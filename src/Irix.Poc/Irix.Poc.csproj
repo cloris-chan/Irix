@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Irix.Core\Irix.Core.csproj" />
+    <ProjectReference Include="..\Irix.Rendering\Irix.Rendering.csproj" />
+    <ProjectReference Include="..\Irix.Platform\Irix.Platform.csproj" />
+    <ProjectReference Include="..\Irix.Platform.Windows\Irix.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

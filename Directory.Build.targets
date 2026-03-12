@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+    <Compile Include="$(MSBuildThisFileDirectory)RepositoryInternalsVisibleTo.cs"
+             Link="Generated\RepositoryInternalsVisibleTo.g.cs" />
+  </ItemGroup>
+</Project>

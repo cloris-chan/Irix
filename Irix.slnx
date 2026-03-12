@@ -2,5 +2,22 @@
   <Folder Name="/docs/">
     <File Path="docs/Irix_Framework_Design.md" />
   </Folder>
-  <Folder Name="/src/" />
+  <Folder Name="/Solution Items/">
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Irix.Core/Irix.Core.csproj" />
+    <Project Path="src/Irix.Platform.Windows/Irix.Platform.Windows.csproj" />
+    <Project Path="src/Irix.Platform/Irix.Platform.csproj" />
+    <Project Path="src/Irix.Poc/Irix.Poc.csproj" />
+    <Project Path="src/Irix.Rendering/Irix.Rendering.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Irix.Core.Tests/Irix.Core.Tests.csproj" />
+  </Folder>
 </Solution>
+
