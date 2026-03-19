@@ -12,6 +12,7 @@ namespace Irix.Platform.Windows;
 internal sealed class WindowsNativeWindow : INativeWindow
 {
     private const int ContentPadding = 16;
+    private const int ButtonBorderThickness = 1;
 
     private readonly HINSTANCE _instanceHandle;
     private readonly Action? _closedSink;
@@ -22,7 +23,7 @@ internal sealed class WindowsNativeWindow : INativeWindow
     private readonly HWND _windowHandle;
     private readonly int _ownerThreadId;
 
-    private string _contentText = string.Empty;
+    private WindowContentElement[] _contentElements = [];
     private bool _isDisposed;
 
     public WindowsNativeWindow(
@@ -98,11 +99,11 @@ internal sealed class WindowsNativeWindow : INativeWindow
 
     public unsafe nint Handle => (nint)_windowHandle.Value;
 
-    public void SetContentText(string text)
+    public void SetContentElements(IReadOnlyList<WindowContentElement> elements)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
         EnsureAccess();
-        _contentText = text ?? string.Empty;
+        _contentElements = [.. elements];
         PInvoke.InvalidateRect(_windowHandle, null, true);
     }
 
@@ -243,27 +244,66 @@ internal sealed class WindowsNativeWindow : INativeWindow
         PInvoke.GetClientRect(windowHandle, &clientRectangle);
         _ = PInvoke.FillRect(deviceContext, &clientRectangle, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_WINDOW));
 
-        if (!string.IsNullOrEmpty(_contentText))
+        foreach (var element in _contentElements)
         {
-            var textRectangle = clientRectangle;
-            textRectangle.left += ContentPadding;
-            textRectangle.top += ContentPadding;
-            textRectangle.right -= ContentPadding;
-            textRectangle.bottom -= ContentPadding;
-
-            fixed (char* text = _contentText)
-            {
-                _ = PInvoke.DrawText(
-                    deviceContext,
-                    new PCWSTR(text),
-                    _contentText.Length,
-                    &textRectangle,
-                    DRAW_TEXT_FORMAT.DT_LEFT | DRAW_TEXT_FORMAT.DT_TOP | DRAW_TEXT_FORMAT.DT_WORDBREAK | DRAW_TEXT_FORMAT.DT_NOPREFIX);
-            }
+            DrawElement(deviceContext, element);
         }
 
         PInvoke.EndPaint(windowHandle, paintStruct);
         return new LRESULT(0);
+    }
+
+    private static unsafe void DrawElement(HDC deviceContext, WindowContentElement element)
+    {
+        var bounds = ToRect(element.Bounds);
+
+        switch (element.Kind)
+        {
+            case WindowContentElementKind.Rectangle:
+                _ = PInvoke.FillRect(deviceContext, &bounds, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_HIGHLIGHT));
+                return;
+            case WindowContentElementKind.Button:
+                var border = bounds;
+                _ = PInvoke.FrameRect(deviceContext, &border, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_WINDOWFRAME));
+
+                var inner = bounds;
+                inner.left += ButtonBorderThickness;
+                inner.top += ButtonBorderThickness;
+                inner.right -= ButtonBorderThickness;
+                inner.bottom -= ButtonBorderThickness;
+                _ = PInvoke.FillRect(deviceContext, &inner, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_3DFACE));
+                DrawText(deviceContext, inner, element.Text, DRAW_TEXT_FORMAT.DT_CENTER | DRAW_TEXT_FORMAT.DT_VCENTER | DRAW_TEXT_FORMAT.DT_SINGLELINE | DRAW_TEXT_FORMAT.DT_NOPREFIX);
+                return;
+            case WindowContentElementKind.Text:
+                DrawText(deviceContext, bounds, element.Text, DRAW_TEXT_FORMAT.DT_LEFT | DRAW_TEXT_FORMAT.DT_TOP | DRAW_TEXT_FORMAT.DT_WORDBREAK | DRAW_TEXT_FORMAT.DT_NOPREFIX);
+                return;
+            default:
+                return;
+        }
+    }
+
+    private static unsafe void DrawText(HDC deviceContext, RECT bounds, string? text, DRAW_TEXT_FORMAT format)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        fixed (char* textPointer = text)
+        {
+            _ = PInvoke.DrawText(deviceContext, new PCWSTR(textPointer), text.Length, &bounds, format);
+        }
+    }
+
+    private static RECT ToRect(PixelRectangle rectangle)
+    {
+        return new RECT
+        {
+            left = rectangle.X,
+            top = rectangle.Y,
+            right = rectangle.X + rectangle.Width,
+            bottom = rectangle.Y + rectangle.Height
+        };
     }
 
     private static unsafe void HandleSizeChanged(HWND windowHandle)

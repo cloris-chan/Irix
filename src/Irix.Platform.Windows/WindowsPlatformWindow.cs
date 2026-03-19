@@ -27,10 +27,10 @@ internal sealed class WindowsPlatformWindow : INativeWindow
 
     public nint Handle => _window.Handle;
 
-    public void SetContentText(string text)
+    public void SetContentElements(IReadOnlyList<WindowContentElement> elements)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
-        _platformThread.Invoke(() => _window.SetContentText(text));
+        _platformThread.Invoke(() => _window.SetContentElements(elements));
     }
 
     public void Show()

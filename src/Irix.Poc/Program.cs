@@ -10,16 +10,17 @@ internal static class Program
     {
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
+        var visualCompositor = new WindowVisualCompositor(window);
         await using var compositorLoop = new CompositorLoop(new CompositeCompositor(
             new ConsoleCompositor(Console.Out),
-            new WindowTextCompositor(window)));
+            visualCompositor));
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
         using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
 
         platformHost.TopologyChanged += OnTopologyChanged;
 
         Console.WriteLine($"Detected screens: {platformHost.Screens.Count}");
-        Console.WriteLine("Controls: Left click/Up = +1, Right click/Down = -1, R = reset, Mouse wheel = +/-1.");
+        Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 
         await runtime.StartAsync();
 
@@ -32,11 +33,14 @@ internal static class Program
         {
             switch (inputEvent.Kind)
             {
-                case RawInputEventKind.PointerReleased when inputEvent.Button == PointerButton.Left:
+                case RawInputEventKind.PointerReleased
+                    when inputEvent.Button == PointerButton.Left
+                    && visualCompositor.TryGetActionAt(inputEvent.X, inputEvent.Y, out var action):
+                    runtime.Dispatch(MapAction(action));
+                    break;
                 case RawInputEventKind.KeyPressed when inputEvent.KeyCode == 0x26:
                     runtime.Dispatch(new CounterMessage.Increment());
                     break;
-                case RawInputEventKind.PointerReleased when inputEvent.Button == PointerButton.Right:
                 case RawInputEventKind.KeyPressed when inputEvent.KeyCode == 0x28:
                     runtime.Dispatch(new CounterMessage.Decrement());
                     break;
@@ -58,6 +62,17 @@ internal static class Program
         }
 
         platformHost.TopologyChanged -= OnTopologyChanged;
+    }
+
+    private static CounterMessage MapAction(string action)
+    {
+        return action switch
+        {
+            nameof(CounterMessage.Increment) => new CounterMessage.Increment(),
+            nameof(CounterMessage.Decrement) => new CounterMessage.Decrement(),
+            nameof(CounterMessage.Reset) => new CounterMessage.Reset(0),
+            _ => throw new NotSupportedException($"Unsupported action: {action}")
+        };
     }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)

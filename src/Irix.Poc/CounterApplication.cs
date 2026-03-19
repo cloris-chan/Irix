@@ -29,11 +29,20 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
         var root = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeFactory.Text($"Count: {model.Count}", 2),
-            VirtualNodeFactory.Rectangle(160, 48, 3),
+            VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 3),
+            VirtualNodeFactory.Rectangle(220, 48, 4),
             VirtualNodeFactory.Button(
                 "Increment",
-                4,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText(nameof(CounterMessage.Increment)))));
+                5,
+                new VirtualNodeAttribute("Action", AttributeValue.FromText(nameof(CounterMessage.Increment)))),
+            VirtualNodeFactory.Button(
+                "Decrement",
+                6,
+                new VirtualNodeAttribute("Action", AttributeValue.FromText(nameof(CounterMessage.Decrement)))),
+            VirtualNodeFactory.Button(
+                "Reset",
+                7,
+                new VirtualNodeAttribute("Action", AttributeValue.FromText(nameof(CounterMessage.Reset)))));
 
         return new VirtualNodeTree(root);
     }

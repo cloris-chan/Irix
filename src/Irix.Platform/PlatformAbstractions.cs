@@ -23,6 +23,13 @@ public enum PointerButton
     Middle
 }
 
+public enum WindowContentElementKind
+{
+    Text,
+    Rectangle,
+    Button
+}
+
 public enum ColorSpace
 {
     Srgb,
@@ -45,6 +52,11 @@ public readonly record struct RawInputEvent(
     int Delta = 0,
     char Character = '\0');
 
+public readonly record struct WindowContentElement(
+    WindowContentElementKind Kind,
+    PixelRectangle Bounds,
+    string? Text = null);
+
 public interface INativeWindow : IDisposable
 {
     string Title { get; }
@@ -53,7 +65,7 @@ public interface INativeWindow : IDisposable
 
     nint Handle { get; }
 
-    void SetContentText(string text);
+    void SetContentElements(IReadOnlyList<WindowContentElement> elements);
 
     void Show();
 
