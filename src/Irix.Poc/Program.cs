@@ -10,20 +10,54 @@ internal static class Program
     {
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
-        await using var compositorLoop = new CompositorLoop(new ConsoleCompositor(Console.Out));
+        await using var compositorLoop = new CompositorLoop(new CompositeCompositor(
+            new ConsoleCompositor(Console.Out),
+            new WindowTextCompositor(window)));
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
+        using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
+
+        platformHost.TopologyChanged += OnTopologyChanged;
 
         Console.WriteLine($"Detected screens: {platformHost.Screens.Count}");
+        Console.WriteLine("Controls: Left click/Up = +1, Right click/Down = -1, R = reset, Mouse wheel = +/-1.");
 
         await runtime.StartAsync();
-        runtime.Dispatch(new CounterMessage.Increment());
-        runtime.Dispatch(new CounterMessage.Increment());
-        runtime.Dispatch(new CounterMessage.Decrement());
 
         window.Show();
         window.RunMessageLoop();
 
         Console.WriteLine($"Final count: {runtime.CurrentModel.Count}");
+
+        void HandleInput(RawInputEvent inputEvent)
+        {
+            switch (inputEvent.Kind)
+            {
+                case RawInputEventKind.PointerReleased when inputEvent.Button == PointerButton.Left:
+                case RawInputEventKind.KeyPressed when inputEvent.KeyCode == 0x26:
+                    runtime.Dispatch(new CounterMessage.Increment());
+                    break;
+                case RawInputEventKind.PointerReleased when inputEvent.Button == PointerButton.Right:
+                case RawInputEventKind.KeyPressed when inputEvent.KeyCode == 0x28:
+                    runtime.Dispatch(new CounterMessage.Decrement());
+                    break;
+                case RawInputEventKind.PointerWheel when inputEvent.Delta > 0:
+                    runtime.Dispatch(new CounterMessage.Increment());
+                    break;
+                case RawInputEventKind.PointerWheel when inputEvent.Delta < 0:
+                    runtime.Dispatch(new CounterMessage.Decrement());
+                    break;
+                case RawInputEventKind.CharacterInput when inputEvent.Character is 'r' or 'R':
+                    runtime.Dispatch(new CounterMessage.Reset(0));
+                    break;
+            }
+        }
+
+        void OnTopologyChanged(object? sender, ScreenTopologyChangedEventArgs args)
+        {
+            Console.WriteLine($"Topology changed. Screen count: {args.Screens.Count}");
+        }
+
+        platformHost.TopologyChanged -= OnTopologyChanged;
     }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
@@ -34,5 +68,21 @@ internal static class Program
         var x = bounds.X + Math.Max((bounds.Width - windowWidth) / 2, 0);
         var y = bounds.Y + Math.Max((bounds.Height - windowHeight) / 2, 0);
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
+    }
+
+    private sealed class PlatformInputObserver(Action<RawInputEvent> onNext) : IObserver<RawInputEvent>
+    {
+        public void OnCompleted()
+        {
+        }
+
+        public void OnError(Exception error)
+        {
+        }
+
+        public void OnNext(RawInputEvent value)
+        {
+            onNext(value);
+        }
     }
 }

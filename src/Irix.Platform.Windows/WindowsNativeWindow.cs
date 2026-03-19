@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -12,24 +11,31 @@ namespace Irix.Platform.Windows;
 
 internal sealed class WindowsNativeWindow : INativeWindow
 {
-    private const int ArrowCursorId = 32512;
-
-    private static readonly ConcurrentDictionary<nint, WindowsNativeWindow> WindowsByHandle = new();
+    private const int ContentPadding = 16;
 
     private readonly HINSTANCE _instanceHandle;
+    private readonly Action? _closedSink;
+    private readonly Action? _displayChangedSink;
+    private readonly GCHandle _gcHandle;
     private readonly Action<RawInputEvent>? _rawInputEventSink;
-    private readonly string _windowClassName;
     private readonly nint _titlePointer;
-    private readonly nint _windowClassNamePointer;
     private readonly HWND _windowHandle;
     private readonly int _ownerThreadId;
 
+    private string _contentText = string.Empty;
     private bool _isDisposed;
 
-    public WindowsNativeWindow(string title, ScreenRegion region, Action<RawInputEvent>? rawInputEventSink = null)
+    public WindowsNativeWindow(
+        string title,
+        ScreenRegion region,
+        Action<RawInputEvent>? rawInputEventSink = null,
+        Action? closedSink = null,
+        Action? displayChangedSink = null)
     {
         Title = title;
         Region = region;
+        _closedSink = closedSink;
+        _displayChangedSink = displayChangedSink;
         _rawInputEventSink = rawInputEventSink;
         _ownerThreadId = Environment.CurrentManagedThreadId;
         var moduleHandle = PInvoke.GetModuleHandle((PCWSTR)null);
@@ -37,47 +43,33 @@ internal sealed class WindowsNativeWindow : INativeWindow
         {
             _instanceHandle = new HINSTANCE((nint)moduleHandle.Value);
         }
-        _windowClassName = $"IrixWindowClass_{Guid.NewGuid():N}";
         _titlePointer = Marshal.StringToHGlobalUni(Title);
-        _windowClassNamePointer = Marshal.StringToHGlobalUni(_windowClassName);
         var windowClassRegistered = false;
 
         try
         {
+            RegisterWindowClass();
+            windowClassRegistered = true;
+
             unsafe
             {
-                var className = new PCWSTR((char*)_windowClassNamePointer);
-                var windowClass = new WNDCLASSW
+                fixed (char* classNameValue = WindowsWindowClassRegistry.ClassName)
                 {
-                    style = WNDCLASS_STYLES.CS_HREDRAW | WNDCLASS_STYLES.CS_VREDRAW,
-                    lpfnWndProc = &HandleWindowMessage,
-                    hInstance = _instanceHandle,
-                    hCursor = PInvoke.LoadCursor(default, new PCWSTR((char*)ArrowCursorId)),
-                    hbrBackground = PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_WINDOW),
-                    lpszClassName = className
-                };
 
-                var classAtom = PInvoke.RegisterClass(windowClass);
-                if (classAtom == 0)
-                {
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to register the Win32 window class.");
+                    _windowHandle = PInvoke.CreateWindowEx(
+                        default,
+                        classNameValue,
+                        new PCWSTR((char*)_titlePointer),
+                        WINDOW_STYLE.WS_OVERLAPPEDWINDOW,
+                        Region.PhysicalBounds.X,
+                        Region.PhysicalBounds.Y,
+                        Region.PhysicalBounds.Width,
+                        Region.PhysicalBounds.Height,
+                        default,
+                        default,
+                        _instanceHandle,
+                        null);
                 }
-
-                windowClassRegistered = true;
-
-                _windowHandle = PInvoke.CreateWindowEx(
-                    default,
-                    className,
-                    new PCWSTR((char*)_titlePointer),
-                    WINDOW_STYLE.WS_OVERLAPPEDWINDOW,
-                    Region.PhysicalBounds.X,
-                    Region.PhysicalBounds.Y,
-                    Region.PhysicalBounds.Width,
-                    Region.PhysicalBounds.Height,
-                    default,
-                    default,
-                    _instanceHandle,
-                    null);
             }
 
             if (_windowHandle == HWND.Null)
@@ -85,20 +77,17 @@ internal sealed class WindowsNativeWindow : INativeWindow
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Failed to create the Win32 window.");
             }
 
-            WindowsByHandle[Handle] = this;
+            _gcHandle = GCHandle.Alloc(this);
+            _ = PInvoke.SetWindowLongPtr(_windowHandle, WINDOW_LONG_PTR_INDEX.GWLP_USERDATA, GCHandle.ToIntPtr(_gcHandle));
         }
         catch
         {
             if (windowClassRegistered)
             {
-                unsafe
-                {
-                    PInvoke.UnregisterClass(new PCWSTR((char*)_windowClassNamePointer), _instanceHandle);
-                }
+                UnregisterWindowClass();
             }
 
             Marshal.FreeHGlobal(_titlePointer);
-            Marshal.FreeHGlobal(_windowClassNamePointer);
             throw;
         }
     }
@@ -108,6 +97,14 @@ internal sealed class WindowsNativeWindow : INativeWindow
     public ScreenRegion Region { get; }
 
     public unsafe nint Handle => (nint)_windowHandle.Value;
+
+    public void SetContentText(string text)
+    {
+        ObjectDisposedException.ThrowIf(_isDisposed, this);
+        EnsureAccess();
+        _contentText = text ?? string.Empty;
+        PInvoke.InvalidateRect(_windowHandle, null, true);
+    }
 
     public void Show()
     {
@@ -137,37 +134,36 @@ internal sealed class WindowsNativeWindow : INativeWindow
         }
 
         EnsureAccess();
-        WindowsByHandle.TryRemove(Handle, out _);
+
+        _ = PInvoke.SetWindowLongPtr(_windowHandle, WINDOW_LONG_PTR_INDEX.GWLP_USERDATA, IntPtr.Zero);
 
         if (PInvoke.IsWindow(_windowHandle))
         {
             PInvoke.DestroyWindow(_windowHandle);
         }
 
-        unsafe
+        if (_gcHandle.IsAllocated)
         {
-            PInvoke.UnregisterClass(new PCWSTR((char*)_windowClassNamePointer), _instanceHandle);
+            _gcHandle.Free();
         }
+
+        UnregisterWindowClass();
         Marshal.FreeHGlobal(_titlePointer);
-        Marshal.FreeHGlobal(_windowClassNamePointer);
         _isDisposed = true;
     }
+
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
     private static LRESULT HandleWindowMessage(HWND windowHandle, uint message, WPARAM wParam, LPARAM lParam)
     {
-        unsafe
+        var window = GetWindow(windowHandle);
+        if (window is not null)
         {
-            var handle = (nint)windowHandle.Value;
-            if (WindowsByHandle.TryGetValue(handle, out var window))
-            {
-                return window.HandleWindowMessageCore(windowHandle, message, wParam, lParam);
-            }
+            return window.HandleWindowMessageCore(windowHandle, message, wParam, lParam);
         }
 
         if (message == WindowMessages.Destroy)
         {
-            PInvoke.PostQuitMessage(0);
             return new LRESULT(0);
         }
 
@@ -187,10 +183,22 @@ internal sealed class WindowsNativeWindow : INativeWindow
                 PublishPointerEvent(RawInputEventKind.PointerMoved, lParam);
                 return new LRESULT(0);
             case WindowMessages.LeftButtonDown:
-                PublishPointerEvent(RawInputEventKind.PointerPressed, lParam);
+                PublishPointerEvent(RawInputEventKind.PointerPressed, lParam, PointerButton.Left);
                 return new LRESULT(0);
             case WindowMessages.LeftButtonUp:
-                PublishPointerEvent(RawInputEventKind.PointerReleased, lParam);
+                PublishPointerEvent(RawInputEventKind.PointerReleased, lParam, PointerButton.Left);
+                return new LRESULT(0);
+            case WindowMessages.RightButtonDown:
+                PublishPointerEvent(RawInputEventKind.PointerPressed, lParam, PointerButton.Right);
+                return new LRESULT(0);
+            case WindowMessages.RightButtonUp:
+                PublishPointerEvent(RawInputEventKind.PointerReleased, lParam, PointerButton.Right);
+                return new LRESULT(0);
+            case WindowMessages.MiddleButtonDown:
+                PublishPointerEvent(RawInputEventKind.PointerPressed, lParam, PointerButton.Middle);
+                return new LRESULT(0);
+            case WindowMessages.MiddleButtonUp:
+                PublishPointerEvent(RawInputEventKind.PointerReleased, lParam, PointerButton.Middle);
                 return new LRESULT(0);
             case WindowMessages.KeyDown:
                 PublishKeyEvent(RawInputEventKind.KeyPressed, wParam);
@@ -198,8 +206,23 @@ internal sealed class WindowsNativeWindow : INativeWindow
             case WindowMessages.KeyUp:
                 PublishKeyEvent(RawInputEventKind.KeyReleased, wParam);
                 return new LRESULT(0);
+            case WindowMessages.Character:
+                PublishCharacterEvent(wParam);
+                return new LRESULT(0);
+            case WindowMessages.MouseWheel:
+                PublishWheelEvent(wParam, lParam);
+                return new LRESULT(0);
+            case WindowMessages.FocusGained:
+                PublishFocusEvent(RawInputEventKind.FocusGained);
+                return new LRESULT(0);
+            case WindowMessages.FocusLost:
+                PublishFocusEvent(RawInputEventKind.FocusLost);
+                return new LRESULT(0);
+            case WindowMessages.DisplayChange:
+                _displayChangedSink?.Invoke();
+                return new LRESULT(0);
             case WindowMessages.Destroy:
-                PInvoke.PostQuitMessage(0);
+                _closedSink?.Invoke();
                 return new LRESULT(0);
             default:
                 return PInvoke.DefWindowProc(windowHandle, message, wParam, lParam);
@@ -208,9 +231,37 @@ internal sealed class WindowsNativeWindow : INativeWindow
 
     private static unsafe LRESULT HandlePaint(HWND windowHandle)
     {
-        var deviceContext = PInvoke.BeginPaint(windowHandle, out var paintStruct);
-        PInvoke.GetClientRect(windowHandle, out var clientRectangle);
+        var window = GetWindow(windowHandle);
+        return window is null ? new LRESULT(0) : window.PaintCore(windowHandle);
+    }
+
+    private unsafe LRESULT PaintCore(HWND windowHandle)
+    {
+        PAINTSTRUCT paintStruct;
+        var deviceContext = PInvoke.BeginPaint(windowHandle, &paintStruct);
+        RECT clientRectangle;
+        PInvoke.GetClientRect(windowHandle, &clientRectangle);
         _ = PInvoke.FillRect(deviceContext, &clientRectangle, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_WINDOW));
+
+        if (!string.IsNullOrEmpty(_contentText))
+        {
+            var textRectangle = clientRectangle;
+            textRectangle.left += ContentPadding;
+            textRectangle.top += ContentPadding;
+            textRectangle.right -= ContentPadding;
+            textRectangle.bottom -= ContentPadding;
+
+            fixed (char* text = _contentText)
+            {
+                _ = PInvoke.DrawText(
+                    deviceContext,
+                    new PCWSTR(text),
+                    _contentText.Length,
+                    &textRectangle,
+                    DRAW_TEXT_FORMAT.DT_LEFT | DRAW_TEXT_FORMAT.DT_TOP | DRAW_TEXT_FORMAT.DT_WORDBREAK | DRAW_TEXT_FORMAT.DT_NOPREFIX);
+            }
+        }
+
         PInvoke.EndPaint(windowHandle, paintStruct);
         return new LRESULT(0);
     }
@@ -220,13 +271,14 @@ internal sealed class WindowsNativeWindow : INativeWindow
         PInvoke.InvalidateRect(windowHandle, null, true);
     }
 
-    private void PublishPointerEvent(RawInputEventKind kind, LPARAM lParam)
+    private void PublishPointerEvent(RawInputEventKind kind, LPARAM lParam, PointerButton button = PointerButton.None)
     {
         _rawInputEventSink?.Invoke(new RawInputEvent(
             kind,
             Stopwatch.GetTimestamp(),
             GetPointerX(lParam),
-            GetPointerY(lParam)));
+            GetPointerY(lParam),
+            Button: button));
     }
 
     private void PublishKeyEvent(RawInputEventKind kind, WPARAM wParam)
@@ -239,6 +291,34 @@ internal sealed class WindowsNativeWindow : INativeWindow
             GetKeyCode(wParam)));
     }
 
+    private void PublishCharacterEvent(WPARAM wParam)
+    {
+        var character = unchecked((char)GetKeyCode(wParam));
+        _rawInputEventSink?.Invoke(new RawInputEvent(
+            RawInputEventKind.CharacterInput,
+            Stopwatch.GetTimestamp(),
+            0,
+            0,
+            KeyCode: character,
+            Character: character));
+    }
+
+    private void PublishWheelEvent(WPARAM wParam, LPARAM lParam)
+    {
+        _rawInputEventSink?.Invoke(new RawInputEvent(
+            RawInputEventKind.PointerWheel,
+            Stopwatch.GetTimestamp(),
+            GetPointerX(lParam),
+            GetPointerY(lParam),
+            Delta: GetWheelDelta(wParam)));
+    }
+
+    private void PublishFocusEvent(RawInputEventKind kind)
+    {
+        _rawInputEventSink?.Invoke(new RawInputEvent(kind, Stopwatch.GetTimestamp(), 0, 0));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private void EnsureAccess()
     {
         if (Environment.CurrentManagedThreadId != _ownerThreadId)
@@ -260,5 +340,35 @@ internal sealed class WindowsNativeWindow : INativeWindow
     private static unsafe int GetKeyCode(WPARAM wParam)
     {
         return unchecked((int)(nuint)wParam.Value);
+    }
+
+    private static unsafe int GetWheelDelta(WPARAM wParam)
+    {
+        return unchecked((short)((nuint)wParam.Value >> 16));
+    }
+
+    private void RegisterWindowClass()
+    {
+        unsafe
+        {
+            WindowsWindowClassRegistry.AddReference(_instanceHandle, &HandleWindowMessage);
+        }
+    }
+
+    private void UnregisterWindowClass()
+    {
+        WindowsWindowClassRegistry.RemoveReference(_instanceHandle);
+    }
+
+    private static WindowsNativeWindow? GetWindow(HWND windowHandle)
+    {
+        var instancePointer = PInvoke.GetWindowLongPtr(windowHandle, WINDOW_LONG_PTR_INDEX.GWLP_USERDATA);
+        if (instancePointer == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        var gcHandle = GCHandle.FromIntPtr(instancePointer);
+        return gcHandle.Target as WindowsNativeWindow;
     }
 }

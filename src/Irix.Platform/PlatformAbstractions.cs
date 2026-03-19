@@ -7,8 +7,20 @@ public enum RawInputEventKind
     PointerMoved,
     PointerPressed,
     PointerReleased,
+    PointerWheel,
     KeyPressed,
-    KeyReleased
+    KeyReleased,
+    CharacterInput,
+    FocusGained,
+    FocusLost
+}
+
+public enum PointerButton
+{
+    None,
+    Left,
+    Right,
+    Middle
 }
 
 public enum ColorSpace
@@ -28,7 +40,10 @@ public readonly record struct RawInputEvent(
     long Timestamp,
     int X,
     int Y,
-    int KeyCode = 0);
+    int KeyCode = 0,
+    PointerButton Button = PointerButton.None,
+    int Delta = 0,
+    char Character = '\0');
 
 public interface INativeWindow : IDisposable
 {
@@ -37,6 +52,8 @@ public interface INativeWindow : IDisposable
     ScreenRegion Region { get; }
 
     nint Handle { get; }
+
+    void SetContentText(string text);
 
     void Show();
 
