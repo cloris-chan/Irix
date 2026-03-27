@@ -25,6 +25,14 @@ public enum AttributeValueKind
     Boolean
 }
 
+public enum NodeContentKind
+{
+    None,
+    Text,
+    Number,
+    Boolean
+}
+
 public readonly record struct VirtualNodeTree(VirtualNode Root);
 
 public readonly record struct VirtualNode
@@ -32,7 +40,7 @@ public readonly record struct VirtualNode
     public VirtualNode(
         VirtualNodeKind kind,
         ulong key = 0,
-        string? content = null,
+        NodeContent content = default,
         VirtualNodeAttribute[]? attributes = null,
         VirtualNode[]? children = null)
     {
@@ -47,7 +55,7 @@ public readonly record struct VirtualNode
 
     public ulong Key { get; }
 
-    public string? Content { get; }
+    public NodeContent Content { get; }
 
     public VirtualNodeAttribute[] Attributes { get; }
 
@@ -56,12 +64,29 @@ public readonly record struct VirtualNode
 
 public readonly record struct VirtualNodeAttribute(string Name, AttributeValue Value);
 
+public readonly record struct NodeContent(
+    NodeContentKind Kind,
+    string? Text = null,
+    double Number = 0,
+    bool Boolean = false)
+{
+    public static NodeContent None => default;
+
+    public static NodeContent FromText(string value) => new(NodeContentKind.Text, value);
+
+    public static NodeContent FromNumber(double value) => new(NodeContentKind.Number, Number: value);
+
+    public static NodeContent FromBoolean(bool value) => new(NodeContentKind.Boolean, Boolean: value);
+}
+
 public readonly record struct AttributeValue(
     AttributeValueKind Kind,
     string? Text = null,
     double Number = 0,
     bool Boolean = false)
 {
+    public static AttributeValue None => default;
+
     public static AttributeValue FromText(string value) => new(AttributeValueKind.Text, value);
 
     public static AttributeValue FromNumber(double value) => new(AttributeValueKind.Number, Number: value);
@@ -78,7 +103,7 @@ public readonly record struct VirtualNodePatch(
 public static class VirtualNodeFactory
 {
     public static VirtualNode Text(string content, ulong key = 0, params VirtualNodeAttribute[] attributes) =>
-        new(VirtualNodeKind.Text, key, content, attributes);
+        new(VirtualNodeKind.Text, key, NodeContent.FromText(content), attributes);
 
     public static VirtualNode Rectangle(double width, double height, ulong key = 0, params VirtualNodeAttribute[] attributes) =>
         new(

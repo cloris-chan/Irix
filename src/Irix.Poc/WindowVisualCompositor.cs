@@ -71,12 +71,16 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
                     LayoutNode(child, availableWidth, ref cursorY, elements, hitTargets);
                 }
                 break;
-            case VirtualNodeKind.Text when !string.IsNullOrWhiteSpace(node.Content):
-                elements.Add(new WindowContentElement(
-                    WindowContentElementKind.Text,
-                    new PixelRectangle(HorizontalPadding, cursorY, availableWidth, TextHeight),
-                    node.Content));
-                cursorY += TextHeight + ItemSpacing;
+            case VirtualNodeKind.Text:
+                var content = GetTextContent(node);
+                if (!string.IsNullOrWhiteSpace(content))
+                {
+                    elements.Add(new WindowContentElement(
+                        WindowContentElementKind.Text,
+                        new PixelRectangle(HorizontalPadding, cursorY, availableWidth, TextHeight),
+                        content));
+                    cursorY += TextHeight + ItemSpacing;
+                }
                 break;
             case VirtualNodeKind.Rectangle:
                 var rectangleBounds = new PixelRectangle(
@@ -121,12 +125,13 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
     {
         foreach (var child in node.Children)
         {
-            if (child.Kind == VirtualNodeKind.Text && !string.IsNullOrWhiteSpace(child.Content))
+            var content = GetTextContent(child);
+            if (child.Kind == VirtualNodeKind.Text && !string.IsNullOrWhiteSpace(content))
             {
-                return child.Content;
+                return content;
             }
         }
-
+       
         return "Button";
     }
 
@@ -143,6 +148,11 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
         return null;
     }
 
+    private static string? GetTextContent(VirtualNode node)
+    {
+        return node.Content.Kind == NodeContentKind.Text ? node.Content.Text : null;
+    }
+
     private static bool Contains(PixelRectangle bounds, int x, int y)
     {
         return x >= bounds.X
@@ -153,3 +163,4 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
 
     private readonly record struct ButtonHitTarget(PixelRectangle Bounds, string Action);
 }
+
