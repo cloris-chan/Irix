@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/docs/">
     <File Path="docs/Irix_Framework_Design.md" />
+    <File Path="docs/Project_Status_and_Todo.md" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".gitattributes" />
@@ -11,6 +12,7 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Irix.Core/Irix.Core.csproj" />
+    <Project Path="src/Irix.Drawing/Irix.Drawing.csproj" />
     <Project Path="src/Irix.Platform.Windows/Irix.Platform.Windows.csproj" />
     <Project Path="src/Irix.Platform/Irix.Platform.csproj" />
     <Project Path="src/Irix.Poc/Irix.Poc.csproj" />

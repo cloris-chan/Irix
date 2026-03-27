@@ -42,6 +42,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `ICompositor`
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`
   - 已有 `ConsoleCompositor` 与 `CompositeCompositor`
+- `Irix.Drawing`
+  - 已拆出独立项目骨架
+  - 已有 `DrawCommand`、`FrameContext`、`DrawCommandBatch`、`IDrawingBackend` 最小类型
 - `Irix.Poc`
   - 已有 Counter 示例应用
   - 已有 `WindowVisualCompositor`，能把 `VirtualNode` 渲染成当前 PoC Window 内容
@@ -53,7 +56,6 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 - 还没有 `D3D12` 渲染主链
 - 还没有 `Skia + D3D12` backend adapter
-- 还没有正式的 `DrawCommand` / `IDrawingBackend` 代码骨架
 - 还没有正式的 `LayoutTreeBuilder`
 - 还没有真正的 retained tree / layout tree / draw command pipeline
 - `VirtualNodeDiffer` 仍然是最小实现，不是完整 diff
@@ -110,7 +112,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### 3.3 Rendering / PoC 可视化
 
-当前渲染层实际上还是“PoC 可视化层”，不是正式 GPU 渲染层。
+当前渲染层实际上还是“PoC 可视化层 + 新拆出的 Drawing 抽象骨架”，不是正式 GPU 渲染层。
 
 `WindowVisualCompositor` 现在同时做了三件事：
 
@@ -122,6 +124,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 关键文件：
 
+- [DrawingPrimitives.cs](/d:/source/Irix/src/Irix.Drawing/DrawingPrimitives.cs)
+- [IDrawingBackend.cs](/d:/source/Irix/src/Irix.Drawing/IDrawingBackend.cs)
 - [CompositorLoop.cs](/d:/source/Irix/src/Irix.Rendering/CompositorLoop.cs)
 - [WindowVisualCompositor.cs](/d:/source/Irix/src/Irix.Poc/WindowVisualCompositor.cs)
 
@@ -184,7 +188,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P0
 
-- 在 `Irix.Rendering` 中建立正式的 `DrawCommand` / `IDrawingBackend` / `DrawCommandBatch` 骨架
+- 在 `Irix.Drawing` 中稳定 `DrawCommand` / `IDrawingBackend` / `DrawCommandBatch` 骨架
 - 把 `WindowVisualCompositor` 从“直接消费 `VirtualNodePatch`”改成“消费 `DrawCommandBatch`”
 - 抽出 `LayoutTreeBuilder` 或同类职责对象，别让 PoC compositor 继续同时承担布局和绘制语义解释
 
@@ -206,10 +210,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### Rendering / Drawing
 
-- [ ] 新建 `DrawCommand` 数据模型
-- [ ] 新建 `IDrawingBackend`
-- [ ] 新建 `FrameContext`
-- [ ] 新建 `DrawCommandBatch`
+- [x] 新建 `DrawCommand` 数据模型
+- [x] 新建 `IDrawingBackend`
+- [x] 新建 `FrameContext`
+- [x] 新建 `DrawCommandBatch`
 - [ ] 实现 `WindowBackend`，使其消费 `DrawCommandBatch`
 - [ ] 将 `WindowVisualCompositor` 重构为：
 - [ ] `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> WindowBackend`
@@ -303,4 +307,3 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `Irix.Poc`
 - `Irix.Core`（仅补最小桥接类型）
 - `Irix.Core.Tests`（补基础测试）
-

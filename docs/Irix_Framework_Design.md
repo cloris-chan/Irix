@@ -164,7 +164,8 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 ```text
 src/
 ├─ Irix.Core/              # MVU Core、VirtualNode 模型、Diff/Patch、调度运行时
-├─ Irix.Rendering/         # Compositor 抽象、Patch 消费循环、诊断输出实现
+├─ Irix.Drawing/           # Drawing 抽象：DrawCommand、FrameContext、IDrawingBackend
+├─ Irix.Rendering/         # Compositor 抽象、Patch 消费循环、backend 编排与诊断输出
 ├─ Irix.Platform/          # 平台无关抽象：IPlatformHost、屏幕与输入模型
 ├─ Irix.Platform.Windows/  # Windows 平台宿主 PoC 实现
 └─ Irix.Poc/               # 最小示例应用（Counter）

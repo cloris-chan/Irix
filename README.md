@@ -46,7 +46,8 @@ Irix 是一个面向高性能桌面场景的原生 .NET UI 框架原型项目。
 ```text
 src/
 ├─ Irix.Core/              # MVU Core、VirtualNode 模型、Diff/Patch、运行时
-├─ Irix.Rendering/         # Compositor 抽象、Patch 消费循环、后续 Drawing 层落点
+├─ Irix.Drawing/           # Drawing 抽象：DrawCommand、FrameContext、IDrawingBackend
+├─ Irix.Rendering/         # Compositor 抽象、Patch 消费循环、backend 编排层
 ├─ Irix.Platform/          # 平台无关抽象
 ├─ Irix.Platform.Windows/  # Windows 宿主 PoC
 └─ Irix.Poc/               # 最小示例应用（Counter）
@@ -114,7 +115,7 @@ dotnet test .\Irix.slnx
 
 当前最值得优先推进的是：
 
-1. 在 `Irix.Rendering` 中建立正式的 `DrawCommand` / `IDrawingBackend` / `DrawCommandBatch`
+1. 在 `Irix.Drawing` 中稳定 `DrawCommand` / `IDrawingBackend` / `DrawCommandBatch`
 2. 把 `WindowVisualCompositor` 改成消费 `DrawCommandBatch`
 3. 抽出 `LayoutTreeBuilder`
 4. 开始搭 `D3D12` 最小渲染循环
