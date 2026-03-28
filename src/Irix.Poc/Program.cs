@@ -11,7 +11,8 @@ internal static class Program
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
         var visualCompositor = new WindowVisualCompositor(window);
-        await using var compositorLoop = new CompositorLoop(new CompositeCompositor(
+        var drawCommandTranslator = new WindowDrawCommandTranslator(window);
+        await using var compositorLoop = new CompositorLoop(drawCommandTranslator, new CompositeCompositor(
             new ConsoleCompositor(Console.Out),
             visualCompositor));
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);

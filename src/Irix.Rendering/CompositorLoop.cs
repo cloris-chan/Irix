@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using System.Threading.Channels;
 
 namespace Irix.Rendering;
@@ -5,11 +6,13 @@ namespace Irix.Rendering;
 public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
 {
     private readonly ICompositor _compositor;
+    private readonly IPatchBatchTranslator _translator;
     private readonly Channel<PatchBatch> _channel;
     private readonly Task _processingTask;
 
-    public CompositorLoop(ICompositor compositor)
+    public CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor)
     {
+        _translator = translator;
         _compositor = compositor;
         _channel = Channel.CreateUnbounded<PatchBatch>(new UnboundedChannelOptions
         {
@@ -36,7 +39,8 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
         {
             using (patchBatch)
             {
-                await _compositor.RenderAsync(patchBatch);
+                using var drawCommandBatch = _translator.Translate(patchBatch);
+                await _compositor.RenderAsync(drawCommandBatch);
             }
         }
     }

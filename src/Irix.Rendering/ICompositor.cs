@@ -1,6 +1,8 @@
+using Irix.Drawing;
+
 namespace Irix.Rendering;
 
 public interface ICompositor
 {
-    ValueTask RenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default);
+    ValueTask RenderAsync(DrawCommandBatch drawCommandBatch, CancellationToken cancellationToken = default);
 }
