@@ -42,6 +42,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `ICompositor`
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`
   - 已有 `ConsoleCompositor` 与 `CompositeCompositor`
+  - 已有 `LayoutTreeBuilder`、`LayoutElement`、`DrawCommandRecorder` 过渡骨架
 - `Irix.Drawing`
   - 已拆出独立项目骨架
   - 已有 `DrawCommand`、`FrameContext`、`DrawCommandBatch`、`IDrawingBackend` 最小类型
@@ -56,7 +57,6 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 - 还没有 `D3D12` 渲染主链
 - 还没有 `Skia + D3D12` backend adapter
-- 还没有正式的 `LayoutTreeBuilder`
 - 还没有真正的 retained tree / layout tree / draw command pipeline
 - `VirtualNodeDiffer` 仍然是最小实现，不是完整 diff
 - 测试覆盖仍然很薄，目前主要是单个 runtime 测试
@@ -112,20 +112,22 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### 3.3 Rendering / PoC 可视化
 
-当前渲染层实际上还是“PoC 可视化层 + 新拆出的 Drawing 抽象骨架”，不是正式 GPU 渲染层。
+当前渲染层实际上还是“PoC 可视化层 + 初步成形的 layout/draw pipeline 骨架”，不是正式 GPU 渲染层。
 
-`WindowVisualCompositor` 现在同时做了三件事：
+`WindowVisualCompositor` 当前主要负责 PoC backend 可视化：
 
-1. 从 `VirtualNode` 解析控件语义
-2. 执行简单布局
-3. 直接生成 PoC Window 内容元素和命中目标
+1. 消费 `DrawCommandBatch`
+2. 生成 PoC Window 内容元素
+3. 维护命中目标
 
-这适合演示，但后续必须拆开。
+布局与命令录制已经开始沉到 `Irix.Rendering`，但离正式 retained tree / GPU backend 还有距离。
 
 关键文件：
 
 - [DrawingPrimitives.cs](/d:/source/Irix/src/Irix.Drawing/DrawingPrimitives.cs)
 - [IDrawingBackend.cs](/d:/source/Irix/src/Irix.Drawing/IDrawingBackend.cs)
+- [LayoutTreeBuilder.cs](/d:/source/Irix/src/Irix.Rendering/LayoutTreeBuilder.cs)
+- [DrawCommandRecorder.cs](/d:/source/Irix/src/Irix.Rendering/DrawCommandRecorder.cs)
 - [CompositorLoop.cs](/d:/source/Irix/src/Irix.Rendering/CompositorLoop.cs)
 - [WindowVisualCompositor.cs](/d:/source/Irix/src/Irix.Poc/WindowVisualCompositor.cs)
 
@@ -133,7 +135,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 当前测试状态：
 
-- `Irix.Core.Tests` 只有最基础的 runtime patch 发布测试
+- `Irix.Core.Tests` 已有 runtime 测试和 layout/draw pipeline 基础测试
 - 还没有 diff、layout、输入路由、所有权转移、异常/取消路径测试
 
 关键文件：
@@ -175,10 +177,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 1. [Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)
 2. [Runtime.cs](/d:/source/Irix/src/Irix.Core/Runtime.cs)
 3. [VirtualNodeModels.cs](/d:/source/Irix/src/Irix.Core/VirtualNodeModels.cs)
-4. [WindowVisualCompositor.cs](/d:/source/Irix/src/Irix.Poc/WindowVisualCompositor.cs)
-5. [WindowsPlatformHost.cs](/d:/source/Irix/src/Irix.Platform.Windows/WindowsPlatformHost.cs)
-6. [Program.cs](/d:/source/Irix/src/Irix.Poc/Program.cs)
-7. [RuntimeTests.cs](/d:/source/Irix/tests/Irix.Core.Tests/RuntimeTests.cs)
+4. [LayoutTreeBuilder.cs](/d:/source/Irix/src/Irix.Rendering/LayoutTreeBuilder.cs)
+5. [DrawCommandRecorder.cs](/d:/source/Irix/src/Irix.Rendering/DrawCommandRecorder.cs)
+6. [WindowVisualCompositor.cs](/d:/source/Irix/src/Irix.Poc/WindowVisualCompositor.cs)
+7. [WindowsPlatformHost.cs](/d:/source/Irix/src/Irix.Platform.Windows/WindowsPlatformHost.cs)
 
 ---
 
@@ -188,9 +190,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P0
 
-- 在 `Irix.Drawing` 中稳定 `DrawCommand` / `IDrawingBackend` / `DrawCommandBatch` 骨架
-- 把 `WindowVisualCompositor` 从“直接消费 `VirtualNodePatch`”改成“消费 `DrawCommandBatch`”
-- 抽出 `LayoutTreeBuilder` 或同类职责对象，别让 PoC compositor 继续同时承担布局和绘制语义解释
+- 在 `Irix.Drawing` 中继续稳定 `DrawCommand` / `IDrawingBackend` / `DrawCommandBatch`
+- 继续把 `LayoutTreeBuilder` / `DrawCommandRecorder` 从 PoC 规则里抽成更通用的 pipeline
+- 让 `WindowVisualCompositor` 保持为纯 PoC/backend 层，不再回流正式职责
 
 ### P1
 
@@ -215,8 +217,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 新建 `FrameContext`
 - [x] 新建 `DrawCommandBatch`
 - [ ] 实现 `WindowBackend`，使其消费 `DrawCommandBatch`
-- [ ] 将 `WindowVisualCompositor` 重构为：
-- [ ] `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> WindowBackend`
+- [x] 将 `WindowVisualCompositor` 从 patch 直接消费改成 draw command 消费
+- [x] 建立 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> WindowBackend` 过渡链
 - [ ] 搭 `D3D12` 基础渲染循环
 - [ ] 评估 `Skia + D3D12` 集成可行性
 
@@ -225,6 +227,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [ ] 为 `VirtualNode` 增加更清晰的属性建模策略
 - [ ] 设计 retained element tree
 - [ ] 设计 layout tree
+- [ ] 让 `LayoutTreeBuilder` 脱离 PoC 特有布局常量和控件假设
 - [ ] 将 diff 从 `ReplaceRoot` 提升到最小可用局部 diff
 - [ ] 增加 keyed reconciliation 设计草案
 

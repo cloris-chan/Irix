@@ -6,8 +6,8 @@ namespace Irix.Poc;
 
 internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatchBatchTranslator
 {
-    private readonly WindowLayoutTreeBuilder _layoutTreeBuilder = new();
-    private readonly WindowDrawCommandRecorder _drawCommandRecorder = new();
+    private readonly Irix.Rendering.LayoutTreeBuilder _layoutTreeBuilder = new();
+    private readonly Irix.Rendering.DrawCommandRecorder _drawCommandRecorder = new();
 
     public DrawCommandBatch Translate(PatchBatch patchBatch)
     {

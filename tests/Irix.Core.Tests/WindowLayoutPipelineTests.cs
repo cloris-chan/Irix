@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Rendering;
 using Xunit;
 
 namespace Irix.Core.Tests;
@@ -7,7 +8,7 @@ namespace Irix.Core.Tests;
 public sealed class WindowLayoutPipelineTests
 {
     [Fact]
-    public void WindowLayoutTreeBuilder_builds_expected_layout_elements()
+    public void LayoutTreeBuilder_builds_expected_layout_elements()
     {
         var root = VirtualNodeFactory.ScrollContainer(
             1,
@@ -17,33 +18,33 @@ public sealed class WindowLayoutPipelineTests
                 "Increment",
                 4,
                 new VirtualNodeAttribute("Action", AttributeValue.FromText("Increment"))));
-        var builder = new Irix.Poc.WindowLayoutTreeBuilder();
+        var builder = new LayoutTreeBuilder();
 
         var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
 
         Assert.Equal(3, elements.Count);
 
-        Assert.Equal(Irix.Poc.WindowLayoutElementKind.Text, elements[0].Kind);
+        Assert.Equal(LayoutElementKind.Text, elements[0].Kind);
         Assert.Equal(new PixelRectangle(16, 16, 928, 32), elements[0].Bounds);
         Assert.Equal("Count: 0", elements[0].Text);
 
-        Assert.Equal(Irix.Poc.WindowLayoutElementKind.Rectangle, elements[1].Kind);
+        Assert.Equal(LayoutElementKind.Rectangle, elements[1].Kind);
         Assert.Equal(new PixelRectangle(16, 60, 220, 48), elements[1].Bounds);
 
-        Assert.Equal(Irix.Poc.WindowLayoutElementKind.Button, elements[2].Kind);
+        Assert.Equal(LayoutElementKind.Button, elements[2].Kind);
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), elements[2].Bounds);
         Assert.Equal("Increment", elements[2].Text);
         Assert.Equal("Increment", elements[2].Action);
     }
 
     [Fact]
-    public void WindowDrawCommandRecorder_records_button_as_fill_and_text_commands()
+    public void DrawCommandRecorder_records_button_as_fill_and_text_commands()
     {
-        var recorder = new Irix.Poc.WindowDrawCommandRecorder();
+        var recorder = new DrawCommandRecorder();
         var elements = new[]
         {
-            new Irix.Poc.WindowLayoutElement(
-                Irix.Poc.WindowLayoutElementKind.Button,
+            new LayoutElement(
+                LayoutElementKind.Button,
                 new PixelRectangle(16, 120, 140, 40),
                 Text: "Increment",
                 Action: "Increment")

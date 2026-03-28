@@ -1,11 +1,11 @@
 using Irix.Drawing;
 using Irix.Platform;
 
-namespace Irix.Poc;
+namespace Irix.Rendering;
 
-internal sealed class WindowDrawCommandRecorder
+internal sealed class DrawCommandRecorder
 {
-    public DrawCommandBatch Record(IReadOnlyList<WindowLayoutElement> elements)
+    public DrawCommandBatch Record(IReadOnlyList<LayoutElement> elements)
     {
         if (elements.Count == 0)
         {
@@ -18,20 +18,20 @@ internal sealed class WindowDrawCommandRecorder
         {
             switch (element.Kind)
             {
-                case WindowLayoutElementKind.Text:
+                case LayoutElementKind.Text:
                     commands.Add(new DrawCommand(
                         DrawCommandKind.DrawTextRun,
                         Rect: ToDrawRect(element.Bounds),
                         Text: element.Text,
                         Color: DrawColor.Opaque(255, 255, 255)));
                     break;
-                case WindowLayoutElementKind.Rectangle:
+                case LayoutElementKind.Rectangle:
                     commands.Add(new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: ToDrawRect(element.Bounds),
                         Color: DrawColor.Opaque(72, 72, 72)));
                     break;
-                case WindowLayoutElementKind.Button:
+                case LayoutElementKind.Button:
                     var bounds = ToDrawRect(element.Bounds);
                     commands.Add(new DrawCommand(
                         DrawCommandKind.FillRect,

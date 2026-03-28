@@ -1,8 +1,8 @@
 using Irix.Platform;
 
-namespace Irix.Poc;
+namespace Irix.Rendering;
 
-internal sealed class WindowLayoutTreeBuilder
+internal sealed class LayoutTreeBuilder
 {
     private const int HorizontalPadding = 16;
     private const int VerticalPadding = 16;
@@ -10,9 +10,9 @@ internal sealed class WindowLayoutTreeBuilder
     private const int TextHeight = 32;
     private const int ButtonHeight = 40;
 
-    public IReadOnlyList<WindowLayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds)
+    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds)
     {
-        var elements = new List<WindowLayoutElement>();
+        var elements = new List<LayoutElement>();
         var availableWidth = Math.Max(viewportBounds.Width - (HorizontalPadding * 2), 0);
         var cursorY = VerticalPadding;
 
@@ -24,7 +24,7 @@ internal sealed class WindowLayoutTreeBuilder
         VirtualNode node,
         int availableWidth,
         ref int cursorY,
-        List<WindowLayoutElement> elements)
+        List<LayoutElement> elements)
     {
         switch (node.Kind)
         {
@@ -38,8 +38,8 @@ internal sealed class WindowLayoutTreeBuilder
                 var content = GetTextContent(node);
                 if (!string.IsNullOrWhiteSpace(content))
                 {
-                    elements.Add(new WindowLayoutElement(
-                        WindowLayoutElementKind.Text,
+                    elements.Add(new LayoutElement(
+                        LayoutElementKind.Text,
                         new PixelRectangle(HorizontalPadding, cursorY, availableWidth, TextHeight),
                         Text: content));
                     cursorY += TextHeight + ItemSpacing;
@@ -51,7 +51,7 @@ internal sealed class WindowLayoutTreeBuilder
                     cursorY,
                     GetDimension(node, "Width", Math.Min(availableWidth, 160)),
                     GetDimension(node, "Height", 48));
-                elements.Add(new WindowLayoutElement(WindowLayoutElementKind.Rectangle, rectangleBounds));
+                elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds));
                 cursorY += rectangleBounds.Height + ItemSpacing;
                 break;
             case VirtualNodeKind.Button:
@@ -59,8 +59,8 @@ internal sealed class WindowLayoutTreeBuilder
                 var width = Math.Min(availableWidth, Math.Max(140, label.Length * 12 + 32));
                 var bounds = new PixelRectangle(HorizontalPadding, cursorY, width, ButtonHeight);
                 var action = GetTextAttribute(node, "Action");
-                elements.Add(new WindowLayoutElement(
-                    WindowLayoutElementKind.Button,
+                elements.Add(new LayoutElement(
+                    LayoutElementKind.Button,
                     bounds,
                     Text: label,
                     Action: action));
