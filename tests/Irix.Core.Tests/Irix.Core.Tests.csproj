@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\Irix.Core\Irix.Core.csproj" />
     <ProjectReference Include="..\..\src\Irix.Drawing\Irix.Drawing.csproj" />
     <ProjectReference Include="..\..\src\Irix.Platform\Irix.Platform.csproj" />
+    <ProjectReference Include="..\..\src\Irix.Poc\Irix.Poc.csproj" />
     <ProjectReference Include="..\..\src\Irix.Rendering\Irix.Rendering.csproj" />
   </ItemGroup>
 </Project>

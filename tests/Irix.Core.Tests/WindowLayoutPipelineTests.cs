@@ -65,4 +65,94 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal("Increment", textCommand.Text);
         Assert.Equal("Increment", textCommand.Metadata);
     }
+
+    [Fact]
+    public void LayoutTreeBuilder_uses_supplied_layout_style()
+    {
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Title", 2),
+            VirtualNodeFactory.Button(
+                "Go",
+                3,
+                new VirtualNodeAttribute("Action", AttributeValue.FromText("Go"))));
+        var builder = new LayoutTreeBuilder(new LayoutStyle(
+            HorizontalPadding: 24,
+            VerticalPadding: 20,
+            ItemSpacing: 8,
+            TextHeight: 28,
+            ButtonHeight: 36,
+            MinimumButtonWidth: 120,
+            ButtonTextWidthFactor: 10,
+            ButtonHorizontalPadding: 20));
+
+        var elements = builder.Build(root, new PixelRectangle(0, 0, 400, 300));
+
+        Assert.Equal(new PixelRectangle(24, 20, 352, 28), elements[0].Bounds);
+        Assert.Equal(new PixelRectangle(24, 56, 120, 36), elements[1].Bounds);
+    }
+
+    [Fact]
+    public void DrawCommandRecorder_uses_supplied_drawing_style()
+    {
+        var recorder = new DrawCommandRecorder(new DrawingStyle(
+            TextColor: DrawColor.Opaque(230, 230, 230),
+            RectangleFillColor: DrawColor.Opaque(20, 30, 40),
+            ButtonFillColor: DrawColor.Opaque(10, 20, 30),
+            ButtonTextColor: DrawColor.Opaque(200, 210, 220)));
+        var elements = new[]
+        {
+            new LayoutElement(
+                LayoutElementKind.Rectangle,
+                new PixelRectangle(16, 60, 220, 48)),
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(16, 120, 140, 40),
+                Text: "Increment",
+                Action: "Increment")
+        };
+
+        using var batch = recorder.Record(elements);
+
+        Assert.Equal(DrawColor.Opaque(20, 30, 40), batch.Memory.Span[0].Color);
+        Assert.Equal(DrawColor.Opaque(10, 20, 30), batch.Memory.Span[1].Color);
+        Assert.Equal(DrawColor.Opaque(200, 210, 220), batch.Memory.Span[2].Color);
+    }
+
+    [Fact]
+    public void RenderPipeline_builds_draw_commands_from_virtual_node()
+    {
+        var pipeline = new RenderPipeline(
+            new LayoutStyle(
+                HorizontalPadding: 16,
+                VerticalPadding: 16,
+                ItemSpacing: 12,
+                TextHeight: 32,
+                ButtonHeight: 40,
+                MinimumButtonWidth: 140,
+                ButtonTextWidthFactor: 12,
+                ButtonHorizontalPadding: 32),
+            new DrawingStyle(
+                TextColor: DrawColor.Opaque(255, 255, 255),
+                RectangleFillColor: DrawColor.Opaque(72, 72, 72),
+                ButtonFillColor: DrawColor.Opaque(52, 120, 246),
+                ButtonTextColor: DrawColor.Opaque(255, 255, 255)));
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button(
+                "Increment",
+                3,
+                new VirtualNodeAttribute("Action", AttributeValue.FromText("Increment"))));
+
+        using var batch = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540));
+
+        Assert.Equal(3, batch.Count);
+        Assert.Equal(DrawCommandKind.DrawTextRun, batch.Memory.Span[0].Kind);
+        Assert.Equal(new DrawRect(16, 16, 928, 32), batch.Memory.Span[0].Rect);
+        Assert.Equal(DrawCommandKind.FillRect, batch.Memory.Span[1].Kind);
+        Assert.Equal("Increment", batch.Memory.Span[1].Metadata);
+        Assert.Equal(DrawCommandKind.DrawTextRun, batch.Memory.Span[2].Kind);
+        Assert.Equal("Increment", batch.Memory.Span[2].Text);
+    }
 }

@@ -6,8 +6,13 @@ namespace Irix.Poc;
 
 internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatchBatchTranslator
 {
-    private readonly Irix.Rendering.LayoutTreeBuilder _layoutTreeBuilder = new();
-    private readonly Irix.Rendering.DrawCommandRecorder _drawCommandRecorder = new();
+    private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(
+        new LayoutStyle(),
+        new DrawingStyle(
+        TextColor: DrawColor.Opaque(255, 255, 255),
+        RectangleFillColor: DrawColor.Opaque(72, 72, 72),
+        ButtonFillColor: DrawColor.Opaque(52, 120, 246),
+        ButtonTextColor: DrawColor.Opaque(255, 255, 255)));
 
     public DrawCommandBatch Translate(PatchBatch patchBatch)
     {
@@ -17,7 +22,6 @@ internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatch
         }
 
         var root = patchBatch.Memory.Span[patchBatch.Count - 1].Node;
-        var layoutElements = _layoutTreeBuilder.Build(root, window.Region.PhysicalBounds);
-        return _drawCommandRecorder.Record(layoutElements);
+        return _renderPipeline.Build(root, window.Region.PhysicalBounds);
     }
 }

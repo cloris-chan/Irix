@@ -5,6 +5,18 @@ namespace Irix.Rendering;
 
 internal sealed class DrawCommandRecorder
 {
+    private readonly DrawingStyle _style;
+
+    public DrawCommandRecorder()
+        : this(DrawingStyle.Default)
+    {
+    }
+
+    public DrawCommandRecorder(DrawingStyle style)
+    {
+        _style = style;
+    }
+
     public DrawCommandBatch Record(IReadOnlyList<LayoutElement> elements)
     {
         if (elements.Count == 0)
@@ -23,26 +35,26 @@ internal sealed class DrawCommandRecorder
                         DrawCommandKind.DrawTextRun,
                         Rect: ToDrawRect(element.Bounds),
                         Text: element.Text,
-                        Color: DrawColor.Opaque(255, 255, 255)));
+                        Color: _style.TextColor));
                     break;
                 case LayoutElementKind.Rectangle:
                     commands.Add(new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: ToDrawRect(element.Bounds),
-                        Color: DrawColor.Opaque(72, 72, 72)));
+                        Color: _style.RectangleFillColor));
                     break;
                 case LayoutElementKind.Button:
                     var bounds = ToDrawRect(element.Bounds);
                     commands.Add(new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: bounds,
-                        Color: DrawColor.Opaque(52, 120, 246),
+                        Color: _style.ButtonFillColor,
                         Metadata: element.Action));
                     commands.Add(new DrawCommand(
                         DrawCommandKind.DrawTextRun,
                         Rect: bounds,
                         Text: element.Text,
-                        Color: DrawColor.Opaque(255, 255, 255),
+                        Color: _style.ButtonTextColor,
                         Metadata: element.Action));
                     break;
             }

@@ -4,19 +4,25 @@ namespace Irix.Rendering;
 
 internal sealed class LayoutTreeBuilder
 {
-    private const int HorizontalPadding = 16;
-    private const int VerticalPadding = 16;
-    private const int ItemSpacing = 12;
-    private const int TextHeight = 32;
-    private const int ButtonHeight = 40;
+    private readonly LayoutStyle _style;
+
+    public LayoutTreeBuilder()
+        : this(LayoutStyle.Default)
+    {
+    }
+
+    public LayoutTreeBuilder(LayoutStyle style)
+    {
+        _style = style;
+    }
 
     public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds)
     {
         var elements = new List<LayoutElement>();
-        var availableWidth = Math.Max(viewportBounds.Width - (HorizontalPadding * 2), 0);
-        var cursorY = VerticalPadding;
+        var availableWidth = Math.Max(viewportBounds.Width - (_style.HorizontalPadding * 2), 0);
+        var cursorY = _style.VerticalPadding;
 
-        LayoutNode(root, availableWidth, ref cursorY, elements);
+        LayoutNode(root, availableWidth, ref cursorY, elements, _style);
         return elements;
     }
 
@@ -24,14 +30,15 @@ internal sealed class LayoutTreeBuilder
         VirtualNode node,
         int availableWidth,
         ref int cursorY,
-        List<LayoutElement> elements)
+        List<LayoutElement> elements,
+        LayoutStyle style)
     {
         switch (node.Kind)
         {
             case VirtualNodeKind.ScrollContainer:
                 foreach (var child in node.Children)
                 {
-                    LayoutNode(child, availableWidth, ref cursorY, elements);
+                    LayoutNode(child, availableWidth, ref cursorY, elements, style);
                 }
                 break;
             case VirtualNodeKind.Text:
@@ -40,31 +47,33 @@ internal sealed class LayoutTreeBuilder
                 {
                     elements.Add(new LayoutElement(
                         LayoutElementKind.Text,
-                        new PixelRectangle(HorizontalPadding, cursorY, availableWidth, TextHeight),
+                        new PixelRectangle(style.HorizontalPadding, cursorY, availableWidth, style.TextHeight),
                         Text: content));
-                    cursorY += TextHeight + ItemSpacing;
+                    cursorY += style.TextHeight + style.ItemSpacing;
                 }
                 break;
             case VirtualNodeKind.Rectangle:
                 var rectangleBounds = new PixelRectangle(
-                    HorizontalPadding,
+                    style.HorizontalPadding,
                     cursorY,
                     GetDimension(node, "Width", Math.Min(availableWidth, 160)),
                     GetDimension(node, "Height", 48));
                 elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds));
-                cursorY += rectangleBounds.Height + ItemSpacing;
+                cursorY += rectangleBounds.Height + style.ItemSpacing;
                 break;
             case VirtualNodeKind.Button:
                 var label = GetButtonLabel(node);
-                var width = Math.Min(availableWidth, Math.Max(140, label.Length * 12 + 32));
-                var bounds = new PixelRectangle(HorizontalPadding, cursorY, width, ButtonHeight);
+                var width = Math.Min(availableWidth, Math.Max(
+                    style.MinimumButtonWidth,
+                    label.Length * style.ButtonTextWidthFactor + style.ButtonHorizontalPadding));
+                var bounds = new PixelRectangle(style.HorizontalPadding, cursorY, width, style.ButtonHeight);
                 var action = GetTextAttribute(node, "Action");
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
                     bounds,
                     Text: label,
                     Action: action));
-                cursorY += ButtonHeight + ItemSpacing;
+                cursorY += style.ButtonHeight + style.ItemSpacing;
                 break;
         }
     }
