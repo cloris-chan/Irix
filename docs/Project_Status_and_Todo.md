@@ -50,6 +50,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 Counter 示例应用
   - 已有 `WindowVisualCompositor`，能把 `VirtualNode` 渲染成当前 PoC Window 内容
   - 已有 `WindowBackend`，可将 `DrawCommand` 翻译成 PoC Window 内容元素与命中目标
+  - 已将 Counter 示例中的输入映射抽到独立 `CounterInputRouter`
   - 已打通：窗口创建 -> 输入 -> runtime dispatch -> patch 发布 -> PoC 可视化
 - `Irix.Core.Tests`
   - 已有最基础 runtime 测试
@@ -147,7 +148,15 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 已补 `WindowDrawCommandTranslator` 默认布局回归测试
 - 已补 `WindowBackend` 颜色映射断言
 - 已补 `WindowVisualCompositor` 命中边界与空帧清理测试
-- 还没有 diff、输入路由、所有权转移、异常/取消路径测试
+- 已补 Counter PoC 输入路由映射测试
+- 已补 `PatchBatch` / `DrawCommandBatch` / `CompositorLoop` 基础所有权与释放路径测试
+- 还没有 diff、异常/取消路径测试
+
+当前已知行为记录：
+
+- `PatchBatch.Dispose()` 后再次访问 `Memory`，当前实现会因切片边界失效而抛 `ArgumentOutOfRangeException`
+- `DrawCommandBatch.Dispose()` 后再次访问 `Memory`，当前实现返回空内存
+- `CompositorLoop` 在正常渲染路径中会负责释放传入的 `PatchBatch` 与翻译产出的 `DrawCommandBatch`
 
 关键文件：
 
@@ -262,13 +271,14 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 ### Tests
 
 - [ ] 为 diff 增加测试
-- [ ] 为 `PatchBatch.Dispose()` 路径增加测试
+- [x] 为 `PatchBatch.Dispose()` 路径增加测试
 - [ ] 为 runtime command 执行增加测试
-- [ ] 为 `Program` 层输入路由增加测试
+- [x] 为 Counter PoC 输入路由增加最小测试
 - [ ] 为 hit testing 增加测试
 - [x] 为 layout / draw pipeline 增加基础测试
 - [x] 为 PoC 渲染回归增加最小测试
 - [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
+- [x] 为 `CompositorLoop` 所有权转移增加最小测试
 
 ---
 

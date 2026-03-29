@@ -32,29 +32,15 @@ internal static class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            switch (inputEvent.Kind)
+            if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionAt, out var message))
             {
-                case RawInputEventKind.PointerReleased
-                    when inputEvent.Button == PointerButton.Left
-                    && visualCompositor.TryGetActionAt(inputEvent.X, inputEvent.Y, out var action):
-                    runtime.Dispatch(MapAction(action));
-                    break;
-                case RawInputEventKind.KeyPressed when inputEvent.KeyCode == 0x26:
-                    runtime.Dispatch(new CounterMessage.Increment());
-                    break;
-                case RawInputEventKind.KeyPressed when inputEvent.KeyCode == 0x28:
-                    runtime.Dispatch(new CounterMessage.Decrement());
-                    break;
-                case RawInputEventKind.PointerWheel when inputEvent.Delta > 0:
-                    runtime.Dispatch(new CounterMessage.Increment());
-                    break;
-                case RawInputEventKind.PointerWheel when inputEvent.Delta < 0:
-                    runtime.Dispatch(new CounterMessage.Decrement());
-                    break;
-                case RawInputEventKind.CharacterInput when inputEvent.Character is 'r' or 'R':
-                    runtime.Dispatch(new CounterMessage.Reset(0));
-                    break;
+                runtime.Dispatch(message);
             }
+        }
+
+        string? TryGetActionAt(int x, int y)
+        {
+            return visualCompositor.TryGetActionAt(x, y, out var action) ? action : null;
         }
 
         void OnTopologyChanged(object? sender, ScreenTopologyChangedEventArgs args)
@@ -64,18 +50,6 @@ internal static class Program
 
         platformHost.TopologyChanged -= OnTopologyChanged;
     }
-
-    private static CounterMessage MapAction(string action)
-    {
-        return action switch
-        {
-            nameof(CounterMessage.Increment) => new CounterMessage.Increment(),
-            nameof(CounterMessage.Decrement) => new CounterMessage.Decrement(),
-            nameof(CounterMessage.Reset) => new CounterMessage.Reset(0),
-            _ => throw new NotSupportedException($"Unsupported action: {action}")
-        };
-    }
-
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
     {
         const int windowWidth = 960;
