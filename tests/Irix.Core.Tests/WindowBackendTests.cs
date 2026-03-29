@@ -39,15 +39,20 @@ public sealed class WindowBackendTests
         Assert.Equal(3, result.Elements.Count);
         Assert.Equal(new WindowContentElement(
             WindowContentElementKind.Rectangle,
-            new PixelRectangle(16, 60, 220, 48)), result.Elements[0]);
+            new PixelRectangle(16, 60, 220, 48),
+            BackgroundColor: WindowColor.Opaque(72, 72, 72)), result.Elements[0]);
         Assert.Equal(new WindowContentElement(
             WindowContentElementKind.Button,
             new PixelRectangle(16, 120, 140, 40),
-            "Increment"), result.Elements[1]);
+            "Increment",
+            ForegroundColor: WindowColor.Opaque(255, 255, 255),
+            BackgroundColor: WindowColor.Opaque(52, 120, 246),
+            BorderColor: WindowColor.Opaque(24, 48, 96)), result.Elements[1]);
         Assert.Equal(new WindowContentElement(
             WindowContentElementKind.Text,
             new PixelRectangle(16, 16, 928, 32),
-            "Count: 0"), result.Elements[2]);
+            "Count: 0",
+            ForegroundColor: WindowColor.Opaque(255, 255, 255)), result.Elements[2]);
 
         Assert.Single(result.HitTargets);
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), result.HitTargets[0].Bounds);

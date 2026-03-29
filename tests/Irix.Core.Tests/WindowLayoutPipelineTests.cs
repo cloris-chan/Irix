@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
 
@@ -154,5 +155,52 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal("Increment", batch.Memory.Span[1].Metadata);
         Assert.Equal(DrawCommandKind.DrawTextRun, batch.Memory.Span[2].Kind);
         Assert.Equal("Increment", batch.Memory.Span[2].Text);
+    }
+
+    [Fact]
+    public void WindowDrawCommandTranslator_uses_non_zero_default_layout_style()
+    {
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button(
+                "Increment",
+                3,
+                new VirtualNodeAttribute("Action", AttributeValue.FromText("Increment"))));
+
+        using var patchBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var batch = translator.Translate(patchBatch);
+
+        Assert.Equal(3, batch.Count);
+        Assert.Equal(new DrawRect(16, 16, 928, 32), batch.Memory.Span[0].Rect);
+        Assert.Equal(new DrawRect(16, 60, 140, 40), batch.Memory.Span[1].Rect);
+        Assert.Equal(new DrawRect(16, 60, 140, 40), batch.Memory.Span[2].Rect);
+    }
+
+    private sealed class FakeWindow(ScreenRegion region) : INativeWindow
+    {
+        public string Title => "Test";
+
+        public ScreenRegion Region => region;
+
+        public nint Handle => nint.Zero;
+
+        public void Dispose()
+        {
+        }
+
+        public void RunMessageLoop()
+        {
+        }
+
+        public void SetContentElements(IReadOnlyList<WindowContentElement> elements)
+        {
+        }
+
+        public void Show()
+        {
+        }
     }
 }

@@ -49,9 +49,11 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `Irix.Poc`
   - 已有 Counter 示例应用
   - 已有 `WindowVisualCompositor`，能把 `VirtualNode` 渲染成当前 PoC Window 内容
+  - 已有 `WindowBackend`，可将 `DrawCommand` 翻译成 PoC Window 内容元素与命中目标
   - 已打通：窗口创建 -> 输入 -> runtime dispatch -> patch 发布 -> PoC 可视化
 - `Irix.Core.Tests`
   - 已有最基础 runtime 测试
+  - 已有 layout / draw pipeline / `WindowBackend` 基础测试与最近的回归测试
 
 ### 尚未落地的关键内容
 
@@ -122,6 +124,11 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 布局与命令录制已经开始沉到 `Irix.Rendering`，但离正式 retained tree / GPU backend 还有距离。
 
+最近已确认并修复的 PoC 问题：
+
+- `WindowDrawCommandTranslator` 若误用 `new LayoutStyle()`，会因为 `record struct` 默认值全为 `0`，导致文本/按钮高度都退化为 `0`
+- `WindowBackend` / `WindowsNativeWindow` 现已补通颜色传递，PoC Window 不再忽略 `DrawCommand.Color`
+
 关键文件：
 
 - [DrawingPrimitives.cs](/d:/source/Irix/src/Irix.Drawing/DrawingPrimitives.cs)
@@ -136,7 +143,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 当前测试状态：
 
 - `Irix.Core.Tests` 已有 runtime 测试和 layout/draw pipeline 基础测试
-- 还没有 diff、layout、输入路由、所有权转移、异常/取消路径测试
+- 已补 `WindowDrawCommandTranslator` 默认布局回归测试
+- 已补 `WindowBackend` 颜色映射断言
+- 还没有 diff、输入路由、所有权转移、异常/取消路径测试
 
 关键文件：
 
@@ -193,6 +202,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 在 `Irix.Drawing` 中继续稳定 `DrawCommand` / `IDrawingBackend` / `DrawCommandBatch`
 - 继续把 `LayoutTreeBuilder` / `DrawCommandRecorder` 从 PoC 规则里抽成更通用的 pipeline
 - 让 `WindowVisualCompositor` 保持为纯 PoC/backend 层，不再回流正式职责
+- 梳理 `record struct` 风格配置对象的默认值策略，避免再次出现 `new XxxStyle()` 触发零值布局
 
 ### P1
 
@@ -216,9 +226,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 新建 `IDrawingBackend`
 - [x] 新建 `FrameContext`
 - [x] 新建 `DrawCommandBatch`
-- [ ] 实现 `WindowBackend`，使其消费 `DrawCommandBatch`
+- [x] 实现 `WindowBackend`，使其消费 `DrawCommandBatch`
 - [x] 将 `WindowVisualCompositor` 从 patch 直接消费改成 draw command 消费
 - [x] 建立 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> WindowBackend` 过渡链
+- [x] 打通 PoC Window 对 `DrawCommand.Color` 的映射
 - [ ] 搭 `D3D12` 基础渲染循环
 - [ ] 评估 `Skia + D3D12` 集成可行性
 
@@ -252,7 +263,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [ ] 为 `PatchBatch.Dispose()` 路径增加测试
 - [ ] 为 runtime command 执行增加测试
 - [ ] 为输入路由增加测试
-- [ ] 为 layout / hit testing 增加测试
+- [ ] 为 hit testing 增加测试
+- [x] 为 layout / draw pipeline 增加基础测试
+- [x] 为 PoC 渲染回归增加最小测试
 
 ---
 
@@ -282,6 +295,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 如需新增平台代码，Windows interop 优先使用 `CsWin32`
 - 命名遵循 C# 风格，尽早统一，不保留临时缩写命名
 - 不要在未经确认的情况下把 `Skia` API 泄漏到上层 UI / layout / core
+- 遇到 `record struct` 风格配置类型时，不要假设 `new Type()` 等价于 `.Default`
 
 ---
 
