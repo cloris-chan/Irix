@@ -28,18 +28,28 @@ internal sealed class WindowBackend
             {
                 case DrawCommandKind.FillRect when !string.IsNullOrWhiteSpace(command.Metadata):
                     var buttonBounds = ToPixelRectangle(command.Rect);
-                    var label = TryConsumeButtonLabel(commands, index + 1, command.Metadata, buttonBounds, consumedTextIndices);
-                    elements.Add(new WindowContentElement(WindowContentElementKind.Button, buttonBounds, label));
+                    var button = TryConsumeButtonPresentation(commands, index + 1, command.Metadata, buttonBounds, consumedTextIndices);
+                    elements.Add(new WindowContentElement(
+                        WindowContentElementKind.Button,
+                        buttonBounds,
+                        button.Label,
+                        ForegroundColor: button.TextColor,
+                        BackgroundColor: ToWindowColor(command.Color),
+                        BorderColor: WindowColor.Opaque(24, 48, 96)));
                     hitTargets.Add(new WindowHitTarget(buttonBounds, command.Metadata));
                     break;
                 case DrawCommandKind.FillRect:
-                    elements.Add(new WindowContentElement(WindowContentElementKind.Rectangle, ToPixelRectangle(command.Rect)));
+                    elements.Add(new WindowContentElement(
+                        WindowContentElementKind.Rectangle,
+                        ToPixelRectangle(command.Rect),
+                        BackgroundColor: ToWindowColor(command.Color)));
                     break;
                 case DrawCommandKind.DrawTextRun:
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
-                        command.Text));
+                        command.Text,
+                        ForegroundColor: ToWindowColor(command.Color)));
                     break;
             }
         }
@@ -47,7 +57,7 @@ internal sealed class WindowBackend
         return new WindowBackendRenderResult([.. elements], [.. hitTargets]);
     }
 
-    private static string TryConsumeButtonLabel(
+    private static ButtonPresentation TryConsumeButtonPresentation(
         ReadOnlySpan<DrawCommand> commands,
         int startIndex,
         string? action,
@@ -62,11 +72,13 @@ internal sealed class WindowBackend
                 && ToPixelRectangle(candidate.Rect) == bounds)
             {
                 consumedTextIndices.Add(index);
-                return string.IsNullOrWhiteSpace(candidate.Text) ? "Button" : candidate.Text;
+                return new ButtonPresentation(
+                    string.IsNullOrWhiteSpace(candidate.Text) ? "Button" : candidate.Text,
+                    ToWindowColor(candidate.Color));
             }
         }
 
-        return "Button";
+        return new ButtonPresentation("Button", WindowColor.Opaque(255, 255, 255));
     }
 
     private static PixelRectangle ToPixelRectangle(DrawRect rect)
@@ -77,4 +89,8 @@ internal sealed class WindowBackend
             (int)MathF.Round(rect.Width),
             (int)MathF.Round(rect.Height));
     }
+
+    private static WindowColor ToWindowColor(DrawColor color) => new(color.A, color.R, color.G, color.B);
+
+    private readonly record struct ButtonPresentation(string Label, WindowColor TextColor);
 }

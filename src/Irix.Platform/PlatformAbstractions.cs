@@ -37,6 +37,13 @@ public enum ColorSpace
     Hdr10
 }
 
+public readonly record struct WindowColor(byte A, byte R, byte G, byte B)
+{
+    public static WindowColor Transparent => new(0, 0, 0, 0);
+
+    public static WindowColor Opaque(byte r, byte g, byte b) => new(255, r, g, b);
+}
+
 
 public readonly record struct PixelRectangle(int X, int Y, int Width, int Height);
 
@@ -55,7 +62,10 @@ public readonly record struct RawInputEvent(
 public readonly record struct WindowContentElement(
     WindowContentElementKind Kind,
     PixelRectangle Bounds,
-    string? Text = null);
+    string? Text = null,
+    WindowColor ForegroundColor = default,
+    WindowColor BackgroundColor = default,
+    WindowColor BorderColor = default);
 
 public interface INativeWindow : IDisposable
 {

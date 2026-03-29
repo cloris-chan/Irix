@@ -260,39 +260,62 @@ internal sealed class WindowsNativeWindow : INativeWindow
         switch (element.Kind)
         {
             case WindowContentElementKind.Rectangle:
-                _ = PInvoke.FillRect(deviceContext, &bounds, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_HIGHLIGHT));
+                FillRectangle(deviceContext, bounds, element.BackgroundColor);
                 return;
             case WindowContentElementKind.Button:
-                var border = bounds;
-                _ = PInvoke.FrameRect(deviceContext, &border, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_WINDOWFRAME));
-
                 var inner = bounds;
                 inner.left += ButtonBorderThickness;
                 inner.top += ButtonBorderThickness;
                 inner.right -= ButtonBorderThickness;
                 inner.bottom -= ButtonBorderThickness;
-                _ = PInvoke.FillRect(deviceContext, &inner, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_3DFACE));
-                DrawText(deviceContext, inner, element.Text, DRAW_TEXT_FORMAT.DT_CENTER | DRAW_TEXT_FORMAT.DT_VCENTER | DRAW_TEXT_FORMAT.DT_SINGLELINE | DRAW_TEXT_FORMAT.DT_NOPREFIX);
+                FrameRectangle(deviceContext, bounds, element.BorderColor);
+                FillRectangle(deviceContext, inner, element.BackgroundColor);
+                DrawText(
+                    deviceContext,
+                    inner,
+                    element.Text,
+                    element.ForegroundColor,
+                    DRAW_TEXT_FORMAT.DT_CENTER | DRAW_TEXT_FORMAT.DT_VCENTER | DRAW_TEXT_FORMAT.DT_SINGLELINE | DRAW_TEXT_FORMAT.DT_NOPREFIX);
                 return;
             case WindowContentElementKind.Text:
-                DrawText(deviceContext, bounds, element.Text, DRAW_TEXT_FORMAT.DT_LEFT | DRAW_TEXT_FORMAT.DT_TOP | DRAW_TEXT_FORMAT.DT_WORDBREAK | DRAW_TEXT_FORMAT.DT_NOPREFIX);
+                DrawText(
+                    deviceContext,
+                    bounds,
+                    element.Text,
+                    element.ForegroundColor,
+                    DRAW_TEXT_FORMAT.DT_LEFT | DRAW_TEXT_FORMAT.DT_TOP | DRAW_TEXT_FORMAT.DT_WORDBREAK | DRAW_TEXT_FORMAT.DT_NOPREFIX);
                 return;
             default:
                 return;
         }
     }
 
-    private static unsafe void DrawText(HDC deviceContext, RECT bounds, string? text, DRAW_TEXT_FORMAT format)
+    private static unsafe void DrawText(HDC deviceContext, RECT bounds, string? text, WindowColor color, DRAW_TEXT_FORMAT format)
     {
         if (string.IsNullOrEmpty(text))
         {
             return;
         }
 
+        _ = PInvoke.SetBkMode(deviceContext, BACKGROUND_MODE.TRANSPARENT);
+        _ = PInvoke.SetTextColor(deviceContext, ToColorRef(color));
+
         fixed (char* textPointer = text)
         {
             _ = PInvoke.DrawText(deviceContext, new PCWSTR(textPointer), text.Length, &bounds, format);
         }
+    }
+
+    private static unsafe void FillRectangle(HDC deviceContext, RECT bounds, WindowColor color)
+    {
+        using var brush = new ScopedBrush(color);
+        _ = PInvoke.FillRect(deviceContext, &bounds, brush.Handle);
+    }
+
+    private static unsafe void FrameRectangle(HDC deviceContext, RECT bounds, WindowColor color)
+    {
+        using var brush = new ScopedBrush(color);
+        _ = PInvoke.FrameRect(deviceContext, &bounds, brush.Handle);
     }
 
     private static RECT ToRect(PixelRectangle rectangle)
@@ -304,6 +327,11 @@ internal sealed class WindowsNativeWindow : INativeWindow
             right = rectangle.X + rectangle.Width,
             bottom = rectangle.Y + rectangle.Height
         };
+    }
+
+    private static global::Windows.Win32.Foundation.COLORREF ToColorRef(WindowColor color)
+    {
+        return new global::Windows.Win32.Foundation.COLORREF((uint)(color.R | (color.G << 8) | (color.B << 16)));
     }
 
     private static unsafe void HandleSizeChanged(HWND windowHandle)
@@ -410,5 +438,23 @@ internal sealed class WindowsNativeWindow : INativeWindow
 
         var gcHandle = GCHandle.FromIntPtr(instancePointer);
         return gcHandle.Target as WindowsNativeWindow;
+    }
+
+    private readonly ref struct ScopedBrush
+    {
+        public ScopedBrush(WindowColor color)
+        {
+            Handle = PInvoke.CreateSolidBrush(ToColorRef(color));
+        }
+
+        public HBRUSH Handle { get; }
+
+        public void Dispose()
+        {
+            if (Handle != HBRUSH.Null)
+            {
+                _ = PInvoke.DeleteObject(Handle);
+            }
+        }
     }
 }

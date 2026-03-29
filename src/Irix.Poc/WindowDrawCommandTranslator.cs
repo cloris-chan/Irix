@@ -7,9 +7,9 @@ namespace Irix.Poc;
 internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatchBatchTranslator
 {
     private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(
-        new LayoutStyle(),
+        LayoutStyle.Default,
         new DrawingStyle(
-        TextColor: DrawColor.Opaque(255, 255, 255),
+        TextColor: DrawColor.Opaque(32, 32, 32),
         RectangleFillColor: DrawColor.Opaque(72, 72, 72),
         ButtonFillColor: DrawColor.Opaque(52, 120, 246),
         ButtonTextColor: DrawColor.Opaque(255, 255, 255)));

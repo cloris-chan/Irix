@@ -2,6 +2,8 @@ EnumDisplayMonitors
 BeginPaint
 EndPaint
 FillRect
+CreateSolidBrush
+DeleteObject
 GetSysColorBrush
 CreateWindowExW
 DefWindowProcW
@@ -22,6 +24,8 @@ LoadCursorW
 PostThreadMessageW
 PostQuitMessage
 RegisterClassW
+SetBkMode
+SetTextColor
 SetWindowLongPtrW
 ShowWindow
 TranslateMessage
