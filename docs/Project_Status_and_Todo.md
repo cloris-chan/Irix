@@ -121,6 +121,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 1. 消费 `DrawCommandBatch`
 2. 生成 PoC Window 内容元素
 3. 维护命中目标
+4. 空帧到来时主动清空窗口元素与命中目标，避免上一帧命中信息残留
 
 布局与命令录制已经开始沉到 `Irix.Rendering`，但离正式 retained tree / GPU backend 还有距离。
 
@@ -145,6 +146,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `Irix.Core.Tests` 已有 runtime 测试和 layout/draw pipeline 基础测试
 - 已补 `WindowDrawCommandTranslator` 默认布局回归测试
 - 已补 `WindowBackend` 颜色映射断言
+- 已补 `WindowVisualCompositor` 命中边界与空帧清理测试
 - 还没有 diff、输入路由、所有权转移、异常/取消路径测试
 
 关键文件：
@@ -262,10 +264,11 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [ ] 为 diff 增加测试
 - [ ] 为 `PatchBatch.Dispose()` 路径增加测试
 - [ ] 为 runtime command 执行增加测试
-- [ ] 为输入路由增加测试
+- [ ] 为 `Program` 层输入路由增加测试
 - [ ] 为 hit testing 增加测试
 - [x] 为 layout / draw pipeline 增加基础测试
 - [x] 为 PoC 渲染回归增加最小测试
+- [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
 
 ---
 

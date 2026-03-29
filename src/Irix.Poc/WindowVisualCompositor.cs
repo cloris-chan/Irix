@@ -14,6 +14,13 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
     {
         if (drawCommandBatch.Count == 0)
         {
+            window.SetContentElements([]);
+
+            lock (_hitTargetsLock)
+            {
+                _hitTargets = [];
+            }
+
             return ValueTask.CompletedTask;
         }
 
