@@ -100,7 +100,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 能力 | 说明 |
 |------|------|
 | Remote UI Delivery | FlatBuffers Schema + gRPC 双向流 + 乐观更新与回滚，用于跨机器 UI 下发 |
-| MVVM → MVU Source Generator 桥接 | 零运行时反射，编译期转换 |
+| MVVM → MVU Source Generator 桥接 | 轻量编译期桥接；`XAML/IXAML` 仅作为 DSL；双向绑定编译为 MVU 消息与状态更新；无运行时解析与反射式 Binding Engine |
 | F# 一等互操作层 | Discriminated Unions + 模式匹配 |
 | 第二图形后端 / 后端扩展 | 在 `D3D12` 主链稳定后，再补齐 `Vulkan` 或其他后端 |
 | 自研 Drawing Engine（评估项） | 仅在 `DrawCommand` 层稳定且 `Skia` 明确成为瓶颈后启动 |
@@ -759,10 +759,90 @@ internal class OptimisticStateManager
 
 ### 9.1 C# MVVM 桥接 (Source Generator)
 
-允许传统 .NET 开发者以熟悉的 MVVM 模式接入框架，Source Generator 在编译期完成转换，零运行时反射。
+Irix 的 `MVVM Bridge` 不应复制 `WPF / WinUI / MAUI` 上那套完整而沉重的运行时对象模型。它的职责应收敛为一种**面向 MVU 的轻量 authoring layer**：让习惯 MVVM 的开发者能以熟悉写法接入，但最终仍落到 Irix 唯一的 `Model / Message / Update / View` 主链。
+
+#### 9.1.1 定位
+
+- `MVVM Bridge` 只是迁移入口与语法糖，不是第二套 UI runtime。
+- 运行时只保留一份权威状态：MVU `Model`。不再维护独立的、可长期漂移的 `ViewModel State`。
+- `ViewModel`、Binding、`IXAML` 语法的价值在于提升 authoring 体验，而不是引入新的对象层级。
+
+#### 9.1.2 Binding 收敛策略
+
+Binding 只负责“读当前状态”和“把用户输入转换为 Message”。bridge 的最小能力建议收敛为：
+
+- `OneWay`
+- `TwoWay`
+- `Command`
+- 少量可在编译期解析的 typed converter（如后续确有必要）
+
+其中 `TwoWay Binding` 的本质不是运行时同步两套对象图，而是由生成器自动把写入动作转换为 `dispatch`：
+
+```ixaml
+<TextBox Text="{Bind Name, Mode=TwoWay}" />
+<Button Command="{Bind Save}" />
+```
+
+对应生成代码应接近：
 
 ```csharp
-// 开发者写法（传统 MVVM）
+builder.TextBox(
+    text: model.Name,
+    onTextChanged: value => dispatch(new SetNameMessage(value)));
+
+builder.Button(
+    onClick: () => dispatch(new SaveMessage()));
+```
+
+也就是说，所谓“双向绑定”只是**内部自动管理 MVU 的 update/state glue code**，而不是重新引入一个通用运行时 Binding Engine。
+
+#### 9.1.3 XAML / IXAML 的角色
+
+`XAML / IXAML` 在 Irix 中应仅作为 DSL 存在：
+
+- 仅在编译期由 Source Generator 解析
+- 生成强类型 C# 视图构建代码
+- 生成结果直接接入 `BuildView` / `Dispatch` / `VirtualNode` 主链
+- 编译期暴露 binding path、类型不匹配、命令签名不匹配等错误
+
+明确不做：
+
+- 运行时 `XAML / IXAML` 解析
+- 运行时对象图装配
+- 反射式 Markup Extension 系统
+- 依赖运行时 `DataContext` 猜测的弱类型 binding
+
+#### 9.1.4 VisualTree / VisualState 收敛策略
+
+Irix 不应复制 WPF 式完整 `VisualTree`、`DependencyObject`、`VisualStateManager` 体系。bridge 生成的视图最终仍应下沉到 Irix 自己的稳定主链：
+
+```text
+IXAML / ViewModel
+  → Source Generator
+  → Typed C# View Builder
+  → VirtualNode / Element / Layout / DrawCommand
+```
+
+因此：
+
+- `VisualTree` 只保留 Irix 自己的 `VirtualNode` / Element / Layout 层次，不额外引入第二棵 UI 树
+- `VisualState` 应优先编译为条件属性、条件样式或条件分支，而不是独立运行时状态机
+- 模板、资源、样式若存在，也应优先做编译期展开或受限模型，而不是完整复制 WPF 的动态系统
+
+#### 9.1.5 明确非目标
+
+为避免 bridge 失控，下面这些能力不应作为首批设计目标：
+
+- 不做 `DependencyProperty` / `DependencyObject` 兼容层
+- 不做通用运行时 Binding Path 解释器
+- 不做完整 Routed Event 系统
+- 不做通用 Attached Property 运行时
+- 不做完整 Trigger / Resource Dictionary / Template 运行时
+- 不做“为了兼容旧 XAML 生态”而复制 `WPF / WinUI / MAUI` 的历史包袱
+
+#### 9.1.6 开发者写法与生成目标（概念示意）
+
+```csharp
 [ViewModelBridge]
 public partial class CounterViewModel
 {
@@ -772,11 +852,14 @@ public partial class CounterViewModel
     public void Increment() => Count++;
 }
 
-// Source Generator 自动生成（概念示意）
-// → 将 PropertyChanged 映射为 Message { PropertyName, NewValue }
-// → 将 ICommand.Execute 映射为 Message { CommandName, Parameter }
-// → 接入底层 MVU Dispatch 管线
+// Source Generator 的生成目标（概念示意）
+// → 将属性读取映射为对 Model 的只读投影
+// → 将属性写入映射为类型安全的 Message
+// → 将 Command 调用映射为 Dispatch
+// → 将 IXAML DSL 映射为普通 C# 视图构建代码
 ```
+
+这样既能保留传统 .NET 开发者熟悉的 authoring 体验，也能保持 Irix 在 AOT、可测试性、零运行时反射和架构边界上的优势。
 
 ### 9.2 F# MVU 互操作层
 
@@ -811,7 +894,7 @@ let update (model: Model) (message: Message) =
 | **核心逻辑** | 状态引擎 | C# 14 | **v1** | `MemoryPool`、同步热路径优化、Native AOT 友好设计 |
 | **本地 IPC** | 线程间通信 | `System.Threading.Channels` (MPSC) | **v1** | `IMemoryOwner` 所有权转移通道 |
 | **测试** | 单元/集成测试 | xUnit + FsCheck (Property-based) | **v1** | MVU Core 纯函数，天然适合属性测试 |
-| **编译器扩展** | 代码生成 | Roslyn Source Generators | v2.0 | 用于 MVVM 桥接、AOT 元数据生成 |
+| **编译器扩展** | 代码生成 | Roslyn Source Generators | v2.0 | 用于轻量 MVVM authoring bridge、`IXAML` DSL 编译期降解与 AOT 元数据生成 |
 | **本机 UI 传输** | Loopback RPC / IPC | 命名管道 / Unix Domain Socket / loopback gRPC（待定） | v1.x | 用于 `Local UI Remoting` 插件/扩展宿主 |
 | **跨网络序列化** | 网络协议 | FlatBuffers (`.fbs` Schema) | v2.0 | `Remote UI Delivery` 增量 `Patch` 协议 |
 | **网络传输** | 长连接 | `Grpc.Net.Client` (Bi-directional) | v2.0 | `Remote UI Delivery` 底层通信 |
@@ -834,6 +917,7 @@ let update (model: Model) (message: Message) =
 | R-08 | 多显示器动态插拔（热插拔）的 `HWND` 生命周期管理 | 🟡 中 | 作为 v1.1 专项能力建设，先覆盖单窗口单主视口 |
 | R-09 | 过早启动自研 Drawing Engine，吞噬核心 UI 框架建设节奏 | 🟡 中 | 先用 `SkiaBackend` 跑通 MVP，再以基线数据决定是否自研 |
 | R-10 | 开源版与商业版的 UI 协议分叉，导致生态与商业化相互掣肘 | 🟡 中 | `Local UI Remoting` 与 `Remote UI Delivery` 共享核心 UI 协议，仅在传输边界和运营能力上区分 |
+| R-11 | 为兼容 MVVM / XAML 过度引入 `WPF / WinUI / MAUI` 级运行时对象模型，导致 AOT、热路径和架构边界失守 | 🟡 中 | 明确 bridge 仅为编译期 DSL + Binding 代码生成，不引入运行时 parser、反射式 Binding Engine、`DependencyProperty` 体系 |
 
 ---
 
@@ -894,7 +978,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 
 - [ ] 更完整的多屏热插拔、跨刷新率、跨色彩空间支持
 - [ ] `Remote UI Delivery`：FlatBuffers Schema、gRPC 双向流、乐观更新与回滚
-- [ ] `MVVM → MVU` Source Generator 桥接
+- [ ] 轻量 `MVVM → MVU` Source Generator 桥接（`IXAML` 仅作为 DSL，无运行时解析）
 - [ ] F# 一等互操作层
 - [ ] 第二图形后端
 - [ ] `Irix.Drawing` 自研 Drawing Engine（仅在基线数据证明必要时）

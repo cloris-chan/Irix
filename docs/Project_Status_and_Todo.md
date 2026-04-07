@@ -17,6 +17,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - UI 交付层分为两条产品线：
   - `Local UI Remoting`：loopback-only，本机多进程插件/扩展 UI 接入
   - `Remote UI Delivery`：跨机器、商业版、server-driven UI
+- `MVVM bridge` 应保持为轻量编译期 authoring layer，而不是复制 `WPF / WinUI / MAUI` runtime
+- `XAML / IXAML` 仅作为 DSL，由 Source Generator 在编译期降解为 C#，不做运行时解析
+- `TwoWay Binding` 的本质是生成 MVU 的 `update/state` glue code，不引入第二套权威状态
 
 设计主文档见：[Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)
 
@@ -176,6 +179,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 上层依赖目标是 `DrawCommand + IDrawingBackend`
 - 免费/开源许可方向优先做 `Local UI Remoting`
 - 商业版方向做 `Remote UI Delivery`
+- `MVVM bridge` 只做轻量编译期桥接，不复制 `DependencyProperty` / `VisualState` 运行时
+- `XAML / IXAML` 仅作为 DSL，不做运行时解析
+- `TwoWay Binding` 编译为 MVU 的 `Message + Update` glue code
 
 ### 未确认或尚未落地
 
@@ -187,6 +193,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 其他本机 RPC 封装
 - `DrawCommand` 的最终字段设计
 - retained tree / layout tree 的具体对象模型
+- `IXAML` 的最小语法子集与 typed context 规则
+- binding / converter 的最小支持集合
+- visual state / template / resource 的受限模型
 
 ---
 
@@ -226,6 +235,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 开始搭 `D3D12` 最小三角形上屏
 - 明确 `SkiaBackend` 只位于 backend adapter 层
 - 为 `Local UI Remoting` 起草最小协议：`InputEvent`、`VirtualNodePatch`、`Ack / SeqId`
+- 收敛轻量 `MVVM bridge` 的最小 binding 语法、`IXAML` 子集与代码生成边界
 
 ---
 
@@ -268,6 +278,14 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [ ] 明确宿主的资源配额与安全边界
 - [ ] 保证 `Local UI Remoting` 与 `Remote UI Delivery` 共用核心 UI 协议模型
 
+### MVVM Bridge / DSL
+
+- [ ] 定义 `IXAML` 的最小语法子集与 typed context 规则
+- [ ] 定义 `OneWay` / `TwoWay` / `Command` binding 的代码生成模型
+- [ ] 明确 converter 的最小支持集合，避免引入通用运行时 binding engine
+- [ ] 明确 visual state 简化策略，优先编译为条件属性或条件分支
+- [ ] 输出 bridge 非目标清单：不做 `DependencyProperty`、运行时 `XAML` 解析、完整模板/资源 runtime
+
 ### Tests
 
 - [ ] 为 diff 增加测试
@@ -294,6 +312,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 不要先做自研 Drawing Engine
 - 不要把上层代码直接绑到 `Skia` 对象模型
 - 不要在 `WindowVisualCompositor` 上继续叠更多正式架构职责
+- 不要做运行时 `XAML / IXAML` parser
+- 不要复制 `DependencyProperty`、`VisualStateManager`、`ResourceDictionary` 那套完整 runtime
+- 不要引入第二套 `ViewModel` 权威状态再与 `Model` 同步
 
 ---
 
@@ -309,6 +330,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 命名遵循 C# 风格，尽早统一，不保留临时缩写命名
 - 不要在未经确认的情况下把 `Skia` API 泄漏到上层 UI / layout / core
 - 遇到 `record struct` 风格配置类型时，不要假设 `new Type()` 等价于 `.Default`
+- 将 `MVVM bridge` 视为编译期前端，不是第二套 runtime
+- 不要默认引入反射式 binding engine、弱类型 `DataContext` 或运行时 `XAML` 加载
 
 ---
 
