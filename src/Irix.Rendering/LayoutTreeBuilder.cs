@@ -2,27 +2,20 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal sealed class LayoutTreeBuilder
+internal sealed class LayoutTreeBuilder(LayoutStyle style)
 {
-    private readonly LayoutStyle _style;
-
     public LayoutTreeBuilder()
         : this(LayoutStyle.Default)
     {
     }
 
-    public LayoutTreeBuilder(LayoutStyle style)
-    {
-        _style = style;
-    }
-
     public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds)
     {
         var elements = new List<LayoutElement>();
-        var availableWidth = Math.Max(viewportBounds.Width - (_style.HorizontalPadding * 2), 0);
-        var cursorY = _style.VerticalPadding;
+        var availableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0);
+        var cursorY = style.VerticalPadding;
 
-        LayoutNode(root, availableWidth, ref cursorY, elements, _style);
+        LayoutNode(root, availableWidth, ref cursorY, elements, style);
         return elements;
     }
 
