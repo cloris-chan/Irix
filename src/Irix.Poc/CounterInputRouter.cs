@@ -6,17 +6,17 @@ internal static class CounterInputRouter
 {
     public static bool TryMapInput(
         RawInputEvent inputEvent,
-        Func<int, int, string?> tryGetActionAt,
+        Func<int, int, string?> tryGetActionIdAt,
         out CounterMessage message)
     {
         switch (inputEvent.Kind)
         {
             case RawInputEventKind.PointerReleased
                 when inputEvent.Button == PointerButton.Left:
-                var action = tryGetActionAt(inputEvent.X, inputEvent.Y);
-                if (!string.IsNullOrWhiteSpace(action))
+                var actionId = tryGetActionIdAt(inputEvent.X, inputEvent.Y);
+                if (!string.IsNullOrWhiteSpace(actionId))
                 {
-                    message = MapAction(action);
+                    message = MapActionId(actionId);
                     return true;
                 }
 
@@ -42,14 +42,14 @@ internal static class CounterInputRouter
         return false;
     }
 
-    internal static CounterMessage MapAction(string action)
+    internal static CounterMessage MapActionId(string actionId)
     {
-        return action switch
+        return actionId switch
         {
             nameof(CounterMessage.Increment) => new CounterMessage.Increment(),
             nameof(CounterMessage.Decrement) => new CounterMessage.Decrement(),
             nameof(CounterMessage.Reset) => new CounterMessage.Reset(0),
-            _ => throw new NotSupportedException($"Unsupported action: {action}")
+            _ => throw new NotSupportedException($"Unsupported action id: {actionId}")
         };
     }
 }

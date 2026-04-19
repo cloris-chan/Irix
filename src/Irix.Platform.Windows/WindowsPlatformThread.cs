@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using Windows.Win32;
-using Windows.Win32.Foundation;
 
 namespace Irix.Platform.Windows;
 
@@ -18,7 +17,7 @@ internal sealed class WindowsPlatformThread : IDisposable
         _thread = new Thread(ThreadMain)
         {
             IsBackground = false,
-            Name = "Irix Platform Thread"
+            Name = "Irix Platform Thread",
         };
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();

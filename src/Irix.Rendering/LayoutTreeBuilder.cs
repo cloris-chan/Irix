@@ -60,12 +60,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     style.MinimumButtonWidth,
                     label.Length * style.ButtonTextWidthFactor + style.ButtonHorizontalPadding));
                 var bounds = new PixelRectangle(style.HorizontalPadding, cursorY, width, style.ButtonHeight);
-                var action = GetTextAttribute(node, "Action");
+                var actionId = GetTextAttribute(node, "ActionId");
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
                     bounds,
                     Text: label,
-                    Action: action));
+                    ActionId: actionId));
                 cursorY += style.ButtonHeight + style.ItemSpacing;
                 break;
         }

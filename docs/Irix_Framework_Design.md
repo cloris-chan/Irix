@@ -234,7 +234,7 @@ CompositorThread.Start()
   └─ 进入渲染循环:
        while (!cancellation.IsCancellationRequested)
          ├─ 等待 VSync 信号 (或高精度 Timer)
-         ├─ 消费 MPSC 队列中的 Patch / DrawCommandBatch
+                 ├─ 消费 MPSC 队列中的 Patch / RenderFrameBatch
          ├─ 执行布局 (Measure/Arrange)
          ├─ 执行绘制 (DrawCommand → Backend Adapter)
          ├─ Submit CommandBuffer / Present Swapchain
@@ -298,6 +298,8 @@ public interface IDrawingBackend : IDisposable
 ```
 
 > **设计原则：** 上层布局、命中测试、动画、Patch Routing 只依赖 `DrawCommand` 语义，不依赖 `Skia` 的 `Canvas`、`Paint`、`Path` 等具体对象模型。
+>
+> **当前过渡实现补充：** 在文本资源系统落地前，`DrawTextRun` 可以临时携带内联文本；但点击/命中等交互语义必须通过与绘制命令并行的 `HitTestTarget[]` / `RenderFrameBatch` 传递，不能回流到 `DrawCommand` 字段。
 
 #### 5.2.5 是否需要自研 Drawing Engine
 
@@ -383,7 +385,7 @@ public enum DrawingResourceKind : byte
 }
 ```
 
-> **关键约束：** `DrawCommand` 必须是“可序列化、可记录、可回放、可做 diff 诊断”的稳定数据结构，不能把 `SKPaint`、`SKPath`、`SKImage` 这类后端对象直接塞进去。
+> **关键约束：** `DrawCommand` 必须是“可序列化、可记录、可回放、可做 diff 诊断”的稳定数据结构，不能把 `SKPaint`、`SKPath`、`SKImage` 这类后端对象直接塞进去，也不能把 `ActionId`、命中目标、按钮语义等交互元数据塞进去。
 
 #### 5.2.7 布局树与 DrawCommand 的边界
 
@@ -413,22 +415,21 @@ VirtualNode
 
 #### 5.2.8 与当前 PoC 的衔接方式
 
-当前仓库中的 `WindowVisualCompositor` 同时承担了三件事：
+当前仓库中的 `WindowVisualCompositor` 已经收敛为 PoC backend 层，当前主要承担两件事：
 
-1. 从 `VirtualNode` 解析控件语义；
-2. 计算简单布局；
-3. 直接生成窗口绘制元素与命中目标。
+1. 消费 `RenderFrameBatch`（当前过渡实现为 `DrawCommandBatch + HitTestTarget[]`）；
+2. 把绘制命令和并行命中目标翻译成 PoC 窗口内容元素与点击路由数据。
 
 这对于演示是合适的，但不适合作为正式 rendering 架构的终点。推荐演进顺序如下：
 
 1. 把 `WindowVisualCompositor` 中的布局逻辑抽成 `LayoutTreeBuilder`。
 2. 把 `WindowContentElement` 视为临时的 `DrawCommand` 替身，先建立 `DrawCommandRecorder`。
-3. 让 `WindowVisualCompositor` 改为消费 `DrawCommandBatch`，而不是直接消费 `VirtualNodePatch`。
+3. 保持 `WindowVisualCompositor` 只消费 `RenderFrameBatch`，不要再把 `ActionId` / hit testing 元数据塞回 `DrawCommand`。
 4. 等 `SkiaBackend` 接入后，PoC Window backend 与 `SkiaBackend` 共享同一套 `DrawCommand` 输入。
 
 也就是说，当前 PoC 最务实的下一步不是“立刻写 Skia”，而是：
 
-`VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> WindowBackend`
+`VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderFrameBatch -> WindowBackend`
 
 先把这条中间层站稳，再去接真实 GPU backend。
 
@@ -934,7 +935,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 - [ ] 集成 `SkiaSharp` 作为 `D3D12` 路径下的首个 backend adapter，渲染基础矩形、路径、文本
 - [ ] 实现主 `HWND` + 单 `CompositorThread` 基础渲染闭环
 - [ ] 实现最小化 MVU Core（`Model/Update/View` 三元组）
-- [ ] 实现 `VirtualNodePatch -> Retained UI Tree -> DrawCommandBatch` 单消费者渲染链路
+- [ ] 实现 `VirtualNodePatch -> Retained UI Tree -> DrawCommandBatch + HitTestTarget` 单消费者渲染链路
 - [ ] **验收指标：** 1080p 下文本 + 矩形界面稳定运行 30min；帧循环稳态无持续性 GC 分配；无设备丢失或未释放资源；上层无 `Skia` 直接依赖
 
 ### Phase 2：本地模式 MVP（目标：8 周）

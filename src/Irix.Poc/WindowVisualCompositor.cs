@@ -8,11 +8,11 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
 {
     private readonly WindowBackend _windowBackend = new();
     private readonly Lock _hitTargetsLock = new();
-    private WindowHitTarget[] _hitTargets = [];
+    private HitTestTarget[] _hitTargets = [];
 
-    public ValueTask RenderAsync(DrawCommandBatch drawCommandBatch, CancellationToken cancellationToken = default)
+    public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
-        if (drawCommandBatch.Count == 0)
+        if (renderFrameBatch.Commands.Count == 0)
         {
             window.SetContentElements([]);
 
@@ -24,7 +24,9 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
             return ValueTask.CompletedTask;
         }
 
-        var result = _windowBackend.Build(drawCommandBatch.Memory.Span[..drawCommandBatch.Count]);
+        var result = _windowBackend.Build(
+            renderFrameBatch.Commands.Memory.Span[..renderFrameBatch.Commands.Count],
+            renderFrameBatch.HitTargets);
         window.SetContentElements(result.Elements);
 
         lock (_hitTargetsLock)
@@ -35,7 +37,7 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
         return ValueTask.CompletedTask;
     }
 
-    public bool TryGetActionAt(int x, int y, out string action)
+    public bool TryGetActionIdAt(int x, int y, out string actionId)
     {
         lock (_hitTargetsLock)
         {
@@ -43,13 +45,13 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
             {
                 if (Contains(hitTarget.Bounds, x, y))
                 {
-                    action = hitTarget.Action;
+                    actionId = hitTarget.ActionId;
                     return true;
                 }
             }
         }
 
-        action = string.Empty;
+        actionId = string.Empty;
         return false;
     }
 

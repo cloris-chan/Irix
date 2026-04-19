@@ -18,7 +18,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 4,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText("Increment"))));
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
         var builder = new LayoutTreeBuilder();
 
         var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
@@ -35,7 +35,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(LayoutElementKind.Button, elements[2].Kind);
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), elements[2].Bounds);
         Assert.Equal("Increment", elements[2].Text);
-        Assert.Equal("Increment", elements[2].Action);
+        Assert.Equal("Increment", elements[2].ActionId);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class WindowLayoutPipelineTests
                 LayoutElementKind.Button,
                 new PixelRectangle(16, 120, 140, 40),
                 Text: "Increment",
-                Action: "Increment")
+                ActionId: "Increment")
         };
 
         using var batch = recorder.Record(elements);
@@ -58,13 +58,10 @@ public sealed class WindowLayoutPipelineTests
         var fillCommand = batch.Memory.Span[0];
         Assert.Equal(DrawCommandKind.FillRect, fillCommand.Kind);
         Assert.Equal(new DrawRect(16, 120, 140, 40), fillCommand.Rect);
-        Assert.Equal("Increment", fillCommand.Metadata);
-
         var textCommand = batch.Memory.Span[1];
         Assert.Equal(DrawCommandKind.DrawTextRun, textCommand.Kind);
         Assert.Equal(new DrawRect(16, 120, 140, 40), textCommand.Rect);
         Assert.Equal("Increment", textCommand.Text);
-        Assert.Equal("Increment", textCommand.Metadata);
     }
 
     [Fact]
@@ -76,7 +73,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Go",
                 3,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText("Go"))));
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Go"))));
         var builder = new LayoutTreeBuilder(new LayoutStyle(
             HorizontalPadding: 24,
             VerticalPadding: 20,
@@ -110,7 +107,7 @@ public sealed class WindowLayoutPipelineTests
                 LayoutElementKind.Button,
                 new PixelRectangle(16, 120, 140, 40),
                 Text: "Increment",
-                Action: "Increment")
+                ActionId: "Increment")
         };
 
         using var batch = recorder.Record(elements);
@@ -144,17 +141,18 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 3,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText("Increment"))));
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
 
-        using var batch = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540));
 
-        Assert.Equal(3, batch.Count);
-        Assert.Equal(DrawCommandKind.DrawTextRun, batch.Memory.Span[0].Kind);
-        Assert.Equal(new DrawRect(16, 16, 928, 32), batch.Memory.Span[0].Rect);
-        Assert.Equal(DrawCommandKind.FillRect, batch.Memory.Span[1].Kind);
-        Assert.Equal("Increment", batch.Memory.Span[1].Metadata);
-        Assert.Equal(DrawCommandKind.DrawTextRun, batch.Memory.Span[2].Kind);
-        Assert.Equal("Increment", batch.Memory.Span[2].Text);
+        Assert.Equal(3, frame.Commands.Count);
+        Assert.Equal(DrawCommandKind.DrawTextRun, frame.Commands.Memory.Span[0].Kind);
+        Assert.Equal(new DrawRect(16, 16, 928, 32), frame.Commands.Memory.Span[0].Rect);
+        Assert.Equal(DrawCommandKind.FillRect, frame.Commands.Memory.Span[1].Kind);
+        Assert.Equal(DrawCommandKind.DrawTextRun, frame.Commands.Memory.Span[2].Kind);
+        Assert.Equal("Increment", frame.Commands.Memory.Span[2].Text);
+        Assert.Single(frame.HitTargets);
+        Assert.Equal(new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment"), frame.HitTargets[0]);
     }
 
     [Fact]
@@ -168,15 +166,17 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 3,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText("Increment"))));
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
 
         using var patchBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
-        using var batch = translator.Translate(patchBatch);
+        using var frame = translator.Translate(patchBatch);
 
-        Assert.Equal(3, batch.Count);
-        Assert.Equal(new DrawRect(16, 16, 928, 32), batch.Memory.Span[0].Rect);
-        Assert.Equal(new DrawRect(16, 60, 140, 40), batch.Memory.Span[1].Rect);
-        Assert.Equal(new DrawRect(16, 60, 140, 40), batch.Memory.Span[2].Rect);
+        Assert.Equal(3, frame.Commands.Count);
+        Assert.Equal(new DrawRect(16, 16, 928, 32), frame.Commands.Memory.Span[0].Rect);
+        Assert.Equal(new DrawRect(16, 60, 140, 40), frame.Commands.Memory.Span[1].Rect);
+        Assert.Equal(new DrawRect(16, 60, 140, 40), frame.Commands.Memory.Span[2].Rect);
+        Assert.Single(frame.HitTargets);
+        Assert.Equal(new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment"), frame.HitTargets[0]);
     }
 
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow

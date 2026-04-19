@@ -96,8 +96,8 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void MapAction_throws_for_unsupported_action()
+    public void MapActionId_throws_for_unsupported_action_id()
     {
-        Assert.Throws<NotSupportedException>(() => CounterInputRouter.MapAction("Unsupported"));
+        Assert.Throws<NotSupportedException>(() => CounterInputRouter.MapActionId("Unsupported"));
     }
 }

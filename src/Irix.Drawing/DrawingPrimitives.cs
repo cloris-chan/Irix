@@ -50,7 +50,6 @@ public readonly record struct DrawCommand(
     DrawColor Color = default,
     ResourceHandle Resource = default,
     string? Text = null,
-    string? Metadata = null,
     float StrokeWidth = 1,
     Matrix3x2 Transform = default,
     int ZIndex = 0);

@@ -39,8 +39,8 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
         {
             using (patchBatch)
             {
-                using var drawCommandBatch = _translator.Translate(patchBatch);
-                await _compositor.RenderAsync(drawCommandBatch);
+                using var renderFrameBatch = _translator.Translate(patchBatch);
+                await _compositor.RenderAsync(renderFrameBatch);
             }
         }
     }

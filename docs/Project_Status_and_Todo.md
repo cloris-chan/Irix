@@ -46,13 +46,14 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`
   - 已有 `ConsoleCompositor` 与 `CompositeCompositor`
   - 已有 `LayoutTreeBuilder`、`LayoutElement`、`DrawCommandRecorder` 过渡骨架
+  - 已有 `RenderFrameBatch` / `HitTestTarget`，当前 PoC 通过它们并行承载命中数据，而不是往 `DrawCommand` 塞交互元数据
 - `Irix.Drawing`
   - 已拆出独立项目骨架
   - 已有 `DrawCommand`、`FrameContext`、`DrawCommandBatch`、`IDrawingBackend` 最小类型
 - `Irix.Poc`
   - 已有 Counter 示例应用
-  - 已有 `WindowVisualCompositor`，能把 `VirtualNode` 渲染成当前 PoC Window 内容
-  - 已有 `WindowBackend`，可将 `DrawCommand` 翻译成 PoC Window 内容元素与命中目标
+  - 已有 `WindowVisualCompositor`，能消费当前 `RenderFrameBatch` 并更新 PoC Window 内容与命中目标
+  - 已有 `WindowBackend`，可将 `DrawCommand + HitTestTarget[]` 翻译成 PoC Window 内容元素与命中目标
   - 已将 Counter 示例中的输入映射抽到独立 `CounterInputRouter`
   - 已打通：窗口创建 -> 输入 -> runtime dispatch -> patch 发布 -> PoC 可视化
 - `Irix.Core.Tests`
@@ -122,9 +123,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 `WindowVisualCompositor` 当前主要负责 PoC backend 可视化：
 
-1. 消费 `DrawCommandBatch`
+1. 消费 `RenderFrameBatch`
 2. 生成 PoC Window 内容元素
-3. 维护命中目标
+3. 维护命中目标，并明确与 `DrawCommand` 分离传递
 4. 空帧到来时主动清空窗口元素与命中目标，避免上一帧命中信息残留
 
 布局与命令录制已经开始沉到 `Irix.Rendering`，但离正式 retained tree / GPU backend 还有距离。
@@ -133,6 +134,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 - `WindowDrawCommandTranslator` 若误用 `new LayoutStyle()`，会因为 `record struct` 默认值全为 `0`，导致文本/按钮高度都退化为 `0`
 - `WindowBackend` / `WindowsNativeWindow` 现已补通颜色传递，PoC Window 不再忽略 `DrawCommand.Color`
+- `DrawCommand` 不再携带 PoC 专用的点击 `ActionId`；命中目标改为通过 `RenderFrameBatch` 并行传递，避免污染正式绘制边界
 
 关键文件：
 
@@ -152,14 +154,14 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 已补 `WindowBackend` 颜色映射断言
 - 已补 `WindowVisualCompositor` 命中边界与空帧清理测试
 - 已补 Counter PoC 输入路由映射测试
-- 已补 `PatchBatch` / `DrawCommandBatch` / `CompositorLoop` 基础所有权与释放路径测试
+- 已补 `PatchBatch` / `DrawCommandBatch` / `RenderFrameBatch` / `CompositorLoop` 基础所有权与释放路径测试
 - 还没有 diff、异常/取消路径测试
 
 当前已知行为记录：
 
 - `PatchBatch.Dispose()` 后再次访问 `Memory`，当前实现会因切片边界失效而抛 `ArgumentOutOfRangeException`
 - `DrawCommandBatch.Dispose()` 后再次访问 `Memory`，当前实现返回空内存
-- `CompositorLoop` 在正常渲染路径中会负责释放传入的 `PatchBatch` 与翻译产出的 `DrawCommandBatch`
+- `CompositorLoop` 在正常渲染路径中会负责释放传入的 `PatchBatch` 与翻译产出的 `RenderFrameBatch`（其内部持有 `DrawCommandBatch`）
 
 关键文件：
 
@@ -177,6 +179,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `Vulkan` 后移到后续阶段
 - `Skia` 不直接暴露给上层 UI
 - 上层依赖目标是 `DrawCommand + IDrawingBackend`
+- PoC 点击/命中语义通过 `RenderFrameBatch` 的并行数据传递，不塞进 `DrawCommand`
 - 免费/开源许可方向优先做 `Local UI Remoting`
 - 商业版方向做 `Remote UI Delivery`
 - `MVVM bridge` 只做轻量编译期桥接，不复制 `DependencyProperty` / `VisualState` 运行时
@@ -247,9 +250,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 新建 `IDrawingBackend`
 - [x] 新建 `FrameContext`
 - [x] 新建 `DrawCommandBatch`
-- [x] 实现 `WindowBackend`，使其消费 `DrawCommandBatch`
+- [x] 实现 `WindowBackend`，使其消费 `DrawCommandBatch + HitTestTarget[]`
 - [x] 将 `WindowVisualCompositor` 从 patch 直接消费改成 draw command 消费
-- [x] 建立 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> WindowBackend` 过渡链
+- [x] 建立 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderFrameBatch -> WindowBackend` 过渡链
 - [x] 打通 PoC Window 对 `DrawCommand.Color` 的映射
 - [ ] 搭 `D3D12` 基础渲染循环
 - [ ] 评估 `Skia + D3D12` 集成可行性

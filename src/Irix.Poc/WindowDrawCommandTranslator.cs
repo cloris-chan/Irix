@@ -14,11 +14,11 @@ internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatch
         ButtonFillColor: DrawColor.Opaque(52, 120, 246),
         ButtonTextColor: DrawColor.Opaque(255, 255, 255)));
 
-    public DrawCommandBatch Translate(PatchBatch patchBatch)
+    public RenderFrameBatch Translate(PatchBatch patchBatch)
     {
         if (patchBatch.Count == 0)
         {
-            return new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0);
+            return new RenderFrameBatch(new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0), []);
         }
 
         var root = patchBatch.Memory.Span[patchBatch.Count - 1].Node;

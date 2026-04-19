@@ -48,14 +48,12 @@ internal sealed class DrawCommandRecorder
                     commands.Add(new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: bounds,
-                        Color: _style.ButtonFillColor,
-                        Metadata: element.Action));
+                        Color: _style.ButtonFillColor));
                     commands.Add(new DrawCommand(
                         DrawCommandKind.DrawTextRun,
                         Rect: bounds,
                         Text: element.Text,
-                        Color: _style.ButtonTextColor,
-                        Metadata: element.Action));
+                        Color: _style.ButtonTextColor));
                     break;
             }
         }

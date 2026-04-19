@@ -32,15 +32,15 @@ internal static class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionAt, out var message))
+            if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionIdAt, out var message))
             {
                 runtime.Dispatch(message);
             }
         }
 
-        string? TryGetActionAt(int x, int y)
+        string? TryGetActionIdAt(int x, int y)
         {
-            return visualCompositor.TryGetActionAt(x, y, out var action) ? action : null;
+            return visualCompositor.TryGetActionIdAt(x, y, out var actionId) ? actionId : null;
         }
 
         void OnTopologyChanged(object? sender, ScreenTopologyChangedEventArgs args)

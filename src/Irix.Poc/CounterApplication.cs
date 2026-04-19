@@ -34,15 +34,15 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
             VirtualNodeFactory.Button(
                 "Increment",
                 5,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText(nameof(CounterMessage.Increment)))),
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText(nameof(CounterMessage.Increment)))),
             VirtualNodeFactory.Button(
                 "Decrement",
                 6,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText(nameof(CounterMessage.Decrement)))),
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText(nameof(CounterMessage.Decrement)))),
             VirtualNodeFactory.Button(
                 "Reset",
                 7,
-                new VirtualNodeAttribute("Action", AttributeValue.FromText(nameof(CounterMessage.Reset)))));
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText(nameof(CounterMessage.Reset)))));
 
         return new VirtualNodeTree(root);
     }

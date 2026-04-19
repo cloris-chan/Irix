@@ -13,4 +13,4 @@ internal readonly record struct LayoutElement(
     LayoutElementKind Kind,
     PixelRectangle Bounds,
     string? Text = null,
-    string? Action = null);
+    string? ActionId = null);

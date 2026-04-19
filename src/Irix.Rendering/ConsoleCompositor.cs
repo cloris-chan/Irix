@@ -1,16 +1,19 @@
-using Irix.Drawing;
-
 namespace Irix.Rendering;
 
 public sealed class ConsoleCompositor(TextWriter writer) : ICompositor
 {
-    public ValueTask RenderAsync(DrawCommandBatch drawCommandBatch, CancellationToken cancellationToken = default)
+    public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
-        for (var index = 0; index < drawCommandBatch.Count; index++)
+        if (renderFrameBatch.HitTargets.Count > 0)
         {
-            var command = drawCommandBatch.Memory.Span[index];
+            writer.WriteLine($"[Compositor] HitTargets={renderFrameBatch.HitTargets.Count}");
+        }
+
+        for (var index = 0; index < renderFrameBatch.Commands.Count; index++)
+        {
+            var command = renderFrameBatch.Commands.Memory.Span[index];
             writer.WriteLine(
-                $"[Compositor] Command={command.Kind} Rect=({command.Rect.X}, {command.Rect.Y}, {command.Rect.Width}, {command.Rect.Height}) Text={command.Text ?? "<none>"} Metadata={command.Metadata ?? "<none>"}");
+                $"[Compositor] Command={command.Kind} Rect=({command.Rect.X}, {command.Rect.Y}, {command.Rect.Width}, {command.Rect.Height}) Text={command.Text ?? "<none>"}");
         }
 
         return ValueTask.CompletedTask;

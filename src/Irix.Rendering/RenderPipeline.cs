@@ -19,9 +19,30 @@ internal sealed class RenderPipeline
         _drawCommandRecorder = new DrawCommandRecorder(drawingStyle);
     }
 
-    public DrawCommandBatch Build(VirtualNode root, PixelRectangle viewportBounds)
+    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds)
     {
         var layoutElements = _layoutTreeBuilder.Build(root, viewportBounds);
-        return _drawCommandRecorder.Record(layoutElements);
+        var commands = _drawCommandRecorder.Record(layoutElements);
+        return new RenderFrameBatch(commands, BuildHitTargets(layoutElements));
+    }
+
+    private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
+    {
+        if (layoutElements.Count == 0)
+        {
+            return [];
+        }
+
+        var hitTargets = new List<HitTestTarget>();
+
+        foreach (var element in layoutElements)
+        {
+            if (!string.IsNullOrWhiteSpace(element.ActionId))
+            {
+                hitTargets.Add(new HitTestTarget(element.Bounds, element.ActionId));
+            }
+        }
+
+        return [.. hitTargets];
     }
 }

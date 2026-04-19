@@ -95,10 +95,10 @@ public sealed class BatchOwnershipTests
     {
         public int TranslateCallCount { get; private set; }
 
-        public DrawCommandBatch Translate(PatchBatch patchBatch)
+        public RenderFrameBatch Translate(PatchBatch patchBatch)
         {
             TranslateCallCount++;
-            return new DrawCommandBatch(drawOwner, 1);
+            return new RenderFrameBatch(new DrawCommandBatch(drawOwner, 1), []);
         }
     }
 
@@ -108,7 +108,7 @@ public sealed class BatchOwnershipTests
 
         public int RenderCallCount { get; private set; }
 
-        public ValueTask RenderAsync(DrawCommandBatch drawCommandBatch, CancellationToken cancellationToken = default)
+        public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
         {
             RenderCallCount++;
             _rendered.TrySetResult();
