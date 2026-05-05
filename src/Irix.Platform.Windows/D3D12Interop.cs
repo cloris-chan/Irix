@@ -12,6 +12,7 @@ internal enum D3D12_DESCRIPTOR_HEAP_TYPE { RTV = 2 }
 internal enum D3D12_RESOURCE_STATES { COMMON = 0, RENDER_TARGET = 4, PRESENT = 0 }
 internal enum DXGI_FORMAT { R8G8B8A8_UNORM = 28 }
 internal enum DXGI_SWAP_EFFECT { FLIP_DISCARD = 4 }
+internal enum DXGI_SCALING { STRETCH = 0, NONE = 1 }
 
 // ═══════════════════════════════════════════════════════════════════
 // Structs
@@ -71,6 +72,7 @@ internal struct DXGI_SWAP_CHAIN_DESC1
     public DXGI_SAMPLE_DESC SampleDesc;
     public uint BufferUsage;
     public uint BufferCount;
+    public DXGI_SCALING Scaling;
     public DXGI_SWAP_EFFECT SwapEffect;
     public uint AlphaMode;
     public uint Flags;
@@ -132,12 +134,15 @@ internal static unsafe class D3D12Vtable
     public static void ResourceBarrier(nint l, uint count, D3D12_RESOURCE_BARRIER* barriers)
         => ((delegate* unmanaged[Stdcall]<nint, uint, D3D12_RESOURCE_BARRIER*, void>)Vtbl(l)[26])(l, count, barriers);
 
+    // ClearDepthStencilView=47, ClearRenderTargetView=48
     public static void ClearRenderTargetView(nint l, D3D12_CPU_DESCRIPTOR_HANDLE rtv, float* color, uint rects, void* pRects)
-        => ((delegate* unmanaged[Stdcall]<nint, D3D12_CPU_DESCRIPTOR_HANDLE, float*, uint, void*, void>)Vtbl(l)[47])(l, rtv, color, rects, pRects);
+        => ((delegate* unmanaged[Stdcall]<nint, D3D12_CPU_DESCRIPTOR_HANDLE, float*, uint, void*, void>)Vtbl(l)[48])(l, rtv, color, rects, pRects);
 
-    // ── ID3D12DescriptorHeap ── vtable: ...(7) ID3D12DescriptorHeap(8)
+    // ── ID3D12DescriptorHeap ── vtable: IUnknown(0-2) ID3D12Object(3-6) ID3D12DeviceChild(7) ID3D12DescriptorHeap(8+)
+    // GetDesc=8, GetCPUDescriptorHandleForHeapStart=9, GetGPUDescriptorHandleForHeapStart=10, GetDescriptorHandleIncrementSize=11
+    // Note: CsWin32 uses [Stdcall,MemberFunction] for struct-returning methods
     public static D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandleForHeapStart(nint h)
-        => ((delegate* unmanaged[Stdcall]<nint, D3D12_CPU_DESCRIPTOR_HANDLE>)Vtbl(h)[8])(h);
+        => ((delegate* unmanaged[Stdcall,MemberFunction]<nint, D3D12_CPU_DESCRIPTOR_HANDLE>)Vtbl(h)[9])(h);
 
     // ── ID3D12Fence ── vtable: ...(7) ID3D12Fence(8+)
     public static ulong GetCompletedValue(nint f)

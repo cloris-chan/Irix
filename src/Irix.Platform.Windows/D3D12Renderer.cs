@@ -62,13 +62,14 @@ internal sealed class D3D12Renderer : IDisposable
                 Format = DXGI_FORMAT.R8G8B8A8_UNORM,
                 SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
                 BufferUsage = 0x20, BufferCount = FrameCount,
+                Scaling = DXGI_SCALING.STRETCH,
                 SwapEffect = DXGI_SWAP_EFFECT.FLIP_DISCARD
             };
             riid = G("790a45f7-0d42-4876-983a-0a55cfe6f4aa");
             nint sc1;
             hr = D3D12Vtable.CreateSwapChainForHwnd(factory, _queue, hwnd, &sd, null, null, (void**)&sc1);
             if (hr < 0) throw new InvalidOperationException($"CreateSwapChainForHwnd failed: 0x{hr:X8}");
-            riid = G("a8be2ac4-199f-4946-b331-79599fb98de7");
+            riid = G("94D99BDB-F1F8-4AB0-B236-7DA0170EDAB1");
             var qi = (delegate* unmanaged[Stdcall]<nint, Guid*, void**, int>)(*(void***)sc1)[0];
             hr = qi(sc1, &riid, (void**)&ptr);
             if (hr < 0) throw new InvalidOperationException($"QueryInterface(IDXGISwapChain3) failed: 0x{hr:X8}");
@@ -82,10 +83,13 @@ internal sealed class D3D12Renderer : IDisposable
             hr = D3D12Vtable.CreateDescriptorHeap(_device, &hd, &riid, (void**)&ptr);
             if (hr < 0) throw new InvalidOperationException($"CreateDescriptorHeap failed: 0x{hr:X8}");
             _rtvHeap = ptr;
+            Console.WriteLine($"[D3D12] _rtvHeap = 0x{_rtvHeap:X16}");
             _rtvSize = D3D12Vtable.GetDescriptorHandleIncrementSize(_device, D3D12_DESCRIPTOR_HEAP_TYPE.RTV);
+            Console.WriteLine($"[D3D12] _rtvSize = {_rtvSize}");
 
             // Render targets
             _renderTargets = new nint[FrameCount];
+            Console.WriteLine($"[D3D12] Calling GetCPUDescriptorHandleForHeapStart on 0x{_rtvHeap:X16}...");
             var rtv = D3D12Vtable.GetCPUDescriptorHandleForHeapStart(_rtvHeap);
             riid = G("696442be-a72e-4059-bc79-5b5c98040fad");
             fixed (nint* pRT = _renderTargets)
@@ -101,7 +105,7 @@ internal sealed class D3D12Renderer : IDisposable
 
             // Command allocators
             _allocators = new nint[FrameCount];
-            riid = G("6102dee4-af59-4b09-b999-b44f7d899bae");
+            riid = G("6102DEE4-AF59-4B09-B999-B44D73F09B24");
             fixed (nint* pA = _allocators)
             {
                 for (var i = 0; i < FrameCount; i++)

@@ -34,6 +34,12 @@ UpdateWindow
 // D3D12 — CsWin32 generates these so we can inspect vtable layout
 D3D12CreateDevice
 ID3D12Device
+ID3D12CommandQueue
+ID3D12CommandAllocator
+ID3D12GraphicsCommandList
+ID3D12Resource
+ID3D12DescriptorHeap
+ID3D12Fence
 // DXGI
 CreateDXGIFactory1
 IDXGISwapChain3
