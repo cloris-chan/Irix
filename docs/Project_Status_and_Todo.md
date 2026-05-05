@@ -1,27 +1,31 @@
 # Irix 项目进度与待办
 
-> 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。
-
+> 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。>
+> 📅 **最后验证日期：** 请在每次提交前更新此日期。本文档描述的代码状态以此日期为准。
+>
+> 📐 **架构设计详见：** [Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)。本文档不重复设计细节，仅记录实现状态与待办。
 ---
 
 ## 1. 项目定位
 
 Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
-当前已经明确的方向：
+**核心方向概要**（详细论述见 [设计文档 §1~§3](/d:/source/Irix/docs/Irix_Framework_Design.md)）：
 
-- v1 / Windows-only PoC 以 `D3D12` 为唯一图形后端
-- 上层 UI 不直接绑定第三方绘图库
-- Drawing 层采用 `DrawCommand + IDrawingBackend` 的内部抽象方向
-- `Skia` 在当前规划中是 backend adapter，而不是长期架构中心
-- UI 交付层分为两条产品线：
-  - `Local UI Remoting`：loopback-only，本机多进程插件/扩展 UI 接入
-  - `Remote UI Delivery`：跨机器、商业版、server-driven UI
-- `MVVM bridge` 应保持为轻量编译期 authoring layer，而不是复制 `WPF / WinUI / MAUI` runtime
-- `XAML / IXAML` 仅作为 DSL，由 Source Generator 在编译期降解为 C#，不做运行时解析
-- `TwoWay Binding` 的本质是生成 MVU 的 `update/state` glue code，不引入第二套权威状态
+- v1 / Windows-only PoC 以 `D3D12` 为唯一图形后端（[ADR-001](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)）
+- Drawing 层采用 `DrawCommand + IDrawingBackend` 隔离 Skia（[ADR-002](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)）
+- UI 交付层分两条线：`Local UI Remoting`（免费/开源）与 `Remote UI Delivery`（商业版）
+- `MVVM Bridge` 仅为编译期 authoring layer（[ADR-007](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)）
 
-设计主文档见：[Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)
+**Phase / 版本映射**（详见 [设计文档 §12](/d:/source/Irix/docs/Irix_Framework_Design.md#12-分阶段交付计划)）：
+
+| Phase | 版本 | 当前状态 |
+|-------|------|---------|
+| Phase 1 | v1.0 基础 | 🚧 进行中 |
+| Phase 2 | v1.0 MVP | ❌ 未开始 |
+| Phase 3 | v1.0 GA | ❌ 未开始 |
+| Phase 4 | v1.x | ❌ 未开始 |
+| Phase 5 | v2.0 | ❌ 未开始 |
 
 ---
 
@@ -67,6 +71,20 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 还没有真正的 retained tree / layout tree / draw command pipeline
 - `VirtualNodeDiffer` 仍然是最小实现，不是完整 diff
 - 测试覆盖仍然很薄，目前主要是单个 runtime 测试
+
+**数据流各阶段验证速查**（详见 [设计文档 §4.1](/d:/source/Irix/docs/Irix_Framework_Design.md#41-关键数据流本地模式v1)）：
+
+| 阶段 | 状态 |
+|------|------|
+| 输入采集 → MPSC | ✅ 已验证 |
+| 消息派发 → Update | ✅ 已验证 |
+| View 构建 | ⚠️ 部分 |
+| Diff / Patch | ❌ 最小实现 |
+| 布局 | ⚠️ PoC 骨架 |
+| 命令录制 | ⚠️ 基础可用 |
+| 帧消费 (CompositorLoop) | ✅ 已验证 |
+| GPU 渲染 | ❌ 未实现 |
+| PoC 可视化 | ✅ 已验证 |
 
 ---
 
@@ -171,20 +189,19 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ## 4. 当前架构决策
 
-下面这些应视为**当前生效中的架构决策**。
+> 详细论述与权衡分析见 [设计文档附录 B：ADR 索引](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)。此处仅列出当前生效状态与尚未落地的决策。
 
-### 已确认
+### 已确认（详见 ADR-001 ~ ADR-010）
 
-- Windows-only PoC 阶段只做 `D3D12`
-- `Vulkan` 后移到后续阶段
-- `Skia` 不直接暴露给上层 UI
-- 上层依赖目标是 `DrawCommand + IDrawingBackend`
-- PoC 点击/命中语义通过 `RenderFrameBatch` 的并行数据传递，不塞进 `DrawCommand`
-- 免费/开源许可方向优先做 `Local UI Remoting`
-- 商业版方向做 `Remote UI Delivery`
-- `MVVM bridge` 只做轻量编译期桥接，不复制 `DependencyProperty` / `VisualState` 运行时
-- `XAML / IXAML` 仅作为 DSL，不做运行时解析
-- `TwoWay Binding` 编译为 MVU 的 `Message + Update` glue code
+- D3D12 作为 v1 唯一图形后端 / Skia 仅作为 backend adapter（ADR-001, ADR-006）
+- DrawCommand + IDrawingBackend 隔离层（ADR-002）
+- IMemoryOwner 所有权转移模型（ADR-003）
+- HitTestTarget 与 DrawCommand 并行传递（ADR-004）
+- 单线程 Update 串行执行（ADR-005）
+- MVVM Bridge 为编译期前端（ADR-007）
+- Local UI Remoting 为免费/开源方向（ADR-008）
+- 不做运行时 XAML/IXAML 解析（ADR-009）
+- VirtualNode 采用轻量不可变结构（ADR-010）
 
 ### 未确认或尚未落地
 
@@ -305,19 +322,19 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ## 8. 当前不建议做的事
 
-为了避免范围膨胀，接手者不要优先做下面这些事情：
+> 完整的非目标清单与边界声明见 [设计文档附录 C](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-c非目标清单与边界声明)。以下为核心约束摘要：
 
-- 不要先做 `Vulkan`
-- 不要先做跨平台
-- 不要先做完整多屏热插拔
-- 不要先做复杂动画系统
-- 不要先做完整 `Remote UI Delivery`
-- 不要先做自研 Drawing Engine
-- 不要把上层代码直接绑到 `Skia` 对象模型
-- 不要在 `WindowVisualCompositor` 上继续叠更多正式架构职责
+**架构边界（绝对不做）：**
 - 不要做运行时 `XAML / IXAML` parser
 - 不要复制 `DependencyProperty`、`VisualStateManager`、`ResourceDictionary` 那套完整 runtime
 - 不要引入第二套 `ViewModel` 权威状态再与 `Model` 同步
+- 不要把上层代码直接绑到 `Skia` 对象模型
+
+**范围收敛（v1 不做，后续再议）：**
+- 不要先做 `Vulkan`、跨平台、完整多屏热插拔
+- 不要先做复杂动画系统、完整 `Remote UI Delivery`
+- 不要先做自研 Drawing Engine
+- 不要在 `WindowVisualCompositor` 上继续叠更多正式架构职责
 
 ---
 

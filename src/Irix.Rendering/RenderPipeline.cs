@@ -22,8 +22,8 @@ internal sealed class RenderPipeline
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds)
     {
         var layoutElements = _layoutTreeBuilder.Build(root, viewportBounds);
-        var commands = _drawCommandRecorder.Record(layoutElements);
-        return new RenderFrameBatch(commands, BuildHitTargets(layoutElements));
+        var result = _drawCommandRecorder.Record(layoutElements);
+        return new RenderFrameBatch(result.Commands, BuildHitTargets(layoutElements), result.TextRuns);
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)

@@ -51,17 +51,23 @@ public sealed class WindowLayoutPipelineTests
                 ActionId: "Increment")
         };
 
-        using var batch = recorder.Record(elements);
+        var result = recorder.Record(elements);
 
-        Assert.Equal(2, batch.Count);
+        Assert.Equal(2, result.Commands.Count);
 
-        var fillCommand = batch.Memory.Span[0];
+        var fillCommand = result.Commands.Memory.Span[0];
         Assert.Equal(DrawCommandKind.FillRect, fillCommand.Kind);
         Assert.Equal(new DrawRect(16, 120, 140, 40), fillCommand.Rect);
-        var textCommand = batch.Memory.Span[1];
+        var textCommand = result.Commands.Memory.Span[1];
         Assert.Equal(DrawCommandKind.DrawTextRun, textCommand.Kind);
         Assert.Equal(new DrawRect(16, 120, 140, 40), textCommand.Rect);
-        Assert.Equal("Increment", textCommand.Text);
+        Assert.Equal(DrawingResourceKind.TextStyle, textCommand.Resource.Kind);
+
+        Assert.Single(result.TextRuns);
+        Assert.Equal("Increment", result.TextRuns[0].Text);
+        Assert.Equal(textCommand.Resource.Id, result.TextRuns[0].Id);
+
+        result.Commands.Dispose();
     }
 
     [Fact]
@@ -110,11 +116,13 @@ public sealed class WindowLayoutPipelineTests
                 ActionId: "Increment")
         };
 
-        using var batch = recorder.Record(elements);
+        var result = recorder.Record(elements);
 
-        Assert.Equal(DrawColor.Opaque(20, 30, 40), batch.Memory.Span[0].Color);
-        Assert.Equal(DrawColor.Opaque(10, 20, 30), batch.Memory.Span[1].Color);
-        Assert.Equal(DrawColor.Opaque(200, 210, 220), batch.Memory.Span[2].Color);
+        Assert.Equal(DrawColor.Opaque(20, 30, 40), result.Commands.Memory.Span[0].Color);
+        Assert.Equal(DrawColor.Opaque(10, 20, 30), result.Commands.Memory.Span[1].Color);
+        Assert.Equal(DrawColor.Opaque(200, 210, 220), result.Commands.Memory.Span[2].Color);
+
+        result.Commands.Dispose();
     }
 
     [Fact]
@@ -150,9 +158,14 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(new DrawRect(16, 16, 928, 32), frame.Commands.Memory.Span[0].Rect);
         Assert.Equal(DrawCommandKind.FillRect, frame.Commands.Memory.Span[1].Kind);
         Assert.Equal(DrawCommandKind.DrawTextRun, frame.Commands.Memory.Span[2].Kind);
-        Assert.Equal("Increment", frame.Commands.Memory.Span[2].Text);
         Assert.Single(frame.HitTargets);
         Assert.Equal(new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment"), frame.HitTargets[0]);
+
+        Assert.Equal(2, frame.TextRuns.Count);
+        Assert.Equal("Count: 0", frame.TextRuns[0].Text);
+        Assert.Equal("Increment", frame.TextRuns[1].Text);
+        Assert.Equal(frame.Commands.Memory.Span[0].Resource.Id, frame.TextRuns[0].Id);
+        Assert.Equal(frame.Commands.Memory.Span[2].Resource.Id, frame.TextRuns[1].Id);
     }
 
     [Fact]

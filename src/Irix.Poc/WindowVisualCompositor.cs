@@ -26,7 +26,8 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
 
         var result = _windowBackend.Build(
             renderFrameBatch.Commands.Memory.Span[..renderFrameBatch.Commands.Count],
-            renderFrameBatch.HitTargets);
+            renderFrameBatch.HitTargets,
+            renderFrameBatch.TextRuns);
         window.SetContentElements(result.Elements);
 
         lock (_hitTargetsLock)

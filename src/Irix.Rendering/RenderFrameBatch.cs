@@ -7,8 +7,14 @@ public readonly record struct HitTestTarget(PixelRectangle Bounds, string Action
 
 public readonly record struct RenderFrameBatch(
     DrawCommandBatch Commands,
-    IReadOnlyList<HitTestTarget> HitTargets) : IDisposable
+    IReadOnlyList<HitTestTarget> HitTargets,
+    IReadOnlyList<TextRunEntry> TextRuns) : IDisposable
 {
+    public RenderFrameBatch(DrawCommandBatch Commands, IReadOnlyList<HitTestTarget> HitTargets)
+        : this(Commands, HitTargets, [])
+    {
+    }
+
     public void Dispose()
     {
         Commands.Dispose();

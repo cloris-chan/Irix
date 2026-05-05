@@ -25,10 +25,11 @@ public sealed class WindowVisualCompositorTests
                 new DrawCommand(
                     DrawCommandKind.DrawTextRun,
                     Rect: new DrawRect(16, 120, 140, 40),
-                    Text: "Increment",
+                    Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle),
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            [new TextRunEntry(0, "Increment")]);
 
         await compositor.RenderAsync(frame, cancellationToken);
 
@@ -56,10 +57,11 @@ public sealed class WindowVisualCompositorTests
                 new DrawCommand(
                     DrawCommandKind.DrawTextRun,
                     Rect: new DrawRect(16, 120, 140, 40),
-                    Text: "Increment",
+                    Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle),
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            [new TextRunEntry(0, "Increment")]);
 
         await compositor.RenderAsync(frame, cancellationToken);
 
@@ -86,10 +88,11 @@ public sealed class WindowVisualCompositorTests
                 new DrawCommand(
                     DrawCommandKind.DrawTextRun,
                     Rect: new DrawRect(16, 120, 140, 40),
-                    Text: "Increment",
+                    Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle),
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            [new TextRunEntry(0, "Increment")]);
 
         await compositor.RenderAsync(firstFrame, cancellationToken);
         Assert.True(compositor.TryGetActionIdAt(32, 140, out _));
