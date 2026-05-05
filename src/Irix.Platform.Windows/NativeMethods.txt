@@ -31,6 +31,10 @@ ShowWindow
 TranslateMessage
 UnregisterClassW
 UpdateWindow
+// Kernel32 sync
+CreateEventW
+WaitForSingleObject
+CloseHandle
 // D3D12 — CsWin32 generates these so we can inspect vtable layout
 D3D12CreateDevice
 ID3D12Device
