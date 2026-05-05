@@ -45,6 +45,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 Windows 宿主 PoC
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
   - Win32 互操作优先走 `CsWin32`
+  - 已有手写 D3D12/DXGI COM vtable 绑定（`D3D12Interop.cs`、`D3D12Renderer.cs`），支持设备创建、交换链、清屏、呈现
 - `Irix.Rendering`
   - 已有 `ICompositor`
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已实现无变化帧跳过（`Count == 0` 时跳过翻译与渲染）
@@ -70,8 +71,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### 尚未落地的关键内容
 
-- 还没有 `D3D12` 渲染主链
-- 还没有 `Skia + D3D12` backend adapter
+- D3D12 互操作层已手写完成（`D3D12Interop.cs` + `D3D12Renderer.cs`），使用 raw COM vtable 调用，未接入渲染管线
+- 还没有 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现）
+- 还没有 Skia + D3D12 集成
 - 还没有真正的 retained tree / layout tree / draw command pipeline
 - `VirtualNodeDiffer` 已实现深比较（递归节点等价判断），能正确检测无变化并跳过 ReplaceRoot；尚未实现局部 diff / keyed reconciliation
 - `DrawCommand` 已移除内联 `string? Text`，改为 `ResourceHandle` + 并行 `TextRunEntry[]` 传递文本
@@ -92,7 +94,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | 布局 | ⚠️ Retained layout 已引入，未脱离硬编码常量 |
 | 命令录制 | ⚠️ 基础可用，TextRunEntry 已分离 |
 | 帧消费 (CompositorLoop) | ✅ 已验证（含无变化跳过） |
-| GPU 渲染 | ❌ 未实现 |
+| GPU 渲染 | ⚠️ D3D12 绑定已手写，未接入 IDrawingBackend |
 | PoC 可视化 | ✅ 已验证 |
 
 ---
@@ -284,7 +286,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 将 `WindowVisualCompositor` 从 patch 直接消费改成 draw command 消费
 - [x] 建立 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderFrameBatch -> WindowBackend` 过渡链
 - [x] 打通 PoC Window 对 `DrawCommand.Color` 的映射
-- [ ] 搭 `D3D12` 基础渲染循环
+- [x] 搭 `D3D12` 基础渲染循环
+- [ ] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现）
 - [ ] 评估 `Skia + D3D12` 集成可行性
 
 ### Core
