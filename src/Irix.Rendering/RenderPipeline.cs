@@ -29,7 +29,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             _retainedViewport = viewportBounds;
         }
 
-        var result = _drawCommandRecorder.Record(_retainedLayout);
+        var result = _drawCommandRecorder.Record(_retainedLayout!);
         return new RenderFrameBatch(result.Commands, BuildHitTargets(_retainedLayout), result.TextRuns);
     }
 

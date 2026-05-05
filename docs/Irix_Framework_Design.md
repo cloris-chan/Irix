@@ -179,7 +179,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | Retained layout 已引入，未脱离 PoC 硬编码常量 |
 | 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，未接入真实 GPU backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 无变化跳过 |
-| GPU 渲染 | D3D12 / SkiaBackend | ❌ 未实现 | 尚未搭建 |
+| GPU 渲染 | D3D12 / SkiaBackend | ⚠️ PoC 已验证 | `IDrawingBackend` 首次实现（`PoCDrawingBackend`），D3D12 未接入 |
 | PoC 可视化 | `WindowVisualCompositor` | ✅ 已验证 | PoC Window 内容元素 + 命中目标已通 |
 
 ### 4.2 最小化 PoC 项目结构（当前仓库）
@@ -501,9 +501,9 @@ VirtualNode
 
 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> WindowBackend`
 
-**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现递归深比较；`CompositorLoop` 已实现无变化帧跳过。
+**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现递归深比较；`CompositorLoop` 已实现无变化帧跳过。`IDrawingBackend` 已首次落地实现（`PoCDrawingBackend` + `DrawingBackendCompositor`），验证了从 `RenderFrameBatch` 到 `IDrawingBackend` 到 `INativeWindow` 的完整链路。
 
-**下一步：** 让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局，最后接真实 GPU backend。
+**下一步：** 接入 `D3D12` backend（实现 `IDrawingBackend`），让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
 
 #### 5.2.9 文本、路径与图片的资源策略
 

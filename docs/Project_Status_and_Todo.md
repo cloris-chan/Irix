@@ -52,6 +52,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `LayoutTreeBuilder`、`LayoutElement`、`DrawCommandRecorder` 过渡骨架
   - `RenderPipeline` 已引入 retained layout：缓存 `LayoutElement[]`，树/视口不变时复用
   - 已有 `RenderFrameBatch` / `HitTestTarget` / `TextRunEntry`，并行承载命中数据与文本内容
+  - 已有 `DrawingBackendCompositor`，桥接 `ICompositor` → `IDrawingBackend`，缓存命中目标
 - `Irix.Drawing`
   - 已拆出独立项目骨架
   - 已有 `DrawCommand`、`FrameContext`、`DrawCommandBatch`、`IDrawingBackend` 最小类型
@@ -60,6 +61,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 Counter 示例应用
   - 已有 `WindowVisualCompositor`，能消费当前 `RenderFrameBatch` 并更新 PoC Window 内容与命中目标
   - 已有 `WindowBackend`，可将 `DrawCommand + HitTestTarget[]` 翻译成 PoC Window 内容元素与命中目标
+  - 已有 `PoCDrawingBackend`，首次实现 `IDrawingBackend` 接口，验证 DrawCommand → WindowContentElement 链路
   - 已将 Counter 示例中的输入映射抽到独立 `CounterInputRouter`
   - 已打通：窗口创建 -> 输入 -> runtime dispatch -> patch 发布 -> PoC 可视化
 - `Irix.Core.Tests`
@@ -74,9 +76,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `VirtualNodeDiffer` 已实现深比较（递归节点等价判断），能正确检测无变化并跳过 ReplaceRoot；尚未实现局部 diff / keyed reconciliation
 - `DrawCommand` 已移除内联 `string? Text`，改为 `ResourceHandle` + 并行 `TextRunEntry[]` 传递文本
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 42 个测试（含 diff、DrawCommand 文本传递、CompositorLoop 跳过、retained layout、所有权转移等）
+- 测试覆盖已扩展至 47 个测试（含 diff、DrawCommand 文本传递、CompositorLoop 跳过、retained layout、DrawingBackendCompositor、所有权转移等）
 - `CompositorLoop` 已实现 `PatchBatch.Count == 0` 时跳过翻译与渲染，避免无变化帧清空窗口
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
+- `IDrawingBackend` 已首次落地实现：`PoCDrawingBackend`（Irix.Poc）+ `DrawingBackendCompositor`（Irix.Rendering），验证了从 `RenderFrameBatch` → `IDrawingBackend` → `INativeWindow` 的完整链路
 
 **数据流各阶段验证速查**（详见 [设计文档 §4.1](/d:/source/Irix/docs/Irix_Framework_Design.md#41-关键数据流本地模式v1)）：
 
