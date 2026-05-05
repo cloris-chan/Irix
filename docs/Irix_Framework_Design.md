@@ -179,7 +179,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | Retained layout 已引入，未脱离 PoC 硬编码常量 |
 | 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，未接入真实 GPU backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 无变化跳过 |
-| GPU 渲染 | D3D12 / SkiaBackend | ✅ Phase 1 已验证 | D3D12 清屏渲染已接入 PoC；`IDrawingBackend` 两条路径均可用 |
+| GPU 渲染 | D3D12 / SkiaBackend | ✅ Phase 1 已验证 | D3D12 清屏渲染已接入 PoC；CsWin32 裸指针 COM 包装已替代手写 vtable |
 | PoC 可视化 | `WindowVisualCompositor` | ✅ 已验证 | PoC Window 内容元素 + 命中目标已通 |
 
 ### 4.2 最小化 PoC 项目结构（当前仓库）
@@ -501,7 +501,7 @@ VirtualNode
 
 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> WindowBackend`
 
-**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现递归深比较；`CompositorLoop` 已实现无变化帧跳过。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 清屏）。PoC 已切换为 D3D12 渲染路径。
+**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现递归深比较；`CompositorLoop` 已实现无变化帧跳过。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 清屏）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013）。
 
 **下一步：** D3D12 Phase 2（矩形绘制 + 文本渲染），让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
 
@@ -1361,6 +1361,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-010 | VirtualNode 采用轻量不可变结构，非全量 ref struct | §6.2 | ✅ 已确认 | 平衡可实现性、可调试性与热路径性能 |
 | ADR-011 | DrawCommand 不内联文本，通过 ResourceHandle + TextRunEntry 并行传递 | §5.2.6 | ✅ 已确认 | DrawCommand 保持纯值类型，可序列化/可记录/可回放 |
 | ADR-012 | PatchBatch 携带 Root 属性，消费者直接使用 | §7.2 | ✅ 已确认 | 消除从 Memory 反推根节点的 hack，为未来增量 patch 铺路 |
+| ADR-013 | D3D12 互操作使用 CsWin32 生成的裸指针 COM 包装 | §5.2.2 | ✅ 已确认 | 消除手写 vtable 偏移和 GUID 错误；`allowMarshaling: false` 保持 AOT 兼容 |
 
 ---
 

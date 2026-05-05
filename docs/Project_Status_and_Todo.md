@@ -45,8 +45,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 Windows 宿主 PoC
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
   - Win32 互操作优先走 `CsWin32`
-  - 已有手写 D3D12/DXGI COM vtable 绑定（`D3D12Interop.cs`、`D3D12Renderer.cs`），支持设备创建、交换链、清屏、呈现
-  - 已有 `D3D12DrawingBackend`，实现 `IDrawingBackend`，Phase 1 以 FillRect 颜色清屏
+  - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、呈现
+  - 已有 `D3D12DrawingBackend`（Irix.Poc），实现 `IDrawingBackend`，Phase 1 以 FillRect 颜色清屏
 - `Irix.Rendering`
   - 已有 `ICompositor`
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已实现无变化帧跳过（`Count == 0` 时跳过翻译与渲染）
@@ -73,8 +73,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### 尚未落地的关键内容
 
-- D3D12 互操作层已手写完成（`D3D12Interop.cs` + `D3D12Renderer.cs`），使用 raw COM vtable 调用，未接入渲染管线
-- 还没有 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现）
+- D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 实现 Phase 1 清屏渲染
 - 还没有 Skia + D3D12 集成
 - 还没有真正的 retained tree / layout tree / draw command pipeline
 - `VirtualNodeDiffer` 已实现深比较（递归节点等价判断），能正确检测无变化并跳过 ReplaceRoot；尚未实现局部 diff / keyed reconciliation
@@ -269,7 +268,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P2
 
-- 开始搭 `D3D12` 最小三角形上屏
+- ✅ D3D12 基础渲染循环已搭建（CsWin32 裸指针 COM 包装，不再手写 vtable）
+- ✅ `D3D12DrawingBackend` 已实现 Phase 1 清屏渲染
+- Phase 2: D3D12 矩形绘制（FillRect → D3D12 2D 矩形）+ 文本渲染（暂用 GDI 软件光栅化上传纹理）
 - 明确 `SkiaBackend` 只位于 backend adapter 层
 - 为 `Local UI Remoting` 起草最小协议：`InputEvent`、`VirtualNodePatch`、`Ack / SeqId`
 - 收敛轻量 `MVVM bridge` 的最小 binding 语法、`IXAML` 子集与代码生成边界
@@ -290,6 +291,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 打通 PoC Window 对 `DrawCommand.Color` 的映射
 - [x] 搭 `D3D12` 基础渲染循环
 - [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，Phase 1 清屏渲染）
+- [x] 从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装
 - [ ] Phase 2: D3D12 矩形绘制 + 文本渲染
 
 ### Core
