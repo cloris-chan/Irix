@@ -7,18 +7,13 @@ internal readonly record struct DrawCommandRecordResult(
     DrawCommandBatch Commands,
     IReadOnlyList<TextRunEntry> TextRuns);
 
-internal sealed class DrawCommandRecorder
+internal sealed class DrawCommandRecorder(DrawingStyle style)
 {
-    private readonly DrawingStyle _style;
+    private readonly DrawingStyle _style = style;
 
     public DrawCommandRecorder()
         : this(DrawingStyle.Default)
     {
-    }
-
-    public DrawCommandRecorder(DrawingStyle style)
-    {
-        _style = style;
     }
 
     public DrawCommandRecordResult Record(IReadOnlyList<LayoutElement> elements)

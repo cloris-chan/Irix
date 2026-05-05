@@ -176,7 +176,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 消息派发 | `IMessageDispatcher` / `Runtime` | ✅ 已验证 | 基础 dispatch + Update 循环已测试 |
 | 视图构建 | `BuildView` → `VirtualNode` | ⚠️ 部分 | 基础树构建可用，属性模型待完善 |
 | Diff / Patch | `VirtualNodeDiffer` | ⚠️ 深比较已实现 | 递归节点等价判断，无变化跳过 ReplaceRoot；尚无局部 diff |
-| 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | PoC 过渡骨架，未脱离硬编码常量 |
+| 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | Retained layout 已引入，未脱离 PoC 硬编码常量 |
 | 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，未接入真实 GPU backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 无变化跳过 |
 | GPU 渲染 | D3D12 / SkiaBackend | ❌ 未实现 | 尚未搭建 |
@@ -497,11 +497,13 @@ VirtualNode
 3. 保持 `WindowVisualCompositor` 只消费 `RenderFrameBatch`，不要再把 `ActionId` / hit testing 元数据塞回 `DrawCommand`。
 4. 等 `SkiaBackend` 接入后，PoC Window backend 与 `SkiaBackend` 共享同一套 `DrawCommand` 输入。
 
-也就是说，当前 PoC 最务实的下一步不是“立刻写 Skia”，而是：
+也就是说，当前 PoC 最务实的下一步不是"立刻写 Skia"，而是先把中间层站稳：
 
-`VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderFrameBatch -> WindowBackend`
+`VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> WindowBackend`
 
-先把这条中间层站稳，再去接真实 GPU backend。
+**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现递归深比较；`CompositorLoop` 已实现无变化帧跳过。
+
+**下一步：** 让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局，最后接真实 GPU backend。
 
 #### 5.2.9 文本、路径与图片的资源策略
 

@@ -1,25 +1,17 @@
 namespace Irix.Platform.Windows;
 
-internal sealed class WindowsPlatformWindow : INativeWindow
+internal sealed class WindowsPlatformWindow(
+    WindowsPlatformThread platformThread,
+    WindowsNativeWindow window,
+    Task closedTask,
+    Action disposeCallback) : INativeWindow
 {
-    private readonly Action _disposeCallback;
-    private readonly Task _closedTask;
-    private readonly WindowsNativeWindow _window;
-    private readonly WindowsPlatformThread _platformThread;
+    private readonly Action _disposeCallback = disposeCallback;
+    private readonly Task _closedTask = closedTask;
+    private readonly WindowsNativeWindow _window = window;
+    private readonly WindowsPlatformThread _platformThread = platformThread;
 
     private bool _isDisposed;
-
-    public WindowsPlatformWindow(
-        WindowsPlatformThread platformThread,
-        WindowsNativeWindow window,
-        Task closedTask,
-        Action disposeCallback)
-    {
-        _platformThread = platformThread;
-        _window = window;
-        _closedTask = closedTask;
-        _disposeCallback = disposeCallback;
-    }
 
     public string Title => _window.Title;
 

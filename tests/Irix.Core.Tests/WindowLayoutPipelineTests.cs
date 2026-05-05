@@ -192,6 +192,64 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment"), frame.HitTargets[0]);
     }
 
+    [Fact]
+    public void RenderPipeline_reuses_retained_layout_when_tree_and_viewport_unchanged()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        using var frame1 = pipeline.Build(root, viewport);
+        using var frame2 = pipeline.Build(root, viewport);
+
+        // Both frames should have identical layout
+        Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
+        Assert.Equal(frame1.HitTargets.Count, frame2.HitTargets.Count);
+        Assert.Equal(frame1.TextRuns.Count, frame2.TextRuns.Count);
+        for (var i = 0; i < frame1.Commands.Count; i++)
+        {
+            Assert.Equal(frame1.Commands.Memory.Span[i].Rect, frame2.Commands.Memory.Span[i].Rect);
+            Assert.Equal(frame1.Commands.Memory.Span[i].Kind, frame2.Commands.Memory.Span[i].Kind);
+        }
+    }
+
+    [Fact]
+    public void RenderPipeline_rebuilds_layout_when_viewport_changes()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2));
+
+        using var frame1 = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540));
+        using var frame2 = pipeline.Build(root, new PixelRectangle(0, 0, 1920, 1080));
+
+        // Layout should differ because viewport width changed
+        var text1 = frame1.Commands.Memory.Span[0];
+        var text2 = frame2.Commands.Memory.Span[0];
+        Assert.NotEqual(text1.Rect.Width, text2.Rect.Width);
+    }
+
+    [Fact]
+    public void RenderPipeline_rebuilds_layout_when_tree_changes()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("Hello", 2));
+        var root2 = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("World", 2));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport);
+
+        Assert.Equal(1, frame1.TextRuns.Count);
+        Assert.Equal(1, frame2.TextRuns.Count);
+        Assert.Equal("Hello", frame1.TextRuns[0].Text);
+        Assert.Equal("World", frame2.TextRuns[0].Text);
+    }
+
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow
     {
         public string Title => "Test";

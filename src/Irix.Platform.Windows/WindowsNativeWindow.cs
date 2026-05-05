@@ -440,14 +440,9 @@ internal sealed class WindowsNativeWindow : INativeWindow
         return gcHandle.Target as WindowsNativeWindow;
     }
 
-    private readonly ref struct ScopedBrush
+    private readonly ref struct ScopedBrush(WindowColor color)
     {
-        public ScopedBrush(WindowColor color)
-        {
-            Handle = PInvoke.CreateSolidBrush(ToColorRef(color));
-        }
-
-        public HBRUSH Handle { get; }
+        public HBRUSH Handle { get; } = PInvoke.CreateSolidBrush(ToColorRef(color));
 
         public void Dispose()
         {
