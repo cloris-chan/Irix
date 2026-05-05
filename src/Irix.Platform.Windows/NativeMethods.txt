@@ -31,3 +31,10 @@ ShowWindow
 TranslateMessage
 UnregisterClassW
 UpdateWindow
+// D3D12 — CsWin32 generates these so we can inspect vtable layout
+D3D12CreateDevice
+ID3D12Device
+// DXGI
+CreateDXGIFactory1
+IDXGISwapChain3
+IDXGIFactory4

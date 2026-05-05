@@ -110,12 +110,13 @@ internal static unsafe class D3D12Vtable
     public static int CreateFence(nint dev, ulong init, int flags, Guid* riid, void** pp)
         => ((delegate* unmanaged[Stdcall]<nint, ulong, int, Guid*, void**, int>)Vtbl(dev)[36])(dev, init, flags, riid, pp);
 
-    // ── ID3D12CommandQueue ── vtable: IUnknown(0-2) ID3D12Object(3-6) ID3D12CommandQueue(7+)
+    // ── ID3D12CommandQueue ── vtable: IUnknown(0-2) ID3D12Object(3-6) ID3D12DeviceChild(7) ID3D12CommandQueue(8+)
+    // UpdateTileMappings=8, CopyTileMappings=9, ExecuteCommandLists=10, ..., Signal=14
     public static void ExecuteCommandLists(nint q, uint count, nint* lists)
-        => ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Vtbl(q)[9])(q, count, lists);
+        => ((delegate* unmanaged[Stdcall]<nint, uint, nint*, void>)Vtbl(q)[10])(q, count, lists);
 
     public static int QueueSignal(nint q, nint fence, ulong val)
-        => ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Vtbl(q)[13])(q, fence, val);
+        => ((delegate* unmanaged[Stdcall]<nint, nint, ulong, int>)Vtbl(q)[14])(q, fence, val);
 
     // ── ID3D12CommandAllocator ── vtable: ...(7) ID3D12CommandAllocator(8)
     public static int ResetAllocator(nint a)
@@ -148,22 +149,26 @@ internal static unsafe class D3D12Vtable
     public static int FenceSignal(nint f, ulong val)
         => ((delegate* unmanaged[Stdcall]<nint, ulong, int>)Vtbl(f)[10])(f, val);
 
-    // ── IDXGISwapChain3 ── vtable: IDXGIObject(0-2) IDXGIDeviceSubObject(3) IDXGISwapChain(4+)
+    // ── IDXGISwapChain3 ── vtable: IUnknown(0-2) IDXGIObject(3-6) IDXGIDeviceSubObject(7) IDXGISwapChain(8+)
+    // Present=8, GetBuffer=9, ..., ResizeBuffers=13, ...
+    // IDXGISwapChain1(18+) IDXGISwapChain2(29+) IDXGISwapChain3(36+)
+    // GetCurrentBackBufferIndex=36
     public static int Present(nint sc, uint sync, uint flags)
-        => ((delegate* unmanaged[Stdcall]<nint, uint, uint, int>)Vtbl(sc)[4])(sc, sync, flags);
+        => ((delegate* unmanaged[Stdcall]<nint, uint, uint, int>)Vtbl(sc)[8])(sc, sync, flags);
 
     public static int GetBuffer(nint sc, uint buf, Guid* riid, void** pp)
-        => ((delegate* unmanaged[Stdcall]<nint, uint, Guid*, void**, int>)Vtbl(sc)[5])(sc, buf, riid, pp);
+        => ((delegate* unmanaged[Stdcall]<nint, uint, Guid*, void**, int>)Vtbl(sc)[9])(sc, buf, riid, pp);
 
     public static int ResizeBuffers(nint sc, uint count, uint w, uint h, DXGI_FORMAT fmt, uint flags)
-        => ((delegate* unmanaged[Stdcall]<nint, uint, uint, uint, DXGI_FORMAT, uint, int>)Vtbl(sc)[9])(sc, count, w, h, fmt, flags);
+        => ((delegate* unmanaged[Stdcall]<nint, uint, uint, uint, DXGI_FORMAT, uint, int>)Vtbl(sc)[13])(sc, count, w, h, fmt, flags);
 
     public static uint GetCurrentBackBufferIndex(nint sc)
-        => ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(sc)[32])(sc);
+        => ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(sc)[36])(sc);
 
-    // ── IDXGIFactory4 ── vtable: IDXGIObject(0-2) IDXGIFactory(3+) IDXGIFactory1(11+) IDXGIFactory2(13+)
+    // ── IDXGIFactory4 ── vtable: IUnknown(0-2) IDXGIObject(3-6) IDXGIFactory(7+) IDXGIFactory1(12+) IDXGIFactory2(14+)
+    // CreateSwapChainForHwnd=15
     public static int CreateSwapChainForHwnd(nint f, nint dev, nint hwnd, DXGI_SWAP_CHAIN_DESC1* desc, void* fs, void* restrict, void** pp)
-        => ((delegate* unmanaged[Stdcall]<nint, nint, nint, DXGI_SWAP_CHAIN_DESC1*, void*, void*, void**, int>)Vtbl(f)[14])(f, dev, hwnd, desc, fs, restrict, pp);
+        => ((delegate* unmanaged[Stdcall]<nint, nint, nint, DXGI_SWAP_CHAIN_DESC1*, void*, void*, void**, int>)Vtbl(f)[15])(f, dev, hwnd, desc, fs, restrict, pp);
 }
 
 // ═══════════════════════════════════════════════════════════════════

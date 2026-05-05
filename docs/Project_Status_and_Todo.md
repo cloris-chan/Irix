@@ -46,6 +46,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
   - Win32 互操作优先走 `CsWin32`
   - 已有手写 D3D12/DXGI COM vtable 绑定（`D3D12Interop.cs`、`D3D12Renderer.cs`），支持设备创建、交换链、清屏、呈现
+  - 已有 `D3D12DrawingBackend`，实现 `IDrawingBackend`，Phase 1 以 FillRect 颜色清屏
 - `Irix.Rendering`
   - 已有 `ICompositor`
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已实现无变化帧跳过（`Count == 0` 时跳过翻译与渲染）
@@ -63,6 +64,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `WindowVisualCompositor`，能消费当前 `RenderFrameBatch` 并更新 PoC Window 内容与命中目标
   - 已有 `WindowBackend`，可将 `DrawCommand + HitTestTarget[]` 翻译成 PoC Window 内容元素与命中目标
   - 已有 `PoCDrawingBackend`，首次实现 `IDrawingBackend` 接口，验证 DrawCommand → WindowContentElement 链路
+  - 已有 `D3D12DrawingBackend`，D3D12 渲染路径已接入 PoC（Phase 1: 清屏渲染）
   - 已将 Counter 示例中的输入映射抽到独立 `CounterInputRouter`
   - 已打通：窗口创建 -> 输入 -> runtime dispatch -> patch 发布 -> PoC 可视化
 - `Irix.Core.Tests`
@@ -94,7 +96,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | 布局 | ⚠️ Retained layout 已引入，未脱离硬编码常量 |
 | 命令录制 | ⚠️ 基础可用，TextRunEntry 已分离 |
 | 帧消费 (CompositorLoop) | ✅ 已验证（含无变化跳过） |
-| GPU 渲染 | ⚠️ D3D12 绑定已手写，未接入 IDrawingBackend |
+| GPU 渲染 | ✅ D3D12 清屏渲染已接入 PoC |
 | PoC 可视化 | ✅ 已验证 |
 
 ---
@@ -287,8 +289,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 建立 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderFrameBatch -> WindowBackend` 过渡链
 - [x] 打通 PoC Window 对 `DrawCommand.Color` 的映射
 - [x] 搭 `D3D12` 基础渲染循环
-- [ ] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现）
-- [ ] 评估 `Skia + D3D12` 集成可行性
+- [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，Phase 1 清屏渲染）
+- [ ] Phase 2: D3D12 矩形绘制 + 文本渲染
 
 ### Core
 

@@ -10,17 +10,23 @@ internal static class Program
     {
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
-        var visualCompositor = new WindowVisualCompositor(window);
+
+        // D3D12 rendering path
+        var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend);
+
         var drawCommandTranslator = new WindowDrawCommandTranslator(window);
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, new CompositeCompositor(
             new ConsoleCompositor(Console.Out),
-            visualCompositor));
+            d3d12Compositor));
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
         using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
 
         platformHost.TopologyChanged += OnTopologyChanged;
 
         Console.WriteLine($"Detected screens: {platformHost.Screens.Count}");
+        Console.WriteLine("Rendering: D3D12 (clear color from FillRect)");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 
         await runtime.StartAsync();
@@ -40,7 +46,7 @@ internal static class Program
 
         string? TryGetActionIdAt(int x, int y)
         {
-            return visualCompositor.TryGetActionIdAt(x, y, out var actionId) ? actionId : null;
+            return d3d12Compositor.TryGetActionIdAt(x, y, out var actionId) ? actionId : null;
         }
 
         void OnTopologyChanged(object? sender, ScreenTopologyChangedEventArgs args)

@@ -34,21 +34,25 @@ internal sealed class D3D12Renderer : IDisposable
         unsafe
         {
             nint ptr;
+            int hr;
 
             // DXGI factory
             var riid = G("1bc6ea02-ef36-464f-bf0c-21ca39e5168a");
             nint factory;
-            D3D12NativeMethods.CreateDXGIFactory1(&riid, (void**)&factory);
+            hr = D3D12NativeMethods.CreateDXGIFactory1(&riid, (void**)&factory);
+            if (hr < 0) throw new InvalidOperationException($"CreateDXGIFactory1 failed: 0x{hr:X8}");
 
             // D3D12 device
             riid = G("189819f1-1db6-4b57-be54-1821339b85f7");
-            D3D12NativeMethods.D3D12CreateDevice(0, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, &riid, (void**)&ptr);
+            hr = D3D12NativeMethods.D3D12CreateDevice(0, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, &riid, (void**)&ptr);
+            if (hr < 0) throw new InvalidOperationException($"D3D12CreateDevice failed: 0x{hr:X8}");
             _device = ptr;
 
             // Command queue
             riid = G("0ec870a6-5d7e-4c22-8cfc-5baae07616ed");
             var qd = new D3D12_COMMAND_QUEUE_DESC { Type = D3D12_COMMAND_LIST_TYPE.DIRECT };
-            D3D12Vtable.CreateCommandQueue(_device, &qd, &riid, (void**)&ptr);
+            hr = D3D12Vtable.CreateCommandQueue(_device, &qd, &riid, (void**)&ptr);
+            if (hr < 0) throw new InvalidOperationException($"CreateCommandQueue failed: 0x{hr:X8}");
             _queue = ptr;
 
             // Swap chain
@@ -62,10 +66,12 @@ internal sealed class D3D12Renderer : IDisposable
             };
             riid = G("790a45f7-0d42-4876-983a-0a55cfe6f4aa");
             nint sc1;
-            D3D12Vtable.CreateSwapChainForHwnd(factory, _queue, hwnd, &sd, null, null, (void**)&sc1);
+            hr = D3D12Vtable.CreateSwapChainForHwnd(factory, _queue, hwnd, &sd, null, null, (void**)&sc1);
+            if (hr < 0) throw new InvalidOperationException($"CreateSwapChainForHwnd failed: 0x{hr:X8}");
             riid = G("a8be2ac4-199f-4946-b331-79599fb98de7");
             var qi = (delegate* unmanaged[Stdcall]<nint, Guid*, void**, int>)(*(void***)sc1)[0];
-            qi(sc1, &riid, (void**)&ptr);
+            hr = qi(sc1, &riid, (void**)&ptr);
+            if (hr < 0) throw new InvalidOperationException($"QueryInterface(IDXGISwapChain3) failed: 0x{hr:X8}");
             _swapChain = ptr;
             D3D12Vtable.Release(sc1);
             D3D12Vtable.Release(factory);
@@ -73,7 +79,8 @@ internal sealed class D3D12Renderer : IDisposable
             // RTV heap
             riid = G("8efb471d-616c-4f49-90f7-127bb763fa51");
             var hd = new D3D12_DESCRIPTOR_HEAP_DESC { NumDescriptors = FrameCount, Type = D3D12_DESCRIPTOR_HEAP_TYPE.RTV };
-            D3D12Vtable.CreateDescriptorHeap(_device, &hd, &riid, (void**)&ptr);
+            hr = D3D12Vtable.CreateDescriptorHeap(_device, &hd, &riid, (void**)&ptr);
+            if (hr < 0) throw new InvalidOperationException($"CreateDescriptorHeap failed: 0x{hr:X8}");
             _rtvHeap = ptr;
             _rtvSize = D3D12Vtable.GetDescriptorHandleIncrementSize(_device, D3D12_DESCRIPTOR_HEAP_TYPE.RTV);
 
@@ -85,7 +92,8 @@ internal sealed class D3D12Renderer : IDisposable
             {
                 for (var i = 0; i < FrameCount; i++)
                 {
-                    D3D12Vtable.GetBuffer(_swapChain, (uint)i, &riid, (void**)&pRT[i]);
+                    hr = D3D12Vtable.GetBuffer(_swapChain, (uint)i, &riid, (void**)&pRT[i]);
+                    if (hr < 0) throw new InvalidOperationException($"GetBuffer({i}) failed: 0x{hr:X8}");
                     D3D12Vtable.CreateRenderTargetView(_device, pRT[i], rtv);
                     rtv.ptr += _rtvSize;
                 }
@@ -97,22 +105,28 @@ internal sealed class D3D12Renderer : IDisposable
             fixed (nint* pA = _allocators)
             {
                 for (var i = 0; i < FrameCount; i++)
-                    D3D12Vtable.CreateCommandAllocator(_device, D3D12_COMMAND_LIST_TYPE.DIRECT, &riid, (void**)&pA[i]);
+                {
+                    hr = D3D12Vtable.CreateCommandAllocator(_device, D3D12_COMMAND_LIST_TYPE.DIRECT, &riid, (void**)&pA[i]);
+                    if (hr < 0) throw new InvalidOperationException($"CreateCommandAllocator({i}) failed: 0x{hr:X8}");
+                }
             }
 
             // Command list
             riid = G("5b160d0f-ac1b-4185-8ba8-b3ae42a5a455");
             fixed (nint* pA = _allocators)
-                D3D12Vtable.CreateCommandList(_device, 0, D3D12_COMMAND_LIST_TYPE.DIRECT, pA[0], &riid, (void**)&ptr);
+                hr = D3D12Vtable.CreateCommandList(_device, 0, D3D12_COMMAND_LIST_TYPE.DIRECT, pA[0], &riid, (void**)&ptr);
+            if (hr < 0) throw new InvalidOperationException($"CreateCommandList failed: 0x{hr:X8}");
             _list = ptr;
             D3D12Vtable.Close(_list);
 
             // Fence
             riid = G("0a753dcf-c4d8-4b91-adf6-be5a60d95a76");
-            D3D12Vtable.CreateFence(_device, 0, 0, &riid, (void**)&ptr);
+            hr = D3D12Vtable.CreateFence(_device, 0, 0, &riid, (void**)&ptr);
+            if (hr < 0) throw new InvalidOperationException($"CreateFence failed: 0x{hr:X8}");
             _fence = ptr;
             _fenceValues = new ulong[FrameCount];
             _fenceEvent = CreateEventW(0, 1, 0, 0);
+            if (_fenceEvent == 0) throw new InvalidOperationException("CreateEvent failed");
 
             _frameIndex = D3D12Vtable.GetCurrentBackBufferIndex(_swapChain);
         }
