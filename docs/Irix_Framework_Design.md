@@ -175,7 +175,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 事件传递 | MPSC 事件队列 | ⚠️ 部分 | Channel 基础可用，异常/取消路径未测 |
 | 消息派发 | `IMessageDispatcher` / `Runtime` | ✅ 已验证 | 基础 dispatch + Update 循环已测试 |
 | 视图构建 | `BuildView` → `VirtualNode` | ⚠️ 部分 | 基础树构建可用，属性模型待完善 |
-| Diff / Patch | `VirtualNodeDiffer` | ❌ 最小实现 | 当前等同于 ReplaceRoot，无真正局部 diff |
+| Diff / Patch | `VirtualNodeDiffer` | ⚠️ 深比较已实现 | 递归节点等价判断，无变化跳过 ReplaceRoot；尚无局部 diff |
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | PoC 过渡骨架，未脱离硬编码常量 |
 | 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，未接入真实 GPU backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放路径已测试 |
@@ -798,9 +798,12 @@ v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、
 
 **Diff 算法策略：**
 
-- 同层比较，Key 驱动的列表 Reconciliation（类 React keys）。
-- Diff 输出为 `VirtualNodePatch[]`，每个 Patch 描述"对哪个节点，做什么操作（Add/Remove/Update/Move）"。
+- 递归深比较：逐节点比较 `Kind`、`Key`、`Content`、`Attributes`、`Children`，短路于首个差异。
+- 当前实现：若两棵树等价，输出空 `PatchBatch`（`Count = 0`），下游可跳过渲染；若不等价，输出 `ReplaceRoot`。
+- **已落地：** 递归节点等价判断（`NodesEqual`），正确处理 `default(VirtualNode)` 的空数组边界。
+- **待落地：** 同层比较、Key 驱动的列表 Reconciliation（类 React keys）；局部 `Update` / `Add` / `Remove` / `Move` Patch 输出。
 - Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor；v1 不把"整棵 VirtualNode 树 0 分配"作为发布门槛。
+- `PatchBatch` 已携带 `Root` 属性，消费者可直接使用 `patchBatch.Root` 获取新根节点，无需从 `Memory` 中反推。
 
 ### 6.3 调度器 (IMessageDispatcher)
 
@@ -1354,6 +1357,8 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-008 | Local UI Remoting 为免费/开源方向 | §8.2.4 | ✅ 已确认 | 形成开发者生态入口，不吞掉商业版价值 |
 | ADR-009 | v1 不做运行时 XAML/IXAML 解析 | §9.1.3 | ✅ 已确认 | Source Generator 编译期降解，零运行时开销 |
 | ADR-010 | VirtualNode 采用轻量不可变结构，非全量 ref struct | §6.2 | ✅ 已确认 | 平衡可实现性、可调试性与热路径性能 |
+| ADR-011 | DrawCommand 不内联文本，通过 ResourceHandle + TextRunEntry 并行传递 | §5.2.6 | ✅ 已确认 | DrawCommand 保持纯值类型，可序列化/可记录/可回放 |
+| ADR-012 | PatchBatch 携带 Root 属性，消费者直接使用 | §7.2 | ✅ 已确认 | 消除从 Memory 反推根节点的 hack，为未来增量 patch 铺路 |
 
 ---
 

@@ -21,7 +21,6 @@ internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatch
             return new RenderFrameBatch(new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0), []);
         }
 
-        var root = patchBatch.Memory.Span[patchBatch.Count - 1].Node;
-        return _renderPipeline.Build(root, window.Region.PhysicalBounds);
+        return _renderPipeline.Build(patchBatch.Root, window.Region.PhysicalBounds);
     }
 }

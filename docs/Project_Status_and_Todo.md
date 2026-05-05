@@ -69,8 +69,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 还没有 `D3D12` 渲染主链
 - 还没有 `Skia + D3D12` backend adapter
 - 还没有真正的 retained tree / layout tree / draw command pipeline
-- `VirtualNodeDiffer` 仍然是最小实现，不是完整 diff
-- 测试覆盖仍然很薄，目前主要是单个 runtime 测试
+- `VirtualNodeDiffer` 已实现深比较（递归节点等价判断），能正确检测无变化并跳过 ReplaceRoot；尚未实现局部 diff / keyed reconciliation
+- `DrawCommand` 已移除内联 `string? Text`，改为 `ResourceHandle` + 并行 `TextRunEntry[]` 传递文本
+- `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
+- 测试覆盖已扩展至 38 个测试（含 diff、DrawCommand 文本传递、所有权转移等）
 
 **数据流各阶段验证速查**（详见 [设计文档 §4.1](/d:/source/Irix/docs/Irix_Framework_Design.md#41-关键数据流本地模式v1)）：
 
@@ -79,7 +81,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | 输入采集 → MPSC | ✅ 已验证 |
 | 消息派发 → Update | ✅ 已验证 |
 | View 构建 | ⚠️ 部分 |
-| Diff / Patch | ❌ 最小实现 |
+| Diff / Patch | ⚠️ 深比较已实现，无变化跳过；尚无局部 diff |
 | 布局 | ⚠️ PoC 骨架 |
 | 命令录制 | ⚠️ 基础可用 |
 | 帧消费 (CompositorLoop) | ✅ 已验证 |
@@ -104,8 +106,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 限制：
 
-- `VirtualNodeDiffer` 当前基本等同于“整棵树替换根节点”
-- 还没有真正的局部 diff / keyed reconciliation
+- `VirtualNodeDiffer` 已实现递归深比较，能正确检测无变化（输出空 PatchBatch）；输出仍为 ReplaceRoot，尚未实现局部 diff / keyed reconciliation
 - 还没有 drawing 层抽象
 
 关键文件：
@@ -167,7 +168,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 当前测试状态：
 
-- `Irix.Core.Tests` 已有 runtime 测试和 layout/draw pipeline 基础测试
+- `Irix.Core.Tests` 已有 runtime 测试、diff 测试、layout/draw pipeline 基础测试与最近的回归测试
+- 已补 `VirtualNodeDiffer` 深比较与空 PatchBatch 检测测试（15 个测试用例）
+- 已补 `PatchBatch.Root` 属性验证
 - 已补 `WindowDrawCommandTranslator` 默认布局回归测试
 - 已补 `WindowBackend` 颜色映射断言
 - 已补 `WindowVisualCompositor` 命中边界与空帧清理测试
@@ -191,7 +194,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 > 详细论述与权衡分析见 [设计文档附录 B：ADR 索引](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)。此处仅列出当前生效状态与尚未落地的决策。
 
-### 已确认（详见 ADR-001 ~ ADR-010）
+### 已确认（详见 ADR-001 ~ ADR-012）
 
 - D3D12 作为 v1 唯一图形后端 / Skia 仅作为 backend adapter（ADR-001, ADR-006）
 - DrawCommand + IDrawingBackend 隔离层（ADR-002）
@@ -202,6 +205,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - Local UI Remoting 为免费/开源方向（ADR-008）
 - 不做运行时 XAML/IXAML 解析（ADR-009）
 - VirtualNode 采用轻量不可变结构（ADR-010）
+- DrawCommand 不内联文本，通过 ResourceHandle + TextRunEntry[] 并行传递（ADR-011）
+- PatchBatch 携带 Root 属性，消费者直接使用而非从 Memory 反推（ADR-012）
 
 ### 未确认或尚未落地
 
@@ -246,7 +251,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P1
 
-- 为 `VirtualNodeDiffer` 制定从 `ReplaceRoot` 走向真实 diff 的演进计划
+- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到深比较（递归节点等价判断）；下一步：局部 diff / keyed reconciliation
 - 增加 `PatchBatch` / `IMemoryOwner<T>` 异常、取消、释放路径测试
 - 增加输入路由和命中测试的最小测试覆盖
 

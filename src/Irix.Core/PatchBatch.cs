@@ -6,7 +6,7 @@ public sealed class PatchBatch : IDisposable
 {
     private readonly IMemoryOwner<VirtualNodePatch> _owner;
 
-    public PatchBatch(IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0)
+    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0)
     {
         ArgumentNullException.ThrowIfNull(owner);
 
@@ -15,10 +15,18 @@ public sealed class PatchBatch : IDisposable
             throw new ArgumentOutOfRangeException(nameof(count));
         }
 
+        Root = root;
         _owner = owner;
         Count = count;
         ScreenId = screenId;
     }
+
+    public PatchBatch(IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0)
+        : this(default, owner, count, screenId)
+    {
+    }
+
+    public VirtualNode Root { get; }
 
     public int Count { get; }
 
