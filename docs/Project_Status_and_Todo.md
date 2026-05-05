@@ -46,7 +46,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
   - Win32 互操作优先走 `CsWin32`
   - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、呈现
-  - 已有 `D3D12DrawingBackend`（Irix.Poc），实现 `IDrawingBackend`，Phase 1 以 FillRect 颜色清屏
+  - 已有 `D3D12Renderer2D`，运行时 HLSL 编译 + 顶点缓冲区渲染彩色矩形
+  - 已有 `D3D12DrawingBackend`（Irix.Poc），Phase 2：FillRect → D3D12 矩形渲染
 - `Irix.Rendering`
   - 已有 `ICompositor`
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已实现无变化帧跳过（`Count == 0` 时跳过翻译与渲染）
@@ -270,7 +271,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 - ✅ D3D12 基础渲染循环已搭建（CsWin32 裸指针 COM 包装，不再手写 vtable）
 - ✅ `D3D12DrawingBackend` 已实现 Phase 1 清屏渲染
-- Phase 2: D3D12 矩形绘制（FillRect → D3D12 2D 矩形）+ 文本渲染（暂用 GDI 软件光栅化上传纹理）
+- ✅ Phase 2: D3D12 矩形绘制已实现（`D3D12Renderer2D`：运行时 HLSL 编译 + 顶点缓冲区）
+- Phase 3: D3D12 文本渲染（暂用 GDI 软件光栅化上传纹理）
 - 明确 `SkiaBackend` 只位于 backend adapter 层
 - 为 `Local UI Remoting` 起草最小协议：`InputEvent`、`VirtualNodePatch`、`Ack / SeqId`
 - 收敛轻量 `MVVM bridge` 的最小 binding 语法、`IXAML` 子集与代码生成边界
@@ -292,7 +294,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 搭 `D3D12` 基础渲染循环
 - [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，Phase 1 清屏渲染）
 - [x] 从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装
-- [ ] Phase 2: D3D12 矩形绘制 + 文本渲染
+- [x] Phase 2: D3D12 矩形绘制（`D3D12Renderer2D`：运行时 HLSL 编译 + 顶点缓冲区）
+- [ ] Phase 3: D3D12 文本渲染（暂用 GDI 软件光栅化上传纹理）
 
 ### Core
 

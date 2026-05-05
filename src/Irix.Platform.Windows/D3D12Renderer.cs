@@ -27,6 +27,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private HANDLE _fenceEvent;
     private ulong[] _fenceValues;
     private uint _frameIndex;
+    private D3D12Renderer2D? _renderer2D;
     private bool _disposed;
 
     public D3D12Renderer(nint hwnd, int width, int height)
@@ -104,7 +105,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _fenceEvent = new HANDLE(PInvoke.CreateEvent(null, true, false, null).DangerousGetHandle());
 
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+        _renderer2D = new D3D12Renderer2D(_device);
     }
+
+    public D3D12Renderer2D Renderer2D => _renderer2D!;
 
     public void BeginFrame()
     {
@@ -128,6 +132,54 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         rtv.ptr += _frameIndex * _rtvSize;
         var color = stackalloc float[] { r, g, b, a };
         _list->ClearRenderTargetView(rtv, new ReadOnlySpan<float>(color, 4));
+
+        // Transition to present
+        barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
+        _list->ResourceBarrier(1, &barrier);
+
+        _list->Close();
+
+        var pList = (ID3D12CommandList*)_list;
+        _queue->ExecuteCommandLists(1, &pList);
+
+        _swapChain->Present(1, 0);
+        MoveToNextFrame();
+    }
+
+    /// <summary>
+    /// Render colored rectangles using D3D12Renderer2D, then present.
+    /// </summary>
+    public void RenderRectangles(ReadOnlySpan<D3D12Renderer2D.RectData> rects)
+    {
+        // Transition to render target
+        var barrier = new D3D12_RESOURCE_BARRIER();
+        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        barrier.Anonymous.Transition.pResource = _renderTargets[_frameIndex];
+        barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
+        barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Anonymous.Transition.Subresource = 0xFFFFFFFF;
+        _list->ResourceBarrier(1, &barrier);
+
+        // Set render target
+        var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += _frameIndex * _rtvSize;
+        _list->OMSetRenderTargets(1, &rtv, false, null);
+
+        // Clear with dark background
+        var bgColor = stackalloc float[] { 0.1f, 0.1f, 0.1f, 1.0f };
+        _list->ClearRenderTargetView(rtv, new ReadOnlySpan<float>(bgColor, 4));
+
+        // Set viewport and scissor
+        // Viewport dimensions are embedded in the rect coordinates (NDC conversion in D3D12Renderer2D)
+        // For now, use a default viewport — the renderer2D handles NDC conversion internally
+        var viewport = new D3D12_VIEWPORT { Width = 960, Height = 540, MaxDepth = 1.0f };
+        _list->RSSetViewports(1, &viewport);
+        var scissor = new RECT { right = 960, bottom = 540 };
+        _list->RSSetScissorRects(1, &scissor);
+
+        // Render rectangles
+        _renderer2D.RenderRectangles(_list, rects, 960, 540);
 
         // Transition to present
         barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -169,6 +221,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         if (_disposed) return;
         WaitForGpu();
+        if (_renderer2D != null) { _renderer2D.Dispose(); _renderer2D = null; }
         for (var i = 0; i < FrameCount; i++)
         {
             _renderTargets[i]->Release();
