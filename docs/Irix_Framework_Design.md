@@ -177,8 +177,8 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 视图构建 | `BuildView` → `VirtualNode` | ⚠️ 部分 | 基础树构建可用，属性模型待完善 |
 | Diff / Patch | `VirtualNodeDiffer` | ⚠️ 深比较已实现 | 递归节点等价判断，无变化跳过 ReplaceRoot；尚无局部 diff |
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | PoC 过渡骨架，未脱离硬编码常量 |
-| 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，未接入真实 GPU backend |
-| 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放路径已测试 |
+| 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，未接入真实 GPU backend |
+| 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 无变化跳过 |
 | GPU 渲染 | D3D12 / SkiaBackend | ❌ 未实现 | 尚未搭建 |
 | PoC 可视化 | `WindowVisualCompositor` | ✅ 已验证 | PoC Window 内容元素 + 命中目标已通 |
 

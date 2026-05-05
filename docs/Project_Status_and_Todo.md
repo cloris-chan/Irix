@@ -47,13 +47,14 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - Win32 互操作优先走 `CsWin32`
 - `Irix.Rendering`
   - 已有 `ICompositor`
-  - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`
+  - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已实现无变化帧跳过（`Count == 0` 时跳过翻译与渲染）
   - 已有 `ConsoleCompositor` 与 `CompositeCompositor`
   - 已有 `LayoutTreeBuilder`、`LayoutElement`、`DrawCommandRecorder` 过渡骨架
-  - 已有 `RenderFrameBatch` / `HitTestTarget`，当前 PoC 通过它们并行承载命中数据，而不是往 `DrawCommand` 塞交互元数据
+  - 已有 `RenderFrameBatch` / `HitTestTarget` / `TextRunEntry`，并行承载命中数据与文本内容
 - `Irix.Drawing`
   - 已拆出独立项目骨架
   - 已有 `DrawCommand`、`FrameContext`、`DrawCommandBatch`、`IDrawingBackend` 最小类型
+  - `DrawCommand` 已移除内联 `string? Text`，改为 `ResourceHandle` + `TextRunEntry[]` 并行传递
 - `Irix.Poc`
   - 已有 Counter 示例应用
   - 已有 `WindowVisualCompositor`，能消费当前 `RenderFrameBatch` 并更新 PoC Window 内容与命中目标
@@ -72,7 +73,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `VirtualNodeDiffer` 已实现深比较（递归节点等价判断），能正确检测无变化并跳过 ReplaceRoot；尚未实现局部 diff / keyed reconciliation
 - `DrawCommand` 已移除内联 `string? Text`，改为 `ResourceHandle` + 并行 `TextRunEntry[]` 传递文本
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 38 个测试（含 diff、DrawCommand 文本传递、所有权转移等）
+- 测试覆盖已扩展至 39 个测试（含 diff、DrawCommand 文本传递、CompositorLoop 跳过、所有权转移等）
+- `CompositorLoop` 已实现 `PatchBatch.Count == 0` 时跳过翻译与渲染，避免无变化帧清空窗口
 
 **数据流各阶段验证速查**（详见 [设计文档 §4.1](/d:/source/Irix/docs/Irix_Framework_Design.md#41-关键数据流本地模式v1)）：
 
@@ -84,7 +86,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | Diff / Patch | ⚠️ 深比较已实现，无变化跳过；尚无局部 diff |
 | 布局 | ⚠️ PoC 骨架 |
 | 命令录制 | ⚠️ 基础可用 |
-| 帧消费 (CompositorLoop) | ✅ 已验证 |
+| 帧消费 (CompositorLoop) | ✅ 已验证（含无变化跳过） |
 | GPU 渲染 | ❌ 未实现 |
 | PoC 可视化 | ✅ 已验证 |
 
@@ -176,7 +178,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 已补 `WindowVisualCompositor` 命中边界与空帧清理测试
 - 已补 Counter PoC 输入路由映射测试
 - 已补 `PatchBatch` / `DrawCommandBatch` / `RenderFrameBatch` / `CompositorLoop` 基础所有权与释放路径测试
-- 还没有 diff、异常/取消路径测试
+- 已补 `CompositorLoop` 无变化帧跳过测试
+- 还没有异常/取消路径测试
 
 当前已知行为记录：
 

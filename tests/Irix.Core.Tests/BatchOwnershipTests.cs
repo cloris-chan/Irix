@@ -76,6 +76,28 @@ public sealed class BatchOwnershipTests
         Assert.Equal(1, drawOwner.DisposeCallCount);
     }
 
+    [Fact]
+    public async Task CompositorLoop_skips_translation_and_rendering_when_patch_count_is_zero()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var drawOwner = new TrackingMemoryOwner<DrawCommand>([]);
+        var translator = new FakeTranslator(drawOwner);
+        var compositor = new RecordingCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+
+        // Publish a no-change PatchBatch (Count = 0)
+        var emptyOwner = new TrackingMemoryOwner<VirtualNodePatch>([]);
+        var emptyBatch = new PatchBatch(emptyOwner, 0);
+        await loop.PublishAsync(emptyBatch, cancellationToken);
+
+        // Wait briefly to let the processing loop run
+        await Task.Delay(100, cancellationToken);
+
+        Assert.Equal(0, translator.TranslateCallCount);
+        Assert.Equal(0, compositor.RenderCallCount);
+        Assert.Equal(1, emptyOwner.DisposeCallCount);
+    }
+
     private sealed class TrackingMemoryOwner<T>(T[] buffer) : IMemoryOwner<T>
     {
         private T[]? _buffer = buffer;
