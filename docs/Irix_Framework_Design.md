@@ -179,7 +179,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | Retained layout 已引入，未脱离 PoC 硬编码常量 |
 | 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，未接入真实 GPU backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 无变化跳过 |
-| GPU 渲染 | D3D12 / SkiaBackend | ✅ Phase 2 进行中 | D3D12 矩形渲染已实现（`D3D12Renderer2D`）；CsWin32 裸指针 COM 包装 |
+| GPU 渲染 | D3D12 / SkiaBackend | ✅ Phase 2 已验证 | D3D12 矩形渲染已实现（`D3D12Renderer2D`）；viewport 已接入真实窗口尺寸；resize 支持已添加 |
 | PoC 可视化 | `WindowVisualCompositor` | ✅ 已验证 | PoC Window 内容元素 + 命中目标已通 |
 
 ### 4.2 最小化 PoC 项目结构（当前仓库）

@@ -45,7 +45,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 Windows 宿主 PoC
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
   - Win32 互操作优先走 `CsWin32`
-  - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、呈现
+  - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、呈现、resize
   - 已有 `D3D12Renderer2D`，运行时 HLSL 编译 + 顶点缓冲区渲染彩色矩形
   - 已有 `D3D12DrawingBackend`（Irix.Poc），Phase 2：FillRect → D3D12 矩形渲染
 - `Irix.Rendering`
@@ -295,6 +295,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，Phase 1 清屏渲染）
 - [x] 从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装
 - [x] Phase 2: D3D12 矩形绘制（`D3D12Renderer2D`：运行时 HLSL 编译 + 顶点缓冲区）
+- [x] 移除 D3D12 viewport 硬编码，接入真实窗口尺寸 + resize 支持
+- [x] 添加 GitHub Actions CI（build + test + AOT check）
 - [ ] Phase 3: D3D12 文本渲染（暂用 GDI 软件光栅化上传纹理）
 
 ### Core

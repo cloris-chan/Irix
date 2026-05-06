@@ -28,10 +28,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private ulong[] _fenceValues;
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
+    private int _width;
+    private int _height;
     private bool _disposed;
 
     public D3D12Renderer(nint hwnd, int width, int height)
     {
+        _width = width;
+        _height = height;
         // DXGI factory
         PInvoke.CreateDXGIFactory1(typeof(IDXGIFactory4).GUID, out var factoryObj);
         var factory = (IDXGIFactory4*)factoryObj;
@@ -110,6 +114,38 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public D3D12Renderer2D Renderer2D => _renderer2D!;
 
+    public int Width => _width;
+    public int Height => _height;
+
+    public void Resize(int newWidth, int newHeight)
+    {
+        if (newWidth == _width && newHeight == _height) return;
+        if (newWidth <= 0 || newHeight <= 0) return;
+
+        WaitForGpu();
+
+        for (var i = 0; i < FrameCount; i++)
+        {
+            _renderTargets[i]->Release();
+            _renderTargets[i] = null;
+        }
+
+        _swapChain->ResizeBuffers(FrameCount, (uint)newWidth, (uint)newHeight, DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+
+        var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        for (var i = 0; i < FrameCount; i++)
+        {
+            _swapChain->GetBuffer((uint)i, typeof(ID3D12Resource).GUID, out var resObj);
+            _renderTargets[i] = (ID3D12Resource*)resObj;
+            _device->CreateRenderTargetView(_renderTargets[i], null, rtv);
+            rtv.ptr += _rtvSize;
+        }
+
+        _width = newWidth;
+        _height = newHeight;
+        _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+    }
+
     public void BeginFrame()
     {
         _allocators[_frameIndex]->Reset();
@@ -170,16 +206,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var bgColor = stackalloc float[] { 0.1f, 0.1f, 0.1f, 1.0f };
         _list->ClearRenderTargetView(rtv, new ReadOnlySpan<float>(bgColor, 4));
 
-        // Set viewport and scissor
-        // Viewport dimensions are embedded in the rect coordinates (NDC conversion in D3D12Renderer2D)
-        // For now, use a default viewport — the renderer2D handles NDC conversion internally
-        var viewport = new D3D12_VIEWPORT { Width = 960, Height = 540, MaxDepth = 1.0f };
+        // Set viewport and scissor from actual window dimensions
+        var viewport = new D3D12_VIEWPORT { Width = _width, Height = _height, MaxDepth = 1.0f };
         _list->RSSetViewports(1, &viewport);
-        var scissor = new RECT { right = 960, bottom = 540 };
+        var scissor = new RECT { right = _width, bottom = _height };
         _list->RSSetScissorRects(1, &scissor);
 
         // Render rectangles
-        _renderer2D.RenderRectangles(_list, rects, 960, 540);
+        _renderer2D.RenderRectangles(_list, rects, _width, _height);
 
         // Transition to present
         barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
