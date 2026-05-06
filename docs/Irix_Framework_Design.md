@@ -175,7 +175,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 事件传递 | MPSC 事件队列 | ⚠️ 部分 | Channel 基础可用，异常/取消路径未测 |
 | 消息派发 | `IMessageDispatcher` / `Runtime` | ✅ 已验证 | 基础 dispatch + Update 循环已测试 |
 | 视图构建 | `BuildView` → `VirtualNode` | ⚠️ 部分 | 基础树构建可用，属性模型待完善 |
-| Diff / Patch | `VirtualNodeDiffer` | ⚠️ 深比较已实现 | 递归节点等价判断，无变化跳过 ReplaceRoot；尚无局部 diff |
+| Diff / Patch | `VirtualNodeDiffer` | ✅ 局部 diff 已实现 | 递归深比较 + keyed reconciliation + Update/Add/Remove patches |
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | Retained layout 已引入，未脱离 PoC 硬编码常量 |
 | 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，未接入真实 GPU backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 无变化跳过 |
@@ -801,11 +801,11 @@ v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、
 **Diff 算法策略：**
 
 - 递归深比较：逐节点比较 `Kind`、`Key`、`Content`、`Attributes`、`Children`，短路于首个差异。
-- 当前实现：若两棵树等价，输出空 `PatchBatch`（`Count = 0`），下游可跳过渲染；若不等价，输出 `ReplaceRoot`。
-- **已落地：** 递归节点等价判断（`NodesEqual`），正确处理 `default(VirtualNode)` 的空数组边界。
-- **待落地：** 同层比较、Key 驱动的列表 Reconciliation（类 React keys）；局部 `Update` / `Add` / `Remove` / `Move` Patch 输出。
-- Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor；v1 不把"整棵 VirtualNode 树 0 分配"作为发布门槛。
+- **已落地：** 局部 diff — 相同 Kind/Key 的节点输出 `Update` patch（内容或属性变化）；Keyed reconciliation 用于子节点列表匹配（同 React keys）；新增子节点输出 `Add`，移除子节点输出 `Remove`；Kind 变化时退化为 `ReplaceRoot`。
+- **待落地：** `Move` 操作的优化（当前通过 `Remove` + `Add` 实现）；深度局部 patch 路径标识。
+- Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor。
 - `PatchBatch` 已携带 `Root` 属性，消费者可直接使用 `patchBatch.Root` 获取新根节点，无需从 `Memory` 中反推。
+- 测试覆盖：56 个测试用例，涵盖无变化跳过、Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation 等场景。
 
 ### 6.3 调度器 (IMessageDispatcher)
 
