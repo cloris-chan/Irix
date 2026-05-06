@@ -15,6 +15,7 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
     private List<D3D12TextRenderer.TextData>? _texts;
     private D3D12Renderer2D.RectData[]? _rectArray;
     private D3D12TextRenderer.TextData[]? _textArray;
+    private ITextResolver? _textResolver;
 
     public D3D12DrawingBackend(D3D12Renderer renderer)
     {
@@ -28,9 +29,10 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
         _texts = [];
     }
 
-    public void Execute(ReadOnlySpan<DrawCommand> commands, ReadOnlySpan<TextRunEntry> textRuns)
+    public void Execute(ReadOnlySpan<DrawCommand> commands, ITextResolver textResolver)
     {
         if (_rects == null || _texts == null) return;
+        _textResolver = textResolver;
 
         foreach (var command in commands)
         {
@@ -52,8 +54,7 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
                         command.Color.B / 255f, command.Color.A / 255f));
                     break;
                 case DrawCommandKind.DrawTextRun:
-                    var text = LookUpText(textRuns, command.Resource);
-                    if (text == null)
+                    if (textResolver.Resolve(command.Text).IsEmpty)
                     {
                         break;
                     }
@@ -67,7 +68,7 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
                         command.Color.G / 255f,
                         command.Color.B / 255f,
                         command.Color.A / 255f,
-                        text));
+                        command.Text));
                     break;
             }
         }
@@ -77,8 +78,10 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
     {
         var rects = _rects ?? [];
         var texts = _texts ?? [];
+        var textResolver = _textResolver ?? FrameTextArena.Empty;
         _rects = null;
         _texts = null;
+        _textResolver = null;
         _rectArray = rects.Count > 0 ? rects.ToArray() : null;
         _textArray = texts.Count > 0 ? texts.ToArray() : null;
 
@@ -87,6 +90,7 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
             _renderer.RenderFrame(
                 _rectArray ?? [],
                 _textArray ?? [],
+                textResolver,
                 _bgR,
                 _bgG,
                 _bgB,
@@ -97,24 +101,6 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
             // Fallback: just clear with background color
             _renderer.ClearAndPresent(_bgR, _bgG, _bgB, _bgA);
         }
-    }
-
-    private static string? LookUpText(ReadOnlySpan<TextRunEntry> textRuns, ResourceHandle resource)
-    {
-        if (resource.Kind != DrawingResourceKind.TextStyle || resource.Id < 0 || textRuns.Length == 0)
-        {
-            return null;
-        }
-
-        foreach (var entry in textRuns)
-        {
-            if (entry.Id == resource.Id)
-            {
-                return entry.Text;
-            }
-        }
-
-        return null;
     }
 
     public void Dispose()

@@ -11,24 +11,14 @@ namespace Irix.Poc;
 internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
 {
     private List<WindowContentElement>? _pendingElements;
-    private List<TextRunEntry>? _textRuns;
 
     public void BeginFrame(in FrameContext frameContext)
     {
         _pendingElements = [];
-        _textRuns = [];
     }
 
-    public void Execute(ReadOnlySpan<DrawCommand> commands, ReadOnlySpan<TextRunEntry> textRuns)
+    public void Execute(ReadOnlySpan<DrawCommand> commands, ITextResolver textResolver)
     {
-        // Capture text runs for lookup
-        _textRuns ??= [];
-        _textRuns.Clear();
-        foreach (var entry in textRuns)
-        {
-            _textRuns.Add(entry);
-        }
-
         _pendingElements ??= [];
         foreach (var command in commands)
         {
@@ -41,7 +31,7 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
                         BackgroundColor: ToWindowColor(command.Color)));
                     break;
                 case DrawCommandKind.DrawTextRun:
-                    var text = LookUpText(_textRuns, command.Resource);
+                    var text = ResolveText(textResolver, command.Text);
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
@@ -56,29 +46,16 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
     {
         window.SetContentElements(_pendingElements ?? []);
         _pendingElements = null;
-        _textRuns = null;
     }
 
     public void Dispose()
     {
     }
 
-    private static string? LookUpText(List<TextRunEntry> textRuns, ResourceHandle resource)
+    private static string ResolveText(ITextResolver textResolver, TextSlice text)
     {
-        if (resource.Kind != DrawingResourceKind.TextStyle || resource.Id < 0)
-        {
-            return null;
-        }
-
-        foreach (var entry in textRuns)
-        {
-            if (entry.Id == resource.Id)
-            {
-                return entry.Text;
-            }
-        }
-
-        return null;
+        var span = textResolver.Resolve(text);
+        return span.IsEmpty ? string.Empty : span.ToString();
     }
 
     private static PixelRectangle ToPixelRectangle(DrawRect rect) =>

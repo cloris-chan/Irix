@@ -32,8 +32,7 @@ public sealed class BatchOwnershipTests
         [
             new DrawCommand(
                 DrawCommandKind.DrawTextRun,
-                Rect: new DrawRect(16, 16, 928, 32),
-                Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle))
+                Rect: new DrawRect(16, 16, 928, 32))
         ]);
         var batch = new DrawCommandBatch(owner, 1);
 
@@ -58,8 +57,7 @@ public sealed class BatchOwnershipTests
         [
             new DrawCommand(
                 DrawCommandKind.DrawTextRun,
-                Rect: new DrawRect(16, 16, 928, 32),
-                Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle))
+                Rect: new DrawRect(16, 16, 928, 32))
         ]);
         var translator = new FakeTranslator(drawOwner);
         var compositor = new RecordingCompositor();

@@ -11,6 +11,10 @@ public sealed class WindowBackendTests
     public void WindowBackend_builds_button_text_and_rectangle_elements()
     {
         var backend = new Irix.Poc.WindowBackend();
+        var textArena = new FrameTextArena();
+        var increment = textArena.Add("Increment");
+        var count = textArena.Add("Count: 0");
+        textArena.Seal();
         var commands = new[]
         {
             new DrawCommand(
@@ -24,25 +28,19 @@ public sealed class WindowBackendTests
             new DrawCommand(
                 DrawCommandKind.DrawTextRun,
                 Rect: new DrawRect(16, 120, 140, 40),
-                Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle),
+                Text: increment,
                 Color: DrawColor.Opaque(255, 255, 255)),
             new DrawCommand(
                 DrawCommandKind.DrawTextRun,
                 Rect: new DrawRect(16, 16, 928, 32),
-                Resource: new ResourceHandle(1, DrawingResourceKind.TextStyle),
+                Text: count,
                 Color: DrawColor.Opaque(255, 255, 255))
         };
         var hitTargets = new[]
         {
             new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")
         };
-        var textRuns = new TextRunEntry[]
-        {
-            new(0, "Increment"),
-            new(1, "Count: 0")
-        };
-
-        var result = backend.Build(commands, hitTargets, textRuns);
+        var result = backend.Build(commands, hitTargets, textArena);
 
         Assert.Equal(3, result.Elements.Count);
         Assert.Equal(new WindowContentElement(

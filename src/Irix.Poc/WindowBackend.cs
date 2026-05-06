@@ -9,7 +9,7 @@ internal sealed class WindowBackend
     public WindowBackendRenderResult Build(
         ReadOnlySpan<DrawCommand> commands,
         IReadOnlyList<HitTestTarget> hitTargets,
-        IReadOnlyList<TextRunEntry> textRuns)
+        ITextResolver textResolver)
     {
         if (commands.Length == 0)
         {
@@ -31,7 +31,7 @@ internal sealed class WindowBackend
             {
                 case DrawCommandKind.FillRect when TryGetHitTarget(hitTargets, ToPixelRectangle(command.Rect), out _):
                     var buttonBounds = ToPixelRectangle(command.Rect);
-                    var button = TryConsumeButtonPresentation(commands, index + 1, buttonBounds, textRuns, consumedTextIndices);
+                    var button = TryConsumeButtonPresentation(commands, index + 1, buttonBounds, textResolver, consumedTextIndices);
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Button,
                         buttonBounds,
@@ -47,7 +47,7 @@ internal sealed class WindowBackend
                         BackgroundColor: ToWindowColor(command.Color)));
                     break;
                 case DrawCommandKind.DrawTextRun:
-                    var text = LookUpText(textRuns, command.Resource);
+                    var text = ResolveText(textResolver, command.Text);
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
@@ -64,7 +64,7 @@ internal sealed class WindowBackend
         ReadOnlySpan<DrawCommand> commands,
         int startIndex,
         PixelRectangle bounds,
-        IReadOnlyList<TextRunEntry> textRuns,
+        ITextResolver textResolver,
         HashSet<int> consumedTextIndices)
     {
         for (var index = startIndex; index < commands.Length; index++)
@@ -74,7 +74,7 @@ internal sealed class WindowBackend
                 && ToPixelRectangle(candidate.Rect) == bounds)
             {
                 consumedTextIndices.Add(index);
-                var text = LookUpText(textRuns, candidate.Resource);
+                var text = ResolveText(textResolver, candidate.Text);
                 return new ButtonPresentation(
                     string.IsNullOrWhiteSpace(text) ? "Button" : text,
                     ToWindowColor(candidate.Color));
@@ -84,22 +84,10 @@ internal sealed class WindowBackend
         return new ButtonPresentation("Button", WindowColor.Opaque(255, 255, 255));
     }
 
-    private static string? LookUpText(IReadOnlyList<TextRunEntry> textRuns, ResourceHandle resource)
+    private static string ResolveText(ITextResolver textResolver, TextSlice text)
     {
-        if (resource.Kind != DrawingResourceKind.TextStyle || resource.Id < 0 || textRuns.Count == 0)
-        {
-            return null;
-        }
-
-        foreach (var entry in textRuns)
-        {
-            if (entry.Id == resource.Id)
-            {
-                return entry.Text;
-            }
-        }
-
-        return null;
+        var span = textResolver.Resolve(text);
+        return span.IsEmpty ? string.Empty : span.ToString();
     }
 
     private static bool TryGetHitTarget(IReadOnlyList<HitTestTarget> hitTargets, PixelRectangle bounds, out HitTestTarget hitTarget)

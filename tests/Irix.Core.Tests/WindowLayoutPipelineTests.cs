@@ -61,11 +61,9 @@ public sealed class WindowLayoutPipelineTests
         var textCommand = result.Commands.Memory.Span[1];
         Assert.Equal(DrawCommandKind.DrawTextRun, textCommand.Kind);
         Assert.Equal(new DrawRect(16, 120, 140, 40), textCommand.Rect);
-        Assert.Equal(DrawingResourceKind.TextStyle, textCommand.Resource.Kind);
+        Assert.Equal(ResourceHandle.None, textCommand.Resource);
 
-        Assert.Single(result.TextRuns);
-        Assert.Equal("Increment", result.TextRuns[0].Text);
-        Assert.Equal(textCommand.Resource.Id, result.TextRuns[0].Id);
+        Assert.Equal("Increment", result.TextResolver.Resolve(textCommand.Text).ToString());
 
         result.Commands.Dispose();
     }
@@ -161,11 +159,8 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(frame.HitTargets);
         Assert.Equal(new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment"), frame.HitTargets[0]);
 
-        Assert.Equal(2, frame.TextRuns.Count);
-        Assert.Equal("Count: 0", frame.TextRuns[0].Text);
-        Assert.Equal("Increment", frame.TextRuns[1].Text);
-        Assert.Equal(frame.Commands.Memory.Span[0].Resource.Id, frame.TextRuns[0].Id);
-        Assert.Equal(frame.Commands.Memory.Span[2].Resource.Id, frame.TextRuns[1].Id);
+        Assert.Equal("Count: 0", frame.TextResolver.Resolve(frame.Commands.Memory.Span[0].Text).ToString());
+        Assert.Equal("Increment", frame.TextResolver.Resolve(frame.Commands.Memory.Span[2].Text).ToString());
     }
 
     [Fact]
@@ -208,7 +203,9 @@ public sealed class WindowLayoutPipelineTests
         // Both frames should have identical layout
         Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
         Assert.Equal(frame1.HitTargets.Count, frame2.HitTargets.Count);
-        Assert.Equal(frame1.TextRuns.Count, frame2.TextRuns.Count);
+        Assert.Equal(
+            frame1.TextResolver.Resolve(frame1.Commands.Memory.Span[0].Text).ToString(),
+            frame2.TextResolver.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
         for (var i = 0; i < frame1.Commands.Count; i++)
         {
             Assert.Equal(frame1.Commands.Memory.Span[i].Rect, frame2.Commands.Memory.Span[i].Rect);
@@ -244,10 +241,8 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport);
 
-        Assert.Equal(1, frame1.TextRuns.Count);
-        Assert.Equal(1, frame2.TextRuns.Count);
-        Assert.Equal("Hello", frame1.TextRuns[0].Text);
-        Assert.Equal("World", frame2.TextRuns[0].Text);
+        Assert.Equal("Hello", frame1.TextResolver.Resolve(frame1.Commands.Memory.Span[0].Text).ToString());
+        Assert.Equal("World", frame2.TextResolver.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
     }
 
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow

@@ -29,8 +29,9 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             _retainedViewport = viewportBounds;
         }
 
-        var result = _drawCommandRecorder.Record(_retainedLayout!);
-        return new RenderFrameBatch(result.Commands, BuildHitTargets(_retainedLayout), result.TextRuns);
+        var layout = _retainedLayout!;
+        var result = _drawCommandRecorder.Record(layout);
+        return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.TextResolver);
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)

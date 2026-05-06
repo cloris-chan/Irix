@@ -35,7 +35,7 @@ public sealed class DrawingBackendCompositor : ICompositor, IDisposable
 
         _backend.Execute(
             renderFrameBatch.Commands.Memory.Span[..renderFrameBatch.Commands.Count],
-            renderFrameBatch.TextRuns.ToArray());
+            renderFrameBatch.TextResolver);
 
         _backend.EndFrame();
 

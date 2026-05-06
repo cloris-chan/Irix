@@ -14,6 +14,9 @@ public sealed class WindowVisualCompositorTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
         var compositor = new WindowVisualCompositor(window);
+        var textArena = new FrameTextArena();
+        var increment = textArena.Add("Increment");
+        textArena.Seal();
 
         using var frame = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
@@ -25,11 +28,11 @@ public sealed class WindowVisualCompositorTests
                 new DrawCommand(
                     DrawCommandKind.DrawTextRun,
                     Rect: new DrawRect(16, 120, 140, 40),
-                    Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle),
+                    Text: increment,
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
             [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
-            [new TextRunEntry(0, "Increment")]);
+            textArena);
 
         await compositor.RenderAsync(frame, cancellationToken);
 
@@ -46,6 +49,9 @@ public sealed class WindowVisualCompositorTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
         var compositor = new WindowVisualCompositor(window);
+        var textArena = new FrameTextArena();
+        var increment = textArena.Add("Increment");
+        textArena.Seal();
 
         using var frame = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
@@ -57,11 +63,11 @@ public sealed class WindowVisualCompositorTests
                 new DrawCommand(
                     DrawCommandKind.DrawTextRun,
                     Rect: new DrawRect(16, 120, 140, 40),
-                    Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle),
+                    Text: increment,
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
             [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
-            [new TextRunEntry(0, "Increment")]);
+            textArena);
 
         await compositor.RenderAsync(frame, cancellationToken);
 
@@ -77,6 +83,9 @@ public sealed class WindowVisualCompositorTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
         var compositor = new WindowVisualCompositor(window);
+        var textArena = new FrameTextArena();
+        var increment = textArena.Add("Increment");
+        textArena.Seal();
 
         using var firstFrame = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
@@ -88,11 +97,11 @@ public sealed class WindowVisualCompositorTests
                 new DrawCommand(
                     DrawCommandKind.DrawTextRun,
                     Rect: new DrawRect(16, 120, 140, 40),
-                    Resource: new ResourceHandle(0, DrawingResourceKind.TextStyle),
+                    Text: increment,
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
             [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
-            [new TextRunEntry(0, "Increment")]);
+            textArena);
 
         await compositor.RenderAsync(firstFrame, cancellationToken);
         Assert.True(compositor.TryGetActionIdAt(32, 140, out _));

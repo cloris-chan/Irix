@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct2D;
@@ -156,7 +157,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         ReleaseFrameResources();
     }
 
-    public void Render(uint frameIndex, ReadOnlySpan<TextData> textRuns)
+    public void Render(uint frameIndex, ReadOnlySpan<TextData> textRuns, ITextResolver textResolver)
     {
         if (textRuns.Length == 0 || frameIndex >= _wrappedBackBuffers.Length)
         {
@@ -177,7 +178,8 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
             foreach (var textRun in textRuns)
             {
-                if (string.IsNullOrEmpty(textRun.Text))
+                var text = textResolver.Resolve(textRun.Text);
+                if (text.IsEmpty)
                 {
                     continue;
                 }
@@ -193,14 +195,17 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
                     bottom = textRun.Y + textRun.Height
                 };
 
-                _d2dContext->DrawText(
-                    textRun.Text,
-                    (uint)textRun.Text.Length,
-                    _textFormat,
-                    layoutRect,
-                    (ID2D1Brush*)_textBrush,
-                    D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP,
-                    DWRITE_MEASURING_MODE.DWRITE_MEASURING_MODE_NATURAL);
+                fixed (char* textPointer = text)
+                {
+                    _d2dContext->DrawText(
+                        (PCWSTR)textPointer,
+                        (uint)text.Length,
+                        _textFormat,
+                        &layoutRect,
+                        (ID2D1Brush*)_textBrush,
+                        D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP,
+                        DWRITE_MEASURING_MODE.DWRITE_MEASURING_MODE_NATURAL);
+                }
             }
 
             endDrawResult = _d2dContext->EndDraw(null, null);
@@ -273,5 +278,5 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         float G,
         float B,
         float A,
-        string Text);
+        TextSlice Text);
 }

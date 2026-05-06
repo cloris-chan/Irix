@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -192,7 +193,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     /// </summary>
     public void RenderRectangles(ReadOnlySpan<D3D12Renderer2D.RectData> rects)
     {
-        RenderFrame(rects, [], 0.1f, 0.1f, 0.1f, 1.0f);
+        RenderFrame(rects, [], FrameTextArena.Empty, 0.1f, 0.1f, 0.1f, 1.0f);
     }
 
     /// <summary>
@@ -201,6 +202,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public void RenderFrame(
         ReadOnlySpan<D3D12Renderer2D.RectData> rects,
         ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        ITextResolver textResolver,
         float clearR,
         float clearG,
         float clearB,
@@ -248,7 +250,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         if (hasText)
         {
-            textRenderer!.Render(_frameIndex, textRuns);
+            textRenderer!.Render(_frameIndex, textRuns, textResolver);
         }
 
         _swapChain->Present(1, 0);

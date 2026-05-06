@@ -38,11 +38,10 @@ public readonly record struct ResourceHandle(int Id, DrawingResourceKind Kind)
     public static ResourceHandle None => default;
 }
 
-/// <summary>
-/// Parallel text content entry referenced by <see cref="DrawCommand.Resource"/> on DrawTextRun commands.
-/// Kept outside DrawCommand to maintain blittable/serializable command structure.
-/// </summary>
-public readonly record struct TextRunEntry(int Id, string Text);
+public readonly record struct TextSlice(int BufferId, int Start, int Length)
+{
+    public bool IsValid => BufferId > 0 && Start >= 0 && Length >= 0;
+}
 
 public readonly record struct FrameContext(
     int Width,
@@ -55,6 +54,7 @@ public readonly record struct DrawCommand(
     DrawRect Rect = default,
     DrawColor Color = default,
     ResourceHandle Resource = default,
+    TextSlice Text = default,
     float StrokeWidth = 1,
     Matrix3x2 Transform = default,
     int ZIndex = 0);
