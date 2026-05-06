@@ -16,6 +16,8 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe class D3D12TextRenderer : IDisposable
 {
+    private const int MaxCachedTextLayouts = 256;
+
     private readonly ID3D11Device* _d3d11Device;
     private readonly ID3D11DeviceContext* _d3d11Context;
     private readonly ID3D11On12Device* _d3d11On12Device;
@@ -23,7 +25,9 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private readonly ID2D1Device2* _d2dDevice;
     private readonly ID2D1DeviceContext2* _d2dContext;
     private readonly IDWriteFactory* _dwriteFactory;
-    private readonly IDWriteTextFormat* _textFormat;
+    private readonly Dictionary<TextStyle, nint> _textFormats = [];
+    private readonly Dictionary<TextLayoutCacheKey, List<CachedTextLayout>> _textLayouts = [];
+    private readonly Queue<CachedTextLayout> _textLayoutOrder = [];
     private ID2D1SolidColorBrush* _textBrush;
     private ID3D11Resource*[] _wrappedBackBuffers = [];
     private ID2D1Bitmap1*[] _renderTargets = [];
@@ -84,21 +88,6 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
             out var dwriteFactoryObject).ThrowOnFailure();
         _dwriteFactory = (IDWriteFactory*)dwriteFactoryObject;
 
-        IDWriteTextFormat* textFormat;
-        _dwriteFactory->CreateTextFormat(
-            "Segoe UI",
-            null,
-            DWRITE_FONT_WEIGHT.DWRITE_FONT_WEIGHT_NORMAL,
-            DWRITE_FONT_STYLE.DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH.DWRITE_FONT_STRETCH_NORMAL,
-            16.0f,
-            "",
-            &textFormat);
-        _textFormat = textFormat;
-        _textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT.DWRITE_TEXT_ALIGNMENT_LEADING);
-        _textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT.DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        _textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_NO_WRAP);
-
         var initialBrushColor = new D2D1_COLOR_F { r = 1, g = 1, b = 1, a = 1 };
         ID2D1SolidColorBrush* textBrush;
         _d2dContext->CreateSolidColorBrush(&initialBrushColor, null, &textBrush);
@@ -157,7 +146,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         ReleaseFrameResources();
     }
 
-    public void Render(uint frameIndex, ReadOnlySpan<TextData> textRuns, ITextResolver textResolver)
+    public void Render(uint frameIndex, ReadOnlySpan<TextData> textRuns, IFrameResourceResolver resources)
     {
         if (textRuns.Length == 0 || frameIndex >= _wrappedBackBuffers.Length)
         {
@@ -178,8 +167,8 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
             foreach (var textRun in textRuns)
             {
-                var text = textResolver.Resolve(textRun.Text);
-                if (text.IsEmpty)
+                var text = resources.Resolve(textRun.Text);
+                if (text.IsEmpty || textRun.Width <= 0 || textRun.Height <= 0)
                 {
                     continue;
                 }
@@ -187,25 +176,19 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
                 var color = new D2D1_COLOR_F { r = textRun.R, g = textRun.G, b = textRun.B, a = textRun.A };
                 _textBrush->SetColor(&color);
 
-                var layoutRect = new D2D_RECT_F
+                var style = resources.ResolveTextStyle(textRun.Style).Normalize();
+                var layout = GetTextLayout(text, style, textRun.Width, textRun.Height);
+                var origin = new D2D_POINT_2F
                 {
-                    left = textRun.X,
-                    top = textRun.Y,
-                    right = textRun.X + textRun.Width,
-                    bottom = textRun.Y + textRun.Height
+                    x = textRun.X,
+                    y = textRun.Y
                 };
 
-                fixed (char* textPointer = text)
-                {
-                    _d2dContext->DrawText(
-                        (PCWSTR)textPointer,
-                        (uint)text.Length,
-                        _textFormat,
-                        &layoutRect,
-                        (ID2D1Brush*)_textBrush,
-                        D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP,
-                        DWRITE_MEASURING_MODE.DWRITE_MEASURING_MODE_NATURAL);
-                }
+                _d2dContext->DrawTextLayout(
+                    origin,
+                    layout,
+                    (ID2D1Brush*)_textBrush,
+                    D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP);
             }
 
             endDrawResult = _d2dContext->EndDraw(null, null);
@@ -217,6 +200,182 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         }
 
         endDrawResult.ThrowOnFailure();
+    }
+
+    private IDWriteTextLayout* GetTextLayout(ReadOnlySpan<char> text, TextStyle style, float width, float height)
+    {
+        var key = new TextLayoutCacheKey(ComputeTextHash(text), text.Length, style, width, height);
+        if (_textLayouts.TryGetValue(key, out var entries))
+        {
+            foreach (var entry in entries)
+            {
+                if (text.SequenceEqual(entry.Text.AsSpan()))
+                {
+                    return (IDWriteTextLayout*)entry.Layout;
+                }
+            }
+        }
+
+        var layout = CreateTextLayout(text, style, width, height);
+        var cached = new CachedTextLayout(key, text.ToString(), (nint)layout);
+        if (entries == null)
+        {
+            entries = [];
+            _textLayouts.Add(key, entries);
+        }
+
+        entries.Add(cached);
+        _textLayoutOrder.Enqueue(cached);
+
+        if (_textLayoutOrder.Count > MaxCachedTextLayouts)
+        {
+            EvictOldestTextLayout();
+        }
+
+        return layout;
+    }
+
+    private IDWriteTextLayout* CreateTextLayout(ReadOnlySpan<char> text, TextStyle style, float width, float height)
+    {
+        var textFormat = GetTextFormat(style);
+        IDWriteTextLayout* textLayout;
+        fixed (char* textPointer = text)
+        {
+            _dwriteFactory->CreateTextLayout(
+                (PCWSTR)textPointer,
+                (uint)text.Length,
+                textFormat,
+                width,
+                height,
+                &textLayout);
+        }
+
+        return textLayout;
+    }
+
+    private IDWriteTextFormat* GetTextFormat(TextStyle style)
+    {
+        style = style.Normalize();
+        if (_textFormats.TryGetValue(style, out var textFormat))
+        {
+            return (IDWriteTextFormat*)textFormat;
+        }
+
+        IDWriteTextFormat* createdFormat;
+        _dwriteFactory->CreateTextFormat(
+            style.FontFamily,
+            null,
+            ToDirectWriteFontWeight(style.FontWeight),
+            ToDirectWriteFontStyle(style.FontStyle),
+            ToDirectWriteFontStretch(style.FontStretch),
+            style.FontSize,
+            string.Empty,
+            &createdFormat);
+        createdFormat->SetTextAlignment(ToDirectWriteTextAlignment(style.HorizontalAlignment));
+        createdFormat->SetParagraphAlignment(ToDirectWriteParagraphAlignment(style.VerticalAlignment));
+        createdFormat->SetWordWrapping(ToDirectWriteWordWrapping(style.Wrapping));
+
+        _textFormats.Add(style, (nint)createdFormat);
+        return createdFormat;
+    }
+
+    private void EvictOldestTextLayout()
+    {
+        var entry = _textLayoutOrder.Dequeue();
+        if (_textLayouts.TryGetValue(entry.Key, out var entries))
+        {
+            entries.Remove(entry);
+            if (entries.Count == 0)
+            {
+                _textLayouts.Remove(entry.Key);
+            }
+        }
+
+        ((IDWriteTextLayout*)entry.Layout)->Release();
+    }
+
+    private void ReleaseTextResources()
+    {
+        while (_textLayoutOrder.Count > 0)
+        {
+            EvictOldestTextLayout();
+        }
+
+        foreach (var textFormat in _textFormats.Values)
+        {
+            ((IDWriteTextFormat*)textFormat)->Release();
+        }
+
+        _textFormats.Clear();
+    }
+
+    private static ulong ComputeTextHash(ReadOnlySpan<char> text)
+    {
+        const ulong offsetBasis = 14695981039346656037;
+        const ulong prime = 1099511628211;
+
+        var hash = offsetBasis;
+        foreach (var character in text)
+        {
+            hash ^= character;
+            hash *= prime;
+        }
+
+        return hash;
+    }
+
+    private static DWRITE_FONT_WEIGHT ToDirectWriteFontWeight(TextFontWeight fontWeight)
+    {
+        return fontWeight switch
+        {
+            TextFontWeight.Bold => DWRITE_FONT_WEIGHT.DWRITE_FONT_WEIGHT_BOLD,
+            TextFontWeight.SemiBold => DWRITE_FONT_WEIGHT.DWRITE_FONT_WEIGHT_SEMI_BOLD,
+            _ => DWRITE_FONT_WEIGHT.DWRITE_FONT_WEIGHT_NORMAL
+        };
+    }
+
+    private static DWRITE_FONT_STYLE ToDirectWriteFontStyle(TextFontStyle fontStyle)
+    {
+        return fontStyle switch
+        {
+            TextFontStyle.Italic => DWRITE_FONT_STYLE.DWRITE_FONT_STYLE_ITALIC,
+            TextFontStyle.Oblique => DWRITE_FONT_STYLE.DWRITE_FONT_STYLE_OBLIQUE,
+            _ => DWRITE_FONT_STYLE.DWRITE_FONT_STYLE_NORMAL
+        };
+    }
+
+    private static DWRITE_FONT_STRETCH ToDirectWriteFontStretch(TextFontStretch fontStretch)
+    {
+        return DWRITE_FONT_STRETCH.DWRITE_FONT_STRETCH_NORMAL;
+    }
+
+    private static DWRITE_TEXT_ALIGNMENT ToDirectWriteTextAlignment(TextHorizontalAlignment alignment)
+    {
+        return alignment switch
+        {
+            TextHorizontalAlignment.Center => DWRITE_TEXT_ALIGNMENT.DWRITE_TEXT_ALIGNMENT_CENTER,
+            TextHorizontalAlignment.Trailing => DWRITE_TEXT_ALIGNMENT.DWRITE_TEXT_ALIGNMENT_TRAILING,
+            _ => DWRITE_TEXT_ALIGNMENT.DWRITE_TEXT_ALIGNMENT_LEADING
+        };
+    }
+
+    private static DWRITE_PARAGRAPH_ALIGNMENT ToDirectWriteParagraphAlignment(TextVerticalAlignment alignment)
+    {
+        return alignment switch
+        {
+            TextVerticalAlignment.Bottom => DWRITE_PARAGRAPH_ALIGNMENT.DWRITE_PARAGRAPH_ALIGNMENT_FAR,
+            TextVerticalAlignment.Top => DWRITE_PARAGRAPH_ALIGNMENT.DWRITE_PARAGRAPH_ALIGNMENT_NEAR,
+            _ => DWRITE_PARAGRAPH_ALIGNMENT.DWRITE_PARAGRAPH_ALIGNMENT_CENTER
+        };
+    }
+
+    private static DWRITE_WORD_WRAPPING ToDirectWriteWordWrapping(TextWrapping wrapping)
+    {
+        return wrapping switch
+        {
+            TextWrapping.Wrap => DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_WRAP,
+            _ => DWRITE_WORD_WRAPPING.DWRITE_WORD_WRAPPING_NO_WRAP
+        };
     }
 
     private void ReleaseFrameResources()
@@ -258,7 +417,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
         ReleaseFrameResources();
         if (_textBrush != null) _textBrush->Release();
-        if (_textFormat != null) _textFormat->Release();
+        ReleaseTextResources();
         if (_dwriteFactory != null) _dwriteFactory->Release();
         if (_d2dContext != null) _d2dContext->Release();
         if (_d2dDevice != null) _d2dDevice->Release();
@@ -278,5 +437,22 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         float G,
         float B,
         float A,
-        TextSlice Text);
+        TextSlice Text,
+        ResourceHandle Style);
+
+    private readonly record struct TextLayoutCacheKey(
+        ulong TextHash,
+        int TextLength,
+        TextStyle Style,
+        float Width,
+        float Height);
+
+    private sealed class CachedTextLayout(TextLayoutCacheKey key, string text, nint layout)
+    {
+        public TextLayoutCacheKey Key { get; } = key;
+
+        public string Text { get; } = text;
+
+        public nint Layout { get; } = layout;
+    }
 }

@@ -17,7 +17,7 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
         _pendingElements = [];
     }
 
-    public void Execute(ReadOnlySpan<DrawCommand> commands, ITextResolver textResolver)
+    public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
     {
         _pendingElements ??= [];
         foreach (var command in commands)
@@ -31,7 +31,7 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
                         BackgroundColor: ToWindowColor(command.Color)));
                     break;
                 case DrawCommandKind.DrawTextRun:
-                    var text = ResolveText(textResolver, command.Text);
+                    var text = ResolveText(resources, command.Text);
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
@@ -52,9 +52,9 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
     {
     }
 
-    private static string ResolveText(ITextResolver textResolver, TextSlice text)
+    private static string ResolveText(IFrameResourceResolver resources, TextSlice text)
     {
-        var span = textResolver.Resolve(text);
+        var span = resources.Resolve(text);
         return span.IsEmpty ? string.Empty : span.ToString();
     }
 

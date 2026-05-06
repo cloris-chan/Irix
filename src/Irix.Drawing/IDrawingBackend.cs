@@ -4,7 +4,7 @@ public interface IDrawingBackend : IDisposable
 {
     void BeginFrame(in FrameContext frameContext);
 
-    void Execute(ReadOnlySpan<DrawCommand> commands, ITextResolver textResolver);
+    void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources);
 
     void EndFrame();
 }

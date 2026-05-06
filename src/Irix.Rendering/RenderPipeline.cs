@@ -31,7 +31,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
         var layout = _retainedLayout!;
         var result = _drawCommandRecorder.Record(layout);
-        return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.TextResolver);
+        return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources);
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)

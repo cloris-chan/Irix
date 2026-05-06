@@ -15,18 +15,19 @@ public sealed class DrawingBackendCompositorTests
         var window = new FakeWindow();
         var backend = new PoCDrawingBackend(window);
         var compositor = new DrawingBackendCompositor(backend);
-        var textArena = new FrameTextArena();
-        var hello = textArena.Add("Hello");
-        textArena.Seal();
+        var resources = new FrameDrawingResources();
+        var hello = resources.AddText("Hello");
+        var textStyle = resources.AddTextStyle(TextStyle.Default);
+        resources.Seal();
 
         using var frame = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
             [
                 new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(10, 20, 100, 50), Color: DrawColor.Opaque(255, 0, 0)),
-                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 20, 100, 50), Text: hello, Color: DrawColor.Opaque(0, 0, 0))
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 20, 100, 50), Resource: textStyle, Text: hello, Color: DrawColor.Opaque(0, 0, 0))
             ]), 2),
             [],
-            textArena);
+            resources);
 
         await compositor.RenderAsync(frame, cancellationToken);
 

@@ -193,7 +193,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     /// </summary>
     public void RenderRectangles(ReadOnlySpan<D3D12Renderer2D.RectData> rects)
     {
-        RenderFrame(rects, [], FrameTextArena.Empty, 0.1f, 0.1f, 0.1f, 1.0f);
+        RenderFrame(rects, [], FrameDrawingResources.Empty, 0.1f, 0.1f, 0.1f, 1.0f);
     }
 
     /// <summary>
@@ -202,7 +202,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public void RenderFrame(
         ReadOnlySpan<D3D12Renderer2D.RectData> rects,
         ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
-        ITextResolver textResolver,
+        IFrameResourceResolver resources,
         float clearR,
         float clearG,
         float clearB,
@@ -250,7 +250,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         if (hasText)
         {
-            textRenderer!.Render(_frameIndex, textRuns, textResolver);
+            textRenderer!.Render(_frameIndex, textRuns, resources);
         }
 
         _swapChain->Present(1, 0);

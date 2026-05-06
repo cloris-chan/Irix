@@ -15,7 +15,7 @@ public sealed class ConsoleCompositor(TextWriter writer) : ICompositor
         {
             var command = renderFrameBatch.Commands.Memory.Span[index];
             var text = command.Kind == DrawCommandKind.DrawTextRun
-                ? renderFrameBatch.TextResolver.Resolve(command.Text).ToString()
+                ? renderFrameBatch.Resources.Resolve(command.Text).ToString()
                 : null;
             writer.WriteLine(
                 $"[Compositor] Command={command.Kind} Rect=({command.Rect.X}, {command.Rect.Y}, {command.Rect.Width}, {command.Rect.Height}) Text={text ?? "<none>"}");

@@ -5,7 +5,7 @@ namespace Irix.Rendering;
 
 internal readonly record struct DrawCommandRecordResult(
     DrawCommandBatch Commands,
-    ITextResolver TextResolver);
+    IFrameResourceResolver Resources);
 
 internal sealed class DrawCommandRecorder(DrawingStyle style)
 {
@@ -22,21 +22,24 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         {
             return new DrawCommandRecordResult(
                 new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0),
-                FrameTextArena.Empty);
+                FrameDrawingResources.Empty);
         }
 
         var commands = new List<DrawCommand>(elements.Count * 2);
-        var textArena = new FrameTextArena();
+        var resources = new FrameDrawingResources();
+        var textStyle = resources.AddTextStyle(_style.TextStyle);
+        var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
 
         foreach (var element in elements)
         {
             switch (element.Kind)
             {
                 case LayoutElementKind.Text:
-                    var text = textArena.Add(element.Text);
+                    var text = resources.AddText(element.Text);
                     commands.Add(new DrawCommand(
                         DrawCommandKind.DrawTextRun,
                         Rect: ToDrawRect(element.Bounds),
+                        Resource: textStyle,
                         Text: text,
                         Color: _style.TextColor));
                     break;
@@ -52,21 +55,22 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                         DrawCommandKind.FillRect,
                         Rect: bounds,
                         Color: _style.ButtonFillColor));
-                    var buttonText = textArena.Add(element.Text);
+                    var buttonText = resources.AddText(element.Text);
                     commands.Add(new DrawCommand(
                         DrawCommandKind.DrawTextRun,
                         Rect: bounds,
+                        Resource: buttonTextStyle,
                         Text: buttonText,
                         Color: _style.ButtonTextColor));
                     break;
             }
         }
 
-        textArena.Seal();
+        resources.Seal();
 
         return new DrawCommandRecordResult(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([.. commands]), commands.Count),
-            textArena);
+            resources);
     }
 
     private static DrawRect ToDrawRect(PixelRectangle bounds)

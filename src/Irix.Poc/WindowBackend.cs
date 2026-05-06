@@ -9,7 +9,7 @@ internal sealed class WindowBackend
     public WindowBackendRenderResult Build(
         ReadOnlySpan<DrawCommand> commands,
         IReadOnlyList<HitTestTarget> hitTargets,
-        ITextResolver textResolver)
+        IFrameResourceResolver resources)
     {
         if (commands.Length == 0)
         {
@@ -31,7 +31,7 @@ internal sealed class WindowBackend
             {
                 case DrawCommandKind.FillRect when TryGetHitTarget(hitTargets, ToPixelRectangle(command.Rect), out _):
                     var buttonBounds = ToPixelRectangle(command.Rect);
-                    var button = TryConsumeButtonPresentation(commands, index + 1, buttonBounds, textResolver, consumedTextIndices);
+                    var button = TryConsumeButtonPresentation(commands, index + 1, buttonBounds, resources, consumedTextIndices);
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Button,
                         buttonBounds,
@@ -47,7 +47,7 @@ internal sealed class WindowBackend
                         BackgroundColor: ToWindowColor(command.Color)));
                     break;
                 case DrawCommandKind.DrawTextRun:
-                    var text = ResolveText(textResolver, command.Text);
+                    var text = ResolveText(resources, command.Text);
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
@@ -64,7 +64,7 @@ internal sealed class WindowBackend
         ReadOnlySpan<DrawCommand> commands,
         int startIndex,
         PixelRectangle bounds,
-        ITextResolver textResolver,
+        IFrameResourceResolver resources,
         HashSet<int> consumedTextIndices)
     {
         for (var index = startIndex; index < commands.Length; index++)
@@ -74,7 +74,7 @@ internal sealed class WindowBackend
                 && ToPixelRectangle(candidate.Rect) == bounds)
             {
                 consumedTextIndices.Add(index);
-                var text = ResolveText(textResolver, candidate.Text);
+                var text = ResolveText(resources, candidate.Text);
                 return new ButtonPresentation(
                     string.IsNullOrWhiteSpace(text) ? "Button" : text,
                     ToWindowColor(candidate.Color));
@@ -84,9 +84,9 @@ internal sealed class WindowBackend
         return new ButtonPresentation("Button", WindowColor.Opaque(255, 255, 255));
     }
 
-    private static string ResolveText(ITextResolver textResolver, TextSlice text)
+    private static string ResolveText(IFrameResourceResolver resources, TextSlice text)
     {
-        var span = textResolver.Resolve(text);
+        var span = resources.Resolve(text);
         return span.IsEmpty ? string.Empty : span.ToString();
     }
 

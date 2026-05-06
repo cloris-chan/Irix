@@ -61,9 +61,10 @@ public sealed class WindowLayoutPipelineTests
         var textCommand = result.Commands.Memory.Span[1];
         Assert.Equal(DrawCommandKind.DrawTextRun, textCommand.Kind);
         Assert.Equal(new DrawRect(16, 120, 140, 40), textCommand.Rect);
-        Assert.Equal(ResourceHandle.None, textCommand.Resource);
+        Assert.Equal(DrawingResourceKind.TextStyle, textCommand.Resource.Kind);
+        Assert.Equal(TextStyle.Default, result.Resources.ResolveTextStyle(textCommand.Resource));
 
-        Assert.Equal("Increment", result.TextResolver.Resolve(textCommand.Text).ToString());
+        Assert.Equal("Increment", result.Resources.Resolve(textCommand.Text).ToString());
 
         result.Commands.Dispose();
     }
@@ -101,7 +102,9 @@ public sealed class WindowLayoutPipelineTests
             TextColor: DrawColor.Opaque(230, 230, 230),
             RectangleFillColor: DrawColor.Opaque(20, 30, 40),
             ButtonFillColor: DrawColor.Opaque(10, 20, 30),
-            ButtonTextColor: DrawColor.Opaque(200, 210, 220)));
+            ButtonTextColor: DrawColor.Opaque(200, 210, 220),
+            TextStyle: TextStyle.Default,
+            ButtonTextStyle: TextStyle.Default));
         var elements = new[]
         {
             new LayoutElement(
@@ -140,7 +143,9 @@ public sealed class WindowLayoutPipelineTests
                 TextColor: DrawColor.Opaque(255, 255, 255),
                 RectangleFillColor: DrawColor.Opaque(72, 72, 72),
                 ButtonFillColor: DrawColor.Opaque(52, 120, 246),
-                ButtonTextColor: DrawColor.Opaque(255, 255, 255)));
+                ButtonTextColor: DrawColor.Opaque(255, 255, 255),
+                TextStyle: TextStyle.Default,
+                ButtonTextStyle: TextStyle.Default));
         var root = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeFactory.Text("Count: 0", 2),
@@ -159,8 +164,9 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(frame.HitTargets);
         Assert.Equal(new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment"), frame.HitTargets[0]);
 
-        Assert.Equal("Count: 0", frame.TextResolver.Resolve(frame.Commands.Memory.Span[0].Text).ToString());
-        Assert.Equal("Increment", frame.TextResolver.Resolve(frame.Commands.Memory.Span[2].Text).ToString());
+        Assert.Equal("Count: 0", frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString());
+        Assert.Equal("Increment", frame.Resources.Resolve(frame.Commands.Memory.Span[2].Text).ToString());
+        Assert.Equal(TextStyle.Default, frame.Resources.ResolveTextStyle(frame.Commands.Memory.Span[0].Resource));
     }
 
     [Fact]
@@ -204,8 +210,8 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
         Assert.Equal(frame1.HitTargets.Count, frame2.HitTargets.Count);
         Assert.Equal(
-            frame1.TextResolver.Resolve(frame1.Commands.Memory.Span[0].Text).ToString(),
-            frame2.TextResolver.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
+            frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString(),
+            frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
         for (var i = 0; i < frame1.Commands.Count; i++)
         {
             Assert.Equal(frame1.Commands.Memory.Span[i].Rect, frame2.Commands.Memory.Span[i].Rect);
@@ -241,8 +247,8 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport);
 
-        Assert.Equal("Hello", frame1.TextResolver.Resolve(frame1.Commands.Memory.Span[0].Text).ToString());
-        Assert.Equal("World", frame2.TextResolver.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
+        Assert.Equal("Hello", frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString());
+        Assert.Equal("World", frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
     }
 
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow

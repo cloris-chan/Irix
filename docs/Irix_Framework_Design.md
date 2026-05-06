@@ -362,14 +362,14 @@ VirtualNode Patch
 public interface IDrawingBackend : IDisposable
 {
     void BeginFrame(in FrameContext frameContext);
-    void Execute(ReadOnlySpan<DrawCommand> commands, ITextResolver textResolver);
+    void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources);
     void EndFrame();
 }
 ```
 
 > **设计原则：** 上层布局、命中测试、动画、Patch Routing 只依赖 `DrawCommand` 语义，不依赖 `Skia` 的 `Canvas`、`Paint`、`Path` 等具体对象模型。
 >
-> **当前实现补充：** `DrawTextRun` 不再携带内联 `string`；文本内容通过 `TextSlice` 引用 frame-local `FrameTextArena`，执行阶段由 `ITextResolver.Resolve(TextSlice)` 解析为 `ReadOnlySpan<char>`。点击/命中等交互语义继续通过 `HitTestTarget[]` / `RenderFrameBatch` 并行传递，不能回流到 `DrawCommand` 字段。
+> **当前实现补充：** `DrawTextRun` 不再携带内联 `string`；文本内容通过 `TextSlice` 引用 frame-local `FrameDrawingResources`，执行阶段由 `IFrameResourceResolver.Resolve(TextSlice)` 解析为 `ReadOnlySpan<char>`。`DrawTextRun.Resource` 用于 `TextStyle` 句柄，由 backend 解析并缓存对应原生文本资源。点击/命中等交互语义继续通过 `HitTestTarget[]` / `RenderFrameBatch` 并行传递，不能回流到 `DrawCommand` 字段。
 
 #### 5.2.5 是否需要自研 Drawing Engine
 
@@ -442,6 +442,11 @@ public readonly record struct DrawCommand(
 
 public readonly record struct TextSlice(int BufferId, int Start, int Length);
 
+public interface IFrameResourceResolver : ITextResolver
+{
+    TextStyle ResolveTextStyle(ResourceHandle handle);
+}
+
 public readonly record struct DrawRect(float X, float Y, float Width, float Height);
 
 public readonly record struct DrawColor(byte A, byte R, byte G, byte B);
@@ -490,7 +495,7 @@ VirtualNode
 
 当前仓库中的 `WindowVisualCompositor` 已经收敛为 PoC backend 层，当前主要承担两件事：
 
-1. 消费 `RenderFrameBatch`（当前过渡实现为 `DrawCommandBatch + HitTestTarget[] + ITextResolver`）；
+1. 消费 `RenderFrameBatch`（当前过渡实现为 `DrawCommandBatch + HitTestTarget[] + IFrameResourceResolver`）；
 2. 把绘制命令和并行命中目标翻译成 PoC 窗口内容元素与点击路由数据。
 
 这对于演示是合适的，但不适合作为正式 rendering 架构的终点。推荐演进顺序如下：
@@ -498,7 +503,7 @@ VirtualNode
 1. 把 `WindowVisualCompositor` 中的布局逻辑抽成 `LayoutTreeBuilder`。
 2. 把 `WindowContentElement` 视为临时的 `DrawCommand` 替身，先建立 `DrawCommandRecorder`。
 3. 保持 `WindowVisualCompositor` 只消费 `RenderFrameBatch`，不要再把 `ActionId` / hit testing 元数据塞回 `DrawCommand`。
-4. 后续新增 `SkiaBackend` 或自研 backend 时，PoC Window backend 与 GPU backend 共享同一套 `DrawCommand + TextSlice/ITextResolver` 输入。
+4. 后续新增 `SkiaBackend` 或自研 backend 时，PoC Window backend 与 GPU backend 共享同一套 `DrawCommand + FrameDrawingResources` 输入。
 
 也就是说，当前 PoC 最务实的下一步不是"立刻写 Skia"，而是先把中间层站稳：
 
@@ -506,13 +511,14 @@ VirtualNode
 
 **已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已实现无变化帧跳过。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + DirectWrite 文本）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013）。
 
-**下一步：** 补齐裁剪、透明度、文本格式资源缓存、glyph/text layout cache 与 GPU device-lost recovery；随后让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
+**下一步：** 补齐裁剪、透明度、显式 glyph atlas/cache（若后续脱离 DirectWrite 或需要跨 backend glyph 资源复用）与 GPU device-lost recovery；随后让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
 
 #### 5.2.9 文本、路径与图片的资源策略
 
 自研 Drawing 层最容易失控的地方通常不是矩形，而是文本和路径。因此 v1 建议明确分层：
 
 - 文本 shaping 与 glyph rasterization：Windows PoC 暂时委托给 DirectWrite / Direct2D。
+- 文本格式资源：`TextStyle` 通过 `ResourceHandle` 引用，Windows backend 缓存 `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`。
 - 复杂路径栅格化：后续可委托给 `Skia` backend adapter 或自研路径模块，当前不急于实现。
 - 图片解码与上传：使用独立资源接口封装，避免与 backend 紧耦合。
 
@@ -555,7 +561,7 @@ public interface IImageResourceManager
 v1 Drawing 层的成功标准只有两个：
 
 1. 对上能稳定承接 Irix 自己的 UI 布局与绘制语义。
-2. 对下能让 `WindowBackend`、D3D12 backend 与未来 `SkiaBackend` 共用同一份 `DrawCommand + TextSlice/ITextResolver` 输入。
+2. 对下能让 `WindowBackend`、D3D12 backend 与未来 `SkiaBackend` 共用同一份 `DrawCommand + FrameDrawingResources` 输入。
 
 ### 5.3 时间轴动画系统
 
@@ -812,7 +818,7 @@ v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、
 - **待落地：** `Move` 操作的优化（当前通过 `Remove` + `Add` 实现）；深度局部 patch 路径标识。
 - Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor。
 - `PatchBatch` 已携带 `Root` 属性，消费者可直接使用 `patchBatch.Root` 获取新根节点，无需从 `Memory` 中反推。
-- 测试覆盖：59 个测试用例，涵盖无变化跳过、Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、FrameTextArena 等场景。
+- 测试覆盖：62 个测试用例，涵盖无变化跳过、Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、FrameTextArena、FrameDrawingResources 等场景。
 
 ### 6.3 调度器 (IMessageDispatcher)
 
@@ -1332,10 +1338,12 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | **PatchBatch** | 一组 `VirtualNodePatch` 的所有权包装，通过 MPSC 传递 | §7.2 |
 | **DrawCommand** | Irix 自有的稳定绘制命令，隔离上层 UI 与底层 backend | §5.2.4 |
 | **DrawCommandBatch** | 一组 `DrawCommand` 的内存包装 | — |
-| **RenderFrameBatch** | 单帧完整渲染数据：`DrawCommandBatch` + `HitTestTarget[]` + `ITextResolver` | §5.2.8 |
+| **RenderFrameBatch** | 单帧完整渲染数据：`DrawCommandBatch` + `HitTestTarget[]` + `IFrameResourceResolver` | §5.2.8 |
 | **TextSlice** | frame-local 文本内容切片，供 `DrawTextRun` 引用 | §5.2.4 |
 | **FrameTextArena** | 单帧文本内容 arena，负责把文本打包并解析为 `ReadOnlySpan<char>` | §5.2.4 |
 | **ITextResolver** | 将 `TextSlice` 解析为 `ReadOnlySpan<char>` 的执行期接口 | §5.2.4 |
+| **FrameDrawingResources** | 单帧绘制资源表，承载文本内容与 `TextStyle` 资源句柄 | §5.2.4 |
+| **IFrameResourceResolver** | 将 frame-local 文本与资源句柄解析为执行期数据的接口 | §5.2.4 |
 | **HitTestTarget** | 命中测试目标，与 `DrawCommand` 并行传递 | §5.4.2 |
 | **LayoutBox** | 布局输出：节点的最终几何、裁剪区域、ZIndex | §5.2.6 |
 | **IDrawingBackend** | 绘制后端抽象接口 | §5.2.4 |
@@ -1379,6 +1387,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-013 | D3D12 互操作使用 CsWin32 生成的裸指针 COM 包装 | §5.2.2 | ✅ 已确认 | 消除手写 vtable 偏移和 GUID 错误；`allowMarshaling: false` 保持 AOT 兼容 |
 | ADR-014 | Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12 | §5.2.8 / §5.2.9 | ✅ 已确认 | 复用 Windows 成熟文本栈，避免 PoC 阶段手写 glyph rasterization 或提前引入 Skia |
 | ADR-015 | 文本内容使用 frame-local arena + slice，而非无边界全局字符串池 | §5.2.4 / §5.2.9 | ✅ 已确认 | 避免动态文本泄漏和复杂全局生命周期；全局化优先留给 TextStyle、glyph/shaping cache |
+| ADR-016 | TextStyle 使用 ResourceHandle 并由 backend 缓存原生文本资源 | §5.2.4 / §5.2.9 | ✅ 已确认 | DrawCommand 保持纯值；DirectWrite backend 复用 TextFormat/TextLayout，显式 glyph atlas 后置 |
 
 ---
 
