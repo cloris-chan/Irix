@@ -28,6 +28,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private ulong[] _fenceValues;
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
+    private D3D12TextRenderer? _textRenderer;
     private int _width;
     private int _height;
     private bool _disposed;
@@ -110,6 +111,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
         _renderer2D = new D3D12Renderer2D(_device);
+        _textRenderer = new D3D12TextRenderer(_device, _queue, _renderTargets);
     }
 
     public D3D12Renderer2D Renderer2D => _renderer2D!;
@@ -123,6 +125,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         if (newWidth <= 0 || newHeight <= 0) return;
 
         WaitForGpu();
+        _textRenderer?.ReleaseFrameResourcesForResize();
 
         for (var i = 0; i < FrameCount; i++)
         {
@@ -144,6 +147,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _width = newWidth;
         _height = newHeight;
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+        _textRenderer?.RecreateFrameResources(_renderTargets);
     }
 
     public void BeginFrame()
@@ -188,6 +192,20 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     /// </summary>
     public void RenderRectangles(ReadOnlySpan<D3D12Renderer2D.RectData> rects)
     {
+        RenderFrame(rects, [], 0.1f, 0.1f, 0.1f, 1.0f);
+    }
+
+    /// <summary>
+    /// Render colored rectangles with an optional DirectWrite text overlay, then present.
+    /// </summary>
+    public void RenderFrame(
+        ReadOnlySpan<D3D12Renderer2D.RectData> rects,
+        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        float clearR,
+        float clearG,
+        float clearB,
+        float clearA)
+    {
         // Transition to render target
         var barrier = new D3D12_RESOURCE_BARRIER();
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -202,8 +220,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         rtv.ptr += _frameIndex * _rtvSize;
         _list->OMSetRenderTargets(1, &rtv, false, null);
 
-        // Clear with dark background
-        var bgColor = stackalloc float[] { 0.1f, 0.1f, 0.1f, 1.0f };
+        var bgColor = stackalloc float[] { clearR, clearG, clearB, clearA };
         _list->ClearRenderTargetView(rtv, new ReadOnlySpan<float>(bgColor, 4));
 
         // Set viewport and scissor from actual window dimensions
@@ -212,18 +229,27 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var scissor = new RECT { right = _width, bottom = _height };
         _list->RSSetScissorRects(1, &scissor);
 
-        // Render rectangles
-        _renderer2D.RenderRectangles(_list, rects, _width, _height);
+        _renderer2D!.RenderRectangles(_list, rects, _width, _height);
 
-        // Transition to present
-        barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
-        barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
-        _list->ResourceBarrier(1, &barrier);
+        var textRenderer = _textRenderer;
+        var hasText = textRuns.Length > 0 && textRenderer != null;
+        if (!hasText)
+        {
+            // Transition to present when Direct2D is not handling the wrapped back buffer.
+            barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
+            barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
+            _list->ResourceBarrier(1, &barrier);
+        }
 
         _list->Close();
 
         var pList = (ID3D12CommandList*)_list;
         _queue->ExecuteCommandLists(1, &pList);
+
+        if (hasText)
+        {
+            textRenderer!.Render(_frameIndex, textRuns);
+        }
 
         _swapChain->Present(1, 0);
         MoveToNextFrame();
@@ -255,6 +281,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         if (_disposed) return;
         WaitForGpu();
+        if (_textRenderer != null) { _textRenderer.Dispose(); _textRenderer = null; }
         if (_renderer2D != null) { _renderer2D.Dispose(); _renderer2D = null; }
         for (var i = 0; i < FrameCount; i++)
         {

@@ -10,26 +10,27 @@ namespace Irix.Poc;
 internal sealed class D3D12DrawingBackend : IDrawingBackend
 {
     private readonly D3D12Renderer _renderer;
-    private readonly D3D12Renderer2D _renderer2D;
     private float _bgR, _bgG, _bgB, _bgA = 1.0f;
     private List<D3D12Renderer2D.RectData>? _rects;
+    private List<D3D12TextRenderer.TextData>? _texts;
     private D3D12Renderer2D.RectData[]? _rectArray;
+    private D3D12TextRenderer.TextData[]? _textArray;
 
-    public D3D12DrawingBackend(D3D12Renderer renderer, D3D12Renderer2D renderer2D)
+    public D3D12DrawingBackend(D3D12Renderer renderer)
     {
         _renderer = renderer;
-        _renderer2D = renderer2D;
     }
 
     public void BeginFrame(in FrameContext frameContext)
     {
         _renderer.BeginFrame();
         _rects = [];
+        _texts = [];
     }
 
     public void Execute(ReadOnlySpan<DrawCommand> commands, ReadOnlySpan<TextRunEntry> textRuns)
     {
-        if (_rects == null) return;
+        if (_rects == null || _texts == null) return;
 
         foreach (var command in commands)
         {
@@ -50,6 +51,24 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
                         command.Color.R / 255f, command.Color.G / 255f,
                         command.Color.B / 255f, command.Color.A / 255f));
                     break;
+                case DrawCommandKind.DrawTextRun:
+                    var text = LookUpText(textRuns, command.Resource);
+                    if (text == null)
+                    {
+                        break;
+                    }
+
+                    _texts.Add(new D3D12TextRenderer.TextData(
+                        command.Rect.X,
+                        command.Rect.Y,
+                        command.Rect.Width,
+                        command.Rect.Height,
+                        command.Color.R / 255f,
+                        command.Color.G / 255f,
+                        command.Color.B / 255f,
+                        command.Color.A / 255f,
+                        text));
+                    break;
             }
         }
     }
@@ -57,13 +76,21 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
     public void EndFrame()
     {
         var rects = _rects ?? [];
+        var texts = _texts ?? [];
         _rects = null;
+        _texts = null;
         _rectArray = rects.Count > 0 ? rects.ToArray() : null;
+        _textArray = texts.Count > 0 ? texts.ToArray() : null;
 
-        // Render rectangles via D3D12Renderer2D
-        if (_rectArray != null)
+        if (_rectArray != null || _textArray != null)
         {
-            _renderer.RenderRectangles(_rectArray);
+            _renderer.RenderFrame(
+                _rectArray ?? [],
+                _textArray ?? [],
+                _bgR,
+                _bgG,
+                _bgB,
+                _bgA);
         }
         else
         {
@@ -72,9 +99,26 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
         }
     }
 
+    private static string? LookUpText(ReadOnlySpan<TextRunEntry> textRuns, ResourceHandle resource)
+    {
+        if (resource.Kind != DrawingResourceKind.TextStyle || resource.Id < 0 || textRuns.Length == 0)
+        {
+            return null;
+        }
+
+        foreach (var entry in textRuns)
+        {
+            if (entry.Id == resource.Id)
+            {
+                return entry.Text;
+            }
+        }
+
+        return null;
+    }
+
     public void Dispose()
     {
-        _renderer2D.Dispose();
         _renderer.Dispose();
     }
 }

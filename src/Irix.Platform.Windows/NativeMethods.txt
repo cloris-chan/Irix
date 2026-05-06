@@ -48,7 +48,25 @@ ID3D12PipelineState
 ID3D12RootSignature
 D3D12SerializeRootSignature
 D3DCompile
+// D3D11On12 / D2D / DirectWrite text overlay
+D3D11On12CreateDevice
+D3D11_CREATE_DEVICE_FLAG
+ID3D11Device
+ID3D11DeviceContext
+ID3D11On12Device
+ID3D11Resource
+D2D1CreateFactory
+ID2D1Factory3
+ID2D1Device2
+ID2D1DeviceContext2
+ID2D1Bitmap1
+ID2D1SolidColorBrush
+DWriteCreateFactory
+IDWriteFactory
+IDWriteTextFormat
 // DXGI
 CreateDXGIFactory1
 IDXGISwapChain3
 IDXGIFactory4
+IDXGIDevice
+IDXGISurface

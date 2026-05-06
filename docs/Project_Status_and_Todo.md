@@ -1,7 +1,7 @@
 # Irix 项目进度与待办
 
-> 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。>
-> 📅 **最后验证日期：** 请在每次提交前更新此日期。本文档描述的代码状态以此日期为准。
+> 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。
+> 📅 **最后验证日期：** 2026-05-07。本文档描述的代码状态以此日期为准。
 >
 > 📐 **架构设计详见：** [Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)。本文档不重复设计细节，仅记录实现状态与待办。
 ---
@@ -13,7 +13,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 **核心方向概要**（详细论述见 [设计文档 §1~§3](/d:/source/Irix/docs/Irix_Framework_Design.md)）：
 
 - v1 / Windows-only PoC 以 `D3D12` 为唯一图形后端（[ADR-001](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)）
-- Drawing 层采用 `DrawCommand + IDrawingBackend` 隔离 Skia（[ADR-002](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)）
+- Drawing 层采用 `DrawCommand + IDrawingBackend` 隔离具体 backend API（[ADR-002](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)）
 - UI 交付层分两条线：`Local UI Remoting`（免费/开源）与 `Remote UI Delivery`（商业版）
 - `MVVM Bridge` 仅为编译期 authoring layer（[ADR-007](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)）
 
@@ -21,9 +21,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 | Phase | 版本 | 当前状态 |
 |-------|------|---------|
-| Phase 1 | v1.0 基础 | 🚧 进行中 |
-| Phase 2 | v1.0 MVP | ❌ 未开始 |
-| Phase 3 | v1.0 GA | ❌ 未开始 |
+| Phase 1 | v1.0 基础 | 🚧 进行中（核心闭环已打通） |
+| Phase 2 | v1.0 MVP | 🚧 部分能力提前验证（局部 diff、D3D12 矩形/文本、CI） |
+| Phase 3 | v1.0 GA | ❌ 未开始（产品化硬化尚未开始） |
 | Phase 4 | v1.x | ❌ 未开始 |
 | Phase 5 | v2.0 | ❌ 未开始 |
 
@@ -44,10 +44,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `Irix.Platform.Windows`
   - 已有 Windows 宿主 PoC
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
+  - Windows-targeted projects 使用 `net10.0-windows10.0.17763.0` 编译，并声明 Windows 10.0.10240+ 为最低 API 边界
   - Win32 互操作优先走 `CsWin32`
-  - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、呈现、resize
+  - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、矩形 + 文本帧合成、呈现、resize
   - 已有 `D3D12Renderer2D`，运行时 HLSL 编译 + 顶点缓冲区渲染彩色矩形
-  - 已有 `D3D12DrawingBackend`（Irix.Poc），Phase 2：FillRect → D3D12 矩形渲染
+  - 已有 `D3D12TextRenderer`，通过 D3D11On12 + Direct2D + DirectWrite 在 D3D12 back buffer 上叠加文本
+  - 已有 `D3D12DrawingBackend`（Irix.Poc），Phase 3：FillRect → D3D12 矩形渲染，DrawTextRun → DirectWrite 文本渲染
 - `Irix.Rendering`
   - 已有 `ICompositor`
   - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已实现无变化帧跳过（`Count == 0` 时跳过翻译与渲染）
@@ -65,18 +67,18 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `WindowVisualCompositor`，能消费当前 `RenderFrameBatch` 并更新 PoC Window 内容与命中目标
   - 已有 `WindowBackend`，可将 `DrawCommand + HitTestTarget[]` 翻译成 PoC Window 内容元素与命中目标
   - 已有 `PoCDrawingBackend`，首次实现 `IDrawingBackend` 接口，验证 DrawCommand → WindowContentElement 链路
-  - 已有 `D3D12DrawingBackend`，D3D12 渲染路径已接入 PoC（Phase 1: 清屏渲染）
+  - 已有 `D3D12DrawingBackend`，D3D12 渲染路径已接入 PoC（Phase 3: 矩形 + DirectWrite 文本渲染）
   - 已将 Counter 示例中的输入映射抽到独立 `CounterInputRouter`
   - 已打通：窗口创建 -> 输入 -> runtime dispatch -> patch 发布 -> PoC 可视化
 - `Irix.Core.Tests`
   - 已有最基础 runtime 测试
   - 已有 layout / draw pipeline / `WindowBackend` 基础测试与最近的回归测试
 
-### 尚未落地的关键内容
+### 关键进展与仍需补齐的内容
 
-- D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 实现 Phase 1 清屏渲染
+- D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
-- 还没有真正的 retained tree / layout tree / draw command pipeline
+- retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
 - `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；56 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `ResourceHandle` + 并行 `TextRunEntry[]` 传递文本
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
@@ -92,11 +94,11 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | 输入采集 → MPSC | ✅ 已验证 |
 | 消息派发 → Update | ✅ 已验证 |
 | View 构建 | ⚠️ 部分 |
-| Diff / Patch | ⚠️ 深比较已实现，无变化跳过；尚无局部 diff |
+| Diff / Patch | ✅ 局部 diff 已实现：Update/Add/Remove + keyed reconciliation；Move 仍待优化 |
 | 布局 | ⚠️ Retained layout 已引入，未脱离硬编码常量 |
 | 命令录制 | ⚠️ 基础可用，TextRunEntry 已分离 |
 | 帧消费 (CompositorLoop) | ✅ 已验证（含无变化跳过） |
-| GPU 渲染 | ✅ D3D12 清屏渲染已接入 PoC |
+| GPU 渲染 | ✅ D3D12 矩形渲染 + DirectWrite 文本叠加已接入 PoC |
 | PoC 可视化 | ✅ 已验证 |
 
 ---
@@ -117,8 +119,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 限制：
 
-- `VirtualNodeDiffer` 已实现递归深比较，能正确检测无变化（输出空 PatchBatch）；输出仍为 ReplaceRoot，尚未实现局部 diff / keyed reconciliation
-- 还没有 drawing 层抽象
+- `VirtualNodeDiffer` 已实现局部 diff 与 keyed reconciliation；`Move` 优化和下游增量 patch 应用尚未落地
+- Drawing 层抽象已落地为 `DrawCommand + IDrawingBackend + TextRunEntry`，但仍需继续稳定资源和样式模型
 
 关键文件：
 
@@ -149,7 +151,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### 3.3 Rendering / PoC 可视化
 
-当前渲染层实际上还是“PoC 可视化层 + 初步成形的 layout/draw pipeline 骨架”，不是正式 GPU 渲染层。
+当前渲染层已经有“PoC 可视化层 + 初步 D3D12 GPU backend + layout/draw pipeline 骨架”，但还不是正式产品级 rendering 架构。
 
 `WindowVisualCompositor` 当前主要负责 PoC backend 可视化：
 
@@ -158,7 +160,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 3. 维护命中目标，并明确与 `DrawCommand` 分离传递
 4. 空帧到来时主动清空窗口元素与命中目标，避免上一帧命中信息残留
 
-布局与命令录制已经开始沉到 `Irix.Rendering`，但离正式 retained tree / GPU backend 还有距离。
+布局与命令录制已经开始沉到 `Irix.Rendering`；D3D12 backend 已能渲染矩形和文本，但离正式 retained tree、增量布局、裁剪、透明度和资源缓存还有距离。
 
 最近已确认并修复的 PoC 问题：
 
@@ -180,7 +182,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 当前测试状态：
 
 - `Irix.Core.Tests` 已有 runtime 测试、diff 测试、layout/draw pipeline 基础测试与最近的回归测试
-- 已补 `VirtualNodeDiffer` 深比较与空 PatchBatch 检测测试（15 个测试用例）
+- 已补 `VirtualNodeDiffer` 局部 diff、keyed reconciliation 与空 PatchBatch 检测测试
 - 已补 `PatchBatch.Root` 属性验证
 - 已补 `WindowDrawCommandTranslator` 默认布局回归测试
 - 已补 `WindowBackend` 颜色映射断言
@@ -206,7 +208,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 > 详细论述与权衡分析见 [设计文档附录 B：ADR 索引](/d:/source/Irix/docs/Irix_Framework_Design.md#附录-b架构决策记录索引-adr)。此处仅列出当前生效状态与尚未落地的决策。
 
-### 已确认（详见 ADR-001 ~ ADR-012）
+### 已确认（详见 ADR-001 ~ ADR-014）
 
 - D3D12 作为 v1 唯一图形后端 / Skia 仅作为 backend adapter（ADR-001, ADR-006）
 - DrawCommand + IDrawingBackend 隔离层（ADR-002）
@@ -219,10 +221,11 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - VirtualNode 采用轻量不可变结构（ADR-010）
 - DrawCommand 不内联文本，通过 ResourceHandle + TextRunEntry[] 并行传递（ADR-011）
 - PatchBatch 携带 Root 属性，消费者直接使用而非从 Memory 反推（ADR-012）
+- D3D12 互操作使用 CsWin32 `allowMarshaling: false` 生成的裸指针 COM 包装（ADR-013）
+- Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12（ADR-014）
 
 ### 未确认或尚未落地
 
-- `D3D12` 具体接入方式
 - `Skia + D3D12` 的最终 backend adapter 方案
 - 本机 IPC 选型：
   - 命名管道
@@ -270,9 +273,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 ### P2
 
 - ✅ D3D12 基础渲染循环已搭建（CsWin32 裸指针 COM 包装，不再手写 vtable）
-- ✅ `D3D12DrawingBackend` 已实现 Phase 1 清屏渲染
+- ✅ `D3D12DrawingBackend` 已实现 `IDrawingBackend` 的 D3D12 路径并接入 PoC
 - ✅ Phase 2: D3D12 矩形绘制已实现（`D3D12Renderer2D`：运行时 HLSL 编译 + 顶点缓冲区）
-- Phase 3: D3D12 文本渲染（暂用 GDI 软件光栅化上传纹理）
+- ✅ Phase 3: D3D12 文本渲染已实现（D3D11On12 + Direct2D + DirectWrite overlay）
 - 明确 `SkiaBackend` 只位于 backend adapter 层
 - 为 `Local UI Remoting` 起草最小协议：`InputEvent`、`VirtualNodePatch`、`Ack / SeqId`
 - 收敛轻量 `MVVM bridge` 的最小 binding 语法、`IXAML` 子集与代码生成边界
@@ -292,12 +295,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 建立 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderFrameBatch -> WindowBackend` 过渡链
 - [x] 打通 PoC Window 对 `DrawCommand.Color` 的映射
 - [x] 搭 `D3D12` 基础渲染循环
-- [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，Phase 1 清屏渲染）
+- [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，已接入矩形与文本）
 - [x] 从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装
 - [x] Phase 2: D3D12 矩形绘制（`D3D12Renderer2D`：运行时 HLSL 编译 + 顶点缓冲区）
 - [x] 移除 D3D12 viewport 硬编码，接入真实窗口尺寸 + resize 支持
 - [x] 添加 GitHub Actions CI（build + test + AOT check）
-- [ ] Phase 3: D3D12 文本渲染（暂用 GDI 软件光栅化上传纹理）
+- [x] Phase 3: D3D12 文本渲染（D3D11On12 + Direct2D + DirectWrite overlay）
 
 ### Core
 
@@ -305,8 +308,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [ ] 设计 retained element tree
 - [ ] 设计 layout tree
 - [ ] 让 `LayoutTreeBuilder` 脱离 PoC 特有布局常量和控件假设
-- [ ] 将 diff 从 `ReplaceRoot` 提升到最小可用局部 diff
-- [ ] 增加 keyed reconciliation 设计草案
+- [x] 将 diff 从 `ReplaceRoot` 提升到最小可用局部 diff
+- [x] 增加 keyed reconciliation 设计草案并落地基础实现
 
 ### Input / Platform
 
@@ -333,7 +336,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### Tests
 
-- [ ] 为 diff 增加测试
+- [x] 为 diff 增加测试
 - [x] 为 `PatchBatch.Dispose()` 路径增加测试
 - [ ] 为 runtime command 执行增加测试
 - [x] 为 Counter PoC 输入路由增加最小测试
@@ -397,11 +400,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 如果按当前节奏推进，最自然的一次提交应围绕下面这个主题展开：
 
-`Introduce DrawCommand pipeline skeleton and decouple PoC window compositor from VirtualNodePatch`
+`Add DirectWrite text rendering to the D3D12 backend`
 
 对应改动范围建议：
 
-- `Irix.Rendering`
+- `Irix.Platform.Windows`
 - `Irix.Poc`
-- `Irix.Core`（仅补最小桥接类型）
-- `Irix.Core.Tests`（补基础测试）
+- `docs`

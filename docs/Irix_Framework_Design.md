@@ -79,7 +79,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | C# MVU Core（本地模式） | Model / Update / View 三元组，纯函数，可单元测试 |
 | 单图形后端（Windows PoC） | `D3D12` 作为 v1 / Windows-only PoC 唯一图形后端，`Vulkan` 后移到后续阶段 |
 | Win32 主 HWND 窗口 | 单窗口、单主视口优先 |
-| 内部 Drawing 抽象层 | UI 树不直接耦合第三方绘图库；v1 用内部 `DrawCommand` 层 + `Skia` 适配器落地 |
+| 内部 Drawing 抽象层 | UI 树不直接耦合第三方绘图库；PoC 已用内部 `DrawCommand` 层 + D3D12 backend 验证，`Skia` 仅保留为未来 backend adapter 选项 |
 | MPSC + `IMemoryOwner<T>` 管线 | 线程间所有权转移通道 |
 | 最小控件集合 | Text、Rectangle、Button、ScrollContainer |
 | 基础输入路由 | 鼠标 / 键盘，焦点切换 |
@@ -177,9 +177,9 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 视图构建 | `BuildView` → `VirtualNode` | ⚠️ 部分 | 基础树构建可用，属性模型待完善 |
 | Diff / Patch | `VirtualNodeDiffer` | ✅ 局部 diff 已实现 | 递归深比较 + keyed reconciliation + Update/Add/Remove patches |
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | Retained layout 已引入，未脱离 PoC 硬编码常量 |
-| 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，未接入真实 GPU backend |
+| 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，TextRunEntry 已分离，已接入 D3D12 PoC backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 无变化跳过 |
-| GPU 渲染 | D3D12 / SkiaBackend | ✅ Phase 2 已验证 | D3D12 矩形渲染已实现（`D3D12Renderer2D`）；viewport 已接入真实窗口尺寸；resize 支持已添加 |
+| GPU 渲染 | D3D12 backend | ✅ Phase 3 已验证 | D3D12 矩形渲染 + DirectWrite 文本叠加已实现；viewport 已接入真实窗口尺寸；resize 支持已添加 |
 | PoC 可视化 | `WindowVisualCompositor` | ✅ 已验证 | PoC Window 内容元素 + 命中目标已通 |
 
 ### 4.2 最小化 PoC 项目结构（当前仓库）
@@ -300,7 +300,7 @@ v1 只实现**单 `CompositorThread` + 单主视口**。每个屏幕一个独立
 CompositorThread.Start()
   ├─ 初始化图形 API 设备 (v1 / Windows PoC: D3D12)
   ├─ 创建 Swapchain (匹配当前屏幕刷新率)
-  ├─ 初始化 Drawing Backend Context（v1 默认由 Skia 适配器承接）
+    ├─ 初始化 Drawing Backend Context（当前 PoC: D3D12 + DirectWrite overlay）
   └─ 进入渲染循环:
        while (!cancellation.IsCancellationRequested)
          ├─ 等待 VSync 信号 (或高精度 Timer)
@@ -333,7 +333,7 @@ CompositorThread.Start()
 
 #### 5.2.4 Drawing 层策略
 
-Irix 不应将 UI 语义层直接绑定到 `Skia` API。`Skia` 更适合作为**v1 的底层绘制实现**，而不是长期的架构中心。
+Irix 不应将 UI 语义层直接绑定到 `Skia`、Direct2D 或任意单一 backend API。PoC 阶段已经优先验证 `D3D12 + DirectWrite` 主链，`Skia` 更适合作为未来可替换 backend adapter，而不是长期架构中心。
 
 v1 的推荐分层如下：
 
@@ -343,7 +343,7 @@ VirtualNode Patch
   → Layout Result
   → DrawCommand List
   → IDrawingBackend
-  → Skia / Future Backend
+    → D3D12 / DirectWrite / Skia / Future Backend
 ```
 
 其中 `DrawCommand` 是 Irix 自己的稳定中间层，至少覆盖：
@@ -362,14 +362,14 @@ VirtualNode Patch
 public interface IDrawingBackend : IDisposable
 {
     void BeginFrame(in FrameContext frameContext);
-    void Execute(ReadOnlySpan<DrawCommand> commands);
+    void Execute(ReadOnlySpan<DrawCommand> commands, ReadOnlySpan<TextRunEntry> textRuns);
     void EndFrame();
 }
 ```
 
 > **设计原则：** 上层布局、命中测试、动画、Patch Routing 只依赖 `DrawCommand` 语义，不依赖 `Skia` 的 `Canvas`、`Paint`、`Path` 等具体对象模型。
 >
-> **当前过渡实现补充：** 在文本资源系统落地前，`DrawTextRun` 可以临时携带内联文本；但点击/命中等交互语义必须通过与绘制命令并行的 `HitTestTarget[]` / `RenderFrameBatch` 传递，不能回流到 `DrawCommand` 字段。
+> **当前实现补充：** `DrawTextRun` 不再携带内联文本；文本内容通过与绘制命令并行的 `TextRunEntry[]` 传递。点击/命中等交互语义继续通过 `HitTestTarget[]` / `RenderFrameBatch` 并行传递，不能回流到 `DrawCommand` 字段。
 
 #### 5.2.5 是否需要自研 Drawing Engine
 
@@ -377,27 +377,27 @@ public interface IDrawingBackend : IDisposable
 
 原因如下：
 
-1. `Skia` 在文本、路径、栅格化成熟度上足够高，适合验证 UI 主链。
+1. DirectWrite / Direct2D 在 Windows 文本 shaping、glyph rasterization 和 D3D 互操作上足够成熟，适合作为 PoC 文本路径。
 2. 当前项目的核心风险首先在窗口、调度、布局、Patch、输入与渲染闭环，而不是 2D 栅格化算法本身。
 3. 如果现在直接做类似 `Flutter Impeller` 的自研 Drawing Engine，会把图形 API、路径 tessellation、文本 shaping、缓存策略、AA、资源生命周期等风险一次性叠满。
 
-但从设计理念上，你的直觉是对的：`Skia` 并不天然契合 Irix 的全部目标，特别是下面几类诉求：
+但从设计理念上，你的直觉是对的：任何第三方绘制栈都不应成为 Irix 的上层语义中心，特别是下面几类诉求：
 
 - 严格可控的命令录制与资源生命周期
 - 更贴近 UI 场景的 retained drawing / partial invalidation
 - 更稳定的多线程与多视口资源模型
 - 对热路径分配、缓存、诊断的细粒度掌控
 
-因此更合理的路线不是“继续深绑 Skia”，而是：
+因此更合理的路线不是“继续深绑某个绘制库”，而是：
 
-- v1：`DrawCommand` + `SkiaBackend`
+- v1：`DrawCommand` + D3D12 backend；Windows 文本 PoC 通过 DirectWrite / Direct2D overlay 完成
 - v1.x：补齐文本缓存、画刷缓存、命令录制和局部重绘基线
-- v2：如果 `Skia` 在性能模型、资源模型、可诊断性上持续成为瓶颈，再评估自研 `Irix.Drawing` 引擎
+- v2：如果第三方绘制实现或平台文本栈在性能模型、资源模型、可诊断性上持续成为瓶颈，再评估自研 `Irix.Drawing` 引擎
 
 只有在以下条件同时满足时，才建议启动自研 Drawing Engine：
 
 1. `DrawCommand` 语义已经稳定，且至少支撑过一个完整 MVP。
-2. 已经通过基线监测确认瓶颈确实在 `Skia`/第三方绘制实现，而不是布局、Patch、文本或窗口层。
+2. 已经通过基线监测确认瓶颈确实在第三方绘制实现或平台文本栈，而不是布局、Patch、文本命令模型或窗口层。
 3. 团队愿意长期承担文本 shaping、路径栅格化、GPU 资源系统、调试工具的维护成本。
 
 #### 5.2.6 Drawing 层最小对象模型（建议落地稿）
@@ -487,7 +487,7 @@ VirtualNode
 
 当前仓库中的 `WindowVisualCompositor` 已经收敛为 PoC backend 层，当前主要承担两件事：
 
-1. 消费 `RenderFrameBatch`（当前过渡实现为 `DrawCommandBatch + HitTestTarget[]`）；
+1. 消费 `RenderFrameBatch`（当前过渡实现为 `DrawCommandBatch + HitTestTarget[] + TextRunEntry[]`）；
 2. 把绘制命令和并行命中目标翻译成 PoC 窗口内容元素与点击路由数据。
 
 这对于演示是合适的，但不适合作为正式 rendering 架构的终点。推荐演进顺序如下：
@@ -495,22 +495,22 @@ VirtualNode
 1. 把 `WindowVisualCompositor` 中的布局逻辑抽成 `LayoutTreeBuilder`。
 2. 把 `WindowContentElement` 视为临时的 `DrawCommand` 替身，先建立 `DrawCommandRecorder`。
 3. 保持 `WindowVisualCompositor` 只消费 `RenderFrameBatch`，不要再把 `ActionId` / hit testing 元数据塞回 `DrawCommand`。
-4. 等 `SkiaBackend` 接入后，PoC Window backend 与 `SkiaBackend` 共享同一套 `DrawCommand` 输入。
+4. 后续新增 `SkiaBackend` 或自研 backend 时，PoC Window backend 与 GPU backend 共享同一套 `DrawCommand + TextRunEntry[]` 输入。
 
 也就是说，当前 PoC 最务实的下一步不是"立刻写 Skia"，而是先把中间层站稳：
 
 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> WindowBackend`
 
-**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现递归深比较；`CompositorLoop` 已实现无变化帧跳过。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 清屏）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013）。
+**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已实现无变化帧跳过。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + DirectWrite 文本）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013）。
 
-**下一步：** D3D12 Phase 2（矩形绘制 + 文本渲染），让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
+**下一步：** 补齐裁剪、透明度、文本格式资源缓存与 resize 事件接线；随后让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
 
 #### 5.2.9 文本、路径与图片的资源策略
 
 自研 Drawing 层最容易失控的地方通常不是矩形，而是文本和路径。因此 v1 建议明确分层：
 
-- 文本 shaping 与 glyph rasterization：暂时委托给 `Skia`。
-- 复杂路径栅格化：暂时委托给 `Skia`。
+- 文本 shaping 与 glyph rasterization：Windows PoC 暂时委托给 DirectWrite / Direct2D。
+- 复杂路径栅格化：后续可委托给 `Skia` backend adapter 或自研路径模块，当前不急于实现。
 - 图片解码与上传：使用独立资源接口封装，避免与 backend 紧耦合。
 
 对应地，`Irix.Drawing` 在 v1 不应该尝试自研：
@@ -552,7 +552,7 @@ public interface IImageResourceManager
 v1 Drawing 层的成功标准只有两个：
 
 1. 对上能稳定承接 Irix 自己的 UI 布局与绘制语义。
-2. 对下能让 `WindowBackend` 与 `SkiaBackend` 共用同一份 `DrawCommand` 输入。
+2. 对下能让 `WindowBackend`、D3D12 backend 与未来 `SkiaBackend` 共用同一份 `DrawCommand + TextRunEntry[]` 输入。
 
 ### 5.3 时间轴动画系统
 
@@ -1323,7 +1323,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | **PatchBatch** | 一组 `VirtualNodePatch` 的所有权包装，通过 MPSC 传递 | §7.2 |
 | **DrawCommand** | Irix 自有的稳定绘制命令，隔离上层 UI 与底层 backend | §5.2.4 |
 | **DrawCommandBatch** | 一组 `DrawCommand` 的内存包装 | — |
-| **RenderFrameBatch** | 单帧完整渲染数据：`DrawCommandBatch` + `HitTestTarget[]` | §5.2.8 |
+| **RenderFrameBatch** | 单帧完整渲染数据：`DrawCommandBatch` + `HitTestTarget[]` + `TextRunEntry[]` | §5.2.8 |
 | **HitTestTarget** | 命中测试目标，与 `DrawCommand` 并行传递 | §5.4.2 |
 | **LayoutBox** | 布局输出：节点的最终几何、裁剪区域、ZIndex | §5.2.6 |
 | **IDrawingBackend** | 绘制后端抽象接口 | §5.2.4 |
@@ -1339,6 +1339,9 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | **MVVM Bridge** | 轻量编译期 MVVM authoring layer，非运行时 | §9.1 |
 | **IXAML** | Irix 的声明式 UI DSL，仅编译期解析 | §9.1.3 |
 | **D3D12** | Direct3D 12，v1 唯一图形后端 | §5.2.2 |
+| **D3D11On12** | Direct3D 11-on-12 interop layer，用于让 Direct2D/DirectWrite 叠加到 D3D12 back buffer | §5.2.8 |
+| **DirectWrite** | Windows 文本 shaping / layout / rasterization API，当前 PoC 文本路径使用 | §5.2.9 |
+| **Direct2D** | Windows 2D 绘制 API，当前通过 D3D11On12 承接 DirectWrite 文本绘制 | §5.2.9 |
 | **CsWin32** | Win32 API 的 C# 源码生成器 | 项目约定 |
 
 ---
@@ -1362,6 +1365,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-011 | DrawCommand 不内联文本，通过 ResourceHandle + TextRunEntry 并行传递 | §5.2.6 | ✅ 已确认 | DrawCommand 保持纯值类型，可序列化/可记录/可回放 |
 | ADR-012 | PatchBatch 携带 Root 属性，消费者直接使用 | §7.2 | ✅ 已确认 | 消除从 Memory 反推根节点的 hack，为未来增量 patch 铺路 |
 | ADR-013 | D3D12 互操作使用 CsWin32 生成的裸指针 COM 包装 | §5.2.2 | ✅ 已确认 | 消除手写 vtable 偏移和 GUID 错误；`allowMarshaling: false` 保持 AOT 兼容 |
+| ADR-014 | Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12 | §5.2.8 / §5.2.9 | ✅ 已确认 | 复用 Windows 成熟文本栈，避免 PoC 阶段手写 glyph rasterization 或提前引入 Skia |
 
 ---
 
