@@ -36,4 +36,24 @@ public sealed class FrameDrawingResourcesTests
 
         Assert.Throws<InvalidOperationException>(() => resources.AddTextStyle(TextStyle.Default));
     }
+
+    [Fact]
+    public void Reset_reuses_resources_for_new_frame()
+    {
+        using var resources = new FrameDrawingResources();
+
+        var handle1 = resources.AddTextStyle(TextStyle.Default);
+        var text1 = resources.AddText("Hello");
+        resources.Seal();
+        Assert.Equal("Hello", resources.Resolve(text1).ToString());
+        Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(handle1));
+
+        resources.Reset();
+
+        var handle2 = resources.AddTextStyle(TextStyle.Default);
+        var text2 = resources.AddText("World");
+        resources.Seal();
+        Assert.Equal("World", resources.Resolve(text2).ToString());
+        Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(handle2));
+    }
 }

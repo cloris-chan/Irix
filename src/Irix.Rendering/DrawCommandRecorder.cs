@@ -7,15 +7,21 @@ internal readonly record struct DrawCommandRecordResult(
     DrawCommandBatch Commands,
     IFrameResourceResolver Resources);
 
-internal sealed class DrawCommandRecorder(DrawingStyle style)
+internal sealed class DrawCommandRecorder(DrawingStyle style) : IDisposable
 {
     private const int StackCommandThreshold = 64;
 
     private readonly DrawingStyle _style = style;
+    private readonly FrameDrawingResources _frameResources = new();
 
     public DrawCommandRecorder()
         : this(DrawingStyle.Default)
     {
+    }
+
+    public void Dispose()
+    {
+        _frameResources.Dispose();
     }
 
     public DrawCommandRecordResult Record(IReadOnlyList<LayoutElement> elements)
@@ -28,21 +34,41 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         }
 
         var maximumCommandCount = elements.Count * 2;
-        var resources = new FrameDrawingResources();
+        var resources = _frameResources;
+        resources.Reset();
         var textStyle = resources.AddTextStyle(_style.TextStyle);
         var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
 
-        if (maximumCommandCount <= StackCommandThreshold)
-        {
-            Span<DrawCommand> stackCommands = stackalloc DrawCommand[maximumCommandCount];
-            var stackCommandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, stackCommands);
-            resources.Seal();
+        var (batch, resolver) = maximumCommandCount <= StackCommandThreshold
+            ? RecordSmallBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount)
+            : RecordLargeBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount);
 
-            var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(stackCommandCount);
-            stackCommands[..stackCommandCount].CopyTo(owner.Memory.Span);
-            return new DrawCommandRecordResult(new DrawCommandBatch(owner, stackCommandCount), resources);
-        }
+        return new DrawCommandRecordResult(batch, resolver);
+    }
 
+    private (DrawCommandBatch, IFrameResourceResolver) RecordSmallBatch(
+        IReadOnlyList<LayoutElement> elements,
+        FrameDrawingResources resources,
+        ResourceHandle textStyle,
+        ResourceHandle buttonTextStyle,
+        int maximumCommandCount)
+    {
+        Span<DrawCommand> stackCommands = stackalloc DrawCommand[maximumCommandCount];
+        var stackCommandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, stackCommands);
+        resources.Seal();
+
+        var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(stackCommandCount);
+        stackCommands[..stackCommandCount].CopyTo(owner.Memory.Span);
+        return (new DrawCommandBatch(owner, stackCommandCount), resources);
+    }
+
+    private (DrawCommandBatch, IFrameResourceResolver) RecordLargeBatch(
+        IReadOnlyList<LayoutElement> elements,
+        FrameDrawingResources resources,
+        ResourceHandle textStyle,
+        ResourceHandle buttonTextStyle,
+        int maximumCommandCount)
+    {
         var pooledOwner = PooledArrayMemoryOwner<DrawCommand>.Rent(maximumCommandCount);
         var success = false;
         try
@@ -50,7 +76,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
             var commandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, pooledOwner.Memory.Span);
             resources.Seal();
             success = true;
-            return new DrawCommandRecordResult(new DrawCommandBatch(pooledOwner, commandCount), resources);
+            return (new DrawCommandBatch(pooledOwner, commandCount), resources);
         }
         finally
         {

@@ -204,14 +204,14 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
 
         using var frame1 = pipeline.Build(root, viewport);
+        var frame1Text = frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString();
         using var frame2 = pipeline.Build(root, viewport);
+        var frame2Text = frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString();
 
         // Both frames should have identical layout
         Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
         Assert.Equal(frame1.HitTargets.Count, frame2.HitTargets.Count);
-        Assert.Equal(
-            frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString(),
-            frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
+        Assert.Equal(frame1Text, frame2Text);
         for (var i = 0; i < frame1.Commands.Count; i++)
         {
             Assert.Equal(frame1.Commands.Memory.Span[i].Rect, frame2.Commands.Memory.Span[i].Rect);
@@ -245,10 +245,12 @@ public sealed class WindowLayoutPipelineTests
         var root2 = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("World", 2));
 
         using var frame1 = pipeline.Build(root1, viewport);
+        var text1 = frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString();
         using var frame2 = pipeline.Build(root2, viewport);
+        var text2 = frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString();
 
-        Assert.Equal("Hello", frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString());
-        Assert.Equal("World", frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString());
+        Assert.Equal("Hello", text1);
+        Assert.Equal("World", text2);
     }
 
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow

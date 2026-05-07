@@ -5,7 +5,7 @@ public interface IFrameResourceResolver : ITextResolver
     TextStyle ResolveTextStyle(ResourceHandle handle);
 }
 
-public sealed class FrameDrawingResources : IFrameResourceResolver
+public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
 {
     public static IFrameResourceResolver Empty { get; } = new EmptyFrameResourceResolver();
 
@@ -64,6 +64,22 @@ public sealed class FrameDrawingResources : IFrameResourceResolver
         }
 
         return _textStyles[handle.Id];
+    }
+
+    public void Reset()
+    {
+        _textArena.Reset();
+        _textStyles.Clear();
+        _textStyleHandles.Clear();
+        _sealed = false;
+    }
+
+    public void Dispose()
+    {
+        _textArena.Dispose();
+        _textStyles.Clear();
+        _textStyleHandles.Clear();
+        _sealed = false;
     }
 
     private void EnsureCanAdd()

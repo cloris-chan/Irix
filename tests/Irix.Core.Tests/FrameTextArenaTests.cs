@@ -40,4 +40,21 @@ public sealed class FrameTextArenaTests
 
         Assert.Throws<InvalidOperationException>(() => arena.Add("World"));
     }
+
+    [Fact]
+    public void Reset_reuses_arena_for_new_frame()
+    {
+        using var arena = new FrameTextArena();
+
+        var hello = arena.Add("Hello");
+        arena.Seal();
+        Assert.Equal("Hello", arena.Resolve(hello).ToString());
+
+        arena.Reset();
+
+        var world = arena.Add("World");
+        arena.Seal();
+        Assert.Equal("World", arena.Resolve(world).ToString());
+        Assert.True(arena.Resolve(hello).IsEmpty);
+    }
 }

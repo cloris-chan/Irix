@@ -3,19 +3,24 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle)
+internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle) : IDisposable
 {
     private readonly LayoutTreeBuilder _layoutTreeBuilder = new LayoutTreeBuilder(layoutStyle);
     private readonly DrawCommandRecorder _drawCommandRecorder = new DrawCommandRecorder(drawingStyle);
-
-    private VirtualNode _retainedRoot;
-    private IReadOnlyList<LayoutElement>? _retainedLayout;
-    private PixelRectangle _retainedViewport;
 
     public RenderPipeline()
         : this(LayoutStyle.Default, DrawingStyle.Default)
     {
     }
+
+    public void Dispose()
+    {
+        _drawCommandRecorder.Dispose();
+    }
+
+    private VirtualNode _retainedRoot;
+    private IReadOnlyList<LayoutElement>? _retainedLayout;
+    private PixelRectangle _retainedViewport;
 
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds)
     {
