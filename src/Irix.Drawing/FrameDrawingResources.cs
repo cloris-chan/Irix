@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace Irix.Drawing;
 
 public interface IFrameResourceResolver : ITextResolver
@@ -7,12 +9,59 @@ public interface IFrameResourceResolver : ITextResolver
 
 public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
 {
+    private const int MaxPoolSize = 4;
+
     public static IFrameResourceResolver Empty { get; } = new EmptyFrameResourceResolver();
+
+    private static readonly object PoolLock = new();
+    private static readonly Queue<FrameDrawingResources> Pool = new();
 
     private readonly FrameTextArena _textArena = new();
     private readonly List<TextStyle> _textStyles = [];
     private readonly Dictionary<TextStyle, ResourceHandle> _textStyleHandles = [];
     private bool _sealed;
+    private bool _returned;
+
+    public static FrameDrawingResources Rent()
+    {
+        lock (PoolLock)
+        {
+            if (Pool.Count > 0)
+            {
+                var instance = Pool.Dequeue();
+                instance._returned = false;
+                return instance;
+            }
+        }
+
+        return new FrameDrawingResources();
+    }
+
+    public static void Return(FrameDrawingResources resources)
+    {
+        if (resources._returned)
+        {
+            return;
+        }
+
+        resources._returned = true;
+        resources._textArena.Reset();
+        resources._textStyles.Clear();
+        resources._textStyleHandles.Clear();
+        resources._sealed = false;
+
+        lock (PoolLock)
+        {
+            if (Pool.Count < MaxPoolSize)
+            {
+                Pool.Enqueue(resources);
+            }
+            else
+            {
+                resources._textArena.Dispose();
+            }
+        }
+    }
 
     public TextSlice AddText(string? text)
     {
@@ -72,6 +121,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         _textStyles.Clear();
         _textStyleHandles.Clear();
         _sealed = false;
+        _returned = false;
     }
 
     public void Dispose()
@@ -80,6 +130,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         _textStyles.Clear();
         _textStyleHandles.Clear();
         _sealed = false;
+        _returned = false;
     }
 
     private void EnsureCanAdd()

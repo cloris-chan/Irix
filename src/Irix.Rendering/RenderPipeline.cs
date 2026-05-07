@@ -3,7 +3,7 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle) : IDisposable
+internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle)
 {
     private readonly LayoutTreeBuilder _layoutTreeBuilder = new LayoutTreeBuilder(layoutStyle);
     private readonly DrawCommandRecorder _drawCommandRecorder = new DrawCommandRecorder(drawingStyle);
@@ -11,11 +11,6 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     public RenderPipeline()
         : this(LayoutStyle.Default, DrawingStyle.Default)
     {
-    }
-
-    public void Dispose()
-    {
-        _drawCommandRecorder.Dispose();
     }
 
     private VirtualNode _retainedRoot;

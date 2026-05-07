@@ -11,10 +11,8 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
 {
     private readonly D3D12Renderer _renderer;
     private float _bgR, _bgG, _bgB, _bgA = 1.0f;
-    private List<D3D12Renderer2D.RectData>? _rects;
-    private List<D3D12TextRenderer.TextData>? _texts;
-    private D3D12Renderer2D.RectData[]? _rectArray;
-    private D3D12TextRenderer.TextData[]? _textArray;
+    private readonly FrameRenderList<D3D12Renderer2D.RectData> _rects = new();
+    private readonly FrameRenderList<D3D12TextRenderer.TextData> _texts = new();
     private IFrameResourceResolver? _resources;
 
     public D3D12DrawingBackend(D3D12Renderer renderer)
@@ -25,13 +23,12 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
     public void BeginFrame(in FrameContext frameContext)
     {
         _renderer.BeginFrame();
-        _rects = [];
-        _texts = [];
+        _rects.Reset();
+        _texts.Reset();
     }
 
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
     {
-        if (_rects == null || _texts == null) return;
         _resources = resources;
 
         foreach (var command in commands)
@@ -39,7 +36,6 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
             switch (command.Kind)
             {
                 case DrawCommandKind.FillRect:
-                    // First FillRect with ZIndex 0 is the background
                     if (_rects.Count == 0)
                     {
                         _bgR = command.Color.R / 255f;
@@ -77,35 +73,25 @@ internal sealed class D3D12DrawingBackend : IDrawingBackend
 
     public void EndFrame()
     {
-        var rects = _rects ?? [];
-        var texts = _texts ?? [];
+        var rects = _rects.Span;
+        var texts = _texts.Span;
         var resources = _resources ?? FrameDrawingResources.Empty;
-        _rects = null;
-        _texts = null;
         _resources = null;
-        _rectArray = rects.Count > 0 ? rects.ToArray() : null;
-        _textArray = texts.Count > 0 ? texts.ToArray() : null;
 
-        if (_rectArray != null || _textArray != null)
+        if (rects.Length > 0 || texts.Length > 0)
         {
-            _renderer.RenderFrame(
-                _rectArray ?? [],
-                _textArray ?? [],
-                resources,
-                _bgR,
-                _bgG,
-                _bgB,
-                _bgA);
+            _renderer.RenderFrame(rects, texts, resources, _bgR, _bgG, _bgB, _bgA);
         }
         else
         {
-            // Fallback: just clear with background color
             _renderer.ClearAndPresent(_bgR, _bgG, _bgB, _bgA);
         }
     }
 
     public void Dispose()
     {
+        _rects.Dispose();
+        _texts.Dispose();
         _renderer.Dispose();
     }
 }

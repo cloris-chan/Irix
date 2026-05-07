@@ -7,21 +7,15 @@ internal readonly record struct DrawCommandRecordResult(
     DrawCommandBatch Commands,
     IFrameResourceResolver Resources);
 
-internal sealed class DrawCommandRecorder(DrawingStyle style) : IDisposable
+internal sealed class DrawCommandRecorder(DrawingStyle style)
 {
     private const int StackCommandThreshold = 64;
 
     private readonly DrawingStyle _style = style;
-    private readonly FrameDrawingResources _frameResources = new();
 
     public DrawCommandRecorder()
         : this(DrawingStyle.Default)
     {
-    }
-
-    public void Dispose()
-    {
-        _frameResources.Dispose();
     }
 
     public DrawCommandRecordResult Record(IReadOnlyList<LayoutElement> elements)
@@ -34,8 +28,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style) : IDisposable
         }
 
         var maximumCommandCount = elements.Count * 2;
-        var resources = _frameResources;
-        resources.Reset();
+        var resources = FrameDrawingResources.Rent();
         var textStyle = resources.AddTextStyle(_style.TextStyle);
         var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
 

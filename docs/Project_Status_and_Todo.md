@@ -82,7 +82,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；65 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
-- 渲染热路径仍有托管分配：`DrawCommandRecorder` 已为实例级对象，`FrameDrawingResources` 通过 `Reset()` 跨帧复用 `char[]` 和 `StringBuilder`；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。当前热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配），未达 0 API 调用但已消除 GC pressure
+- 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
 - 测试覆盖已扩展至 65 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、CompositorLoop 跳过、retained layout、DrawingBackendCompositor、所有权转移等）
 - `CompositorLoop` 已实现 `PatchBatch.Count == 0` 时跳过翻译与渲染，避免无变化帧清空窗口
@@ -309,7 +309,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 将文本内容从 `ResourceHandle` 分离为 frame-local `FrameDrawingResources + TextSlice/IFrameResourceResolver`
 - [x] 建立 `TextStyle` resource cache 与 DirectWrite bounded `TextFormat/TextLayout` cache
 - [x] 将 `DrawCommandRecorder` 改为小批量 `stackalloc` + 跨 async 边界 pooled owner
-- [x] 将 `FrameDrawingResources` / `FrameTextArena` 改为实例级对象，`Reset()` 跨帧复用 `char[]` 和 `StringBuilder`，`Seal()` 使用 `ArrayPool<char>` 而非生成 `string`
+- [x] 将 `FrameDrawingResources` 改为静态池 Rent/Return 生命周期，`RenderFrameBatch.Dispose()` 归还资源到池
+- [x] `D3D12DrawingBackend` 改用 `FrameRenderList<T>`（ArrayPool 背板），消除 `List` 和 `ToArray()` 分配
 - [ ] 设计显式 glyph atlas/cache（仅当后续脱离 DirectWrite 或需要跨 backend glyph 资源复用时推进）
 - [ ] 增加 GPU device-lost 检测、设备/Swapchain 重建与失败上报路径
 

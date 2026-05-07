@@ -18,5 +18,9 @@ public readonly record struct RenderFrameBatch(
     public void Dispose()
     {
         Commands.Dispose();
+        if (Resources is FrameDrawingResources resources)
+        {
+            FrameDrawingResources.Return(resources);
+        }
     }
 }

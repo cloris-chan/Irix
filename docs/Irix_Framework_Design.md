@@ -812,7 +812,7 @@ public readonly struct VirtualNodeAttribute
 
 v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 可采用轻量不可变结构配合池化 Builder / Arena 分配策略，在复杂度、可调试性和性能之间取得更稳妥的平衡。
 
-> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 已为实例级对象，`FrameDrawingResources` 通过 `Reset()` 跨帧复用 pooled `char[]` 和 `StringBuilder`，`Seal()` 从 `ArrayPool<char>` 租用 buffer 而非生成 `string`。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。热路径 API 调用数仍有优化空间（ArrayPool rent/return），但 GC pressure 已显著降低。
+> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还资源到池，资源生命周期已显式化。`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new List + ToArray。`FrameTextArena` 的 `Seal()` 从 `ArrayPool<char>` 租用 buffer 而非生成 `string`。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。热路径 GC pressure 已基本消除。
 
 **Diff 算法策略：**
 

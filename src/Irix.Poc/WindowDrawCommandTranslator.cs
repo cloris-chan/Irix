@@ -4,7 +4,7 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatchBatchTranslator, IDisposable
+internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatchBatchTranslator
 {
     private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(
         LayoutStyle.Default,
@@ -24,10 +24,5 @@ internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatch
         }
 
         return _renderPipeline.Build(patchBatch.Root, window.Region.PhysicalBounds);
-    }
-
-    public void Dispose()
-    {
-        _renderPipeline.Dispose();
     }
 }
