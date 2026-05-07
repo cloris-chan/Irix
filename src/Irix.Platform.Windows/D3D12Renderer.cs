@@ -213,6 +213,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public void BeginFrame()
     {
+        if (_deviceRemoved) return;
         _allocators[_frameIndex]->Reset();
         _list->Reset(_allocators[_frameIndex], null);
     }
@@ -325,12 +326,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         _hasRendered = true;
 
-        // Apply any pending resize after the first frame is rendered
-        if (_pendingResize)
-        {
-            ApplyResize(_pendingWidth, _pendingHeight);
-        }
-
+        // 1. Signal current frame fence and wait for it
         var fence = _fenceValues[_frameIndex];
         _queue->Signal(_fence, fence);
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
@@ -340,12 +336,30 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
         }
         _fenceValues[_frameIndex] = fence + 1;
+
+        // 2. Apply pending resize after GPU is idle (fence completed, safe to release backbuffers)
+        if (_pendingResize)
+        {
+            ApplyResize(_pendingWidth, _pendingHeight);
+        }
     }
 
     private void HandleDeviceError(COMException ex)
     {
         _deviceRemoved = true;
         System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Device error (0x{ex.ErrorCode:X8}). No automatic recovery.");
+    }
+
+    /// <summary>
+    /// Check HRESULT from D3D/DXGI/D2D calls that return it directly.
+    /// Sets _deviceRemoved on any failure.
+    /// </summary>
+    internal static bool SucceededOrMarkDeviceRemoved(HRESULT hr, ref bool deviceRemoved)
+    {
+        if (hr.Succeeded) return true;
+        deviceRemoved = true;
+        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] HRESULT failure (0x{unchecked((uint)hr.Value):X8}). Device marked as removed.");
+        return false;
     }
 
     private void WaitForGpu()

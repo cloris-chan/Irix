@@ -99,8 +99,8 @@ internal static class Program
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
 
-        var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-        var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
 
         // Build a test frame: one rectangle + one text + one button
         var resources = FrameDrawingResources.Rent();
@@ -153,6 +153,6 @@ internal static class Program
         Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
         Console.WriteLine("=== Diagnostic mode complete ===");
 
-        resources.Dispose();
+        FrameDrawingResources.Return(resources);
     }
 }
