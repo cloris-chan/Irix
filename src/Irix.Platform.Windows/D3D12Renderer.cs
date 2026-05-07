@@ -26,14 +26,15 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private ID3D12CommandAllocator*[] _allocators;
     private ID3D12GraphicsCommandList* _list;
     private ID3D12Fence* _fence;
+    private SafeHandle? _fenceEventOwner;
     private HANDLE _fenceEvent;
     private ulong[] _fenceValues;
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
     private D3D12TextRenderer? _textRenderer;
+    private readonly Lock _resizeLock = new();
     private int _width;
     private int _height;
-    private bool _hasRendered;
     private bool _disposed;
     private bool _deviceRemoved;
     private string? _deviceErrorReason;
@@ -80,7 +81,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
             BufferUsage = DXGI_USAGE.DXGI_USAGE_RENDER_TARGET_OUTPUT,
             BufferCount = FrameCount,
-            Scaling = DXGI_SCALING.DXGI_SCALING_STRETCH,
+            Scaling = DXGI_SCALING.DXGI_SCALING_NONE,
             SwapEffect = DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD
         };
         IDXGISwapChain1* sc1;
@@ -128,7 +129,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _device->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, typeof(ID3D12Fence).GUID, out var fenceObj);
         _fence = (ID3D12Fence*)fenceObj;
         _fenceValues = new ulong[FrameCount];
-        _fenceEvent = new HANDLE(PInvoke.CreateEvent(null, true, false, null).DangerousGetHandle());
+        _fenceEventOwner = PInvoke.CreateEvent(null, false, false, null);
+        if (_fenceEventOwner.IsInvalid)
+        {
+            throw new InvalidOperationException("Failed to create the D3D12 fence event.");
+        }
+
+        _fenceEvent = new HANDLE(_fenceEventOwner.DangerousGetHandle());
 
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
         _renderer2D = new D3D12Renderer2D(_device);
@@ -137,8 +144,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public D3D12Renderer2D Renderer2D => _renderer2D!;
 
-    public int Width => _width;
-    public int Height => _height;
+    public int Width => Volatile.Read(ref _width);
+    public int Height => Volatile.Read(ref _height);
 
     public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false);
 
@@ -154,29 +161,94 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _textRenderer?.ResetDiagnostics();
     }
 
+    public bool HasPendingResize
+    {
+        get
+        {
+            lock (_resizeLock)
+            {
+                return _pendingResize;
+            }
+        }
+    }
+
+    public int PendingWidth
+    {
+        get
+        {
+            lock (_resizeLock)
+            {
+                return _pendingWidth;
+            }
+        }
+    }
+
+    public int PendingHeight
+    {
+        get
+        {
+            lock (_resizeLock)
+            {
+                return _pendingHeight;
+            }
+        }
+    }
+
     public void Resize(int newWidth, int newHeight)
     {
-        if (newWidth == _width && newHeight == _height) return;
         if (newWidth <= 0 || newHeight <= 0) return;
-        if (_deviceRemoved) return;
+        if (IsDeviceRemoved) return;
 
-        if (!_hasRendered)
+        lock (_resizeLock)
         {
-            // Defer resize until after first frame
+            if (newWidth == Volatile.Read(ref _width) && newHeight == Volatile.Read(ref _height))
+            {
+                _pendingResize = false;
+                return;
+            }
+
             _pendingWidth = newWidth;
             _pendingHeight = newHeight;
             _pendingResize = true;
-            return;
         }
-
-        ApplyResize(newWidth, newHeight);
     }
 
-    private void ApplyResize(int newWidth, int newHeight)
+    public bool ApplyPendingResize()
     {
-        WaitForGpu();
+        if (IsDeviceRemoved) return false;
+
+        int newWidth;
+        int newHeight;
+        lock (_resizeLock)
+        {
+            if (!_pendingResize)
+            {
+                return false;
+            }
+
+            newWidth = _pendingWidth;
+            newHeight = _pendingHeight;
+            _pendingResize = false;
+        }
+
+        return ApplyResize(newWidth, newHeight);
+    }
+
+    private bool ApplyResize(int newWidth, int newHeight)
+    {
+        if (newWidth == Volatile.Read(ref _width) && newHeight == Volatile.Read(ref _height))
+        {
+            return false;
+        }
+
+        if (!WaitForGpu())
+        {
+            return false;
+        }
+
         _textRenderer?.ReleaseFrameResourcesForResize();
 
+        // Release all back buffer references before ResizeBuffers
         for (var i = 0; i < FrameCount; i++)
         {
             if (_renderTargets[i] != null)
@@ -193,7 +265,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         catch (COMException ex)
         {
             HandleDeviceError(ex, "ResizeBuffers");
-            return;
+            return false;
         }
 
         var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -205,11 +277,11 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             rtv.ptr += _rtvSize;
         }
 
-        _width = newWidth;
-        _height = newHeight;
+        Volatile.Write(ref _width, newWidth);
+        Volatile.Write(ref _height, newHeight);
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
         _textRenderer?.RecreateFrameResources(_renderTargets);
-        _pendingResize = false;
+        return true;
     }
 
     public void BeginFrame()
@@ -247,9 +319,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var pList = (ID3D12CommandList*)_list;
         _queue->ExecuteCommandLists(1, &pList);
 
-        try { _swapChain->Present(1, 0); }
-        catch (COMException ex) { HandleDeviceError(ex, "Present"); return; }
-        MoveToNextFrame();
+        if (!Present()) return;
+        _ = MoveToNextFrame();
     }
 
     /// <summary>
@@ -290,13 +361,16 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var bgColor = stackalloc float[] { clearR, clearG, clearB, clearA };
         _list->ClearRenderTargetView(rtv, new ReadOnlySpan<float>(bgColor, 4));
 
+        var width = Width;
+        var height = Height;
+
         // Set viewport and scissor from actual window dimensions
-        var viewport = new D3D12_VIEWPORT { Width = _width, Height = _height, MaxDepth = 1.0f };
+        var viewport = new D3D12_VIEWPORT { Width = width, Height = height, MaxDepth = 1.0f };
         _list->RSSetViewports(1, &viewport);
-        var scissor = new RECT { right = _width, bottom = _height };
+        var scissor = new RECT { right = width, bottom = height };
         _list->RSSetScissorRects(1, &scissor);
 
-        _renderer2D!.RenderRectangles(_list, rects, _width, _height);
+        _renderer2D!.RenderRectangles(_list, rects, width, height);
 
         var textRenderer = _textRenderer;
         var hasText = textRuns.Length > 0 && textRenderer != null;
@@ -323,30 +397,44 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             }
         }
 
-        try { _swapChain->Present(1, 0); }
-        catch (COMException ex) { HandleDeviceError(ex, "Present"); return; }
-        MoveToNextFrame();
+        if (!Present()) return;
+        _ = MoveToNextFrame();
     }
 
-    private void MoveToNextFrame()
+    private bool Present()
     {
-        _hasRendered = true;
-
-        // 1. Signal current frame fence and wait for it
-        var fence = _fenceValues[_frameIndex];
-        _queue->Signal(_fence, fence);
-        _frameIndex = _swapChain->GetCurrentBackBufferIndex();
-        if (_fence->GetCompletedValue() < _fenceValues[_frameIndex])
+        try
         {
-            _fence->SetEventOnCompletion(_fenceValues[_frameIndex], _fenceEvent);
-            PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
+            _swapChain->Present(1, 0);
+            return true;
         }
-        _fenceValues[_frameIndex] = fence + 1;
-
-        // 2. Apply pending resize after GPU is idle (fence completed, safe to release backbuffers)
-        if (_pendingResize)
+        catch (COMException ex)
         {
-            ApplyResize(_pendingWidth, _pendingHeight);
+            HandleDeviceError(ex, "Present");
+            return false;
+        }
+    }
+
+    private bool MoveToNextFrame()
+    {
+        try
+        {
+            var fence = _fenceValues[_frameIndex];
+            _queue->Signal(_fence, fence);
+            _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+            if (_fence->GetCompletedValue() < _fenceValues[_frameIndex])
+            {
+                _fence->SetEventOnCompletion(_fenceValues[_frameIndex], _fenceEvent);
+                PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
+            }
+
+            _fenceValues[_frameIndex] = fence + 1;
+            return true;
+        }
+        catch (COMException ex)
+        {
+            HandleDeviceError(ex, "MoveToNextFrame");
+            return false;
         }
     }
 
@@ -370,30 +458,48 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         return false;
     }
 
-    private void WaitForGpu()
+    private bool WaitForGpu()
     {
-        var fence = _fenceValues[_frameIndex];
-        _queue->Signal(_fence, fence);
-        _fence->SetEventOnCompletion(fence, _fenceEvent);
-        PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
-        for (var i = 0; i < FrameCount; i++) _fenceValues[i] = fence + 1;
+        try
+        {
+            var fence = _fenceValues[_frameIndex];
+            _queue->Signal(_fence, fence);
+            _fence->SetEventOnCompletion(fence, _fenceEvent);
+            PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
+            for (var i = 0; i < FrameCount; i++) _fenceValues[i] = fence + 1;
+            return true;
+        }
+        catch (COMException ex)
+        {
+            HandleDeviceError(ex, "WaitForGpu");
+            return false;
+        }
     }
 
     public void Dispose()
     {
         if (_disposed) return;
-        WaitForGpu();
+        _ = WaitForGpu();
         if (_textRenderer != null) { _textRenderer.Dispose(); _textRenderer = null; }
         if (_renderer2D != null) { _renderer2D.Dispose(); _renderer2D = null; }
         for (var i = 0; i < FrameCount; i++)
         {
-            _renderTargets[i]->Release();
-            _allocators[i]->Release();
+            if (_renderTargets[i] != null)
+            {
+                _renderTargets[i]->Release();
+            }
+
+            if (_allocators[i] != null)
+            {
+                _allocators[i]->Release();
+            }
         }
         _list->Release();
         _rtvHeap->Release();
         _fence->Release();
-        PInvoke.CloseHandle(_fenceEvent);
+        _fenceEventOwner?.Dispose();
+        _fenceEventOwner = null;
+        _fenceEvent = default;
         _swapChain->Release();
         _queue->Release();
         _device->Release();

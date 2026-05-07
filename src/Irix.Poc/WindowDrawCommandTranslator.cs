@@ -4,8 +4,11 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatchBatchTranslator
+internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 {
+    private readonly INativeWindow _window;
+    private readonly Action? _prepareFrame;
+    private readonly Func<PixelRectangle>? _viewportProvider;
     private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(
         LayoutStyle.Default,
         new DrawingStyle(
@@ -16,13 +19,32 @@ internal sealed class WindowDrawCommandTranslator(INativeWindow window) : IPatch
         TextStyle: TextStyle.Default,
         ButtonTextStyle: TextStyle.Default));
 
+    private VirtualNodeTree _lastTree;
+
+    public WindowDrawCommandTranslator(INativeWindow window)
+        : this(window, prepareFrame: null, viewportProvider: null)
+    {
+    }
+
+    public WindowDrawCommandTranslator(
+        INativeWindow window,
+        Action? prepareFrame,
+        Func<PixelRectangle>? viewportProvider)
+    {
+        _window = window;
+        _prepareFrame = prepareFrame;
+        _viewportProvider = viewportProvider;
+    }
+
     public RenderFrameBatch Translate(PatchBatch patchBatch)
     {
-        if (patchBatch.Count == 0)
+        if (patchBatch.Count > 0)
         {
-            return new RenderFrameBatch(new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0), []);
+            _lastTree = new VirtualNodeTree(patchBatch.Root);
         }
 
-        return _renderPipeline.Build(patchBatch.Root, window.Region.PhysicalBounds);
+        _prepareFrame?.Invoke();
+        var viewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
+        return _renderPipeline.Build(_lastTree.Root, viewport);
     }
 }

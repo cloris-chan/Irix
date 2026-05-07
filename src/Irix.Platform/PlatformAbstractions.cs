@@ -71,7 +71,9 @@ public interface INativeWindow : IDisposable
 {
     string Title { get; }
 
-    ScreenRegion Region { get; }
+    ScreenRegion Region { get; set; }
+
+    bool ExternalRenderingEnabled { get; set; }
 
     nint Handle { get; }
 

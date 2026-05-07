@@ -87,7 +87,7 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
-    public async Task CompositorLoop_skips_translation_and_rendering_when_patch_count_is_zero()
+    public async Task CompositorLoop_translates_zero_count_patches_for_viewport_changes()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var drawOwner = new TrackingMemoryOwner<DrawCommand>([]);
@@ -95,17 +95,39 @@ public sealed class BatchOwnershipTests
         var compositor = new RecordingCompositor();
         await using var loop = new CompositorLoop(translator, compositor);
 
-        // Publish a no-change PatchBatch (Count = 0)
+        // Publish a no-change PatchBatch (Count = 0) — still translated for viewport sync
         var emptyOwner = new TrackingMemoryOwner<VirtualNodePatch>([]);
         var emptyBatch = new PatchBatch(emptyOwner, 0);
         await loop.PublishAsync(emptyBatch, cancellationToken);
 
-        // Wait briefly to let the processing loop run
-        await Task.Delay(100, cancellationToken);
+        await compositor.WaitForRenderAsync(cancellationToken);
 
-        Assert.Equal(0, translator.TranslateCallCount);
-        Assert.Equal(0, compositor.RenderCallCount);
+        Assert.Equal(1, translator.TranslateCallCount);
+        Assert.Equal(1, compositor.RenderCallCount);
         Assert.Equal(1, emptyOwner.DisposeCallCount);
+    }
+
+    [Fact]
+    public async Task CompositorLoop_coalesces_render_requests_during_active_render()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new BlockingCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+
+        await loop.RequestRenderAsync(cancellationToken);
+        await compositor.WaitForRenderCountAsync(1, cancellationToken);
+
+        await loop.RequestRenderAsync(cancellationToken);
+        await loop.RequestRenderAsync(cancellationToken);
+        await loop.RequestRenderAsync(cancellationToken);
+
+        compositor.Release();
+        await compositor.WaitForRenderCountAsync(2, cancellationToken);
+        await Task.Delay(50, cancellationToken);
+
+        Assert.Equal(2, translator.TranslateCallCount);
+        Assert.Equal(2, compositor.RenderCallCount);
     }
 
     private sealed class TrackingMemoryOwner<T>(T[] buffer) : IMemoryOwner<T>
@@ -134,6 +156,23 @@ public sealed class BatchOwnershipTests
         }
     }
 
+    private sealed class AllocatingTranslator : IPatchBatchTranslator
+    {
+        public int TranslateCallCount { get; private set; }
+
+        public RenderFrameBatch Translate(PatchBatch patchBatch)
+        {
+            TranslateCallCount++;
+            var owner = new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(
+                    DrawCommandKind.DrawTextRun,
+                    Rect: new DrawRect(16, 16, 928, 32))
+            ]);
+            return new RenderFrameBatch(new DrawCommandBatch(owner, 1), []);
+        }
+    }
+
     private sealed class RecordingCompositor : ICompositor
     {
         private readonly TaskCompletionSource _rendered = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -150,6 +189,30 @@ public sealed class BatchOwnershipTests
         public Task WaitForRenderAsync(CancellationToken cancellationToken)
         {
             return _rendered.Task.WaitAsync(cancellationToken);
+        }
+    }
+
+    private sealed class BlockingCompositor : ICompositor
+    {
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _renderCallCount;
+
+        public int RenderCallCount => Volatile.Read(ref _renderCallCount);
+
+        public async ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
+        {
+            Interlocked.Increment(ref _renderCallCount);
+            await _released.Task.WaitAsync(cancellationToken);
+        }
+
+        public void Release()
+        {
+            _released.TrySetResult();
+        }
+
+        public Task WaitForRenderCountAsync(int expectedCount, CancellationToken cancellationToken)
+        {
+            return WaitForConditionAsync(() => RenderCallCount >= expectedCount, cancellationToken);
         }
     }
 

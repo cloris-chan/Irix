@@ -119,7 +119,9 @@ public sealed class DrawingBackendCompositorTests
 
         public string Title => "Test";
 
-        public ScreenRegion Region => new(0, new PixelRectangle(0, 0, 960, 540));
+        public ScreenRegion Region { get; set; } = new(0, new PixelRectangle(0, 0, 960, 540));
+
+        public bool ExternalRenderingEnabled { get; set; }
 
         public nint Handle => nint.Zero;
 

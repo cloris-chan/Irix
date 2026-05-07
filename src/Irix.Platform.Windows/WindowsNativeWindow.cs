@@ -95,7 +95,9 @@ internal sealed class WindowsNativeWindow : INativeWindow
 
     public string Title { get; }
 
-    public ScreenRegion Region { get; }
+    public ScreenRegion Region { get; set; }
+
+    public bool ExternalRenderingEnabled { get; set; }
 
     public unsafe nint Handle => (nint)_windowHandle.Value;
 
@@ -242,6 +244,12 @@ internal sealed class WindowsNativeWindow : INativeWindow
     {
         PAINTSTRUCT paintStruct;
         var deviceContext = PInvoke.BeginPaint(windowHandle, &paintStruct);
+        if (ExternalRenderingEnabled)
+        {
+            PInvoke.EndPaint(windowHandle, paintStruct);
+            return new LRESULT(0);
+        }
+
         RECT clientRectangle;
         PInvoke.GetClientRect(windowHandle, &clientRectangle);
         _ = PInvoke.FillRect(deviceContext, &clientRectangle, PInvoke.GetSysColorBrush(SYS_COLOR_INDEX.COLOR_WINDOW));
@@ -338,20 +346,29 @@ internal sealed class WindowsNativeWindow : INativeWindow
 
     private static unsafe void HandleSizeChanged(HWND windowHandle)
     {
-        PInvoke.InvalidateRect(windowHandle, null, true);
-
         var window = GetWindow(windowHandle);
-        if (window?.SizeChanged is { } sink)
+        if (window is null) return;
+
+        RECT clientRect;
+        PInvoke.GetClientRect(windowHandle, &clientRect);
+        var width = clientRect.right - clientRect.left;
+        var height = clientRect.bottom - clientRect.top;
+
+        if (width > 0 && height > 0)
         {
-            RECT clientRect;
-            PInvoke.GetClientRect(windowHandle, &clientRect);
-            var width = clientRect.right - clientRect.left;
-            var height = clientRect.bottom - clientRect.top;
-            if (width > 0 && height > 0)
-            {
-                sink(width, height);
-            }
+            // Update Region immediately so layout pipeline sees correct viewport
+            window.Region = new ScreenRegion(
+                window.Region.ScreenId,
+                new PixelRectangle(
+                    window.Region.PhysicalBounds.X,
+                    window.Region.PhysicalBounds.Y,
+                    width,
+                    height));
+
+            window.SizeChanged?.Invoke(width, height);
         }
+
+        PInvoke.InvalidateRect(windowHandle, null, !window.ExternalRenderingEnabled);
     }
 
     private void PublishPointerEvent(RawInputEventKind kind, LPARAM lParam, PointerButton button = PointerButton.None)

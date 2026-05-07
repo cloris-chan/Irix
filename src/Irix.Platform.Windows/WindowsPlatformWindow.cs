@@ -15,7 +15,17 @@ internal sealed class WindowsPlatformWindow(
 
     public string Title => _window.Title;
 
-    public ScreenRegion Region => _window.Region;
+    public ScreenRegion Region
+    {
+        get => _window.Region;
+        set => _window.Region = value;
+    }
+
+    public bool ExternalRenderingEnabled
+    {
+        get => _window.ExternalRenderingEnabled;
+        set => _window.ExternalRenderingEnabled = value;
+    }
 
     public nint Handle => _window.Handle;
 

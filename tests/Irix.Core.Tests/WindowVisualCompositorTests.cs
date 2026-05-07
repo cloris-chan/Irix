@@ -126,7 +126,9 @@ public sealed class WindowVisualCompositorTests
 
         public string Title => "Test";
 
-        public ScreenRegion Region => region;
+        public ScreenRegion Region { get; set; } = region;
+
+        public bool ExternalRenderingEnabled { get; set; }
 
         public nint Handle => nint.Zero;
 

@@ -1,3 +1,4 @@
+using Irix;
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -15,20 +16,41 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-resize"))
+        {
+            RunResizeDiagnosticMode();
+            return;
+        }
+
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
+        window.ExternalRenderingEnabled = true;
+        window.Show();
 
         // D3D12 rendering path
         var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-        window.SizeChanged += (w, h) => d3d12Renderer.Resize(w, h);
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
-        var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend);
 
-        var drawCommandTranslator = new WindowDrawCommandTranslator(window);
-        await using var compositorLoop = new CompositorLoop(drawCommandTranslator, new CompositeCompositor(
-            new ConsoleCompositor(Console.Out),
-            d3d12Compositor));
+        var drawCommandTranslator = new WindowDrawCommandTranslator(
+            window,
+            () => _ = d3d12Renderer.ApplyPendingResize(),
+            () =>
+            {
+                var bounds = window.Region.PhysicalBounds;
+                return new PixelRectangle(bounds.X, bounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
+            });
+        using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend);
+        var compositor = args.Contains("--console")
+            ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
+            : (ICompositor)d3d12Compositor;
+        await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
+
+        window.SizeChanged += (w, h) =>
+        {
+            d3d12Renderer.Resize(w, h);
+            _ = compositorLoop.RequestRenderAsync();
+        };
         using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
 
         platformHost.TopologyChanged += OnTopologyChanged;
@@ -39,7 +61,6 @@ internal static class Program
 
         await runtime.StartAsync();
 
-        window.Show();
         window.RunMessageLoop();
 
         Console.WriteLine($"Final count: {runtime.CurrentModel.Count}");
@@ -155,5 +176,73 @@ internal static class Program
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);
+    }
+
+    private static void RunResizeDiagnosticMode()
+    {
+        using var platformHost = new WindowsPlatformHost();
+        using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
+
+        using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+
+        var resources = FrameDrawingResources.Rent();
+        try
+        {
+            var textStyle = resources.AddTextStyle(TextStyle.Default);
+            var text = resources.AddText("Resize Diagnostic: DirectWrite + D3D12 fence stress");
+            resources.Seal();
+
+            var commands = new DrawCommand[]
+            {
+                new(DrawCommandKind.FillRect,
+                    Rect: new DrawRect(0, 0, 1280, 720),
+                    Color: DrawColor.Opaque(32, 32, 32)),
+                new(DrawCommandKind.FillRect,
+                    Rect: new DrawRect(16, 80, 300, 44),
+                    Color: DrawColor.Opaque(52, 120, 246)),
+                new(DrawCommandKind.DrawTextRun,
+                    Rect: new DrawRect(16, 16, 900, 36),
+                    Resource: textStyle,
+                    Text: text,
+                    Color: DrawColor.Opaque(255, 255, 255))
+            };
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            for (var i = 0; i < 80; i++)
+            {
+                var width = 720 + i % 17 * 19;
+                var height = 420 + i % 11 * 17;
+                d3d12Renderer.Resize(width, height);
+                _ = d3d12Renderer.ApplyPendingResize();
+
+                d3d12Backend.BeginFrame(default);
+                d3d12Backend.Execute(commands, resources);
+                d3d12Backend.EndFrame();
+
+                if (d3d12Renderer.IsDeviceRemoved)
+                {
+                    break;
+                }
+
+                if (i % 8 == 0)
+                {
+                    GC.Collect();
+                    GC.WaitForPendingFinalizers();
+                }
+            }
+
+            Console.WriteLine("=== D3D12 Resize Diagnostics ===");
+            Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
+            Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
+            Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
+            Console.WriteLine("=== Resize diagnostic mode complete ===");
+        }
+        finally
+        {
+            FrameDrawingResources.Return(resources);
+        }
     }
 }
