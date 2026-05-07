@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Irix.Drawing;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -34,6 +35,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private int _height;
     private bool _hasRendered;
     private bool _disposed;
+    private bool _deviceRemoved;
+    private int _pendingWidth;
+    private int _pendingHeight;
+    private bool _pendingResize;
 
     public D3D12Renderer(nint hwnd, int width, int height)
     {
@@ -136,16 +141,41 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public int Width => _width;
     public int Height => _height;
 
+    public bool IsDeviceRemoved => _deviceRemoved;
+
+    public D3D12TextRenderer.TextRendererDiagnostics? GetTextDiagnostics()
+    {
+        return _textRenderer?.GetDiagnostics();
+    }
+
+    public void ResetTextDiagnostics()
+    {
+        _textRenderer?.ResetDiagnostics();
+    }
+
     public void Resize(int newWidth, int newHeight)
     {
         if (newWidth == _width && newHeight == _height) return;
         if (newWidth <= 0 || newHeight <= 0) return;
-        if (!_hasRendered) return; // Skip resize before first frame (e.g., initial WM_SIZE from ShowWindow)
+        if (_deviceRemoved) return;
 
+        if (!_hasRendered)
+        {
+            // Defer resize until after first frame
+            _pendingWidth = newWidth;
+            _pendingHeight = newHeight;
+            _pendingResize = true;
+            return;
+        }
+
+        ApplyResize(newWidth, newHeight);
+    }
+
+    private void ApplyResize(int newWidth, int newHeight)
+    {
         WaitForGpu();
         _textRenderer?.ReleaseFrameResourcesForResize();
 
-        // Release back buffer references before ResizeBuffers
         for (var i = 0; i < FrameCount; i++)
         {
             if (_renderTargets[i] != null)
@@ -155,7 +185,15 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             }
         }
 
-        _swapChain->ResizeBuffers(FrameCount, (uint)newWidth, (uint)newHeight, DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+        try
+        {
+            _swapChain->ResizeBuffers(FrameCount, (uint)newWidth, (uint)newHeight, DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+        }
+        catch (COMException ex)
+        {
+            HandleDeviceError(ex);
+            return;
+        }
 
         var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
         for (var i = 0; i < FrameCount; i++)
@@ -170,6 +208,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _height = newHeight;
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
         _textRenderer?.RecreateFrameResources(_renderTargets);
+        _pendingResize = false;
     }
 
     public void BeginFrame()
@@ -180,6 +219,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public void ClearAndPresent(float r, float g, float b, float a = 1.0f)
     {
+        if (_deviceRemoved) return;
         // Transition to render target
         var barrier = new D3D12_RESOURCE_BARRIER();
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -205,7 +245,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var pList = (ID3D12CommandList*)_list;
         _queue->ExecuteCommandLists(1, &pList);
 
-        _swapChain->Present(1, 0);
+        try { _swapChain->Present(1, 0); }
+        catch (COMException ex) { HandleDeviceError(ex); return; }
         MoveToNextFrame();
     }
 
@@ -229,6 +270,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         float clearB,
         float clearA)
     {
+        if (_deviceRemoved) return;
         // Transition to render target
         var barrier = new D3D12_RESOURCE_BARRIER();
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -274,13 +316,21 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             textRenderer!.Render(_frameIndex, textRuns, resources);
         }
 
-        _swapChain->Present(1, 0);
+        try { _swapChain->Present(1, 0); }
+        catch (COMException ex) { HandleDeviceError(ex); return; }
         MoveToNextFrame();
     }
 
     private void MoveToNextFrame()
     {
         _hasRendered = true;
+
+        // Apply any pending resize after the first frame is rendered
+        if (_pendingResize)
+        {
+            ApplyResize(_pendingWidth, _pendingHeight);
+        }
+
         var fence = _fenceValues[_frameIndex];
         _queue->Signal(_fence, fence);
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
@@ -290,6 +340,12 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
         }
         _fenceValues[_frameIndex] = fence + 1;
+    }
+
+    private void HandleDeviceError(COMException ex)
+    {
+        _deviceRemoved = true;
+        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Device error (0x{ex.ErrorCode:X8}). No automatic recovery.");
     }
 
     private void WaitForGpu()

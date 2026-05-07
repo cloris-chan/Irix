@@ -308,12 +308,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] Phase 3: D3D12 文本渲染（D3D11On12 + Direct2D + DirectWrite overlay）
 - [x] 将文本内容从 `ResourceHandle` 分离为 frame-local `FrameDrawingResources + TextSlice/IFrameResourceResolver`
 - [x] 建立 `TextStyle` resource cache 与 DirectWrite bounded `TextFormat/TextLayout` cache
-- [x] `D3D12Renderer.Resize()` 已接线：`WM_SIZE` → `INativeWindow.SizeChanged` → `D3D12Renderer.Resize()`，含 D2D target clear + D3D11 flush + 首帧前跳过保护
-- [x] D3D12 debug layer：调试器附加时启用 `ID3D12Debug::EnableDebugLayer()`
-- [x] `D3D12TextRenderer` 缓存诊断：`TextRendererDiagnostics` 含 format/layout 命中率、淘汰次数、缓存数量
+- [x] D3D12 device-removed 检测：`RenderFrame`/`ClearAndPresent`/`ApplyResize` 中 try-catch `COMException` 设置 `_deviceRemoved` 标志，后续帧跳过渲染
+- [x] D3D12 diagnostics 透传：`D3D12Renderer.GetTextDiagnostics()` / `ResetTextDiagnostics()` 暴露 `TextRendererDiagnostics`
 - [x] TextSlice 生命周期测试：frame resource return/arena reset 后旧 slice 必须失效
-- [x] Patch 应用级测试：验证 Update/Add/Remove/ReplaceRoot/Keyed reconciliation 的布局等价性
+- [x] Patch diff 等价性测试：验证 Update/Add/Remove/ReplaceRoot/Keyed reconciliation 的布局等价性（注：非 RetainedTree.Apply）
 - [x] 文本渲染正确性测试：英文、中文、emoji、混合 unicode、空文本、超长文本、按钮居中、DPI 缩放
+- [x] D3D12 诊断 smoke mode：`--diagnose` 渲染 3 帧并输出 TextRendererDiagnostics 缓存统计
 - [ ] 设计显式 glyph atlas/cache（仅当后续脱离 DirectWrite 或需要跨 backend glyph 资源复用时推进）
 - [ ] 增加 GPU device-lost 检测、设备/Swapchain 重建与失败上报路径
 

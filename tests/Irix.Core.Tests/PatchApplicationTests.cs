@@ -7,9 +7,11 @@ namespace Irix.Core.Tests;
 
 /// <summary>
 /// Tests that verify patches produced by VirtualNodeDiffer are semantically correct:
-/// after applying all patches to the old tree, the layout output must match the new tree's layout.
+/// PatchBatch.Root must produce the same layout as if we built directly from the new tree.
+/// NOTE: These test the diff-outputs-layout equivalence, not a retained-tree Apply(patches) path.
+/// When a real RetainedTree.Apply(PatchBatch) is implemented, add dedicated tests for that.
 /// </summary>
-public sealed class PatchApplicationTests
+public sealed class PatchDiffEquivalenceTests
 {
     [Fact]
     public void Update_patch_content_change_produces_correct_layout()
