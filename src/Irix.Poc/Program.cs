@@ -150,6 +150,7 @@ internal static class Program
         }
 
         Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
+        Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
         Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
         Console.WriteLine("=== Diagnostic mode complete ===");
 

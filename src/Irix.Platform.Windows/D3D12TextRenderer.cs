@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Irix.Drawing;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -42,6 +43,8 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private int _diagnosticLayoutMisses;
     private int _diagnosticFormatEvictions;
     private int _diagnosticLayoutEvictions;
+    private bool _deviceRemoved;
+    private string? _deviceErrorReason;
 
     public D3D12TextRenderer(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12Resource*[] backBuffers)
     {
@@ -106,6 +109,9 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         RecreateFrameResources(backBuffers);
     }
 
+    public bool IsDeviceRemoved => _deviceRemoved;
+    public string? DeviceErrorReason => _deviceErrorReason;
+
     public void RecreateFrameResources(ID3D12Resource*[] backBuffers)
     {
         ReleaseFrameResources();
@@ -156,60 +162,93 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         ReleaseFrameResources();
     }
 
-    public void Render(uint frameIndex, ReadOnlySpan<TextData> textRuns, IFrameResourceResolver resources)
+    public bool Render(uint frameIndex, ReadOnlySpan<TextData> textRuns, IFrameResourceResolver resources)
     {
         if (textRuns.Length == 0 || frameIndex >= _wrappedBackBuffers.Length)
         {
-            return;
+            return true;
+        }
+        if (_deviceRemoved)
+        {
+            return false;
         }
 
-        var wrappedResource = _wrappedBackBuffers[frameIndex];
-        var wrappedResourceList = &wrappedResource;
-        _d3d11On12Device->AcquireWrappedResources(wrappedResourceList, 1);
-
-        var endDrawResult = default(HRESULT);
         try
         {
-            _d2dContext->SetTarget((ID2D1Image*)_renderTargets[frameIndex]);
-            _d2dContext->BeginDraw();
-            var identity = CreateIdentityTransform();
-            _d2dContext->SetTransform(&identity);
+            var wrappedResource = _wrappedBackBuffers[frameIndex];
+            var wrappedResourceList = &wrappedResource;
+            _d3d11On12Device->AcquireWrappedResources(wrappedResourceList, 1);
 
-            foreach (var textRun in textRuns)
+            var endDrawResult = default(HRESULT);
+            try
             {
-                var text = resources.Resolve(textRun.Text);
-                if (text.IsEmpty || textRun.Width <= 0 || textRun.Height <= 0)
+                _d2dContext->SetTarget((ID2D1Image*)_renderTargets[frameIndex]);
+                _d2dContext->BeginDraw();
+                var identity = CreateIdentityTransform();
+                _d2dContext->SetTransform(&identity);
+
+                foreach (var textRun in textRuns)
                 {
-                    continue;
+                    var text = resources.Resolve(textRun.Text);
+                    if (text.IsEmpty || textRun.Width <= 0 || textRun.Height <= 0)
+                    {
+                        continue;
+                    }
+
+                    var color = new D2D1_COLOR_F { r = textRun.R, g = textRun.G, b = textRun.B, a = textRun.A };
+                    _textBrush->SetColor(&color);
+
+                    var style = resources.ResolveTextStyle(textRun.Style).Normalize();
+                    var layout = GetTextLayout(text, style, textRun.Width, textRun.Height);
+                    var origin = new D2D_POINT_2F
+                    {
+                        x = textRun.X,
+                        y = textRun.Y
+                    };
+
+                    _d2dContext->DrawTextLayout(
+                        origin,
+                        layout,
+                        (ID2D1Brush*)_textBrush,
+                        D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP);
                 }
 
-                var color = new D2D1_COLOR_F { r = textRun.R, g = textRun.G, b = textRun.B, a = textRun.A };
-                _textBrush->SetColor(&color);
-
-                var style = resources.ResolveTextStyle(textRun.Style).Normalize();
-                var layout = GetTextLayout(text, style, textRun.Width, textRun.Height);
-                var origin = new D2D_POINT_2F
-                {
-                    x = textRun.X,
-                    y = textRun.Y
-                };
-
-                _d2dContext->DrawTextLayout(
-                    origin,
-                    layout,
-                    (ID2D1Brush*)_textBrush,
-                    D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                endDrawResult = _d2dContext->EndDraw(null, null);
+            }
+            finally
+            {
+                _d3d11On12Device->ReleaseWrappedResources(wrappedResourceList, 1);
+                _d3d11Context->Flush();
             }
 
-            endDrawResult = _d2dContext->EndDraw(null, null);
+            if (!SucceededOrMarkDeviceRemoved(endDrawResult, "EndDraw"))
+            {
+                return false;
+            }
         }
-        finally
+        catch (COMException ex)
         {
-            _d3d11On12Device->ReleaseWrappedResources(wrappedResourceList, 1);
-            _d3d11Context->Flush();
+            MarkDeviceRemoved($"TextRenderer COMException: 0x{ex.ErrorCode:X8}");
+            return false;
         }
 
-        endDrawResult.ThrowOnFailure();
+        return true;
+    }
+
+    private bool SucceededOrMarkDeviceRemoved(HRESULT hr, string context)
+    {
+        if (hr.Succeeded) return true;
+        _deviceRemoved = true;
+        _deviceErrorReason = $"{context}: HRESULT 0x{unchecked((uint)hr.Value):X8}";
+        System.Diagnostics.Debug.WriteLine($"[D3D12TextRenderer] {_deviceErrorReason}");
+        return false;
+    }
+
+    private void MarkDeviceRemoved(string reason)
+    {
+        _deviceRemoved = true;
+        _deviceErrorReason = reason;
+        System.Diagnostics.Debug.WriteLine($"[D3D12TextRenderer] {reason}");
     }
 
     private IDWriteTextLayout* GetTextLayout(ReadOnlySpan<char> text, TextStyle style, float width, float height)

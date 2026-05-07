@@ -36,6 +36,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private bool _hasRendered;
     private bool _disposed;
     private bool _deviceRemoved;
+    private string? _deviceErrorReason;
     private int _pendingWidth;
     private int _pendingHeight;
     private bool _pendingResize;
@@ -62,8 +63,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var factory = (IDXGIFactory4*)factoryObj;
 
         // D3D12 device
-        // D3D12_CREATE_DEVICE_FLAG_DEBUG = 0x1
-        var deviceFlags = System.Diagnostics.Debugger.IsAttached ? 1u : 0u;
         PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj);
         _device = (ID3D12Device*)deviceObj;
 
@@ -141,7 +140,9 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public int Width => _width;
     public int Height => _height;
 
-    public bool IsDeviceRemoved => _deviceRemoved;
+    public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false);
+
+    public string? DeviceErrorReason => _deviceErrorReason ?? _textRenderer?.DeviceErrorReason;
 
     public D3D12TextRenderer.TextRendererDiagnostics? GetTextDiagnostics()
     {
@@ -191,7 +192,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (COMException ex)
         {
-            HandleDeviceError(ex);
+            HandleDeviceError(ex, "ResizeBuffers");
             return;
         }
 
@@ -247,7 +248,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _queue->ExecuteCommandLists(1, &pList);
 
         try { _swapChain->Present(1, 0); }
-        catch (COMException ex) { HandleDeviceError(ex); return; }
+        catch (COMException ex) { HandleDeviceError(ex, "Present"); return; }
         MoveToNextFrame();
     }
 
@@ -314,11 +315,16 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         if (hasText)
         {
-            textRenderer!.Render(_frameIndex, textRuns, resources);
+            if (!textRenderer!.Render(_frameIndex, textRuns, resources))
+            {
+                _deviceRemoved = true;
+                _deviceErrorReason = textRenderer.DeviceErrorReason ?? "TextRenderer render failed";
+                return;
+            }
         }
 
         try { _swapChain->Present(1, 0); }
-        catch (COMException ex) { HandleDeviceError(ex); return; }
+        catch (COMException ex) { HandleDeviceError(ex, "Present"); return; }
         MoveToNextFrame();
     }
 
@@ -344,21 +350,23 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
     }
 
-    private void HandleDeviceError(COMException ex)
+    private void HandleDeviceError(COMException ex, string context = "Unknown")
     {
         _deviceRemoved = true;
-        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Device error (0x{ex.ErrorCode:X8}). No automatic recovery.");
+        _deviceErrorReason = $"{context}: COMException 0x{ex.ErrorCode:X8}";
+        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
     }
 
     /// <summary>
     /// Check HRESULT from D3D/DXGI/D2D calls that return it directly.
     /// Sets _deviceRemoved on any failure.
     /// </summary>
-    internal static bool SucceededOrMarkDeviceRemoved(HRESULT hr, ref bool deviceRemoved)
+    internal bool SucceededOrMarkDeviceRemoved(HRESULT hr, string context)
     {
         if (hr.Succeeded) return true;
-        deviceRemoved = true;
-        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] HRESULT failure (0x{unchecked((uint)hr.Value):X8}). Device marked as removed.");
+        _deviceRemoved = true;
+        _deviceErrorReason = $"{context}: HRESULT 0x{unchecked((uint)hr.Value):X8}";
+        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
         return false;
     }
 
