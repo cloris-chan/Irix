@@ -37,6 +37,8 @@ WaitForSingleObject
 CloseHandle
 // D3D12 — CsWin32 generates these so we can inspect vtable layout
 D3D12CreateDevice
+D3D12GetDebugInterface
+ID3D12Debug
 ID3D12Device
 ID3D12CommandQueue
 ID3D12CommandAllocator

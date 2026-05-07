@@ -80,6 +80,8 @@ public interface INativeWindow : IDisposable
     void Show();
 
     void RunMessageLoop();
+
+    event Action<int, int>? SizeChanged;
 }
 
 public interface IScreenInfo

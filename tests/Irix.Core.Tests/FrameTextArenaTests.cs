@@ -57,4 +57,52 @@ public sealed class FrameTextArenaTests
         Assert.Equal("World", arena.Resolve(world).ToString());
         Assert.True(arena.Resolve(hello).IsEmpty);
     }
+
+    [Fact]
+    public void Dispose_invalidates_all_slices()
+    {
+        var arena = new FrameTextArena();
+        var text = arena.Add("Hello");
+        arena.Seal();
+        Assert.Equal("Hello", arena.Resolve(text).ToString());
+
+        arena.Dispose();
+
+        Assert.True(arena.Resolve(text).IsEmpty);
+    }
+
+    [Fact]
+    public void Add_empty_text_resolves_empty()
+    {
+        using var arena = new FrameTextArena();
+        var slice = arena.Add("");
+        arena.Seal();
+
+        Assert.True(arena.Resolve(slice).IsEmpty);
+    }
+
+    [Fact]
+    public void Add_multilingual_text_roundtrips()
+    {
+        using var arena = new FrameTextArena();
+        var chinese = arena.Add("你好世界");
+        var emoji = arena.Add("🎯🔥");
+        var mixed = arena.Add("Hello你好🎯");
+        arena.Seal();
+
+        Assert.Equal("你好世界", arena.Resolve(chinese).ToString());
+        Assert.Equal("🎯🔥", arena.Resolve(emoji).ToString());
+        Assert.Equal("Hello你好🎯", arena.Resolve(mixed).ToString());
+    }
+
+    [Fact]
+    public void Add_long_text_roundtrips()
+    {
+        using var arena = new FrameTextArena();
+        var longText = new string('A', 10_000);
+        var slice = arena.Add(longText);
+        arena.Seal();
+
+        Assert.Equal(longText, arena.Resolve(slice).ToString());
+    }
 }

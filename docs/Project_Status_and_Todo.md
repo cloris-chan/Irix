@@ -79,12 +79,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
-- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；65 个测试用例覆盖各场景
+- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；88 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 65 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、CompositorLoop 跳过、retained layout、DrawingBackendCompositor、所有权转移等）
+- 测试覆盖已扩展至 88 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 跳过、retained layout、DrawingBackendCompositor、所有权转移等）
 - `CompositorLoop` 已实现 `PatchBatch.Count == 0` 时跳过翻译与渲染，避免无变化帧清空窗口
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
 - `IDrawingBackend` 已首次落地实现：`PoCDrawingBackend`（Irix.Poc）+ `DrawingBackendCompositor`（Irix.Rendering），验证了从 `RenderFrameBatch` → `IDrawingBackend` → `INativeWindow` 的完整链路
@@ -271,7 +271,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P1
 
-- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation）；65 个测试用例
+- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation）；88 个测试用例
 - 增加 `PatchBatch` / `IMemoryOwner<T>` 异常、取消、释放路径测试
 - 增加输入路由和命中测试的最小测试覆盖
 
@@ -308,9 +308,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] Phase 3: D3D12 文本渲染（D3D11On12 + Direct2D + DirectWrite overlay）
 - [x] 将文本内容从 `ResourceHandle` 分离为 frame-local `FrameDrawingResources + TextSlice/IFrameResourceResolver`
 - [x] 建立 `TextStyle` resource cache 与 DirectWrite bounded `TextFormat/TextLayout` cache
-- [x] 将 `DrawCommandRecorder` 改为小批量 `stackalloc` + 跨 async 边界 pooled owner
-- [x] 将 `FrameDrawingResources` 改为静态池 Rent/Return 生命周期，`RenderFrameBatch.Dispose()` 归还资源到池
-- [x] `D3D12DrawingBackend` 改用 `FrameRenderList<T>`（ArrayPool 背板），消除 `List` 和 `ToArray()` 分配
+- [x] `D3D12Renderer.Resize()` 已接线：`WM_SIZE` → `INativeWindow.SizeChanged` → `D3D12Renderer.Resize()`，含 D2D target clear + D3D11 flush + 首帧前跳过保护
+- [x] D3D12 debug layer：调试器附加时启用 `ID3D12Debug::EnableDebugLayer()`
+- [x] `D3D12TextRenderer` 缓存诊断：`TextRendererDiagnostics` 含 format/layout 命中率、淘汰次数、缓存数量
+- [x] TextSlice 生命周期测试：frame resource return/arena reset 后旧 slice 必须失效
+- [x] Patch 应用级测试：验证 Update/Add/Remove/ReplaceRoot/Keyed reconciliation 的布局等价性
+- [x] 文本渲染正确性测试：英文、中文、emoji、混合 unicode、空文本、超长文本、按钮居中、DPI 缩放
 - [ ] 设计显式 glyph atlas/cache（仅当后续脱离 DirectWrite 或需要跨 backend glyph 资源复用时推进）
 - [ ] 增加 GPU device-lost 检测、设备/Swapchain 重建与失败上报路径
 

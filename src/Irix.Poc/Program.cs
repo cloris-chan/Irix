@@ -13,6 +13,7 @@ internal static class Program
 
         // D3D12 rendering path
         var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        window.SizeChanged += (w, h) => d3d12Renderer.Resize(w, h);
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
         var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend);
 

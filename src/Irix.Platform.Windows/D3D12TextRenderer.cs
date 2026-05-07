@@ -35,6 +35,14 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private ID2D1Bitmap1*[] _renderTargets = [];
     private bool _disposed;
 
+    // Diagnostic counters
+    private int _diagnosticFormatHits;
+    private int _diagnosticFormatMisses;
+    private int _diagnosticLayoutHits;
+    private int _diagnosticLayoutMisses;
+    private int _diagnosticFormatEvictions;
+    private int _diagnosticLayoutEvictions;
+
     public D3D12TextRenderer(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12Resource*[] backBuffers)
     {
         var queues = stackalloc IUnknown*[1];
@@ -213,10 +221,13 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
             {
                 if (text.SequenceEqual(entry.Text.AsSpan()))
                 {
+                    _diagnosticLayoutHits++;
                     return (IDWriteTextLayout*)entry.Layout;
                 }
             }
         }
+
+        _diagnosticLayoutMisses++;
 
         var layout = CreateTextLayout(text, style, width, height);
         var cached = new CachedTextLayout(key, text.ToString(), (nint)layout);
@@ -232,6 +243,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         if (_textLayoutOrder.Count > MaxCachedTextLayouts)
         {
             EvictOldestTextLayout();
+            _diagnosticLayoutEvictions++;
         }
 
         return layout;
@@ -260,8 +272,11 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         style = style.Normalize();
         if (_textFormats.TryGetValue(style, out var cachedTextFormat))
         {
+            _diagnosticFormatHits++;
             return (IDWriteTextFormat*)cachedTextFormat.Format;
         }
+
+        _diagnosticFormatMisses++;
 
         IDWriteTextFormat* createdFormat;
         _dwriteFactory->CreateTextFormat(
@@ -284,6 +299,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         if (_textFormatOrder.Count > MaxCachedTextFormats)
         {
             EvictOldestTextFormat();
+            _diagnosticFormatEvictions++;
         }
 
         return createdFormat;
@@ -402,6 +418,12 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
     private void ReleaseFrameResources()
     {
+        // Clear D2D context target before releasing render targets
+        if (_d2dContext != null)
+        {
+            _d2dContext->SetTarget(null);
+        }
+
         foreach (var renderTarget in _renderTargets)
         {
             if (renderTarget != null)
@@ -416,6 +438,12 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
             {
                 wrappedBackBuffer->Release();
             }
+        }
+
+        // Flush D3D11 to ensure all references are released
+        if (_d3d11Context != null)
+        {
+            _d3d11Context->Flush();
         }
 
         _renderTargets = [];
@@ -449,6 +477,39 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         if (_d3d11Device != null) _d3d11Device->Release();
         _disposed = true;
     }
+
+    public TextRendererDiagnostics GetDiagnostics()
+    {
+        return new TextRendererDiagnostics(
+            _diagnosticFormatHits,
+            _diagnosticFormatMisses,
+            _diagnosticLayoutHits,
+            _diagnosticLayoutMisses,
+            _diagnosticFormatEvictions,
+            _diagnosticLayoutEvictions,
+            _textFormats.Count,
+            _textLayoutOrder.Count);
+    }
+
+    public void ResetDiagnostics()
+    {
+        _diagnosticFormatHits = 0;
+        _diagnosticFormatMisses = 0;
+        _diagnosticLayoutHits = 0;
+        _diagnosticLayoutMisses = 0;
+        _diagnosticFormatEvictions = 0;
+        _diagnosticLayoutEvictions = 0;
+    }
+
+    public readonly record struct TextRendererDiagnostics(
+        int FormatHits,
+        int FormatMisses,
+        int LayoutHits,
+        int LayoutMisses,
+        int FormatEvictions,
+        int LayoutEvictions,
+        int CachedFormats,
+        int CachedLayouts);
 
     public readonly record struct TextData(
         float X,

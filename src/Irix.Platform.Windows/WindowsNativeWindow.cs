@@ -127,6 +127,8 @@ internal sealed class WindowsNativeWindow : INativeWindow
         }
     }
 
+    public event Action<int, int>? SizeChanged;
+
     public void Dispose()
     {
         if (_isDisposed)
@@ -337,6 +339,19 @@ internal sealed class WindowsNativeWindow : INativeWindow
     private static unsafe void HandleSizeChanged(HWND windowHandle)
     {
         PInvoke.InvalidateRect(windowHandle, null, true);
+
+        var window = GetWindow(windowHandle);
+        if (window?.SizeChanged is { } sink)
+        {
+            RECT clientRect;
+            PInvoke.GetClientRect(windowHandle, &clientRect);
+            var width = clientRect.right - clientRect.left;
+            var height = clientRect.bottom - clientRect.top;
+            if (width > 0 && height > 0)
+            {
+                sink(width, height);
+            }
+        }
     }
 
     private void PublishPointerEvent(RawInputEventKind kind, LPARAM lParam, PointerButton button = PointerButton.None)

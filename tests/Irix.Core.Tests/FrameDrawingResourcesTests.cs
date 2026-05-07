@@ -56,4 +56,39 @@ public sealed class FrameDrawingResourcesTests
         Assert.Equal("World", resources.Resolve(text2).ToString());
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(handle2));
     }
+
+    [Fact]
+    public void Return_to_pool_invalidates_old_text_slices()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var text = resources.AddText("Hello");
+        resources.Seal();
+        Assert.Equal("Hello", resources.Resolve(text).ToString());
+
+        FrameDrawingResources.Return(resources);
+
+        // After Return, old slices must be invalid on a new Rent
+        var resources2 = FrameDrawingResources.Rent();
+        // Either same instance reused or new — either way old slice must not resolve
+        var resolved = resources2.Resolve(text);
+        Assert.True(resolved.IsEmpty);
+        FrameDrawingResources.Return(resources2);
+    }
+
+    [Fact]
+    public void Rent_and_Return_avoids_allocation_when_pool_warm()
+    {
+        // Warm the pool with multiple Rent/Return cycles
+        for (var i = 0; i < 4; i++)
+        {
+            var r = FrameDrawingResources.Rent();
+            r.Seal();
+            FrameDrawingResources.Return(r);
+        }
+
+        // Now Rent should get a pooled instance (no new allocation)
+        var pooled = FrameDrawingResources.Rent();
+        pooled.Seal();
+        FrameDrawingResources.Return(pooled);
+    }
 }

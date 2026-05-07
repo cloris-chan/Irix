@@ -32,17 +32,33 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private D3D12TextRenderer? _textRenderer;
     private int _width;
     private int _height;
+    private bool _hasRendered;
     private bool _disposed;
 
     public D3D12Renderer(nint hwnd, int width, int height)
     {
         _width = width;
         _height = height;
+
+        // Enable D3D12 debug layer when a debugger is attached
+        if (System.Diagnostics.Debugger.IsAttached)
+        {
+            ID3D12Debug* debugController;
+            if (PInvoke.D3D12GetDebugInterface(typeof(ID3D12Debug).GUID, out var debugObj).Succeeded)
+            {
+                debugController = (ID3D12Debug*)debugObj;
+                debugController->EnableDebugLayer();
+                debugController->Release();
+            }
+        }
+
         // DXGI factory
         PInvoke.CreateDXGIFactory1(typeof(IDXGIFactory4).GUID, out var factoryObj);
         var factory = (IDXGIFactory4*)factoryObj;
 
         // D3D12 device
+        // D3D12_CREATE_DEVICE_FLAG_DEBUG = 0x1
+        var deviceFlags = System.Diagnostics.Debugger.IsAttached ? 1u : 0u;
         PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj);
         _device = (ID3D12Device*)deviceObj;
 
@@ -124,14 +140,19 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         if (newWidth == _width && newHeight == _height) return;
         if (newWidth <= 0 || newHeight <= 0) return;
+        if (!_hasRendered) return; // Skip resize before first frame (e.g., initial WM_SIZE from ShowWindow)
 
         WaitForGpu();
         _textRenderer?.ReleaseFrameResourcesForResize();
 
+        // Release back buffer references before ResizeBuffers
         for (var i = 0; i < FrameCount; i++)
         {
-            _renderTargets[i]->Release();
-            _renderTargets[i] = null;
+            if (_renderTargets[i] != null)
+            {
+                _renderTargets[i]->Release();
+                _renderTargets[i] = null;
+            }
         }
 
         _swapChain->ResizeBuffers(FrameCount, (uint)newWidth, (uint)newHeight, DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, 0);
@@ -259,6 +280,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     private void MoveToNextFrame()
     {
+        _hasRendered = true;
         var fence = _fenceValues[_frameIndex];
         _queue->Signal(_fence, fence);
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();

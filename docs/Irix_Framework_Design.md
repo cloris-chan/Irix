@@ -821,7 +821,7 @@ v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、
 - **待落地：** `Move` 操作的优化（当前通过 `Remove` + `Add` 实现）；深度局部 patch 路径标识。
 - Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor。
 - `PatchBatch` 已携带 `Root` 属性，消费者可直接使用 `patchBatch.Root` 获取新根节点，无需从 `Memory` 中反推。
-- 测试覆盖：65 个测试用例，涵盖无变化跳过、Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、FrameTextArena、FrameDrawingResources、arena reuse、pooled owner 等场景。
+- 测试覆盖：88 个测试用例，涵盖无变化跳过、Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、patch 应用等价性、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、文本渲染正确性、pooled owner 等场景。
 
 ### 6.3 调度器 (IMessageDispatcher)
 

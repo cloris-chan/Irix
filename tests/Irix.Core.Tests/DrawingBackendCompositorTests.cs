@@ -127,5 +127,6 @@ public sealed class DrawingBackendCompositorTests
         public void RunMessageLoop() { }
         public void SetContentElements(IReadOnlyList<WindowContentElement> elements) => LastElements = elements;
         public void Show() { }
+        public event Action<int, int>? SizeChanged { add { } remove { } }
     }
 }

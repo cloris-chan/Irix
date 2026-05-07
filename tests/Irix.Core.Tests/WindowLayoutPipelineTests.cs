@@ -276,5 +276,7 @@ public sealed class WindowLayoutPipelineTests
         public void Show()
         {
         }
+
+        public event Action<int, int>? SizeChanged { add { } remove { } }
     }
 }

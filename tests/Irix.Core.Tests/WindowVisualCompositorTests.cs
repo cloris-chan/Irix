@@ -146,5 +146,7 @@ public sealed class WindowVisualCompositorTests
         public void Show()
         {
         }
+
+        public event Action<int, int>? SizeChanged { add { } remove { } }
     }
 }

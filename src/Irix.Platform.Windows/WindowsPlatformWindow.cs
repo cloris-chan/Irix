@@ -37,6 +37,12 @@ internal sealed class WindowsPlatformWindow(
         _closedTask.GetAwaiter().GetResult();
     }
 
+    public event Action<int, int>? SizeChanged
+    {
+        add => _window.SizeChanged += value;
+        remove => _window.SizeChanged -= value;
+    }
+
     public void Dispose()
     {
         if (_isDisposed)
