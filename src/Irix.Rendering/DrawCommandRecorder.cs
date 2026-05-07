@@ -9,6 +9,8 @@ internal readonly record struct DrawCommandRecordResult(
 
 internal sealed class DrawCommandRecorder(DrawingStyle style)
 {
+    private const int StackCommandThreshold = 64;
+
     private readonly DrawingStyle _style = style;
 
     public DrawCommandRecorder()
@@ -25,10 +27,49 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                 FrameDrawingResources.Empty);
         }
 
-        var commands = new List<DrawCommand>(elements.Count * 2);
+        var maximumCommandCount = elements.Count * 2;
         var resources = new FrameDrawingResources();
         var textStyle = resources.AddTextStyle(_style.TextStyle);
         var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
+
+        if (maximumCommandCount <= StackCommandThreshold)
+        {
+            Span<DrawCommand> stackCommands = stackalloc DrawCommand[maximumCommandCount];
+            var stackCommandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, stackCommands);
+            resources.Seal();
+
+            var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(stackCommandCount);
+            stackCommands[..stackCommandCount].CopyTo(owner.Memory.Span);
+            return new DrawCommandRecordResult(new DrawCommandBatch(owner, stackCommandCount), resources);
+        }
+
+        var pooledOwner = PooledArrayMemoryOwner<DrawCommand>.Rent(maximumCommandCount);
+        var success = false;
+        try
+        {
+            var commandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, pooledOwner.Memory.Span);
+            resources.Seal();
+            success = true;
+            return new DrawCommandRecordResult(new DrawCommandBatch(pooledOwner, commandCount), resources);
+        }
+        finally
+        {
+            if (!success)
+            {
+                pooledOwner.Dispose();
+            }
+        }
+    }
+
+    private static int RecordInto(
+        IReadOnlyList<LayoutElement> elements,
+        FrameDrawingResources resources,
+        DrawingStyle style,
+        ResourceHandle textStyle,
+        ResourceHandle buttonTextStyle,
+        Span<DrawCommand> commands)
+    {
+        var commandCount = 0;
 
         foreach (var element in elements)
         {
@@ -36,41 +77,37 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
             {
                 case LayoutElementKind.Text:
                     var text = resources.AddText(element.Text);
-                    commands.Add(new DrawCommand(
+                    commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.DrawTextRun,
                         Rect: ToDrawRect(element.Bounds),
                         Resource: textStyle,
                         Text: text,
-                        Color: _style.TextColor));
+                        Color: style.TextColor);
                     break;
                 case LayoutElementKind.Rectangle:
-                    commands.Add(new DrawCommand(
+                    commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: ToDrawRect(element.Bounds),
-                        Color: _style.RectangleFillColor));
+                        Color: style.RectangleFillColor);
                     break;
                 case LayoutElementKind.Button:
                     var bounds = ToDrawRect(element.Bounds);
-                    commands.Add(new DrawCommand(
+                    commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: bounds,
-                        Color: _style.ButtonFillColor));
+                        Color: style.ButtonFillColor);
                     var buttonText = resources.AddText(element.Text);
-                    commands.Add(new DrawCommand(
+                    commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.DrawTextRun,
                         Rect: bounds,
                         Resource: buttonTextStyle,
                         Text: buttonText,
-                        Color: _style.ButtonTextColor));
+                        Color: style.ButtonTextColor);
                     break;
             }
         }
 
-        resources.Seal();
-
-        return new DrawCommandRecordResult(
-            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([.. commands]), commands.Count),
-            resources);
+        return commandCount;
     }
 
     private static DrawRect ToDrawRect(PixelRectangle bounds)

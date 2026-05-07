@@ -41,16 +41,30 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             return [];
         }
 
-        var hitTargets = new List<HitTestTarget>();
-
+        var hitTargetCount = 0;
         foreach (var element in layoutElements)
         {
             if (!string.IsNullOrWhiteSpace(element.ActionId))
             {
-                hitTargets.Add(new HitTestTarget(element.Bounds, element.ActionId));
+                hitTargetCount++;
             }
         }
 
-        return [.. hitTargets];
+        if (hitTargetCount == 0)
+        {
+            return [];
+        }
+
+        var hitTargets = new HitTestTarget[hitTargetCount];
+        var index = 0;
+        foreach (var element in layoutElements)
+        {
+            if (!string.IsNullOrWhiteSpace(element.ActionId))
+            {
+                hitTargets[index++] = new HitTestTarget(element.Bounds, element.ActionId);
+            }
+        }
+
+        return hitTargets;
     }
 }

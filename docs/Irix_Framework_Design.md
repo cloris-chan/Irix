@@ -812,7 +812,7 @@ public readonly struct VirtualNodeAttribute
 
 v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 可采用轻量不可变结构配合池化 Builder / Arena 分配策略，在复杂度、可调试性和性能之间取得更稳妥的平衡。
 
-> **当前实现状态：** Diff / patch 所有权模型已经较接近目标，但渲染热路径仍处于 PoC 形态：`DrawCommandRecorder.Record()` 每帧创建 `List<DrawCommand>`、`FrameDrawingResources` / `FrameTextArena`，并把命令拷贝为数组；`FrameTextArena.Seal()` 仍会生成 frame-local string。后续需要用池化 `DrawCommand` buffer、可复用 frame resource arena 和 pooled text buffer 才能靠近 0 GC pressure。
+> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder.Record()` 已改为小批量 `stackalloc Span<DrawCommand>`、大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。但渲染热路径仍会每帧创建 `FrameDrawingResources` / `FrameTextArena`，`FrameTextArena.Seal()` 仍会生成 frame-local string。后续需要可复用 frame resource arena 和 pooled text buffer 才能靠近 0 GC pressure。
 
 **Diff 算法策略：**
 
@@ -821,7 +821,7 @@ v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、
 - **待落地：** `Move` 操作的优化（当前通过 `Remove` + `Add` 实现）；深度局部 patch 路径标识。
 - Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor。
 - `PatchBatch` 已携带 `Root` 属性，消费者可直接使用 `patchBatch.Root` 获取新根节点，无需从 `Memory` 中反推。
-- 测试覆盖：62 个测试用例，涵盖无变化跳过、Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、FrameTextArena、FrameDrawingResources 等场景。
+- 测试覆盖：63 个测试用例，涵盖无变化跳过、Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、FrameTextArena、FrameDrawingResources、pooled owner 等场景。
 
 ### 6.3 调度器 (IMessageDispatcher)
 

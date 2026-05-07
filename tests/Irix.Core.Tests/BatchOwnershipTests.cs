@@ -43,6 +43,18 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public void PooledArrayMemoryOwner_dispose_releases_memory()
+    {
+        var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(4);
+
+        Assert.Equal(4, owner.Memory.Length);
+
+        owner.Dispose();
+
+        Assert.Equal(0, owner.Memory.Length);
+    }
+
+    [Fact]
     public async Task CompositorLoop_disposes_patch_and_draw_batches_after_render()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
