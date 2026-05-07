@@ -81,7 +81,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
 - `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；62 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
-- DirectWrite backend 已缓存 `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
+- DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
+- 渲染热路径仍有托管分配：`DrawCommandRecorder.Record()` 每帧创建 `List<DrawCommand>`、`FrameDrawingResources` / `FrameTextArena`，并把命令拷贝为数组；`FrameTextArena.Seal()` 仍会生成 frame-local string。当前可接受于 PoC，但未达到文档目标中的 0 GC pressure
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
 - 测试覆盖已扩展至 62 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、CompositorLoop 跳过、retained layout、DrawingBackendCompositor、所有权转移等）
 - `CompositorLoop` 已实现 `PatchBatch.Count == 0` 时跳过翻译与渲染，避免无变化帧清空窗口
@@ -306,7 +307,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 添加 GitHub Actions CI（build + test + AOT check）
 - [x] Phase 3: D3D12 文本渲染（D3D11On12 + Direct2D + DirectWrite overlay）
 - [x] 将文本内容从 `ResourceHandle` 分离为 frame-local `FrameDrawingResources + TextSlice/IFrameResourceResolver`
-- [x] 建立 `TextStyle` resource cache 与 DirectWrite `TextFormat/TextLayout` cache
+- [x] 建立 `TextStyle` resource cache 与 DirectWrite bounded `TextFormat/TextLayout` cache
+- [ ] 将 `DrawCommandRecorder` / `FrameDrawingResources` 改为池化或 arena 化，降低热路径托管分配
 - [ ] 设计显式 glyph atlas/cache（仅当后续脱离 DirectWrite 或需要跨 backend glyph 资源复用时推进）
 - [ ] 增加 GPU device-lost 检测、设备/Swapchain 重建与失败上报路径
 

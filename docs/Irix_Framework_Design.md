@@ -511,14 +511,15 @@ VirtualNode
 
 **已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已实现无变化帧跳过。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + DirectWrite 文本）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013）。
 
-**下一步：** 补齐裁剪、透明度、显式 glyph atlas/cache（若后续脱离 DirectWrite 或需要跨 backend glyph 资源复用）与 GPU device-lost recovery；随后让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
+**下一步：** 补齐裁剪、透明度、热路径池化/arena 化、显式 glyph atlas/cache（若后续脱离 DirectWrite 或需要跨 backend glyph 资源复用）与 GPU device-lost recovery；随后让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
 
 #### 5.2.9 文本、路径与图片的资源策略
 
 自研 Drawing 层最容易失控的地方通常不是矩形，而是文本和路径。因此 v1 建议明确分层：
 
 - 文本 shaping 与 glyph rasterization：Windows PoC 暂时委托给 DirectWrite / Direct2D。
-- 文本格式资源：`TextStyle` 通过 `ResourceHandle` 引用，Windows backend 缓存 `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`。
+- 文本格式资源：`TextStyle` 通过 `ResourceHandle` 引用，Windows backend 缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`。当前 layout cache 以文本 hash、长度、样式与布局尺寸为 key，并保存文本副本用于 hash collision 验证；动画尺寸频繁变化时可能产生 layout churn，但缓存上限控制了资源风险。
+- 显式 glyph cache：当前尚未实现跨 backend glyph atlas/cache，Windows PoC 继续委托 DirectWrite 内部 glyph rasterization/cache。
 - 复杂路径栅格化：后续可委托给 `Skia` backend adapter 或自研路径模块，当前不急于实现。
 - 图片解码与上传：使用独立资源接口封装，避免与 backend 紧耦合。
 
@@ -810,6 +811,8 @@ public readonly struct VirtualNodeAttribute
 ```
 
 v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 可采用轻量不可变结构配合池化 Builder / Arena 分配策略，在复杂度、可调试性和性能之间取得更稳妥的平衡。
+
+> **当前实现状态：** Diff / patch 所有权模型已经较接近目标，但渲染热路径仍处于 PoC 形态：`DrawCommandRecorder.Record()` 每帧创建 `List<DrawCommand>`、`FrameDrawingResources` / `FrameTextArena`，并把命令拷贝为数组；`FrameTextArena.Seal()` 仍会生成 frame-local string。后续需要用池化 `DrawCommand` buffer、可复用 frame resource arena 和 pooled text buffer 才能靠近 0 GC pressure。
 
 **Diff 算法策略：**
 
@@ -1387,7 +1390,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-013 | D3D12 互操作使用 CsWin32 生成的裸指针 COM 包装 | §5.2.2 | ✅ 已确认 | 消除手写 vtable 偏移和 GUID 错误；`allowMarshaling: false` 保持 AOT 兼容 |
 | ADR-014 | Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12 | §5.2.8 / §5.2.9 | ✅ 已确认 | 复用 Windows 成熟文本栈，避免 PoC 阶段手写 glyph rasterization 或提前引入 Skia |
 | ADR-015 | 文本内容使用 frame-local arena + slice，而非无边界全局字符串池 | §5.2.4 / §5.2.9 | ✅ 已确认 | 避免动态文本泄漏和复杂全局生命周期；全局化优先留给 TextStyle、glyph/shaping cache |
-| ADR-016 | TextStyle 使用 ResourceHandle 并由 backend 缓存原生文本资源 | §5.2.4 / §5.2.9 | ✅ 已确认 | DrawCommand 保持纯值；DirectWrite backend 复用 TextFormat/TextLayout，显式 glyph atlas 后置 |
+| ADR-016 | TextStyle 使用 ResourceHandle 并由 backend 缓存原生文本资源 | §5.2.4 / §5.2.9 | ✅ 已确认 | DrawCommand 保持纯值；DirectWrite backend 复用 bounded TextFormat/TextLayout，显式 glyph atlas 后置 |
 
 ---
 

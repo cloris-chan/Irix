@@ -16,6 +16,7 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe class D3D12TextRenderer : IDisposable
 {
+    private const int MaxCachedTextFormats = 64;
     private const int MaxCachedTextLayouts = 256;
 
     private readonly ID3D11Device* _d3d11Device;
@@ -25,7 +26,8 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private readonly ID2D1Device2* _d2dDevice;
     private readonly ID2D1DeviceContext2* _d2dContext;
     private readonly IDWriteFactory* _dwriteFactory;
-    private readonly Dictionary<TextStyle, nint> _textFormats = [];
+    private readonly Dictionary<TextStyle, CachedTextFormat> _textFormats = [];
+    private readonly Queue<CachedTextFormat> _textFormatOrder = [];
     private readonly Dictionary<TextLayoutCacheKey, List<CachedTextLayout>> _textLayouts = [];
     private readonly Queue<CachedTextLayout> _textLayoutOrder = [];
     private ID2D1SolidColorBrush* _textBrush;
@@ -256,9 +258,9 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private IDWriteTextFormat* GetTextFormat(TextStyle style)
     {
         style = style.Normalize();
-        if (_textFormats.TryGetValue(style, out var textFormat))
+        if (_textFormats.TryGetValue(style, out var cachedTextFormat))
         {
-            return (IDWriteTextFormat*)textFormat;
+            return (IDWriteTextFormat*)cachedTextFormat.Format;
         }
 
         IDWriteTextFormat* createdFormat;
@@ -275,8 +277,28 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         createdFormat->SetParagraphAlignment(ToDirectWriteParagraphAlignment(style.VerticalAlignment));
         createdFormat->SetWordWrapping(ToDirectWriteWordWrapping(style.Wrapping));
 
-        _textFormats.Add(style, (nint)createdFormat);
+        cachedTextFormat = new CachedTextFormat(style, (nint)createdFormat);
+        _textFormats.Add(style, cachedTextFormat);
+        _textFormatOrder.Enqueue(cachedTextFormat);
+
+        if (_textFormatOrder.Count > MaxCachedTextFormats)
+        {
+            EvictOldestTextFormat();
+        }
+
         return createdFormat;
+    }
+
+    private void EvictOldestTextFormat()
+    {
+        var entry = _textFormatOrder.Dequeue();
+        if (_textFormats.TryGetValue(entry.Style, out var currentEntry)
+            && ReferenceEquals(entry, currentEntry))
+        {
+            _textFormats.Remove(entry.Style);
+        }
+
+        ((IDWriteTextFormat*)entry.Format)->Release();
     }
 
     private void EvictOldestTextLayout()
@@ -301,9 +323,9 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
             EvictOldestTextLayout();
         }
 
-        foreach (var textFormat in _textFormats.Values)
+        while (_textFormatOrder.Count > 0)
         {
-            ((IDWriteTextFormat*)textFormat)->Release();
+            EvictOldestTextFormat();
         }
 
         _textFormats.Clear();
@@ -439,6 +461,13 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         float A,
         TextSlice Text,
         ResourceHandle Style);
+
+    private sealed class CachedTextFormat(TextStyle style, nint format)
+    {
+        public TextStyle Style { get; } = style;
+
+        public nint Format { get; } = format;
+    }
 
     private readonly record struct TextLayoutCacheKey(
         ulong TextHash,
