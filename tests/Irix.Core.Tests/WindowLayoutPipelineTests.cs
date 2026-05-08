@@ -715,4 +715,201 @@ public sealed class WindowLayoutPipelineTests
         // Button → 2 commands
         Assert.Equal(new ElementCommandRange(1, 2), pipeline.LastElementCommandRanges[1]);
     }
+
+    [Fact]
+    public void RangeUtils_merge_combines_adjacent_ranges()
+    {
+        var ranges = new List<(int, int)> { (0, 1), (1, 2), (4, 2) };
+        var merged = RangeUtils.Merge(ranges);
+
+        Assert.Equal(2, merged.Count);
+        Assert.Equal((0, 3), merged[0]); // (0,1) + (1,2) → (0,3)
+        Assert.Equal((4, 2), merged[1]);
+    }
+
+    [Fact]
+    public void RangeUtils_merge_combines_overlapping_ranges()
+    {
+        var ranges = new List<(int, int)> { (0, 3), (2, 4) };
+        var merged = RangeUtils.Merge(ranges);
+
+        Assert.Single(merged);
+        Assert.Equal((0, 6), merged[0]); // overlap → merged
+    }
+
+    [Fact]
+    public void RangeUtils_merge_single_range_unchanged()
+    {
+        var ranges = new List<(int, int)> { (5, 3) };
+        var merged = RangeUtils.Merge(ranges);
+
+        Assert.Single(merged);
+        Assert.Equal((5, 3), merged[0]);
+    }
+
+    [Fact]
+    public void RangeUtils_merge_empty_returns_empty()
+    {
+        var merged = RangeUtils.Merge([]);
+        Assert.Empty(merged);
+    }
+
+    [Fact]
+    public void RangeUtils_contains_finds_index_in_range()
+    {
+        var ranges = new List<(int, int)> { (0, 2), (5, 3) };
+        Assert.True(RangeUtils.Contains(ranges, 0));
+        Assert.True(RangeUtils.Contains(ranges, 1));
+        Assert.False(RangeUtils.Contains(ranges, 2));
+        Assert.True(RangeUtils.Contains(ranges, 5));
+        Assert.True(RangeUtils.Contains(ranges, 7));
+        Assert.False(RangeUtils.Contains(ranges, 8));
+    }
+
+    [Fact]
+    public void RangeUtils_map_and_merge_converts_element_to_command_ranges()
+    {
+        var elementRanges = new ElementCommandRange[]
+        {
+            new(0, 1),  // element 0 → command 0
+            new(1, 2),  // element 1 → commands 1-2
+            new(3, 1),  // element 2 → command 3
+        };
+        var dirtyElements = new List<(int, int)> { (0, 2) }; // elements 0-1
+
+        var result = RangeUtils.MapAndMerge(elementRanges, dirtyElements);
+
+        Assert.Single(result);
+        Assert.Equal((0, 3), result[0]); // commands 0-2
+    }
+
+    [Fact]
+    public void RetainedCommandBuffer_full_apply_stores_commands()
+    {
+        var buffer = new RetainedCommandBuffer();
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 100)),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 10, 80, 32)),
+        ]);
+        var batch = new DrawCommandBatch(owner, 2);
+
+        buffer.ApplyFull(batch);
+
+        Assert.Equal(2, buffer.Count);
+        Assert.Equal(DrawCommandKind.FillRect, buffer.Commands[0].Kind);
+        Assert.Equal(DrawCommandKind.DrawTextRun, buffer.Commands[1].Kind);
+    }
+
+    [Fact]
+    public void RetainedCommandBuffer_partial_apply_replaces_dirty_range()
+    {
+        var buffer = new RetainedCommandBuffer();
+        var initialOwner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 100)),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 10, 80, 32), Text: default),
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 50, 100, 40)),
+        ]);
+        buffer.ApplyFull(new DrawCommandBatch(initialOwner, 3));
+
+        // New batch with different text at index 1
+        var newOwner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 100)),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 10, 80, 32), Text: default),
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 50, 100, 40)),
+        ]);
+        var dirtyRanges = new List<(int, int)> { (1, 1) }; // only command 1 is dirty
+
+        buffer.ApplyPartial(new DrawCommandBatch(newOwner, 3), dirtyRanges);
+
+        Assert.Equal(3, buffer.Count);
+        // Commands 0 and 2 should be from the initial batch (unchanged)
+        // Command 1 should be from the new batch
+        Assert.Equal(DrawCommandKind.FillRect, buffer.Commands[0].Kind);
+        Assert.Equal(DrawCommandKind.DrawTextRun, buffer.Commands[1].Kind);
+        Assert.Equal(DrawCommandKind.FillRect, buffer.Commands[2].Kind);
+    }
+
+    [Fact]
+    public void RetainedCommandBuffer_partial_apply_falls_back_to_full_when_count_differs()
+    {
+        var buffer = new RetainedCommandBuffer();
+        var initialOwner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 100)),
+        ]);
+        buffer.ApplyFull(new DrawCommandBatch(initialOwner, 1));
+
+        // New batch has different count → falls back to full
+        var newOwner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 10, 80, 32)),
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 50, 100, 40)),
+        ]);
+        buffer.ApplyPartial(new DrawCommandBatch(newOwner, 2), [(0, 1)]);
+
+        Assert.Equal(2, buffer.Count);
+        Assert.Equal(DrawCommandKind.DrawTextRun, buffer.Commands[0].Kind);
+    }
+
+    [Fact]
+    public void RetainedCommandBuffer_reset_preserves_capacity()
+    {
+        var buffer = new RetainedCommandBuffer();
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 100)),
+        ]);
+        buffer.ApplyFull(new DrawCommandBatch(owner, 1));
+        Assert.Equal(1, buffer.Count);
+
+        buffer.Reset();
+        Assert.Equal(0, buffer.Count);
+    }
+
+    [Fact]
+    public void RenderFrameBatch_carries_dirty_command_ranges()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("hello", 2),
+            VirtualNodeFactory.Button("click", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Initial build
+        using var frame1 = pipeline.Build(root, viewport);
+        Assert.Empty(frame1.DirtyCommandRanges);
+
+        // Dirty build
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("world", 2),
+            VirtualNodeFactory.Button("click", 3));
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+
+        Assert.Single(frame2.DirtyCommandRanges);
+        Assert.Equal((0, 1), frame2.DirtyCommandRanges[0]); // Text → 1 command at index 0
+    }
+
+    [Fact]
+    public void RenderFrameBatch_button_dirty_produces_two_dirty_commands()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("hello", 2),
+            VirtualNodeFactory.Button("old", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        using var frame1 = pipeline.Build(root, viewport);
+
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("hello", 2),
+            VirtualNodeFactory.Button("new", 3));
+        using var frame2 = pipeline.Build(root2, viewport, [2]); // dirty button at DFS index 2
+
+        // Button → 2 commands (FillRect + DrawTextRun) at index 1-2
+        Assert.Single(frame2.DirtyCommandRanges);
+        Assert.Equal((1, 2), frame2.DirtyCommandRanges[0]);
+    }
 }

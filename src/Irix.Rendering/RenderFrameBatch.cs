@@ -8,10 +8,16 @@ public readonly record struct HitTestTarget(PixelRectangle Bounds, string Action
 public readonly record struct RenderFrameBatch(
     DrawCommandBatch Commands,
     IReadOnlyList<HitTestTarget> HitTargets,
-    IFrameResourceResolver Resources) : IDisposable
+    IFrameResourceResolver Resources,
+    IReadOnlyList<(int Start, int Count)> DirtyCommandRanges) : IDisposable
 {
     public RenderFrameBatch(DrawCommandBatch Commands, IReadOnlyList<HitTestTarget> HitTargets)
-        : this(Commands, HitTargets, FrameDrawingResources.Empty)
+        : this(Commands, HitTargets, FrameDrawingResources.Empty, [])
+    {
+    }
+
+    public RenderFrameBatch(DrawCommandBatch Commands, IReadOnlyList<HitTestTarget> HitTargets, IFrameResourceResolver Resources)
+        : this(Commands, HitTargets, Resources, [])
     {
     }
 

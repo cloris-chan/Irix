@@ -23,7 +23,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         var treeNodes = LayoutNode(root, 0, availableWidth, ref cursorY, elements, style);
 
         var dirtyRanges = dirtyNodes is { Count: > 0 }
-            ? ComputeDirtyRanges(treeNodes, new HashSet<int>(dirtyNodes))
+            ? RangeUtils.Merge(CollectDirtyRanges(treeNodes, new HashSet<int>(dirtyNodes)))
             : [];
 
         return new LayoutTreeResult(elements, treeNodes, dirtyRanges);
@@ -121,43 +121,17 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         }
     }
 
-    private static IReadOnlyList<(int Start, int Count)> ComputeDirtyRanges(
+    private static List<(int Start, int Count)> CollectDirtyRanges(
         LayoutTreeNode[] treeNodes,
         HashSet<int> dirtyIndices)
     {
         var ranges = new List<(int Start, int Count)>();
-        CollectDirtyRanges(treeNodes, dirtyIndices, ranges);
+        CollectDirtyRangesRecursive(treeNodes, dirtyIndices, ranges);
         ranges.Sort((a, b) => a.Start.CompareTo(b.Start));
-
-        // Merge overlapping/adjacent ranges
-        if (ranges.Count <= 1)
-        {
-            return ranges;
-        }
-
-        var merged = new List<(int Start, int Count)> { ranges[0] };
-        for (var i = 1; i < ranges.Count; i++)
-        {
-            var last = merged[^1];
-            var current = ranges[i];
-            var lastEnd = last.Start + last.Count;
-
-            if (current.Start <= lastEnd)
-            {
-                // Overlapping or adjacent → merge
-                var newEnd = Math.Max(lastEnd, current.Start + current.Count);
-                merged[^1] = (last.Start, newEnd - last.Start);
-            }
-            else
-            {
-                merged.Add(current);
-            }
-        }
-
-        return merged;
+        return ranges;
     }
 
-    private static void CollectDirtyRanges(
+    private static void CollectDirtyRangesRecursive(
         LayoutTreeNode[] treeNodes,
         HashSet<int> dirtyIndices,
         List<(int Start, int Count)> ranges)
@@ -171,7 +145,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
             if (node.Children.Length > 0)
             {
-                CollectDirtyRanges(node.Children, dirtyIndices, ranges);
+                CollectDirtyRangesRecursive(node.Children, dirtyIndices, ranges);
             }
         }
     }

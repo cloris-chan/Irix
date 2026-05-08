@@ -13,6 +13,12 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private readonly Lock _hitTargetsLock = new();
     private HitTestTarget[] _hitTargets = [];
 
+    /// <summary>
+    /// The dirty command ranges from the last render, if any.
+    /// Currently recorded for diagnostics only; rendering is still full-frame.
+    /// </summary>
+    public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges { get; private set; } = [];
+
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
         if (renderFrameBatch.Commands.Count == 0)
@@ -22,6 +28,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 _hitTargets = [];
             }
 
+            LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
             return ValueTask.CompletedTask;
         }
 
@@ -38,6 +45,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             _hitTargets = [.. renderFrameBatch.HitTargets];
         }
+
+        LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
 
         return ValueTask.CompletedTask;
     }

@@ -49,11 +49,10 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
             : RecordLargeBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount);
 
         var dirtyCommandRanges = dirtyElementRanges is { Count: > 0 }
-            ? ComputeDirtyCommandRanges(elementRanges, dirtyElementRanges)
+            ? RangeUtils.MapAndMerge(elementRanges, dirtyElementRanges)
             : (IReadOnlyList<(int Start, int Count)>)[];
-        var mergedDirtyCommandRanges = MergeRanges(dirtyCommandRanges);
 
-        return new DrawCommandRecordResult(batch, resolver, elementRanges, mergedDirtyCommandRanges);
+        return new DrawCommandRecordResult(batch, resolver, elementRanges, dirtyCommandRanges);
     }
 
     private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRange[]) RecordSmallBatch(
@@ -153,60 +152,6 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         }
 
         return commandCount;
-    }
-
-    private static IReadOnlyList<(int Start, int Count)> ComputeDirtyCommandRanges(
-        ElementCommandRange[] elementRanges,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
-    {
-        var ranges = new List<(int Start, int Count)>();
-        foreach (var (elementStart, elementCount) in dirtyElementRanges)
-        {
-            var elementEnd = elementStart + elementCount;
-            if (elementStart >= elementRanges.Length)
-            {
-                continue;
-            }
-
-            var clampedEnd = Math.Min(elementEnd, elementRanges.Length);
-            var cmdStart = elementRanges[elementStart].CommandStart;
-            var lastRange = elementRanges[clampedEnd - 1];
-            var cmdEnd = lastRange.CommandStart + lastRange.CommandCount;
-            ranges.Add((cmdStart, cmdEnd - cmdStart));
-        }
-
-        return MergeRanges(ranges);
-    }
-
-    private static IReadOnlyList<(int Start, int Count)> MergeRanges(IReadOnlyList<(int Start, int Count)> ranges)
-    {
-        if (ranges.Count <= 1)
-        {
-            return ranges;
-        }
-
-        var sorted = new List<(int Start, int Count)>(ranges);
-        sorted.Sort((a, b) => a.Start.CompareTo(b.Start));
-
-        var merged = new List<(int Start, int Count)> { sorted[0] };
-        for (var i = 1; i < sorted.Count; i++)
-        {
-            var last = merged[^1];
-            var current = sorted[i];
-            var lastEnd = last.Start + last.Count;
-
-            if (current.Start <= lastEnd)
-            {
-                var newEnd = Math.Max(lastEnd, current.Start + current.Count);
-                merged[^1] = (last.Start, newEnd - last.Start);
-            }
-            else
-            {
-                merged.Add(current);
-            }
-        }
-
-        return merged;
     }
 
     private static DrawRect ToDrawRect(PixelRectangle bounds)

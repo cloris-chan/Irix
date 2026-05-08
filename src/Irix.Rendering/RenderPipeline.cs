@@ -67,7 +67,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         LastDirtyCommandRanges = result.DirtyCommandRanges;
         LastElementCommandRanges = result.ElementCommandRanges;
 
-        return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources);
+        return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources, result.DirtyCommandRanges);
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
