@@ -9,7 +9,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     {
     }
 
-    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds)
+    /// <summary>
+    /// Build layout elements for the given tree and viewport.
+    /// <paramref name="dirtyNodes"/> is accepted for interface compatibility (v0 incremental layout),
+    /// but currently the entire tree is always laid out regardless.
+    /// </summary>
+    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         var elements = new List<LayoutElement>();
         var availableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0);

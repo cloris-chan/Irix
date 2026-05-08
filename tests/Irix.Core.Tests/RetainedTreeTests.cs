@@ -200,4 +200,90 @@ public sealed class RetainedTreeTests
         Assert.Contains(result.Children, c => c.Key == 40);  // "d"
         Assert.DoesNotContain(result.Children, c => c.Key == 20);  // "b" removed
     }
+
+    [Fact]
+    public void Apply_dirty_is_sorted_ascending()
+    {
+        // Root(0) has 3 children: indices 1, 2, 3
+        // Update index 3 (last child) and index 1 (first child) — dirty should be [1, 3]
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("a", 2),
+            VirtualNodeFactory.Text("b", 3),
+            VirtualNodeFactory.Text("c", 4));
+        var updatedA = VirtualNodeFactory.Text("A", 2);
+        var updatedC = VirtualNodeFactory.Text("C", 4);
+        var batch = new PatchBatch(root, new PatchMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(VirtualNodePatchOperation.Update, 3, updatedC),
+            new VirtualNodePatch(VirtualNodePatchOperation.Update, 1, updatedA)
+        ]), 2);
+        var tree = new RetainedTree(new VirtualNodeTree(root));
+
+        var dirty = tree.Apply(batch);
+
+        // Should be sorted ascending
+        Assert.Equal(2, dirty.Count);
+        Assert.Equal(1, dirty[0]);
+        Assert.Equal(3, dirty[1]);
+    }
+
+    [Fact]
+    public void Apply_dirty_is_deduplicated_when_multiple_children_change()
+    {
+        // Add two children at the same parent → parent dirty should appear only once
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("a", 2));
+        var newB = VirtualNodeFactory.Text("b", 3);
+        var newC = VirtualNodeFactory.Text("c", 4);
+        var batch = new PatchBatch(root, new PatchMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(VirtualNodePatchOperation.Add, 2, newB),
+            new VirtualNodePatch(VirtualNodePatchOperation.Add, 3, newC)
+        ]), 2);
+        var tree = new RetainedTree(new VirtualNodeTree(root));
+
+        var dirty = tree.Apply(batch);
+
+        // Parent (root, index 0) should appear only once even though two children were added
+        Assert.Contains(0, dirty);
+        Assert.Equal(1, dirty.Count(d => d == 0));
+    }
+
+    [Fact]
+    public void Apply_update_marks_updated_node_not_parent()
+    {
+        // Update a child → dirty should contain the child's index, not the parent's
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("before", 2),
+            VirtualNodeFactory.Text("keep", 3));
+        var updated = VirtualNodeFactory.Text("after", 2);
+        var batch = new PatchBatch(root, new PatchMemoryOwner<VirtualNodePatch>(
+            [new VirtualNodePatch(VirtualNodePatchOperation.Update, 1, updated)]), 1);
+        var tree = new RetainedTree(new VirtualNodeTree(root));
+
+        var dirty = tree.Apply(batch);
+
+        Assert.Contains(1, dirty);   // the updated node
+        Assert.DoesNotContain(0, dirty); // parent not dirty (children unchanged)
+    }
+
+    [Fact]
+    public void Apply_add_and_remove_marks_parent_as_dirty()
+    {
+        // Remove child at index 1, add new child at index 2 → parent (0) dirty
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("old", 2),
+            VirtualNodeFactory.Text("keep", 3));
+        var newChild = VirtualNodeFactory.Text("new", 4);
+        var batch = new PatchBatch(root, new PatchMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(VirtualNodePatchOperation.Remove, 1, default),
+            new VirtualNodePatch(VirtualNodePatchOperation.Add, 2, newChild)
+        ]), 2);
+        var tree = new RetainedTree(new VirtualNodeTree(root));
+
+        var dirty = tree.Apply(batch);
+
+        Assert.Contains(0, dirty); // parent dirty
+    }
 }

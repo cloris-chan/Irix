@@ -17,14 +17,21 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     private IReadOnlyList<LayoutElement>? _retainedLayout;
     private PixelRectangle _retainedViewport;
 
-    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds)
+    /// <summary>
+    /// Build a render frame for the given root and viewport.
+    /// When <paramref name="dirtyNodes"/> is non-null, forces a full layout rebuild
+    /// (v0: incremental layout not yet implemented).
+    /// When null (render request), reuses the retained layout if tree and viewport match.
+    /// </summary>
+    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(_retainedRoot, root);
         var viewportChanged = _retainedViewport != viewportBounds;
+        var hasDirty = dirtyNodes is { Count: > 0 };
 
-        if (treeChanged || viewportChanged)
+        if (treeChanged || viewportChanged || hasDirty)
         {
-            _retainedLayout = _layoutTreeBuilder.Build(root, viewportBounds);
+            _retainedLayout = _layoutTreeBuilder.Build(root, viewportBounds, dirtyNodes);
             _retainedRoot = root;
             _retainedViewport = viewportBounds;
         }

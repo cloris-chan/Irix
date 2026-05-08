@@ -295,4 +295,109 @@ public sealed class WindowLayoutPipelineTests
 
         public event Action<int, int>? SizeChanged { add { } remove { } }
     }
+
+    [Fact]
+    public void RenderPipeline_rebuilds_layout_when_dirty_nodes_provided()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // First build with no dirty
+        using var frame1 = pipeline.Build(root, viewport);
+
+        // Second build with same root/viewport but dirty nodes → forces rebuild
+        using var frame2 = pipeline.Build(root, viewport, [0]);
+
+        // Both frames should have identical layout (v0: full rebuild regardless)
+        Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
+        for (var i = 0; i < frame1.Commands.Count; i++)
+        {
+            Assert.Equal(frame1.Commands.Memory.Span[i].Rect, frame2.Commands.Memory.Span[i].Rect);
+        }
+    }
+
+    [Fact]
+    public void RenderPipeline_reuses_layout_when_dirty_nodes_empty()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // First build
+        using var frame1 = pipeline.Build(root, viewport);
+        var text1 = frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString();
+
+        // Second build with empty dirty set → should reuse retained layout
+        using var frame2 = pipeline.Build(root, viewport, []);
+        var text2 = frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString();
+
+        Assert.Equal(text1, text2);
+        Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
+    }
+
+    [Fact]
+    public void WindowDrawCommandTranslator_diff_batch_produces_correct_layout()
+    {
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+
+        var root1 = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Increment", 3,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+
+        // Initial frame via diff from default → root1
+        using var batch1 = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root1));
+        using var frame1 = translator.Translate(batch1);
+        Assert.Equal(3, frame1.Commands.Count);
+
+        var root2 = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 1", 2),
+            VirtualNodeFactory.Button("Increment", 3,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+
+        // Update frame via diff from root1 → root2
+        using var batch2 = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(root1), new VirtualNodeTree(root2));
+        using var frame2 = translator.Translate(batch2);
+
+        // Layout should reflect updated content
+        var textContent = frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString();
+        Assert.Equal("Count: 1", textContent);
+    }
+
+    [Fact]
+    public void WindowDrawCommandTranslator_render_request_reuses_retained_tree()
+    {
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Click", 3));
+
+        // Set up retained tree via initial diff
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var frame1 = translator.Translate(batch);
+        Assert.Equal(3, frame1.Commands.Count);
+
+        // Render request should reuse retained tree
+        var renderRequest = PatchBatch.CreateRenderRequest();
+        using var frame2 = translator.Translate(renderRequest);
+
+        // Should have the same layout as before (retained tree is reused)
+        Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
+        for (var i = 0; i < frame1.Commands.Count; i++)
+        {
+            Assert.Equal(frame1.Commands.Memory.Span[i].Rect, frame2.Commands.Memory.Span[i].Rect);
+        }
+    }
 }

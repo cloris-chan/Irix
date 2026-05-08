@@ -19,7 +19,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         TextStyle: TextStyle.Default,
         ButtonTextStyle: TextStyle.Default));
 
-    private VirtualNodeTree _lastTree;
+    private readonly RetainedTree _retainedTree = new(default);
 
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null)
@@ -38,13 +38,24 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 
     public RenderFrameBatch Translate(PatchBatch patchBatch)
     {
-        if (patchBatch.Count > 0)
+        IReadOnlyList<int>? dirty = null;
+        if (patchBatch.Kind == PatchBatchKind.RenderRequest)
         {
-            _lastTree = new VirtualNodeTree(patchBatch.Root);
+            // Render request: reuse retained tree, no dirty nodes
+        }
+        else if (patchBatch.Count > 0)
+        {
+            // Diff batch: apply patches to retained tree, get dirty set
+            dirty = _retainedTree.Apply(patchBatch);
+        }
+        else
+        {
+            // Empty diff with new root (e.g. initial frame): apply to update retained tree
+            _retainedTree.Apply(patchBatch);
         }
 
         _prepareFrame?.Invoke();
         var viewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
-        return _renderPipeline.Build(_lastTree.Root, viewport);
+        return _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
     }
 }

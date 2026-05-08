@@ -1,12 +1,42 @@
 ﻿namespace Irix;
 
+/// <summary>
+/// Applies <see cref="PatchBatch"/> patches to a <see cref="VirtualNode"/> tree,
+/// producing a new immutable tree. Uses a single DFS pass to avoid index drift
+/// from sequential patch application.
+///
+/// <para><b>Patch semantics:</b></para>
+/// <list type="bullet">
+///   <item><b>ReplaceRoot</b> — replaces the entire root node (and all children) with the patch node.</item>
+///   <item><b>Update</b> — replaces the <em>content and attributes</em> of the target node, but
+///     <em>preserves its existing children</em> from the old tree. The patch node's Children are ignored.</item>
+///   <item><b>Add</b> — inserts a new node at the DFS position specified by <c>NodeIndex</c>.
+///     The index is in the <em>old tree's</em> DFS coordinate system (before this batch is applied).</item>
+///   <item><b>Remove</b> — removes the node at the DFS position specified by <c>NodeIndex</c>.
+///     For keyed nodes (Key ≠ 0), matching is by key; for unkeyed nodes, by DFS index.</item>
+/// </list>
+///
+/// <para><b>Dirty index semantics:</b></para>
+/// <para>
+/// The returned dirty set contains the DFS indices of parent nodes whose <em>children list</em>
+/// changed (Add/Remove), or the node itself whose content changed (Update/ReplaceRoot).
+/// All indices refer to the <em>result tree's</em> DFS ordering. The output is
+/// <b>sorted ascending and deduplicated</b>.
+/// </para>
+/// </summary>
 public sealed class RetainedTree
 {
     private VirtualNodeTree _tree;
 
     public RetainedTree(VirtualNodeTree tree) { _tree = tree; }
+
+    /// <summary>The current retained tree.</summary>
     public VirtualNodeTree Tree => _tree;
 
+    /// <summary>
+    /// Apply all patches in the batch in a single DFS pass.
+    /// Returns sorted, deduplicated DFS node indices that were affected.
+    /// </summary>
     public IReadOnlyList<int> Apply(PatchBatch batch)
     {
         if (batch.Count == 0)
@@ -44,12 +74,18 @@ public sealed class RetainedTree
         if (replacePatches.ContainsKey(0))
         {
             _tree = new VirtualNodeTree(replacePatches[0]);
-            dirty.Add(0);
-            return dirty;
+            return [0];
         }
 
         _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty));
-        return dirty;
+        dirty.Sort();
+        var deduped = new List<int>(dirty.Count);
+        var last = -1;
+        foreach (var d in dirty)
+        {
+            if (d != last) { deduped.Add(d); last = d; }
+        }
+        return deduped;
     }
 
     private static VirtualNode ApplyRecursive(
