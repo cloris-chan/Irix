@@ -253,6 +253,77 @@ public sealed class DrawingBackendCompositorTests
         Assert.False(compositor.LastPartialApplySucceeded);
     }
 
+    [Fact]
+    public async Task RenderAsync_propagates_dirty_ranges_to_dirty_aware_backend()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new DirtyRangeTrackingBackend();
+        var compositor = new DrawingBackendCompositor(backend);
+
+        // Prepare all text before sealing
+        var resources = FrameDrawingResources.Rent();
+        var hello = resources.AddText("Hello");
+        var world = resources.AddText("World");
+        resources.Seal();
+
+        // Frame 1: full apply (no dirty ranges)
+        using var frame1 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: hello, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources,
+            []);
+
+        await compositor.RenderAsync(frame1, cancellationToken);
+        frame1.Dispose();
+
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Single(backend.ReceivedDirtyRanges);
+        Assert.Empty(backend.ReceivedDirtyRanges[0]); // no dirty ranges on initial frame
+
+        // Frame 2: same resources + dirty ranges → partial apply
+        using var frame2 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: world, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources,
+            [(0, 1)]);
+
+        await compositor.RenderAsync(frame2, cancellationToken);
+        frame2.Dispose();
+
+        Assert.Equal(2, backend.ExecuteCount);
+        Assert.Equal(2, backend.ReceivedDirtyRanges.Count);
+        // Second frame should have the dirty ranges propagated to the backend
+        Assert.Single(backend.ReceivedDirtyRanges[1]);
+        Assert.Equal(0, backend.ReceivedDirtyRanges[1][0].Start);
+        Assert.Equal(1, backend.ReceivedDirtyRanges[1][0].Count);
+
+        // Compositor and backend dirty ranges should match
+        Assert.Equal(compositor.LastDirtyCommandRanges.Count, backend.ReceivedDirtyRanges[1].Count);
+        Assert.Equal(compositor.LastDirtyCommandRanges[0], backend.ReceivedDirtyRanges[1][0]);
+    }
+
+    [Fact]
+    public void FrameDrawingResources_reset_throws_while_retained()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Retain();
+
+        // Reset() must throw while retained
+        Assert.Throws<InvalidOperationException>(() => resources.Reset());
+
+        // Release first, then Reset is safe
+        resources.Release();
+        resources.Reset(); // no exception
+
+        FrameDrawingResources.Return(resources);
+    }
+
     private sealed class FakeWindow : INativeWindow
     {
         public IReadOnlyList<WindowContentElement> LastElements { get; private set; } = [];
@@ -270,5 +341,24 @@ public sealed class DrawingBackendCompositorTests
         public void SetContentElements(IReadOnlyList<WindowContentElement> elements) => LastElements = elements;
         public void Show() { }
         public event Action<int, int>? SizeChanged { add { } remove { } }
+    }
+
+    private sealed class DirtyRangeTrackingBackend : IDrawingBackend, IDirtyRangeAware
+    {
+        public List<IReadOnlyList<(int Start, int Count)>> ReceivedDirtyRanges { get; } = [];
+        public int ExecuteCount { get; private set; }
+
+        public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
+        {
+            ReceivedDirtyRanges.Add(ranges);
+        }
+
+        public void BeginFrame(in FrameContext frameContext) { }
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+            ExecuteCount++;
+        }
+        public void EndFrame() { }
+        public void Dispose() { }
     }
 }

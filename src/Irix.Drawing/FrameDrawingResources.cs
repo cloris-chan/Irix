@@ -40,6 +40,11 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
             {
                 var instance = Pool.Dequeue();
                 instance._returned = false;
+                instance._sealed = false;
+                instance._retained = false; // defensive: clear stale retain state
+                instance._textArena.Reset(); // defensive: ensure arena is unsealed
+                instance._textStyles.Clear();
+                instance._textStyleHandles.Clear();
                 instance._frameId++;
                 return instance;
             }
@@ -168,7 +173,13 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     /// </summary>
     internal void Reset()
     {
-        ObjectDisposedException.ThrowIf(_returned && _retained, this);
+        if (_retained)
+        {
+            throw new InvalidOperationException(
+                "Cannot reset FrameDrawingResources while it is retained by a RetainedRenderFrame. " +
+                "Call Release() first.");
+        }
+
         _textArena.Reset();
         _textStyles.Clear();
         _textStyleHandles.Clear();

@@ -186,11 +186,20 @@ internal static class Program
         Console.WriteLine($"Empty frames: {compositor.EmptyFrameCount}");
         Console.WriteLine($"Partial hit rate: {(compositor.RenderCount > 0 ? 100.0 * compositor.PartialApplyCount / compositor.RenderCount : 0):F1}%");
         var dirty = compositor.LastDirtyCommandRanges;
-        Console.WriteLine($"Last dirty ranges: {dirty.Count} ranges");
+        Console.WriteLine($"Compositor dirty ranges: {dirty.Count} ranges");
         foreach (var (start, count) in dirty)
         {
             Console.WriteLine($"  [{start}..{start + count - 1}] ({count} commands)");
         }
+        var backendDirty = d3d12Backend.LastDirtyCommandRanges;
+        Console.WriteLine($"Backend dirty ranges: {backendDirty.Count} ranges");
+        foreach (var (start, count) in backendDirty)
+        {
+            Console.WriteLine($"  [{start}..{start + count - 1}] ({count} commands)");
+        }
+        var rangesMatch = dirty.Count == backendDirty.Count &&
+            dirty.Zip(backendDirty).All(p => p.First == p.Second);
+        Console.WriteLine($"Dirty ranges aligned: {rangesMatch}");
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);
