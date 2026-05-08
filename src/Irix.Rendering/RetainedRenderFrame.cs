@@ -80,18 +80,27 @@ internal sealed class RetainedRenderFrame : IDisposable
 
     /// <summary>
     /// Apply a partial update: replace only the dirty command ranges from the new batch.
-    /// Falls back to full replacement if the buffer is empty, command count differs,
-    /// no dirty ranges are provided, or the batch resources are not the same instance
-    /// and generation as the current resources.
+    /// Returns <c>true</c> on success. Returns <c>false</c> without side effects when:
+    /// the buffer is empty, no dirty ranges are provided, command count differs,
+    /// or the batch resources are not the same instance and generation as the current resources.
+    ///
+    /// <para>
+    /// On failure the caller is responsible for fallback (typically <see cref="ReleaseResources"/> +
+    /// <see cref="ApplyFull"/> + <see cref="RetainResources"/>). This method never mutates
+    /// retained state on the failure path.
+    /// </para>
     /// </summary>
-    /// <returns>
-    /// <c>true</c> if partial apply succeeded; <c>false</c> if fallback to full apply occurred.
-    /// </returns>
     public bool TryApplyPartial(RenderFrameBatch batch)
     {
         if (_commandBuffer.Count == 0 || batch.DirtyCommandRanges.Count == 0)
         {
-            ApplyFull(batch);
+            return false;
+        }
+
+        // Command count mismatch: partial replace is only valid when the new batch
+        // has the same total command count as the retained buffer.
+        if (_commandBuffer.Count != batch.Commands.Count)
+        {
             return false;
         }
 
@@ -104,16 +113,12 @@ internal sealed class RetainedRenderFrame : IDisposable
             || !ReferenceEquals(currentFdr, batchFdr)
             || currentFdr.FrameId != batchFdr.FrameId)
         {
-            ApplyFull(batch);
             return false;
         }
 
         _commandBuffer.ApplyPartial(batch.Commands, batch.DirtyCommandRanges);
         _hitTargets = [.. batch.HitTargets];
         _dirtyCommandRanges = batch.DirtyCommandRanges;
-
-        // Resources are already retained from the previous ApplyFull + RetainResources.
-        // No ownership change needed for partial apply.
         return true;
     }
 
@@ -167,6 +172,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     public void Dispose()
     {
         _commandBuffer.Dispose();
+        ReleaseResources();
         _resources = FrameDrawingResources.Empty;
         _hitTargets = [];
         _dirtyCommandRanges = [];

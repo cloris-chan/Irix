@@ -80,12 +80,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
-- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；150 个测试用例覆盖各场景
+- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；152 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 150 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移等）
+- 测试覆盖已扩展至 152 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 纯 TryApplyPartial 失败路径、Dispose 安全释放、资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移等）
 - `CompositorLoop` 已实现合并式显式重绘请求：连续 resize 只保留必要的 repaint，渲染中再次请求会在当前帧后补一帧，避免丢失最新 viewport
 - D3D12 resize 已改为 UI 线程只记录 pending size，Compositor 翻译/布局前应用 pending resize，并以 renderer 实际 swapchain 尺寸作为 layout viewport；fence event 由 renderer 持有 SafeHandle 且使用 auto-reset event，避免 GC 后 `E_HANDLE` 与 stale fence wait；交互运行默认关闭 ConsoleCompositor trace，swapchain 使用非拉伸 scaling；D3D12 窗口启用 external rendering 模式，避免 Win32 GDI `WM_PAINT`/erase 与 swapchain present 竞争
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
@@ -365,7 +365,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 为 PoC 渲染回归增加最小测试
 - [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
 - [x] 为 `CompositorLoop` 所有权转移增加最小测试
-- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中 dirty 后补一帧、普通 empty diff 不等同 render request（150 个测试，全部通过）
+- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中 dirty 后补一帧、普通 empty diff 不等同 render request（152 个测试，全部通过）
 - [x] 引入最小 `RetainedTree`：单次 DFS 遍历应用 ReplaceRoot/Update/Add/Remove patch，返回去重升序 dirty 节点索引集合；13 个测试覆盖 replace root、update、add、remove、keyed reconciliation、多 patch 组合、empty batch、diff→apply 等价性、dirty 排序去重、layout dirty v0、RenderPipeline dirty-driven rebuild、Translator RetainedTree 集成
 - [x] `RenderPipeline` 接入 `RetainedTree`：Translator 持有 RetainedTree，diff batch 调用 Apply 并传递 dirty set，render request 只复用 retained tree；LayoutTreeBuilder 接受 dirty nodes 参数（v0 全量重建）
 - [x] Layout dirty v0：`LayoutTreeBuilder.Build(root, viewport, dirtyNodes)` 接口已落地，当前为全量重建，dirty set 透传用于后续增量布局
@@ -378,13 +378,14 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 抽取 `RangeUtils` 工具类：统一 element range 和 command range 的合并/映射/查找逻辑
 - [x] `RenderFrameBatch` 携带 `DirtyCommandRanges` 字段：compositor/backend 能拿到 dirty command range
 - [x] `DrawingBackendCompositor` 记录 `LastDirtyCommandRanges`：暂时仍全量渲染，但 diagnostics/log/test 能看到 dirty ranges
-- [x] `RetainedRenderFrame` 资源一致性保护：`TryApplyPartial` 检查 `ReferenceEquals` + `FrameId` generation 一致，不同实例或不同 rental cycle fallback 到 full apply，避免用新 resources 解析旧 TextSlice
+- [x] `RetainedRenderFrame` 资源一致性保护：`TryApplyPartial` 为纯函数，失败只返回 `false` 不做 side effect；检查 `ReferenceEquals` + `FrameId` generation 一致 + command count 匹配；fallback ownership 仅在 compositor 一处处理（ReleaseResources + ApplyFull + RetainResources）
 - [x] `RetainedRenderFrame` 零分配读取：`TryReadFrame` 暴露 `ReadOnlySpan<DrawCommand>` + `IFrameResourceResolver`，backend 可直接读取 retained frame 而不经过 `ToBatch()` 复制
 - [x] `DrawingBackendCompositor` 持有 `RetainedRenderFrame`：每次 `RenderAsync` 更新 retained frame（full 或 partial），backend 通过 `TryReadFrame` 消费，`LastPartialApplySucceeded` 暴露 partial apply 结果
-- [x] Partial apply pilot：compositor 层在 command count 相同、resources 同一实例 + 同一 generation、dirty ranges 非空时走 partial apply；其他情况 fallback full apply
-- [x] 资源所有权模型：`RetainedRenderFrame` 不默认接管资源；`ApplyFull` 仅存储引用；compositor 显式调用 `RetainResources` / `ReleaseResources` 管理生命周期；`FrameDrawingResources.Retain()` 阻止 `Return()` 回池，`Release()` 释放回池
+- [x] Partial apply 策略：当前 compositor 跨帧 full apply；partial 仅限同 frame scope（same `FrameDrawingResources` instance + same `FrameId` generation + same command count + dirty ranges 非空）；`TryApplyPartial` 纯函数，失败不污染状态；compositor 是 fallback 唯一处理点
+- [x] 资源所有权模型：`RetainedRenderFrame` 不默认接管资源；`ApplyFull` 仅存储引用；compositor 显式调用 `RetainResources` / `ReleaseResources` 管理生命周期；`Dispose()` 内部调用 `ReleaseResources()` 兜底，直接 dispose 不泄漏 retained resources
 - [x] 资源 generation 跟踪：`FrameDrawingResources.FrameId` 在每次 `Rent()` 时递增，`Return()` 时保留；compositor 用 `_lastAppliedFrameId` 做跨帧 guard，防止 recycled pooled instance 被误判为同一 frame scope
 - [x] 跨帧 partial apply 禁用：compositor 层在 `Invalidate` 或 FrameId 不匹配时强制 fallback full apply，正确性优先
+- [x] `TryApplyPartial` 失败路径测试：same resources + dirty ranges + command count mismatch 时返回 `false` 且不污染 retained buffer/resources；`Dispose()` 安全释放 retained resources 回池
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`

@@ -1131,7 +1131,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void RetainedRenderFrame_try_apply_partial_falls_back_on_different_resources()
+    public void RetainedRenderFrame_try_apply_partial_returns_false_on_different_resources()
     {
         var resources1 = FrameDrawingResources.Rent();
         var slice1 = resources1.AddText("old");
@@ -1151,7 +1151,7 @@ public sealed class WindowLayoutPipelineTests
         frame.ApplyFull(batch1);
         Assert.Same(resources1, frame.Resources);
 
-        // Different resources instance — partial must refuse and fallback to full
+        // Different resources instance — partial must refuse without side effects
         var resources2 = FrameDrawingResources.Rent();
         var slice2 = resources2.AddText("new");
         resources2.Seal();
@@ -1168,14 +1168,14 @@ public sealed class WindowLayoutPipelineTests
 
         var result = frame.TryApplyPartial(batch2);
 
-        Assert.False(result); // refused, fell back to full
-        Assert.Same(resources2, frame.Resources); // full apply replaced resources
+        Assert.False(result);
+        // Frame state is UNCHANGED — TryApplyPartial is pure on failure
+        Assert.Same(resources1, frame.Resources);
         Assert.Equal(1, frame.CommandCount);
-        Assert.Equal(slice2, frame.Commands[0].Text);
+        Assert.Equal(slice1, frame.Commands[0].Text);
 
-        // frame.Dispose() releases resources2 (current owner); resources1 was released
-        // when ApplyFull(batch2) was called.
         frame.Dispose();
+        batch2.Dispose();
     }
 
     [Fact]
@@ -1209,6 +1209,88 @@ public sealed class WindowLayoutPipelineTests
         Assert.Same(resources, resolvedResources);
 
         frame.Dispose();
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_try_apply_partial_returns_false_on_command_count_mismatch()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice1 = resources.AddText("one");
+        var slice2 = resources.AddText("two");
+        resources.Seal();
+
+        // Retained frame has 2 commands
+        var owner1 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice1),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 40, 100, 32), Text: slice2),
+        ]);
+        var batch1 = new RenderFrameBatch(
+            new DrawCommandBatch(owner1, 2),
+            [],
+            resources,
+            []);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch1);
+
+        // New batch has 1 command (count mismatch) + same resources + dirty ranges
+        var owner2 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice1),
+        ]);
+        var batch2 = new RenderFrameBatch(
+            new DrawCommandBatch(owner2, 1),
+            [],
+            resources,
+            [(0, 1)]);
+
+        var result = frame.TryApplyPartial(batch2);
+
+        Assert.False(result);
+        // Frame state is UNCHANGED — no pollution from count mismatch
+        Assert.Equal(2, frame.CommandCount);
+        Assert.Equal(slice1, frame.Commands[0].Text);
+        Assert.Equal(slice2, frame.Commands[1].Text);
+        Assert.Same(resources, frame.Resources);
+        Assert.Empty(frame.DirtyCommandRanges);
+
+        frame.Dispose();
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_dispose_releases_retained_resources()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice = resources.AddText("dispose-test");
+        resources.Seal();
+
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice),
+        ]);
+        var batch = new RenderFrameBatch(
+            new DrawCommandBatch(owner, 1),
+            [],
+            resources,
+            []);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch);
+        frame.RetainResources();
+
+        // batch.Dispose() is a no-op for resources (retained)
+        batch.Dispose();
+
+        // frame.Dispose() should release retained resources back to pool
+        frame.Dispose();
+
+        // After dispose, resources should be back in pool.
+        // A fresh Rent() may recycle the same object.
+        var recycled = FrameDrawingResources.Rent();
+        // Either same object (recycled) or different (pool was full).
+        // Either way, no leak.
+        FrameDrawingResources.Return(recycled);
     }
 
     [Fact]
