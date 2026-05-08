@@ -194,6 +194,20 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void RenderRequest_before_first_diff_does_not_crash()
+    {
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+
+        // Simulate a RenderRequest before any diff has set _lastTree
+        var renderRequest = PatchBatch.CreateRenderRequest();
+        using var frame = translator.Translate(renderRequest);
+
+        // Should produce an empty frame (no commands) since _lastTree is default
+        Assert.Equal(0, frame.Commands.Count);
+    }
+
+    [Fact]
     public void RenderPipeline_reuses_retained_layout_when_tree_and_viewport_unchanged()
     {
         var pipeline = new RenderPipeline();
