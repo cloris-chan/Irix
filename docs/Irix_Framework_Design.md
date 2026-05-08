@@ -908,6 +908,32 @@ v1 在 Debug 构建中启用以下诊断断言（`Debug.Assert`）：
 - `LayoutBox` 的 `ClipBounds` 必须完全包含在父节点的 `ClipBounds` 内。
 - `VirtualNodePatch` 的目标 `NodeId` 必须在当前树中存在（`Remove` / `Move` 操作）。
 
+#### 7.5 跨帧资源策略（ADR-017 设计草案）
+
+> **状态：** 设计草案，v1 不实现。记录未来 partial rendering 所需的资源模型边界。
+
+**当前约束：** `DrawCommand.TextSlice` 引用 `FrameTextArena` 的 pooled `char[]`。`FrameDrawingResources.Return()` 重置 arena 并递增 `BufferId`，旧 `TextSlice` 立即失效。因此 `RetainedRenderFrame` 必须与 `FrameDrawingResources` 同生命周期。
+
+**跨帧 partial rendering 需要解决的核心问题：**
+
+当 compositor 想只重绘 dirty commands 而保留 unchanged commands 时，unchanged commands 中的 `TextSlice` 仍指向旧帧的 arena。如果旧帧资源已归还池，这些 `TextSlice` 无法解析。
+
+**三条候选路径（均未实现，仅供未来评估）：**
+
+| 方案 | 描述 | 优势 | 代价 |
+|------|------|------|------|
+| **A. 稳定 text handle** | `TextSlice` 不直接引用 arena buffer，改为引用一个跨帧稳定的 text registry（handle → string 映射） | 最干净的跨帧模型 | 每次 `AddText` 需查 registry，热路径多一次间接；全局 registry 生命周期复杂 |
+| **B. Resource snapshot** | `RetainedRenderFrame` 持有旧帧 `FrameDrawingResources` 的快照（引用计数或独占），新旧 commands 各自引用各自的 resources | 局部改动，不影响 `DrawCommand` 结构 | 需要引用计数或 ownership 转移；多帧 resources 并存增加内存；`IFrameResourceResolver` 需支持多 buffer |
+| **C. Per-frame full resources + command diff** | 每帧仍创建完整 `FrameDrawingResources`，但只录制 dirty commands，unchanged commands 从 retained buffer 复制（已包含旧 resources 的 TextSlice），backend 按 command range 分两次 Execute | 最小架构改动 | backend 需支持分段 Execute；旧 resources 不能归还直到 frame 完成；两套 resources 并存 |
+
+**v1 决策：** 保持当前模型 — compositor 跨帧 full apply，partial 仅限同 frame scope（same `FrameDrawingResources` instance + same `FrameId` generation）。`TryApplyPartial` 纯函数，失败不污染状态。compositor 是 fallback 唯一处理点。
+
+**未来实现触发条件：**
+
+1. Profiler 确认 full apply 是渲染瓶颈（当前 D3D12 full execute 开销远大于 command 录制）。
+2. 文本命令数量超过 100+，full re-record 成为可测量开销。
+3. Remote UI Delivery 场景需要增量 command 传输。
+
 ---
 
 ## 8. 运行模式与 UI 交付层
@@ -1391,6 +1417,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-014 | Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12 | §5.2.8 / §5.2.9 | ✅ 已确认 | 复用 Windows 成熟文本栈，避免 PoC 阶段手写 glyph rasterization 或提前引入 Skia |
 | ADR-015 | 文本内容使用 frame-local arena + slice，而非无边界全局字符串池 | §5.2.4 / §5.2.9 | ✅ 已确认 | 避免动态文本泄漏和复杂全局生命周期；全局化优先留给 TextStyle、glyph/shaping cache |
 | ADR-016 | TextStyle 使用 ResourceHandle 并由 backend 缓存原生文本资源 | §5.2.4 / §5.2.9 | ✅ 已确认 | DrawCommand 保持纯值；DirectWrite backend 复用 bounded TextFormat/TextLayout，显式 glyph atlas 后置 |
+| ADR-017 | 跨帧 partial rendering 需要稳定的资源快照，v1 不实现 | §7.3 | 📝 设计草案 | 当前 TextSlice 引用 frame-local arena，跨帧 partial 需要：(1) 稳定 text handle 不随 arena reset 失效；(2) resource snapshot 保留旧帧 TextSlice 可解析；或 (3) per-frame full resources + command-level diff。v1 保持 full apply，partial 仅限同 frame scope pilot |
 
 ---
 

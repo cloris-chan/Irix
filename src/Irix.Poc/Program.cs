@@ -122,6 +122,7 @@ internal static class Program
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        using var compositor = new DrawingBackendCompositor(d3d12Backend);
 
         // Build a test frame: one rectangle + one text + one button
         var resources = FrameDrawingResources.Rent();
@@ -150,12 +151,17 @@ internal static class Program
                 Color: DrawColor.Opaque(255, 255, 255))
         };
 
-        // Render 3 frames to warm caches
+        // Render 3 frames via compositor to warm caches and collect stats
         for (var i = 0; i < 3; i++)
         {
-            d3d12Backend.BeginFrame(default);
-            d3d12Backend.Execute(commands, resources);
-            d3d12Backend.EndFrame();
+            var batch = new RenderFrameBatch(
+                new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(commands), commands.Length),
+                [],
+                resources,
+                i == 0 ? [] : [(0, commands.Length)]); // frame 0: full; frames 1-2: dirty ranges
+
+            compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
+            batch.Dispose();
         }
 
         // Dump diagnostics
@@ -173,6 +179,18 @@ internal static class Program
         Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
         Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
         Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
+        Console.WriteLine($"=== Compositor Diagnostics ===");
+        Console.WriteLine($"Render count: {compositor.RenderCount}");
+        Console.WriteLine($"Partial apply: {compositor.PartialApplyCount}");
+        Console.WriteLine($"Full apply: {compositor.FullApplyCount}");
+        Console.WriteLine($"Empty frames: {compositor.EmptyFrameCount}");
+        Console.WriteLine($"Partial hit rate: {(compositor.RenderCount > 0 ? 100.0 * compositor.PartialApplyCount / compositor.RenderCount : 0):F1}%");
+        var dirty = compositor.LastDirtyCommandRanges;
+        Console.WriteLine($"Last dirty ranges: {dirty.Count} ranges");
+        foreach (var (start, count) in dirty)
+        {
+            Console.WriteLine($"  [{start}..{start + count - 1}] ({count} commands)");
+        }
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);

@@ -1,3 +1,4 @@
+using System.Threading;
 using Irix.Drawing;
 
 namespace Irix.Rendering;
@@ -15,6 +16,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private readonly RetainedRenderFrame _retainedFrame = new();
     private HitTestTarget[] _hitTargets = [];
     private ulong _lastAppliedFrameId;
+    private long _renderCount;
+    private long _partialApplyCount;
+    private long _fullApplyCount;
+    private long _emptyFrameCount;
 
     /// <summary>
     /// The dirty command ranges from the last render, if any.
@@ -34,6 +39,18 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// </summary>
     internal RetainedRenderFrame RetainedFrame => _retainedFrame;
 
+    /// <summary>Total non-empty frames rendered.</summary>
+    public long RenderCount => _renderCount;
+
+    /// <summary>Number of renders that used partial apply.</summary>
+    public long PartialApplyCount => _partialApplyCount;
+
+    /// <summary>Number of renders that fell back to full apply.</summary>
+    public long FullApplyCount => _fullApplyCount;
+
+    /// <summary>Number of empty frames received (commands.Count == 0).</summary>
+    public long EmptyFrameCount => _emptyFrameCount;
+
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
         if (renderFrameBatch.Commands.Count == 0)
@@ -43,6 +60,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 _hitTargets = [];
             }
 
+            Interlocked.Increment(ref _emptyFrameCount);
             _retainedFrame.ReleaseResources();
             _retainedFrame.Invalidate();
             _lastAppliedFrameId = 0;
@@ -74,8 +92,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _retainedFrame.ApplyFull(renderFrameBatch);
             // Take ownership: prevent batch.Dispose() from returning resources to pool
             _retainedFrame.RetainResources();
+            Interlocked.Increment(ref _fullApplyCount);
+        }
+        else
+        {
+            Interlocked.Increment(ref _partialApplyCount);
         }
 
+        Interlocked.Increment(ref _renderCount);
         _lastAppliedFrameId = batchFrameId;
         LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
 

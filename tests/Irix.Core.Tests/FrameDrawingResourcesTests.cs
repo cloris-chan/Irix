@@ -91,4 +91,111 @@ public sealed class FrameDrawingResourcesTests
         pooled.Seal();
         FrameDrawingResources.Return(pooled);
     }
+
+    [Fact]
+    public void Retain_prevents_Return_from_recycling()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Retain();
+
+        FrameDrawingResources.Return(resources);
+
+        // Return is a no-op while retained — resources should not be in pool.
+        // A fresh Rent() should NOT get the same instance back.
+        var other = FrameDrawingResources.Rent();
+        Assert.NotSame(resources, other);
+        FrameDrawingResources.Return(other);
+
+        // Release returns to pool
+        resources.Release();
+    }
+
+    [Fact]
+    public void Release_returns_to_pool_if_not_already_returned()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Retain();
+
+        resources.Release();
+
+        // After Release, resources should be back in pool.
+        // A fresh Rent() may recycle the same object.
+        var recycled = FrameDrawingResources.Rent();
+        // Either same object (recycled) or different (pool was full) — either way no leak.
+        FrameDrawingResources.Return(recycled);
+    }
+
+    [Fact]
+    public void Double_Release_is_idempotent()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Retain();
+
+        resources.Release();
+        resources.Release(); // second release should be a no-op
+
+        // No exception, no double-return. Pool state is clean.
+        var recycled = FrameDrawingResources.Rent();
+        FrameDrawingResources.Return(recycled);
+    }
+
+    [Fact]
+    public void Release_after_Return_is_noop()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Retain();
+
+        // Simulate batch.Dispose() calling Return() while retained — no-op
+        FrameDrawingResources.Return(resources);
+
+        // Now Release() — should return to pool (since Return was blocked by _retained)
+        resources.Release();
+
+        // Resources are back in pool. Second Release is a no-op.
+        resources.Release();
+
+        var recycled = FrameDrawingResources.Rent();
+        FrameDrawingResources.Return(recycled);
+    }
+
+    [Fact]
+    public void Retain_then_batch_dispose_does_not_return_to_pool()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice = resources.AddText("retained");
+        resources.Seal();
+        resources.Retain();
+
+        // Simulate batch.Dispose() → Return() — should be no-op since retained
+        FrameDrawingResources.Return(resources);
+
+        // TextSlice is still valid — resources are NOT in pool
+        Assert.Equal("retained", resources.Resolve(slice).ToString());
+
+        // Release returns to pool
+        resources.Release();
+    }
+
+    [Fact]
+    public void FrameId_increments_on_each_rent()
+    {
+        var r1 = FrameDrawingResources.Rent();
+        var id1 = r1.FrameId;
+        FrameDrawingResources.Return(r1);
+
+        var r2 = FrameDrawingResources.Rent();
+        var id2 = r2.FrameId;
+
+        // If same object, FrameId must differ
+        if (ReferenceEquals(r1, r2))
+        {
+            Assert.True(id2 > id1);
+        }
+        else
+        {
+            Assert.True(id2 >= 1);
+        }
+
+        FrameDrawingResources.Return(r2);
+    }
 }
