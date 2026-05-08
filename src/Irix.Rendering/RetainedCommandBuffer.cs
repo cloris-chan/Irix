@@ -8,6 +8,18 @@ namespace Irix.Rendering;
 /// are available, only those ranges are replaced from a new batch, avoiding
 /// a full copy of unchanged commands.
 ///
+/// <para><b>Resource lifecycle constraint:</b></para>
+/// <para>
+/// <see cref="DrawCommand"/>s may contain <see cref="TextSlice"/> references into
+/// a <see cref="FrameDrawingResources"/> arena. These references are only valid while
+/// the resources are alive (not returned to the pool). Therefore:
+/// </para>
+/// <list type="bullet">
+///   <item>The buffer is <b>frame-scoped</b>: it must be reset when resources are returned.</item>
+///   <item><see cref="ApplyPartial"/> is only valid within the same frame/resource scope.</item>
+///   <item>Cross-frame retention requires either full resource snapshots or no TextSlice references.</item>
+/// </list>
+///
 /// <para><b>v0 status:</b> Memory-level validation only. Not wired into D3D12 backend.</para>
 /// </summary>
 internal sealed class RetainedCommandBuffer : IDisposable

@@ -17,6 +17,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     private LayoutTreeResult? _retainedLayoutResult;
     private IReadOnlyList<LayoutElement>? _retainedLayout;
     private PixelRectangle _retainedViewport;
+    private readonly RetainedRenderFrame _retainedFrame = new();
 
     /// <summary>
     /// The dirty element ranges from the last Build call, if any.
@@ -35,6 +36,12 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     /// <c>LastElementCommandRanges[elementIndex]</c> gives (commandStart, commandCount).
     /// </summary>
     public ElementCommandRange[] LastElementCommandRanges { get; private set; } = [];
+
+    /// <summary>
+    /// The retained render frame from the last Build call.
+    /// Contains the retained command buffer, resource resolver, and dirty ranges.
+    /// </summary>
+    public RetainedRenderFrame RetainedFrame => _retainedFrame;
 
     /// <summary>
     /// Build a render frame for the given root and viewport.
@@ -67,7 +74,21 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         LastDirtyCommandRanges = result.DirtyCommandRanges;
         LastElementCommandRanges = result.ElementCommandRanges;
 
-        return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources, result.DirtyCommandRanges);
+        var batch = new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources, result.DirtyCommandRanges);
+
+        // Update retained render frame: use partial apply when dirty ranges exist,
+        // full apply otherwise. The retained frame is frame-scoped — TextSlice
+        // references are only valid while the current FrameDrawingResources is alive.
+        if (hasDirty && result.DirtyCommandRanges.Count > 0)
+        {
+            _retainedFrame.ApplyPartial(batch);
+        }
+        else
+        {
+            _retainedFrame.ApplyFull(batch);
+        }
+
+        return batch;
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)

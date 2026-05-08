@@ -912,4 +912,240 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(frame2.DirtyCommandRanges);
         Assert.Equal((1, 2), frame2.DirtyCommandRanges[0]);
     }
+
+    [Fact]
+    public void RetainedCommandBuffer_reset_after_resource_return_does_not_resolve_stale_text()
+    {
+        // Simulate the lifecycle: record commands with resources, return resources, reset buffer
+        var resources = FrameDrawingResources.Rent();
+        var textSlice = resources.AddText("hello");
+        resources.Seal();
+
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: textSlice),
+        ]);
+        var batch = new DrawCommandBatch(owner, 1);
+
+        var buffer = new RetainedCommandBuffer();
+        buffer.ApplyFull(batch);
+
+        // Verify the command is there
+        Assert.Equal(1, buffer.Count);
+        Assert.Equal(textSlice, buffer.Commands[0].Text);
+
+        // Return resources to pool (simulates frame end)
+        FrameDrawingResources.Return(resources);
+
+        // The buffer still holds the old TextSlice, but it's now invalid
+        // because the arena was reset. Reset the buffer to prevent stale access.
+        buffer.Reset();
+        Assert.Equal(0, buffer.Count);
+    }
+
+    [Fact]
+    public void RetainedCommandBuffer_partial_apply_within_same_resource_scope_is_safe()
+    {
+        // Simulate a single frame where we record two batches with the same resources.
+        // In practice, DrawCommandRecorder.Record() creates resources once per frame.
+        var resources = FrameDrawingResources.Rent();
+        var slice1 = resources.AddText("hello");
+        var slice2 = resources.AddText("world");
+        var slice3 = resources.AddText("updated");
+        resources.Seal();
+
+        // Initial batch
+        var owner1 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice1),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 40, 100, 32), Text: slice2),
+        ]);
+        var buffer = new RetainedCommandBuffer();
+        buffer.ApplyFull(new DrawCommandBatch(owner1, 2));
+
+        // Partial replace: update command 0 with new text (same resources)
+        var owner2 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice3),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 40, 100, 32), Text: slice2),
+        ]);
+        buffer.ApplyPartial(new DrawCommandBatch(owner2, 2), [(0, 1)]);
+
+        Assert.Equal(2, buffer.Count);
+        // Command 0 should have the new text
+        Assert.Equal(slice3, buffer.Commands[0].Text);
+        // Command 1 should be unchanged
+        Assert.Equal(slice2, buffer.Commands[1].Text);
+
+        // Both slices should resolve correctly since resources are still alive
+        Assert.Equal("updated", resources.Resolve(buffer.Commands[0].Text).ToString());
+        Assert.Equal("world", resources.Resolve(buffer.Commands[1].Text).ToString());
+
+        FrameDrawingResources.Return(resources);
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_apply_full_stores_commands_and_resources()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice = resources.AddText("test");
+        resources.Seal();
+
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice),
+        ]);
+        var batch = new RenderFrameBatch(
+            new DrawCommandBatch(owner, 1),
+            [],
+            resources,
+            []);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch);
+
+        Assert.Equal(1, frame.CommandCount);
+        Assert.Equal(slice, frame.Commands[0].Text);
+        Assert.Same(resources, frame.Resources);
+        Assert.Empty(frame.DirtyCommandRanges);
+
+        frame.Dispose();
+        FrameDrawingResources.Return(resources);
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_apply_partial_replaces_dirty_commands()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice1 = resources.AddText("old");
+        var slice2 = resources.AddText("keep");
+        var slice3 = resources.AddText("new");
+        resources.Seal();
+
+        var owner1 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice1),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 40, 100, 32), Text: slice2),
+        ]);
+        var batch1 = new RenderFrameBatch(
+            new DrawCommandBatch(owner1, 2),
+            [],
+            resources,
+            []);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch1);
+
+        // Partial update: replace command 0
+        var owner2 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice3),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 40, 100, 32), Text: slice2),
+        ]);
+        var batch2 = new RenderFrameBatch(
+            new DrawCommandBatch(owner2, 2),
+            [],
+            resources,
+            [(0, 1)]);
+
+        frame.ApplyPartial(batch2);
+
+        Assert.Equal(2, frame.CommandCount);
+        Assert.Equal(slice3, frame.Commands[0].Text);
+        Assert.Equal(slice2, frame.Commands[1].Text);
+        Assert.Equal("new", resources.Resolve(frame.Commands[0].Text).ToString());
+        Assert.Equal("keep", resources.Resolve(frame.Commands[1].Text).ToString());
+
+        frame.Dispose();
+        FrameDrawingResources.Return(resources);
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_invalidate_resets_all_state()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice = resources.AddText("test");
+        resources.Seal();
+
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice),
+        ]);
+        var batch = new RenderFrameBatch(
+            new DrawCommandBatch(owner, 1),
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 32), "btn")],
+            resources,
+            [(0, 1)]);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch);
+
+        Assert.Equal(1, frame.CommandCount);
+        Assert.Single(frame.HitTargets);
+        Assert.Single(frame.DirtyCommandRanges);
+
+        frame.Invalidate();
+
+        Assert.Equal(0, frame.CommandCount);
+        Assert.Empty(frame.HitTargets);
+        Assert.Empty(frame.DirtyCommandRanges);
+
+        frame.Dispose();
+        FrameDrawingResources.Return(resources);
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_to_batch_creates_independent_snapshot()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice = resources.AddText("snapshot");
+        resources.Seal();
+
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice),
+        ]);
+        var batch = new RenderFrameBatch(
+            new DrawCommandBatch(owner, 1),
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 32), "btn")],
+            resources,
+            [(0, 1)]);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch);
+
+        using var snapshot = frame.ToBatch();
+
+        Assert.Equal(1, snapshot.Commands.Count);
+        Assert.Equal(slice, snapshot.Commands.Memory.Span[0].Text);
+        Assert.Single(snapshot.HitTargets);
+        Assert.Single(snapshot.DirtyCommandRanges);
+        Assert.Same(resources, snapshot.Resources);
+
+        frame.Dispose();
+        snapshot.Dispose(); // returns resources
+    }
+
+    [Fact]
+    public void RenderPipeline_retained_frame_updates_on_each_build()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("hello", 2));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Initial build
+        using var frame1 = pipeline.Build(root, viewport);
+        Assert.Equal(1, pipeline.RetainedFrame.CommandCount);
+        Assert.Empty(pipeline.RetainedFrame.DirtyCommandRanges);
+
+        // Dirty build
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("world", 2));
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+
+        Assert.Equal(1, pipeline.RetainedFrame.CommandCount);
+        Assert.Single(pipeline.RetainedFrame.DirtyCommandRanges);
+        Assert.Equal((0, 1), pipeline.RetainedFrame.DirtyCommandRanges[0]);
+    }
 }
