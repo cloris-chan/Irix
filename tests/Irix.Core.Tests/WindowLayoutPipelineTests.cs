@@ -1014,7 +1014,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void RetainedRenderFrame_apply_partial_replaces_dirty_commands()
+    public void RetainedRenderFrame_try_apply_partial_replaces_dirty_commands()
     {
         var resources = FrameDrawingResources.Rent();
         var slice1 = resources.AddText("old");
@@ -1036,7 +1036,7 @@ public sealed class WindowLayoutPipelineTests
         var frame = new RetainedRenderFrame();
         frame.ApplyFull(batch1);
 
-        // Partial update: replace command 0
+        // Partial update: replace command 0 (same resources instance)
         var owner2 = new ArrayMemoryOwner<DrawCommand>(
         [
             new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice3),
@@ -1048,8 +1048,9 @@ public sealed class WindowLayoutPipelineTests
             resources,
             [(0, 1)]);
 
-        frame.ApplyPartial(batch2);
+        var result = frame.TryApplyPartial(batch2);
 
+        Assert.True(result);
         Assert.Equal(2, frame.CommandCount);
         Assert.Equal(slice3, frame.Commands[0].Text);
         Assert.Equal(slice2, frame.Commands[1].Text);
@@ -1124,6 +1125,88 @@ public sealed class WindowLayoutPipelineTests
 
         frame.Dispose();
         snapshot.Dispose(); // returns resources
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_try_apply_partial_falls_back_on_different_resources()
+    {
+        var resources1 = FrameDrawingResources.Rent();
+        var slice1 = resources1.AddText("old");
+        resources1.Seal();
+
+        var owner1 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice1),
+        ]);
+        var batch1 = new RenderFrameBatch(
+            new DrawCommandBatch(owner1, 1),
+            [],
+            resources1,
+            []);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch1);
+        Assert.Same(resources1, frame.Resources);
+
+        // Different resources instance — partial must refuse and fallback to full
+        var resources2 = FrameDrawingResources.Rent();
+        var slice2 = resources2.AddText("new");
+        resources2.Seal();
+
+        var owner2 = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice2),
+        ]);
+        var batch2 = new RenderFrameBatch(
+            new DrawCommandBatch(owner2, 1),
+            [],
+            resources2,
+            [(0, 1)]);
+
+        var result = frame.TryApplyPartial(batch2);
+
+        Assert.False(result); // refused, fell back to full
+        Assert.Same(resources2, frame.Resources); // full apply replaced resources
+        Assert.Equal(1, frame.CommandCount);
+        Assert.Equal(slice2, frame.Commands[0].Text);
+
+        frame.Dispose();
+        FrameDrawingResources.Return(resources1);
+        FrameDrawingResources.Return(resources2);
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_try_read_frame_returns_commands_and_resources()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice = resources.AddText("hello");
+        resources.Seal();
+
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice),
+        ]);
+        var batch = new RenderFrameBatch(
+            new DrawCommandBatch(owner, 1),
+            [],
+            resources,
+            []);
+
+        var frame = new RetainedRenderFrame();
+
+        // Empty frame: TryReadFrame returns false
+        Assert.False(frame.TryReadFrame(out _, out _));
+
+        frame.ApplyFull(batch);
+
+        // Non-empty frame: TryReadFrame returns true with valid data
+        Assert.True(frame.TryReadFrame(out var commands, out var resolvedResources));
+        Assert.Equal(1, commands.Length);
+        Assert.Equal(slice, commands[0].Text);
+        Assert.Same(resources, resolvedResources);
+
+        frame.Dispose();
+        FrameDrawingResources.Return(resources);
     }
 
     [Fact]

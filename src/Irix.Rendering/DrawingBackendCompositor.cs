@@ -4,6 +4,7 @@ namespace Irix.Rendering;
 
 /// <summary>
 /// Compositor that delegates rendering to an <see cref="IDrawingBackend"/>.
+/// Owns a <see cref="RetainedRenderFrame"/> for incremental update and zero-alloc backend reads.
 /// Caches hit targets from the frame for input routing.
 /// This is the bridge between the RenderFrameBatch world and the IDrawingBackend world.
 /// </summary>
@@ -11,13 +12,26 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly Lock _hitTargetsLock = new();
+    private readonly RetainedRenderFrame _retainedFrame = new();
     private HitTestTarget[] _hitTargets = [];
 
     /// <summary>
     /// The dirty command ranges from the last render, if any.
-    /// Currently recorded for diagnostics only; rendering is still full-frame.
+    /// Reflects the actual ranges that were applied to the retained frame
+    /// (may differ from the batch's dirty ranges if partial apply was refused).
     /// </summary>
     public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges { get; private set; } = [];
+
+    /// <summary>
+    /// Whether the last render used partial apply on the retained frame.
+    /// </summary>
+    public bool LastPartialApplySucceeded { get; private set; }
+
+    /// <summary>
+    /// The retained render frame owned by this compositor.
+    /// Exposed for diagnostics and test assertions.
+    /// </summary>
+    internal RetainedRenderFrame RetainedFrame => _retainedFrame;
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
@@ -28,25 +42,45 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 _hitTargets = [];
             }
 
+            _retainedFrame.Invalidate();
             LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
+            LastPartialApplySucceeded = false;
             return ValueTask.CompletedTask;
         }
 
-        var frameContext = new FrameContext(0, 0); // Viewport size not needed for PoC backend
-        _backend.BeginFrame(frameContext);
+        // Update retained frame: try partial apply first (same resources + dirty ranges),
+        // fall back to full apply if resources differ or no dirty ranges.
+        if (renderFrameBatch.DirtyCommandRanges.Count > 0)
+        {
+            LastPartialApplySucceeded = _retainedFrame.TryApplyPartial(renderFrameBatch);
+        }
+        else
+        {
+            LastPartialApplySucceeded = false;
+        }
 
-        _backend.Execute(
-            renderFrameBatch.Commands.Memory.Span[..renderFrameBatch.Commands.Count],
-            renderFrameBatch.Resources);
+        if (!LastPartialApplySucceeded)
+        {
+            _retainedFrame.ApplyFull(renderFrameBatch);
+        }
 
-        _backend.EndFrame();
+        LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
+
+        // Execute backend from the retained frame (zero-alloc: no ToBatch copy).
+        if (_retainedFrame.TryReadFrame(out var commands, out var resources))
+        {
+            var frameContext = new FrameContext(0, 0); // Viewport size not needed for PoC backend
+            _backend.BeginFrame(frameContext);
+
+            _backend.Execute(commands, resources);
+
+            _backend.EndFrame();
+        }
 
         lock (_hitTargetsLock)
         {
-            _hitTargets = [.. renderFrameBatch.HitTargets];
+            _hitTargets = [.. _retainedFrame.HitTargets];
         }
-
-        LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
 
         return ValueTask.CompletedTask;
     }

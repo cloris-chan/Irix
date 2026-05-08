@@ -76,14 +76,10 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
         var batch = new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources, result.DirtyCommandRanges);
 
-        // Update retained render frame: use partial apply when dirty ranges exist,
-        // full apply otherwise. The retained frame is frame-scoped — TextSlice
-        // references are only valid while the current FrameDrawingResources is alive.
-        if (hasDirty && result.DirtyCommandRanges.Count > 0)
-        {
-            _retainedFrame.ApplyPartial(batch);
-        }
-        else
+        // Update retained render frame: try partial apply when dirty ranges exist,
+        // which only succeeds when resources are the same instance (same frame scope).
+        // Falls back to full apply when resources differ or no dirty ranges.
+        if (!hasDirty || result.DirtyCommandRanges.Count == 0 || !_retainedFrame.TryApplyPartial(batch))
         {
             _retainedFrame.ApplyFull(batch);
         }

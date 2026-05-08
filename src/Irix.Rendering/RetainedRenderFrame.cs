@@ -55,20 +55,52 @@ internal sealed class RetainedRenderFrame : IDisposable
     /// Apply a partial update: replace only the dirty command ranges from the new batch.
     /// The new batch must be recorded with the same <see cref="IFrameResourceResolver"/>
     /// as the current retained frame (same frame scope). Falls back to full replacement
-    /// if the buffer is empty, command count differs, or no dirty ranges are provided.
+    /// if the buffer is empty, command count differs, no dirty ranges are provided,
+    /// or the batch resources are not the same instance as the current resources.
     /// </summary>
-    public void ApplyPartial(RenderFrameBatch batch)
+    /// <returns>
+    /// <c>true</c> if partial apply succeeded; <c>false</c> if fallback to full apply occurred.
+    /// </returns>
+    public bool TryApplyPartial(RenderFrameBatch batch)
     {
         if (_commandBuffer.Count == 0 || batch.DirtyCommandRanges.Count == 0)
         {
             ApplyFull(batch);
-            return;
+            return false;
+        }
+
+        // Resource identity guard: partial replace is only safe when both batches
+        // were recorded with the same FrameDrawingResources instance. Different
+        // instances mean TextSlice buffer IDs are incompatible — must fallback.
+        if (!ReferenceEquals(batch.Resources, _resources))
+        {
+            ApplyFull(batch);
+            return false;
         }
 
         _commandBuffer.ApplyPartial(batch.Commands, batch.DirtyCommandRanges);
-        _resources = batch.Resources;
         _hitTargets = [.. batch.HitTargets];
         _dirtyCommandRanges = batch.DirtyCommandRanges;
+        return true;
+    }
+
+    /// <summary>
+    /// Try to read the retained frame data without copying (zero-alloc hot path).
+    /// Returns true when the frame has commands, providing span access to the commands
+    /// and the associated resource resolver.
+    /// </summary>
+    public bool TryReadFrame(out ReadOnlySpan<DrawCommand> commands, out IFrameResourceResolver resources)
+    {
+        if (_commandBuffer.Count == 0)
+        {
+            commands = default;
+            resources = FrameDrawingResources.Empty;
+            return false;
+        }
+
+        commands = _commandBuffer.Commands;
+        resources = _resources;
+        return true;
     }
 
     /// <summary>

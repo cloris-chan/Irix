@@ -113,6 +113,90 @@ public sealed class DrawingBackendCompositorTests
         // PoCDrawingBackend.Dispose is a no-op, so no exception means success
     }
 
+    [Fact]
+    public async Task RenderAsync_uses_partial_apply_when_resources_match()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow();
+        var backend = new PoCDrawingBackend(window);
+        var compositor = new DrawingBackendCompositor(backend);
+        var resources = new FrameDrawingResources();
+        var hello = resources.AddText("Hello");
+        var world = resources.AddText("World");
+        var textStyle = resources.AddTextStyle(TextStyle.Default);
+        resources.Seal();
+
+        // First frame: full apply
+        using var frame1 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: hello, Resource: textStyle, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources);
+
+        await compositor.RenderAsync(frame1, cancellationToken);
+        Assert.False(compositor.LastPartialApplySucceeded); // no dirty ranges
+        Assert.Same(resources, compositor.RetainedFrame.Resources);
+
+        // Second frame: same resources + dirty ranges → partial apply
+        using var frame2 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: world, Resource: textStyle, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources,
+            [(0, 1)]);
+
+        await compositor.RenderAsync(frame2, cancellationToken);
+        Assert.True(compositor.LastPartialApplySucceeded);
+        Assert.Single(compositor.LastDirtyCommandRanges);
+        Assert.Equal((0, 1), compositor.LastDirtyCommandRanges[0]);
+    }
+
+    [Fact]
+    public async Task RenderAsync_falls_back_to_full_apply_when_resources_differ()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow();
+        var backend = new PoCDrawingBackend(window);
+        var compositor = new DrawingBackendCompositor(backend);
+
+        var resources1 = new FrameDrawingResources();
+        var hello = resources1.AddText("Hello");
+        resources1.Seal();
+
+        using var frame1 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: hello, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources1);
+
+        await compositor.RenderAsync(frame1, cancellationToken);
+        Assert.Same(resources1, compositor.RetainedFrame.Resources);
+
+        // Different resources instance + dirty ranges → partial refused, full fallback
+        var resources2 = new FrameDrawingResources();
+        var world = resources2.AddText("World");
+        resources2.Seal();
+
+        using var frame2 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: world, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources2,
+            [(0, 1)]);
+
+        await compositor.RenderAsync(frame2, cancellationToken);
+        Assert.False(compositor.LastPartialApplySucceeded); // refused, full fallback
+        Assert.Same(resources2, compositor.RetainedFrame.Resources); // full apply replaced
+    }
+
     private sealed class FakeWindow : INativeWindow
     {
         public IReadOnlyList<WindowContentElement> LastElements { get; private set; } = [];
