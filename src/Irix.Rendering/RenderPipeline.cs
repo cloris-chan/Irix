@@ -44,6 +44,12 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     public RetainedRenderFrame RetainedFrame => _retainedFrame;
 
     /// <summary>
+    /// The layout tree result from the last Build call, if available.
+    /// Exposes scroll container diagnostics and tree structure.
+    /// </summary>
+    public LayoutTreeResult? LastLayoutResult => _retainedLayoutResult;
+
+    /// <summary>
     /// Build a render frame for the given root and viewport.
     /// When <paramref name="dirtyNodes"/> is non-null, the layout tree is rebuilt
     /// and dirty element/command ranges are computed. When null (render request),

@@ -233,6 +233,14 @@ internal static class Program
             var ht = layoutBatch.HitTargets[0];
             Console.WriteLine($"  Hit target: {ht.ActionId} bounds=({ht.Bounds.X},{ht.Bounds.Y},{ht.Bounds.Width},{ht.Bounds.Height}) clip=({ht.ClipBounds.X},{ht.ClipBounds.Y},{ht.ClipBounds.Width},{ht.ClipBounds.Height})");
         }
+        var layoutResult = layoutPipeline.LastLayoutResult;
+        if (layoutResult is not null)
+        {
+            foreach (var sd in layoutResult.ScrollDiagnostics)
+            {
+                Console.WriteLine($"  ScrollContainer[{sd.DfsIndex}]: visible={sd.VisibleHeight} content={sd.ContentHeight} scrollY={sd.ScrollY} maxScrollY={sd.MaxScrollY}");
+            }
+        }
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);

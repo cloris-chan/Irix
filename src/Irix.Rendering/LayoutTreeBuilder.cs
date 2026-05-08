@@ -17,16 +17,17 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         var elements = new List<LayoutElement>();
+        var scrollDiags = new List<ScrollContainerDiag>();
         var availableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0);
         var cursorY = style.VerticalPadding;
 
-        var treeNodes = LayoutNode(root, 0, availableWidth, viewportBounds.Height, ref cursorY, elements, style);
+        var treeNodes = LayoutNode(root, 0, availableWidth, viewportBounds.Height, ref cursorY, elements, style, scrollDiags);
 
         var dirtyRanges = dirtyNodes is { Count: > 0 }
             ? RangeUtils.Merge(CollectDirtyRanges(treeNodes, new HashSet<int>(dirtyNodes)))
             : [];
 
-        return new LayoutTreeResult(elements, treeNodes, dirtyRanges);
+        return new LayoutTreeResult(elements, treeNodes, dirtyRanges, scrollDiags);
     }
 
     /// <summary>
@@ -45,6 +46,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         ref int cursorY,
         List<LayoutElement> elements,
         LayoutStyle style,
+        List<ScrollContainerDiag> scrollDiags,
         PixelRectangle clipBounds = default)
     {
         switch (node.Kind)
@@ -53,29 +55,53 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             {
                 var children = new List<LayoutTreeNode>();
                 var childDfsIndex = dfsIndex + 1;
+                var containerTop = cursorY;
+
+                // Container visible height: explicit Height attribute, or full remaining viewport
+                var explicitHeight = GetDimension(node, "Height", 0);
+                var containerVisibleHeight = explicitHeight > 0
+                    ? Math.Min(explicitHeight, Math.Max(viewportHeight - containerTop, 0))
+                    : Math.Max(viewportHeight - containerTop, 0);
+
                 // Clip bounds: the visible area for children within this container
                 var containerClip = new PixelRectangle(
                     style.HorizontalPadding,
-                    style.VerticalPadding,
+                    containerTop,
                     availableWidth,
-                    Math.Max(viewportHeight - style.VerticalPadding * 2, 0));
+                    containerVisibleHeight);
                 // Intersect with parent clip to prevent children from overflowing
                 if (clipBounds.Width > 0 && clipBounds.Height > 0)
                 {
                     containerClip = IntersectRect(containerClip, clipBounds);
                 }
-                // Scroll offset: shift child y coordinates by -ScrollY
-                var scrollY = GetDimension(node, "ScrollY", 0);
-                var containerTop = cursorY;
-                var savedCursorY = cursorY;
-                cursorY -= scrollY;
+
+                // Lay out children to measure content height (start at container top)
+                cursorY = containerTop;
                 foreach (var child in node.Children)
                 {
-                    children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, viewportHeight, ref cursorY, elements, style, containerClip));
+                    children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, viewportHeight, ref cursorY, elements, style, scrollDiags, containerClip));
                     childDfsIndex += CountVirtualNodes(child);
                 }
-                // Advance cursor past the container's visible area (not content height)
-                var containerVisibleHeight = Math.Max(viewportHeight - containerTop, 0);
+                var contentHeight = Math.Max(cursorY - containerTop, 0);
+
+                // Scroll offset: clamp to [0, MaxScrollY], then shift children
+                var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
+                var scrollY = Math.Clamp(GetDimension(node, "ScrollY", 0), 0, maxScrollY);
+
+                if (scrollY > 0)
+                {
+                    OffsetElementY(elements, children, -scrollY);
+                }
+
+                // Collect scroll diagnostics
+                scrollDiags.Add(new ScrollContainerDiag(
+                    dfsIndex,
+                    containerVisibleHeight,
+                    contentHeight,
+                    scrollY,
+                    maxScrollY));
+
+                // Advance cursor past the container
                 cursorY = containerTop + containerVisibleHeight + style.ItemSpacing;
 
                 if (children.Count == 0)
@@ -237,5 +263,22 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         var width = Math.Max(right - x, 0);
         var height = Math.Max(bottom - y, 0);
         return new PixelRectangle(x, y, width, height);
+    }
+
+    private static void OffsetElementY(List<LayoutElement> elements, List<LayoutTreeNode> nodes, int offsetY)
+    {
+        if (offsetY == 0)
+        {
+            return;
+        }
+
+        foreach (var node in nodes)
+        {
+            for (var i = node.ElementStart; i < node.ElementStart + node.ElementCount; i++)
+            {
+                var el = elements[i];
+                elements[i] = el with { Bounds = new PixelRectangle(el.Bounds.X, el.Bounds.Y + offsetY, el.Bounds.Width, el.Bounds.Height) };
+            }
+        }
     }
 }

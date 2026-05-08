@@ -164,8 +164,8 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(frame.HitTargets);
         Assert.Equal(new PixelRectangle(16, 60, 140, 40), frame.HitTargets[0].Bounds);
         Assert.Equal("Increment", frame.HitTargets[0].ActionId);
-        // Clip bounds from ScrollContainer (padding=16, viewport 960x540)
-        Assert.Equal(new PixelRectangle(16, 16, 928, 508), frame.HitTargets[0].ClipBounds);
+        // Clip bounds from ScrollContainer (container starts at y=16, height=540-16=524)
+        Assert.Equal(new PixelRectangle(16, 16, 928, 524), frame.HitTargets[0].ClipBounds);
 
         Assert.Equal("Count: 0", frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString());
         Assert.Equal("Increment", frame.Resources.Resolve(frame.Commands.Memory.Span[2].Text).ToString());
@@ -195,8 +195,8 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(frame.HitTargets);
         Assert.Equal(new PixelRectangle(16, 60, 140, 40), frame.HitTargets[0].Bounds);
         Assert.Equal("Increment", frame.HitTargets[0].ActionId);
-        // Clip bounds from ScrollContainer (padding=16, viewport 960x540)
-        Assert.Equal(new PixelRectangle(16, 16, 928, 508), frame.HitTargets[0].ClipBounds);
+        // Clip bounds from ScrollContainer (container starts at y=16, height=540-16=524)
+        Assert.Equal(new PixelRectangle(16, 16, 928, 524), frame.HitTargets[0].ClipBounds);
     }
 
     [Fact]

@@ -42,9 +42,16 @@ internal readonly record struct ElementCommandRange(int CommandStart, int Comman
 internal sealed class LayoutTreeResult(
     IReadOnlyList<LayoutElement> elements,
     LayoutTreeNode[] treeNodes,
-    IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
+    IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
+    IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
 {
-
+    public LayoutTreeResult(
+        IReadOnlyList<LayoutElement> elements,
+        LayoutTreeNode[] treeNodes,
+        IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
+        : this(elements, treeNodes, dirtyElementRanges, [])
+    {
+    }
 
     /// <summary>The flat layout element array (full frame).</summary>
     public IReadOnlyList<LayoutElement> Elements { get; } = elements;
@@ -59,7 +66,20 @@ internal sealed class LayoutTreeResult(
     /// Empty when no dirty nodes are specified.
     /// </summary>
     public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = dirtyElementRanges;
+
+    /// <summary>Diagnostic info for each ScrollContainer encountered during layout.</summary>
+    public IReadOnlyList<ScrollContainerDiag> ScrollDiagnostics { get; } = scrollDiagnostics;
 }
+
+/// <summary>
+/// Diagnostic information for a single ScrollContainer's scroll state.
+/// </summary>
+internal readonly record struct ScrollContainerDiag(
+    int DfsIndex,
+    int VisibleHeight,
+    int ContentHeight,
+    int ScrollY,
+    int MaxScrollY);
 
 /// <summary>
 /// Result of recording draw commands: the command batch, resource resolver,

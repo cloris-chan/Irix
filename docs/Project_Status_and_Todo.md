@@ -407,6 +407,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] Clip hit-test 精度测试：构造 viewport 120×60 使 button bounds 超出 clip 区域；验证“bounds 内 clip 外”点击被 clip check 拒绝（而非 bounds check）
 - [x] Nested clip intersection 精确断言：断言交集结果等于预期矩形 `[16, 16, 268, 168]`，而非仅 `<= viewport`
 - [x] Hit-test + scroll 联动测试：`ScrollY=30` 使第一个 button 部分滚出 clip；验证 clip 外不命中、clip 内命中；第二个 button 滚入可见区后可命中
+- [x] ScrollY v0 清理：删除 `savedCursorY`；`ScrollY` 负值 clamp 到 0；`Math.Clamp(scrollY, 0, maxScrollY)` 防止超大滚动
+- [x] 容器高度 v0：`ScrollContainer` 支持 `Height` 属性；无属性时 root 用 `viewportHeight - containerTop`，嵌套容器用内容高度；容器布局后 cursorY 恢复到 `containerTop + containerVisibleHeight + spacing`
+- [x] Scroll bounds clamp：根据 content height 和 visible height 计算 `MaxScrollY`，布局时 clamp `ScrollY` 到 `[0, MaxScrollY]`；`OffsetElementY` 在 clamp 后偏移子元素 y 坐标
+- [x] Scroll 诊断：`LayoutTreeResult.ScrollDiagnostics` 暴露每个 ScrollContainer 的 `VisibleHeight`、`ContentHeight`、`ScrollY`、`MaxScrollY`；`RenderPipeline.LastLayoutResult` 可访问；`--diagnose` 输出 scroll container 状态
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`
@@ -441,7 +445,8 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | **Clipped commands** | **0** (diagnostic mode uses raw commands, not layout pipeline) |
 | **Layout commands** | **3** |
 | **Layout clipped commands** | **3** |
-| **Layout hit targets** | **1** (LayoutBtn, clip = 16,16,928,508) |
+| **Layout hit targets** | **1** (LayoutBtn, clip = 16,16,928,524) |
+| **ScrollContainer[0]** | **visible=524 content=96 scrollY=0 maxScrollY=0** |
 
 ### `--diagnose-resize` 压力模式
 
