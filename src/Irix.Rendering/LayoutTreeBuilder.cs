@@ -59,6 +59,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     style.VerticalPadding,
                     availableWidth,
                     Math.Max(viewportHeight - style.VerticalPadding * 2, 0));
+                // Intersect with parent clip to prevent children from overflowing
+                if (clipBounds.Width > 0 && clipBounds.Height > 0)
+                {
+                    containerClip = IntersectRect(containerClip, clipBounds);
+                }
                 foreach (var child in node.Children)
                 {
                     children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, viewportHeight, ref cursorY, elements, style, containerClip));
@@ -213,5 +218,16 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     private static string? GetTextContent(VirtualNode node)
     {
         return node.Content.Kind == NodeContentKind.Text ? node.Content.Text : null;
+    }
+
+    private static PixelRectangle IntersectRect(PixelRectangle a, PixelRectangle b)
+    {
+        var x = Math.Max(a.X, b.X);
+        var y = Math.Max(a.Y, b.Y);
+        var right = Math.Min(a.X + a.Width, b.X + b.Width);
+        var bottom = Math.Min(a.Y + a.Height, b.Y + b.Height);
+        var width = Math.Max(right - x, 0);
+        var height = Math.Max(bottom - y, 0);
+        return new PixelRectangle(x, y, width, height);
     }
 }

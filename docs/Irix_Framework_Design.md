@@ -564,7 +564,29 @@ v1 Drawing 层的成功标准只有两个：
 1. 对上能稳定承接 Irix 自己的 UI 布局与绘制语义。
 2. 对下能让 `WindowBackend`、D3D12 backend 与未来 `SkiaBackend` 共用同一份 `DrawCommand + FrameDrawingResources` 输入。
 
-### 5.3 时间轴动画系统
+#### 5.2.10 裁剪与 Scissor 实现路线（ADR-018 设计草案）
+
+> **状态：** 设计草案，v1 不实现 GPU scissor。记录未来实现裁剪渲染的三条候选路线。
+
+**当前状态：** `DrawCommand.ClipBounds` 和 `HitTestTarget.ClipBounds` 已携带裁剪数据。`LayoutTreeBuilder` 为 ScrollContainer 子元素计算 clip（容器可见区域与 parent clip 求交集）。`DrawingBackendCompositor.TryGetActionIdAt` 检查 clip bounds。D3D12 backend 记录 `ClippedCommandCount` 用于诊断。GPU 渲染仍全帧，不做 scissor。
+
+**三条候选路线：**
+
+| 方案 | 描述 | 优势 | 代价 |
+|------|------|------|------|
+| **A. Per-command scissor** | 每个 `DrawCommand` 执行前设置 `RSSetScissorRects` 为 `ClipBounds` | 最精确；每个元素独立裁剪；实现简单 | scissor rect 切换频繁（每命令一次）；D3D12 scissor state 变更可能有驱动开销 |
+| **B. Batch by clip** | 按 `ClipBounds` 对 commands 分组，相同 clip 的 commands 批量渲染 | 减少 scissor 切换次数；batch-friendly | 需要排序/分组逻辑；打断 command 录制顺序；对增量 partial redraw 不友好 |
+| **C. D2D text clip** | 矩形用 scissor，文本用 `ID2D1PushAxisAlignedClip` | 文本裁剪更精确（sub-pixel）；D2D 原生支持 | 矩形和文本走不同裁剪路径；D2D clip 与 D3D12 scissor 状态需要协调；D3D11On12 interop 层增加复杂度 |
+
+**v1 决策：** 保持当前模型 — clip 数据仅用于诊断和 hit-test。GPU scissor 留待 profiler 确认裁剪是性能瓶颈后再实现。
+
+**实现触发条件：**
+
+1. 可见元素数量超过 100+，且大部分被裁剪（如长列表滚动），full render 浪费明显。
+2. Profiler 确认 D3D12 draw call 数量是帧时间瓶颈。
+3. Remote UI Delivery 场景需要增量裁剪传输。
+
+---
 
 - 动画系统**不依赖帧序号**，仅依赖全局高精度物理时间戳（`Stopwatch.GetTimestamp()`，精度 < 1µs）。
 - 每帧插值公式：$value = lerp(from, to, easing((now - startTime) / duration))$
@@ -1418,6 +1440,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-015 | 文本内容使用 frame-local arena + slice，而非无边界全局字符串池 | §5.2.4 / §5.2.9 | ✅ 已确认 | 避免动态文本泄漏和复杂全局生命周期；全局化优先留给 TextStyle、glyph/shaping cache |
 | ADR-016 | TextStyle 使用 ResourceHandle 并由 backend 缓存原生文本资源 | §5.2.4 / §5.2.9 | ✅ 已确认 | DrawCommand 保持纯值；DirectWrite backend 复用 bounded TextFormat/TextLayout，显式 glyph atlas 后置 |
 | ADR-017 | 跨帧 partial rendering 需要稳定的资源快照，v1 不实现 | §7.3 | 📝 设计草案 | 当前 TextSlice 引用 frame-local arena，跨帧 partial 需要：(1) 稳定 text handle 不随 arena reset 失效；(2) resource snapshot 保留旧帧 TextSlice 可解析；或 (3) per-frame full resources + command-level diff。v1 保持 full apply，partial 仅限同 frame scope pilot |
+| ADR-018 | D3D12 scissor/clipping 实现路线（设计草案） | §5.2.10 | 📝 设计草案 | 三条候选路线见 §5.2.10；v1 仅传递 clip 数据用于诊断和 hit-test，不实现 GPU scissor |
 
 ---
 

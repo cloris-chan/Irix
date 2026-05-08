@@ -201,6 +201,38 @@ internal static class Program
             dirty.Zip(backendDirty).All(p => p.First == p.Second);
         Console.WriteLine($"Dirty ranges aligned: {rangesMatch}");
         Console.WriteLine($"Clipped commands: {d3d12Backend.ClippedCommandCount}");
+
+        // Layout-driven frame: render through VirtualNode → Layout → Pipeline → Compositor
+        // to verify the clip chain produces clipped commands
+        Console.WriteLine($"=== Layout Pipeline Diagnostics ===");
+        var layoutPipeline = new RenderPipeline();
+        var layoutRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Layout Pipeline Test", 2),
+            VirtualNodeFactory.Button("LayoutBtn", 3,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("LayoutBtn"))));
+        var layoutViewport = new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
+        using var layoutBatch = layoutPipeline.Build(layoutRoot, layoutViewport);
+
+        // Render the layout-driven frame through the compositor
+        compositor.RenderAsync(layoutBatch).AsTask().GetAwaiter().GetResult();
+
+        var layoutClipCount = 0;
+        for (var j = 0; j < layoutBatch.Commands.Count; j++)
+        {
+            var cmd = layoutBatch.Commands.Memory.Span[j];
+            if (cmd.ClipBounds.Width > 0 && cmd.ClipBounds.Height > 0)
+            {
+                layoutClipCount++;
+            }
+        }
+        Console.WriteLine($"Layout commands: {layoutBatch.Commands.Count}");
+        Console.WriteLine($"Layout clipped commands: {layoutClipCount}");
+        Console.WriteLine($"Layout hit targets: {layoutBatch.HitTargets.Count}");
+        if (layoutBatch.HitTargets.Count > 0)
+        {
+            var ht = layoutBatch.HitTargets[0];
+            Console.WriteLine($"  Hit target: {ht.ActionId} bounds=({ht.Bounds.X},{ht.Bounds.Y},{ht.Bounds.Width},{ht.Bounds.Height}) clip=({ht.ClipBounds.X},{ht.ClipBounds.Y},{ht.ClipBounds.Width},{ht.ClipBounds.Height})");
+        }
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);
