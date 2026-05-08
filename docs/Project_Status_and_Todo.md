@@ -46,6 +46,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
   - Windows-targeted projects 使用 `net10.0-windows10.0.17763.0` 编译，并声明 Windows 10.0.10240+ 为最低 API 边界
   - Win32 互操作优先走 `CsWin32`
+  - `Irix.Platform.Windows` 已启用 `CsWin32RunAsBuildTask=true`，CsWin32 绑定以实体 `obj/.../Generated/CsWin32/Windows.Win32.NativeMethods.g.cs` 参与编译，避免依赖易失效的 Roslyn `roslyn-source-generated://` 虚拟文档
   - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、矩形 + 文本帧合成、呈现、resize
   - 已有 `D3D12Renderer2D`，运行时 HLSL 编译 + 顶点缓冲区渲染彩色矩形
   - 已有 `D3D12TextRenderer`，通过 D3D11On12 + Direct2D + DirectWrite 在 D3D12 back buffer 上叠加文本
@@ -84,7 +85,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 136 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移等）
+- 测试覆盖已扩展至 143 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移等）
 - `CompositorLoop` 已实现合并式显式重绘请求：连续 resize 只保留必要的 repaint，渲染中再次请求会在当前帧后补一帧，避免丢失最新 viewport
 - D3D12 resize 已改为 UI 线程只记录 pending size，Compositor 翻译/布局前应用 pending resize，并以 renderer 实际 swapchain 尺寸作为 layout viewport；fence event 由 renderer 持有 SafeHandle 且使用 auto-reset event，避免 GC 后 `E_HANDLE` 与 stale fence wait；交互运行默认关闭 ConsoleCompositor trace，swapchain 使用非拉伸 scaling；D3D12 窗口启用 external rendering 模式，避免 Win32 GDI `WM_PAINT`/erase 与 swapchain present 竞争
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
@@ -225,7 +226,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - DrawCommand 不内联文本，通过 frame-local `TextSlice + IFrameResourceResolver` 传递文本内容（ADR-011, ADR-015）
 - TextStyle 通过 `ResourceHandle` 引用，DirectWrite backend 缓存 `IDWriteTextFormat` / `IDWriteTextLayout`（ADR-016）
 - PatchBatch 携带 Root 属性，消费者直接使用而非从 Memory 反推（ADR-012）
-- D3D12 互操作使用 CsWin32 `allowMarshaling: false` 生成的裸指针 COM 包装（ADR-013）
+- D3D12 互操作使用 CsWin32 `allowMarshaling: false` 生成的裸指针 COM 包装；Windows 平台项目使用 `CsWin32RunAsBuildTask=true` 将绑定生成为实体 `obj` 编译输入，减少 Roslyn source-generated virtual document 噪音（ADR-013）
 - Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12（ADR-014）
 - 文本内容优先使用 frame-local arena，不在早期阶段引入无边界全局字符串池（ADR-015）
 - `TextStyle` 使用 `ResourceHandle`，backend 负责缓存对应原生文本资源（ADR-016）
@@ -303,6 +304,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 搭 `D3D12` 基础渲染循环
 - [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，已接入矩形与文本）
 - [x] 从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装
+- [x] 将 Windows 平台 CsWin32 生成模式切到 build task，生成实体 `Windows.Win32.NativeMethods.g.cs` 并避免编辑器反复请求过期 `roslyn-source-generated://` 文档
 - [x] Phase 2: D3D12 矩形绘制（`D3D12Renderer2D`：运行时 HLSL 编译 + 顶点缓冲区）
 - [x] 移除 D3D12 viewport 硬编码，接入真实窗口尺寸 + resize 支持
 - [x] 添加 GitHub Actions CI（build + test + AOT check）
@@ -452,6 +454,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - 将 `WindowVisualCompositor` 视为**PoC 过渡实现**，不是最终结构
 - 如需新增渲染相关代码，优先放在 `Irix.Rendering`
 - 如需新增平台代码，Windows interop 优先使用 `CsWin32`
+- `Irix.Platform.Windows` 的 CsWin32 输入由包内 props 自动收集 `NativeMethods.txt/json`；不要再手动添加重复的 `AdditionalFiles Include="NativeMethods.txt"`
 - 命名遵循 C# 风格，尽早统一，不保留临时缩写命名
 - 不要在未经确认的情况下把 `Skia` API 泄漏到上层 UI / layout / core
 - 遇到 `record struct` 风格配置类型时，不要假设 `new Type()` 等价于 `.Default`
