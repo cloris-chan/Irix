@@ -10,22 +10,36 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     }
 
     /// <summary>
-    /// Build layout elements for the given tree and viewport.
-    /// <paramref name="dirtyNodes"/> is accepted for interface compatibility (v0 incremental layout),
-    /// but currently the entire tree is always laid out regardless.
+    /// Build layout elements and a layout tree for the given VirtualNode tree.
+    /// When <paramref name="dirtyNodes"/> is non-null, computes which layout element
+    /// ranges correspond to the dirty VirtualNode DFS indices.
     /// </summary>
-    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
+    public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         var elements = new List<LayoutElement>();
         var availableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0);
         var cursorY = style.VerticalPadding;
 
-        LayoutNode(root, availableWidth, ref cursorY, elements, style);
-        return elements;
+        var treeNodes = LayoutNode(root, 0, availableWidth, ref cursorY, elements, style);
+
+        var dirtyRanges = dirtyNodes is { Count: > 0 }
+            ? ComputeDirtyRanges(treeNodes, new HashSet<int>(dirtyNodes))
+            : [];
+
+        return new LayoutTreeResult(elements, treeNodes, dirtyRanges);
     }
 
-    private static void LayoutNode(
+    /// <summary>
+    /// Backward-compatible overload returning flat elements only.
+    /// </summary>
+    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
+    {
+        return BuildLayoutTree(root, viewportBounds, dirtyNodes).Elements;
+    }
+
+    private LayoutTreeNode[] LayoutNode(
         VirtualNode node,
+        int dfsIndex,
         int availableWidth,
         ref int cursorY,
         List<LayoutElement> elements,
@@ -34,46 +48,116 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         switch (node.Kind)
         {
             case VirtualNodeKind.ScrollContainer:
+            {
+                var children = new List<LayoutTreeNode>();
+                var childDfsIndex = dfsIndex + 1;
                 foreach (var child in node.Children)
                 {
-                    LayoutNode(child, availableWidth, ref cursorY, elements, style);
+                    children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, ref cursorY, elements, style));
+                    childDfsIndex += CountVirtualNodes(child);
                 }
-                break;
+
+                if (children.Count == 0)
+                {
+                    return [];
+                }
+
+                var elementStart = children[0].ElementStart;
+                var lastChild = children[^1];
+                var elementCount = (lastChild.ElementStart + lastChild.ElementCount) - elementStart;
+                return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Text, elementStart, elementCount, children.ToArray())];
+            }
+
             case VirtualNodeKind.Text:
+            {
                 var content = GetTextContent(node);
                 if (!string.IsNullOrWhiteSpace(content))
                 {
+                    var elementIndex = elements.Count;
                     elements.Add(new LayoutElement(
                         LayoutElementKind.Text,
                         new PixelRectangle(style.HorizontalPadding, cursorY, availableWidth, style.TextHeight),
                         Text: content));
                     cursorY += style.TextHeight + style.ItemSpacing;
+                    return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Text, elementIndex, 1, [])];
                 }
-                break;
+
+                return [];
+            }
+
             case VirtualNodeKind.Rectangle:
+            {
                 var rectangleBounds = new PixelRectangle(
                     style.HorizontalPadding,
                     cursorY,
                     GetDimension(node, "Width", Math.Min(availableWidth, 160)),
                     GetDimension(node, "Height", 48));
+                var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds));
                 cursorY += rectangleBounds.Height + style.ItemSpacing;
-                break;
+                return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Rectangle, elementIndex, 1, [])];
+            }
+
             case VirtualNodeKind.Button:
+            {
                 var label = GetButtonLabel(node);
                 var width = Math.Min(availableWidth, Math.Max(
                     style.MinimumButtonWidth,
                     label.Length * style.ButtonTextWidthFactor + style.ButtonHorizontalPadding));
                 var bounds = new PixelRectangle(style.HorizontalPadding, cursorY, width, style.ButtonHeight);
                 var actionId = GetTextAttribute(node, "ActionId");
+                var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
                     bounds,
                     Text: label,
                     ActionId: actionId));
                 cursorY += style.ButtonHeight + style.ItemSpacing;
-                break;
+                return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Button, elementIndex, 1, [])];
+            }
+
+            default:
+                return [];
         }
+    }
+
+    private static IReadOnlyList<(int Start, int Count)> ComputeDirtyRanges(
+        LayoutTreeNode[] treeNodes,
+        HashSet<int> dirtyIndices)
+    {
+        var ranges = new List<(int Start, int Count)>();
+        CollectDirtyRanges(treeNodes, dirtyIndices, ranges);
+        ranges.Sort((a, b) => a.Start.CompareTo(b.Start));
+        return ranges;
+    }
+
+    private static void CollectDirtyRanges(
+        LayoutTreeNode[] treeNodes,
+        HashSet<int> dirtyIndices,
+        List<(int Start, int Count)> ranges)
+    {
+        foreach (var node in treeNodes)
+        {
+            if (dirtyIndices.Contains(node.DfsIndex))
+            {
+                ranges.Add((node.ElementStart, node.ElementCount));
+            }
+
+            if (node.Children.Length > 0)
+            {
+                CollectDirtyRanges(node.Children, dirtyIndices, ranges);
+            }
+        }
+    }
+
+    private static int CountVirtualNodes(VirtualNode node)
+    {
+        var count = 1;
+        foreach (var child in node.Children)
+        {
+            count += CountVirtualNodes(child);
+        }
+        return count;
     }
 
     private static int GetDimension(VirtualNode node, string attributeName, int defaultValue)

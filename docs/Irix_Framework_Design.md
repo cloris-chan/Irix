@@ -821,7 +821,7 @@ v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、
 - **待落地：** `Move` 操作的优化（当前通过 `Remove` + `Add` 实现）；深度局部 patch 路径标识。
 - Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor。
 - `PatchBatch` 已携带 `Root` 属性，消费者可直接使用 `patchBatch.Root` 获取新根节点，无需从 `Memory` 中反推。
-- 测试覆盖：108 个测试用例，涵盖 Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、patch 应用等价性、RetainedTree patch apply（单次 DFS 遍历、去重升序 dirty set）、RenderPipeline dirty-driven rebuild、layout dirty v0 接口、WindowDrawCommandTranslator RetainedTree 集成、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、文本渲染正确性、CompositorLoop 合并式重绘请求、render request 与 empty diff 区分、首帧 RenderRequest 语义、pooled owner 等场景。
+- 测试覆盖：115 个测试用例，涵盖 Kind 变化 ReplaceRoot、内容 Update、属性 Update、子节点 Add/Remove、Keyed reconciliation、patch 应用等价性、RetainedTree patch apply（单次 DFS 遍历、去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射）、增量布局 dirty range 计算（text update/button update/add remove child/viewport change）、RenderPipeline dirty-driven rebuild、layout dirty v0 接口、WindowDrawCommandTranslator RetainedTree 集成、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、文本渲染正确性、CompositorLoop 合并式重绘请求、render request 与 empty diff 区分、首帧 RenderRequest 语义、pooled owner 等场景。
 
 ### 6.3 调度器 (IMessageDispatcher)
 

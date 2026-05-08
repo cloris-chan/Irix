@@ -14,14 +14,21 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     }
 
     private VirtualNode _retainedRoot;
+    private LayoutTreeResult? _retainedLayoutResult;
     private IReadOnlyList<LayoutElement>? _retainedLayout;
     private PixelRectangle _retainedViewport;
 
     /// <summary>
+    /// The dirty element ranges from the last Build call, if any.
+    /// Each tuple is (startIndex, count) into the flat LayoutElement array.
+    /// </summary>
+    public IReadOnlyList<(int Start, int Count)> LastDirtyElementRanges { get; private set; } = [];
+
+    /// <summary>
     /// Build a render frame for the given root and viewport.
-    /// When <paramref name="dirtyNodes"/> is non-null, forces a full layout rebuild
-    /// (v0: incremental layout not yet implemented).
-    /// When null (render request), reuses the retained layout if tree and viewport match.
+    /// When <paramref name="dirtyNodes"/> is non-null, the layout tree is rebuilt
+    /// and dirty element ranges are computed. When null (render request),
+    /// reuses the retained layout if tree and viewport match.
     /// </summary>
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
@@ -31,12 +38,17 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
         if (treeChanged || viewportChanged || hasDirty)
         {
-            _retainedLayout = _layoutTreeBuilder.Build(root, viewportBounds, dirtyNodes);
+            _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
+            _retainedLayout = _retainedLayoutResult.Elements;
             _retainedRoot = root;
             _retainedViewport = viewportBounds;
         }
 
         var layout = _retainedLayout!;
+        LastDirtyElementRanges = hasDirty && _retainedLayoutResult is not null
+            ? _retainedLayoutResult.DirtyElementRanges
+            : [];
+
         var result = _drawCommandRecorder.Record(layout);
         return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources);
     }

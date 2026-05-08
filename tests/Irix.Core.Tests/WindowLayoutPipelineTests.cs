@@ -400,4 +400,148 @@ public sealed class WindowLayoutPipelineTests
             Assert.Equal(frame1.Commands.Memory.Span[i].Rect, frame2.Commands.Memory.Span[i].Rect);
         }
     }
+
+    [Fact]
+    public void LayoutTree_text_update_produces_correct_dirty_range()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("before", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Build with dirty node 1 (the Text node)
+        var result = builder.BuildLayoutTree(root, viewport, [1]);
+
+        // Text is element 0, Button is element 1
+        Assert.Equal(2, result.Elements.Count);
+        Assert.Single(result.DirtyElementRanges);
+        Assert.Equal((0, 1), result.DirtyElementRanges[0]); // Text element at index 0
+    }
+
+    [Fact]
+    public void LayoutTree_button_update_produces_correct_dirty_range()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Build with dirty node 2 (the Button node)
+        var result = builder.BuildLayoutTree(root, viewport, [2]);
+
+        // Text is element 0, Button is element 1
+        Assert.Equal(2, result.Elements.Count);
+        Assert.Single(result.DirtyElementRanges);
+        Assert.Equal((1, 1), result.DirtyElementRanges[0]); // Button element at index 1
+    }
+
+    [Fact]
+    public void LayoutTree_add_remove_child_produces_parent_dirty_range()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("a", 2),
+            VirtualNodeFactory.Text("b", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Dirty node 0 (root/parent) → its element range spans all children
+        var result = builder.BuildLayoutTree(root, viewport, [0]);
+
+        Assert.Equal(2, result.Elements.Count);
+        Assert.Single(result.DirtyElementRanges);
+        // Root's element range covers all children: elements 0..1
+        Assert.Equal((0, 2), result.DirtyElementRanges[0]);
+    }
+
+    [Fact]
+    public void LayoutTree_multiple_dirty_nodes_produce_multiple_ranges()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("a", 2),
+            VirtualNodeFactory.Text("b", 3),
+            VirtualNodeFactory.Text("c", 4));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Dirty nodes 1 and 3 (first and third text nodes)
+        var result = builder.BuildLayoutTree(root, viewport, [1, 3]);
+
+        Assert.Equal(3, result.Elements.Count);
+        Assert.Equal(2, result.DirtyElementRanges.Count);
+        Assert.Equal((0, 1), result.DirtyElementRanges[0]); // Text "a" at element 0
+        Assert.Equal((2, 1), result.DirtyElementRanges[1]); // Text "c" at element 2
+    }
+
+    [Fact]
+    public void LayoutTree_viewport_change_no_dirty_ranges()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("hello", 2));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // No dirty nodes → empty dirty ranges
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Single(result.Elements);
+        Assert.Empty(result.DirtyElementRanges);
+    }
+
+    [Fact]
+    public void LayoutTree_tree_structure_maps_dfs_indices()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("first", 2),
+            VirtualNodeFactory.Button("btn", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        // Should have 1 top-level tree node (root ScrollContainer)
+        Assert.Single(result.TreeNodes);
+        var rootNode = result.TreeNodes[0];
+        Assert.Equal(0, rootNode.DfsIndex);
+        Assert.Equal(2, rootNode.ElementCount); // 2 children → 2 elements
+        Assert.Equal(2, rootNode.Children.Length);
+
+        // Children should be the Text and Button
+        Assert.Equal(1, rootNode.Children[0].DfsIndex);
+        Assert.Equal(LayoutElementKind.Text, rootNode.Children[0].Kind);
+        Assert.Equal(0, rootNode.Children[0].ElementStart);
+        Assert.Equal(1, rootNode.Children[0].ElementCount);
+
+        Assert.Equal(2, rootNode.Children[1].DfsIndex);
+        Assert.Equal(LayoutElementKind.Button, rootNode.Children[1].Kind);
+        Assert.Equal(1, rootNode.Children[1].ElementStart);
+        Assert.Equal(1, rootNode.Children[1].ElementCount);
+    }
+
+    [Fact]
+    public void LayoutTree_incremental_text_update_only_affects_one_element()
+    {
+        var builder = new LayoutTreeBuilder();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        var result1 = builder.BuildLayoutTree(root1, viewport);
+        Assert.Equal(2, result1.Elements.Count);
+
+        // Simulate text update: dirty node 1 (the Text)
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Count: 1", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        var result2 = builder.BuildLayoutTree(root2, viewport, [1]);
+
+        // Only element 0 (Text) should be in dirty range
+        Assert.Single(result2.DirtyElementRanges);
+        Assert.Equal((0, 1), result2.DirtyElementRanges[0]);
+
+        // Button element (index 1) bounds should be identical
+        Assert.Equal(result1.Elements[1].Bounds, result2.Elements[1].Bounds);
+    }
 }
