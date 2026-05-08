@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Irix.Platform;
 
 namespace Irix.Rendering;
@@ -21,37 +22,71 @@ internal readonly record struct LayoutElement(
 /// </summary>
 internal readonly record struct LayoutTreeNode(
     int DfsIndex,
-    LayoutElementKind Kind,
+    VirtualNodeKind Kind,
     int ElementStart,
     int ElementCount,
     LayoutTreeNode[] Children);
 
 /// <summary>
+/// Maps a single <see cref="LayoutElement"/> index to the range of
+/// <see cref="DrawCommand"/>s it produces. Text/Rectangle → 1 command,
+/// Button → 2 commands (FillRect + DrawTextRun).
+/// </summary>
+internal readonly record struct ElementCommandRange(int CommandStart, int CommandCount);
+
+/// <summary>
 /// Result of building a layout tree: the flat element array, the tree structure
 /// for DFS-index lookups, and the dirty element ranges for incremental re-recording.
 /// </summary>
-internal sealed class LayoutTreeResult
+internal sealed class LayoutTreeResult(
+    IReadOnlyList<LayoutElement> elements,
+    LayoutTreeNode[] treeNodes,
+    IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
 {
-    public LayoutTreeResult(
-        IReadOnlyList<LayoutElement> elements,
-        LayoutTreeNode[] treeNodes,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
-    {
-        Elements = elements;
-        TreeNodes = treeNodes;
-        DirtyElementRanges = dirtyElementRanges;
-    }
+
 
     /// <summary>The flat layout element array (full frame).</summary>
-    public IReadOnlyList<LayoutElement> Elements { get; }
+    public IReadOnlyList<LayoutElement> Elements { get; } = elements;
 
     /// <summary>Top-level layout tree nodes (usually one root).</summary>
-    public LayoutTreeNode[] TreeNodes { get; }
+    public LayoutTreeNode[] TreeNodes { get; } = treeNodes;
 
     /// <summary>
-    /// Ranges of layout elements that correspond to dirty VirtualNodes.
+    /// Merged, sorted ranges of layout elements that correspond to dirty VirtualNodes.
     /// Each tuple is (startIndex, count) into <see cref="Elements"/>.
+    /// Overlapping/adjacent ranges are merged to produce the minimal set.
     /// Empty when no dirty nodes are specified.
     /// </summary>
-    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; }
+    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = dirtyElementRanges;
+}
+
+/// <summary>
+/// Result of recording draw commands: the command batch, resource resolver,
+/// element→command range mapping, and dirty command ranges for incremental redraw.
+/// </summary>
+internal sealed class DrawCommandRecordResult(
+    DrawCommandBatch commands,
+    IFrameResourceResolver resources,
+    ElementCommandRange[] elementCommandRanges,
+    IReadOnlyList<(int Start, int Count)> dirtyCommandRanges)
+{
+    public DrawCommandRecordResult(DrawCommandBatch commands, IFrameResourceResolver resources)
+        : this(commands, resources, [], [])
+    {
+    }
+
+    public DrawCommandBatch Commands { get; } = commands;
+    public IFrameResourceResolver Resources { get; } = resources;
+
+    /// <summary>
+    /// Maps each <see cref="LayoutElement"/> index to its <see cref="DrawCommand"/> range.
+    /// <c>ElementCommandRanges[elementIndex]</c> gives (commandStart, commandCount).
+    /// </summary>
+    public ElementCommandRange[] ElementCommandRanges { get; } = elementCommandRanges;
+
+    /// <summary>
+    /// Merged, sorted ranges of draw commands that correspond to dirty layout elements.
+    /// Each tuple is (startIndex, count) into the command batch.
+    /// </summary>
+    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; } = dirtyCommandRanges;
 }

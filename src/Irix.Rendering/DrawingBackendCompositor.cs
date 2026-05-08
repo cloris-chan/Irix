@@ -7,16 +7,11 @@ namespace Irix.Rendering;
 /// Caches hit targets from the frame for input routing.
 /// This is the bridge between the RenderFrameBatch world and the IDrawingBackend world.
 /// </summary>
-public sealed class DrawingBackendCompositor : ICompositor, IDisposable
+public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IDisposable
 {
-    private readonly IDrawingBackend _backend;
+    private readonly IDrawingBackend _backend = backend;
     private readonly Lock _hitTargetsLock = new();
     private HitTestTarget[] _hitTargets = [];
-
-    public DrawingBackendCompositor(IDrawingBackend backend)
-    {
-        _backend = backend;
-    }
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {

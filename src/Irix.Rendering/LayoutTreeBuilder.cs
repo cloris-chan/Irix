@@ -65,7 +65,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var elementStart = children[0].ElementStart;
                 var lastChild = children[^1];
                 var elementCount = (lastChild.ElementStart + lastChild.ElementCount) - elementStart;
-                return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Text, elementStart, elementCount, children.ToArray())];
+                return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, elementStart, elementCount, children.ToArray())];
             }
 
             case VirtualNodeKind.Text:
@@ -79,7 +79,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                         new PixelRectangle(style.HorizontalPadding, cursorY, availableWidth, style.TextHeight),
                         Text: content));
                     cursorY += style.TextHeight + style.ItemSpacing;
-                    return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Text, elementIndex, 1, [])];
+                    return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Text, elementIndex, 1, [])];
                 }
 
                 return [];
@@ -95,7 +95,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds));
                 cursorY += rectangleBounds.Height + style.ItemSpacing;
-                return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Rectangle, elementIndex, 1, [])];
+                return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Rectangle, elementIndex, 1, [])];
             }
 
             case VirtualNodeKind.Button:
@@ -113,7 +113,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     Text: label,
                     ActionId: actionId));
                 cursorY += style.ButtonHeight + style.ItemSpacing;
-                return [new LayoutTreeNode(dfsIndex, LayoutElementKind.Button, elementIndex, 1, [])];
+                return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, [])];
             }
 
             default:
@@ -128,7 +128,33 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         var ranges = new List<(int Start, int Count)>();
         CollectDirtyRanges(treeNodes, dirtyIndices, ranges);
         ranges.Sort((a, b) => a.Start.CompareTo(b.Start));
-        return ranges;
+
+        // Merge overlapping/adjacent ranges
+        if (ranges.Count <= 1)
+        {
+            return ranges;
+        }
+
+        var merged = new List<(int Start, int Count)> { ranges[0] };
+        for (var i = 1; i < ranges.Count; i++)
+        {
+            var last = merged[^1];
+            var current = ranges[i];
+            var lastEnd = last.Start + last.Count;
+
+            if (current.Start <= lastEnd)
+            {
+                // Overlapping or adjacent → merge
+                var newEnd = Math.Max(lastEnd, current.Start + current.Count);
+                merged[^1] = (last.Start, newEnd - last.Start);
+            }
+            else
+            {
+                merged.Add(current);
+            }
+        }
+
+        return merged;
     }
 
     private static void CollectDirtyRanges(

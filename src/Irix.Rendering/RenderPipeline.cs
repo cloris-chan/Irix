@@ -25,9 +25,21 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     public IReadOnlyList<(int Start, int Count)> LastDirtyElementRanges { get; private set; } = [];
 
     /// <summary>
+    /// The dirty draw command ranges from the last Build call, if any.
+    /// Each tuple is (startIndex, count) into the DrawCommand batch.
+    /// </summary>
+    public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges { get; private set; } = [];
+
+    /// <summary>
+    /// The element→command range mapping from the last Build call.
+    /// <c>LastElementCommandRanges[elementIndex]</c> gives (commandStart, commandCount).
+    /// </summary>
+    public ElementCommandRange[] LastElementCommandRanges { get; private set; } = [];
+
+    /// <summary>
     /// Build a render frame for the given root and viewport.
     /// When <paramref name="dirtyNodes"/> is non-null, the layout tree is rebuilt
-    /// and dirty element ranges are computed. When null (render request),
+    /// and dirty element/command ranges are computed. When null (render request),
     /// reuses the retained layout if tree and viewport match.
     /// </summary>
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
@@ -45,11 +57,16 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         }
 
         var layout = _retainedLayout!;
-        LastDirtyElementRanges = hasDirty && _retainedLayoutResult is not null
+        var dirtyElementRanges = hasDirty && _retainedLayoutResult is not null
             ? _retainedLayoutResult.DirtyElementRanges
-            : [];
+            : null;
 
-        var result = _drawCommandRecorder.Record(layout);
+        LastDirtyElementRanges = dirtyElementRanges ?? [];
+
+        var result = _drawCommandRecorder.Record(layout, dirtyElementRanges);
+        LastDirtyCommandRanges = result.DirtyCommandRanges;
+        LastElementCommandRanges = result.ElementCommandRanges;
+
         return new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources);
     }
 

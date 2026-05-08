@@ -509,12 +509,12 @@ public sealed class WindowLayoutPipelineTests
 
         // Children should be the Text and Button
         Assert.Equal(1, rootNode.Children[0].DfsIndex);
-        Assert.Equal(LayoutElementKind.Text, rootNode.Children[0].Kind);
+        Assert.Equal(VirtualNodeKind.Text, rootNode.Children[0].Kind);
         Assert.Equal(0, rootNode.Children[0].ElementStart);
         Assert.Equal(1, rootNode.Children[0].ElementCount);
 
         Assert.Equal(2, rootNode.Children[1].DfsIndex);
-        Assert.Equal(LayoutElementKind.Button, rootNode.Children[1].Kind);
+        Assert.Equal(VirtualNodeKind.Button, rootNode.Children[1].Kind);
         Assert.Equal(1, rootNode.Children[1].ElementStart);
         Assert.Equal(1, rootNode.Children[1].ElementCount);
     }
@@ -543,5 +543,176 @@ public sealed class WindowLayoutPipelineTests
 
         // Button element (index 1) bounds should be identical
         Assert.Equal(result1.Elements[1].Bounds, result2.Elements[1].Bounds);
+    }
+
+    [Fact]
+    public void LayoutTree_parent_and_child_dirty_ranges_are_merged()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("a", 2),
+            VirtualNodeFactory.Text("b", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Dirty node 0 (parent) and node 1 (child "a")
+        // Parent's range covers both children → child's range is subsumed
+        var result = builder.BuildLayoutTree(root, viewport, [0, 1]);
+
+        Assert.Single(result.DirtyElementRanges);
+        Assert.Equal((0, 2), result.DirtyElementRanges[0]); // merged into one range
+    }
+
+    [Fact]
+    public void LayoutTree_adjacent_dirty_ranges_are_merged()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("a", 2),
+            VirtualNodeFactory.Text("b", 3),
+            VirtualNodeFactory.Text("c", 4));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Dirty nodes 1 and 2 (adjacent elements "a" and "b")
+        var result = builder.BuildLayoutTree(root, viewport, [1, 2]);
+
+        Assert.Single(result.DirtyElementRanges);
+        Assert.Equal((0, 2), result.DirtyElementRanges[0]); // adjacent → merged
+    }
+
+    [Fact]
+    public void LayoutTree_non_adjacent_dirty_ranges_stay_separate()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("a", 2),
+            VirtualNodeFactory.Text("b", 3),
+            VirtualNodeFactory.Text("c", 4));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Dirty nodes 1 and 3 (non-adjacent elements "a" and "c")
+        var result = builder.BuildLayoutTree(root, viewport, [1, 3]);
+
+        Assert.Equal(2, result.DirtyElementRanges.Count);
+        Assert.Equal((0, 1), result.DirtyElementRanges[0]); // "a"
+        Assert.Equal((2, 1), result.DirtyElementRanges[1]); // "c"
+    }
+
+    [Fact]
+    public void DrawCommandRecorder_maps_elements_to_command_ranges()
+    {
+        var recorder = new DrawCommandRecorder();
+        var elements = new List<LayoutElement>
+        {
+            new(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "hello"),
+            new(LayoutElementKind.Rectangle, new PixelRectangle(0, 40, 100, 48)),
+            new(LayoutElementKind.Button, new PixelRectangle(0, 100, 100, 40), Text: "click"),
+        };
+
+        var result = recorder.Record(elements);
+
+        // Text → 1 command (DrawTextRun)
+        Assert.Equal(new ElementCommandRange(0, 1), result.ElementCommandRanges[0]);
+        // Rectangle → 1 command (FillRect)
+        Assert.Equal(new ElementCommandRange(1, 1), result.ElementCommandRanges[1]);
+        // Button → 2 commands (FillRect + DrawTextRun)
+        Assert.Equal(new ElementCommandRange(2, 2), result.ElementCommandRanges[2]);
+    }
+
+    [Fact]
+    public void DrawCommandRecorder_computes_dirty_command_ranges()
+    {
+        var recorder = new DrawCommandRecorder();
+        var elements = new List<LayoutElement>
+        {
+            new(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "hello"),
+            new(LayoutElementKind.Button, new PixelRectangle(0, 40, 100, 40), Text: "click"),
+            new(LayoutElementKind.Text, new PixelRectangle(0, 100, 100, 32), Text: "world"),
+        };
+
+        // Dirty element range: element 1 (the Button, which produces 2 commands)
+        var result = recorder.Record(elements, [(1, 1)]);
+
+        // Button maps to commands 1..2 (index 1, count 2)
+        Assert.Single(result.DirtyCommandRanges);
+        Assert.Equal((1, 2), result.DirtyCommandRanges[0]);
+    }
+
+    [Fact]
+    public void DrawCommandRecorder_merges_adjacent_dirty_command_ranges()
+    {
+        var recorder = new DrawCommandRecorder();
+        var elements = new List<LayoutElement>
+        {
+            new(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "a"),
+            new(LayoutElementKind.Button, new PixelRectangle(0, 40, 100, 40), Text: "b"),
+            new(LayoutElementKind.Text, new PixelRectangle(0, 100, 100, 32), Text: "c"),
+        };
+
+        // Dirty elements 0 and 1 → commands 0..2 (adjacent, should merge)
+        var result = recorder.Record(elements, [(0, 2)]);
+
+        Assert.Single(result.DirtyCommandRanges);
+        Assert.Equal((0, 3), result.DirtyCommandRanges[0]); // commands 0,1,2
+    }
+
+    [Fact]
+    public void DrawCommandRecorder_empty_dirty_ranges_returns_empty()
+    {
+        var recorder = new DrawCommandRecorder();
+        var elements = new List<LayoutElement>
+        {
+            new(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "hello"),
+        };
+
+        var result = recorder.Record(elements, []);
+
+        Assert.Empty(result.DirtyCommandRanges);
+        Assert.Single(result.ElementCommandRanges);
+    }
+
+    [Fact]
+    public void RenderPipeline_exposes_dirty_command_ranges_on_dirty_build()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Initial build
+        using var frame1 = pipeline.Build(root, viewport);
+        Assert.Empty(pipeline.LastDirtyElementRanges);
+        Assert.Empty(pipeline.LastDirtyCommandRanges);
+
+        // Build with dirty node 1 (Text) → should produce dirty ranges
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Count: 1", 2),
+            VirtualNodeFactory.Button("Click", 3));
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+
+        Assert.Single(pipeline.LastDirtyElementRanges);
+        Assert.Equal((0, 1), pipeline.LastDirtyElementRanges[0]);
+
+        // Text → 1 draw command at index 0
+        Assert.Single(pipeline.LastDirtyCommandRanges);
+        Assert.Equal((0, 1), pipeline.LastDirtyCommandRanges[0]);
+    }
+
+    [Fact]
+    public void RenderPipeline_element_command_mapping_reflects_button_two_commands()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("hello", 2),
+            VirtualNodeFactory.Button("click", 3));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        using var frame = pipeline.Build(root, viewport);
+
+        Assert.Equal(2, pipeline.LastElementCommandRanges.Length);
+        // Text → 1 command
+        Assert.Equal(new ElementCommandRange(0, 1), pipeline.LastElementCommandRanges[0]);
+        // Button → 2 commands
+        Assert.Equal(new ElementCommandRange(1, 2), pipeline.LastElementCommandRanges[1]);
     }
 }

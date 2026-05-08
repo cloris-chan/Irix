@@ -3,10 +3,6 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal readonly record struct DrawCommandRecordResult(
-    DrawCommandBatch Commands,
-    IFrameResourceResolver Resources);
-
 internal sealed class DrawCommandRecorder(DrawingStyle style)
 {
     private const int StackCommandThreshold = 64;
@@ -18,7 +14,23 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
     {
     }
 
+    /// <summary>
+    /// Record draw commands for all layout elements.
+    /// Returns the full command batch plus element→command range mapping.
+    /// </summary>
     public DrawCommandRecordResult Record(IReadOnlyList<LayoutElement> elements)
+    {
+        return Record(elements, dirtyElementRanges: null);
+    }
+
+    /// <summary>
+    /// Record draw commands for all layout elements.
+    /// When <paramref name="dirtyElementRanges"/> is provided, computes the corresponding
+    /// dirty draw command ranges using the element→command mapping.
+    /// </summary>
+    public DrawCommandRecordResult Record(
+        IReadOnlyList<LayoutElement> elements,
+        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges)
     {
         if (elements.Count == 0)
         {
@@ -32,14 +44,19 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         var textStyle = resources.AddTextStyle(_style.TextStyle);
         var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
 
-        var (batch, resolver) = maximumCommandCount <= StackCommandThreshold
+        var (batch, resolver, elementRanges) = maximumCommandCount <= StackCommandThreshold
             ? RecordSmallBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount)
             : RecordLargeBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount);
 
-        return new DrawCommandRecordResult(batch, resolver);
+        var dirtyCommandRanges = dirtyElementRanges is { Count: > 0 }
+            ? ComputeDirtyCommandRanges(elementRanges, dirtyElementRanges)
+            : (IReadOnlyList<(int Start, int Count)>)[];
+        var mergedDirtyCommandRanges = MergeRanges(dirtyCommandRanges);
+
+        return new DrawCommandRecordResult(batch, resolver, elementRanges, mergedDirtyCommandRanges);
     }
 
-    private (DrawCommandBatch, IFrameResourceResolver) RecordSmallBatch(
+    private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRange[]) RecordSmallBatch(
         IReadOnlyList<LayoutElement> elements,
         FrameDrawingResources resources,
         ResourceHandle textStyle,
@@ -47,15 +64,17 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         int maximumCommandCount)
     {
         Span<DrawCommand> stackCommands = stackalloc DrawCommand[maximumCommandCount];
-        var stackCommandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, stackCommands);
+        Span<ElementCommandRange> stackRanges = stackalloc ElementCommandRange[elements.Count];
+        var stackCommandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, stackCommands, stackRanges);
         resources.Seal();
 
         var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(stackCommandCount);
         stackCommands[..stackCommandCount].CopyTo(owner.Memory.Span);
-        return (new DrawCommandBatch(owner, stackCommandCount), resources);
+        var elementRanges = stackRanges.ToArray();
+        return (new DrawCommandBatch(owner, stackCommandCount), resources, elementRanges);
     }
 
-    private (DrawCommandBatch, IFrameResourceResolver) RecordLargeBatch(
+    private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRange[]) RecordLargeBatch(
         IReadOnlyList<LayoutElement> elements,
         FrameDrawingResources resources,
         ResourceHandle textStyle,
@@ -63,13 +82,14 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         int maximumCommandCount)
     {
         var pooledOwner = PooledArrayMemoryOwner<DrawCommand>.Rent(maximumCommandCount);
+        var elementRanges = new ElementCommandRange[elements.Count];
         var success = false;
         try
         {
-            var commandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, pooledOwner.Memory.Span);
+            var commandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, pooledOwner.Memory.Span, elementRanges);
             resources.Seal();
             success = true;
-            return (new DrawCommandBatch(pooledOwner, commandCount), resources);
+            return (new DrawCommandBatch(pooledOwner, commandCount), resources, elementRanges);
         }
         finally
         {
@@ -86,12 +106,16 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         DrawingStyle style,
         ResourceHandle textStyle,
         ResourceHandle buttonTextStyle,
-        Span<DrawCommand> commands)
+        Span<DrawCommand> commands,
+        Span<ElementCommandRange> elementRanges)
     {
         var commandCount = 0;
 
-        foreach (var element in elements)
+        for (var i = 0; i < elements.Count; i++)
         {
+            var element = elements[i];
+            var startCommand = commandCount;
+
             switch (element.Kind)
             {
                 case LayoutElementKind.Text:
@@ -124,9 +148,65 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                         Color: style.ButtonTextColor);
                     break;
             }
+
+            elementRanges[i] = new ElementCommandRange(startCommand, commandCount - startCommand);
         }
 
         return commandCount;
+    }
+
+    private static IReadOnlyList<(int Start, int Count)> ComputeDirtyCommandRanges(
+        ElementCommandRange[] elementRanges,
+        IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
+    {
+        var ranges = new List<(int Start, int Count)>();
+        foreach (var (elementStart, elementCount) in dirtyElementRanges)
+        {
+            var elementEnd = elementStart + elementCount;
+            if (elementStart >= elementRanges.Length)
+            {
+                continue;
+            }
+
+            var clampedEnd = Math.Min(elementEnd, elementRanges.Length);
+            var cmdStart = elementRanges[elementStart].CommandStart;
+            var lastRange = elementRanges[clampedEnd - 1];
+            var cmdEnd = lastRange.CommandStart + lastRange.CommandCount;
+            ranges.Add((cmdStart, cmdEnd - cmdStart));
+        }
+
+        return MergeRanges(ranges);
+    }
+
+    private static IReadOnlyList<(int Start, int Count)> MergeRanges(IReadOnlyList<(int Start, int Count)> ranges)
+    {
+        if (ranges.Count <= 1)
+        {
+            return ranges;
+        }
+
+        var sorted = new List<(int Start, int Count)>(ranges);
+        sorted.Sort((a, b) => a.Start.CompareTo(b.Start));
+
+        var merged = new List<(int Start, int Count)> { sorted[0] };
+        for (var i = 1; i < sorted.Count; i++)
+        {
+            var last = merged[^1];
+            var current = sorted[i];
+            var lastEnd = last.Start + last.Count;
+
+            if (current.Start <= lastEnd)
+            {
+                var newEnd = Math.Max(lastEnd, current.Start + current.Count);
+                merged[^1] = (last.Start, newEnd - last.Start);
+            }
+            else
+            {
+                merged.Add(current);
+            }
+        }
+
+        return merged;
     }
 
     private static DrawRect ToDrawRect(PixelRectangle bounds)

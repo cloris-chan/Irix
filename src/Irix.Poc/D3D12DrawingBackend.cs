@@ -7,18 +7,13 @@ namespace Irix.Poc;
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
 /// </summary>
-internal sealed class D3D12DrawingBackend : IDrawingBackend
+internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBackend
 {
-    private readonly D3D12Renderer _renderer;
+    private readonly D3D12Renderer _renderer = renderer;
     private float _bgR, _bgG, _bgB, _bgA = 1.0f;
     private readonly FrameRenderList<D3D12Renderer2D.RectData> _rects = new();
     private readonly FrameRenderList<D3D12TextRenderer.TextData> _texts = new();
     private IFrameResourceResolver? _resources;
-
-    public D3D12DrawingBackend(D3D12Renderer renderer)
-    {
-        _renderer = renderer;
-    }
 
     public void BeginFrame(in FrameContext frameContext)
     {

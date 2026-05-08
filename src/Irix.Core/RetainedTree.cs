@@ -24,11 +24,10 @@
 /// <b>sorted ascending and deduplicated</b>.
 /// </para>
 /// </summary>
-public sealed class RetainedTree
+public sealed class RetainedTree(VirtualNodeTree tree)
 {
-    private VirtualNodeTree _tree;
+    private VirtualNodeTree _tree = tree;
 
-    public RetainedTree(VirtualNodeTree tree) { _tree = tree; }
 
     /// <summary>The current retained tree.</summary>
     public VirtualNodeTree Tree => _tree;

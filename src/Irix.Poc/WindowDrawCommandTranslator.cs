@@ -4,11 +4,14 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
+internal sealed class WindowDrawCommandTranslator(
+    INativeWindow window,
+    Action? prepareFrame,
+    Func<PixelRectangle>? viewportProvider) : IPatchBatchTranslator
 {
-    private readonly INativeWindow _window;
-    private readonly Action? _prepareFrame;
-    private readonly Func<PixelRectangle>? _viewportProvider;
+    private readonly INativeWindow _window = window;
+    private readonly Action? _prepareFrame = prepareFrame;
+    private readonly Func<PixelRectangle>? _viewportProvider = viewportProvider;
     private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(
         LayoutStyle.Default,
         new DrawingStyle(
@@ -24,16 +27,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null)
     {
-    }
-
-    public WindowDrawCommandTranslator(
-        INativeWindow window,
-        Action? prepareFrame,
-        Func<PixelRectangle>? viewportProvider)
-    {
-        _window = window;
-        _prepareFrame = prepareFrame;
-        _viewportProvider = viewportProvider;
     }
 
     public RenderFrameBatch Translate(PatchBatch patchBatch)
