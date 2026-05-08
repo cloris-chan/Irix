@@ -534,6 +534,113 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void ScrollContainer_negative_scrollY_clamped_to_zero()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(-50))],
+            children: [
+                VirtualNodeFactory.Text("hello", 2)
+            ]);
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        // ScrollY=-50 should be clamped to 0; element should be at original position
+        Assert.Single(result.Elements);
+        Assert.Equal(16, result.Elements[0].Bounds.Y); // VerticalPadding, no scroll offset
+
+        Assert.Single(result.ScrollDiagnostics);
+        Assert.Equal(0, result.ScrollDiagnostics[0].ScrollY); // clamped to 0
+    }
+
+    [Fact]
+    public void ScrollContainer_scrollY_clamped_to_max_scroll()
+    {
+        var builder = new LayoutTreeBuilder();
+        // 10 text items × (32 height + 12 spacing) = 440 content height
+        // Visible height = 100 - 16 = 84 (viewport 100, container top at 16)
+        // MaxScrollY = 440 - 84 = 356
+        var children = new VirtualNode[10];
+        for (var i = 0; i < 10; i++)
+        {
+            children[i] = VirtualNodeFactory.Text($"item {i}", (ulong)(i + 2));
+        }
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(9999))],
+            children: children);
+        var viewport = new PixelRectangle(0, 0, 960, 100);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Single(result.ScrollDiagnostics);
+        var diag = result.ScrollDiagnostics[0];
+        Assert.Equal(356, diag.MaxScrollY);
+        Assert.Equal(356, diag.ScrollY); // clamped from 9999 to 356
+
+        // First element should be scrolled up by 356
+        // Original y = 16, after scroll: 16 - 356 = -340
+        Assert.Equal(-340, result.Elements[0].Bounds.Y);
+    }
+
+    [Fact]
+    public void ScrollContainer_explicit_height_limits_visible_area()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(60))],
+            children: [
+                VirtualNodeFactory.Text("hello", 2),
+                VirtualNodeFactory.Text("world", 3),
+            ]);
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Single(result.ScrollDiagnostics);
+        var diag = result.ScrollDiagnostics[0];
+        Assert.Equal(60, diag.VisibleHeight); // explicit Height=60
+        // Content: 2 items × (32+12) = 88 (last item has spacing too)
+        Assert.True(diag.ContentHeight > diag.VisibleHeight);
+        Assert.True(diag.MaxScrollY > 0);
+    }
+
+    [Fact]
+    public void ScrollContainer_diagnostics_counts_visible_and_clipped_elements()
+    {
+        var builder = new LayoutTreeBuilder();
+        // 5 items, visible height = 50-16 = 34 (viewport 50)
+        // Item height = 32 + 12 = 44 per item
+        // Item 0: y=16, bottom=48 → inside clip (16..50) ✓
+        // Item 1: y=60, bottom=92 → outside clip (16..50) ✗
+        // Item 2+: also outside
+        var children = new VirtualNode[5];
+        for (var i = 0; i < 5; i++)
+        {
+            children[i] = VirtualNodeFactory.Text($"item {i}", (ulong)(i + 2));
+        }
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            children: children);
+        var viewport = new PixelRectangle(0, 0, 960, 50);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Single(result.ScrollDiagnostics);
+        var diag = result.ScrollDiagnostics[0];
+        Assert.Equal(1, diag.VisibleElementCount); // only item 0 fully visible
+        Assert.Equal(4, diag.ClippedElementCount); // items 1-4 outside clip
+        Assert.Equal(0, diag.ScrollY); // no scroll, content extends beyond clip
+    }
+
+    [Fact]
     public void LayoutTree_incremental_text_update_only_affects_one_element()
     {
         var builder = new LayoutTreeBuilder();

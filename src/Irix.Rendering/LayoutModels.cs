@@ -79,7 +79,9 @@ internal readonly record struct ScrollContainerDiag(
     int VisibleHeight,
     int ContentHeight,
     int ScrollY,
-    int MaxScrollY);
+    int MaxScrollY,
+    int VisibleElementCount,
+    int ClippedElementCount);
 
 /// <summary>
 /// Result of recording draw commands: the command batch, resource resolver,

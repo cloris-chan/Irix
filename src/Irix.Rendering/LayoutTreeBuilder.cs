@@ -2,6 +2,37 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
+/// <summary>
+/// Carries layout state through recursive LayoutNode calls.
+/// Prevents parameter list bloat as more layout features are added.
+/// </summary>
+internal struct LayoutContext
+{
+    public int AvailableWidth;
+    public int ViewportHeight;
+    public int Depth; // 0 = root container, 1+ = nested
+    public PixelRectangle ClipBounds;
+    public LayoutStyle Style;
+    public List<ScrollContainerDiag> ScrollDiags;
+
+    /// <summary>
+    /// Default height for nested containers that have no explicit Height attribute.
+    /// Uses the remaining viewport height clamped to a reasonable minimum.
+    /// </summary>
+    public int DefaultContainerHeight(int containerTop)
+    {
+        if (Depth == 0)
+        {
+            // Root: fill remaining viewport
+            return Math.Max(ViewportHeight - containerTop, 0);
+        }
+
+        // Nested: use remaining viewport or a sensible minimum
+        var remaining = Math.Max(ViewportHeight - containerTop, 0);
+        return remaining > 0 ? remaining : Style.TextHeight * 3;
+    }
+}
+
 internal sealed class LayoutTreeBuilder(LayoutStyle style)
 {
     public LayoutTreeBuilder()
@@ -18,10 +49,19 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     {
         var elements = new List<LayoutElement>();
         var scrollDiags = new List<ScrollContainerDiag>();
-        var availableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0);
         var cursorY = style.VerticalPadding;
 
-        var treeNodes = LayoutNode(root, 0, availableWidth, viewportBounds.Height, ref cursorY, elements, style, scrollDiags);
+        var ctx = new LayoutContext
+        {
+            AvailableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0),
+            ViewportHeight = viewportBounds.Height,
+            Depth = 0,
+            ClipBounds = default,
+            Style = style,
+            ScrollDiags = scrollDiags,
+        };
+
+        var treeNodes = LayoutNode(root, 0, ref cursorY, elements, ref ctx);
 
         var dirtyRanges = dirtyNodes is { Count: > 0 }
             ? RangeUtils.Merge(CollectDirtyRanges(treeNodes, new HashSet<int>(dirtyNodes)))
@@ -41,13 +81,9 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     private LayoutTreeNode[] LayoutNode(
         VirtualNode node,
         int dfsIndex,
-        int availableWidth,
-        int viewportHeight,
         ref int cursorY,
         List<LayoutElement> elements,
-        LayoutStyle style,
-        List<ScrollContainerDiag> scrollDiags,
-        PixelRectangle clipBounds = default)
+        ref LayoutContext ctx)
     {
         switch (node.Kind)
         {
@@ -57,29 +93,32 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var childDfsIndex = dfsIndex + 1;
                 var containerTop = cursorY;
 
-                // Container visible height: explicit Height attribute, or full remaining viewport
+                // Container visible height: explicit Height, or default based on depth
                 var explicitHeight = GetDimension(node, "Height", 0);
                 var containerVisibleHeight = explicitHeight > 0
-                    ? Math.Min(explicitHeight, Math.Max(viewportHeight - containerTop, 0))
-                    : Math.Max(viewportHeight - containerTop, 0);
+                    ? Math.Min(explicitHeight, ctx.DefaultContainerHeight(containerTop))
+                    : ctx.DefaultContainerHeight(containerTop);
 
                 // Clip bounds: the visible area for children within this container
                 var containerClip = new PixelRectangle(
-                    style.HorizontalPadding,
+                    ctx.Style.HorizontalPadding,
                     containerTop,
-                    availableWidth,
+                    ctx.AvailableWidth,
                     containerVisibleHeight);
                 // Intersect with parent clip to prevent children from overflowing
-                if (clipBounds.Width > 0 && clipBounds.Height > 0)
+                if (ctx.ClipBounds.Width > 0 && ctx.ClipBounds.Height > 0)
                 {
-                    containerClip = IntersectRect(containerClip, clipBounds);
+                    containerClip = IntersectRect(containerClip, ctx.ClipBounds);
                 }
 
-                // Lay out children to measure content height (start at container top)
+                // Lay out children to measure content height
+                var childCtx = ctx;
+                childCtx.Depth = ctx.Depth + 1;
+                childCtx.ClipBounds = containerClip;
                 cursorY = containerTop;
                 foreach (var child in node.Children)
                 {
-                    children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, viewportHeight, ref cursorY, elements, style, scrollDiags, containerClip));
+                    children.AddRange(LayoutNode(child, childDfsIndex, ref cursorY, elements, ref childCtx));
                     childDfsIndex += CountVirtualNodes(child);
                 }
                 var contentHeight = Math.Max(cursorY - containerTop, 0);
@@ -93,16 +132,38 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     OffsetElementY(elements, children, -scrollY);
                 }
 
+                // Count visible vs clipped elements for diagnostics
+                var visibleCount = 0;
+                var clippedCount = 0;
+                foreach (var child in children)
+                {
+                    for (var i = child.ElementStart; i < child.ElementStart + child.ElementCount; i++)
+                    {
+                        var el = elements[i];
+                        if (el.Bounds.Y + el.Bounds.Height <= containerTop
+                            || el.Bounds.Y >= containerTop + containerVisibleHeight)
+                        {
+                            clippedCount++;
+                        }
+                        else
+                        {
+                            visibleCount++;
+                        }
+                    }
+                }
+
                 // Collect scroll diagnostics
-                scrollDiags.Add(new ScrollContainerDiag(
+                ctx.ScrollDiags.Add(new ScrollContainerDiag(
                     dfsIndex,
                     containerVisibleHeight,
                     contentHeight,
                     scrollY,
-                    maxScrollY));
+                    maxScrollY,
+                    visibleCount,
+                    clippedCount));
 
                 // Advance cursor past the container
-                cursorY = containerTop + containerVisibleHeight + style.ItemSpacing;
+                cursorY = containerTop + containerVisibleHeight + ctx.Style.ItemSpacing;
 
                 if (children.Count == 0)
                 {
@@ -123,10 +184,10 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     var elementIndex = elements.Count;
                     elements.Add(new LayoutElement(
                         LayoutElementKind.Text,
-                        new PixelRectangle(style.HorizontalPadding, cursorY, availableWidth, style.TextHeight),
-                        ClipBounds: clipBounds,
+                        new PixelRectangle(ctx.Style.HorizontalPadding, cursorY, ctx.AvailableWidth, ctx.Style.TextHeight),
+                        ClipBounds: ctx.ClipBounds,
                         Text: content));
-                    cursorY += style.TextHeight + style.ItemSpacing;
+                    cursorY += ctx.Style.TextHeight + ctx.Style.ItemSpacing;
                     return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Text, elementIndex, 1, [])];
                 }
 
@@ -136,32 +197,32 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             case VirtualNodeKind.Rectangle:
             {
                 var rectangleBounds = new PixelRectangle(
-                    style.HorizontalPadding,
+                    ctx.Style.HorizontalPadding,
                     cursorY,
-                    GetDimension(node, "Width", Math.Min(availableWidth, 160)),
-                    GetDimension(node, "Height", style.RectangleHeight));
+                    GetDimension(node, "Width", Math.Min(ctx.AvailableWidth, 160)),
+                    GetDimension(node, "Height", ctx.Style.RectangleHeight));
                 var elementIndex = elements.Count;
-                elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: clipBounds));
-                cursorY += rectangleBounds.Height + style.ItemSpacing;
+                elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: ctx.ClipBounds));
+                cursorY += rectangleBounds.Height + ctx.Style.ItemSpacing;
                 return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Rectangle, elementIndex, 1, [])];
             }
 
             case VirtualNodeKind.Button:
             {
                 var label = GetButtonLabel(node);
-                var width = Math.Min(availableWidth, Math.Max(
-                    style.MinimumButtonWidth,
-                    label.Length * style.ButtonTextWidthFactor + style.ButtonHorizontalPadding));
-                var bounds = new PixelRectangle(style.HorizontalPadding, cursorY, width, style.ButtonHeight);
+                var width = Math.Min(ctx.AvailableWidth, Math.Max(
+                    ctx.Style.MinimumButtonWidth,
+                    label.Length * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
+                var bounds = new PixelRectangle(ctx.Style.HorizontalPadding, cursorY, width, ctx.Style.ButtonHeight);
                 var actionId = GetTextAttribute(node, "ActionId");
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
                     bounds,
-                    ClipBounds: clipBounds,
+                    ClipBounds: ctx.ClipBounds,
                     Text: label,
                     ActionId: actionId));
-                cursorY += style.ButtonHeight + style.ItemSpacing;
+                cursorY += ctx.Style.ButtonHeight + ctx.Style.ItemSpacing;
                 return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, [])];
             }
 
