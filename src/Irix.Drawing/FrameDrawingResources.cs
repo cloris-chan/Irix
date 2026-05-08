@@ -21,6 +21,16 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     private readonly Dictionary<TextStyle, ResourceHandle> _textStyleHandles = [];
     private bool _sealed;
     private bool _returned;
+    private bool _retained;
+    private ulong _frameId;
+
+    /// <summary>
+    /// Monotonically increasing frame identifier, incremented each time this instance
+    /// is rented from the pool. Used by <see cref="Irix.Rendering.RetainedRenderFrame"/>
+    /// to verify that two references to the same <see cref="FrameDrawingResources"/> instance
+    /// actually belong to the same rental cycle (same frame scope).
+    /// </summary>
+    internal ulong FrameId => _frameId;
 
     public static FrameDrawingResources Rent()
     {
@@ -30,16 +40,24 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
             {
                 var instance = Pool.Dequeue();
                 instance._returned = false;
+                instance._frameId++;
                 return instance;
             }
         }
 
-        return new FrameDrawingResources();
+        return new FrameDrawingResources { _frameId = 1 };
     }
 
     public static void Return(FrameDrawingResources resources)
     {
         if (resources._returned)
+        {
+            return;
+        }
+
+        // If retained by a RetainedRenderFrame, do not return to pool.
+        // The retained frame will Release() when done.
+        if (resources._retained)
         {
             return;
         }
@@ -60,6 +78,35 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
             {
                 resources._textArena.Dispose();
             }
+        }
+    }
+
+    /// <summary>
+    /// Mark this instance as retained by a <see cref="Irix.Rendering.RetainedRenderFrame"/>.
+    /// While retained, <see cref="Return"/> is a no-op, preventing the pool from recycling
+    /// the instance while the retained frame still holds TextSlice references into it.
+    /// </summary>
+    internal void Retain()
+    {
+        _retained = true;
+    }
+
+    /// <summary>
+    /// Release the retained claim. If the resources have not already been returned to the pool
+    /// (e.g., by a disposed batch), returns them now.
+    /// </summary>
+    internal void Release()
+    {
+        if (!_retained)
+        {
+            return;
+        }
+
+        _retained = false;
+
+        if (!_returned)
+        {
+            Return(this);
         }
     }
 

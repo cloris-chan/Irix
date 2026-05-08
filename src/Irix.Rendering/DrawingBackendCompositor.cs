@@ -14,6 +14,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private readonly Lock _hitTargetsLock = new();
     private readonly RetainedRenderFrame _retainedFrame = new();
     private HitTestTarget[] _hitTargets = [];
+    private ulong _lastAppliedFrameId;
 
     /// <summary>
     /// The dirty command ranges from the last render, if any.
@@ -42,15 +43,22 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 _hitTargets = [];
             }
 
+            _retainedFrame.ReleaseResources();
             _retainedFrame.Invalidate();
+            _lastAppliedFrameId = 0;
             LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
             LastPartialApplySucceeded = false;
             return ValueTask.CompletedTask;
         }
 
-        // Update retained frame: try partial apply first (same resources + dirty ranges),
-        // fall back to full apply if resources differ or no dirty ranges.
-        if (renderFrameBatch.DirtyCommandRanges.Count > 0)
+        // Cross-frame partial apply guard: only allow partial apply when the batch's
+        // resources are the same FrameDrawingResources instance AND same rental cycle
+        // (FrameId) as the last apply. This prevents a recycled pooled instance from
+        // being misidentified as "same frame scope".
+        var batchFrameId = renderFrameBatch.Resources is FrameDrawingResources fdr ? fdr.FrameId : 0ul;
+        var isSameFrameScope = batchFrameId != 0 && batchFrameId == _lastAppliedFrameId;
+
+        if (isSameFrameScope && renderFrameBatch.DirtyCommandRanges.Count > 0)
         {
             LastPartialApplySucceeded = _retainedFrame.TryApplyPartial(renderFrameBatch);
         }
@@ -61,9 +69,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         if (!LastPartialApplySucceeded)
         {
+            // Release old retained resources before taking new ones
+            _retainedFrame.ReleaseResources();
             _retainedFrame.ApplyFull(renderFrameBatch);
+            // Take ownership: prevent batch.Dispose() from returning resources to pool
+            _retainedFrame.RetainResources();
         }
 
+        _lastAppliedFrameId = batchFrameId;
         LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
 
         // Execute backend from the retained frame (zero-alloc: no ToBatch copy).
@@ -108,6 +121,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     public void Dispose()
     {
+        _retainedFrame.ReleaseResources();
+        _retainedFrame.Dispose();
         _backend.Dispose();
     }
 }

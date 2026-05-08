@@ -120,7 +120,7 @@ public sealed class DrawingBackendCompositorTests
         var window = new FakeWindow();
         var backend = new PoCDrawingBackend(window);
         var compositor = new DrawingBackendCompositor(backend);
-        var resources = new FrameDrawingResources();
+        var resources = FrameDrawingResources.Rent();
         var hello = resources.AddText("Hello");
         var world = resources.AddText("World");
         var textStyle = resources.AddTextStyle(TextStyle.Default);
@@ -153,6 +153,10 @@ public sealed class DrawingBackendCompositorTests
         Assert.True(compositor.LastPartialApplySucceeded);
         Assert.Single(compositor.LastDirtyCommandRanges);
         Assert.Equal((0, 1), compositor.LastDirtyCommandRanges[0]);
+
+        // Dispose: frame2 resources are retained by compositor's retained frame.
+        frame2.Dispose();
+        frame1.Dispose(); // same resources, Return is no-op (retained)
     }
 
     [Fact]
@@ -163,7 +167,7 @@ public sealed class DrawingBackendCompositorTests
         var backend = new PoCDrawingBackend(window);
         var compositor = new DrawingBackendCompositor(backend);
 
-        var resources1 = new FrameDrawingResources();
+        var resources1 = FrameDrawingResources.Rent();
         var hello = resources1.AddText("Hello");
         resources1.Seal();
 
@@ -179,7 +183,7 @@ public sealed class DrawingBackendCompositorTests
         Assert.Same(resources1, compositor.RetainedFrame.Resources);
 
         // Different resources instance + dirty ranges → partial refused, full fallback
-        var resources2 = new FrameDrawingResources();
+        var resources2 = FrameDrawingResources.Rent();
         var world = resources2.AddText("World");
         resources2.Seal();
 
@@ -195,6 +199,58 @@ public sealed class DrawingBackendCompositorTests
         await compositor.RenderAsync(frame2, cancellationToken);
         Assert.False(compositor.LastPartialApplySucceeded); // refused, full fallback
         Assert.Same(resources2, compositor.RetainedFrame.Resources); // full apply replaced
+    }
+
+    [Fact]
+    public async Task RenderAsync_cross_frame_partial_disabled_after_invalidate()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow();
+        var backend = new PoCDrawingBackend(window);
+        var compositor = new DrawingBackendCompositor(backend);
+
+        // Frame 1: rent resources and apply
+        var resources1 = FrameDrawingResources.Rent();
+        var hello = resources1.AddText("Hello");
+        resources1.Seal();
+
+        using var frame1 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: hello, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources1);
+
+        await compositor.RenderAsync(frame1, cancellationToken);
+        frame1.Dispose(); // resources retained, Return is no-op
+
+        // Simulate empty frame (invalidates retained frame and resets frame tracking)
+        using var empty = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0),
+            []);
+
+        await compositor.RenderAsync(empty, cancellationToken);
+
+        // Frame 2: even if same resources object is recycled (same ReferenceEquals),
+        // cross-frame guard resets _lastAppliedFrameId on invalidate → full apply forced
+        var resources2 = FrameDrawingResources.Rent();
+        var world = resources2.AddText("World");
+        resources2.Seal();
+
+        using var frame2 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: world, Color: DrawColor.Opaque(0, 0, 0)),
+            ]), 1),
+            [],
+            resources2,
+            [(0, 1)]);
+
+        await compositor.RenderAsync(frame2, cancellationToken);
+        // After invalidate, _lastAppliedFrameId was reset to 0, so even same-object
+        // would not match. Full apply is forced.
+        Assert.False(compositor.LastPartialApplySucceeded);
     }
 
     private sealed class FakeWindow : INativeWindow

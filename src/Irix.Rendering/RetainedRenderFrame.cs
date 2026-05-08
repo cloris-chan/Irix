@@ -25,7 +25,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     private HitTestTarget[] _hitTargets = [];
     private IReadOnlyList<(int Start, int Count)> _dirtyCommandRanges = [];
 
-    /// <summary>The retained draw commands.</summary>
+    /// <summary>The draw commands.</summary>
     public ReadOnlySpan<DrawCommand> Commands => _commandBuffer.Commands;
 
     /// <summary>Number of commands in the retained buffer.</summary>
@@ -42,6 +42,8 @@ internal sealed class RetainedRenderFrame : IDisposable
 
     /// <summary>
     /// Apply a full render frame batch. Replaces all retained state.
+    /// Does NOT take resource ownership — callers that need resources to survive
+    /// batch disposal must call <see cref="RetainResources"/> after applying.
     /// </summary>
     public void ApplyFull(RenderFrameBatch batch)
     {
@@ -52,11 +54,35 @@ internal sealed class RetainedRenderFrame : IDisposable
     }
 
     /// <summary>
+    /// Retain the current resources, preventing <see cref="FrameDrawingResources.Return"/>
+    /// from returning them to the pool while this frame still holds TextSlice references.
+    /// Call this after <see cref="ApplyFull"/> when the retained frame must outlive the batch.
+    /// </summary>
+    public void RetainResources()
+    {
+        if (_resources is FrameDrawingResources fdr)
+        {
+            fdr.Retain();
+        }
+    }
+
+    /// <summary>
+    /// Release any previously retained resources back to the pool.
+    /// Safe to call even if resources were not retained (no-op).
+    /// </summary>
+    public void ReleaseResources()
+    {
+        if (_resources is FrameDrawingResources fdr)
+        {
+            fdr.Release();
+        }
+    }
+
+    /// <summary>
     /// Apply a partial update: replace only the dirty command ranges from the new batch.
-    /// The new batch must be recorded with the same <see cref="IFrameResourceResolver"/>
-    /// as the current retained frame (same frame scope). Falls back to full replacement
-    /// if the buffer is empty, command count differs, no dirty ranges are provided,
-    /// or the batch resources are not the same instance as the current resources.
+    /// Falls back to full replacement if the buffer is empty, command count differs,
+    /// no dirty ranges are provided, or the batch resources are not the same instance
+    /// and generation as the current resources.
     /// </summary>
     /// <returns>
     /// <c>true</c> if partial apply succeeded; <c>false</c> if fallback to full apply occurred.
@@ -69,10 +95,14 @@ internal sealed class RetainedRenderFrame : IDisposable
             return false;
         }
 
-        // Resource identity guard: partial replace is only safe when both batches
-        // were recorded with the same FrameDrawingResources instance. Different
-        // instances mean TextSlice buffer IDs are incompatible — must fallback.
-        if (!ReferenceEquals(batch.Resources, _resources))
+        // Resource identity + generation guard: partial replace is only safe when both
+        // batches were recorded with the same FrameDrawingResources instance AND the
+        // same rental cycle. A pooled instance re-rented for a different frame will
+        // have a different FrameId even though it's the same object.
+        if (_resources is not FrameDrawingResources currentFdr
+            || batch.Resources is not FrameDrawingResources batchFdr
+            || !ReferenceEquals(currentFdr, batchFdr)
+            || currentFdr.FrameId != batchFdr.FrameId)
         {
             ApplyFull(batch);
             return false;
@@ -81,6 +111,9 @@ internal sealed class RetainedRenderFrame : IDisposable
         _commandBuffer.ApplyPartial(batch.Commands, batch.DirtyCommandRanges);
         _hitTargets = [.. batch.HitTargets];
         _dirtyCommandRanges = batch.DirtyCommandRanges;
+
+        // Resources are already retained from the previous ApplyFull + RetainResources.
+        // No ownership change needed for partial apply.
         return true;
     }
 
@@ -105,7 +138,9 @@ internal sealed class RetainedRenderFrame : IDisposable
 
     /// <summary>
     /// Create a <see cref="RenderFrameBatch"/> snapshot from the retained state.
-    /// The caller takes ownership of the returned batch's resources.
+    /// The returned batch shares the same resources reference; since the retained frame
+    /// owns the resources (retained), the batch's <c>Dispose()</c> will be a no-op
+    /// for resource return.
     /// </summary>
     public RenderFrameBatch ToBatch()
     {
@@ -118,8 +153,8 @@ internal sealed class RetainedRenderFrame : IDisposable
     }
 
     /// <summary>
-    /// Reset the retained frame. Must be called when the associated
-    /// <see cref="FrameDrawingResources"/> is returned to the pool.
+    /// Reset the retained frame. Callers that retained resources via <see cref="RetainResources"/>
+    /// must call <see cref="ReleaseResources"/> before or after invalidation.
     /// </summary>
     public void Invalidate()
     {
