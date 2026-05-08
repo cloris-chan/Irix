@@ -64,11 +64,19 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 {
                     containerClip = IntersectRect(containerClip, clipBounds);
                 }
+                // Scroll offset: shift child y coordinates by -ScrollY
+                var scrollY = GetDimension(node, "ScrollY", 0);
+                var containerTop = cursorY;
+                var savedCursorY = cursorY;
+                cursorY -= scrollY;
                 foreach (var child in node.Children)
                 {
                     children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, viewportHeight, ref cursorY, elements, style, containerClip));
                     childDfsIndex += CountVirtualNodes(child);
                 }
+                // Advance cursor past the container's visible area (not content height)
+                var containerVisibleHeight = Math.Max(viewportHeight - containerTop, 0);
+                cursorY = containerTop + containerVisibleHeight + style.ItemSpacing;
 
                 if (children.Count == 0)
                 {

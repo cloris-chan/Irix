@@ -80,7 +80,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
-- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；165 个测试用例覆盖各场景
+- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；166 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
@@ -365,7 +365,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 为 PoC 渲染回归增加最小测试
 - [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
 - [x] 为 `CompositorLoop` 所有权转移增加最小测试
-- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中 dirty 后补一帧、普通 empty diff 不等同 render request（165 个测试，全部通过）
+- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中 dirty 后补一帧、普通 empty diff 不等同 render request（166 个测试，全部通过）
 - [x] 引入最小 `RetainedTree`：单次 DFS 遍历应用 ReplaceRoot/Update/Add/Remove patch，返回去重升序 dirty 节点索引集合；13 个测试覆盖 replace root、update、add、remove、keyed reconciliation、多 patch 组合、empty batch、diff→apply 等价性、dirty 排序去重、layout dirty v0、RenderPipeline dirty-driven rebuild、Translator RetainedTree 集成
 - [x] `RenderPipeline` 接入 `RetainedTree`：Translator 持有 RetainedTree，diff batch 调用 Apply 并传递 dirty set，render request 只复用 retained tree；LayoutTreeBuilder 接受 dirty nodes 参数（v0 全量重建）
 - [x] Layout dirty v0：`LayoutTreeBuilder.Build(root, viewport, dirtyNodes)` 接口已落地，当前为全量重建，dirty set 透传用于后续增量布局
@@ -403,6 +403,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] Clip intersection v0：`LayoutTreeBuilder` 为 ScrollContainer 子元素计算 clip 时与 parent clip 求交集（`IntersectRect`）；嵌套 ScrollContainer clip 不越界；2 个测试覆盖
 - [x] Layout-driven diagnose：`--diagnose` 新增一帧从 VirtualNode → Layout → Pipeline → Compositor 生成的 clipped commands（`Layout clipped commands: 3`）；clip 链路端到端验证
 - [x] ADR-018 D3D12 scissor 设计草案：三条候选路线（per-command scissor / batch by clip / D2D text clip）；v1 仅传递 clip 数据用于诊断和 hit-test，GPU scissor 留待 profiler 触发
+- [x] Scroll offset v0：`ScrollContainer` 支持 `ScrollY` 属性；布局时子元素 y 坐标应用 `-ScrollY` offset，clip 保持容器可见区不变；cursorY 在容器布局后恢复到容器底部
+- [x] Clip hit-test 精度测试：构造 viewport 120×60 使 button bounds 超出 clip 区域；验证“bounds 内 clip 外”点击被 clip check 拒绝（而非 bounds check）
+- [x] Nested clip intersection 精确断言：断言交集结果等于预期矩形 `[16, 16, 268, 168]`，而非仅 `<= viewport`
+- [x] Hit-test + scroll 联动测试：`ScrollY=30` 使第一个 button 部分滚出 clip；验证 clip 外不命中、clip 内命中；第二个 button 滚入可见区后可命中
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`

@@ -332,44 +332,52 @@ public sealed class DrawingBackendCompositorTests
         var backend = new PoCDrawingBackend(window);
         var compositor = new DrawingBackendCompositor(backend);
 
-        // Build a button inside a ScrollContainer via the layout pipeline
+        // Use a viewport where the button extends beyond the clip area
+        // Viewport 120×60, padding 16 → clip = [16, 16, 88, 28] (120-32=88, 60-32=28)
+        // Button: "ClickMe" (7 chars) → width = max(140, 7*12+32) = 140, but clipped to available=88
+        // So button bounds: (16, 16, 88, 40) — button fills available width
+        // Clip bottom = 16+28 = 44, Button bottom = 16+40 = 56
+        // Point at (20, 50) is inside button (16..104, 16..56) but outside clip (16..104, 16..44)
         var root = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Click", 2,
+            VirtualNodeFactory.Button("ClickMe", 2,
                 new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btn"))));
-        var viewport = new PixelRectangle(0, 0, 200, 100);
+        var viewport = new PixelRectangle(0, 0, 120, 60);
         var pipeline = new RenderPipeline();
         using var batch = pipeline.Build(root, viewport);
 
         await compositor.RenderAsync(batch, cancellationToken);
 
-        // The button should be at (16, 16, 140, 40) with clip (16, 16, 168, 68)
-        // (viewport 200x100, padding 16, so clip = 200-32=168 wide, 100-32=68 tall)
         Assert.Single(batch.HitTargets);
         var target = batch.HitTargets[0];
         Assert.Equal("btn", target.ActionId);
+
+        // Verify clip bounds are set and smaller than button bounds
+        Assert.True(target.ClipBounds.Height > 0);
+        Assert.True(target.ClipBounds.Height < target.Bounds.Height); // clip is tighter
 
         // Inside both bounds and clip → should hit
         Assert.True(compositor.TryGetActionIdAt(20, 20, out var actionId));
         Assert.Equal("btn", actionId);
 
-        // Outside button bounds (x > right edge) → should NOT hit (bounds check)
-        // Button bounds: (16, 16, 140, 40), right edge = 156
-        Assert.False(compositor.TryGetActionIdAt(160, 20, out _));
+        // Inside button bounds but OUTSIDE clip (y=50 > clip bottom=44)
+        // → clip check should reject this
+        Assert.False(compositor.TryGetActionIdAt(20, 50, out _));
 
-        // Inside button bounds but outside clip (y > clip bottom = 16+68 = 84)
-        // → should NOT hit (clip check rejects)
-        Assert.False(compositor.TryGetActionIdAt(20, 90, out _));
+        // Outside button bounds entirely → bounds check rejects
+        Assert.False(compositor.TryGetActionIdAt(200, 20, out _));
     }
 
     [Fact]
-    public async Task Nested_clip_intersection_prevents_overflow()
+    public async Task Nested_clip_intersection_exact_rect()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow();
         var backend = new PoCDrawingBackend(window);
         var compositor = new DrawingBackendCompositor(backend);
 
-        // Nested ScrollContainers: outer clips to viewport, inner clips to outer's area
+        // Nested ScrollContainers with different effective clip areas
+        // Outer: viewport 300×200, padding 16 → clip = [16, 16, 268, 168]
+        // Inner: same container clip intersected with outer = [16, 16, 268, 168]
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.ScrollContainer(2,
                 VirtualNodeFactory.Button("Inner", 3,
@@ -380,17 +388,72 @@ public sealed class DrawingBackendCompositorTests
 
         await compositor.RenderAsync(batch, cancellationToken);
 
-        // The inner button should have clip bounds that are the intersection
-        // of the outer container clip and the inner container clip
         Assert.Single(batch.HitTargets);
         var clip = batch.HitTargets[0].ClipBounds;
 
-        // Outer clip: (16, 16, 268, 168) — viewport 300x200, padding 16
-        // Inner clip: same (intersected with outer) since both use same padding/viewport
-        Assert.True(clip.Width > 0);
-        Assert.True(clip.Height > 0);
-        Assert.True(clip.Width <= 300); // cannot exceed viewport
-        Assert.True(clip.Height <= 200);
+        // Outer clip: [16, 16, 300-32, 200-32] = [16, 16, 268, 168]
+        // Inner clip: intersect(outer, outer) = same = [16, 16, 268, 168]
+        var expectedClip = new PixelRectangle(16, 16, 268, 168);
+        Assert.Equal(expectedClip, clip);
+    }
+
+    [Fact]
+    public async Task Scroll_offset_moves_element_outside_clip()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow();
+        var backend = new PoCDrawingBackend(window);
+        var compositor = new DrawingBackendCompositor(backend);
+
+        // Two buttons in a small viewport. Scrolling down should move the first
+        // button partially outside the clip area.
+        // Viewport 200×80, padding 16 → clip height = 80-32 = 48
+        // Button height = 40, spacing = 12
+        // Button 1: y = 16 (visible)
+        // Button 2: y = 16+40+12 = 68 (partially visible — bottom at 108, clip bottom at 64)
+        // With ScrollY=30: Button 1: y = 16-30 = -14 (outside clip)
+        //                   Button 2: y = 68-30 = 38 (inside clip, bottom at 78 > clip bottom 64 → partially clipped)
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(30))],
+            children: [
+                VirtualNodeFactory.Button("First", 2,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("first"))),
+                VirtualNodeFactory.Button("Second", 3,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("second")))
+            ]);
+        var viewport = new PixelRectangle(0, 0, 200, 80);
+        var pipeline = new RenderPipeline();
+        using var batch = pipeline.Build(root, viewport);
+
+        await compositor.RenderAsync(batch, cancellationToken);
+
+        // Should have 2 hit targets
+        Assert.Equal(2, batch.HitTargets.Count);
+
+        // First button: scrolled up by 30, y = 16-30 = -14
+        // Its bottom = -14+40 = 26, which is inside clip top (16) → partially visible
+        // Actually: bounds y=-14, clip top=16. Point at y=20 is inside bounds (-14..26) and inside clip (16..64)
+        // But point at y=10 is inside bounds (-14..26) but outside clip (16..64)
+        var firstTarget = batch.HitTargets[0];
+        Assert.Equal("first", firstTarget.ActionId);
+
+        // Point inside first button bounds but outside clip (y=10 < clip top=16)
+        Assert.False(compositor.TryGetActionIdAt(20, 10, out _));
+
+        // Point inside first button bounds AND inside clip (y=20 >= clip top=16)
+        Assert.True(compositor.TryGetActionIdAt(20, 20, out var firstId));
+        Assert.Equal("first", firstId);
+
+        // Second button: y = 68-30 = 38, bottom = 78
+        // Clip: [16, 16, 168, 48], bottom = 64
+        // Point at y=50 is inside button (38..78) and inside clip (16..64)
+        Assert.True(compositor.TryGetActionIdAt(20, 50, out var secondId));
+        Assert.Equal("second", secondId);
+
+        // Point at y=70 is inside button (38..78) but outside clip (16..64)
+        Assert.False(compositor.TryGetActionIdAt(20, 70, out _));
     }
 
     private sealed class FakeWindow : INativeWindow
