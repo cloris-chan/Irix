@@ -13,6 +13,7 @@ internal enum LayoutElementKind : byte
 internal readonly record struct LayoutElement(
     LayoutElementKind Kind,
     PixelRectangle Bounds,
+    PixelRectangle ClipBounds = default,
     string? Text = null,
     string? ActionId = null);
 

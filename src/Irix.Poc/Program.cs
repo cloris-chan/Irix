@@ -200,6 +200,7 @@ internal static class Program
         var rangesMatch = dirty.Count == backendDirty.Count &&
             dirty.Zip(backendDirty).All(p => p.First == p.Second);
         Console.WriteLine($"Dirty ranges aligned: {rangesMatch}");
+        Console.WriteLine($"Clipped commands: {d3d12Backend.ClippedCommandCount}");
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);

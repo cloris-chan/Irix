@@ -20,7 +20,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         var availableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0);
         var cursorY = style.VerticalPadding;
 
-        var treeNodes = LayoutNode(root, 0, availableWidth, ref cursorY, elements, style);
+        var treeNodes = LayoutNode(root, 0, availableWidth, viewportBounds.Height, ref cursorY, elements, style);
 
         var dirtyRanges = dirtyNodes is { Count: > 0 }
             ? RangeUtils.Merge(CollectDirtyRanges(treeNodes, new HashSet<int>(dirtyNodes)))
@@ -41,9 +41,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         VirtualNode node,
         int dfsIndex,
         int availableWidth,
+        int viewportHeight,
         ref int cursorY,
         List<LayoutElement> elements,
-        LayoutStyle style)
+        LayoutStyle style,
+        PixelRectangle clipBounds = default)
     {
         switch (node.Kind)
         {
@@ -51,9 +53,15 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             {
                 var children = new List<LayoutTreeNode>();
                 var childDfsIndex = dfsIndex + 1;
+                // Clip bounds: the visible area for children within this container
+                var containerClip = new PixelRectangle(
+                    style.HorizontalPadding,
+                    style.VerticalPadding,
+                    availableWidth,
+                    Math.Max(viewportHeight - style.VerticalPadding * 2, 0));
                 foreach (var child in node.Children)
                 {
-                    children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, ref cursorY, elements, style));
+                    children.AddRange(LayoutNode(child, childDfsIndex, availableWidth, viewportHeight, ref cursorY, elements, style, containerClip));
                     childDfsIndex += CountVirtualNodes(child);
                 }
 
@@ -77,6 +85,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     elements.Add(new LayoutElement(
                         LayoutElementKind.Text,
                         new PixelRectangle(style.HorizontalPadding, cursorY, availableWidth, style.TextHeight),
+                        ClipBounds: clipBounds,
                         Text: content));
                     cursorY += style.TextHeight + style.ItemSpacing;
                     return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Text, elementIndex, 1, [])];
@@ -91,9 +100,9 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     style.HorizontalPadding,
                     cursorY,
                     GetDimension(node, "Width", Math.Min(availableWidth, 160)),
-                    GetDimension(node, "Height", 48));
+                    GetDimension(node, "Height", style.RectangleHeight));
                 var elementIndex = elements.Count;
-                elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds));
+                elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: clipBounds));
                 cursorY += rectangleBounds.Height + style.ItemSpacing;
                 return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Rectangle, elementIndex, 1, [])];
             }
@@ -110,6 +119,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
                     bounds,
+                    ClipBounds: clipBounds,
                     Text: label,
                     ActionId: actionId));
                 cursorY += style.ButtonHeight + style.ItemSpacing;

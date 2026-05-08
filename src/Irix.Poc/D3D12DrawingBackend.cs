@@ -15,9 +15,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
     private readonly FrameRenderList<D3D12TextRenderer.TextData> _texts = new();
     private IFrameResourceResolver? _resources;
     private IReadOnlyList<(int Start, int Count)> _dirtyCommandRanges = [];
+    private int _clippedCommandCount;
 
     /// <summary>Dirty command ranges from the last SetDirtyCommandRanges call.</summary>
     public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges => _dirtyCommandRanges;
+
+    /// <summary>Number of commands with non-default clip bounds from the last Execute.</summary>
+    public int ClippedCommandCount => _clippedCommandCount;
 
     public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
     {
@@ -34,9 +38,16 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
     {
         _resources = resources;
+        _clippedCommandCount = 0;
 
         foreach (var command in commands)
         {
+            // Track clip diagnostics (read-only; no GPU scissor yet)
+            if (command.ClipBounds.Width > 0 && command.ClipBounds.Height > 0)
+            {
+                _clippedCommandCount++;
+            }
+
             switch (command.Kind)
             {
                 case DrawCommandKind.FillRect:

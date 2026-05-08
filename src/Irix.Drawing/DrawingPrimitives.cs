@@ -127,6 +127,7 @@ public readonly record struct DrawCommand(
     DrawColor Color = default,
     ResourceHandle Resource = default,
     TextSlice Text = default,
+    DrawRect ClipBounds = default,
     float StrokeWidth = 1,
     Matrix3x2 Transform = default,
     int ZIndex = 0);

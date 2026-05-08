@@ -134,14 +134,29 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             foreach (var hitTarget in _hitTargets)
             {
-                if (x >= hitTarget.Bounds.X
-                    && y >= hitTarget.Bounds.Y
-                    && x < hitTarget.Bounds.X + hitTarget.Bounds.Width
-                    && y < hitTarget.Bounds.Y + hitTarget.Bounds.Height)
+                // Check bounds
+                if (x < hitTarget.Bounds.X
+                    || y < hitTarget.Bounds.Y
+                    || x >= hitTarget.Bounds.X + hitTarget.Bounds.Width
+                    || y >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
                 {
-                    actionId = hitTarget.ActionId;
-                    return true;
+                    continue;
                 }
+
+                // Check clip bounds (if set): reject hits outside the clip region
+                if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
+                {
+                    if (x < hitTarget.ClipBounds.X
+                        || y < hitTarget.ClipBounds.Y
+                        || x >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
+                        || y >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
+                    {
+                        continue;
+                    }
+                }
+
+                actionId = hitTarget.ActionId;
+                return true;
             }
         }
 

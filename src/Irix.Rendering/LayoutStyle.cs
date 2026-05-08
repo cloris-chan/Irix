@@ -6,6 +6,7 @@ internal readonly record struct LayoutStyle(
     int ItemSpacing = 12,
     int TextHeight = 32,
     int ButtonHeight = 40,
+    int RectangleHeight = 48,
     int MinimumButtonWidth = 140,
     int ButtonTextWidthFactor = 12,
     int ButtonHorizontalPadding = 32)
@@ -16,6 +17,7 @@ internal readonly record struct LayoutStyle(
         ItemSpacing: 12,
         TextHeight: 32,
         ButtonHeight: 40,
+        RectangleHeight: 48,
         MinimumButtonWidth: 140,
         ButtonTextWidthFactor: 12,
         ButtonHorizontalPadding: 32);

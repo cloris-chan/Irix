@@ -114,6 +114,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         {
             var element = elements[i];
             var startCommand = commandCount;
+            var clip = ToDrawRect(element.ClipBounds);
 
             switch (element.Kind)
             {
@@ -124,12 +125,14 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                         Rect: ToDrawRect(element.Bounds),
                         Resource: textStyle,
                         Text: text,
+                        ClipBounds: clip,
                         Color: style.TextColor);
                     break;
                 case LayoutElementKind.Rectangle:
                     commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: ToDrawRect(element.Bounds),
+                        ClipBounds: clip,
                         Color: style.RectangleFillColor);
                     break;
                 case LayoutElementKind.Button:
@@ -137,6 +140,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                     commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: bounds,
+                        ClipBounds: clip,
                         Color: style.ButtonFillColor);
                     var buttonText = resources.AddText(element.Text);
                     commands[commandCount++] = new DrawCommand(
@@ -144,6 +148,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                         Rect: bounds,
                         Resource: buttonTextStyle,
                         Text: buttonText,
+                        ClipBounds: clip,
                         Color: style.ButtonTextColor);
                     break;
             }

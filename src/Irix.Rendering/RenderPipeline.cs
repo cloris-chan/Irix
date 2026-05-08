@@ -114,7 +114,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         {
             if (!string.IsNullOrWhiteSpace(element.ActionId))
             {
-                hitTargets[index++] = new HitTestTarget(element.Bounds, element.ActionId);
+                hitTargets[index++] = new HitTestTarget(element.Bounds, element.ActionId, element.ClipBounds);
             }
         }
 
