@@ -1,4 +1,3 @@
-using Irix.Drawing;
 using System.Threading.Channels;
 
 namespace Irix.Rendering;
@@ -51,11 +50,17 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
     {
         await foreach (var patchBatch in _channel.Reader.ReadAllAsync())
         {
-            var isRenderRequest = patchBatch.Count == 0;
+            var isRenderRequest = patchBatch.Kind == PatchBatchKind.RenderRequest;
             if (isRenderRequest)
             {
                 Interlocked.Exchange(ref _renderRequestQueued, 0);
                 Interlocked.Exchange(ref _renderRequestDirty, 0);
+            }
+            else if (patchBatch.Count == 0)
+            {
+                // Regular empty diff (no-op): dispose and skip.
+                patchBatch.Dispose();
+                continue;
             }
 
             using (patchBatch)
@@ -78,7 +83,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
             return;
         }
 
-        var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>([]), 0);
+        var patchBatch = PatchBatch.CreateRenderRequest();
         if (!_channel.Writer.TryWrite(patchBatch))
         {
             patchBatch.Dispose();

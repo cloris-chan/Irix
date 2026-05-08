@@ -79,12 +79,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
-- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；89 个测试用例覆盖各场景
+- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；90 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 89 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、retained layout、DrawingBackendCompositor、所有权转移等）
+- 测试覆盖已扩展至 90 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render request 与 empty diff 区分、retained layout、DrawingBackendCompositor、所有权转移等）
 - `CompositorLoop` 已实现合并式显式重绘请求：连续 resize 只保留必要的 repaint，渲染中再次请求会在当前帧后补一帧，避免丢失最新 viewport
 - D3D12 resize 已改为 UI 线程只记录 pending size，Compositor 翻译/布局前应用 pending resize，并以 renderer 实际 swapchain 尺寸作为 layout viewport；fence event 由 renderer 持有 SafeHandle 且使用 auto-reset event，避免 GC 后 `E_HANDLE` 与 stale fence wait；交互运行默认关闭 ConsoleCompositor trace，swapchain 使用非拉伸 scaling；D3D12 窗口启用 external rendering 模式，避免 Win32 GDI `WM_PAINT`/erase 与 swapchain present 竞争
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
@@ -272,7 +272,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P1
 
-- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation）；89 个测试用例
+- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation）；90 个测试用例
 - 增加 `PatchBatch` / `IMemoryOwner<T>` 异常、取消、释放路径测试
 - 增加输入路由和命中测试的最小测试覆盖
 
@@ -318,7 +318,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 文本渲染正确性测试：英文、中文、emoji、混合 unicode、空文本、超长文本、按钮居中、DPI 缩放
 - [x] D3D12 诊断 smoke mode：`--diagnose` 渲染 3 帧并输出 TextRendererDiagnostics 缓存统计；`--diagnose-resize` 循环 resize/render 并强制 GC，覆盖 fence handle 生命周期与 resize stress 路径
 - [ ] 设计显式 glyph atlas/cache（仅当后续脱离 DirectWrite 或需要跨 backend glyph 资源复用时推进）
-- [ ] device-lost recovery：重建设备、交换链、所有 GPU 资源（当前仅 fail-fast + 标志位，无自动重建）
+- [ ] device-lost recovery：重建设备、交换链、所有 GPU 资源（当前仅 fail-fast + `_deviceRemoved` 标志位 + `DeviceErrorReason` 字符串；设备丢失后所有 `BeginFrame`/`RenderFrame`/`ClearAndPresent` 跳过执行，不自动重建设备，不连续失败计数）
 
 ### Core
 
@@ -363,6 +363,48 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 为 PoC 渲染回归增加最小测试
 - [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
 - [x] 为 `CompositorLoop` 所有权转移增加最小测试
+- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中 dirty 后补一帧、普通 empty diff 不等同 render request（90 个测试，全部通过）
+
+---
+
+## 7a. 诊断基线（2026-05-08）
+
+以下为 `Irix.Poc --diagnose` 与 `Irix.Poc --diagnose-resize` 的输出基线，供后续对比。
+
+### `--diagnose` 标准模式
+
+| 指标 | 值 |
+|------|-----|
+| Format cache | 1 entry, 1 hit, 1 miss, 0 evictions |
+| Layout cache | 2 entries, 4 hits, 2 misses, 0 evictions |
+| Format hit rate | 50.0% |
+| Layout hit rate | 66.7% |
+| Device removed | False |
+| Device error reason | (none) |
+| Swapchain size | 960×540 |
+
+### `--diagnose-resize` 压力模式
+
+| 指标 | 值 |
+|------|-----|
+| Device removed | False |
+| Device error reason | (none) |
+| Swapchain size | 929×454 |
+| 退出码 | 0 |
+
+---
+
+## 7b. 已知问题清单（2026-05-08）
+
+以下为本轮诊断/验证中发现的已知问题，记录但不在本轮扩功能修复。
+
+| 编号 | 类别 | 描述 | 严重程度 | 状态 |
+|------|------|------|---------|------|
+| I-01 | Debug layer | D3D12 debug layer 在 debugger attached 时启用，release 构建无 debug layer 输出 | 信息 | 预期行为 |
+| I-02 | Resize 抖动 | 快速拖动时 DXGI `DXGI_SCALING_NONE` 下窗口边缘可能出现短暂黑边（backbuffer 未覆盖区域） | 低 | 可接受，后续可通过 `ResizeBuffers` 立即覆盖边缘消除 |
+| I-03 | 启动光标 | 窗口 Show 后到 D3D12 首帧 present 之间仍有短暂 app-starting 光标残留 | 低 | 根因是 D3D12/DirectWrite 初始化延迟，后续可通过预编译 shader 或异步初始化改善 |
+| I-04 | 文本 cache | Format hit rate 50%（首次 miss，后续 hit），layout hit rate 66.7% — 诊断模式仅 3 帧，不代表稳态 | 信息 | 正常暖启动行为 |
+| I-05 | Device-lost | 设备丢失后仅 fail-fast + reason 字符串，不自动恢复 | 中 | 待实现 device-lost recovery（重建设备、交换链、所有 GPU 资源） |
 
 ---
 

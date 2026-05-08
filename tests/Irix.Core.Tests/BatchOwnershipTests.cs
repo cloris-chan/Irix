@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using Irix.Drawing;
 using Irix.Rendering;
 using Xunit;
@@ -87,7 +88,7 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
-    public async Task CompositorLoop_translates_zero_count_patches_for_viewport_changes()
+    public async Task CompositorLoop_render_requests_trigger_translation_and_rendering()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var drawOwner = new TrackingMemoryOwner<DrawCommand>([]);
@@ -95,35 +96,62 @@ public sealed class BatchOwnershipTests
         var compositor = new RecordingCompositor();
         await using var loop = new CompositorLoop(translator, compositor);
 
-        // Publish a no-change PatchBatch (Count = 0) — still translated for viewport sync
-        var emptyOwner = new TrackingMemoryOwner<VirtualNodePatch>([]);
-        var emptyBatch = new PatchBatch(emptyOwner, 0);
-        await loop.PublishAsync(emptyBatch, cancellationToken);
+        await loop.RequestRenderAsync(cancellationToken);
 
         await compositor.WaitForRenderAsync(cancellationToken);
 
         Assert.Equal(1, translator.TranslateCallCount);
         Assert.Equal(1, compositor.RenderCallCount);
-        Assert.Equal(1, emptyOwner.DisposeCallCount);
     }
 
     [Fact]
-    public async Task CompositorLoop_coalesces_render_requests_during_active_render()
+    public async Task CompositorLoop_skips_regular_empty_diffs()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new RecordingCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+
+        // Publish a regular empty diff (Count == 0, Kind == Diff) — should be skipped
+        var emptyOwner = new ArrayMemoryOwner<VirtualNodePatch>([]);
+        var emptyBatch = new PatchBatch(emptyOwner, 0);
+        await loop.PublishAsync(emptyBatch, cancellationToken);
+
+        // Give the processing loop time to consume the batch
+        await Task.Delay(100, cancellationToken);
+
+        Assert.Equal(0, translator.TranslateCallCount);
+        Assert.Equal(0, compositor.RenderCallCount);
+        Assert.Equal(PatchBatchKind.Diff, emptyBatch.Kind);
+    }
+
+    [Fact]
+    public async Task CompositorLoop_render_requests_coalesce_and_reschedule_after_render()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var translator = new AllocatingTranslator();
         var compositor = new BlockingCompositor();
         await using var loop = new CompositorLoop(translator, compositor);
 
+        // First render request: loop processes it, compositor blocks on RenderAsync (count=1)
         await loop.RequestRenderAsync(cancellationToken);
         await compositor.WaitForRenderCountAsync(1, cancellationToken);
 
+        // While first render is blocked, enqueue 3 more render requests.
+        // Request #2: _renderRequestDirty=0→1, _renderRequestQueued=0→1, writes batch
+        // Requests #3,#4: _renderRequestDirty already 1, ScheduleRenderRequest CAS fails (queued=1)
         await loop.RequestRenderAsync(cancellationToken);
         await loop.RequestRenderAsync(cancellationToken);
         await loop.RequestRenderAsync(cancellationToken);
 
+        // Release render #1 → loop picks up coalesced batch, clears queued+dirty, renders (count=2, blocks)
         compositor.Release();
         await compositor.WaitForRenderCountAsync(2, cancellationToken);
+
+        // Release render #2 → channel is empty, no reschedule (dirty was cleared when batch was picked up).
+        // This is correct coalescing: 3 extra requests → 1 coalesced render.
+        // Total renders: 2 (initial + 1 coalesced).
+        compositor.Release();
         await Task.Delay(50, cancellationToken);
 
         Assert.Equal(2, translator.TranslateCallCount);
@@ -194,7 +222,7 @@ public sealed class BatchOwnershipTests
 
     private sealed class BlockingCompositor : ICompositor
     {
-        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly ConcurrentQueue<TaskCompletionSource> _pending = new();
         private int _renderCallCount;
 
         public int RenderCallCount => Volatile.Read(ref _renderCallCount);
@@ -202,12 +230,17 @@ public sealed class BatchOwnershipTests
         public async ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _renderCallCount);
-            await _released.Task.WaitAsync(cancellationToken);
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _pending.Enqueue(tcs);
+            await tcs.Task.WaitAsync(cancellationToken);
         }
 
         public void Release()
         {
-            _released.TrySetResult();
+            if (_pending.TryDequeue(out var tcs))
+            {
+                tcs.TrySetResult();
+            }
         }
 
         public Task WaitForRenderCountAsync(int expectedCount, CancellationToken cancellationToken)
