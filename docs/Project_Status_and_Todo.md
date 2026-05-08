@@ -389,6 +389,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] `FrameDrawingResources` Retain/Release/Return 幂等性测试：double Release、Release after Return、Retain then batch Dispose、FrameId 递增 — 不会 double-return / 负引用计数
 - [x] `DrawingBackendCompositor` 诊断计数：`RenderCount`、`PartialApplyCount`、`FullApplyCount`、`EmptyFrameCount`、`LastDirtyCommandRanges`；`--diagnose` 模式输出 partial hit rate 与 dirty ranges
 - [x] ADR-017 跨帧资源策略设计草案：明确未来 partial rendering 需要稳定 text handle / resource snapshot / per-frame full resources 之一；v1 保持 full apply，partial 仅限同 frame scope pilot
+- [x] `FrameDrawingResources` API 收紧：`Reset()` 改为 `internal`，防止外部误清 retained arena；`Dispose()` 加 retained 安全释放（`Release()` before dispose），避免池腐蚀
+- [x] `IDirtyRangeAware` 可选接口：backends 可实现 `SetDirtyCommandRanges` 获取只读 dirty ranges；`D3D12DrawingBackend` 已实现；compositor 在 `Execute` 前传播 dirty ranges；不改 `IDrawingBackend` 签名，渲染行为不变
+- [x] 热路径分配复查：`TryApplyPartial` 移除不必要的 `_hitTargets = [.. batch.HitTargets]`（partial apply 不改变 hit targets）；`ApplyFull` 和 compositor 的 hit target 分配保留（must own / thread-safety）；`ToBatch().ToArray()` 仅测试路径；`DrawCommandRecorder` stackalloc→ToArray 保留（stackalloc 无法逃逸方法）
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`

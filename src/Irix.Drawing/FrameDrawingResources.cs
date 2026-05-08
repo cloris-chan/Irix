@@ -162,8 +162,13 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         return _textStyles[handle.Id];
     }
 
-    public void Reset()
+    /// <summary>
+    /// Reset the arena and style lists for reuse. Only valid when not retained.
+    /// Typically called by <see cref="Return"/> during pool recycling.
+    /// </summary>
+    internal void Reset()
     {
+        ObjectDisposedException.ThrowIf(_returned && _retained, this);
         _textArena.Reset();
         _textStyles.Clear();
         _textStyleHandles.Clear();
@@ -173,6 +178,14 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
 
     public void Dispose()
     {
+        if (_retained)
+        {
+            // Safety: release retained claim before disposing to avoid pool corruption.
+            // This handles the case where a caller disposes resources that are still
+            // retained by a RetainedRenderFrame.
+            Release();
+        }
+
         _textArena.Dispose();
         _textStyles.Clear();
         _textStyleHandles.Clear();

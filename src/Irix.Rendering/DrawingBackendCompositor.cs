@@ -106,6 +106,12 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         // Execute backend from the retained frame (zero-alloc: no ToBatch copy).
         if (_retainedFrame.TryReadFrame(out var commands, out var resources))
         {
+            // Propagate dirty ranges to backend for diagnostics (read-only).
+            if (_backend is IDirtyRangeAware dirtyAware)
+            {
+                dirtyAware.SetDirtyCommandRanges(LastDirtyCommandRanges);
+            }
+
             var frameContext = new FrameContext(0, 0); // Viewport size not needed for PoC backend
             _backend.BeginFrame(frameContext);
 
