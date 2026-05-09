@@ -145,9 +145,7 @@ internal static class Program
     private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(16); // ~60fps
     private static int _scrollTickLoopRunning; // 0 = idle, 1 = running
     private static long _pendingScrollDeltaBits; // double encoded as long for Interlocked
-    private static int _scrollFrameQueued; // 1 = ScrollFrame dispatched but not yet processed by Runtime
-    private static double _lastDispatchedTarget; // scroll target at time of last dispatch (for backpressure detection)
-    private static double _lastDispatchedPosition; // scroll position at time of last dispatch
+    private static int _scrollDeltaQueued; // 1 = ScrollDeltaMsg dispatched but not yet processed by Runtime
 
     // ── Diagnostic readouts ────────────────────────────────────────────
 
@@ -160,7 +158,7 @@ internal static class Program
         }
     }
 
-    internal static bool DiagFrameQueued => Volatile.Read(ref _scrollFrameQueued) != 0;
+    internal static bool DiagDeltaQueued => Volatile.Read(ref _scrollDeltaQueued) != 0;
     internal static bool DiagTickLoopRunning => Volatile.Read(ref _scrollTickLoopRunning) != 0;
 
     /// <summary>
@@ -201,18 +199,18 @@ internal static class Program
     }
 
     /// <summary>
-    /// Animation loop: each frame drains pending scroll delta and dispatches
-    /// a single coalesced ScrollFrame(delta, dt) message. Replaces both
-    /// Scroll and Tick — one message per frame maximum.
+    /// Scroll tick loop. Two responsibilities, decoupled:
     ///
-    /// Design:
-    /// - No probe drain — first delta is never lost.
-    /// - First frame dispatches immediately (dt=0) before entering tick loop.
-    /// - Backpressure: only one ScrollFrame queued at a time. While the Runtime
-    ///   has an unprocessed ScrollFrame, new deltas accumulate in pending.
-    ///   Flag is cleared by detecting model scroll state change.
-    /// - RequestRenderAsync is fire-and-forget (coalescing signal, not await).
-    /// - Exit after 3 consecutive idle frames.
+    /// 1. **Delta drain** (every tick): drain pending pixels, dispatch
+    ///    ScrollDeltaMsg immediately. Target updates as fast as the Runtime
+    ///    can process messages. No backpressure on deltas — they always drain.
+    ///
+    /// 2. **Animation tick** (when not backpressured): dispatch ScrollTick
+    ///    to advance smooth animation. Only when the Runtime has processed
+    ///    the previous delta (model target changed) or no delta was dispatched.
+    ///
+    /// This split ensures the user sees the target update immediately via
+    /// BuildView's pending-aware display, even when the Runtime is backed up.
     /// </summary>
     private static async Task RunScrollTickLoopAsync(
         Runtime<CounterModel, CounterMessage> runtime,
@@ -222,18 +220,8 @@ internal static class Program
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             var lastTick = stopwatch.Elapsed;
+            var lastModelTarget = runtime.CurrentModel.Scroll.TargetPosition;
 
-            // First frame: drain and dispatch immediately — no probe, no delay.
-            var firstPending = DrainPendingScrollDelta();
-            if (firstPending != 0)
-            {
-                var firstDelta = new ScrollDelta(ScrollDeltaUnit.Pixel, firstPending);
-                runtime.Dispatch(new CounterMessage.ScrollFrame(firstDelta, DeltaTime: 0));
-                Volatile.Write(ref _scrollFrameQueued, 1);
-                compositorLoop.RequestRenderAsync(); // fire-and-forget
-            }
-
-            // Tick loop
             var consecutiveIdle = 0;
             while (consecutiveIdle < 3)
             {
@@ -242,50 +230,52 @@ internal static class Program
                 var dt = (now - lastTick).TotalSeconds;
                 lastTick = now;
 
-                // Clear backpressure flag: detect if Runtime processed the last
-                // ScrollFrame by comparing scroll state. The Runtime processes
-                // messages sequentially, so a state change means our frame was consumed.
-                if (Volatile.Read(ref _scrollFrameQueued) != 0)
+                // 1. Drain and dispatch delta — always, regardless of backpressure.
+                var pendingPixels = DrainPendingScrollDelta();
+                if (pendingPixels != 0)
                 {
-                    var currentScroll = runtime.CurrentModel.Scroll;
-                    if (currentScroll.TargetPosition != _lastDispatchedTarget
-                        || currentScroll.Position != _lastDispatchedPosition)
+                    var delta = new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels);
+                    runtime.Dispatch(new CounterMessage.ScrollDeltaMsg(delta));
+                    Volatile.Write(ref _scrollDeltaQueued, 1);
+                    compositorLoop.RequestRenderAsync();
+                }
+
+                // 2. Clear delta-queued flag if Runtime processed the last delta.
+                if (Volatile.Read(ref _scrollDeltaQueued) != 0)
+                {
+                    var currentTarget = runtime.CurrentModel.Scroll.TargetPosition;
+                    if (currentTarget != lastModelTarget)
                     {
-                        Volatile.Write(ref _scrollFrameQueued, 0);
+                        Volatile.Write(ref _scrollDeltaQueued, 0);
+                        lastModelTarget = currentTarget;
                     }
                 }
 
-                // Backpressure: if Runtime hasn't processed the last frame yet,
-                // only accumulate deltas — don't dispatch another frame.
-                if (Volatile.Read(ref _scrollFrameQueued) != 0)
+                // 3. Dispatch animation tick only when no delta is queued.
+                // This prevents piling up messages when the Runtime is slow.
+                if (Volatile.Read(ref _scrollDeltaQueued) == 0
+                    && runtime.CurrentModel.Scroll.IsAnimating)
                 {
-                    var stillAnimating = runtime.CurrentModel.Scroll.IsAnimating;
-                    var hasPending = Volatile.Read(ref _pendingScrollDeltaBits) != 0;
-                    consecutiveIdle = (stillAnimating || hasPending) ? 0 : consecutiveIdle + 1;
-                    continue;
+                    runtime.Dispatch(new CounterMessage.ScrollTick(dt));
+                    compositorLoop.RequestRenderAsync();
                 }
 
-                // Drain all accumulated scroll deltas for this frame
-                var pendingPixels = DrainPendingScrollDelta();
-                if (pendingPixels == 0 && !runtime.CurrentModel.Scroll.IsAnimating)
+                // 4. Idle detection: no pending, no animation, no queued delta.
+                if (pendingPixels == 0
+                    && !runtime.CurrentModel.Scroll.IsAnimating
+                    && Volatile.Read(ref _scrollDeltaQueued) == 0)
                 {
                     consecutiveIdle++;
-                    continue;
                 }
-
-                // Dispatch a single coalesced frame
-                var delta = new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels);
-                _lastDispatchedTarget = runtime.CurrentModel.Scroll.TargetPosition + pendingPixels;
-                _lastDispatchedPosition = runtime.CurrentModel.Scroll.Position;
-                runtime.Dispatch(new CounterMessage.ScrollFrame(delta, dt));
-                Volatile.Write(ref _scrollFrameQueued, 1);
-                compositorLoop.RequestRenderAsync(); // fire-and-forget
-                consecutiveIdle = 0;
+                else
+                {
+                    consecutiveIdle = 0;
+                }
             }
         }
         finally
         {
-            Volatile.Write(ref _scrollFrameQueued, 0);
+            Volatile.Write(ref _scrollDeltaQueued, 0);
             Interlocked.Exchange(ref _scrollTickLoopRunning, 0);
         }
     }

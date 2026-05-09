@@ -427,20 +427,21 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] ScrollState 改为 double：`TargetPosition`/`Position`/`Accumulator` 全部 double 精度；小 delta 不因 int target 丢失
 - [x] ApplyScrollDelta：根据 `ScrollDeltaUnit` + `ScrollMetrics` + `SystemScrollSettings` 换算到 pixel target；WheelRaw: `120/120 × 3 lines × 18px = 54px`；30×4 = 120 = 54px
 - [x] Scroll 精度测试：120 units × 3 lines × 18px = 54px、30×4 等价一刻度、小 delta 累计、Line/Pixel/Page 换算、backward-compatible ApplyWheel
-- [x] Tick loop 单实例 guard：`EnsureScrollTickLoop` 用 `Interlocked.Exchange` 保证同时只有一个 tick loop 在跑；`RunScrollTickLoopAsync` 首帧立即 dispatch `ScrollFrame(pending, dt:0)`，后续每帧 drain + dispatch；backpressure 标志 `_scrollFrameQueued` 防止 Runtime 未处理前继续 enqueue；结束时连续 3 帧 idle 自然退出
-- [x] Scroll dispatch 立即渲染：`HandleInput` 中 scroll 消息后先 `RequestRenderAsync()` 再 `EnsureScrollTickLoop`；`EnsureScrollTickLoop` 无条件调用，不检查 `IsAnimating`（避免读旧 model 竞态）
+- [x] Tick loop 单实例 guard：`EnsureScrollTickLoop` 用 `Interlocked.Exchange` 保证同时只有一个 tick loop 在跑；`RunScrollTickLoopAsync` 每帧 drain pending 并 dispatch `ScrollDeltaMsg`（无 backpressure），仅在无 delta 排队时 dispatch `ScrollTick`；结束时连续 3 帧 idle 自然退出
+- [x] Scroll dispatch 立即渲染：`HandleInput` 中 scroll 消息后 `EnsureScrollTickLoop` 无条件调用；tick loop 每帧 drain pending 并 dispatch `ScrollDeltaMsg`（target 即时更新），`RequestRenderAsync` fire-and-forget
 - [x] Scroll 集成测试：单刻度 target=54px、双刻度 target=108px、正负抵消 target=0、单刻度动画收敛 scrollY=54、双刻度动画收敛 scrollY=108、debug 显示包含 target/pos/acc/applied
-- [x] Debug 显示：PoC 文本临时显示 `ScrollY: applied=54 target=54.0 pos=53.87 max=0 acc=0.000 anim=True maxKnown=False pendingPx=0 frameQueued=False tickLoop=False`，可直接看出 input 是否更新 target、动画是否推进 position、max 是否已知、pending 是否未 drain、frame 是否排队
+- [x] Debug 显示：PoC 文本临时显示 `ScrollY: applied=54 target=54.0 pos=53.87 max=0 acc=0.000 anim=True maxKnown=False pendingPx=0 deltaQueued=False tickLoop=False`，可直接看出 input 是否更新 target、动画是否推进 position、max 是否已知、pending 是否未 drain、delta 是否排队
 - [x] Wheel coalescing：`HandleInput` 不直接 `Dispatch(Scroll)`；raw delta 累加到 `PendingScrollDelta`（Interlocked CAS），只启动/唤醒 animation loop。快速滚轮 100 个事件不产生 100 次 MVU update
 - [x] Per-tick drain：animation loop 每幀讀取並清空 pending delta，合成單個 `ScrollFrame(delta, dt)` 消息。每幀最多一次 scroll update，Tick 不會排在大量 wheel 消息後面
 - [x] Clamp target 到 layout max：`ScrollState.MaxScrollY` 由 layout pipeline 通过 `RenderPipeline.LastMaxScrollY` → `WindowDrawCommandTranslator.LastMaxScrollY` → `postFrameCallback` → `UpdateMaxScrollY` 反馈回 model。`ApplyScrollDelta` 在 `HasMaxScrollY=true` 时将 `TargetPosition` clamp 到 `[0, MaxScrollY]`；`WithMaxScrollY` 在更新时重新 clamp 并设置 `HasMaxScrollY=true`
 - [x] MaxScrollY 集成测试：scroll way past content 后 target clamp 到 MaxScrollY；MaxScrollY 更新后 target 被重新 clamp
 - [x] ScrollFrame 统一消息：`ScrollFrame(delta, dt)` 合并 scroll delta + animation tick，取代独立的 `Scroll` 和 `Tick` 消息
-- [x] Scroll tick loop 重写：移除探测式 drain（首笔 delta 不再丢失）；首帧立即 dispatch `ScrollFrame(pending, dt:0)` 再进入 16ms tick 循环；`RequestRenderAsync` 改为 fire-and-forget（不再误用为 await 渲染完成）
-- [x] Scroll backpressure：tick loop 持有 `_scrollFrameQueued` 标志，上一帧 `ScrollFrame` 未被 Runtime 处理前只累加 pending delta 不再 dispatch；通过比对 `runtime.CurrentModel.Scroll` 状态变化检测帧已消费
+- [x] Scroll 消息拆分：`ScrollFrame` 拆为 `ScrollDeltaMsg(delta)` + `ScrollTick(dt)`；delta 与 tick 解耦，tick loop 每帧 drain 并立即 dispatch `ScrollDeltaMsg`（target 即时更新），仅在无 backpressure 时 dispatch `ScrollTick`（动画推进）
+- [x] Scroll backpressure：tick loop 持有 `_scrollDeltaQueued` 标志，上一个 `ScrollDeltaMsg` 未被 Runtime 处理前跳过 `ScrollTick` dispatch；通过比对 `runtime.CurrentModel.Scroll.TargetPosition` 变化检测 delta 已消费
+- [x] BuildView pending-aware 显示：`BuildView` 直接读取 `_pendingScrollDeltaBits` 原始值计算 `displayTarget`（模型 target + 未 drain 的 pending），即使 Runtime 未处理完也能立即反映用户滚动意图
 - [x] `HasMaxScrollY` 状态标志：`ScrollState` 新增 `HasMaxScrollY`，区分"布局尚未报告 max"（`false`，target 不 clamp）和"已报告"（`true`，clamp 到 `[0, MaxScrollY]`）；`WithMaxScrollY(0)` 正确锁定 target 到 0
 - [x] Scroll 诊断字段扩展：debug 显示新增 `maxKnown`/`pendingPx`/`frameQueued`/`tickLoop`，可现场区分 pending 未 drain、frame 排队、max clamp 问题
-- [x] Scroll 回归测试：10 个新测试覆盖 `HasMaxScrollY`（false→不 clamp、true→clamp、0→锁定）、快速 100 刻度合并、动画收敛、`ScrollFrame(dt:0)` 语义、backpressure 场景
+- [x] Scroll 回归测试：10 个新测试覆盖 `HasMaxScrollY`（false→不 clamp、true→clamp、0→锁定）、快速 100 刻度合并、动画收敛、`ScrollDeltaMsg` 语义、backpressure 场景；所有测试已迁移到 `ScrollDeltaMsg`/`ScrollTick` 消息拆分
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`
