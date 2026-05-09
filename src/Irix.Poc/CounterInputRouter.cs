@@ -28,10 +28,8 @@ internal static class CounterInputRouter
                 message = new CounterMessage.Decrement();
                 return true;
             case RawInputEventKind.PointerWheel when inputEvent.Delta != 0:
-                // Normalize wheel delta: standard WHEEL_DELTA = 120 per notch,
-                // map to scroll step of 40 pixels per notch
-                var scrollStep = inputEvent.Delta / 120 * 40;
-                message = new CounterMessage.Scroll(-scrollStep); // positive delta = scroll up = negative ScrollY delta
+                // Send raw delta — ScrollController handles accumulation and conversion
+                message = new CounterMessage.Wheel(inputEvent.Delta);
                 return true;
             case RawInputEventKind.CharacterInput when inputEvent.Character is 'r' or 'R':
                 message = new CounterMessage.Reset(0);

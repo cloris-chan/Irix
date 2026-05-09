@@ -61,11 +61,11 @@ public sealed class CounterInputRouterTests
     }
 
     [Theory]
-    [InlineData(120, -40)]   // scroll up → negative deltaY (scroll content up)
-    [InlineData(-120, 40)]   // scroll down → positive deltaY (scroll content down)
-    [InlineData(240, -80)]   // two notches up
-    [InlineData(0, 0)]       // zero delta → scroll 0
-    public void TryMapInput_maps_mouse_wheel_to_scroll(int delta, int expectedDeltaY)
+    [InlineData(120)]   // one notch up
+    [InlineData(-120)]  // one notch down
+    [InlineData(240)]   // two notches up
+    [InlineData(30)]    // quarter notch (high-precision touchpad)
+    public void TryMapInput_maps_mouse_wheel_to_wheel_message(int delta)
     {
         var inputEvent = new RawInputEvent(
             RawInputEventKind.PointerWheel,
@@ -76,15 +76,9 @@ public sealed class CounterInputRouterTests
 
         var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => null, out var message);
 
-        if (delta == 0)
-        {
-            Assert.False(mapped);
-            return;
-        }
-
         Assert.True(mapped);
-        var scroll = Assert.IsType<CounterMessage.Scroll>(message);
-        Assert.Equal(expectedDeltaY, scroll.DeltaY);
+        var wheel = Assert.IsType<CounterMessage.Wheel>(message);
+        Assert.Equal(delta, wheel.RawDelta); // raw delta preserved, no truncation
     }
 
     [Theory]
@@ -118,13 +112,14 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // Scroll down
-        var result = app.Update(model, new CounterMessage.Scroll(40));
-        Assert.Equal(40, result.NextModel.ScrollY);
+        // Apply one full notch (120 units) → should accumulate and produce target
+        var result = app.Update(model, new CounterMessage.Wheel(120));
+        Assert.Equal(40, result.NextModel.Scroll.TargetPosition); // 120/120 * 40 = 40px
+        Assert.True(result.NextModel.Scroll.IsAnimating);
 
-        // Scroll up
-        result = app.Update(result.NextModel, new CounterMessage.Scroll(-20));
-        Assert.Equal(20, result.NextModel.ScrollY);
+        // Tick to animate toward target
+        result = app.Update(result.NextModel, new CounterMessage.Tick(1.0f));
+        Assert.True(result.NextModel.Scroll.Position > 0);
     }
 
     [Fact]
@@ -133,16 +128,47 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // Scroll up when already at 0 → stays at 0
-        var result = app.Update(model, new CounterMessage.Scroll(-100));
-        Assert.Equal(0, result.NextModel.ScrollY);
+        // Scroll up when at 0 → target stays at 0
+        var result = app.Update(model, new CounterMessage.Wheel(-120));
+        Assert.Equal(0, result.NextModel.Scroll.TargetPosition); // clamped to 0
+    }
+
+    [Fact]
+    public void Scroll_small_deltas_accumulate()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // 4 small deltas of 30 = 120 total → 40px
+        for (var i = 0; i < 4; i++)
+        {
+            model = app.Update(model, new CounterMessage.Wheel(30)).NextModel;
+        }
+        Assert.Equal(40, model.Scroll.TargetPosition);
+    }
+
+    [Fact]
+    public void Scroll_animation_converges_to_target()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // Apply wheel and animate for 2 seconds (should converge)
+        model = app.Update(model, new CounterMessage.Wheel(120)).NextModel;
+        for (var i = 0; i < 120; i++) // 120 frames at 60fps = 2 seconds
+        {
+            model = app.Update(model, new CounterMessage.Tick(1f / 60f)).NextModel;
+        }
+
+        Assert.False(model.Scroll.IsAnimating);
+        Assert.Equal(model.Scroll.TargetPosition, (int)Math.Round(model.Scroll.Position));
     }
 
     [Fact]
     public void ScrollY_appears_in_view_as_attribute()
     {
         var app = new CounterApplication();
-        var model = app.Initialize() with { ScrollY = 80 };
+        var model = app.Initialize() with { Scroll = new ScrollState { TargetPosition = 80, Position = 80 } };
         var tree = app.BuildView(model);
 
         // The root ScrollContainer should have ScrollY=80 attribute
@@ -164,7 +190,7 @@ public sealed class CounterInputRouterTests
     public void ScrollY_in_view_produces_scroll_diagnostics()
     {
         var app = new CounterApplication();
-        var model = app.Initialize() with { ScrollY = 100 };
+        var model = app.Initialize() with { Scroll = new ScrollState { TargetPosition = 100, Position = 100 } };
         var tree = app.BuildView(model);
 
         var builder = new LayoutTreeBuilder();

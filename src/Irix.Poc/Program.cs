@@ -70,6 +70,11 @@ internal static class Program
             if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionIdAt, out var message))
             {
                 runtime.Dispatch(message);
+                // After wheel input, if animating, start the tick loop
+                if (message is CounterMessage.Wheel && runtime.CurrentModel.Scroll.IsAnimating)
+                {
+                    _ = StartTickLoop(runtime, compositorLoop);
+                }
             }
         }
 
@@ -108,6 +113,36 @@ internal static class Program
         public void OnNext(RawInputEvent value)
         {
             onNext(value);
+        }
+    }
+
+    private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(16); // ~60fps
+
+    /// <summary>
+    /// Dispatches Tick messages at ~60fps while the scroll animation is active.
+    /// Stops automatically when IsAnimating becomes false.
+    /// </summary>
+    private static async Task StartTickLoop(
+        Runtime<CounterModel, CounterMessage> runtime,
+        CompositorLoop compositorLoop)
+    {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var lastTick = stopwatch.Elapsed;
+
+        while (!runtime.CurrentModel.Scroll.IsAnimating)
+        {
+            await Task.Delay(TickInterval);
+        }
+
+        while (runtime.CurrentModel.Scroll.IsAnimating)
+        {
+            await Task.Delay(TickInterval);
+            var now = stopwatch.Elapsed;
+            var dt = (float)(now - lastTick).TotalSeconds;
+            lastTick = now;
+
+            runtime.Dispatch(new CounterMessage.Tick(dt));
+            await compositorLoop.RequestRenderAsync();
         }
     }
 
