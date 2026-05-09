@@ -411,4 +411,184 @@ public sealed class CounterInputRouterTests
         Assert.Contains("pos=", debugText);
         Assert.Contains("acc=", debugText);
     }
+
+    // ── HasMaxScrollY tests ────────────────────────────────────────────
+
+    [Fact]
+    public void HasMaxScrollY_false_target_not_clamped()
+    {
+        // Default ScrollState has HasMaxScrollY=false — target should grow freely
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // Scroll way past any reasonable content height
+        for (var i = 0; i < 10; i++)
+        {
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120), 0)).NextModel;
+        }
+
+        // Without MaxScrollY known, target grows unbounded (no upper clamp)
+        Assert.Equal(540.0, model.Scroll.TargetPosition); // 10 × 54px
+        Assert.False(model.Scroll.HasMaxScrollY);
+    }
+
+    [Fact]
+    public void HasMaxScrollY_true_clamps_target()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // First set MaxScrollY
+        model = app.Update(model, new CounterMessage.UpdateMaxScrollY(100)).NextModel;
+        Assert.True(model.Scroll.HasMaxScrollY);
+
+        // Scroll past content
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 12000), 0)).NextModel;
+
+        Assert.Equal(100.0, model.Scroll.TargetPosition);
+    }
+
+    [Fact]
+    public void HasMaxScrollY_max_zero_locks_target()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // Scroll first
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 240), 0)).NextModel;
+        Assert.True(model.Scroll.TargetPosition > 0);
+
+        // Set MaxScrollY=0 (content fits in viewport — no scrolling needed)
+        model = app.Update(model, new CounterMessage.UpdateMaxScrollY(0)).NextModel;
+
+        Assert.True(model.Scroll.HasMaxScrollY);
+        Assert.Equal(0.0, model.Scroll.TargetPosition);
+        Assert.Equal(0.0, model.Scroll.Position);
+    }
+
+    [Fact]
+    public void HasMaxScrollY_withMaxScrollY_sets_flag()
+    {
+        var state = ScrollState.Default;
+        Assert.False(state.HasMaxScrollY);
+
+        state = ScrollController.WithMaxScrollY(state, 200);
+        Assert.True(state.HasMaxScrollY);
+        Assert.Equal(200.0, state.MaxScrollY);
+    }
+
+    [Fact]
+    public void HasMaxScrollY_withMaxScrollY_zero_sets_flag()
+    {
+        var state = ScrollState.Default;
+        state = ScrollController.WithMaxScrollY(state, 0);
+        Assert.True(state.HasMaxScrollY);
+        Assert.Equal(0.0, state.MaxScrollY);
+    }
+
+    // ── Coalescing / rapid input tests ─────────────────────────────────
+
+    [Fact]
+    public void Rapid_100_deltas_target_correct()
+    {
+        // Simulate rapid scrolling: 100 small deltas of 30 units each
+        // 100 × 30 = 3000 total → 3000/120 × 3 × 18 = 1350px
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        for (var i = 0; i < 100; i++)
+        {
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30), 0)).NextModel;
+        }
+
+        Assert.Equal(1350.0, model.Scroll.TargetPosition);
+        Assert.True(model.Scroll.IsAnimating);
+    }
+
+    [Fact]
+    public void Rapid_100_deltas_converge_after_animation()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        for (var i = 0; i < 100; i++)
+        {
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30), 0)).NextModel;
+        }
+
+        var target = model.Scroll.TargetPosition;
+
+        // Animate for 2 seconds (120 frames at 60fps)
+        for (var i = 0; i < 120; i++)
+        {
+            model = app.Update(model, new CounterMessage.ScrollFrame(default, 1.0 / 60.0)).NextModel;
+        }
+
+        Assert.False(model.Scroll.IsAnimating);
+        Assert.Equal(target, Math.Round(model.Scroll.Position));
+    }
+
+    [Fact]
+    public void Coalesced_pixel_delta_applied_correctly()
+    {
+        // Simulate what the tick loop does: drain pending pixels, dispatch as Pixel delta
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // Accumulate 100px of pending delta (simulating coalesced input)
+        var coalescedDelta = new ScrollDelta(ScrollDeltaUnit.Pixel, 100.0);
+        model = app.Update(model, new CounterMessage.ScrollFrame(coalescedDelta, 0)).NextModel;
+
+        Assert.Equal(100.0, model.Scroll.TargetPosition);
+        Assert.True(model.Scroll.IsAnimating);
+    }
+
+    [Fact]
+    public void ScrollFrame_with_zero_delta_and_zero_dt_is_noop()
+    {
+        // First frame with dt=0 should apply delta but not advance animation
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        model = app.Update(model, new CounterMessage.ScrollFrame(delta, 0)).NextModel;
+
+        // Target should be set
+        Assert.Equal(54.0, model.Scroll.TargetPosition);
+        // Position should NOT have moved yet (dt=0 → Tick is a no-op since factor=0)
+        Assert.Equal(0.0, model.Scroll.Position);
+        Assert.True(model.Scroll.IsAnimating);
+    }
+
+    [Fact]
+    public void Backpressure_scenario_rapid_then_slow_converges()
+    {
+        // Simulate backpressure: rapid deltas followed by slow animation
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // Rapid phase: 50 deltas of 120 units each
+        for (var i = 0; i < 50; i++)
+        {
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120), 0)).NextModel;
+        }
+
+        var target = model.Scroll.TargetPosition;
+        Assert.Equal(2700.0, target); // 50 × 54px
+
+        // Slow animation phase: 3 seconds at 60fps
+        for (var i = 0; i < 180; i++)
+        {
+            model = app.Update(model, new CounterMessage.ScrollFrame(default, 1.0 / 60.0)).NextModel;
+        }
+
+        Assert.False(model.Scroll.IsAnimating);
+        Assert.Equal(target, Math.Round(model.Scroll.Position));
+    }
 }

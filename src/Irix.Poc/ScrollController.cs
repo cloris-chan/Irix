@@ -65,8 +65,14 @@ internal readonly record struct ScrollState
     /// <summary>Whether the smooth animation is active.</summary>
     public bool IsAnimating { get; init; }
 
-    /// <summary>Maximum scroll position from the last layout pass. 0 = no scroll.</summary>
+    /// <summary>Maximum scroll position from the last layout pass.</summary>
     public double MaxScrollY { get; init; }
+
+    /// <summary>
+    /// Whether <see cref="MaxScrollY"/> has been reported by the layout pass.
+    /// When false, the target position is not clamped — the layout max is unknown.
+    /// </summary>
+    public bool HasMaxScrollY { get; init; }
 
     public static ScrollState Default => default;
 }
@@ -126,8 +132,10 @@ internal static class ScrollController
         }
 
         var newTarget = state.TargetPosition + wholePixels;
-        // Clamp to [0, MaxScrollY] — MaxScrollY=0 means no scroll limit yet
-        if (state.MaxScrollY > 0)
+        // Clamp: only apply MaxScrollY upper bound when layout has reported it.
+        // HasMaxScrollY=false → max unknown, don't clamp (target may grow freely).
+        // HasMaxScrollY=true → clamp to [0, MaxScrollY].
+        if (state.HasMaxScrollY)
         {
             newTarget = Math.Clamp(newTarget, 0, state.MaxScrollY);
         }
@@ -206,15 +214,14 @@ internal static class ScrollController
     /// </summary>
     public static ScrollState WithMaxScrollY(ScrollState state, double maxScrollY)
     {
-        var clampedTarget = maxScrollY > 0
-            ? Math.Clamp(state.TargetPosition, 0, maxScrollY)
-            : Math.Max(state.TargetPosition, 0);
-        var clampedPos = maxScrollY > 0
-            ? Math.Clamp(state.Position, 0, maxScrollY)
-            : Math.Max(state.Position, 0);
+        // HasMaxScrollY=true means maxScrollY is a known value from layout.
+        // When maxScrollY=0, content fits in viewport — clamp to 0.
+        var clampedTarget = Math.Clamp(state.TargetPosition, 0, maxScrollY);
+        var clampedPos = Math.Clamp(state.Position, 0, maxScrollY);
         return state with
         {
             MaxScrollY = maxScrollY,
+            HasMaxScrollY = true,
             TargetPosition = clampedTarget,
             Position = clampedPos,
             IsAnimating = clampedTarget != clampedPos && state.IsAnimating,
