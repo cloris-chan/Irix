@@ -10,11 +10,17 @@ internal abstract record CounterMessage
 
     public sealed record Reset(int Value) : CounterMessage;
 
-    /// <summary>Structured scroll delta from input router.</summary>
-    public sealed record Scroll(ScrollDelta Delta) : CounterMessage;
+    /// <summary>
+    /// Coalesced animation frame: combines drained scroll delta with tick.
+    /// Sent once per frame by the animation loop. Replaces both Scroll and Tick.
+    /// </summary>
+    public sealed record ScrollFrame(ScrollDelta Delta, double DeltaTime) : CounterMessage;
 
-    /// <summary>Animation tick: advance scroll toward target.</summary>
-    public sealed record Tick(double DeltaTime) : CounterMessage;
+    /// <summary>Update MaxScrollY from the layout pass.</summary>
+    public sealed record UpdateMaxScrollY(double MaxScrollY) : CounterMessage;
+
+    /// <summary>Raw wheel delta from input. Never reaches Update — coalesced by HandleInput.</summary>
+    public sealed record WheelRaw(int RawDelta) : CounterMessage;
 }
 
 internal sealed class CounterApplication : IApplication<CounterModel, CounterMessage>
@@ -27,17 +33,19 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
             CounterMessage.Increment => new UpdateResult<CounterModel, CounterMessage>(model with { Count = model.Count + 1 }),
             CounterMessage.Decrement => new UpdateResult<CounterModel, CounterMessage>(model with { Count = model.Count - 1 }),
             CounterMessage.Reset reset => new UpdateResult<CounterModel, CounterMessage>(model with { Count = reset.Value }),
-            CounterMessage.Scroll scroll => new UpdateResult<CounterModel, CounterMessage>(model with
+            CounterMessage.ScrollFrame frame => new UpdateResult<CounterModel, CounterMessage>(model with
             {
-                Scroll = ScrollController.ApplyScrollDelta(
-                    model.Scroll,
-                    scroll.Delta,
-                    ScrollMetrics.DefaultText,
-                    SystemScrollSettings.Default),
+                Scroll = ScrollController.Tick(
+                    ScrollController.ApplyScrollDelta(
+                        model.Scroll,
+                        frame.Delta,
+                        ScrollMetrics.DefaultText,
+                        SystemScrollSettings.Default),
+                    frame.DeltaTime),
             }),
-            CounterMessage.Tick tick => new UpdateResult<CounterModel, CounterMessage>(model with
+            CounterMessage.UpdateMaxScrollY update => new UpdateResult<CounterModel, CounterMessage>(model with
             {
-                Scroll = ScrollController.Tick(model.Scroll, tick.DeltaTime),
+                Scroll = ScrollController.WithMaxScrollY(model.Scroll, update.MaxScrollY),
             }),
             _ => throw new NotSupportedException($"Unsupported message type: {message.GetType().Name}")
         };
@@ -52,7 +60,7 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
             attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
             children: [
                 VirtualNodeFactory.Text($"Count: {model.Count}", 2),
-                VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={s.TargetPosition:F1} pos={s.Position:F2} acc={s.Accumulator:F3}", 3),
+                VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={s.TargetPosition:F1} pos={s.Position:F2} max={s.MaxScrollY:F0} acc={s.Accumulator:F3} anim={s.IsAnimating}", 3),
                 VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
                 VirtualNodeFactory.Rectangle(220, 48, 5),
                 VirtualNodeFactory.Button(

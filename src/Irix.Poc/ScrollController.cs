@@ -65,6 +65,9 @@ internal readonly record struct ScrollState
     /// <summary>Whether the smooth animation is active.</summary>
     public bool IsAnimating { get; init; }
 
+    /// <summary>Maximum scroll position from the last layout pass. 0 = no scroll.</summary>
+    public double MaxScrollY { get; init; }
+
     public static ScrollState Default => default;
 }
 
@@ -122,7 +125,17 @@ internal static class ScrollController
             return state with { Accumulator = remainder };
         }
 
-        var newTarget = Math.Max(state.TargetPosition + wholePixels, 0);
+        var newTarget = state.TargetPosition + wholePixels;
+        // Clamp to [0, MaxScrollY] — MaxScrollY=0 means no scroll limit yet
+        if (state.MaxScrollY > 0)
+        {
+            newTarget = Math.Clamp(newTarget, 0, state.MaxScrollY);
+        }
+        else
+        {
+            newTarget = Math.Max(newTarget, 0);
+        }
+
         return state with
         {
             TargetPosition = newTarget,
@@ -187,4 +200,24 @@ internal static class ScrollController
 
     /// <summary>Integer scroll offset for layout.</summary>
     public static int GetScrollY(ScrollState state) => (int)Math.Round(state.Position);
+
+    /// <summary>
+    /// Update MaxScrollY from the layout pass. Also re-clamps TargetPosition.
+    /// </summary>
+    public static ScrollState WithMaxScrollY(ScrollState state, double maxScrollY)
+    {
+        var clampedTarget = maxScrollY > 0
+            ? Math.Clamp(state.TargetPosition, 0, maxScrollY)
+            : Math.Max(state.TargetPosition, 0);
+        var clampedPos = maxScrollY > 0
+            ? Math.Clamp(state.Position, 0, maxScrollY)
+            : Math.Max(state.Position, 0);
+        return state with
+        {
+            MaxScrollY = maxScrollY,
+            TargetPosition = clampedTarget,
+            Position = clampedPos,
+            IsAnimating = clampedTarget != clampedPos && state.IsAnimating,
+        };
+    }
 }

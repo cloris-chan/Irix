@@ -28,9 +28,8 @@ internal static class CounterInputRouter
                 message = new CounterMessage.Decrement();
                 return true;
             case RawInputEventKind.PointerWheel when inputEvent.Delta != 0:
-                // Send raw delta as WheelRaw — ScrollController converts via metrics + settings
-                message = new CounterMessage.Scroll(
-                    new ScrollDelta(ScrollDeltaUnit.WheelRaw, inputEvent.Delta));
+                // Send raw delta — HandleInput accumulates for coalescing
+                message = new CounterMessage.WheelRaw(inputEvent.Delta);
                 return true;
             case RawInputEventKind.CharacterInput when inputEvent.Character is 'r' or 'R':
                 message = new CounterMessage.Reset(0);

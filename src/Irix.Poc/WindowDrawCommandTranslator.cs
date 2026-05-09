@@ -7,11 +7,13 @@ namespace Irix.Poc;
 internal sealed class WindowDrawCommandTranslator(
     INativeWindow window,
     Action? prepareFrame,
-    Func<PixelRectangle>? viewportProvider) : IPatchBatchTranslator
+    Func<PixelRectangle>? viewportProvider,
+    Action<double>? postFrameCallback) : IPatchBatchTranslator
 {
     private readonly INativeWindow _window = window;
     private readonly Action? _prepareFrame = prepareFrame;
     private readonly Func<PixelRectangle>? _viewportProvider = viewportProvider;
+    private readonly Action<double>? _postFrameCallback = postFrameCallback;
     private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(
         LayoutStyle.Default,
         new DrawingStyle(
@@ -24,8 +26,11 @@ internal sealed class WindowDrawCommandTranslator(
 
     private readonly RetainedTree _retainedTree = new(default);
 
+    /// <summary>MaxScrollY from the last layout pass. 0 if no scroll needed.</summary>
+    public double LastMaxScrollY => _renderPipeline.LastMaxScrollY;
+
     public WindowDrawCommandTranslator(INativeWindow window)
-        : this(window, prepareFrame: null, viewportProvider: null)
+        : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null)
     {
     }
 
@@ -49,6 +54,8 @@ internal sealed class WindowDrawCommandTranslator(
 
         _prepareFrame?.Invoke();
         var viewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
-        return _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
+        var batch = _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
+        _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
+        return batch;
     }
 }

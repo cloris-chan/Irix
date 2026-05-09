@@ -31,6 +31,7 @@ internal static class Program
         var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
 
+        Action<double>? maxScrollYCallback = null;
         var drawCommandTranslator = new WindowDrawCommandTranslator(
             window,
             () => _ = d3d12Renderer.ApplyPendingResize(),
@@ -38,13 +39,25 @@ internal static class Program
             {
                 var bounds = window.Region.PhysicalBounds;
                 return new PixelRectangle(bounds.X, bounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
-            });
+            },
+            postFrameCallback: maxScrollY => maxScrollYCallback?.Invoke(maxScrollY));
         using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend);
         var compositor = args.Contains("--console")
             ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
             : (ICompositor)d3d12Compositor;
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
+
+        // Wire up MaxScrollY feedback after runtime is created
+        var lastKnownMaxScrollY = 0.0;
+        maxScrollYCallback = maxScrollY =>
+        {
+            if (Math.Abs(maxScrollY - lastKnownMaxScrollY) > 0.5)
+            {
+                lastKnownMaxScrollY = maxScrollY;
+                runtime.Dispatch(new CounterMessage.UpdateMaxScrollY(maxScrollY));
+            }
+        };
 
         window.SizeChanged += (w, h) =>
         {
@@ -69,12 +82,19 @@ internal static class Program
         {
             if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionIdAt, out var message))
             {
-                runtime.Dispatch(message);
-                // After scroll input, immediately request a render and kick off the tick loop
-                if (message is CounterMessage.Scroll)
+                if (message is CounterMessage.WheelRaw wheel)
                 {
-                    _ = compositorLoop.RequestRenderAsync();
+                    // Coalesce: accumulate raw delta, don't dispatch to Runtime
+                    var pixels = ScrollController.ConvertToPixels(
+                        new ScrollDelta(ScrollDeltaUnit.WheelRaw, wheel.RawDelta),
+                        ScrollMetrics.DefaultText,
+                        SystemScrollSettings.Default);
+                    AddPendingScrollDelta(pixels);
                     EnsureScrollTickLoop(runtime, compositorLoop);
+                }
+                else
+                {
+                    runtime.Dispatch(message);
                 }
             }
         }
@@ -120,6 +140,7 @@ internal static class Program
     private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(16); // ~60fps
     private static readonly TimeSpan WaitForAnimatingTimeout = TimeSpan.FromMilliseconds(500);
     private static int _scrollTickLoopRunning; // 0 = idle, 1 = running
+    private static long _pendingScrollDeltaBits; // double encoded as long for Interlocked
 
     /// <summary>
     /// Ensures exactly one tick loop is running. If a loop is already active,
@@ -137,8 +158,31 @@ internal static class Program
     }
 
     /// <summary>
-    /// Dispatches Tick messages at ~60fps while the scroll animation is active.
-    /// Stops automatically when IsAnimating becomes false for a sustained period.
+    /// Drain accumulated scroll delta. Thread-safe: called from animation loop,
+    /// written from input thread via Interlocked.
+    /// </summary>
+    private static double DrainPendingScrollDelta()
+    {
+        var bits = Interlocked.Exchange(ref _pendingScrollDeltaBits, 0);
+        return BitConverter.Int64BitsToDouble(bits);
+    }
+
+    private static void AddPendingScrollDelta(double pixels)
+    {
+        long current, updated;
+        do
+        {
+            current = Volatile.Read(ref _pendingScrollDeltaBits);
+            var currentDouble = BitConverter.Int64BitsToDouble(current);
+            var newDouble = currentDouble + pixels;
+            updated = BitConverter.DoubleToInt64Bits(newDouble);
+        } while (Interlocked.CompareExchange(ref _pendingScrollDeltaBits, updated, current) != current);
+    }
+
+    /// <summary>
+    /// Animation loop: each frame drains pending scroll delta and dispatches
+    /// a single coalesced ScrollFrame(delta, dt) message. Replaces both
+    /// Scroll and Tick — one message per frame maximum.
     /// </summary>
     private static async Task RunScrollTickLoopAsync(
         Runtime<CounterModel, CounterMessage> runtime,
@@ -150,18 +194,21 @@ internal static class Program
             var lastTick = stopwatch.Elapsed;
             var waitStart = stopwatch.Elapsed;
 
-            // Wait briefly for the Runtime to process the scroll message and set IsAnimating.
-            // If it doesn't become true within the timeout, exit silently.
-            while (!runtime.CurrentModel.Scroll.IsAnimating)
+            // Wait briefly for the first pending delta to arrive
+            while (DrainPendingScrollDelta() == 0)
             {
                 await Task.Delay(TickInterval);
                 if (stopwatch.Elapsed - waitStart > WaitForAnimatingTimeout)
                 {
-                    return; // timeout: no animation started
+                    return; // timeout: no input arrived
                 }
             }
 
-            // Tick loop: keep running until IsAnimating is false for 3 consecutive checks
+            // Put back what we drained (it was just a probe)
+            // Actually, we need to re-add it. Simpler: just start the loop.
+            // The first iteration will drain it.
+
+            // Animation loop
             var consecutiveIdle = 0;
             while (consecutiveIdle < 3)
             {
@@ -170,10 +217,15 @@ internal static class Program
                 var dt = (now - lastTick).TotalSeconds;
                 lastTick = now;
 
-                runtime.Dispatch(new CounterMessage.Tick(dt));
+                // Drain all accumulated scroll deltas for this frame
+                var pendingPixels = DrainPendingScrollDelta();
+
+                // Create a single coalesced message: delta + tick combined
+                var delta = new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels);
+                runtime.Dispatch(new CounterMessage.ScrollFrame(delta, dt));
                 await compositorLoop.RequestRenderAsync();
 
-                if (runtime.CurrentModel.Scroll.IsAnimating)
+                if (runtime.CurrentModel.Scroll.IsAnimating || pendingPixels != 0)
                 {
                     consecutiveIdle = 0;
                 }
