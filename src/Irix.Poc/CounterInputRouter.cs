@@ -9,14 +9,40 @@ internal static class CounterInputRouter
         Func<int, int, string?> tryGetActionIdAt,
         out CounterMessage message)
     {
+        return TryMapInput(inputEvent, new InputOwnershipState(), tryGetActionIdAt, out message);
+    }
+
+    public static bool TryMapInput(
+        RawInputEvent inputEvent,
+        InputOwnershipState ownershipState,
+        Func<int, int, string?> tryGetActionIdAt,
+        out CounterMessage message)
+    {
         switch (inputEvent.Kind)
         {
+            case RawInputEventKind.PointerMoved:
+                ownershipState.UpdateHover(inputEvent, tryGetActionIdAt);
+                break;
+            case RawInputEventKind.PointerPressed
+                when inputEvent.Button == PointerButton.Left:
+                ownershipState.PressPointer(inputEvent, tryGetActionIdAt);
+                break;
             case RawInputEventKind.PointerReleased
                 when inputEvent.Button == PointerButton.Left:
-                var actionId = tryGetActionIdAt(inputEvent.X, inputEvent.Y);
+                var actionId = ownershipState.ReleasePointer(inputEvent, tryGetActionIdAt);
                 if (!string.IsNullOrWhiteSpace(actionId))
                 {
                     message = MapActionId(actionId);
+                    return true;
+                }
+
+                break;
+            case RawInputEventKind.KeyPressed
+                when inputEvent.KeyCode is 0x0D or 0x20:
+                var focusedActionId = ownershipState.GetKeyboardTarget();
+                if (!string.IsNullOrWhiteSpace(focusedActionId))
+                {
+                    message = MapActionId(focusedActionId);
                     return true;
                 }
 
@@ -34,6 +60,9 @@ internal static class CounterInputRouter
             case RawInputEventKind.CharacterInput when inputEvent.Character is 'r' or 'R':
                 message = new CounterMessage.Reset(0);
                 return true;
+            case RawInputEventKind.FocusLost:
+                ownershipState.Clear();
+                break;
         }
 
         message = null!;

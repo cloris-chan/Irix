@@ -55,6 +55,8 @@ internal static class Program
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
         _scrollFramePump = scrollFramePump;
+        var inputOwnershipState = new InputOwnershipState();
+        _inputOwnershipState = inputOwnershipState;
 
         // Wire up MaxScrollY feedback after runtime is created
         double? lastKnownMaxScrollY = null;
@@ -88,7 +90,7 @@ internal static class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionIdAt, out var message))
+            if (CounterInputRouter.TryMapInput(inputEvent, inputOwnershipState, TryGetActionIdAt, out var message))
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
@@ -148,6 +150,7 @@ internal static class Program
     }
 
     private static ScrollFramePump? _scrollFramePump;
+    private static InputOwnershipState? _inputOwnershipState;
 
     // ── Diagnostic readouts ────────────────────────────────────────────
 
@@ -158,6 +161,11 @@ internal static class Program
     internal static double DiagScrollRenderWaitMs => _scrollFramePump?.RenderWaitMs ?? 0;
     internal static double DiagScrollLastDt => _scrollFramePump?.LastDt ?? 0;
     internal static double DiagScrollDrainedPixels => _scrollFramePump?.DrainedPixels ?? 0;
+    internal static string? DiagHoveredTarget => _inputOwnershipState?.HoveredTarget;
+    internal static string? DiagFocusedTarget => _inputOwnershipState?.FocusedTarget;
+    internal static string? DiagPressedTarget => _inputOwnershipState?.PressedTarget;
+    internal static string? DiagCapturedTarget => _inputOwnershipState?.CapturedTarget;
+    internal static long DiagHoverChangeCount => _inputOwnershipState?.HoverChangeCount ?? 0;
 
     internal static async Task RunScrollDiagnosticModeAsync(
         TextWriter output,

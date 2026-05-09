@@ -42,6 +42,178 @@ public sealed class CounterInputRouterTests
         Assert.False(mapped);
     }
 
+    [Fact]
+    public void TryMapInput_updates_hover_target_on_pointer_move()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        Assert.False(mapped);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.HoveredTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.LastHoverEnteredTarget);
+        Assert.Null(ownershipState.LastHoverLeftTarget);
+        Assert.Equal(1, ownershipState.HoverChangeCount);
+
+        mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 2, X: 500, Y: 500),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        Assert.False(mapped);
+        Assert.Null(ownershipState.HoveredTarget);
+        Assert.Null(ownershipState.LastHoverEnteredTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.LastHoverLeftTarget);
+        Assert.Equal(2, ownershipState.HoverChangeCount);
+    }
+
+    [Fact]
+    public void TryMapInput_captures_pointer_until_release()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        Assert.False(mapped);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.PressedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.CapturedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.FocusedTarget);
+
+        mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 2,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out var message);
+
+        Assert.True(mapped);
+        Assert.IsType<CounterMessage.Increment>(message);
+        Assert.Null(ownershipState.PressedTarget);
+        Assert.Null(ownershipState.CapturedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.FocusedTarget);
+    }
+
+    [Fact]
+    public void TryMapInput_activates_focused_target_for_enter_or_space()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 2, X: 0, Y: 0, KeyCode: 0x0D),
+            ownershipState,
+            HitIncrementAtButton,
+            out var enterMessage);
+
+        Assert.True(mapped);
+        Assert.IsType<CounterMessage.Increment>(enterMessage);
+
+        mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 3, X: 0, Y: 0, KeyCode: 0x20),
+            ownershipState,
+            HitIncrementAtButton,
+            out var spaceMessage);
+
+        Assert.True(mapped);
+        Assert.IsType<CounterMessage.Increment>(spaceMessage);
+    }
+
+    [Fact]
+    public void TryMapInput_keeps_global_shortcuts_after_focus()
+    {
+        var ownershipState = new InputOwnershipState();
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 2, X: 0, Y: 0, KeyCode: 0x28),
+            ownershipState,
+            HitIncrementAtButton,
+            out var downMessage);
+
+        Assert.True(mapped);
+        Assert.IsType<CounterMessage.Decrement>(downMessage);
+
+        mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.CharacterInput, Timestamp: 3, X: 0, Y: 0, Character: 'R'),
+            ownershipState,
+            HitIncrementAtButton,
+            out var resetMessage);
+
+        Assert.True(mapped);
+        var reset = Assert.IsType<CounterMessage.Reset>(resetMessage);
+        Assert.Equal(0, reset.Value);
+    }
+
+    [Fact]
+    public void TryMapInput_clears_ownership_on_focus_lost()
+    {
+        var ownershipState = new InputOwnershipState();
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 3, X: 0, Y: 0),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        Assert.False(mapped);
+        Assert.Null(ownershipState.HoveredTarget);
+        Assert.Null(ownershipState.FocusedTarget);
+        Assert.Null(ownershipState.PressedTarget);
+        Assert.Null(ownershipState.CapturedTarget);
+    }
+
     [Theory]
     [InlineData(0x26, typeof(CounterMessage.Increment))]
     [InlineData(0x28, typeof(CounterMessage.Decrement))]
@@ -104,6 +276,11 @@ public sealed class CounterInputRouterTests
     public void MapActionId_throws_for_unsupported_action_id()
     {
         Assert.Throws<NotSupportedException>(() => CounterInputRouter.MapActionId("Unsupported"));
+    }
+
+    private static string? HitIncrementAtButton(int x, int y)
+    {
+        return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
     }
 
     [Fact]
