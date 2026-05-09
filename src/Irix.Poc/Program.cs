@@ -70,10 +70,11 @@ internal static class Program
             if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionIdAt, out var message))
             {
                 runtime.Dispatch(message);
-                // After scroll input, if animating, start the tick loop
-                if (message is CounterMessage.Scroll && runtime.CurrentModel.Scroll.IsAnimating)
+                // After scroll input, immediately request a render and kick off the tick loop
+                if (message is CounterMessage.Scroll)
                 {
-                    _ = StartTickLoop(runtime, compositorLoop);
+                    _ = compositorLoop.RequestRenderAsync();
+                    EnsureScrollTickLoop(runtime, compositorLoop);
                 }
             }
         }
@@ -117,32 +118,74 @@ internal static class Program
     }
 
     private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(16); // ~60fps
+    private static readonly TimeSpan WaitForAnimatingTimeout = TimeSpan.FromMilliseconds(500);
+    private static int _scrollTickLoopRunning; // 0 = idle, 1 = running
 
     /// <summary>
-    /// Dispatches Tick messages at ~60fps while the scroll animation is active.
-    /// Stops automatically when IsAnimating becomes false.
+    /// Ensures exactly one tick loop is running. If a loop is already active,
+    /// this is a no-op — the existing loop will pick up the new scroll state
+    /// on its next iteration.
     /// </summary>
-    private static async Task StartTickLoop(
+    private static void EnsureScrollTickLoop(
         Runtime<CounterModel, CounterMessage> runtime,
         CompositorLoop compositorLoop)
     {
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var lastTick = stopwatch.Elapsed;
-
-        while (!runtime.CurrentModel.Scroll.IsAnimating)
+        if (Interlocked.Exchange(ref _scrollTickLoopRunning, 1) == 0)
         {
-            await Task.Delay(TickInterval);
+            _ = RunScrollTickLoopAsync(runtime, compositorLoop);
         }
+    }
 
-        while (runtime.CurrentModel.Scroll.IsAnimating)
+    /// <summary>
+    /// Dispatches Tick messages at ~60fps while the scroll animation is active.
+    /// Stops automatically when IsAnimating becomes false for a sustained period.
+    /// </summary>
+    private static async Task RunScrollTickLoopAsync(
+        Runtime<CounterModel, CounterMessage> runtime,
+        CompositorLoop compositorLoop)
+    {
+        try
         {
-            await Task.Delay(TickInterval);
-            var now = stopwatch.Elapsed;
-            var dt = (now - lastTick).TotalSeconds;
-            lastTick = now;
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var lastTick = stopwatch.Elapsed;
+            var waitStart = stopwatch.Elapsed;
 
-            runtime.Dispatch(new CounterMessage.Tick(dt));
-            await compositorLoop.RequestRenderAsync();
+            // Wait briefly for the Runtime to process the scroll message and set IsAnimating.
+            // If it doesn't become true within the timeout, exit silently.
+            while (!runtime.CurrentModel.Scroll.IsAnimating)
+            {
+                await Task.Delay(TickInterval);
+                if (stopwatch.Elapsed - waitStart > WaitForAnimatingTimeout)
+                {
+                    return; // timeout: no animation started
+                }
+            }
+
+            // Tick loop: keep running until IsAnimating is false for 3 consecutive checks
+            var consecutiveIdle = 0;
+            while (consecutiveIdle < 3)
+            {
+                await Task.Delay(TickInterval);
+                var now = stopwatch.Elapsed;
+                var dt = (now - lastTick).TotalSeconds;
+                lastTick = now;
+
+                runtime.Dispatch(new CounterMessage.Tick(dt));
+                await compositorLoop.RequestRenderAsync();
+
+                if (runtime.CurrentModel.Scroll.IsAnimating)
+                {
+                    consecutiveIdle = 0;
+                }
+                else
+                {
+                    consecutiveIdle++;
+                }
+            }
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _scrollTickLoopRunning, 0);
         }
     }
 

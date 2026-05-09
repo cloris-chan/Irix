@@ -277,4 +277,114 @@ public sealed class CounterInputRouterTests
         var state = ScrollController.ApplyWheel(ScrollState.Default, 120);
         Assert.Equal(54, state.TargetPosition);
     }
+
+    // ── Integration: full MVU scroll path ────────────────────────────
+
+    [Fact]
+    public void Single_notch_scroll_target_is_54px()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        model = app.Update(model, new CounterMessage.Scroll(delta)).NextModel;
+
+        Assert.Equal(54.0, model.Scroll.TargetPosition);
+        Assert.True(model.Scroll.IsAnimating);
+    }
+
+    [Fact]
+    public void Two_notches_scroll_target_is_108px()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        model = app.Update(model, new CounterMessage.Scroll(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+        model = app.Update(model, new CounterMessage.Scroll(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+
+        Assert.Equal(108.0, model.Scroll.TargetPosition);
+    }
+
+    [Fact]
+    public void Scroll_positive_then_negative_cancels()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        // Scroll down 1 notch, then up 1 notch
+        model = app.Update(model, new CounterMessage.Scroll(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+        model = app.Update(model, new CounterMessage.Scroll(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120))).NextModel;
+
+        Assert.Equal(0.0, model.Scroll.TargetPosition);
+        // IsAnimating is still true because ApplyPixelDelta always sets it;
+        // one Tick will detect diff=0 and snap
+        model = app.Update(model, new CounterMessage.Tick(1.0 / 60.0)).NextModel;
+        Assert.False(model.Scroll.IsAnimating);
+    }
+
+    [Fact]
+    public void Scroll_negative_direction_increases_position()
+    {
+        // Windows positive wheel delta = scroll up (content moves down)
+        // In our convention, positive rawDelta → positive TargetPosition
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        model = app.Update(model, new CounterMessage.Scroll(delta)).NextModel;
+
+        // Animate to convergence
+        for (var i = 0; i < 120; i++)
+        {
+            model = app.Update(model, new CounterMessage.Tick(1.0 / 60.0)).NextModel;
+        }
+
+        Assert.False(model.Scroll.IsAnimating);
+        var scrollY = ScrollController.GetScrollY(model.Scroll);
+        Assert.Equal(54, scrollY);
+    }
+
+    [Fact]
+    public void Two_notches_animate_to_108()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        model = app.Update(model, new CounterMessage.Scroll(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+        model = app.Update(model, new CounterMessage.Scroll(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+
+        // Animate to convergence
+        for (var i = 0; i < 120; i++)
+        {
+            model = app.Update(model, new CounterMessage.Tick(1.0 / 60.0)).NextModel;
+        }
+
+        Assert.False(model.Scroll.IsAnimating);
+        var scrollY = ScrollController.GetScrollY(model.Scroll);
+        Assert.Equal(108, scrollY);
+    }
+
+    [Fact]
+    public void Debug_display_contains_target_and_position()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize() with
+        {
+            Scroll = new ScrollState { TargetPosition = 100, Position = 50, Accumulator = 0.5 }
+        };
+        var tree = app.BuildView(model);
+
+        // The second text child should contain the debug display
+        var debugText = tree.Root.Children[1].Content.Text;
+        Assert.Contains("applied=", debugText);
+        Assert.Contains("target=", debugText);
+        Assert.Contains("pos=", debugText);
+        Assert.Contains("acc=", debugText);
+    }
 }
