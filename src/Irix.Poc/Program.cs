@@ -94,7 +94,6 @@ internal static class Program
                     scrollFramePump.AddPendingPixels(pixels);
                     scrollFramePump.EnsureRunning(
                         (frame, cancellationToken) => runtime.DispatchAndWaitAsync(frame, cancellationToken),
-                        compositorLoop.RequestRenderAndWaitAsync,
                         () => runtime.CurrentModel.Scroll);
                 }
                 else
@@ -149,6 +148,10 @@ internal static class Program
     internal static double DiagPendingPx => _scrollFramePump?.PendingPixels ?? 0;
     internal static bool DiagScrollFrameQueued => _scrollFramePump?.IsFrameQueued ?? false;
     internal static bool DiagTickLoopRunning => _scrollFramePump?.IsLoopRunning ?? false;
+    internal static long DiagScrollDispatchedFrameCount => _scrollFramePump?.DispatchedFrameCount ?? 0;
+    internal static double DiagScrollRenderWaitMs => _scrollFramePump?.RenderWaitMs ?? 0;
+    internal static double DiagScrollLastDt => _scrollFramePump?.LastDt ?? 0;
+    internal static double DiagScrollDrainedPixels => _scrollFramePump?.DrainedPixels ?? 0;
 
     /// <summary>
     /// Diagnostic smoke mode: renders one frame with test rectangles and text,

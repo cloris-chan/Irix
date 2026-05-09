@@ -10,7 +10,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
     private readonly Lock _renderRequestGate = new();
     private readonly Task _processingTask;
     private bool _renderRequestQueued;
-    private RenderRequestWaitGroup? _queuedRenderRequestWaitGroup;
+    private RenderCompletionWaitGroup? _queuedRenderRequestWaitGroup;
 
     public CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor)
     {
@@ -27,6 +27,24 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
     public ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
     {
         return _channel.Writer.WriteAsync(new CompositorWorkItem(patchBatch, null), cancellationToken);
+    }
+
+    public ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        var waitGroup = new RenderCompletionWaitGroup();
+        var waitTask = waitGroup.AddWaiter();
+        if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup)))
+        {
+            patchBatch.Dispose();
+            waitGroup.Complete(new InvalidOperationException("Unable to enqueue patch batch."));
+        }
+
+        return new ValueTask(waitTask.WaitAsync(cancellationToken));
     }
 
     public ValueTask RequestRenderAsync(CancellationToken cancellationToken = default)
@@ -52,8 +70,8 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
             return ValueTask.FromCanceled(cancellationToken);
         }
 
-        RenderRequestWaitGroup waitGroup;
-        RenderRequestWaitGroup? waitGroupToSchedule = null;
+        RenderCompletionWaitGroup waitGroup;
+        RenderCompletionWaitGroup? waitGroupToSchedule = null;
         Task? waitTask = null;
 
         lock (_renderRequestGate)
@@ -61,7 +79,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
             if (!_renderRequestQueued)
             {
                 _renderRequestQueued = true;
-                _queuedRenderRequestWaitGroup = new RenderRequestWaitGroup();
+                _queuedRenderRequestWaitGroup = new RenderCompletionWaitGroup();
                 waitGroupToSchedule = _queuedRenderRequestWaitGroup;
             }
 
@@ -92,12 +110,13 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
             var isRenderRequest = patchBatch.Kind == PatchBatchKind.RenderRequest;
             if (isRenderRequest)
             {
-                MarkRenderRequestStarted(workItem.RenderRequestWaitGroup);
+                MarkRenderRequestStarted(workItem.RenderCompletionWaitGroup);
             }
             else if (patchBatch.Count == 0)
             {
                 // Regular empty diff (no-op): dispose and skip.
                 patchBatch.Dispose();
+                workItem.RenderCompletionWaitGroup?.Complete(null);
                 continue;
             }
 
@@ -117,15 +136,12 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
             }
             finally
             {
-                if (isRenderRequest)
-                {
-                    workItem.RenderRequestWaitGroup?.Complete(renderError);
-                }
+                workItem.RenderCompletionWaitGroup?.Complete(renderError);
             }
         }
     }
 
-    private void ScheduleRenderRequest(RenderRequestWaitGroup waitGroup)
+    private void ScheduleRenderRequest(RenderCompletionWaitGroup waitGroup)
     {
         var patchBatch = PatchBatch.CreateRenderRequest();
         if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup)))
@@ -136,7 +152,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
         }
     }
 
-    private void MarkRenderRequestStarted(RenderRequestWaitGroup? waitGroup)
+    private void MarkRenderRequestStarted(RenderCompletionWaitGroup? waitGroup)
     {
         lock (_renderRequestGate)
         {
@@ -149,7 +165,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
         }
     }
 
-    private void MarkRenderRequestScheduleFailed(RenderRequestWaitGroup waitGroup)
+    private void MarkRenderRequestScheduleFailed(RenderCompletionWaitGroup waitGroup)
     {
         lock (_renderRequestGate)
         {
@@ -163,9 +179,9 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
 
     private readonly record struct CompositorWorkItem(
         PatchBatch PatchBatch,
-        RenderRequestWaitGroup? RenderRequestWaitGroup);
+        RenderCompletionWaitGroup? RenderCompletionWaitGroup);
 
-    private sealed class RenderRequestWaitGroup
+    private sealed class RenderCompletionWaitGroup
     {
         private readonly Queue<TaskCompletionSource> _waiters = new();
         private bool _isCompleted;

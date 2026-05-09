@@ -9,6 +9,10 @@ internal sealed class ScrollFramePump
     private int _loopRunning;
     private int _scrollFrameQueued;
     private long _pendingScrollDeltaBits;
+    private long _dispatchedFrameCount;
+    private long _renderWaitMsBits;
+    private long _lastDtBits;
+    private long _drainedPixelsBits;
 
     public double PendingPixels
     {
@@ -22,6 +26,14 @@ internal sealed class ScrollFramePump
     public bool IsFrameQueued => Volatile.Read(ref _scrollFrameQueued) != 0;
 
     public bool IsLoopRunning => Volatile.Read(ref _loopRunning) != 0;
+
+    public long DispatchedFrameCount => Volatile.Read(ref _dispatchedFrameCount);
+
+    public double RenderWaitMs => ReadDouble(ref _renderWaitMsBits);
+
+    public double LastDt => ReadDouble(ref _lastDtBits);
+
+    public double DrainedPixels => ReadDouble(ref _drainedPixelsBits);
 
     public void AddPendingPixels(double pixels)
     {
@@ -38,7 +50,6 @@ internal sealed class ScrollFramePump
 
     public void EnsureRunning(
         Func<CounterMessage.ScrollFrame, CancellationToken, Task> dispatchFrameAsync,
-        Func<CancellationToken, ValueTask> requestRenderAndWaitAsync,
         Func<ScrollState> getScrollState,
         CancellationToken cancellationToken = default)
     {
@@ -49,7 +60,6 @@ internal sealed class ScrollFramePump
 
         var runTask = RunAsync(
             dispatchFrameAsync,
-            requestRenderAndWaitAsync,
             getScrollState,
             restartOnLatePending: true,
             cancellationToken);
@@ -62,13 +72,11 @@ internal sealed class ScrollFramePump
 
     internal Task RunUntilIdleAsync(
         Func<CounterMessage.ScrollFrame, CancellationToken, Task> dispatchFrameAsync,
-        Func<CancellationToken, ValueTask> requestRenderAndWaitAsync,
         Func<ScrollState> getScrollState,
         CancellationToken cancellationToken = default)
     {
         return RunAsync(
             dispatchFrameAsync,
-            requestRenderAndWaitAsync,
             getScrollState,
             restartOnLatePending: false,
             cancellationToken);
@@ -76,7 +84,6 @@ internal sealed class ScrollFramePump
 
     private async Task RunAsync(
         Func<CounterMessage.ScrollFrame, CancellationToken, Task> dispatchFrameAsync,
-        Func<CancellationToken, ValueTask> requestRenderAndWaitAsync,
         Func<ScrollState> getScrollState,
         bool restartOnLatePending,
         CancellationToken cancellationToken)
@@ -114,18 +121,22 @@ internal sealed class ScrollFramePump
                     : Math.Max(0, (now - lastFrameDispatchedAt).TotalSeconds);
                 isFirstFrame = false;
                 lastFrameDispatchedAt = now;
+                WriteDouble(ref _lastDtBits, deltaTime);
+                WriteDouble(ref _drainedPixelsBits, pendingPixels);
 
                 Volatile.Write(ref _scrollFrameQueued, 1);
+                Interlocked.Increment(ref _dispatchedFrameCount);
+                var renderWaitStartedAt = stopwatch.Elapsed;
                 try
                 {
                     var frame = new CounterMessage.ScrollFrame(
                         new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels),
                         deltaTime);
                     await dispatchFrameAsync(frame, cancellationToken);
-                    await requestRenderAndWaitAsync(cancellationToken);
                 }
                 finally
                 {
+                    WriteDouble(ref _renderWaitMsBits, (stopwatch.Elapsed - renderWaitStartedAt).TotalMilliseconds);
                     Volatile.Write(ref _scrollFrameQueued, 0);
                 }
                 consecutiveIdleFrames = PendingPixels == 0 && !getScrollState().IsAnimating
@@ -140,7 +151,7 @@ internal sealed class ScrollFramePump
 
             if (restartOnLatePending && PendingPixels != 0 && !cancellationToken.IsCancellationRequested)
             {
-                EnsureRunning(dispatchFrameAsync, requestRenderAndWaitAsync, getScrollState, cancellationToken);
+                EnsureRunning(dispatchFrameAsync, getScrollState, cancellationToken);
             }
         }
     }
@@ -149,5 +160,15 @@ internal sealed class ScrollFramePump
     {
         var bits = Interlocked.Exchange(ref _pendingScrollDeltaBits, 0);
         return BitConverter.Int64BitsToDouble(bits);
+    }
+
+    private static double ReadDouble(ref long bits)
+    {
+        return BitConverter.Int64BitsToDouble(Volatile.Read(ref bits));
+    }
+
+    private static void WriteDouble(ref long bits, double value)
+    {
+        Interlocked.Exchange(ref bits, BitConverter.DoubleToInt64Bits(value));
     }
 }

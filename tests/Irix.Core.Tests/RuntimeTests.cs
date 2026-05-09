@@ -21,6 +21,25 @@ public sealed class RuntimeTests
         Assert.All(patchSink.PublishedBatches, batch => Assert.Single(batch));
     }
 
+    [Fact]
+    public async Task DispatchAndWaitAsync_completes_after_patch_render_completion()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var patchSink = new BlockingRenderPatchSink();
+        await using var runtime = new Runtime<TestModel, TestMessage>(new TestApplication(), patchSink);
+
+        await runtime.StartAsync(cancellationToken);
+
+        var dispatchTask = runtime.DispatchAndWaitAsync(new TestMessage.Increment(), cancellationToken);
+        await patchSink.WaitForWaitedPatchAsync(cancellationToken);
+
+        Assert.False(dispatchTask.IsCompleted);
+        Assert.Equal(1, runtime.CurrentModel.Count);
+
+        patchSink.CompleteRender();
+        await dispatchTask.WaitAsync(cancellationToken);
+    }
+
     private sealed record TestModel(int Count);
 
     private abstract record TestMessage
@@ -66,6 +85,11 @@ public sealed class RuntimeTests
             return ValueTask.CompletedTask;
         }
 
+        public ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            return PublishAsync(patchBatch, cancellationToken);
+        }
+
         public async Task WaitForBatchCountAsync(int expectedCount)
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
@@ -74,6 +98,35 @@ public sealed class RuntimeTests
             {
                 await Task.WhenAny(_taskCompletionSource.Task, Task.Delay(25, timeout.Token));
             }
+        }
+    }
+
+    private sealed class BlockingRenderPatchSink : IVirtualNodePatchSink
+    {
+        private readonly TaskCompletionSource _waitedPatchPublished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _renderCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            patchBatch.Dispose();
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            patchBatch.Dispose();
+            _waitedPatchPublished.TrySetResult();
+            return new ValueTask(_renderCompleted.Task.WaitAsync(cancellationToken));
+        }
+
+        public Task WaitForWaitedPatchAsync(CancellationToken cancellationToken)
+        {
+            return _waitedPatchPublished.Task.WaitAsync(cancellationToken);
+        }
+
+        public void CompleteRender()
+        {
+            _renderCompleted.TrySetResult();
         }
     }
 }

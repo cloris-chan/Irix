@@ -21,7 +21,6 @@ public sealed class ScrollFramePumpTests
                 frames.Enqueue(frame);
                 return Task.CompletedTask;
             },
-            _ => ValueTask.CompletedTask,
             () => ScrollState.Default,
             cancellationToken);
 
@@ -29,6 +28,10 @@ public sealed class ScrollFramePumpTests
         Assert.Equal(ScrollDeltaUnit.Pixel, frame.Delta.Unit);
         Assert.Equal(54, frame.Delta.Value);
         Assert.Equal(0, frame.DeltaTime);
+        Assert.Equal(1, pump.DispatchedFrameCount);
+        Assert.Equal(54, pump.DrainedPixels);
+        Assert.Equal(0, pump.LastDt);
+        Assert.True(pump.RenderWaitMs >= 0);
     }
 
     [Fact]
@@ -41,12 +44,11 @@ public sealed class ScrollFramePumpTests
 
         pump.AddPendingPixels(54);
         var runTask = pump.RunUntilIdleAsync(
-            (frame, _) =>
+            async (frame, token) =>
             {
                 frames.Enqueue(frame);
-                return Task.CompletedTask;
+                await renderGate.WaitForRenderCompletionAsync(token);
             },
-            renderGate.WaitForRenderCompletionAsync,
             () => ScrollState.Default,
             cancellationToken);
 
@@ -69,6 +71,9 @@ public sealed class ScrollFramePumpTests
         Assert.Equal(54, firstFrame.Delta.Value);
         Assert.Equal(1350, coalescedFrame.Delta.Value);
         Assert.True(coalescedFrame.DeltaTime >= 0);
+        Assert.Equal(2, pump.DispatchedFrameCount);
+        Assert.Equal(2, renderGate.WaitCallCount);
+        Assert.Equal(1350, pump.DrainedPixels);
 
         renderGate.Release();
         await runTask.WaitAsync(cancellationToken);
@@ -85,15 +90,14 @@ public sealed class ScrollFramePumpTests
 
         pump.AddPendingPixels(54);
         var runTask = pump.RunUntilIdleAsync(
-            (frame, _) =>
+            async (frame, token) =>
             {
                 frames.Enqueue(frame);
                 scrollState = frames.Count == 1
                     ? new ScrollState { TargetPosition = 54, Position = 0, IsAnimating = true }
                     : ScrollState.Default;
-                return Task.CompletedTask;
+                await renderGate.WaitForRenderCompletionAsync(token);
             },
-            renderGate.WaitForRenderCompletionAsync,
             () => scrollState,
             cancellationToken);
 
@@ -107,6 +111,8 @@ public sealed class ScrollFramePumpTests
         Assert.True(frames.TryDequeue(out var secondFrame));
         Assert.Equal(0, firstFrame.DeltaTime);
         Assert.True(secondFrame.DeltaTime >= 0.05, $"Expected dt to include render wait, got {secondFrame.DeltaTime:F4}s.");
+        Assert.Equal(secondFrame.DeltaTime, pump.LastDt);
+        Assert.True(pump.RenderWaitMs >= 0);
 
         renderGate.Release();
         await runTask.WaitAsync(cancellationToken);
@@ -115,9 +121,13 @@ public sealed class ScrollFramePumpTests
     private sealed class BlockingRenderGate
     {
         private readonly ConcurrentQueue<TaskCompletionSource> _pending = new();
+        private int _waitCallCount;
+
+        public int WaitCallCount => Volatile.Read(ref _waitCallCount);
 
         public ValueTask WaitForRenderCompletionAsync(CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref _waitCallCount);
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _pending.Enqueue(completion);
             return new ValueTask(completion.Task.WaitAsync(cancellationToken));

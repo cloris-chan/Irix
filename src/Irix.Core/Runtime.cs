@@ -104,7 +104,15 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
                 var patchBatch = VirtualNodeDiffer.CreatePatchBatch(_currentTree, nextTree);
                 _currentTree = nextTree;
 
-                await _patchSink.PublishAsync(patchBatch, _cancellationTokenSource.Token);
+                if (queuedMessage.Processed is null)
+                {
+                    await _patchSink.PublishAsync(patchBatch, _cancellationTokenSource.Token);
+                }
+                else
+                {
+                    await _patchSink.PublishAndWaitRenderAsync(patchBatch, _cancellationTokenSource.Token);
+                }
+
                 await ExecuteCommandAsync(updateResult.Command, _cancellationTokenSource.Token);
                 queuedMessage.Processed?.TrySetResult();
             }

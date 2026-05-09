@@ -53,7 +53,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `D3D12DrawingBackend`（Irix.Poc），Phase 3：FillRect → D3D12 矩形渲染，DrawTextRun → DirectWrite 文本渲染
 - `Irix.Rendering`
   - 已有 `ICompositor`
-  - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已新增合并式 `RequestRenderAsync`，用于 resize 等不改变 VirtualNode 树的显式重绘请求，避免连续 `WM_SIZE` 产生无界空 patch 队列；`RequestRenderAndWaitAsync` 可等待对应 render request 的真实 `RenderAsync` 完成
+  - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；普通 diff patch 可通过 `PublishAndWaitRenderAsync` 等待对应真实 `RenderAsync` 完成；合并式 `RequestRenderAsync` / `RequestRenderAndWaitAsync` 仅用于 resize 等不改变 VirtualNode 树的显式重绘请求，避免连续 `WM_SIZE` 产生无界空 patch 队列
   - 已有 `ConsoleCompositor` 与 `CompositeCompositor`
   - 已有 `LayoutTreeBuilder`、`LayoutElement`、`DrawCommandRecorder` 过渡骨架
   - `RenderPipeline` 已引入 retained layout：缓存 `LayoutElement[]`，树/视口不变时复用
@@ -80,13 +80,13 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
-- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；211 个测试用例覆盖各场景
+- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；213 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 211 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render completion wait、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 纯 TryApplyPartial 失败路径、Dispose 安全释放、资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、FrameDrawingResources Retain/Release/Return 幂等性、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、compositor 诊断计数、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移、ScrollFrame 首帧 delta、Counter 默认可滚动内容、Windows raw wheel 方向、render wait 计入真实 dt 与低频 render completion 回归等）
-- `CompositorLoop` 已实现合并式显式重绘请求：连续 resize 只保留必要的 repaint，渲染中再次请求会在当前帧后补一帧，避免丢失最新 viewport；`RequestRenderAndWaitAsync` 在真实 `RenderAsync` 完成后 complete，用于 frame-paced 动画节奏
+- 测试覆盖已扩展至 213 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、普通 diff patch render wait、Runtime.DispatchAndWaitAsync render completion wait、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 纯 TryApplyPartial 失败路径、Dispose 安全释放、资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、FrameDrawingResources Retain/Release/Return 幂等性、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、compositor 诊断计数、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移、ScrollFrame 首帧 delta、Counter 默认可滚动内容、Windows raw wheel 方向、render wait 计入真实 dt 与低频 render completion 回归等）
+- `CompositorLoop` 已实现两类 render wait：普通 diff patch 的 `PublishAndWaitRenderAsync` 在对应真实 `RenderAsync` 完成后 complete，供 `Runtime.DispatchAndWaitAsync` 等待本次状态更新的真实帧；`RequestRenderAndWaitAsync` 保留给 resize / retained repaint 等无 diff 的显式重绘请求
 - D3D12 resize 已改为 UI 线程只记录 pending size，Compositor 翻译/布局前应用 pending resize，并以 renderer 实际 swapchain 尺寸作为 layout viewport；fence event 由 renderer 持有 SafeHandle 且使用 auto-reset event，避免 GC 后 `E_HANDLE` 与 stale fence wait；交互运行默认关闭 ConsoleCompositor trace，swapchain 使用非拉伸 scaling；D3D12 窗口启用 external rendering 模式，避免 Win32 GDI `WM_PAINT`/erase 与 swapchain present 竞争
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
 - `IDrawingBackend` 已首次落地实现：`PoCDrawingBackend`（Irix.Poc）+ `DrawingBackendCompositor`（Irix.Rendering），验证了从 `RenderFrameBatch` → `IDrawingBackend` → `INativeWindow` 的完整链路
@@ -273,7 +273,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P1
 
-- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation），并纳入当前 211 个全量测试覆盖
+- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation），并纳入当前 213 个全量测试覆盖
 - 增加 `PatchBatch` / `IMemoryOwner<T>` 异常、取消、释放路径测试
 - 增加输入路由和命中测试的最小测试覆盖
 
@@ -365,7 +365,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 为 PoC 渲染回归增加最小测试
 - [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
 - [x] 为 `CompositorLoop` 所有权转移增加最小测试
-- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中后补一帧、普通 empty diff 不等同 render request；`RequestRenderAndWaitAsync` 在 `RenderAsync` 完成后才 complete（211 个测试，全部通过）
+- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中后补一帧、普通 empty diff 不等同 render request；`RequestRenderAndWaitAsync` 与普通 diff `PublishAndWaitRenderAsync` 都在对应 `RenderAsync` 完成后才 complete（213 个测试，全部通过）
 - [x] 引入最小 `RetainedTree`：单次 DFS 遍历应用 ReplaceRoot/Update/Add/Remove patch，返回去重升序 dirty 节点索引集合；13 个测试覆盖 replace root、update、add、remove、keyed reconciliation、多 patch 组合、empty batch、diff→apply 等价性、dirty 排序去重、layout dirty v0、RenderPipeline dirty-driven rebuild、Translator RetainedTree 集成
 - [x] `RenderPipeline` 接入 `RetainedTree`：Translator 持有 RetainedTree，diff batch 调用 Apply 并传递 dirty set，render request 只复用 retained tree；LayoutTreeBuilder 接受 dirty nodes 参数（v0 全量重建）
 - [x] Layout dirty v0：`LayoutTreeBuilder.Build(root, viewport, dirtyNodes)` 接口已落地，当前为全量重建，dirty set 透传用于后续增量布局
@@ -428,9 +428,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] ApplyScrollDelta：根据 `ScrollDeltaUnit` + `ScrollMetrics` + `SystemScrollSettings` 换算到 pixel target；WheelRaw 保留 Windows raw delta 方向：`+120` → `-54px`（向上），`-120` → `+54px`（向下）
 - [x] Scroll 精度测试：Windows raw `+120`/`-120` 方向、`+30×4`/`-30×4` 等价一刻度、小 delta 累计、Line/Pixel/Page 换算、backward-compatible ApplyWheel
 - [x] ScrollFrame pump 单实例 guard：`ScrollFramePump.EnsureRunning` 保证同时只有一个 pump 在跑；首轮不做 pending 探测，直接 drain pending 并 dispatch `ScrollFrame(delta, dt: 0)`，单刻度 target=54px 不再被吞
-- [x] Scroll dispatch frame-paced：每轮流程为 drain pending → 用 `Stopwatch` 计算距离上一条 `ScrollFrame` 的真实 `dt` → dispatch 一个 `ScrollFrame` → 等待 Runtime 处理并发布 patch → `RequestRenderAndWaitAsync` 等待真实 render completion；`dt` 明确包含上一帧 render wait，避免超小 dt 导致动画拖几分钟
+- [x] Scroll dispatch frame-paced：每轮流程为 drain pending → 用 `Stopwatch` 计算距离上一条 `ScrollFrame` 的真实 `dt` → dispatch 一个 `ScrollFrame` → `Runtime.DispatchAndWaitAsync` 等待本次 diff patch 对应的真实 render completion；pump 不再额外调用 `RequestRenderAndWaitAsync`，每个 `ScrollFrame` 只触发一次实际 render；`dt` 明确包含上一帧 render wait，避免超小 dt 导致动画拖几分钟
 - [x] Scroll 集成测试：向下单刻度（Windows raw `-120`）target=54px、双刻度 target=108px、正负抵消 target=0、单刻度动画收敛 scrollY=54、双刻度动画收敛 scrollY=108、debug 显示包含 target/pos/acc/applied
-- [x] Debug 显示：PoC 文本临时显示 `ScrollY: applied=54 target=54.0 pos=53.87 max=unknown/0(known-zero) acc=0.000 anim=True pendingPx=0 frameQueued=False tickLoop=False`，可直接看出 input 是否更新 target、动画是否推进 position、max 是未知还是已知不可滚动、pending 是否未 drain、ScrollFrame 是否排队
+- [x] Debug 显示：PoC 文本临时显示 `ScrollY: applied=54 target=54.0 pos=53.87 max=unknown/0(known-zero) acc=0.000 anim=True pendingPx=0 drained=54 frames=1 waitMs=4.2 dt=0.016 frameQueued=False tickLoop=False`，可直接看出 input 是否更新 target、动画是否推进 position、max 是未知还是已知不可滚动、pending 是否未 drain、ScrollFrame 是否排队、是否双 render、render wait 是否过长
 - [x] Wheel coalescing：`HandleInput` 不直接 dispatch scroll delta；raw delta 累加到 `ScrollFramePump.PendingPixels`（Interlocked CAS），只启动/唤醒 pump。快速滚轮 100 个事件不会产生 100 条 `ScrollFrame`
 - [x] Per-frame drain：animation loop 每帧读取并清空 pending delta，合成单个 `ScrollFrame(delta, dt)` 消息。上一帧未处理/未渲染完成时，新 wheel 只累加 pending，不追加旧帧队列
 - [x] Clamp target 到 layout max：`ScrollState.MaxScrollY` 由 layout pipeline 通过 `RenderPipeline.LastMaxScrollY` → `WindowDrawCommandTranslator.LastMaxScrollY` → `postFrameCallback` → `UpdateMaxScrollY` 反馈回 model。`ApplyScrollDelta` 在 `HasMaxScrollY=true` 时将 `TargetPosition` clamp 到 `[0, MaxScrollY]`；`WithMaxScrollY` 在更新时重新 clamp 并设置 `HasMaxScrollY=true`
@@ -441,7 +441,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] `HasMaxScrollY` 状态标志：`ScrollState` 新增 `HasMaxScrollY`，区分"布局尚未报告 max"（`false`，target 不 clamp）和"已报告"（`true`，clamp 到 `[0, MaxScrollY]`）；`WithMaxScrollY(0)` 正确锁定 target 到 0
 - [x] Scroll 诊断字段扩展：debug 显示新增 `max=unknown/0(known-zero)`、`pendingPx`、`frameQueued`、`tickLoop`，可现场区分 pending 未 drain、frame 排队、max clamp 问题
 - [x] Counter 默认 scroll 内容：Counter PoC 默认内容高度超过 960×540 默认窗口的可见高度，初始 layout 反馈 `MaxScrollY >= 54`，避免首个 wheel delta 被 known-zero max 直接 clamp 成无反应
-- [x] Scroll 回归测试：新增覆盖首笔 pending delta 不丢、Windows 向下单刻度 target=54、默认窗口下 Counter view 可滚动、layout max 回传后单刻度仍得到 target=54、快速 100 次 wheel 在 render wait 阻塞期间合并为少量 ScrollFrame、低频 render completion 不堆积旧帧、`RequestRenderAndWaitAsync` 完成语义、第二帧 `dt` 包含 render wait、raw wheel 方向；全量 211 个测试通过
+- [x] Scroll 回归测试：新增覆盖首笔 pending delta 不丢、Windows 向下单刻度 target=54、默认窗口下 Counter view 可滚动、layout max 回传后单刻度仍得到 target=54、快速 100 次 wheel 在 render wait 阻塞期间合并为少量 ScrollFrame、低频 render completion 不堆积旧帧、普通 diff patch render wait、`RequestRenderAndWaitAsync` 保留给无 diff repaint、第二帧 `dt` 包含 render wait、raw wheel 方向；全量 213 个测试通过
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`

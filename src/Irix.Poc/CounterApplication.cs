@@ -64,7 +64,7 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
             attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
             children: [
                 VirtualNodeFactory.Text($"Count: {model.Count}", 2),
-                VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={s.TargetPosition:F1} pos={s.Position:F2} max={maxScrollText} acc={s.Accumulator:F3} anim={s.IsAnimating} pendingPx={pendingPx:F0} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
+                VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={s.TargetPosition:F1} pos={s.Position:F2} max={maxScrollText} acc={s.Accumulator:F3} anim={s.IsAnimating} pendingPx={pendingPx:F0} drained={Program.DiagScrollDrainedPixels:F0} frames={Program.DiagScrollDispatchedFrameCount} waitMs={Program.DiagScrollRenderWaitMs:F1} dt={Program.DiagScrollLastDt:F3} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
                 VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
                 VirtualNodeFactory.Rectangle(220, 48, 5),
                 VirtualNodeFactory.Button(

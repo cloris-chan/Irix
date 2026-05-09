@@ -125,6 +125,35 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_publish_and_wait_render_completes_after_patch_render_async()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new BlockingCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var patchOwner = new TrackingMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeFactory.Text("Count: 0", 1))
+        ]);
+        var patchBatch = new PatchBatch(patchOwner, 1);
+
+        var renderTask = loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken).AsTask();
+        await compositor.WaitForRenderCountAsync(1, cancellationToken);
+
+        Assert.False(renderTask.IsCompleted);
+        Assert.Equal(1, translator.TranslateCallCount);
+
+        compositor.Release();
+        await renderTask.WaitAsync(cancellationToken);
+
+        Assert.Equal(1, compositor.RenderCallCount);
+        Assert.Equal(1, patchOwner.DisposeCallCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_skips_regular_empty_diffs()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
