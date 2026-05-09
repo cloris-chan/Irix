@@ -10,11 +10,11 @@ internal abstract record CounterMessage
 
     public sealed record Reset(int Value) : CounterMessage;
 
-    /// <summary>Raw wheel delta from input (positive = scroll up).</summary>
-    public sealed record Wheel(int RawDelta) : CounterMessage;
+    /// <summary>Structured scroll delta from input router.</summary>
+    public sealed record Scroll(ScrollDelta Delta) : CounterMessage;
 
     /// <summary>Animation tick: advance scroll toward target.</summary>
-    public sealed record Tick(float DeltaTime) : CounterMessage;
+    public sealed record Tick(double DeltaTime) : CounterMessage;
 }
 
 internal sealed class CounterApplication : IApplication<CounterModel, CounterMessage>
@@ -27,9 +27,13 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
             CounterMessage.Increment => new UpdateResult<CounterModel, CounterMessage>(model with { Count = model.Count + 1 }),
             CounterMessage.Decrement => new UpdateResult<CounterModel, CounterMessage>(model with { Count = model.Count - 1 }),
             CounterMessage.Reset reset => new UpdateResult<CounterModel, CounterMessage>(model with { Count = reset.Value }),
-            CounterMessage.Wheel wheel => new UpdateResult<CounterModel, CounterMessage>(model with
+            CounterMessage.Scroll scroll => new UpdateResult<CounterModel, CounterMessage>(model with
             {
-                Scroll = ScrollController.ApplyWheel(model.Scroll, wheel.RawDelta),
+                Scroll = ScrollController.ApplyScrollDelta(
+                    model.Scroll,
+                    scroll.Delta,
+                    ScrollMetrics.DefaultText,
+                    SystemScrollSettings.Default),
             }),
             CounterMessage.Tick tick => new UpdateResult<CounterModel, CounterMessage>(model with
             {

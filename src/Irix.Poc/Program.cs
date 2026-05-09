@@ -70,8 +70,8 @@ internal static class Program
             if (CounterInputRouter.TryMapInput(inputEvent, TryGetActionIdAt, out var message))
             {
                 runtime.Dispatch(message);
-                // After wheel input, if animating, start the tick loop
-                if (message is CounterMessage.Wheel && runtime.CurrentModel.Scroll.IsAnimating)
+                // After scroll input, if animating, start the tick loop
+                if (message is CounterMessage.Scroll && runtime.CurrentModel.Scroll.IsAnimating)
                 {
                     _ = StartTickLoop(runtime, compositorLoop);
                 }
@@ -138,7 +138,7 @@ internal static class Program
         {
             await Task.Delay(TickInterval);
             var now = stopwatch.Elapsed;
-            var dt = (float)(now - lastTick).TotalSeconds;
+            var dt = (now - lastTick).TotalSeconds;
             lastTick = now;
 
             runtime.Dispatch(new CounterMessage.Tick(dt));

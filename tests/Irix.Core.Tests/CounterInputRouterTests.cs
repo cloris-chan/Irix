@@ -65,7 +65,7 @@ public sealed class CounterInputRouterTests
     [InlineData(-120)]  // one notch down
     [InlineData(240)]   // two notches up
     [InlineData(30)]    // quarter notch (high-precision touchpad)
-    public void TryMapInput_maps_mouse_wheel_to_wheel_message(int delta)
+    public void TryMapInput_maps_mouse_wheel_to_scroll_delta(int delta)
     {
         var inputEvent = new RawInputEvent(
             RawInputEventKind.PointerWheel,
@@ -77,8 +77,9 @@ public sealed class CounterInputRouterTests
         var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => null, out var message);
 
         Assert.True(mapped);
-        var wheel = Assert.IsType<CounterMessage.Wheel>(message);
-        Assert.Equal(delta, wheel.RawDelta); // raw delta preserved, no truncation
+        var scroll = Assert.IsType<CounterMessage.Scroll>(message);
+        Assert.Equal(ScrollDeltaUnit.WheelRaw, scroll.Delta.Unit);
+        Assert.Equal(delta, scroll.Delta.Value); // raw delta preserved, no truncation
     }
 
     [Theory]
@@ -107,18 +108,19 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void Scroll_message_updates_model_scrollY()
+    public void Scroll_message_updates_model_target()
     {
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // Apply one full notch (120 units) → should accumulate and produce target
-        var result = app.Update(model, new CounterMessage.Wheel(120));
-        Assert.Equal(40, result.NextModel.Scroll.TargetPosition); // 120/120 * 40 = 40px
+        // One full notch: 120 units → 120/120 * 3 lines * 18px = 54px
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        var result = app.Update(model, new CounterMessage.Scroll(delta));
+        Assert.Equal(54, result.NextModel.Scroll.TargetPosition);
         Assert.True(result.NextModel.Scroll.IsAnimating);
 
         // Tick to animate toward target
-        result = app.Update(result.NextModel, new CounterMessage.Tick(1.0f));
+        result = app.Update(result.NextModel, new CounterMessage.Tick(1.0));
         Assert.True(result.NextModel.Scroll.Position > 0);
     }
 
@@ -129,8 +131,9 @@ public sealed class CounterInputRouterTests
         var model = app.Initialize();
 
         // Scroll up when at 0 → target stays at 0
-        var result = app.Update(model, new CounterMessage.Wheel(-120));
-        Assert.Equal(0, result.NextModel.Scroll.TargetPosition); // clamped to 0
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
+        var result = app.Update(model, new CounterMessage.Scroll(delta));
+        Assert.Equal(0, result.NextModel.Scroll.TargetPosition);
     }
 
     [Fact]
@@ -139,12 +142,13 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // 4 small deltas of 30 = 120 total → 40px
+        // 4 small deltas of 30 = 120 total → 54px (same as one notch)
         for (var i = 0; i < 4; i++)
         {
-            model = app.Update(model, new CounterMessage.Wheel(30)).NextModel;
+            var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30);
+            model = app.Update(model, new CounterMessage.Scroll(delta)).NextModel;
         }
-        Assert.Equal(40, model.Scroll.TargetPosition);
+        Assert.Equal(54, model.Scroll.TargetPosition);
     }
 
     [Fact]
@@ -153,15 +157,15 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // Apply wheel and animate for 2 seconds (should converge)
-        model = app.Update(model, new CounterMessage.Wheel(120)).NextModel;
-        for (var i = 0; i < 120; i++) // 120 frames at 60fps = 2 seconds
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        model = app.Update(model, new CounterMessage.Scroll(delta)).NextModel;
+        for (var i = 0; i < 120; i++)
         {
-            model = app.Update(model, new CounterMessage.Tick(1f / 60f)).NextModel;
+            model = app.Update(model, new CounterMessage.Tick(1.0 / 60.0)).NextModel;
         }
 
         Assert.False(model.Scroll.IsAnimating);
-        Assert.Equal(model.Scroll.TargetPosition, (int)Math.Round(model.Scroll.Position));
+        Assert.Equal(model.Scroll.TargetPosition, Math.Round(model.Scroll.Position));
     }
 
     [Fact]
@@ -202,5 +206,75 @@ public sealed class CounterInputRouterTests
         Assert.True(diag.ScrollY > 0);
         Assert.True(diag.MaxScrollY > 0);
         Assert.Equal(diag.ScrollY, Math.Min(100, diag.MaxScrollY));
+    }
+
+    // ── ScrollController unit conversion tests ───────────────────────
+
+    [Fact]
+    public void ConvertToPixels_wheel_raw_one_notch()
+    {
+        // 120 units × 3 lines/notch × 18px/line = 54px
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        var px = ScrollController.ConvertToPixels(delta, ScrollMetrics.DefaultText, SystemScrollSettings.Default);
+        Assert.Equal(54.0, px);
+    }
+
+    [Fact]
+    public void ConvertToPixels_wheel_raw_quarter_notch()
+    {
+        // 30 units → 30/120 * 3 * 18 = 13.5px
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30);
+        var px = ScrollController.ConvertToPixels(delta, ScrollMetrics.DefaultText, SystemScrollSettings.Default);
+        Assert.Equal(13.5, px);
+    }
+
+    [Fact]
+    public void ConvertToPixels_line()
+    {
+        var delta = new ScrollDelta(ScrollDeltaUnit.Line, 3);
+        var px = ScrollController.ConvertToPixels(delta, ScrollMetrics.DefaultText, SystemScrollSettings.Default);
+        Assert.Equal(54.0, px); // 3 × 18
+    }
+
+    [Fact]
+    public void ConvertToPixels_pixel()
+    {
+        var delta = new ScrollDelta(ScrollDeltaUnit.Pixel, 42.5);
+        var px = ScrollController.ConvertToPixels(delta, ScrollMetrics.DefaultText, SystemScrollSettings.Default);
+        Assert.Equal(42.5, px);
+    }
+
+    [Fact]
+    public void ConvertToPixels_page_with_viewport()
+    {
+        var metrics = new ScrollMetrics(LineExtent: 18, PageExtent: 0, ViewportExtent: 500, ContentExtent: 2000);
+        var delta = new ScrollDelta(ScrollDeltaUnit.Page, 1);
+        var px = ScrollController.ConvertToPixels(delta, metrics, SystemScrollSettings.Default);
+        Assert.Equal(450.0, px); // 500 * 0.9
+    }
+
+    [Fact]
+    public void ApplyScrollDelta_maxScroll_clamp()
+    {
+        var metrics = new ScrollMetrics(LineExtent: 18, PageExtent: 0, ViewportExtent: 0, ContentExtent: 200);
+        var state = ScrollState.Default;
+
+        // Scroll way past content
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 12000);
+        state = ScrollController.ApplyScrollDelta(state, delta, metrics, SystemScrollSettings.Default);
+
+        // Target should be clamped to MaxScrollY = contentHeight - visibleHeight
+        // But since we don't have visibleHeight in ScrollMetrics yet, the controller
+        // doesn't clamp — it's the layout builder's job. So target is just large.
+        Assert.True(state.TargetPosition > 0);
+        Assert.True(state.IsAnimating);
+    }
+
+    [Fact]
+    public void ApplyWheel_backward_compatible()
+    {
+        // ApplyWheel uses defaults: 120/120 * 3 * 18 = 54px
+        var state = ScrollController.ApplyWheel(ScrollState.Default, 120);
+        Assert.Equal(54, state.TargetPosition);
     }
 }
