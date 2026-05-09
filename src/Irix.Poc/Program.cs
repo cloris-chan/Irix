@@ -22,6 +22,12 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-scroll"))
+        {
+            await RunScrollDiagnosticModeAsync(Console.Out, Path.Combine("TestResults", "diagnose-scroll.txt"));
+            return;
+        }
+
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
         window.ExternalRenderingEnabled = true;
@@ -152,6 +158,73 @@ internal static class Program
     internal static double DiagScrollRenderWaitMs => _scrollFramePump?.RenderWaitMs ?? 0;
     internal static double DiagScrollLastDt => _scrollFramePump?.LastDt ?? 0;
     internal static double DiagScrollDrainedPixels => _scrollFramePump?.DrainedPixels ?? 0;
+
+    internal static async Task RunScrollDiagnosticModeAsync(
+        TextWriter output,
+        string? reportPath = null,
+        CancellationToken cancellationToken = default)
+    {
+        var pump = new ScrollFramePump();
+        var scrollState = ScrollState.Default with { MaxScrollY = 240, HasMaxScrollY = true };
+        var frameCount = 0;
+        var totalDrainedPixels = 0.0;
+
+        pump.AddPendingPixels(54);
+
+        await pump.RunUntilIdleAsync(
+            async (frame, token) =>
+            {
+                frameCount++;
+                totalDrainedPixels += frame.Delta.Value;
+                scrollState = ScrollController.ApplyScrollDelta(
+                    scrollState,
+                    frame.Delta,
+                    ScrollMetrics.DefaultText,
+                    SystemScrollSettings.Default);
+                scrollState = ScrollController.Tick(scrollState, frame.DeltaTime);
+
+                await Task.Delay(20, token);
+
+                if (frameCount >= 2)
+                {
+                    scrollState = scrollState with
+                    {
+                        Position = scrollState.TargetPosition,
+                        IsAnimating = false
+                    };
+                }
+            },
+            () => scrollState,
+            cancellationToken);
+
+        var lines = new[]
+        {
+            "=== Scroll Pump Diagnostics ===",
+            $"frames={pump.DispatchedFrameCount}",
+            $"waitMs={pump.RenderWaitMs:F3}",
+            $"dt={pump.LastDt:F4}",
+            $"drained={totalDrainedPixels:F1}",
+            $"lastFrameDrained={pump.DrainedPixels:F1}",
+            $"pending={pump.PendingPixels:F1}",
+            "=== Scroll diagnostic mode complete ==="
+        };
+
+        foreach (var line in lines)
+        {
+            await output.WriteLineAsync(line);
+        }
+
+        if (reportPath is not null)
+        {
+            var directory = Path.GetDirectoryName(reportPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await File.WriteAllLinesAsync(reportPath, lines, cancellationToken);
+        }
+    }
 
     /// <summary>
     /// Diagnostic smoke mode: renders one frame with test rectangles and text,
