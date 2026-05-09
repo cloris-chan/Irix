@@ -27,11 +27,11 @@ internal static class CounterInputRouter
             case RawInputEventKind.KeyPressed when inputEvent.KeyCode == 0x28:
                 message = new CounterMessage.Decrement();
                 return true;
-            case RawInputEventKind.PointerWheel when inputEvent.Delta > 0:
-                message = new CounterMessage.Increment();
-                return true;
-            case RawInputEventKind.PointerWheel when inputEvent.Delta < 0:
-                message = new CounterMessage.Decrement();
+            case RawInputEventKind.PointerWheel when inputEvent.Delta != 0:
+                // Normalize wheel delta: standard WHEEL_DELTA = 120 per notch,
+                // map to scroll step of 40 pixels per notch
+                var scrollStep = inputEvent.Delta / 120 * 40;
+                message = new CounterMessage.Scroll(-scrollStep); // positive delta = scroll up = negative ScrollY delta
                 return true;
             case RawInputEventKind.CharacterInput when inputEvent.Character is 'r' or 'R':
                 message = new CounterMessage.Reset(0);

@@ -74,6 +74,21 @@ internal sealed class LayoutTreeResult(
 /// <summary>
 /// Diagnostic information for a single ScrollContainer's scroll state.
 /// </summary>
+/// <param name="DfsIndex">DFS index of this ScrollContainer in the VirtualNode tree.</param>
+/// <param name="VisibleHeight">The container's visible area height (after explicit Height or viewport default).</param>
+/// <param name="ContentHeight">Total height of all children before scrolling.</param>
+/// <param name="ScrollY">The clamped scroll offset applied to children (always in [0, MaxScrollY]).</param>
+/// <param name="MaxScrollY">Maximum scroll offset: max(ContentHeight - VisibleHeight, 0).</param>
+/// <param name="VisibleElementCount">
+/// Number of child elements that <b>intersect</b> the container's visible area.
+/// An element is counted as visible if any part of its bounds overlaps with the visible region
+/// (i.e., not fully above or fully below the visible area).
+/// </param>
+/// <param name="ClippedElementCount">
+/// Number of child elements that are <b>fully outside</b> the container's visible area.
+/// An element is clipped if its bottom edge is at or above the visible top,
+/// or its top edge is at or below the visible bottom.
+/// </param>
 internal readonly record struct ScrollContainerDiag(
     int DfsIndex,
     int VisibleHeight,
