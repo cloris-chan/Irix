@@ -47,22 +47,19 @@ internal static class Program
             : (ICompositor)d3d12Compositor;
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
+        var scrollFramePump = new ScrollFramePump();
+        _scrollFramePump = scrollFramePump;
 
         // Wire up MaxScrollY feedback after runtime is created
-        var lastKnownMaxScrollY = 0.0;
+        double? lastKnownMaxScrollY = null;
         maxScrollYCallback = maxScrollY =>
         {
-            if (Math.Abs(maxScrollY - lastKnownMaxScrollY) > 0.5)
+            if (!lastKnownMaxScrollY.HasValue || Math.Abs(maxScrollY - lastKnownMaxScrollY.Value) > 0.5)
             {
                 lastKnownMaxScrollY = maxScrollY;
                 runtime.Dispatch(new CounterMessage.UpdateMaxScrollY(maxScrollY));
             }
         };
-
-        // Track previous scroll state for backpressure flag clearing.
-        // The tick loop compares runtime.CurrentModel.Scroll before and after
-        // each tick — when the Runtime has processed a ScrollFrame, the scroll
-        // state changes and the _scrollFrameQueued flag can be cleared.
 
         window.SizeChanged += (w, h) =>
         {
@@ -94,8 +91,11 @@ internal static class Program
                         new ScrollDelta(ScrollDeltaUnit.WheelRaw, wheel.RawDelta),
                         ScrollMetrics.DefaultText,
                         SystemScrollSettings.Default);
-                    AddPendingScrollDelta(pixels);
-                    EnsureScrollTickLoop(runtime, compositorLoop);
+                    scrollFramePump.AddPendingPixels(pixels);
+                    scrollFramePump.EnsureRunning(
+                        (frame, cancellationToken) => runtime.DispatchAndWaitAsync(frame, cancellationToken),
+                        compositorLoop.RequestRenderAndWaitAsync,
+                        () => runtime.CurrentModel.Scroll);
                 }
                 else
                 {
@@ -142,143 +142,13 @@ internal static class Program
         }
     }
 
-    private static readonly TimeSpan TickInterval = TimeSpan.FromMilliseconds(16); // ~60fps
-    private static int _scrollTickLoopRunning; // 0 = idle, 1 = running
-    private static long _pendingScrollDeltaBits; // double encoded as long for Interlocked
-    private static int _scrollDeltaQueued; // 1 = ScrollDeltaMsg dispatched but not yet processed by Runtime
+    private static ScrollFramePump? _scrollFramePump;
 
     // ── Diagnostic readouts ────────────────────────────────────────────
 
-    internal static double DiagPendingPx
-    {
-        get
-        {
-            var bits = Volatile.Read(ref _pendingScrollDeltaBits);
-            return BitConverter.Int64BitsToDouble(bits);
-        }
-    }
-
-    internal static bool DiagDeltaQueued => Volatile.Read(ref _scrollDeltaQueued) != 0;
-    internal static bool DiagTickLoopRunning => Volatile.Read(ref _scrollTickLoopRunning) != 0;
-
-    /// <summary>
-    /// Ensures exactly one tick loop is running. If a loop is already active,
-    /// this is a no-op — the existing loop will pick up the new scroll state
-    /// on its next iteration.
-    /// </summary>
-    private static void EnsureScrollTickLoop(
-        Runtime<CounterModel, CounterMessage> runtime,
-        CompositorLoop compositorLoop)
-    {
-        if (Interlocked.Exchange(ref _scrollTickLoopRunning, 1) == 0)
-        {
-            _ = RunScrollTickLoopAsync(runtime, compositorLoop);
-        }
-    }
-
-    /// <summary>
-    /// Drain accumulated scroll delta. Thread-safe: called from animation loop,
-    /// written from input thread via Interlocked.
-    /// </summary>
-    private static double DrainPendingScrollDelta()
-    {
-        var bits = Interlocked.Exchange(ref _pendingScrollDeltaBits, 0);
-        return BitConverter.Int64BitsToDouble(bits);
-    }
-
-    private static void AddPendingScrollDelta(double pixels)
-    {
-        long current, updated;
-        do
-        {
-            current = Volatile.Read(ref _pendingScrollDeltaBits);
-            var currentDouble = BitConverter.Int64BitsToDouble(current);
-            var newDouble = currentDouble + pixels;
-            updated = BitConverter.DoubleToInt64Bits(newDouble);
-        } while (Interlocked.CompareExchange(ref _pendingScrollDeltaBits, updated, current) != current);
-    }
-
-    /// <summary>
-    /// Scroll tick loop. Two responsibilities, decoupled:
-    ///
-    /// 1. **Delta drain** (every tick): drain pending pixels, dispatch
-    ///    ScrollDeltaMsg immediately. Target updates as fast as the Runtime
-    ///    can process messages. No backpressure on deltas — they always drain.
-    ///
-    /// 2. **Animation tick** (when not backpressured): dispatch ScrollTick
-    ///    to advance smooth animation. Only when the Runtime has processed
-    ///    the previous delta (model target changed) or no delta was dispatched.
-    ///
-    /// This split ensures the user sees the target update immediately via
-    /// BuildView's pending-aware display, even when the Runtime is backed up.
-    /// </summary>
-    private static async Task RunScrollTickLoopAsync(
-        Runtime<CounterModel, CounterMessage> runtime,
-        CompositorLoop compositorLoop)
-    {
-        try
-        {
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            var lastTick = stopwatch.Elapsed;
-            var lastModelTarget = runtime.CurrentModel.Scroll.TargetPosition;
-
-            var consecutiveIdle = 0;
-            while (consecutiveIdle < 3)
-            {
-                await Task.Delay(TickInterval);
-                var now = stopwatch.Elapsed;
-                var dt = (now - lastTick).TotalSeconds;
-                lastTick = now;
-
-                // 1. Drain and dispatch delta — always, regardless of backpressure.
-                var pendingPixels = DrainPendingScrollDelta();
-                if (pendingPixels != 0)
-                {
-                    var delta = new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels);
-                    runtime.Dispatch(new CounterMessage.ScrollDeltaMsg(delta));
-                    Volatile.Write(ref _scrollDeltaQueued, 1);
-                    compositorLoop.RequestRenderAsync();
-                }
-
-                // 2. Clear delta-queued flag if Runtime processed the last delta.
-                if (Volatile.Read(ref _scrollDeltaQueued) != 0)
-                {
-                    var currentTarget = runtime.CurrentModel.Scroll.TargetPosition;
-                    if (currentTarget != lastModelTarget)
-                    {
-                        Volatile.Write(ref _scrollDeltaQueued, 0);
-                        lastModelTarget = currentTarget;
-                    }
-                }
-
-                // 3. Dispatch animation tick only when no delta is queued.
-                // This prevents piling up messages when the Runtime is slow.
-                if (Volatile.Read(ref _scrollDeltaQueued) == 0
-                    && runtime.CurrentModel.Scroll.IsAnimating)
-                {
-                    runtime.Dispatch(new CounterMessage.ScrollTick(dt));
-                    compositorLoop.RequestRenderAsync();
-                }
-
-                // 4. Idle detection: no pending, no animation, no queued delta.
-                if (pendingPixels == 0
-                    && !runtime.CurrentModel.Scroll.IsAnimating
-                    && Volatile.Read(ref _scrollDeltaQueued) == 0)
-                {
-                    consecutiveIdle++;
-                }
-                else
-                {
-                    consecutiveIdle = 0;
-                }
-            }
-        }
-        finally
-        {
-            Volatile.Write(ref _scrollDeltaQueued, 0);
-            Interlocked.Exchange(ref _scrollTickLoopRunning, 0);
-        }
-    }
+    internal static double DiagPendingPx => _scrollFramePump?.PendingPixels ?? 0;
+    internal static bool DiagScrollFrameQueued => _scrollFramePump?.IsFrameQueued ?? false;
+    internal static bool DiagTickLoopRunning => _scrollFramePump?.IsLoopRunning ?? false;
 
     /// <summary>
     /// Diagnostic smoke mode: renders one frame with test rectangles and text,

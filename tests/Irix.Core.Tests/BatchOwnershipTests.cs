@@ -105,6 +105,26 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_request_render_and_wait_completes_after_render_async()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new BlockingCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+
+        var renderTask = loop.RequestRenderAndWaitAsync(cancellationToken).AsTask();
+        await compositor.WaitForRenderCountAsync(1, cancellationToken);
+
+        Assert.False(renderTask.IsCompleted);
+
+        compositor.Release();
+        await renderTask.WaitAsync(cancellationToken);
+
+        Assert.Equal(1, translator.TranslateCallCount);
+        Assert.Equal(1, compositor.RenderCallCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_skips_regular_empty_diffs()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

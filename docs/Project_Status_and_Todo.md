@@ -1,7 +1,7 @@
 # Irix 项目进度与待办
 
 > 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。
-> 📅 **最后验证日期：** 2026-05-08。本文档描述的代码状态以此日期为准。
+> 📅 **最后验证日期：** 2026-05-10。本文档描述的代码状态以此日期为准。
 >
 > 📐 **架构设计详见：** [Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)。本文档不重复设计细节，仅记录实现状态与待办。
 ---
@@ -53,7 +53,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有 `D3D12DrawingBackend`（Irix.Poc），Phase 3：FillRect → D3D12 矩形渲染，DrawTextRun → DirectWrite 文本渲染
 - `Irix.Rendering`
   - 已有 `ICompositor`
-  - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已新增合并式 `RequestRenderAsync`，用于 resize 等不改变 VirtualNode 树的显式重绘请求，避免连续 `WM_SIZE` 产生无界空 patch 队列
+  - 已有 `CompositorLoop`，负责异步消费 `PatchBatch`；已新增合并式 `RequestRenderAsync`，用于 resize 等不改变 VirtualNode 树的显式重绘请求，避免连续 `WM_SIZE` 产生无界空 patch 队列；`RequestRenderAndWaitAsync` 可等待对应 render request 的真实 `RenderAsync` 完成
   - 已有 `ConsoleCompositor` 与 `CompositeCompositor`
   - 已有 `LayoutTreeBuilder`、`LayoutElement`、`DrawCommandRecorder` 过渡骨架
   - `RenderPipeline` 已引入 retained layout：缓存 `LayoutElement[]`，树/视口不变时复用
@@ -80,13 +80,13 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
-- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；203 个测试用例覆盖各场景
+- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；211 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 158 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 纯 TryApplyPartial 失败路径、Dispose 安全释放、资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、FrameDrawingResources Retain/Release/Return 幂等性、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、compositor 诊断计数、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移等）
-- `CompositorLoop` 已实现合并式显式重绘请求：连续 resize 只保留必要的 repaint，渲染中再次请求会在当前帧后补一帧，避免丢失最新 viewport
+- 测试覆盖已扩展至 211 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、render completion wait、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 纯 TryApplyPartial 失败路径、Dispose 安全释放、资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、FrameDrawingResources Retain/Release/Return 幂等性、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、compositor 诊断计数、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移、ScrollFrame 首帧 delta、Counter 默认可滚动内容、Windows raw wheel 方向、render wait 计入真实 dt 与低频 render completion 回归等）
+- `CompositorLoop` 已实现合并式显式重绘请求：连续 resize 只保留必要的 repaint，渲染中再次请求会在当前帧后补一帧，避免丢失最新 viewport；`RequestRenderAndWaitAsync` 在真实 `RenderAsync` 完成后 complete，用于 frame-paced 动画节奏
 - D3D12 resize 已改为 UI 线程只记录 pending size，Compositor 翻译/布局前应用 pending resize，并以 renderer 实际 swapchain 尺寸作为 layout viewport；fence event 由 renderer 持有 SafeHandle 且使用 auto-reset event，避免 GC 后 `E_HANDLE` 与 stale fence wait；交互运行默认关闭 ConsoleCompositor trace，swapchain 使用非拉伸 scaling；D3D12 窗口启用 external rendering 模式，避免 Win32 GDI `WM_PAINT`/erase 与 swapchain present 竞争
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
 - `IDrawingBackend` 已首次落地实现：`PoCDrawingBackend`（Irix.Poc）+ `DrawingBackendCompositor`（Irix.Rendering），验证了从 `RenderFrameBatch` → `IDrawingBackend` → `INativeWindow` 的完整链路
@@ -101,7 +101,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | Diff / Patch | ✅ 局部 diff 已实现：Update/Add/Remove + keyed reconciliation；Move 仍待优化 |
 | 布局 | ⚠️ Retained layout 已引入，未脱离硬编码常量 |
 | 命令录制 | ⚠️ 基础可用，文本内容与 `TextStyle` 已通过 `FrameDrawingResources` 分离 |
-| 帧消费 (CompositorLoop) | ✅ 已验证（含合并式显式重绘请求） |
+| 帧消费 (CompositorLoop) | ✅ 已验证（含合并式显式重绘请求与 render completion await） |
 | GPU 渲染 | ✅ D3D12 矩形渲染 + DirectWrite 文本叠加已接入 PoC |
 | PoC 可视化 | ✅ 已验证 |
 
@@ -273,7 +273,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P1
 
-- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation）；143 个测试用例
+- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation），并纳入当前 211 个全量测试覆盖
 - 增加 `PatchBatch` / `IMemoryOwner<T>` 异常、取消、释放路径测试
 - 增加输入路由和命中测试的最小测试覆盖
 
@@ -365,7 +365,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 为 PoC 渲染回归增加最小测试
 - [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
 - [x] 为 `CompositorLoop` 所有权转移增加最小测试
-- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中 dirty 后补一帧、普通 empty diff 不等同 render request（203 个测试，全部通过）
+- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中后补一帧、普通 empty diff 不等同 render request；`RequestRenderAndWaitAsync` 在 `RenderAsync` 完成后才 complete（211 个测试，全部通过）
 - [x] 引入最小 `RetainedTree`：单次 DFS 遍历应用 ReplaceRoot/Update/Add/Remove patch，返回去重升序 dirty 节点索引集合；13 个测试覆盖 replace root、update、add、remove、keyed reconciliation、多 patch 组合、empty batch、diff→apply 等价性、dirty 排序去重、layout dirty v0、RenderPipeline dirty-driven rebuild、Translator RetainedTree 集成
 - [x] `RenderPipeline` 接入 `RetainedTree`：Translator 持有 RetainedTree，diff batch 调用 Apply 并传递 dirty set，render request 只复用 retained tree；LayoutTreeBuilder 接受 dirty nodes 参数（v0 全量重建）
 - [x] Layout dirty v0：`LayoutTreeBuilder.Build(root, viewport, dirtyNodes)` 接口已落地，当前为全量重建，dirty set 透传用于后续增量布局
@@ -415,33 +415,33 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] Nested container 高度语义：root 默认剩余 viewport，nested 无 `Height` 属性时用剩余 viewport 或 `Style.TextHeight * 3` 兜底；显式 `Height` 始终优先
 - [x] Scroll clamp 测试：覆盖 `ScrollY < 0`（clamp 到 0）、`ScrollY > MaxScrollY`（clamp 到 max）、显式 `Height` 小于内容高度；4 个新测试验证 diagnostics 中 scrollY 被正确 clamp
 - [x] 可见元素诊断：`ScrollContainerDiag` 新增 `VisibleElementCount`/`ClippedElementCount`；XML doc 明确语义：VisibleElementCount = 与可见区域相交的元素数，ClippedElementCount = 完全在可见区域外的元素数；`--diagnose` 输出 `elements=2/2 visible`
-- [x] 鼠标滚轮事件接入 v0：`CounterInputRouter` 将 `PointerWheel` delta 映射为 `Scroll` 消息（WHEEL_DELTA=120 → 40px/step）；滚轮通过现有 MVU 路径：`Dispatch` → `Update` → `BuildView` → diff → retained tree → layout → render
-- [x] Scroll action 建模：`CounterMessage.Scroll(DeltaY)` 走 MVU update，`CounterModel.ScrollY` 作为状态；`BuildView` 将 `ScrollY` 作为 `ScrollContainer` 属性传入布局
-- [x] Scroll wheel 单测：wheel delta 120/-120/240 映射正确、Scroll 消息更新 model ScrollY、负 ScrollY clamp 到 0、ScrollY 出现在 view 属性中、ScrollY 产生正确 scroll diagnostics
-- [x] ScrollController 纯函数实现：`ApplyWheel` 累计 raw delta（subpixel accumulator），换算 whole pixel 到 `TargetPosition`；`Tick(dt)` 指数 ease `Position` → `TargetPosition`；`SnapThreshold` 自动停止动画；`GetScrollY` 返回整数布局偏移
-- [x] Raw wheel delta 保真：`CounterInputRouter` 发送 `Wheel(rawDelta)` 不做整数截断；高精度触摸板小 delta（如 30）通过 accumulator 累计：30×4 = 120 = 40px
-- [x] Smooth scroll 动画：`ScrollState` 持有 `Accumulator`/`TargetPosition`/`Position`/`IsAnimating`/`HasMaxScrollY`；`Tick(now/dt)` 消息驱动每帧逼近 target；`IsAnimating=true` 时 `StartTickLoop` 持续 dispatch Tick + request render；动画结束自动停止
+- [x] 鼠标滚轮事件接入 v0：`CounterInputRouter` 将 `PointerWheel` delta 映射为 `WheelRaw(rawDelta)`，不做整数截断；`HandleInput` 将 raw delta 按 `SystemScrollSettings` + `ScrollMetrics` 换算为像素并累加到 `ScrollFramePump` pending accumulator
+- [x] Scroll action 建模：`CounterMessage.ScrollFrame(delta, dt)` 走 MVU update；先将本帧 coalesced delta 应用到 `TargetPosition`，再用真实 `dt` 推进 `Position`；`BuildView` 将 `ScrollY` 作为 `ScrollContainer` 属性传入布局
+- [x] Scroll wheel 单测：wheel delta 120/-120/240/30 映射为 raw wheel message；Windows raw `+120` 表示向上滚动（减少 `ScrollY`），raw `-120` 表示向下滚动（增加 `ScrollY`）；ScrollY 出现在 view 属性中并产生正确 scroll diagnostics
+- [x] ScrollController 纯函数实现：`ApplyScrollDelta` 累计 raw/pixel/line/page delta（subpixel accumulator），换算 whole pixel 到 `TargetPosition`；`Tick(dt)` 指数 ease `Position` → `TargetPosition`；`SnapThreshold` 自动停止动画；`GetScrollY` 返回整数布局偏移
+- [x] Raw wheel delta 保真：`CounterInputRouter` 发送 `WheelRaw(rawDelta)` 不做整数截断；高精度触摸板小 delta 保留 Windows 方向语义：`+30×4` 表示向上滚动 `-54px`，`-30×4` 表示向下滚动 `+54px`
+- [x] Smooth scroll 动画：`ScrollState` 持有 `Accumulator`/`TargetPosition`/`Position`/`IsAnimating`/`HasMaxScrollY`；`ScrollFramePump` 使用 `Stopwatch` 记录两次 `ScrollFrame` dispatch 之间的真实时间（包含 render completion wait），不再以固定 16ms/60fps 作为动画节奏假设；动画结束后连续 idle 自然退出
 - [x] ScrollDelta 结构化：`CounterInputRouter` 发送 `ScrollDelta(ScrollDeltaUnit.WheelRaw, rawDelta)`，不做整数截断；`ScrollDeltaUnit` 枚举支持 `Line`/`Pixel`/`Page`/`WheelRaw`
 - [x] ScrollMetrics：`LineExtent`/`PageExtent`/`ViewportExtent`/`ContentExtent`；controller 不再硬编码 40px，通过 `ConvertToPixels(delta, metrics, settings)` 换算
 - [x] SystemScrollSettings：PoC 默认 `LinesPerWheelNotch=3`、`WheelUnitsPerNotch=120`；Windows 平台后续可读取 `SPI_GETWHEELSCROLLLINES`
 - [x] ScrollState 改为 double：`TargetPosition`/`Position`/`Accumulator` 全部 double 精度；小 delta 不因 int target 丢失
-- [x] ApplyScrollDelta：根据 `ScrollDeltaUnit` + `ScrollMetrics` + `SystemScrollSettings` 换算到 pixel target；WheelRaw: `120/120 × 3 lines × 18px = 54px`；30×4 = 120 = 54px
-- [x] Scroll 精度测试：120 units × 3 lines × 18px = 54px、30×4 等价一刻度、小 delta 累计、Line/Pixel/Page 换算、backward-compatible ApplyWheel
-- [x] Tick loop 单实例 guard：`EnsureScrollTickLoop` 用 `Interlocked.Exchange` 保证同时只有一个 tick loop 在跑；`RunScrollTickLoopAsync` 每帧 drain pending 并 dispatch `ScrollDeltaMsg`（无 backpressure），仅在无 delta 排队时 dispatch `ScrollTick`；结束时连续 3 帧 idle 自然退出
-- [x] Scroll dispatch 立即渲染：`HandleInput` 中 scroll 消息后 `EnsureScrollTickLoop` 无条件调用；tick loop 每帧 drain pending 并 dispatch `ScrollDeltaMsg`（target 即时更新），`RequestRenderAsync` fire-and-forget
-- [x] Scroll 集成测试：单刻度 target=54px、双刻度 target=108px、正负抵消 target=0、单刻度动画收敛 scrollY=54、双刻度动画收敛 scrollY=108、debug 显示包含 target/pos/acc/applied
-- [x] Debug 显示：PoC 文本临时显示 `ScrollY: applied=54 target=54.0 pos=53.87 max=0 acc=0.000 anim=True maxKnown=False pendingPx=0 deltaQueued=False tickLoop=False`，可直接看出 input 是否更新 target、动画是否推进 position、max 是否已知、pending 是否未 drain、delta 是否排队
-- [x] Wheel coalescing：`HandleInput` 不直接 `Dispatch(Scroll)`；raw delta 累加到 `PendingScrollDelta`（Interlocked CAS），只启动/唤醒 animation loop。快速滚轮 100 个事件不产生 100 次 MVU update
-- [x] Per-tick drain：animation loop 每幀讀取並清空 pending delta，合成單個 `ScrollFrame(delta, dt)` 消息。每幀最多一次 scroll update，Tick 不會排在大量 wheel 消息後面
+- [x] ApplyScrollDelta：根据 `ScrollDeltaUnit` + `ScrollMetrics` + `SystemScrollSettings` 换算到 pixel target；WheelRaw 保留 Windows raw delta 方向：`+120` → `-54px`（向上），`-120` → `+54px`（向下）
+- [x] Scroll 精度测试：Windows raw `+120`/`-120` 方向、`+30×4`/`-30×4` 等价一刻度、小 delta 累计、Line/Pixel/Page 换算、backward-compatible ApplyWheel
+- [x] ScrollFrame pump 单实例 guard：`ScrollFramePump.EnsureRunning` 保证同时只有一个 pump 在跑；首轮不做 pending 探测，直接 drain pending 并 dispatch `ScrollFrame(delta, dt: 0)`，单刻度 target=54px 不再被吞
+- [x] Scroll dispatch frame-paced：每轮流程为 drain pending → 用 `Stopwatch` 计算距离上一条 `ScrollFrame` 的真实 `dt` → dispatch 一个 `ScrollFrame` → 等待 Runtime 处理并发布 patch → `RequestRenderAndWaitAsync` 等待真实 render completion；`dt` 明确包含上一帧 render wait，避免超小 dt 导致动画拖几分钟
+- [x] Scroll 集成测试：向下单刻度（Windows raw `-120`）target=54px、双刻度 target=108px、正负抵消 target=0、单刻度动画收敛 scrollY=54、双刻度动画收敛 scrollY=108、debug 显示包含 target/pos/acc/applied
+- [x] Debug 显示：PoC 文本临时显示 `ScrollY: applied=54 target=54.0 pos=53.87 max=unknown/0(known-zero) acc=0.000 anim=True pendingPx=0 frameQueued=False tickLoop=False`，可直接看出 input 是否更新 target、动画是否推进 position、max 是未知还是已知不可滚动、pending 是否未 drain、ScrollFrame 是否排队
+- [x] Wheel coalescing：`HandleInput` 不直接 dispatch scroll delta；raw delta 累加到 `ScrollFramePump.PendingPixels`（Interlocked CAS），只启动/唤醒 pump。快速滚轮 100 个事件不会产生 100 条 `ScrollFrame`
+- [x] Per-frame drain：animation loop 每帧读取并清空 pending delta，合成单个 `ScrollFrame(delta, dt)` 消息。上一帧未处理/未渲染完成时，新 wheel 只累加 pending，不追加旧帧队列
 - [x] Clamp target 到 layout max：`ScrollState.MaxScrollY` 由 layout pipeline 通过 `RenderPipeline.LastMaxScrollY` → `WindowDrawCommandTranslator.LastMaxScrollY` → `postFrameCallback` → `UpdateMaxScrollY` 反馈回 model。`ApplyScrollDelta` 在 `HasMaxScrollY=true` 时将 `TargetPosition` clamp 到 `[0, MaxScrollY]`；`WithMaxScrollY` 在更新时重新 clamp 并设置 `HasMaxScrollY=true`
 - [x] MaxScrollY 集成测试：scroll way past content 后 target clamp 到 MaxScrollY；MaxScrollY 更新后 target 被重新 clamp
-- [x] ScrollFrame 统一消息：`ScrollFrame(delta, dt)` 合并 scroll delta + animation tick，取代独立的 `Scroll` 和 `Tick` 消息
-- [x] Scroll 消息拆分：`ScrollFrame` 拆为 `ScrollDeltaMsg(delta)` + `ScrollTick(dt)`；delta 与 tick 解耦，tick loop 每帧 drain 并立即 dispatch `ScrollDeltaMsg`（target 即时更新），仅在无 backpressure 时 dispatch `ScrollTick`（动画推进）
-- [x] Scroll backpressure：tick loop 持有 `_scrollDeltaQueued` 标志，上一个 `ScrollDeltaMsg` 未被 Runtime 处理前跳过 `ScrollTick` dispatch；通过比对 `runtime.CurrentModel.Scroll.TargetPosition` 变化检测 delta 已消费
-- [x] BuildView pending-aware 显示：`BuildView` 直接读取 `_pendingScrollDeltaBits` 原始值计算 `displayTarget`（模型 target + 未 drain 的 pending），即使 Runtime 未处理完也能立即反映用户滚动意图
+- [x] ScrollFrame 统一消息：`ScrollFrame(delta, dt)` 合并 scroll delta + animation tick，取代独立的 `Scroll`、`ScrollDeltaMsg` 和 `ScrollTick` 消息
+- [x] Scroll backpressure：`ScrollFramePump` 持有 `IsFrameQueued` 标志；上一条 `ScrollFrame` 未处理并完成 render wait 前，新 wheel 只进入 pending accumulator，不向 Runtime 追加更多 scroll messages
+- [x] Runtime scroll dispatch wait：`Runtime.DispatchAndWaitAsync` 供 PoC pump 使用，确保 `RequestRenderAndWaitAsync` 排在本次 MVU patch 发布之后，避免等待旧帧
 - [x] `HasMaxScrollY` 状态标志：`ScrollState` 新增 `HasMaxScrollY`，区分"布局尚未报告 max"（`false`，target 不 clamp）和"已报告"（`true`，clamp 到 `[0, MaxScrollY]`）；`WithMaxScrollY(0)` 正确锁定 target 到 0
-- [x] Scroll 诊断字段扩展：debug 显示新增 `maxKnown`/`pendingPx`/`frameQueued`/`tickLoop`，可现场区分 pending 未 drain、frame 排队、max clamp 问题
-- [x] Scroll 回归测试：10 个新测试覆盖 `HasMaxScrollY`（false→不 clamp、true→clamp、0→锁定）、快速 100 刻度合并、动画收敛、`ScrollDeltaMsg` 语义、backpressure 场景；所有测试已迁移到 `ScrollDeltaMsg`/`ScrollTick` 消息拆分
+- [x] Scroll 诊断字段扩展：debug 显示新增 `max=unknown/0(known-zero)`、`pendingPx`、`frameQueued`、`tickLoop`，可现场区分 pending 未 drain、frame 排队、max clamp 问题
+- [x] Counter 默认 scroll 内容：Counter PoC 默认内容高度超过 960×540 默认窗口的可见高度，初始 layout 反馈 `MaxScrollY >= 54`，避免首个 wheel delta 被 known-zero max 直接 clamp 成无反应
+- [x] Scroll 回归测试：新增覆盖首笔 pending delta 不丢、Windows 向下单刻度 target=54、默认窗口下 Counter view 可滚动、layout max 回传后单刻度仍得到 target=54、快速 100 次 wheel 在 render wait 阻塞期间合并为少量 ScrollFrame、低频 render completion 不堆积旧帧、`RequestRenderAndWaitAsync` 完成语义、第二帧 `dt` 包含 render wait、raw wheel 方向；全量 211 个测试通过
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`
@@ -450,7 +450,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ---
 
-## 7a. 诊断基线（2026-05-09）
+## 7a. 诊断基线（2026-05-10）
 
 以下为 `Irix.Poc --diagnose` 与 `Irix.Poc --diagnose-resize` 的输出基线，供后续对比。
 
@@ -490,7 +490,21 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ---
 
-## 7b. 已知问题清单（2026-05-08）
+## 7b. Scroll 手动验证清单（2026-05-10）
+
+以下项目用于手动验证 frame-paced scroll，不作为自动化测试替代。
+
+| 场景 | 需要确认 |
+|------|---------|
+| 前台窗口 hover + 鼠标滚轮 | 向下滚一刻度时 debug `target` 约增加 54px；向上滚一刻度时 `target` 约减少 54px或在顶部保持 0 |
+| 后台/非激活窗口 hover + 鼠标滚轮 | 不产生长时间追赶；焦点/hover 行为符合当前平台输入策略 |
+| 240Hz / 180Hz / 120Hz / 60Hz 显示器 | 动画速度一致，不依赖固定 16ms/60fps 假设 |
+| Windows 11 DRR 开 / 关 | 停止滚轮后短时间内停止，不继续排队十几秒 |
+| 快速连续 100 次 wheel | debug `frameQueued` 期间只累加 pending；停止输入后快速收敛 |
+
+---
+
+## 7c. 已知问题清单（2026-05-08）
 
 以下为本轮诊断/验证中发现的已知问题，记录但不在本轮扩功能修复。
 

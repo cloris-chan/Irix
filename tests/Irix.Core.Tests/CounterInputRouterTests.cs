@@ -112,14 +112,14 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // One full notch: 120 units → 120/120 * 3 lines * 18px = 54px
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
-        var result = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta));
+        // One full downward notch: -120 units → 120/120 * 3 lines * 18px = 54px
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
+        var result = app.Update(model, new CounterMessage.ScrollFrame(delta, 0));
         Assert.Equal(54, result.NextModel.Scroll.TargetPosition);
         Assert.True(result.NextModel.Scroll.IsAnimating);
 
         // Tick to animate toward target
-        result = app.Update(result.NextModel, new CounterMessage.ScrollTick(1.0));
+        result = app.Update(result.NextModel, new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 0), 1.0));
         Assert.True(result.NextModel.Scroll.Position > 0);
     }
 
@@ -130,8 +130,8 @@ public sealed class CounterInputRouterTests
         var model = app.Initialize();
 
         // Scroll up when at 0 → target stays at 0
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
-        var result = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta));
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        var result = app.Update(model, new CounterMessage.ScrollFrame(delta, 0));
         Assert.Equal(0, result.NextModel.Scroll.TargetPosition);
     }
 
@@ -141,11 +141,11 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // 4 small deltas of 30 = 120 total → 54px (same as one notch)
+        // 4 small downward deltas of -30 = -120 total → 54px (same as one notch)
         for (var i = 0; i < 4; i++)
         {
-            var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30);
-            model = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta)).NextModel;
+            var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -30);
+            model = app.Update(model, new CounterMessage.ScrollFrame(delta, 0)).NextModel;
         }
         Assert.Equal(54, model.Scroll.TargetPosition);
     }
@@ -156,11 +156,11 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta)).NextModel;
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
+        model = app.Update(model, new CounterMessage.ScrollFrame(delta, 0)).NextModel;
         for (var i = 0; i < 120; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollTick(1.0 / 60.0)).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 0), 1.0 / 60.0)).NextModel;
         }
 
         Assert.False(model.Scroll.IsAnimating);
@@ -207,13 +207,55 @@ public sealed class CounterInputRouterTests
         Assert.Equal(diag.ScrollY, Math.Min(100, diag.MaxScrollY));
     }
 
+    [Fact]
+    public void Counter_default_view_is_scrollable_at_default_window_size()
+    {
+        var app = new CounterApplication();
+        var tree = app.BuildView(app.Initialize());
+
+        var builder = new LayoutTreeBuilder();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var result = builder.BuildLayoutTree(tree.Root, viewport);
+
+        var diag = Assert.Single(result.ScrollDiagnostics);
+        Assert.True(diag.ContentHeight > diag.VisibleHeight);
+        Assert.True(diag.MaxScrollY >= 54);
+    }
+
+    [Fact]
+    public void Single_notch_scroll_target_survives_default_max_scroll_feedback()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+        var tree = app.BuildView(model);
+
+        var builder = new LayoutTreeBuilder();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var diag = Assert.Single(builder.BuildLayoutTree(tree.Root, viewport).ScrollDiagnostics);
+
+        model = app.Update(model, new CounterMessage.UpdateMaxScrollY(diag.MaxScrollY)).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120),
+            0)).NextModel;
+
+        Assert.Equal(54, model.Scroll.TargetPosition);
+    }
+
     // ── ScrollController unit conversion tests ───────────────────────
 
     [Fact]
     public void ConvertToPixels_wheel_raw_one_notch()
     {
-        // 120 units × 3 lines/notch × 18px/line = 54px
+        // Windows raw wheel +120 is an upward wheel notch, so it decreases ScrollY.
         var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
+        var px = ScrollController.ConvertToPixels(delta, ScrollMetrics.DefaultText, SystemScrollSettings.Default);
+        Assert.Equal(-54.0, px);
+    }
+
+    [Fact]
+    public void ConvertToPixels_wheel_raw_negative_one_notch_scrolls_down()
+    {
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
         var px = ScrollController.ConvertToPixels(delta, ScrollMetrics.DefaultText, SystemScrollSettings.Default);
         Assert.Equal(54.0, px);
     }
@@ -221,10 +263,10 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void ConvertToPixels_wheel_raw_quarter_notch()
     {
-        // 30 units → 30/120 * 3 * 18 = 13.5px
+        // Windows raw +30 is an upward quarter notch.
         var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30);
         var px = ScrollController.ConvertToPixels(delta, ScrollMetrics.DefaultText, SystemScrollSettings.Default);
-        Assert.Equal(13.5, px);
+        Assert.Equal(-13.5, px);
     }
 
     [Fact]
@@ -259,7 +301,7 @@ public sealed class CounterInputRouterTests
         var state = ScrollState.Default;
 
         // Scroll way past content
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 12000);
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -12000);
         state = ScrollController.ApplyScrollDelta(state, delta, metrics, SystemScrollSettings.Default);
 
         // Target should be clamped to MaxScrollY = contentHeight - visibleHeight
@@ -272,8 +314,8 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void ApplyWheel_backward_compatible()
     {
-        // ApplyWheel uses defaults: 120/120 * 3 * 18 = 54px
-        var state = ScrollController.ApplyWheel(ScrollState.Default, 120);
+        // ApplyWheel uses Windows raw wheel direction: -120 scrolls down by 54px.
+        var state = ScrollController.ApplyWheel(ScrollState.Default, -120);
         Assert.Equal(54, state.TargetPosition);
     }
 
@@ -285,8 +327,8 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta)).NextModel;
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
+        model = app.Update(model, new CounterMessage.ScrollFrame(delta, 0)).NextModel;
 
         Assert.Equal(54.0, model.Scroll.TargetPosition);
         Assert.True(model.Scroll.IsAnimating);
@@ -298,10 +340,10 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120), 0)).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120), 0)).NextModel;
 
         Assert.Equal(108.0, model.Scroll.TargetPosition);
     }
@@ -312,13 +354,13 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120))).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120), 0)).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120), 0)).NextModel;
 
         Assert.Equal(0.0, model.Scroll.TargetPosition);
-        model = app.Update(model, new CounterMessage.ScrollTick(1.0 / 60.0)).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 0), 1.0 / 60.0)).NextModel;
         Assert.False(model.Scroll.IsAnimating);
     }
 
@@ -328,12 +370,12 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta)).NextModel;
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
+        model = app.Update(model, new CounterMessage.ScrollFrame(delta, 0)).NextModel;
 
         for (var i = 0; i < 120; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollTick(1.0 / 60.0)).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 0), 1.0 / 60.0)).NextModel;
         }
 
         Assert.False(model.Scroll.IsAnimating);
@@ -347,14 +389,14 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120), 0)).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120), 0)).NextModel;
 
         for (var i = 0; i < 120; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollTick(1.0 / 60.0)).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 0), 1.0 / 60.0)).NextModel;
         }
 
         Assert.False(model.Scroll.IsAnimating);
@@ -372,8 +414,8 @@ public sealed class CounterInputRouterTests
         model = app.Update(model, new CounterMessage.UpdateMaxScrollY(100)).NextModel;
 
         // Scroll way past content
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 12000);
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta)).NextModel;
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -12000);
+        model = app.Update(model, new CounterMessage.ScrollFrame(delta, 0)).NextModel;
 
         Assert.Equal(100.0, model.Scroll.TargetPosition); // clamped to MaxScrollY
     }
@@ -385,8 +427,8 @@ public sealed class CounterInputRouterTests
         var model = app.Initialize();
 
         // Scroll to 200
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 2400))).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -2400), 0)).NextModel;
         Assert.True(model.Scroll.TargetPosition > 100);
 
         // Update MaxScrollY to 100 — should clamp target
@@ -412,6 +454,21 @@ public sealed class CounterInputRouterTests
         Assert.Contains("acc=", debugText);
     }
 
+    [Fact]
+    public void Debug_display_distinguishes_unknown_and_known_zero_max_scroll()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        var debugText = app.BuildView(model).Root.Children[1].Content.Text;
+        Assert.Contains("max=unknown", debugText);
+
+        model = app.Update(model, new CounterMessage.UpdateMaxScrollY(0)).NextModel;
+        debugText = app.BuildView(model).Root.Children[1].Content.Text;
+
+        Assert.Contains("max=0(known-zero)", debugText);
+    }
+
     // ── HasMaxScrollY tests ────────────────────────────────────────────
 
     [Fact]
@@ -424,8 +481,8 @@ public sealed class CounterInputRouterTests
         // Scroll way past any reasonable content height
         for (var i = 0; i < 10; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120), 0)).NextModel;
         }
 
         // Without MaxScrollY known, target grows unbounded (no upper clamp)
@@ -444,8 +501,8 @@ public sealed class CounterInputRouterTests
         Assert.True(model.Scroll.HasMaxScrollY);
 
         // Scroll past content
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 12000))).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -12000), 0)).NextModel;
 
         Assert.Equal(100.0, model.Scroll.TargetPosition);
     }
@@ -457,8 +514,8 @@ public sealed class CounterInputRouterTests
         var model = app.Initialize();
 
         // Scroll first
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, 240))).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -240), 0)).NextModel;
         Assert.True(model.Scroll.TargetPosition > 0);
 
         // Set MaxScrollY=0 (content fits in viewport — no scrolling needed)
@@ -494,15 +551,15 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void Rapid_100_deltas_target_correct()
     {
-        // Simulate rapid scrolling: 100 small deltas of 30 units each
-        // 100 × 30 = 3000 total → 3000/120 × 3 × 18 = 1350px
+        // Simulate rapid downward scrolling: 100 small deltas of -30 units each
+        // 100 × -30 = -3000 total → 3000/120 × 3 × 18 = 1350px
         var app = new CounterApplication();
         var model = app.Initialize();
 
         for (var i = 0; i < 100; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30))).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, -30), 0)).NextModel;
         }
 
         Assert.Equal(1350.0, model.Scroll.TargetPosition);
@@ -517,8 +574,8 @@ public sealed class CounterInputRouterTests
 
         for (var i = 0; i < 100; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 30))).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, -30), 0)).NextModel;
         }
 
         var target = model.Scroll.TargetPosition;
@@ -526,7 +583,7 @@ public sealed class CounterInputRouterTests
         // Animate for 2 seconds (120 frames at 60fps)
         for (var i = 0; i < 120; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollTick(1.0 / 60.0)).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 0), 1.0 / 60.0)).NextModel;
         }
 
         Assert.False(model.Scroll.IsAnimating);
@@ -542,21 +599,21 @@ public sealed class CounterInputRouterTests
 
         // Accumulate 100px of pending delta (simulating coalesced input)
         var coalescedDelta = new ScrollDelta(ScrollDeltaUnit.Pixel, 100.0);
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(coalescedDelta)).NextModel;
+        model = app.Update(model, new CounterMessage.ScrollFrame(coalescedDelta, 0)).NextModel;
 
         Assert.Equal(100.0, model.Scroll.TargetPosition);
         Assert.True(model.Scroll.IsAnimating);
     }
 
     [Fact]
-    public void ScrollDeltaMsg_sets_target_without_moving_position()
+    public void ScrollFrame_dt_zero_sets_target_without_moving_position()
     {
         // First frame with dt=0 should apply delta but not advance animation
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
-        model = app.Update(model, new CounterMessage.ScrollDeltaMsg(delta)).NextModel;
+        var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
+        model = app.Update(model, new CounterMessage.ScrollFrame(delta, 0)).NextModel;
 
         // Target should be set
         Assert.Equal(54.0, model.Scroll.TargetPosition);
@@ -575,8 +632,8 @@ public sealed class CounterInputRouterTests
         // Rapid phase: 50 deltas of 120 units each
         for (var i = 0; i < 50; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollDeltaMsg(
-                new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120))).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(
+                new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120), 0)).NextModel;
         }
 
         var target = model.Scroll.TargetPosition;
@@ -585,7 +642,7 @@ public sealed class CounterInputRouterTests
         // Slow animation phase: 3 seconds at 60fps
         for (var i = 0; i < 180; i++)
         {
-            model = app.Update(model, new CounterMessage.ScrollTick(1.0 / 60.0)).NextModel;
+            model = app.Update(model, new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 0), 1.0 / 60.0)).NextModel;
         }
 
         Assert.False(model.Scroll.IsAnimating);

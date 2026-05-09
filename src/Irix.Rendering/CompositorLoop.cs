@@ -6,16 +6,17 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
 {
     private readonly ICompositor _compositor;
     private readonly IPatchBatchTranslator _translator;
-    private readonly Channel<PatchBatch> _channel;
+    private readonly Channel<CompositorWorkItem> _channel;
+    private readonly Lock _renderRequestGate = new();
     private readonly Task _processingTask;
-    private int _renderRequestQueued;
-    private int _renderRequestDirty;
+    private bool _renderRequestQueued;
+    private RenderRequestWaitGroup? _queuedRenderRequestWaitGroup;
 
     public CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor)
     {
         _translator = translator;
         _compositor = compositor;
-        _channel = Channel.CreateUnbounded<PatchBatch>(new UnboundedChannelOptions
+        _channel = Channel.CreateUnbounded<CompositorWorkItem>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
@@ -25,19 +26,17 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
 
     public ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
     {
-        return _channel.Writer.WriteAsync(patchBatch, cancellationToken);
+        return _channel.Writer.WriteAsync(new CompositorWorkItem(patchBatch, null), cancellationToken);
     }
 
     public ValueTask RequestRenderAsync(CancellationToken cancellationToken = default)
     {
-        if (cancellationToken.IsCancellationRequested)
-        {
-            return ValueTask.FromCanceled(cancellationToken);
-        }
+        return RequestRenderCoreAsync(waitForCompletion: false, cancellationToken);
+    }
 
-        Interlocked.Exchange(ref _renderRequestDirty, 1);
-        ScheduleRenderRequest();
-        return ValueTask.CompletedTask;
+    public ValueTask RequestRenderAndWaitAsync(CancellationToken cancellationToken = default)
+    {
+        return RequestRenderCoreAsync(waitForCompletion: true, cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -46,15 +45,54 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
         await _processingTask;
     }
 
+    private ValueTask RequestRenderCoreAsync(bool waitForCompletion, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        RenderRequestWaitGroup waitGroup;
+        RenderRequestWaitGroup? waitGroupToSchedule = null;
+        Task? waitTask = null;
+
+        lock (_renderRequestGate)
+        {
+            if (!_renderRequestQueued)
+            {
+                _renderRequestQueued = true;
+                _queuedRenderRequestWaitGroup = new RenderRequestWaitGroup();
+                waitGroupToSchedule = _queuedRenderRequestWaitGroup;
+            }
+
+            waitGroup = _queuedRenderRequestWaitGroup
+                ?? throw new InvalidOperationException("No render request wait group is queued.");
+
+            if (waitForCompletion)
+            {
+                waitTask = waitGroup.AddWaiter();
+            }
+        }
+
+        if (waitGroupToSchedule is not null)
+        {
+            ScheduleRenderRequest(waitGroupToSchedule);
+        }
+
+        return waitTask is null
+            ? ValueTask.CompletedTask
+            : new ValueTask(waitTask.WaitAsync(cancellationToken));
+    }
+
     private async Task ProcessAsync()
     {
-        await foreach (var patchBatch in _channel.Reader.ReadAllAsync())
+        await foreach (var workItem in _channel.Reader.ReadAllAsync())
         {
+            var patchBatch = workItem.PatchBatch;
             var isRenderRequest = patchBatch.Kind == PatchBatchKind.RenderRequest;
             if (isRenderRequest)
             {
-                Interlocked.Exchange(ref _renderRequestQueued, 0);
-                Interlocked.Exchange(ref _renderRequestDirty, 0);
+                MarkRenderRequestStarted(workItem.RenderRequestWaitGroup);
             }
             else if (patchBatch.Count == 0)
             {
@@ -63,31 +101,120 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
                 continue;
             }
 
-            using (patchBatch)
+            Exception? renderError = null;
+            try
             {
-                using var renderFrameBatch = _translator.Translate(patchBatch);
-                await _compositor.RenderAsync(renderFrameBatch);
+                using (patchBatch)
+                {
+                    using var renderFrameBatch = _translator.Translate(patchBatch);
+                    await _compositor.RenderAsync(renderFrameBatch);
+                }
             }
-
-            if (isRenderRequest && Interlocked.Exchange(ref _renderRequestDirty, 0) == 1)
+            catch (Exception ex)
             {
-                ScheduleRenderRequest();
+                renderError = ex;
+                throw;
+            }
+            finally
+            {
+                if (isRenderRequest)
+                {
+                    workItem.RenderRequestWaitGroup?.Complete(renderError);
+                }
             }
         }
     }
 
-    private void ScheduleRenderRequest()
+    private void ScheduleRenderRequest(RenderRequestWaitGroup waitGroup)
     {
-        if (Interlocked.CompareExchange(ref _renderRequestQueued, 1, 0) != 0)
-        {
-            return;
-        }
-
         var patchBatch = PatchBatch.CreateRenderRequest();
-        if (!_channel.Writer.TryWrite(patchBatch))
+        if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup)))
         {
             patchBatch.Dispose();
-            Interlocked.Exchange(ref _renderRequestQueued, 0);
+            MarkRenderRequestScheduleFailed(waitGroup);
+            waitGroup.Complete(new InvalidOperationException("Unable to enqueue render request."));
+        }
+    }
+
+    private void MarkRenderRequestStarted(RenderRequestWaitGroup? waitGroup)
+    {
+        lock (_renderRequestGate)
+        {
+            if (ReferenceEquals(_queuedRenderRequestWaitGroup, waitGroup))
+            {
+                _queuedRenderRequestWaitGroup = null;
+            }
+
+            _renderRequestQueued = false;
+        }
+    }
+
+    private void MarkRenderRequestScheduleFailed(RenderRequestWaitGroup waitGroup)
+    {
+        lock (_renderRequestGate)
+        {
+            if (ReferenceEquals(_queuedRenderRequestWaitGroup, waitGroup))
+            {
+                _queuedRenderRequestWaitGroup = null;
+                _renderRequestQueued = false;
+            }
+        }
+    }
+
+    private readonly record struct CompositorWorkItem(
+        PatchBatch PatchBatch,
+        RenderRequestWaitGroup? RenderRequestWaitGroup);
+
+    private sealed class RenderRequestWaitGroup
+    {
+        private readonly Queue<TaskCompletionSource> _waiters = new();
+        private bool _isCompleted;
+        private Exception? _error;
+
+        public Task AddWaiter()
+        {
+            lock (_waiters)
+            {
+                if (_isCompleted)
+                {
+                    return _error is null
+                        ? Task.CompletedTask
+                        : Task.FromException(_error);
+                }
+
+                var waiter = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _waiters.Enqueue(waiter);
+                return waiter.Task;
+            }
+        }
+
+        public void Complete(Exception? error)
+        {
+            TaskCompletionSource[] waiters;
+            lock (_waiters)
+            {
+                if (_isCompleted)
+                {
+                    return;
+                }
+
+                _isCompleted = true;
+                _error = error;
+                waiters = _waiters.ToArray();
+                _waiters.Clear();
+            }
+
+            foreach (var waiter in waiters)
+            {
+                if (error is null)
+                {
+                    waiter.TrySetResult();
+                }
+                else
+                {
+                    waiter.TrySetException(error);
+                }
+            }
         }
     }
 }

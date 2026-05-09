@@ -169,7 +169,7 @@ internal static class ScrollController
             ScrollDeltaUnit.Line => delta.Value * lineExtent,
             ScrollDeltaUnit.Pixel => delta.Value,
             ScrollDeltaUnit.Page => delta.Value * pageExtent,
-            ScrollDeltaUnit.WheelRaw => delta.Value
+            ScrollDeltaUnit.WheelRaw => -delta.Value
                 / settings.WheelUnitsPerNotch
                 * settings.LinesPerWheelNotch
                 * lineExtent,

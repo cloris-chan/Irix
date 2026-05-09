@@ -8,7 +8,7 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
 {
     private readonly IApplication<TModel, TMessage> _application;
     private readonly IVirtualNodePatchSink _patchSink;
-    private readonly Channel<TMessage> _messageChannel;
+    private readonly Channel<QueuedMessage> _messageChannel;
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly Task _processingTask;
 
@@ -20,7 +20,7 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
     {
         _application = application;
         _patchSink = patchSink;
-        _messageChannel = Channel.CreateUnbounded<TMessage>(new UnboundedChannelOptions
+        _messageChannel = Channel.CreateUnbounded<QueuedMessage>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = false
@@ -51,10 +51,28 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
     {
         ObjectDisposedException.ThrowIf(_cancellationTokenSource.IsCancellationRequested, this);
 
-        if (!_messageChannel.Writer.TryWrite(message))
+        if (!_messageChannel.Writer.TryWrite(new QueuedMessage(message, null)))
         {
             throw new InvalidOperationException("Unable to enqueue message.");
         }
+    }
+
+    internal Task DispatchAndWaitAsync(TMessage message, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_cancellationTokenSource.IsCancellationRequested, this);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled(cancellationToken);
+        }
+
+        var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_messageChannel.Writer.TryWrite(new QueuedMessage(message, processed)))
+        {
+            throw new InvalidOperationException("Unable to enqueue message.");
+        }
+
+        return processed.Task.WaitAsync(cancellationToken);
     }
 
     public async ValueTask DisposeAsync()
@@ -75,19 +93,32 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
 
     private async Task ProcessMessagesAsync()
     {
-        await foreach (var message in _messageChannel.Reader.ReadAllAsync(_cancellationTokenSource.Token))
+        await foreach (var queuedMessage in _messageChannel.Reader.ReadAllAsync(_cancellationTokenSource.Token))
         {
-            var updateResult = _application.Update(_currentModel, message);
-            _currentModel = updateResult.NextModel;
+            try
+            {
+                var updateResult = _application.Update(_currentModel, queuedMessage.Message);
+                _currentModel = updateResult.NextModel;
 
-            var nextTree = _application.BuildView(_currentModel);
-            var patchBatch = VirtualNodeDiffer.CreatePatchBatch(_currentTree, nextTree);
-            _currentTree = nextTree;
+                var nextTree = _application.BuildView(_currentModel);
+                var patchBatch = VirtualNodeDiffer.CreatePatchBatch(_currentTree, nextTree);
+                _currentTree = nextTree;
 
-            await _patchSink.PublishAsync(patchBatch, _cancellationTokenSource.Token);
-            await ExecuteCommandAsync(updateResult.Command, _cancellationTokenSource.Token);
+                await _patchSink.PublishAsync(patchBatch, _cancellationTokenSource.Token);
+                await ExecuteCommandAsync(updateResult.Command, _cancellationTokenSource.Token);
+                queuedMessage.Processed?.TrySetResult();
+            }
+            catch (Exception ex)
+            {
+                queuedMessage.Processed?.TrySetException(ex);
+                throw;
+            }
         }
     }
+
+    private readonly record struct QueuedMessage(
+        TMessage Message,
+        TaskCompletionSource? Processed);
 
     private async ValueTask ExecuteCommandAsync(Command<TMessage>? command, CancellationToken cancellationToken)
     {
