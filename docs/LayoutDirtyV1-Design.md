@@ -31,3 +31,20 @@ Layout dirty v1 is a diagnostic and planning step before partial layout. The cur
 - `LayoutTreeBuilder` still performs a full layout rebuild for dirty nodes, tree changes, and viewport changes.
 - `dirtyElementRanges` and dirty command ranges remain diagnostics for retained command replacement; they are not partial layout.
 - `--diagnose` and tests use rebuild reason output to make future partial-layout work auditable before behavior changes.
+
+## Stage Freeze
+
+- Layout dirty v1 diagnostics are complete for this stage: reason tracking, debug UI visibility, `--diagnose-input` dirty reason output, tests, and docs are closed.
+- Do not continue expanding dirty diagnostics in this stage unless fixing a concrete regression in the existing outputs.
+- Do not skip `StyleOnly` layout in this stage. A dirty DFS node still causes the same full `LayoutTreeBuilder` rebuild path as before.
+- Do not implement partial layout, local subtree layout, or a `LayoutTreeBuilder` rewrite as part of layout dirty v1 closure.
+
+## StyleOnly Fast-Path Evaluation
+
+This is design-only. It is not implemented in layout dirty v1.
+
+`StyleOnly` could reuse retained layout data only when the dirty node is known to preserve element count, element order, bounds, clip bounds, scroll diagnostics, and command range mapping. Candidate reusable data would be the retained `LayoutTreeResult.Elements`, layout tree node DFS-to-element ranges, viewport, scroll diagnostics, and existing element bounds/clip rectangles.
+
+Even with retained layout reuse, the affected draw command ranges still need to be rerecorded because hover, pressed, and focused state can change button fill color. Hit targets also need to be rebuilt or patched for affected elements because `ActionId` is currently classified as style-only metadata: its geometry may be stable, but the target action string is not safe to reuse blindly. Resource ownership remains a separate concern; any command patch must respect the current frame resource lifetime and retained command buffer rules.
+
+A future `StyleOnly` fast path must bail out to full layout whenever the dirty classification contains `TextSizeAffecting`, `LayoutAffecting`, `TreeStructure`, `ViewportChanged`, unknown layout-affecting attributes, content changes that can affect measurement, or child shape/key/order changes. It also needs focused tests proving that bounds, clips, hit target geometry, scroll diagnostics, and command ranges are unchanged while visual commands and hit target metadata update correctly.

@@ -369,7 +369,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 引入最小 `RetainedTree`：单次 DFS 遍历应用 ReplaceRoot/Update/Add/Remove patch，返回去重升序 dirty 节点索引集合；13 个测试覆盖 replace root、update、add、remove、keyed reconciliation、多 patch 组合、empty batch、diff→apply 等价性、dirty 排序去重、layout dirty v0、RenderPipeline dirty-driven rebuild、Translator RetainedTree 集成
 - [x] `RenderPipeline` 接入 `RetainedTree`：Translator 持有 RetainedTree，diff batch 调用 Apply 并传递 dirty set，render request 只复用 retained tree；LayoutTreeBuilder 接受 dirty nodes 参数（v0 全量重建）
 - [x] Layout dirty v0：`LayoutTreeBuilder.Build(root, viewport, dirtyNodes)` 接口已落地，当前为全量重建，dirty set 透传用于后续增量布局
-- [x] Layout dirty v1 诊断设计：见 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md)；`RenderPipeline` 记录 `LastLayoutRebuildReason`、`LayoutRebuildCount` 与 `LastDirtyClassifications`，`--debug-ui` 显示 layout dirty 行且手测 hover/press/scroll/resize dirty reason 已通过；`--diagnose-input` 输出 hover-only / press / release dirty reason；真实 PoC 路径测试覆盖 hover-only `StyleOnly`、press `StyleOnly`、scroll `LayoutAffecting`、resize `ViewportChanged`、release `TextSizeAffecting` 与混合 dirty 优先级；当前仍全量 rebuild，不做 partial layout
+- [x] Layout dirty v1 诊断闭环完成：见 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md)；`RenderPipeline` 记录 `LastLayoutRebuildReason`、`LayoutRebuildCount` 与 `LastDirtyClassifications`，`--debug-ui` 显示 layout dirty 行且手测 hover/press/scroll/resize dirty reason 已通过；`--diagnose-input` 输出 hover-only / press / release dirty reason；真实 PoC 路径测试覆盖 hover-only `StyleOnly`、press `StyleOnly`、scroll `LayoutAffecting`、resize `ViewportChanged`、release `TextSizeAffecting` 与混合 dirty 优先级；本阶段冻结诊断扩展，当前仍全量 rebuild，不跳过 `StyleOnly`，不做 partial layout，不改 `LayoutTreeBuilder`
 - [x] 建立 LayoutTree 中间结构：`LayoutTreeNode` 记录 DFS index、element kind、element range；`LayoutTreeResult` 携带 flat elements、tree nodes、dirty element ranges
 - [x] dirty layout v1：dirty 非空时，构建 layout tree 并计算 dirty node 对应的 layout element ranges；单个 Text update 只影响 1 个 element range
 - [x] dirty → affected layout range 映射：`RenderPipeline.LastDirtyElementRanges` 暴露最近一次 Build 的 dirty element ranges，可定位需要重录的 draw commands
@@ -572,6 +572,8 @@ root clip semantics v0 已阶段完成：`Depth == 0` 的 root `ScrollContainer`
 | dirtyReason hoverOnly | `reason=StyleOnly classifications=4:StyleOnly` |
 | dirtyReason press | `reason=StyleOnly classifications=4:StyleOnly` |
 | dirtyReason release | `reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly` |
+
+Layout dirty v1 诊断到此闭环并冻结：reason tracking、`--debug-ui` 可视化、`--diagnose-input` CLI dirty reason、测试与文档均已覆盖；后续不继续扩展诊断面，除非修复现有输出的明确回归。`StyleOnly` fast-path 仅保留设计评估：未来可以复用 retained layout 的 bounds / clip / scroll diagnostics / element-command range，但仍需重录受影响 draw commands，并更新 hit target metadata；当前不跳过 `StyleOnly` layout，不做局部 layout，不改 `LayoutTreeBuilder`。
 
 ---
 
