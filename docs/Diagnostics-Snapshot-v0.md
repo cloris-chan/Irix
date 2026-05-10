@@ -1,6 +1,6 @@
 # Diagnostics Snapshot v0 Design
 
-> 本文记录 diagnostics snapshot 的 v0 数据边界与已落地样板。不改变 `--diagnose*` / `--debug-ui` 的文本输出。当前 CLI diagnostics surface 已经 snapshot-first 闭环，formatter 已抽出，debug UI snapshot bridge v0 已覆盖当前 debug header rows；统一 diagnostics channel 尚未完成。
+> 本文记录 diagnostics snapshot 的 v0 数据边界与已落地样板。不改变 `--diagnose*` / `--debug-ui` 的文本输出。CLI diagnostics snapshot v0 和 debug UI snapshot bridge v0 已完成并封版；后续这条线只修 regression。统一 diagnostics channel 暂缓。
 
 ## 1. 目标
 
@@ -49,7 +49,8 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 - `Program.cs` still owns scripted diagnostic runners and snapshot production adapters.
 - CLI snapshot v0 is closed for the current text surface: every existing `--diagnose*` block either formats from a snapshot directly or builds snapshot lines before writing stdout.
 - Debug UI snapshot bridge v0 is closed for the current debug header rows: Viewport, Scroll, Input, ClipMode, and LayoutDirty rows now format from `DefaultDebugDiagnosticsSnapshotBridge` / `DebugUiDiagnosticsSnapshot` through `DebugDiagnosticsFormatter`.
-- Unified diagnostics channel is not implemented. No event bus, subscription API, or debug overlay replacement exists in this stage.
+- Diagnostics snapshot v0 is now frozen. Do not add formatter fields, new debug header rows, or new snapshot surfaces unless fixing a regression in the existing contract.
+- Unified diagnostics channel is postponed. No event bus, registry, subscription API, or debug overlay replacement exists in this stage.
 
 ## 6. CLI 文本冻结规则
 
@@ -81,7 +82,8 @@ internal readonly record struct DebugUiDiagnosticsSnapshot(
 internal sealed class DefaultDebugDiagnosticsSnapshotBridge(
 	CounterViewportDiagnostics viewport,
 	CounterLayoutDiagnostics layout,
-	ScrollState scroll) : IDebugDiagnosticsSnapshotBridge;
+	ScrollState scroll,
+	OwnershipSnapshot inputOwnership) : IDebugDiagnosticsSnapshotBridge;
 ```
 
 Provider v0 direction:
@@ -93,14 +95,14 @@ internal interface IDiagnosticsProvider<out TSnapshot>
 }
 ```
 
-This is only a local capture contract. It does not introduce a global diagnostics channel, event bus, or runner replacement.
+This is only a local capture contract. It does not introduce a global diagnostics channel, event bus, registry, or runner replacement.
 
 Bridge rules:
 
 - The bridge may temporarily adapt existing PoC-owned state and `Program.Diag*` statics, but those statics should become implementation details rather than UI-facing API.
 - Debug UI rendering consumes `DebugUiDiagnosticsSnapshot` for current header rows and uses `DebugDiagnosticsFormatter` for stable row text.
 - The bridge must stay read-only and must not dispatch runtime messages, trigger renders, or mutate scroll/input/backend state.
-- Further wiring should replace one row at a time and keep overlay text unchanged.
+- Bridge v0 is complete for current debug header rows; further formatter expansion is paused unless required for regression repair.
 
 ## 8. 已落地样板
 
@@ -127,6 +129,8 @@ Implemented sixth sample: `InputDiagnosticsSnapshot` minimal. `--diagnose-input`
 Snapshot type extraction is complete for the v0 CLI-facing PoC snapshots: `DiagnosticsFormatter` no longer references `Program.XSnapshot` nested types.
 
 Debug bridge v0 wiring is complete for the current debug header rows: Viewport, Scroll, Input, ClipMode, and LayoutDirty. `CounterApplication` captures `DebugUiDiagnosticsSnapshot` through `DefaultDebugDiagnosticsSnapshotBridge` and delegates row text to `DebugDiagnosticsFormatter`.
+
+Diagnostics snapshot v0 is sealed at this point. The line should be treated as regression-only until a separate design reopens unified diagnostics channel work.
 
 ## 9. 暂不迁出文件
 
@@ -155,4 +159,5 @@ Further implementation steps should add snapshot data next to the current owner 
 | Design diagnostics provider v0 | Done in `DiagnosticsProvider.cs`; it defines local `Capture()` direction only and does not replace runners. |
 | Design debug UI snapshot bridge | Done in `DebugUiDiagnosticsSnapshotBridge.cs`; default bridge is unit-testable. |
 | Complete debug UI bridge v0 | Done for Viewport, Scroll, Input, ClipMode, and LayoutDirty rows; overlay text remains unchanged. |
+| Seal diagnostics snapshot v0 | Done; this line is regression-only until unified diagnostics channel work is explicitly reopened. |
 | Do not move runtime ownership | Covered by the no-move list. |
