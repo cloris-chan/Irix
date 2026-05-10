@@ -96,7 +96,7 @@ internal static class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, TryGetActionIdAt, out var message, out var shouldRefreshInputVisualState))
+            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, TryGetActionIdAt, out var message))
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
@@ -114,10 +114,6 @@ internal static class Program
                 {
                     runtime.Dispatch(message);
                 }
-            }
-            else if (shouldRefreshInputVisualState)
-            {
-                runtime.Dispatch(new CounterMessage.InputVisualStateChanged());
             }
         }
 
@@ -177,16 +173,28 @@ internal static class Program
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
         Func<int, int, string?> tryGetActionIdAt,
-        out CounterMessage? message,
-        out bool shouldRefreshInputVisualState)
+        out CounterMessage? message)
     {
         var before = ownershipState.Snapshot;
         var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, tryGetActionIdAt, out var mappedMessage);
         var after = ownershipState.Snapshot;
 
-        message = mapped ? mappedMessage : null;
-        shouldRefreshInputVisualState = !mapped && before != after;
-        return mapped;
+        if (mapped)
+        {
+            message = mappedMessage is CounterMessage.WheelRaw
+                ? mappedMessage
+                : new CounterMessage.RoutedInput(mappedMessage, after);
+            return true;
+        }
+
+        if (before != after)
+        {
+            message = new CounterMessage.InputVisualStateChanged(after);
+            return true;
+        }
+
+        message = null;
+        return false;
     }
 
     internal static async Task RunInputDiagnosticModeAsync(

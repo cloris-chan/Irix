@@ -251,18 +251,49 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void InputVisualStateChanged_keeps_model_unchanged()
+    public void InputVisualStateChanged_updates_model_snapshot_without_changing_count_or_scroll()
     {
         var app = new CounterApplication();
         var model = app.Initialize();
+        var snapshot = new OwnershipSnapshot(
+            HoveredTarget: nameof(CounterMessage.Increment),
+            FocusedTarget: null,
+            PressedTarget: null,
+            CapturedTarget: null,
+            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
+            LastHoverLeftTarget: null,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
 
-        var result = app.Update(model, new CounterMessage.InputVisualStateChanged());
+        var result = app.Update(model, new CounterMessage.InputVisualStateChanged(snapshot));
 
-        Assert.Equal(model, result.NextModel);
+        Assert.Equal(model.Count, result.NextModel.Count);
+        Assert.Equal(model.Scroll, result.NextModel.Scroll);
+        Assert.Equal(snapshot, result.NextModel.InputOwnership);
     }
 
     [Fact]
-    public void Program_input_mapping_requests_visual_refresh_for_hover_only_change()
+    public void RoutedInput_applies_action_and_snapshot_in_one_update()
+    {
+        var app = new CounterApplication();
+        var snapshot = new OwnershipSnapshot(
+            HoveredTarget: nameof(CounterMessage.Decrement),
+            FocusedTarget: nameof(CounterMessage.Increment),
+            PressedTarget: null,
+            CapturedTarget: null,
+            LastHoverEnteredTarget: nameof(CounterMessage.Decrement),
+            LastHoverLeftTarget: nameof(CounterMessage.Increment),
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+
+        var result = app.Update(app.Initialize(), new CounterMessage.RoutedInput(new CounterMessage.Increment(), snapshot));
+
+        Assert.Equal(1, result.NextModel.Count);
+        Assert.Equal(snapshot, result.NextModel.InputOwnership);
+    }
+
+    [Fact]
+    public void Program_input_mapping_returns_visual_refresh_for_hover_only_change()
     {
         var ownershipState = new InputOwnershipState();
 
@@ -270,12 +301,11 @@ public sealed class CounterInputRouterTests
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
             ownershipState,
             HitIncrementAtButton,
-            out var message,
-            out var shouldRefreshInputVisualState);
+            out var message);
 
-        Assert.False(mapped);
-        Assert.Null(message);
-        Assert.True(shouldRefreshInputVisualState);
+        Assert.True(mapped);
+        var refresh = Assert.IsType<CounterMessage.InputVisualStateChanged>(message);
+        Assert.Equal(ownershipState.Snapshot, refresh.Snapshot);
         Assert.Equal(nameof(CounterMessage.Increment), ownershipState.HoveredTarget);
     }
 
@@ -287,23 +317,20 @@ public sealed class CounterInputRouterTests
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
             ownershipState,
             HitIncrementAtButton,
-            out _,
             out _);
 
         var mapped = Program.TryMapInputForRuntime(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 2, X: 32, Y: 140),
             ownershipState,
             HitIncrementAtButton,
-            out var message,
-            out var shouldRefreshInputVisualState);
+            out var message);
 
         Assert.False(mapped);
         Assert.Null(message);
-        Assert.False(shouldRefreshInputVisualState);
     }
 
     [Fact]
-    public void Program_input_mapping_uses_action_message_to_refresh_release_state()
+    public void Program_input_mapping_wraps_action_with_latest_snapshot()
     {
         var ownershipState = new InputOwnershipState();
         Program.TryMapInputForRuntime(
@@ -315,8 +342,7 @@ public sealed class CounterInputRouterTests
                 Button: PointerButton.Left),
             ownershipState,
             HitIncrementAtButton,
-            out _,
-            out var pressRefresh);
+            out _);
 
         var mapped = Program.TryMapInputForRuntime(
             new RawInputEvent(
@@ -327,15 +353,156 @@ public sealed class CounterInputRouterTests
                 Button: PointerButton.Left),
             ownershipState,
             HitIncrementAtButton,
-            out var message,
-            out var shouldRefreshInputVisualState);
+            out var message);
 
-        Assert.True(pressRefresh);
         Assert.True(mapped);
-        Assert.IsType<CounterMessage.Increment>(message);
-        Assert.False(shouldRefreshInputVisualState);
+        var routed = Assert.IsType<CounterMessage.RoutedInput>(message);
+        Assert.IsType<CounterMessage.Increment>(routed.Action);
+        Assert.Equal(ownershipState.Snapshot, routed.Snapshot);
         Assert.Null(ownershipState.PressedTarget);
         Assert.Equal(nameof(CounterMessage.Increment), ownershipState.FocusedTarget);
+    }
+
+    [Fact]
+    public void Hover_only_input_updates_model_ownership_and_button_state()
+    {
+        var app = new CounterApplication();
+        var ownershipState = new InputOwnershipState();
+
+        var model = ApplyRuntimeInput(
+            app,
+            app.Initialize(),
+            ownershipState,
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140));
+
+        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.HoveredTarget);
+        AssertButtonState(app.BuildView(model), isHovered: true, isPressed: false, isFocused: false);
+    }
+
+    [Fact]
+    public void Press_input_updates_model_ownership_and_button_state()
+    {
+        var app = new CounterApplication();
+        var ownershipState = new InputOwnershipState();
+
+        var model = ApplyRuntimeInput(
+            app,
+            app.Initialize(),
+            ownershipState,
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left));
+
+        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.PressedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.CapturedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.FocusedTarget);
+        AssertButtonState(app.BuildView(model), isHovered: false, isPressed: true, isFocused: true);
+    }
+
+    [Fact]
+    public void Release_outside_applies_action_and_clears_pressed_state_in_same_model_update()
+    {
+        var app = new CounterApplication();
+        var ownershipState = new InputOwnershipState();
+        var model = ApplyRuntimeInput(
+            app,
+            app.Initialize(),
+            ownershipState,
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left));
+
+        model = ApplyRuntimeInput(
+            app,
+            model,
+            ownershipState,
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 2,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left));
+
+        Assert.Equal(1, model.Count);
+        Assert.Null(model.InputOwnership.PressedTarget);
+        Assert.Null(model.InputOwnership.CapturedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.FocusedTarget);
+        AssertButtonState(app.BuildView(model), isHovered: false, isPressed: false, isFocused: true);
+    }
+
+    [Fact]
+    public void Empty_press_clears_model_focus_and_button_state()
+    {
+        var app = new CounterApplication();
+        var ownershipState = new InputOwnershipState();
+        var model = ApplyRuntimeInput(
+            app,
+            app.Initialize(),
+            ownershipState,
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left));
+
+        model = ApplyRuntimeInput(
+            app,
+            model,
+            ownershipState,
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left));
+
+        Assert.Null(model.InputOwnership.FocusedTarget);
+        Assert.Null(model.InputOwnership.PressedTarget);
+        Assert.Null(model.InputOwnership.CapturedTarget);
+        Assert.True(model.InputOwnership.IsPointerPressed);
+        AssertButtonState(app.BuildView(model), isHovered: false, isPressed: false, isFocused: false);
+    }
+
+    [Fact]
+    public void Focus_lost_clears_model_ownership_and_button_state()
+    {
+        var app = new CounterApplication();
+        var ownershipState = new InputOwnershipState();
+        var model = ApplyRuntimeInput(
+            app,
+            app.Initialize(),
+            ownershipState,
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140));
+        model = ApplyRuntimeInput(
+            app,
+            model,
+            ownershipState,
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left));
+
+        model = ApplyRuntimeInput(
+            app,
+            model,
+            ownershipState,
+            new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 3, X: 0, Y: 0));
+
+        Assert.Null(model.InputOwnership.HoveredTarget);
+        Assert.Null(model.InputOwnership.FocusedTarget);
+        Assert.Null(model.InputOwnership.PressedTarget);
+        Assert.Null(model.InputOwnership.CapturedTarget);
+        Assert.False(model.InputOwnership.IsPointerPressed);
+        AssertButtonState(app.BuildView(model), isHovered: false, isPressed: false, isFocused: false);
     }
 
     [Fact]
@@ -554,6 +721,70 @@ public sealed class CounterInputRouterTests
     private static string? HitIncrementAtButton(int x, int y)
     {
         return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
+    }
+
+    private static CounterModel ApplyRuntimeInput(
+        CounterApplication app,
+        CounterModel model,
+        InputOwnershipState ownershipState,
+        RawInputEvent inputEvent)
+    {
+        return Program.TryMapInputForRuntime(inputEvent, ownershipState, HitIncrementAtButton, out var message) && message is not null and not CounterMessage.WheelRaw
+            ? app.Update(model, message).NextModel
+            : model;
+    }
+
+    private static void AssertButtonState(VirtualNodeTree tree, bool isHovered, bool isPressed, bool isFocused)
+    {
+        var button = FindButton(tree.Root, nameof(CounterMessage.Increment));
+        Assert.Equal(isHovered, GetBooleanAttribute(button, "IsHovered"));
+        Assert.Equal(isPressed, GetBooleanAttribute(button, "IsPressed"));
+        Assert.Equal(isFocused, GetBooleanAttribute(button, "IsFocused"));
+    }
+
+    private static VirtualNode FindButton(VirtualNode node, string actionId)
+    {
+        if (node.Kind == VirtualNodeKind.Button && GetTextAttribute(node, "ActionId") == actionId)
+        {
+            return node;
+        }
+
+        foreach (var child in node.Children)
+        {
+            var found = FindButton(child, actionId);
+            if (found.Kind == VirtualNodeKind.Button)
+            {
+                return found;
+            }
+        }
+
+        return default;
+    }
+
+    private static string? GetTextAttribute(VirtualNode node, string name)
+    {
+        foreach (var attribute in node.Attributes)
+        {
+            if (attribute.Name == name)
+            {
+                return attribute.Value.Text;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool GetBooleanAttribute(VirtualNode node, string name)
+    {
+        foreach (var attribute in node.Attributes)
+        {
+            if (attribute.Name == name)
+            {
+                return attribute.Value.Boolean;
+            }
+        }
+
+        return false;
     }
 
     private static string? HitIncrementOrDecrement(int x, int y)
