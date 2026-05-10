@@ -29,6 +29,7 @@
 | [Irix_Framework_Design.md](Irix_Framework_Design.md) | 总体架构、版本边界、主 ADR 索引、v1/v2 范围 |
 | [ADR-Scissor-Clipping-v0.md](ADR-Scissor-Clipping-v0.md) | clip/scissor/text clip v0 决策、smoke baseline、冻结边界 |
 | [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md) | layout dirty 分类、StyleOnly patch v0 设计、plan diagnostics、未来 fast-path 接入点 |
+| [V1-Consolidation-Prep.md](V1-Consolidation-Prep.md) | v1 architecture consolidation prep：模块边界、诊断入口、测试分组、暂不移动清单 |
 | [RetainedElementTree-Design.md](RetainedElementTree-Design.md) | 真正 retained element tree / local patch apply 的草案 |
 | [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
 
@@ -44,7 +45,7 @@
 ### 下一步候选
 
 - `StyleOnly fast-path implementation`：从 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point 开始，先把真实输入改为 retained layout + next `VirtualNode` metadata projection，不能依赖 next layout output。
-- `v1 architecture consolidation prep`：整理当前已冻结阶段的命名、文档入口、诊断命令、测试分组与架构边界，为后续 v1 主线收敛做准备。
+- `v1 architecture consolidation prep`：从 [V1-Consolidation-Prep.md](V1-Consolidation-Prep.md) 的模块边界、诊断入口、测试分组与暂不移动清单开始，为后续 v1 主线收敛做准备。
 
 ---
 
