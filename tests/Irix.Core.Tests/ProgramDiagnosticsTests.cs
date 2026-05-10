@@ -8,6 +8,8 @@ namespace Irix.Core.Tests;
 
 public sealed class ProgramDiagnosticsTests
 {
+    #region Scroll Snapshot
+
     [Fact]
     public async Task Diagnose_scroll_outputs_scroll_pump_counters()
     {
@@ -72,7 +74,7 @@ public sealed class ProgramDiagnosticsTests
             MaxScrollY: 240,
             HasMaxScrollY: true);
 
-        var output = string.Join(Environment.NewLine, Program.BuildScrollDiagnosticLines(snapshot));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildScrollDiagnosticLines(snapshot));
 
         Assert.Equal(string.Join(Environment.NewLine, [
             "=== Scroll Pump Diagnostics ===",
@@ -85,6 +87,10 @@ public sealed class ProgramDiagnosticsTests
             "=== Scroll diagnostic mode complete ==="
         ]), output);
     }
+
+    #endregion
+
+    #region Input Snapshot
 
     [Fact]
     public async Task Diagnose_input_outputs_ownership_state_transitions()
@@ -149,7 +155,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_input_formatter_outputs_stable_fields()
     {
-        var output = string.Join(Environment.NewLine, Program.BuildInputDiagnosticLines(Program.BuildInputDiagnosticsSnapshot()));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildInputDiagnosticLines(Program.BuildInputDiagnosticsSnapshot()));
 
         Assert.Contains("=== Input Ownership Diagnostics ===", output);
         Assert.Contains("buttonPriorityOrder Pressed > Hovered > Focused > Normal", output);
@@ -160,10 +166,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("=== Input diagnostic mode complete ===", output);
     }
 
+    #endregion
+
+    #region Style Preset Diagnostics
+
     [Fact]
     public void Diagnose_style_preset_outputs_metrics_and_button_colors()
     {
-        var output = string.Join(Environment.NewLine, Program.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.Contains("=== Style Preset Diagnostics ===", output);
         Assert.Contains("stylePreset name=RenderStylePreset.Default", output);
@@ -174,6 +184,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("buttonStateColor hovered=#FF4888FF", output);
         Assert.Contains("buttonStateColor pressed=#FF245CD2", output);
     }
+
+    #endregion
+
+    #region StyleOnly Snapshot
 
     [Fact]
     public void Diagnose_style_only_patch_plan_snapshot_captures_formatter_fields()
@@ -202,7 +216,7 @@ public sealed class ProgramDiagnosticsTests
             [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment", new PixelRectangle(0, 0, 960, 540))]);
         var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", plan);
 
-        var line = Program.BuildStyleOnlyPatchPlanDiagnosticLine(snapshot);
+        var line = DiagnosticsFormatter.BuildStyleOnlyPatchPlanDiagnosticLine(snapshot);
 
         Assert.Equal("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", line);
     }
@@ -216,6 +230,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", output);
         Assert.Contains("styleOnlyPlan layoutAffecting eligible=False fallback=NotStyleOnly dirtyElementRanges=0:1 dirtyCommandRanges=(none) hitTargetCount=0", output);
     }
+
+    #endregion
+
+    #region Backend Clip/Text Snapshot
 
     [Fact]
     public void Diagnose_backend_clip_text_snapshot_captures_formatter_fields()
@@ -241,7 +259,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var snapshot = CreateBackendClipTextSnapshot(1, 0, 1, new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), EffectiveScissor.Empty);
 
-        var line = Program.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), snapshot);
+        var line = DiagnosticsFormatter.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), snapshot);
 
         Assert.Equal("Scissor smoke: kind=FillRect clip=(32,32,80,40) effectiveClip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=True clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=1 deviceRemoved=False", line);
     }
@@ -251,7 +269,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var snapshot = CreateBackendClipTextSnapshot(1, 0, 1, EffectiveScissor.Empty, EffectiveScissor.Empty);
 
-        var line = Program.BuildPipelineScissorSmokeDiagnosticLine(snapshot);
+        var line = DiagnosticsFormatter.BuildPipelineScissorSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Pipeline scissor smoke: source=ScrollContainerRectangle textClip=False clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=1 deviceRemoved=False passed=True", line);
     }
@@ -261,7 +279,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var snapshot = CreateBackendClipTextSnapshot(1, 1, 0, EffectiveScissor.Empty, EffectiveScissor.Empty);
 
-        var line = Program.BuildEmptyScissorSmokeDiagnosticLine(snapshot);
+        var line = DiagnosticsFormatter.BuildEmptyScissorSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Empty scissor smoke: kind=FillRect clippedCommands=1 emptyIntersectionSkipped=1 scissorStateChanges=0 deviceRemoved=False", line);
     }
@@ -271,7 +289,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var snapshot = CreateBackendClipTextSnapshot(0, 0, 0, EffectiveScissor.Empty, new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), textClipSkippedCount: 1);
 
-        var line = Program.BuildTextClipSmokeDiagnosticLine(snapshot);
+        var line = DiagnosticsFormatter.BuildTextClipSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip=(32,32,80,40) textClipSkipped=1 deviceRemoved=False", line);
     }
@@ -281,10 +299,14 @@ public sealed class ProgramDiagnosticsTests
     {
         var snapshot = CreateBackendClipTextSnapshot(2, 0, 1, EffectiveScissor.Empty, new EffectiveScissor(new DrawRect(0, 0, 960, 20), false));
 
-        var line = Program.BuildPipelineTextClipSmokeDiagnosticLine(snapshot);
+        var line = DiagnosticsFormatter.BuildPipelineTextClipSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip=(0,0,960,20) clippedCommands=2 textClipSkipped=0 deviceRemoved=False passed=True", line);
     }
+
+    #endregion
+
+    #region Rendering Pipeline Snapshot
 
     [Fact]
     public void Diagnose_rendering_pipeline_snapshot_captures_minimal_fields()
@@ -321,7 +343,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_rendering_pipeline_compositor_outputs_stable_fields()
     {
-        var output = string.Join(Environment.NewLine, Program.BuildRenderingPipelineCompositorDiagnosticLines(CreateRenderingPipelineSnapshot()));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildRenderingPipelineCompositorDiagnosticLines(CreateRenderingPipelineSnapshot()));
 
         Assert.Equal(string.Join(Environment.NewLine, [
             "Render count: 3",
@@ -341,7 +363,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_rendering_pipeline_layout_outputs_stable_fields()
     {
-        var output = string.Join(Environment.NewLine, Program.BuildRenderingPipelineLayoutDiagnosticLines(CreateRenderingPipelineSnapshot()));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildRenderingPipelineLayoutDiagnosticLines(CreateRenderingPipelineSnapshot()));
 
         Assert.Equal(string.Join(Environment.NewLine, [
             "Layout commands: 3",
@@ -354,6 +376,10 @@ public sealed class ProgramDiagnosticsTests
             "  ScrollContainer[0]: visible=540 content=96 scrollY=0 maxScrollY=0 elements=2/2 visible"
         ]), output);
     }
+
+    #endregion
+
+    #region Viewport Snapshot
 
     [Fact]
     public void Diagnose_resize_viewport_snapshot_captures_source_of_truth_fields()
@@ -402,7 +428,7 @@ public sealed class ProgramDiagnosticsTests
             DpiAwareness: "ProcessDefault",
             ScaleMode: "PhysicalPixelsV0");
 
-        var output = string.Join(Environment.NewLine, Program.BuildResizeViewportDiagnosticLines(snapshot));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildResizeViewportDiagnosticLines(snapshot));
 
         Assert.Contains("windowPhysicalSize=929x454", output);
         Assert.Contains("rendererSwapchainSize=929x454", output);
@@ -419,6 +445,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("dpiAwareness=ProcessDefault", output);
         Assert.Contains("coordinateSpace=PhysicalPixels logicalCoordinates=False", output);
     }
+
+    #endregion
+
+    #region Debug UI Bridge Baseline
 
     [Fact]
     public void Debug_ui_outputs_viewport_diagnostic_row()
@@ -440,6 +470,10 @@ public sealed class ProgramDiagnosticsTests
             node.Kind == VirtualNodeKind.Text
             && node.Content.Text == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
     }
+
+            #endregion
+
+            #region Test Helpers
 
     private static Program.BackendClipTextDiagnosticSnapshot CreateBackendClipTextSnapshot(
         int clippedCommandCount,
@@ -481,4 +515,6 @@ public sealed class ProgramDiagnosticsTests
             HitTargets: [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "LayoutBtn", new PixelRectangle(0, 0, 960, 540))],
             ScrollContainerDiagnostics: [new ScrollContainerDiag(0, 540, 96, 0, 0, 2, 0)]);
     }
+
+    #endregion
 }

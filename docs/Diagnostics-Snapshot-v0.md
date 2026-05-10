@@ -1,6 +1,6 @@
 # Diagnostics Snapshot v0 Design
 
-> 本文记录 diagnostics snapshot 的 v0 数据边界与已落地样板。不移动文件，不改变 `--diagnose*` / `--debug-ui` 的文本输出。当前 CLI formatter 和文本测试继续作为回归 contract。
+> 本文记录 diagnostics snapshot 的 v0 数据边界与已落地样板。不移动文件，不改变 `--diagnose*` / `--debug-ui` 的文本输出。当前 CLI diagnostics surface 已经 snapshot-first 闭环；debug UI snapshot bridge 和统一 diagnostics channel 尚未完成。
 
 ## 1. 目标
 
@@ -41,15 +41,50 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 | `InputDiagnosticsSnapshot` | input routing/focus owner; currently PoC input ownership state/router | `BuildInputDiagnosticsSnapshot` assembles from `InputOwnershipState`, `CounterInputRouter`, button state derivation, and dirty reason smoke | `--diagnose-input`, debug UI input row, tests | Allowed in v0 because input ownership is still PoC-owned; do not expose statics as framework API. |
 | `StyleOnlyPatchPlanDiagnosticSnapshot` | `Irix.Rendering.StyleOnlyPatchPlanBuilder` and plan data | `Program.BuildStyleOnlyPatchPlanSmokeDiagnosticLines` can adapt `StyleOnlyPatchPlan` into snapshot data before formatting | `--diagnose` style-only plan block, tests | Not needed; plan data should be produced from explicit planner inputs. |
 
-## 5. CLI 文本冻结规则
+## 5. CLI 闭环状态
+
+- `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input` now assemble snapshot data before formatting their stable stdout lines.
+- `DiagnosticsFormatter` owns CLI text formatting for the snapshot-backed surface. `Program.cs` still owns scripted diagnostic runners and snapshot production adapters.
+- CLI snapshot v0 is closed for the current text surface: every existing `--diagnose*` block either formats from a snapshot directly or builds snapshot lines before writing stdout.
+- Debug UI is not snapshot-first yet. It still reads `CounterViewportDiagnostics`, `CounterLayoutDiagnostics`, and the existing `Program.Diag*` static bridge.
+- Unified diagnostics channel is not implemented. No event bus, subscription API, or debug overlay replacement exists in this stage.
+
+## 6. CLI 文本冻结规则
 
 - Existing `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input` output text remains frozen.
 - Existing `ProgramDiagnosticsTests` formatter/smoke assertions remain the compatibility contract.
 - Snapshot v0 is an internal data layer behind those formatters, not a replacement for the text contract.
-- A future implementation may build snapshot values first, then call the same formatter logic to preserve exact lines.
+- CLI implementations build snapshot values first, then call the same formatter logic to preserve exact lines.
 - Any intentional CLI text change must be staged separately with explicit test updates and a migration note.
 
-## 6. 最小实现候选
+## 7. Debug UI Snapshot Bridge 设计
+
+Debug UI 后续应通过一个 snapshot bridge 获取诊断数据，而不是继续直接读取散落的 statics。当前阶段只冻结设计，不接线、不替换 overlay、不改变 debug UI 文本。
+
+Implemented minimal bridge contract: `DebugUiDiagnosticsSnapshotBridge.cs`. It is intentionally not wired into the overlay yet.
+
+```csharp
+internal interface IDebugDiagnosticsSnapshotBridge
+{
+	DebugUiDiagnosticsSnapshot Capture();
+}
+
+internal readonly record struct DebugUiDiagnosticsSnapshot(
+	Program.ViewportDiagnosticsSnapshot? Viewport,
+	CounterLayoutDiagnostics? Layout,
+	Program.ScrollDiagnosticsSnapshot? Scroll,
+	Program.InputDiagnosticsSnapshot? Input,
+	Program.BackendClipTextDiagnosticSnapshot? BackendClipText);
+```
+
+Bridge rules:
+
+- The bridge may temporarily adapt existing PoC-owned state and `Program.Diag*` statics, but those statics should become implementation details rather than UI-facing API.
+- Debug UI rendering should consume `DebugUiDiagnosticsSnapshot` or narrower per-row snapshots, then use formatter/helper methods for stable row text.
+- The bridge must stay read-only and must not dispatch runtime messages, trigger renders, or mutate scroll/input/backend state.
+- Introducing the bridge is a separate stage from CLI snapshot v0 closure.
+
+## 8. 已落地样板
 
 Implemented first sample: `StyleOnlyPatchPlanDiagnosticSnapshot`.
 
@@ -71,7 +106,7 @@ Implemented fifth sample: `ScrollDiagnosticsSnapshot`. `--diagnose-scroll` now b
 
 Implemented sixth sample: `InputDiagnosticsSnapshot` minimal. `--diagnose-input` now builds a snapshot containing the final ownership read model, ordered diagnostic lines, ownership transition lines, event lines, button visual state lines, and dirty reason lines before formatting the existing text.
 
-## 7. 暂不迁出文件
+## 9. 暂不迁出文件
 
 Snapshot v0 does not move files. These files stay where they are during this preparation stage:
 
@@ -85,7 +120,7 @@ Snapshot v0 does not move files. These files stay where they are during this pre
 
 Further implementation steps should add snapshot data next to the current owner and adapt existing formatters without changing observable output.
 
-## 8. Completion Checklist
+## 10. Completion Checklist
 
 | Task | Status |
 |------|--------|
@@ -93,4 +128,6 @@ Further implementation steps should add snapshot data next to the current owner 
 | Set provider boundaries | Covered by the producer/adapter/consumer/static field table. |
 | Keep CLI text frozen | Covered by CLI freeze rules. |
 | Pick minimum implementation candidate | `StyleOnlyPatchPlanDiagnosticSnapshot`, `ViewportDiagnosticsSnapshot`, `BackendClipTextDiagnosticSnapshot`, `RenderingPipelineDiagnosticSnapshot`, `ScrollDiagnosticsSnapshot`, and minimal `InputDiagnosticsSnapshot` are implemented. |
+| Close CLI snapshot v0 loop | Done for `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input`; formatter logic lives in `DiagnosticsFormatter`. |
+| Design debug UI snapshot bridge | Covered by the bridge design section; not wired into debug UI yet. |
 | Do not move files | Covered by the no-move list. |
