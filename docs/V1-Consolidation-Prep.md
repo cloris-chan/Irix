@@ -15,7 +15,8 @@
 
 - Framework 层已经基本成形：`Irix.Core` owns MVU/tree/diff, `Irix.Rendering` owns layout/render-frame planning, `Irix.Platform.Windows` owns Win32/D3D12 primitives.
 - `Irix.Poc` 当前承担了三类债务：sample app semantics、cross-layer wiring、diagnostic entrypoints。
-- 后续 consolidation 应先建立统一 diagnostics channel，再决定哪些 PoC helpers 值得提升到 framework 层；不要先做文件搬迁。
+- Program diagnostics runner split 已完成并封版为 regression-only；后续不继续拆 diagnostics，也暂不做 unified diagnostics channel / event bus / registry。
+- 下一条线选择 `v1 API/control boundary prep`：先梳理 controls/input/window glue 的 API 边界，再决定哪些 PoC helpers 值得提升到 framework 层；不要先做文件搬迁。
 
 ## 2. 诊断入口盘点
 
@@ -49,7 +50,7 @@ Recommended order:
 5. Backend clip/text smoke helpers → `BackendClipTextSmokeDiagnostics` (done; smoke host only, D3D12 backend/runtime ownership unchanged).
 6. Full `--diagnose` orchestration → `FullDiagnosticRunner` (done; first pass moved the existing flow as a whole without regrouping internal blocks).
 
-This runner split line is sealed. Future work should start from provider/channel ownership design, not additional `Program.cs` runner moves.
+This runner split line is sealed. Future work should start from `v1 API/control boundary prep`, not diagnostics runner moves or provider/channel ownership design.
 
 Rules for this split:
 
@@ -108,10 +109,11 @@ Rules for this split:
 ## 7. 推荐收敛顺序
 
 1. Treat [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) as sealed; only repair regressions in that line.
-2. Keep Program diagnostics runner split sealed; new diagnostics work should preserve CLI output and debug overlay rows.
-3. Leave unified diagnostics channel, event bus, registry, and provider replacement paused until a separate ownership design is ready.
-4. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
-5. For any future diagnostics ownership move, run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke.
+2. Keep Program diagnostics runner split sealed as regression-only; new diagnostics work should preserve CLI output and debug overlay rows.
+3. Leave unified diagnostics channel, event bus, registry, and provider replacement paused until explicitly reopened.
+4. Start the next line as `v1 API/control boundary prep`, focused on naming, ownership, and API boundaries for controls/input/window glue without moving runtime code.
+5. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
+6. For any future diagnostics ownership move, run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke.
 
 ## 8. 当前完成标准对照
 
@@ -121,5 +123,6 @@ Rules for this split:
 | 诊断入口盘点 | 已列出 `--diagnose*`、`--debug-ui`、StyleOnly plan smoke、scissor/text clip smoke 的当前归属和 channel 方向。 |
 | 测试分组盘点 | 已按 scroll/input/clip/viewport/layout dirty/style-only plan/retained frame 分组。 |
 | 标记不移动清单 | 已明确 scroll/input/clip/render pipeline 核心代码暂不移动。 |
-| Program diagnostics runner split | 已完成并封版：`Program.Main` 只分发 diagnostics runners，后续不在此线继续拆 block。 |
+| Program diagnostics runner split | 已完成并封版为 regression-only：`Program.Main` 只分发 diagnostics runners，后续不在此线继续拆 block。 |
+| 下一条线 | 选择 `v1 API/control boundary prep`；暂不做 StyleOnly fast-path implementation，也暂不做 unified diagnostics channel。 |
 | consolidation prep 文档 | 本文即输出；当前阶段不改运行行为。 |

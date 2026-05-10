@@ -45,8 +45,9 @@
 
 ### 下一步候选
 
-- `StyleOnly fast-path implementation`：从 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point 开始，先把真实输入改为 retained layout + next `VirtualNode` metadata projection，不能依赖 next layout output。
-- `v1 architecture consolidation prep`：从 [V1-Consolidation-Prep.md](V1-Consolidation-Prep.md) 的模块边界、诊断入口、测试分组与暂不移动清单开始，为后续 v1 主线收敛做准备。
+- 当前选择：`v1 API/control boundary prep`，从 [V1-Consolidation-Prep.md](V1-Consolidation-Prep.md) 的模块边界、测试分组与暂不移动清单开始，为 controls/input/window glue 的 ownership 和 API 命名收敛做准备。
+- 暂缓：`StyleOnly fast-path implementation` 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point；不接入 `RenderPipeline.Build`，不启用新行为。
+- 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 
 ---
 
