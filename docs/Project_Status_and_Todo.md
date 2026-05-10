@@ -30,6 +30,7 @@
 | [ADR-Scissor-Clipping-v0.md](ADR-Scissor-Clipping-v0.md) | clip/scissor/text clip v0 决策、smoke baseline、冻结边界 |
 | [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md) | layout dirty 分类、StyleOnly patch v0 设计、plan diagnostics、未来 fast-path 接入点 |
 | [V1-Consolidation-Prep.md](V1-Consolidation-Prep.md) | v1 architecture consolidation prep：模块边界、诊断入口、测试分组、暂不移动清单 |
+| [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) | diagnostics snapshot v0：snapshot 类型、provider 边界、CLI 文本冻结、最小实现候选 |
 | [RetainedElementTree-Design.md](RetainedElementTree-Design.md) | 真正 retained element tree / local patch apply 的草案 |
 | [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
 

@@ -85,7 +85,7 @@
 
 ## 7. 推荐收敛顺序
 
-1. Add diagnostics snapshot/channel types beside current CLI output.
+1. Start from [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md): add diagnostics snapshot/channel types beside current CLI output.
 2. Wire `--diagnose*` to consume snapshots while preserving exact formatter tests.
 3. Split backend diagnostics from PoC smoke runners after channel coverage exists.
 4. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
