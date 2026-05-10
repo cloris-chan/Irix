@@ -161,6 +161,67 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void TryMapInput_records_ownership_diagnostic_events()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 3,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        Assert.Collection(
+            ownershipState.DiagnosticEvents,
+            diagnosticEvent =>
+            {
+                var hover = Assert.IsType<InputOwnershipEvent.HoverChanged>(diagnosticEvent);
+                Assert.Null(hover.PreviousTarget);
+                Assert.Equal(nameof(CounterMessage.Increment), hover.CurrentTarget);
+            },
+            diagnosticEvent =>
+            {
+                var focus = Assert.IsType<InputOwnershipEvent.FocusChanged>(diagnosticEvent);
+                Assert.Null(focus.PreviousTarget);
+                Assert.Equal(nameof(CounterMessage.Increment), focus.CurrentTarget);
+            },
+            diagnosticEvent =>
+            {
+                var pressed = Assert.IsType<InputOwnershipEvent.PressedChanged>(diagnosticEvent);
+                Assert.Null(pressed.PreviousPressedTarget);
+                Assert.Equal(nameof(CounterMessage.Increment), pressed.CurrentPressedTarget);
+                Assert.True(pressed.IsPointerPressed);
+            },
+            diagnosticEvent =>
+            {
+                var pressed = Assert.IsType<InputOwnershipEvent.PressedChanged>(diagnosticEvent);
+                Assert.Equal(nameof(CounterMessage.Increment), pressed.PreviousPressedTarget);
+                Assert.Null(pressed.CurrentPressedTarget);
+                Assert.False(pressed.IsPointerPressed);
+            });
+    }
+
+    [Fact]
     public void TryMapInput_empty_press_clears_focus_and_does_not_trigger_action()
     {
         var ownershipState = new InputOwnershipState();

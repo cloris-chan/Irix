@@ -218,10 +218,24 @@ internal static class Program
             out var releaseMessage);
         lines.Add($"releaseOutside mapped={releaseMapped} message={FormatMessage(releaseMessage)} {FormatOwnership(ownershipState.Snapshot)}");
 
+        var enterMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 5, X: 0, Y: 0, KeyCode: 0x0D),
+            ownershipState,
+            HitDiagnosticTarget,
+            out var enterMessage);
+        lines.Add($"keyboardEnter mapped={enterMapped} message={FormatMessage(enterMessage)} {FormatOwnership(ownershipState.Snapshot)}");
+
+        var spaceMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 6, X: 0, Y: 0, KeyCode: 0x20),
+            ownershipState,
+            HitDiagnosticTarget,
+            out var spaceMessage);
+        lines.Add($"keyboardSpace mapped={spaceMapped} message={FormatMessage(spaceMessage)} {FormatOwnership(ownershipState.Snapshot)}");
+
         var pressEmptyMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
                 RawInputEventKind.PointerPressed,
-                Timestamp: 5,
+                Timestamp: 7,
                 X: 500,
                 Y: 500,
                 Button: PointerButton.Left),
@@ -233,7 +247,7 @@ internal static class Program
         var releaseEmptyMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
                 RawInputEventKind.PointerReleased,
-                Timestamp: 6,
+                Timestamp: 8,
                 X: 32,
                 Y: 140,
                 Button: PointerButton.Left),
@@ -243,11 +257,17 @@ internal static class Program
         lines.Add($"releaseAfterEmptyPress mapped={releaseEmptyMapped} {FormatOwnership(ownershipState.Snapshot)}");
 
         CounterInputRouter.TryMapInput(
-            new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 7, X: 0, Y: 0),
+            new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 9, X: 0, Y: 0),
             ownershipState,
             HitDiagnosticTarget,
             out _);
         lines.Add($"focusLost {FormatOwnership(ownershipState.Snapshot)}");
+        lines.Add("events:");
+        foreach (var diagnosticEvent in ownershipState.DiagnosticEvents)
+        {
+            lines.Add($"  {FormatOwnershipEvent(diagnosticEvent)}");
+        }
+
         lines.Add("=== Input diagnostic mode complete ===");
 
         foreach (var line in lines)
@@ -290,6 +310,20 @@ internal static class Program
     private static string FormatMessage(CounterMessage? message)
     {
         return message?.GetType().Name ?? "-";
+    }
+
+    private static string FormatOwnershipEvent(InputOwnershipEvent diagnosticEvent)
+    {
+        return diagnosticEvent switch
+        {
+            InputOwnershipEvent.HoverChanged hover =>
+                $"HoverChanged previous={FormatTarget(hover.PreviousTarget)} current={FormatTarget(hover.CurrentTarget)}",
+            InputOwnershipEvent.FocusChanged focus =>
+                $"FocusChanged previous={FormatTarget(focus.PreviousTarget)} current={FormatTarget(focus.CurrentTarget)}",
+            InputOwnershipEvent.PressedChanged pressed =>
+                $"PressedChanged previousPressed={FormatTarget(pressed.PreviousPressedTarget)} currentPressed={FormatTarget(pressed.CurrentPressedTarget)} previousCapture={FormatTarget(pressed.PreviousCapturedTarget)} currentCapture={FormatTarget(pressed.CurrentCapturedTarget)} pointerPressed={pressed.IsPointerPressed}",
+            _ => diagnosticEvent.GetType().Name
+        };
     }
 
     internal static async Task RunScrollDiagnosticModeAsync(

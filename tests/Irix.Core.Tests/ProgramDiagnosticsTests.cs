@@ -34,8 +34,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("afterPress hover=Increment focus=Increment pressed=Increment capture=Increment", output);
         Assert.Contains("duringCaptureMove hover=Decrement focus=Increment pressed=Increment capture=Increment", output);
         Assert.Contains("releaseOutside mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
+        Assert.Contains("keyboardEnter mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
+        Assert.Contains("keyboardSpace mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
         Assert.Contains("pressEmpty mapped=False hover=Decrement focus=- pressed=- capture=-", output);
         Assert.Contains("releaseAfterEmptyPress mapped=False", output);
         Assert.Contains("focusLost hover=- focus=- pressed=- capture=-", output);
+        Assert.Contains("HoverChanged previous=- current=Increment", output);
+        Assert.Contains("FocusChanged previous=- current=Increment", output);
+        Assert.Contains("PressedChanged previousPressed=- currentPressed=Increment", output);
+        Assert.Contains("PressedChanged previousPressed=Increment currentPressed=-", output);
+        Assert.Contains("FocusChanged previous=Increment current=-", output);
     }
 }

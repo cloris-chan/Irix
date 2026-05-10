@@ -16,6 +16,25 @@ internal readonly record struct OwnershipSnapshot(
     bool IsPointerPressed);
 
 /// <summary>
+/// Diagnostic-only ownership event stream for v0 input ownership changes.
+/// These events are not visual state and do not imply multi-pointer, nested focus,
+/// or platform capture support.
+/// </summary>
+internal abstract record InputOwnershipEvent
+{
+    public sealed record HoverChanged(string? PreviousTarget, string? CurrentTarget) : InputOwnershipEvent;
+
+    public sealed record FocusChanged(string? PreviousTarget, string? CurrentTarget) : InputOwnershipEvent;
+
+    public sealed record PressedChanged(
+        string? PreviousPressedTarget,
+        string? CurrentPressedTarget,
+        string? PreviousCapturedTarget,
+        string? CurrentCapturedTarget,
+        bool IsPointerPressed) : InputOwnershipEvent;
+}
+
+/// <summary>
 /// Tracks v0 input ownership for the Counter PoC.
 /// This is intentionally scoped to a single pointer, left-button press/capture,
 /// and diagnostic ownership state; it does not model multi-touch, nested focus
@@ -23,6 +42,7 @@ internal readonly record struct OwnershipSnapshot(
 /// </summary>
 internal sealed class InputOwnershipState
 {
+    private readonly List<InputOwnershipEvent> _diagnosticEvents = [];
     private bool _isPointerPressed;
 
     /// <summary>The current hit-test target under the pointer, updated by pointer move.</summary>
@@ -45,6 +65,9 @@ internal sealed class InputOwnershipState
 
     /// <summary>The number of hover target changes observed.</summary>
     public long HoverChangeCount { get; private set; }
+
+    /// <summary>Diagnostic ownership events emitted by v0 state transitions.</summary>
+    public IReadOnlyList<InputOwnershipEvent> DiagnosticEvents => _diagnosticEvents;
 
     /// <summary>
     /// A single consistent read of the current ownership state for diagnostics.
@@ -73,6 +96,7 @@ internal sealed class InputOwnershipState
         LastHoverLeftTarget = previousTarget;
         LastHoverEnteredTarget = nextTarget;
         HoverChangeCount++;
+        _diagnosticEvents.Add(new InputOwnershipEvent.HoverChanged(previousTarget, nextTarget));
     }
 
     /// <summary>
@@ -82,10 +106,29 @@ internal sealed class InputOwnershipState
     public void PressPointer(RawInputEvent inputEvent, Func<int, int, string?> tryGetActionIdAt)
     {
         var target = NormalizeTarget(tryGetActionIdAt(inputEvent.X, inputEvent.Y));
+        var previousFocus = FocusedTarget;
+        var previousPressed = PressedTarget;
+        var previousCaptured = CapturedTarget;
+        var wasPointerPressed = _isPointerPressed;
         _isPointerPressed = true;
         PressedTarget = target;
         CapturedTarget = target;
         FocusedTarget = target;
+
+        if (previousFocus != target)
+        {
+            _diagnosticEvents.Add(new InputOwnershipEvent.FocusChanged(previousFocus, target));
+        }
+
+        if (!wasPointerPressed || previousPressed != target || previousCaptured != target)
+        {
+            _diagnosticEvents.Add(new InputOwnershipEvent.PressedChanged(
+                previousPressed,
+                target,
+                previousCaptured,
+                target,
+                IsPointerPressed: true));
+        }
     }
 
     /// <summary>
@@ -95,12 +138,26 @@ internal sealed class InputOwnershipState
     /// </summary>
     public string? ReleasePointer(RawInputEvent inputEvent, Func<int, int, string?> tryGetActionIdAt)
     {
+        var previousPressed = PressedTarget;
+        var previousCaptured = CapturedTarget;
+        var wasPointerPressed = _isPointerPressed;
         var target = _isPointerPressed
             ? CapturedTarget
             : NormalizeTarget(tryGetActionIdAt(inputEvent.X, inputEvent.Y));
         _isPointerPressed = false;
         PressedTarget = null;
         CapturedTarget = null;
+
+        if (wasPointerPressed || previousPressed is not null || previousCaptured is not null)
+        {
+            _diagnosticEvents.Add(new InputOwnershipEvent.PressedChanged(
+                previousPressed,
+                null,
+                previousCaptured,
+                null,
+                IsPointerPressed: false));
+        }
+
         return target;
     }
 
@@ -110,13 +167,34 @@ internal sealed class InputOwnershipState
     /// <summary>Clears all ownership state, used when the native window loses focus.</summary>
     public void Clear()
     {
+        if (HoveredTarget is not null)
+        {
+            _diagnosticEvents.Add(new InputOwnershipEvent.HoverChanged(HoveredTarget, null));
+            LastHoverLeftTarget = HoveredTarget;
+            LastHoverEnteredTarget = null;
+            HoverChangeCount++;
+        }
+
+        if (FocusedTarget is not null)
+        {
+            _diagnosticEvents.Add(new InputOwnershipEvent.FocusChanged(FocusedTarget, null));
+        }
+
+        if (_isPointerPressed || PressedTarget is not null || CapturedTarget is not null)
+        {
+            _diagnosticEvents.Add(new InputOwnershipEvent.PressedChanged(
+                PressedTarget,
+                null,
+                CapturedTarget,
+                null,
+                IsPointerPressed: false));
+        }
+
         _isPointerPressed = false;
         HoveredTarget = null;
         FocusedTarget = null;
         PressedTarget = null;
         CapturedTarget = null;
-        LastHoverEnteredTarget = null;
-        LastHoverLeftTarget = null;
     }
 
     private static string? NormalizeTarget(string? target)
