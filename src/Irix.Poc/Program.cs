@@ -240,31 +240,107 @@ internal static class Program
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
     }
 
-    internal static string BuildClipScissorSmokeDiagnosticLine(DrawRect clipBounds, EffectiveScissor effectiveScissor, bool gpuScissor, int clippedCommandCount, int emptyIntersectionSkippedCount, int scissorStateChangeCount, bool deviceRemoved)
+    internal readonly record struct BackendClipTextDiagnosticSnapshot(
+        DrawingBackendClipMode ClipMode,
+        int ClippedCommandCount,
+        int EmptyIntersectionSkippedCount,
+        int ScissorStateChangeCount,
+        EffectiveScissor LastEffectiveScissor,
+        EffectiveScissor LastEffectiveTextClip,
+        int TextClipSkippedCount,
+        bool DeviceRemoved,
+        string DeviceErrorReason)
     {
-        return $"Scissor smoke: kind=FillRect clip={FormatRect(clipBounds)} effectiveClip={FormatEffectiveScissor(effectiveScissor)} nestedClip=False textClip=False gpuScissor={gpuScissor} clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved}";
+        public bool GpuScissor => ClipMode == DrawingBackendClipMode.Scissor;
+
+        public static BackendClipTextDiagnosticSnapshot FromBackend(D3D12DrawingBackend backend, D3D12Renderer renderer)
+        {
+            return new BackendClipTextDiagnosticSnapshot(
+                backend.ClipMode,
+                backend.ClippedCommandCount,
+                backend.EmptyIntersectionSkippedCount,
+                backend.ScissorStateChangeCount,
+                backend.LastEffectiveScissor,
+                backend.LastEffectiveTextClip,
+                backend.TextClipSkippedCount,
+                renderer.IsDeviceRemoved,
+                renderer.DeviceErrorReason ?? "(none)");
+        }
     }
 
-    internal static string BuildPipelineScissorSmokeDiagnosticLine(int clippedCommandCount, int emptyIntersectionSkippedCount, int scissorStateChangeCount, bool deviceRemoved)
+    internal readonly record struct RenderingPipelineDiagnosticSnapshot(
+        IReadOnlyList<(int Start, int Count)> CompositorDirtyCommandRanges,
+        IReadOnlyList<(int Start, int Count)> BackendDirtyCommandRanges,
+        int BackendClippedCommandCount,
+        int LayoutCommandCount,
+        int LayoutClippedCommandCount,
+        long LayoutRebuildCount,
+        LayoutRebuildReason LayoutRebuildReason,
+        IReadOnlyList<LayoutDirtyClassification> LayoutDirtyClassifications)
     {
-        var passed = clippedCommandCount > 0 && scissorStateChangeCount > 0;
-        return $"Pipeline scissor smoke: source=ScrollContainerRectangle textClip=False clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved} passed={passed}";
+        public bool DirtyRangesAligned => CompositorDirtyCommandRanges.Count == BackendDirtyCommandRanges.Count &&
+            CompositorDirtyCommandRanges.Zip(BackendDirtyCommandRanges).All(pair => pair.First == pair.Second);
     }
 
-    internal static string BuildEmptyScissorSmokeDiagnosticLine(int clippedCommandCount, int emptyIntersectionSkippedCount, int scissorStateChangeCount, bool deviceRemoved)
+    internal static string[] BuildBackendDeviceDiagnosticLines(BackendClipTextDiagnosticSnapshot snapshot)
     {
-        return $"Empty scissor smoke: kind=FillRect clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved}";
+        return [
+            $"Device removed: {snapshot.DeviceRemoved}",
+            $"Device error reason: {snapshot.DeviceErrorReason}"
+        ];
     }
 
-    internal static string BuildTextClipSmokeDiagnosticLine(EffectiveScissor effectiveClip, int textClipSkippedCount, bool deviceRemoved)
+    internal static string BuildBackendClipModeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
     {
-        return $"Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(effectiveClip)} textClipSkipped={textClipSkippedCount} deviceRemoved={deviceRemoved}";
+        return $"Backend clip mode: {snapshot.ClipMode}";
     }
 
-    internal static string BuildPipelineTextClipSmokeDiagnosticLine(EffectiveScissor effectiveClip, int clippedCommandCount, int textClipSkippedCount, bool deviceRemoved)
+    internal static string BuildClipScissorSmokeDiagnosticLine(DrawRect clipBounds, BackendClipTextDiagnosticSnapshot snapshot)
     {
-        var passed = !effectiveClip.IsEmpty && clippedCommandCount > 0 && textClipSkippedCount == 0;
-        return $"Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(effectiveClip)} clippedCommands={clippedCommandCount} textClipSkipped={textClipSkippedCount} deviceRemoved={deviceRemoved} passed={passed}";
+        return $"Scissor smoke: kind=FillRect clip={FormatRect(clipBounds)} effectiveClip={FormatEffectiveScissor(snapshot.LastEffectiveScissor)} nestedClip=False textClip=False gpuScissor={snapshot.GpuScissor} clippedCommands={snapshot.ClippedCommandCount} emptyIntersectionSkipped={snapshot.EmptyIntersectionSkippedCount} scissorStateChanges={snapshot.ScissorStateChangeCount} deviceRemoved={snapshot.DeviceRemoved}";
+    }
+
+    internal static string BuildPipelineScissorSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
+    {
+        var passed = snapshot.ClippedCommandCount > 0 && snapshot.ScissorStateChangeCount > 0;
+        return $"Pipeline scissor smoke: source=ScrollContainerRectangle textClip=False clippedCommands={snapshot.ClippedCommandCount} emptyIntersectionSkipped={snapshot.EmptyIntersectionSkippedCount} scissorStateChanges={snapshot.ScissorStateChangeCount} deviceRemoved={snapshot.DeviceRemoved} passed={passed}";
+    }
+
+    internal static string BuildEmptyScissorSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
+    {
+        return $"Empty scissor smoke: kind=FillRect clippedCommands={snapshot.ClippedCommandCount} emptyIntersectionSkipped={snapshot.EmptyIntersectionSkippedCount} scissorStateChanges={snapshot.ScissorStateChangeCount} deviceRemoved={snapshot.DeviceRemoved}";
+    }
+
+    internal static string BuildTextClipSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
+    {
+        return $"Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(snapshot.LastEffectiveTextClip)} textClipSkipped={snapshot.TextClipSkippedCount} deviceRemoved={snapshot.DeviceRemoved}";
+    }
+
+    internal static string BuildPipelineTextClipSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
+    {
+        var passed = !snapshot.LastEffectiveTextClip.IsEmpty && snapshot.ClippedCommandCount > 0 && snapshot.TextClipSkippedCount == 0;
+        return $"Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(snapshot.LastEffectiveTextClip)} clippedCommands={snapshot.ClippedCommandCount} textClipSkipped={snapshot.TextClipSkippedCount} deviceRemoved={snapshot.DeviceRemoved} passed={passed}";
+    }
+
+    internal static string[] BuildRenderingPipelineDirtyRangeDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)
+    {
+        var lines = new List<string>();
+        AppendDirtyCommandRangeDiagnosticLines(lines, "Compositor", snapshot.CompositorDirtyCommandRanges);
+        AppendDirtyCommandRangeDiagnosticLines(lines, "Backend", snapshot.BackendDirtyCommandRanges);
+        lines.Add($"Dirty ranges aligned: {snapshot.DirtyRangesAligned}");
+        lines.Add($"Clipped commands: {snapshot.BackendClippedCommandCount}");
+        return [.. lines];
+    }
+
+    internal static string[] BuildRenderingPipelineLayoutDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)
+    {
+        return [
+            $"Layout commands: {snapshot.LayoutCommandCount}",
+            $"Layout clipped commands: {snapshot.LayoutClippedCommandCount}",
+            $"Layout rebuild count: {snapshot.LayoutRebuildCount}",
+            $"Layout rebuild reason: {snapshot.LayoutRebuildReason}",
+            $"Layout dirty classifications: {FormatLayoutDirtyClassifications(snapshot.LayoutDirtyClassifications)}"
+        ];
     }
 
     internal readonly record struct ViewportDiagnosticsSnapshot(
@@ -320,6 +396,15 @@ internal static class Program
             BuildStyleOnlyPatchPlanDiagnosticLine(hoverOnlySnapshot),
             BuildStyleOnlyPatchPlanDiagnosticLine(layoutAffectingSnapshot)
         ];
+    }
+
+    private static void AppendDirtyCommandRangeDiagnosticLines(List<string> lines, string label, IReadOnlyList<(int Start, int Count)> ranges)
+    {
+        lines.Add($"{label} dirty ranges: {ranges.Count} ranges");
+        foreach (var (start, count) in ranges)
+        {
+            lines.Add($"  [{start}..{start + count - 1}] ({count} commands)");
+        }
     }
 
     private static string FormatEffectiveScissor(EffectiveScissor scissor)
@@ -884,8 +969,11 @@ internal static class Program
             Console.WriteLine($"Layout hit rate: {(d.LayoutHits + d.LayoutMisses > 0 ? 100.0 * d.LayoutHits / (d.LayoutHits + d.LayoutMisses) : 0):F1}%");
         }
 
-        Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
-        Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
+        var initialBackendSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
+        foreach (var line in BuildBackendDeviceDiagnosticLines(initialBackendSnapshot))
+        {
+            Console.WriteLine(line);
+        }
         Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
         foreach (var line in BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default))
         {
@@ -898,25 +986,11 @@ internal static class Program
         Console.WriteLine($"Empty frames: {compositor.EmptyFrameCount}");
         Console.WriteLine($"Partial hit rate: {(compositor.RenderCount > 0 ? 100.0 * compositor.PartialApplyCount / compositor.RenderCount : 0):F1}%");
         var dirty = compositor.LastDirtyCommandRanges;
-        Console.WriteLine($"Compositor dirty ranges: {dirty.Count} ranges");
-        foreach (var (start, count) in dirty)
-        {
-            Console.WriteLine($"  [{start}..{start + count - 1}] ({count} commands)");
-        }
         var backendDirty = d3d12Backend.LastDirtyCommandRanges;
-        Console.WriteLine($"Backend dirty ranges: {backendDirty.Count} ranges");
-        foreach (var (start, count) in backendDirty)
-        {
-            Console.WriteLine($"  [{start}..{start + count - 1}] ({count} commands)");
-        }
-        var rangesMatch = dirty.Count == backendDirty.Count &&
-            dirty.Zip(backendDirty).All(p => p.First == p.Second);
-        Console.WriteLine($"Dirty ranges aligned: {rangesMatch}");
-        Console.WriteLine($"Clipped commands: {d3d12Backend.ClippedCommandCount}");
+        var backendClippedCommandCount = d3d12Backend.ClippedCommandCount;
 
         // Layout-driven frame: render through VirtualNode → Layout → Pipeline → Compositor
         // to verify the clip chain produces clipped commands
-        Console.WriteLine($"=== Layout Pipeline Diagnostics ===");
         var layoutPipeline = new RenderPipeline();
         var layoutRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Layout Pipeline Test", 2),
@@ -937,11 +1011,24 @@ internal static class Program
                 layoutClipCount++;
             }
         }
-        Console.WriteLine($"Layout commands: {layoutBatch.Commands.Count}");
-        Console.WriteLine($"Layout clipped commands: {layoutClipCount}");
-        Console.WriteLine($"Layout rebuild count: {layoutPipeline.LayoutRebuildCount}");
-        Console.WriteLine($"Layout rebuild reason: {layoutPipeline.LastLayoutRebuildReason}");
-        Console.WriteLine($"Layout dirty classifications: {FormatLayoutDirtyClassifications(layoutPipeline.LastDirtyClassifications)}");
+        var renderingSnapshot = new RenderingPipelineDiagnosticSnapshot(
+            dirty,
+            backendDirty,
+            backendClippedCommandCount,
+            layoutBatch.Commands.Count,
+            layoutClipCount,
+            layoutPipeline.LayoutRebuildCount,
+            layoutPipeline.LastLayoutRebuildReason,
+            layoutPipeline.LastDirtyClassifications);
+        foreach (var line in BuildRenderingPipelineDirtyRangeDiagnosticLines(renderingSnapshot))
+        {
+            Console.WriteLine(line);
+        }
+        Console.WriteLine($"=== Layout Pipeline Diagnostics ===");
+        foreach (var line in BuildRenderingPipelineLayoutDiagnosticLines(renderingSnapshot))
+        {
+            Console.WriteLine(line);
+        }
         Console.WriteLine($"Layout hit targets: {layoutBatch.HitTargets.Count}");
         if (layoutBatch.HitTargets.Count > 0)
         {
@@ -964,24 +1051,29 @@ internal static class Program
         d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);
         _backendClipMode = d3d12Backend.ClipMode;
         RunPipelineScissorSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
-        Console.WriteLine(BuildPipelineScissorSmokeDiagnosticLine(d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
+        var pipelineScissorSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
+        Console.WriteLine(BuildPipelineScissorSmokeDiagnosticLine(pipelineScissorSnapshot));
         Console.WriteLine($"=== Pipeline Text Clip Smoke ===");
         RunPipelineTextClipSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
-        Console.WriteLine(BuildPipelineTextClipSmokeDiagnosticLine(d3d12Backend.LastEffectiveTextClip, d3d12Backend.ClippedCommandCount, d3d12Backend.TextClipSkippedCount, d3d12Renderer.IsDeviceRemoved));
+        var pipelineTextClipSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
+        Console.WriteLine(BuildPipelineTextClipSmokeDiagnosticLine(pipelineTextClipSnapshot));
 
         Console.WriteLine($"=== Clip Scissor Diagnostics ===");
         var smokeClip = new DrawRect(32, 32, 80, 40);
         d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);
         _backendClipMode = d3d12Backend.ClipMode;
         RunClipScissorSmokeDiagnostic(d3d12Backend);
-        Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
-        Console.WriteLine(BuildClipScissorSmokeDiagnosticLine(smokeClip, d3d12Backend.LastEffectiveScissor, d3d12Backend.ClipMode == DrawingBackendClipMode.Scissor, d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
+        var clipScissorSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
+        Console.WriteLine(BuildBackendClipModeDiagnosticLine(clipScissorSnapshot));
+        Console.WriteLine(BuildClipScissorSmokeDiagnosticLine(smokeClip, clipScissorSnapshot));
         Console.WriteLine($"=== Empty Scissor Diagnostics ===");
         RunEmptyScissorSmokeDiagnostic(d3d12Backend);
-        Console.WriteLine(BuildEmptyScissorSmokeDiagnosticLine(d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
+        var emptyScissorSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
+        Console.WriteLine(BuildEmptyScissorSmokeDiagnosticLine(emptyScissorSnapshot));
         Console.WriteLine($"=== Text Clip Diagnostics ===");
         RunTextClipSmokeDiagnostic(d3d12Backend);
-        Console.WriteLine(BuildTextClipSmokeDiagnosticLine(d3d12Backend.LastEffectiveTextClip, d3d12Backend.TextClipSkippedCount, d3d12Renderer.IsDeviceRemoved));
+        var textClipSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
+        Console.WriteLine(BuildTextClipSmokeDiagnosticLine(textClipSnapshot));
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);

@@ -121,9 +121,30 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Diagnose_backend_clip_text_snapshot_captures_formatter_fields()
+    {
+        var lastEffectiveScissor = new EffectiveScissor(new DrawRect(32, 32, 80, 40), false);
+        var lastEffectiveTextClip = new EffectiveScissor(new DrawRect(0, 0, 960, 20), false);
+        var snapshot = CreateBackendClipTextSnapshot(3, 1, 2, lastEffectiveScissor, lastEffectiveTextClip, textClipSkippedCount: 4, deviceRemoved: true, deviceErrorReason: "DeviceLost");
+
+        Assert.Equal(DrawingBackendClipMode.Scissor, snapshot.ClipMode);
+        Assert.Equal(3, snapshot.ClippedCommandCount);
+        Assert.Equal(1, snapshot.EmptyIntersectionSkippedCount);
+        Assert.Equal(2, snapshot.ScissorStateChangeCount);
+        Assert.Equal(lastEffectiveScissor, snapshot.LastEffectiveScissor);
+        Assert.Equal(lastEffectiveTextClip, snapshot.LastEffectiveTextClip);
+        Assert.Equal(4, snapshot.TextClipSkippedCount);
+        Assert.True(snapshot.DeviceRemoved);
+        Assert.Equal("DeviceLost", snapshot.DeviceErrorReason);
+        Assert.True(snapshot.GpuScissor);
+    }
+
+    [Fact]
     public void Diagnose_clip_scissor_smoke_outputs_stable_fields()
     {
-        var line = Program.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), true, 1, 0, 1, false);
+        var snapshot = CreateBackendClipTextSnapshot(1, 0, 1, new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), EffectiveScissor.Empty);
+
+        var line = Program.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), snapshot);
 
         Assert.Equal("Scissor smoke: kind=FillRect clip=(32,32,80,40) effectiveClip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=True clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=1 deviceRemoved=False", line);
     }
@@ -131,7 +152,9 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_pipeline_scissor_smoke_outputs_real_counter_fields()
     {
-        var line = Program.BuildPipelineScissorSmokeDiagnosticLine(clippedCommandCount: 1, emptyIntersectionSkippedCount: 0, scissorStateChangeCount: 1, deviceRemoved: false);
+        var snapshot = CreateBackendClipTextSnapshot(1, 0, 1, EffectiveScissor.Empty, EffectiveScissor.Empty);
+
+        var line = Program.BuildPipelineScissorSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Pipeline scissor smoke: source=ScrollContainerRectangle textClip=False clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=1 deviceRemoved=False passed=True", line);
     }
@@ -139,7 +162,9 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_empty_scissor_smoke_outputs_skip_counter()
     {
-        var line = Program.BuildEmptyScissorSmokeDiagnosticLine(clippedCommandCount: 1, emptyIntersectionSkippedCount: 1, scissorStateChangeCount: 0, deviceRemoved: false);
+        var snapshot = CreateBackendClipTextSnapshot(1, 1, 0, EffectiveScissor.Empty, EffectiveScissor.Empty);
+
+        var line = Program.BuildEmptyScissorSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Empty scissor smoke: kind=FillRect clippedCommands=1 emptyIntersectionSkipped=1 scissorStateChanges=0 deviceRemoved=False", line);
     }
@@ -147,7 +172,9 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_text_clip_smoke_outputs_effective_clip_and_skip_counter()
     {
-        var line = Program.BuildTextClipSmokeDiagnosticLine(new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), textClipSkippedCount: 1, deviceRemoved: false);
+        var snapshot = CreateBackendClipTextSnapshot(0, 0, 0, EffectiveScissor.Empty, new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), textClipSkippedCount: 1);
+
+        var line = Program.BuildTextClipSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip=(32,32,80,40) textClipSkipped=1 deviceRemoved=False", line);
     }
@@ -155,9 +182,56 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_pipeline_text_clip_smoke_outputs_pipeline_fields()
     {
-        var line = Program.BuildPipelineTextClipSmokeDiagnosticLine(new EffectiveScissor(new DrawRect(0, 0, 960, 20), false), clippedCommandCount: 2, textClipSkippedCount: 0, deviceRemoved: false);
+        var snapshot = CreateBackendClipTextSnapshot(2, 0, 1, EffectiveScissor.Empty, new EffectiveScissor(new DrawRect(0, 0, 960, 20), false));
+
+        var line = Program.BuildPipelineTextClipSmokeDiagnosticLine(snapshot);
 
         Assert.Equal("Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip=(0,0,960,20) clippedCommands=2 textClipSkipped=0 deviceRemoved=False passed=True", line);
+    }
+
+    [Fact]
+    public void Diagnose_rendering_pipeline_snapshot_captures_minimal_fields()
+    {
+        var snapshot = CreateRenderingPipelineSnapshot();
+
+        Assert.Equal([(0, 4)], snapshot.CompositorDirtyCommandRanges);
+        Assert.Equal([(0, 4)], snapshot.BackendDirtyCommandRanges);
+        Assert.True(snapshot.DirtyRangesAligned);
+        Assert.Equal(0, snapshot.BackendClippedCommandCount);
+        Assert.Equal(3, snapshot.LayoutCommandCount);
+        Assert.Equal(3, snapshot.LayoutClippedCommandCount);
+        Assert.Equal(1, snapshot.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.TreeStructure, snapshot.LayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)], snapshot.LayoutDirtyClassifications);
+    }
+
+    [Fact]
+    public void Diagnose_rendering_pipeline_dirty_ranges_output_stable_fields()
+    {
+        var output = string.Join(Environment.NewLine, Program.BuildRenderingPipelineDirtyRangeDiagnosticLines(CreateRenderingPipelineSnapshot()));
+
+        Assert.Equal(string.Join(Environment.NewLine, [
+            "Compositor dirty ranges: 1 ranges",
+            "  [0..3] (4 commands)",
+            "Backend dirty ranges: 1 ranges",
+            "  [0..3] (4 commands)",
+            "Dirty ranges aligned: True",
+            "Clipped commands: 0"
+        ]), output);
+    }
+
+    [Fact]
+    public void Diagnose_rendering_pipeline_layout_outputs_stable_fields()
+    {
+        var output = string.Join(Environment.NewLine, Program.BuildRenderingPipelineLayoutDiagnosticLines(CreateRenderingPipelineSnapshot()));
+
+        Assert.Equal(string.Join(Environment.NewLine, [
+            "Layout commands: 3",
+            "Layout clipped commands: 3",
+            "Layout rebuild count: 1",
+            "Layout rebuild reason: TreeStructure",
+            "Layout dirty classifications: 4:StyleOnly"
+        ]), output);
     }
 
     [Fact]
@@ -244,5 +318,40 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
             && node.Content.Text == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
+    }
+
+    private static Program.BackendClipTextDiagnosticSnapshot CreateBackendClipTextSnapshot(
+        int clippedCommandCount,
+        int emptyIntersectionSkippedCount,
+        int scissorStateChangeCount,
+        EffectiveScissor lastEffectiveScissor,
+        EffectiveScissor lastEffectiveTextClip,
+        int textClipSkippedCount = 0,
+        bool deviceRemoved = false,
+        string deviceErrorReason = "(none)")
+    {
+        return new Program.BackendClipTextDiagnosticSnapshot(
+            DrawingBackendClipMode.Scissor,
+            clippedCommandCount,
+            emptyIntersectionSkippedCount,
+            scissorStateChangeCount,
+            lastEffectiveScissor,
+            lastEffectiveTextClip,
+            textClipSkippedCount,
+            deviceRemoved,
+            deviceErrorReason);
+    }
+
+    private static Program.RenderingPipelineDiagnosticSnapshot CreateRenderingPipelineSnapshot()
+    {
+        return new Program.RenderingPipelineDiagnosticSnapshot(
+            [(0, 4)],
+            [(0, 4)],
+            BackendClippedCommandCount: 0,
+            LayoutCommandCount: 3,
+            LayoutClippedCommandCount: 3,
+            LayoutRebuildCount: 1,
+            LayoutRebuildReason: LayoutRebuildReason.TreeStructure,
+            LayoutDirtyClassifications: [new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)]);
     }
 }
