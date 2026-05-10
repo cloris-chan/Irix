@@ -29,7 +29,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_scroll_snapshot_captures_formatter_fields()
     {
-        var snapshot = new Program.ScrollDiagnosticsSnapshot(
+        var snapshot = new ScrollDiagnosticsSnapshot(
             DispatchedFrameCount: 2,
             RenderWaitMs: 30.125,
             LastDt: 0.0376,
@@ -60,7 +60,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_scroll_formatter_outputs_stable_fields()
     {
-        var snapshot = new Program.ScrollDiagnosticsSnapshot(
+        var snapshot = new ScrollDiagnosticsSnapshot(
             DispatchedFrameCount: 2,
             RenderWaitMs: 30.125,
             LastDt: 0.0376,
@@ -384,7 +384,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_resize_viewport_snapshot_captures_source_of_truth_fields()
     {
-        var snapshot = new Program.ViewportDiagnosticsSnapshot(
+        var snapshot = new ViewportDiagnosticsSnapshot(
             new PixelRectangle(10, 20, 929, 454),
             new PixelRectangle(10, 20, 929, 454),
             new PixelRectangle(10, 20, 929, 454),
@@ -415,7 +415,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_resize_viewport_outputs_source_of_truth_fields()
     {
-        var snapshot = new Program.ViewportDiagnosticsSnapshot(
+        var snapshot = new ViewportDiagnosticsSnapshot(
             new PixelRectangle(10, 20, 929, 454),
             new PixelRectangle(10, 20, 929, 454),
             new PixelRectangle(10, 20, 929, 454),
@@ -451,6 +451,34 @@ public sealed class ProgramDiagnosticsTests
     #region Debug UI Bridge Baseline
 
     [Fact]
+    public void Default_debug_bridge_captures_existing_debug_state()
+    {
+        var viewport = new CounterViewportDiagnostics(
+            new PixelRectangle(0, 0, 929, 454),
+            new PixelRectangle(0, 0, 929, 454),
+            "PhysicalPixelsV0");
+        var layout = new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly");
+        var scroll = ScrollState.Default with
+        {
+            Position = 42.4,
+            TargetPosition = 48,
+            MaxScrollY = 240,
+            HasMaxScrollY = true
+        };
+
+        var snapshot = new DefaultDebugDiagnosticsSnapshotBridge(viewport, layout, scroll).Capture();
+
+        Assert.Equal(viewport, snapshot.Viewport);
+        Assert.Equal(layout, snapshot.Layout);
+        Assert.Equal(42, snapshot.Scroll.AppliedScrollY);
+        Assert.Equal(48, snapshot.Scroll.TargetPosition);
+        Assert.Equal(240, snapshot.Scroll.MaxScrollY);
+        Assert.True(snapshot.Scroll.HasMaxScrollY);
+        Assert.Equal(Program.DiagInputOwnership, snapshot.InputOwnership);
+        Assert.Equal(Program.DiagBackendClipMode, snapshot.BackendClipMode);
+    }
+
+    [Fact]
     public void Debug_ui_outputs_viewport_diagnostic_row()
     {
         var app = new CounterApplication(
@@ -475,7 +503,7 @@ public sealed class ProgramDiagnosticsTests
 
             #region Test Helpers
 
-    private static Program.BackendClipTextDiagnosticSnapshot CreateBackendClipTextSnapshot(
+    private static BackendClipTextDiagnosticSnapshot CreateBackendClipTextSnapshot(
         int clippedCommandCount,
         int emptyIntersectionSkippedCount,
         int scissorStateChangeCount,
@@ -485,7 +513,7 @@ public sealed class ProgramDiagnosticsTests
         bool deviceRemoved = false,
         string deviceErrorReason = "(none)")
     {
-        return new Program.BackendClipTextDiagnosticSnapshot(
+        return new BackendClipTextDiagnosticSnapshot(
             DrawingBackendClipMode.Scissor,
             clippedCommandCount,
             emptyIntersectionSkippedCount,
@@ -497,9 +525,9 @@ public sealed class ProgramDiagnosticsTests
             deviceErrorReason);
     }
 
-    private static Program.RenderingPipelineDiagnosticSnapshot CreateRenderingPipelineSnapshot()
+    private static RenderingPipelineDiagnosticSnapshot CreateRenderingPipelineSnapshot()
     {
-        return new Program.RenderingPipelineDiagnosticSnapshot(
+        return new RenderingPipelineDiagnosticSnapshot(
             RenderCount: 3,
             PartialApplyCount: 2,
             FullApplyCount: 1,

@@ -118,6 +118,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
 
     private static VirtualNode[] BuildDiagnosticHeaderRows(int count, int scrollY, ScrollState scroll, double pendingPx, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
     {
+        var debugDiagnostics = new DefaultDebugDiagnosticsSnapshotBridge(viewportDiagnostics, layoutDiagnostics, scroll).Capture();
         var maxScrollText = !scroll.HasMaxScrollY
             ? "unknown"
             : scroll.MaxScrollY == 0
@@ -131,8 +132,13 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
             VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
             VirtualNodeFactory.Text($"ClipMode: {Program.DiagBackendClipMode}", 10),
             VirtualNodeFactory.Text($"Viewport: renderer={FormatSize(viewportDiagnostics.RendererViewport)} layout={FormatSize(viewportDiagnostics.LayoutViewport)} scaleMode={viewportDiagnostics.ScaleMode}", 11),
-            VirtualNodeFactory.Text($"LayoutDirty: layoutRebuildCount={layoutDiagnostics.LayoutRebuildCount} LastLayoutRebuildReason={layoutDiagnostics.LastLayoutRebuildReason} LastDirtyClassifications={layoutDiagnostics.LastDirtyClassifications}", 12)
+            VirtualNodeFactory.Text(FormatLayoutDirtyDiagnosticRow(debugDiagnostics.Layout), 12)
         ];
+    }
+
+    private static string FormatLayoutDirtyDiagnosticRow(CounterLayoutDiagnostics layoutDiagnostics)
+    {
+        return $"LayoutDirty: layoutRebuildCount={layoutDiagnostics.LayoutRebuildCount} LastLayoutRebuildReason={layoutDiagnostics.LastLayoutRebuildReason} LastDirtyClassifications={layoutDiagnostics.LastDirtyClassifications}";
     }
 
     private static CounterLayoutDiagnostics NormalizeLayoutDiagnostics(CounterLayoutDiagnostics diagnostics)

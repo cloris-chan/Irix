@@ -6,7 +6,7 @@ namespace Irix.Poc;
 
 internal static class DiagnosticsFormatter
 {
-    internal static string[] BuildBackendDeviceDiagnosticLines(Program.BackendClipTextDiagnosticSnapshot snapshot)
+    internal static string[] BuildBackendDeviceDiagnosticLines(BackendClipTextDiagnosticSnapshot snapshot)
     {
         return [
             $"Device removed: {snapshot.DeviceRemoved}",
@@ -14,39 +14,39 @@ internal static class DiagnosticsFormatter
         ];
     }
 
-    internal static string BuildBackendClipModeDiagnosticLine(Program.BackendClipTextDiagnosticSnapshot snapshot)
+    internal static string BuildBackendClipModeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
     {
         return $"Backend clip mode: {snapshot.ClipMode}";
     }
 
-    internal static string BuildClipScissorSmokeDiagnosticLine(DrawRect clipBounds, Program.BackendClipTextDiagnosticSnapshot snapshot)
+    internal static string BuildClipScissorSmokeDiagnosticLine(DrawRect clipBounds, BackendClipTextDiagnosticSnapshot snapshot)
     {
         return $"Scissor smoke: kind=FillRect clip={FormatRect(clipBounds)} effectiveClip={FormatEffectiveScissor(snapshot.LastEffectiveScissor)} nestedClip=False textClip=False gpuScissor={snapshot.GpuScissor} clippedCommands={snapshot.ClippedCommandCount} emptyIntersectionSkipped={snapshot.EmptyIntersectionSkippedCount} scissorStateChanges={snapshot.ScissorStateChangeCount} deviceRemoved={snapshot.DeviceRemoved}";
     }
 
-    internal static string BuildPipelineScissorSmokeDiagnosticLine(Program.BackendClipTextDiagnosticSnapshot snapshot)
+    internal static string BuildPipelineScissorSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
     {
         var passed = snapshot.ClippedCommandCount > 0 && snapshot.ScissorStateChangeCount > 0;
         return $"Pipeline scissor smoke: source=ScrollContainerRectangle textClip=False clippedCommands={snapshot.ClippedCommandCount} emptyIntersectionSkipped={snapshot.EmptyIntersectionSkippedCount} scissorStateChanges={snapshot.ScissorStateChangeCount} deviceRemoved={snapshot.DeviceRemoved} passed={passed}";
     }
 
-    internal static string BuildEmptyScissorSmokeDiagnosticLine(Program.BackendClipTextDiagnosticSnapshot snapshot)
+    internal static string BuildEmptyScissorSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
     {
         return $"Empty scissor smoke: kind=FillRect clippedCommands={snapshot.ClippedCommandCount} emptyIntersectionSkipped={snapshot.EmptyIntersectionSkippedCount} scissorStateChanges={snapshot.ScissorStateChangeCount} deviceRemoved={snapshot.DeviceRemoved}";
     }
 
-    internal static string BuildTextClipSmokeDiagnosticLine(Program.BackendClipTextDiagnosticSnapshot snapshot)
+    internal static string BuildTextClipSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
     {
         return $"Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(snapshot.LastEffectiveTextClip)} textClipSkipped={snapshot.TextClipSkippedCount} deviceRemoved={snapshot.DeviceRemoved}";
     }
 
-    internal static string BuildPipelineTextClipSmokeDiagnosticLine(Program.BackendClipTextDiagnosticSnapshot snapshot)
+    internal static string BuildPipelineTextClipSmokeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)
     {
         var passed = !snapshot.LastEffectiveTextClip.IsEmpty && snapshot.ClippedCommandCount > 0 && snapshot.TextClipSkippedCount == 0;
         return $"Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(snapshot.LastEffectiveTextClip)} clippedCommands={snapshot.ClippedCommandCount} textClipSkipped={snapshot.TextClipSkippedCount} deviceRemoved={snapshot.DeviceRemoved} passed={passed}";
     }
 
-    internal static string[] BuildRenderingPipelineCompositorDiagnosticLines(Program.RenderingPipelineDiagnosticSnapshot snapshot)
+    internal static string[] BuildRenderingPipelineCompositorDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)
     {
         var lines = new List<string>
         {
@@ -63,7 +63,7 @@ internal static class DiagnosticsFormatter
         return [.. lines];
     }
 
-    internal static string[] BuildRenderingPipelineLayoutDiagnosticLines(Program.RenderingPipelineDiagnosticSnapshot snapshot)
+    internal static string[] BuildRenderingPipelineLayoutDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)
     {
         var lines = new List<string>
         {
@@ -85,7 +85,7 @@ internal static class DiagnosticsFormatter
         return [.. lines];
     }
 
-    internal static string[] BuildResizeViewportDiagnosticLines(Program.ViewportDiagnosticsSnapshot snapshot)
+    internal static string[] BuildResizeViewportDiagnosticLines(ViewportDiagnosticsSnapshot snapshot)
     {
         return [
             $"windowPhysicalSize={FormatSize(snapshot.WindowPhysicalBounds)}",
@@ -105,7 +105,7 @@ internal static class DiagnosticsFormatter
         ];
     }
 
-    internal static string[] BuildScrollDiagnosticLines(Program.ScrollDiagnosticsSnapshot snapshot)
+    internal static string[] BuildScrollDiagnosticLines(ScrollDiagnosticsSnapshot snapshot)
     {
         return [
             "=== Scroll Pump Diagnostics ===",
@@ -124,7 +124,7 @@ internal static class DiagnosticsFormatter
         return $"styleOnlyPlan {snapshot.CaseName} eligible={snapshot.Eligible} fallback={snapshot.FallbackReason} dirtyElementRanges={FormatRanges(snapshot.DirtyElementRanges)} dirtyCommandRanges={FormatRanges(snapshot.DirtyCommandRanges)} hitTargetCount={snapshot.HitTargetCount}";
     }
 
-    internal static string[] BuildInputDiagnosticLines(Program.InputDiagnosticsSnapshot snapshot)
+    internal static string[] BuildInputDiagnosticLines(InputDiagnosticsSnapshot snapshot)
     {
         return [
             "=== Input Ownership Diagnostics ===",
