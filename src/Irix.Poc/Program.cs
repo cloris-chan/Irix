@@ -305,6 +305,20 @@ internal static class Program
         ];
     }
 
+    internal static string BuildStyleOnlyPatchPlanDiagnosticLine(string name, StyleOnlyPatchPlan plan)
+    {
+        return $"styleOnlyPlan {name} eligible={plan.Eligible} fallback={plan.FallbackReason} dirtyElementRanges={FormatRanges(plan.DirtyElementRanges)} dirtyCommandRanges={FormatRanges(plan.DirtyCommandRanges)} hitTargetCount={plan.PatchedHitTargets.Count}";
+    }
+
+    internal static string[] BuildStyleOnlyPatchPlanSmokeDiagnosticLines()
+    {
+        return [
+            "=== StyleOnly Patch Plan Diagnostics ===",
+            BuildStyleOnlyPatchPlanDiagnosticLine("hoverOnly", BuildHoverOnlyStyleOnlyPatchPlan()),
+            BuildStyleOnlyPatchPlanDiagnosticLine("layoutAffecting", BuildLayoutAffectingStyleOnlyPatchPlan())
+        ];
+    }
+
     private static string FormatEffectiveScissor(EffectiveScissor scissor)
     {
         return scissor.IsEmpty ? "empty" : FormatRect(scissor.Bounds);
@@ -320,6 +334,16 @@ internal static class Program
         return $"{rectangle.Width}x{rectangle.Height}";
     }
 
+    private static string FormatRanges(IReadOnlyList<(int Start, int Count)> ranges)
+    {
+        if (ranges.Count == 0)
+        {
+            return "(none)";
+        }
+
+        return string.Join(",", ranges.Select(range => $"{range.Start}:{range.Count}"));
+    }
+
     private static string FormatLayoutDirtyClassifications(IReadOnlyList<LayoutDirtyClassification> classifications)
     {
         if (classifications.Count == 0)
@@ -328,6 +352,66 @@ internal static class Program
         }
 
         return string.Join(",", classifications.Select(classification => $"{classification.DfsIndex}:{classification.Reason}"));
+    }
+
+    private static StyleOnlyPatchPlan BuildHoverOnlyStyleOnlyPatchPlan()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var retainedLayout = pipeline.LastLayoutResult;
+        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        return StyleOnlyPatchPlanBuilder.Build(
+            pipeline.LastDirtyClassifications,
+            viewportChanged: false,
+            retainedLayout,
+            retainedCommandRanges,
+            retainedHitTargets,
+            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastDirtyElementRanges);
+    }
+
+    private static StyleOnlyPatchPlan BuildLayoutAffectingStyleOnlyPatchPlan()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
+            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+        var root2 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
+            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var retainedLayout = pipeline.LastLayoutResult;
+        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+
+        using var frame2 = pipeline.Build(root2, viewport, [0]);
+        return StyleOnlyPatchPlanBuilder.Build(
+            pipeline.LastDirtyClassifications,
+            viewportChanged: false,
+            retainedLayout,
+            retainedCommandRanges,
+            retainedHitTargets,
+            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastDirtyElementRanges);
     }
 
     private sealed class PlatformInputObserver(Action<RawInputEvent> onNext) : IObserver<RawInputEvent>
@@ -868,6 +952,10 @@ internal static class Program
             {
                 Console.WriteLine($"  ScrollContainer[{sd.DfsIndex}]: visible={sd.VisibleHeight} content={sd.ContentHeight} scrollY={sd.ScrollY} maxScrollY={sd.MaxScrollY} elements={sd.VisibleElementCount}/{sd.VisibleElementCount + sd.ClippedElementCount} visible");
             }
+        }
+        foreach (var line in BuildStyleOnlyPatchPlanSmokeDiagnosticLines())
+        {
+            Console.WriteLine(line);
         }
         Console.WriteLine($"=== Pipeline Scissor Smoke ===");
         d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);

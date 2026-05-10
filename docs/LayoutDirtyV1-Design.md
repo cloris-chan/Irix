@@ -75,6 +75,12 @@ New draw commands must bind resources from the current frame's `FrameDrawingReso
 
 The retained command buffer may only accept partial command replacement when resource ownership is safe. If new commands are recorded against a different resource owner, the patch must update the retained frame's resource ownership consistently or fall back to a full apply. This prevents stale `TextSlice` / `ResourceHandle` references after old frame resources are returned to the pool.
 
+### Plan Builder Boundary
+
+`StyleOnlyPatchPlanBuilder` is post-layout validation only in the current stage. It consumes the next frame's already-built layout elements, dirty element ranges, retained element-to-command ranges, and retained hit targets, then reports whether a future style-only patch would be safe. Because it depends on next layout output, it is not a fast-path implementation and must not be used as evidence that `LayoutTreeBuilder` was skipped.
+
+The `--diagnose` style-only plan smoke prints an eligible hover-only plan and a layout-affecting fallback reason to make these guard decisions visible. The smoke still runs after layout has been built; it does not replace retained layout, retained frame resources, hit targets, or command buffers.
+
 ### Required Tests Before Implementation
 
 Before implementing a style-only patch path, add tests proving that layout rebuild count does not increase only for the intended fast path, and that retained bounds, clips, element ranges, hit target geometry, scroll diagnostics, and command ranges remain byte-for-byte stable. Also test that button visual commands update, `ActionId` metadata updates, current-frame resources are used, and every mixed or uncertain dirty reason falls back to the existing full layout behavior.

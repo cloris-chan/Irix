@@ -79,6 +79,29 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Diagnose_style_only_patch_plan_formatter_outputs_stable_fields()
+    {
+        var plan = StyleOnlyPatchPlan.CreateEligible(
+            [(0, 1)],
+            [(0, 2)],
+            [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment", new PixelRectangle(0, 0, 960, 540))]);
+
+        var line = Program.BuildStyleOnlyPatchPlanDiagnosticLine("hoverOnly", plan);
+
+        Assert.Equal("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", line);
+    }
+
+    [Fact]
+    public void Diagnose_style_only_patch_plan_smoke_outputs_eligible_and_fallback()
+    {
+        var output = string.Join(Environment.NewLine, Program.BuildStyleOnlyPatchPlanSmokeDiagnosticLines());
+
+        Assert.Contains("=== StyleOnly Patch Plan Diagnostics ===", output);
+        Assert.Contains("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", output);
+        Assert.Contains("styleOnlyPlan layoutAffecting eligible=False fallback=NotStyleOnly dirtyElementRanges=0:1 dirtyCommandRanges=(none) hitTargetCount=0", output);
+    }
+
+    [Fact]
     public void Diagnose_clip_scissor_smoke_outputs_stable_fields()
     {
         var line = Program.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), true, 1, 0, 1, false);
