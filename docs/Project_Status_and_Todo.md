@@ -30,6 +30,7 @@
 | [ADR-Scissor-Clipping-v0.md](ADR-Scissor-Clipping-v0.md) | clip/scissor/text clip v0 决策、smoke baseline、冻结边界 |
 | [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md) | layout dirty 分类、StyleOnly patch v0 设计、plan diagnostics、未来 fast-path 接入点 |
 | [V1-Consolidation-Prep.md](V1-Consolidation-Prep.md) | v1 architecture consolidation prep：模块边界、诊断入口、测试分组、暂不移动清单 |
+| [V1-API-Control-Boundary-Prep.md](V1-API-Control-Boundary-Prep.md) | v1 API/control boundary prep：controls、input、window glue 的 ownership 与命名边界 |
 | [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) | diagnostics snapshot v0：snapshot 类型、provider 边界、CLI 文本冻结、最小实现候选 |
 | [RetainedElementTree-Design.md](RetainedElementTree-Design.md) | 真正 retained element tree / local patch apply 的草案 |
 | [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
@@ -45,7 +46,7 @@
 
 ### 下一步候选
 
-- 当前选择：`v1 API/control boundary prep`，从 [V1-Consolidation-Prep.md](V1-Consolidation-Prep.md) 的模块边界、测试分组与暂不移动清单开始，为 controls/input/window glue 的 ownership 和 API 命名收敛做准备。
+- 当前选择：`v1 API/control boundary prep`，入口文档是 [V1-API-Control-Boundary-Prep.md](V1-API-Control-Boundary-Prep.md)，用于盘点 controls、input、window glue 边界并为 ownership 和 API 命名收敛做准备。
 - 暂缓：`StyleOnly fast-path implementation` 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point；不接入 `RenderPipeline.Build`，不启用新行为。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 

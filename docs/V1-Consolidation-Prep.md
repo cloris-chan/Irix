@@ -16,7 +16,7 @@
 - Framework 层已经基本成形：`Irix.Core` owns MVU/tree/diff, `Irix.Rendering` owns layout/render-frame planning, `Irix.Platform.Windows` owns Win32/D3D12 primitives.
 - `Irix.Poc` 当前承担了三类债务：sample app semantics、cross-layer wiring、diagnostic entrypoints。
 - Program diagnostics runner split 已完成并封版为 regression-only；后续不继续拆 diagnostics，也暂不做 unified diagnostics channel / event bus / registry。
-- 下一条线选择 `v1 API/control boundary prep`：先梳理 controls/input/window glue 的 API 边界，再决定哪些 PoC helpers 值得提升到 framework 层；不要先做文件搬迁。
+- 下一条线选择 `v1 API/control boundary prep`，入口文档是 [V1-API-Control-Boundary-Prep.md](V1-API-Control-Boundary-Prep.md)。先梳理 controls/input/window glue 的 API 边界，再决定哪些 PoC helpers 值得提升到 framework 层；不要先做文件搬迁。
 
 ## 2. 诊断入口盘点
 
@@ -111,7 +111,7 @@ Rules for this split:
 1. Treat [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) as sealed; only repair regressions in that line.
 2. Keep Program diagnostics runner split sealed as regression-only; new diagnostics work should preserve CLI output and debug overlay rows.
 3. Leave unified diagnostics channel, event bus, registry, and provider replacement paused until explicitly reopened.
-4. Start the next line as `v1 API/control boundary prep`, focused on naming, ownership, and API boundaries for controls/input/window glue without moving runtime code.
+4. Start the next line as [v1 API/control boundary prep](V1-API-Control-Boundary-Prep.md), focused on naming, ownership, and API boundaries for controls/input/window glue without moving runtime code.
 5. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
 6. For any future diagnostics ownership move, run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke.
 
@@ -124,5 +124,5 @@ Rules for this split:
 | 测试分组盘点 | 已按 scroll/input/clip/viewport/layout dirty/style-only plan/retained frame 分组。 |
 | 标记不移动清单 | 已明确 scroll/input/clip/render pipeline 核心代码暂不移动。 |
 | Program diagnostics runner split | 已完成并封版为 regression-only：`Program.Main` 只分发 diagnostics runners，后续不在此线继续拆 block。 |
-| 下一条线 | 选择 `v1 API/control boundary prep`；暂不做 StyleOnly fast-path implementation，也暂不做 unified diagnostics channel。 |
+| 下一条线 | 选择 [v1 API/control boundary prep](V1-API-Control-Boundary-Prep.md)；暂不做 StyleOnly fast-path implementation，也暂不做 unified diagnostics channel。 |
 | consolidation prep 文档 | 本文即输出；当前阶段不改运行行为。 |
