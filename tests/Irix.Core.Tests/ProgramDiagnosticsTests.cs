@@ -80,4 +80,20 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal("Scissor smoke: kind=FillRect clip=(32,32,80,40) effectiveClip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=True clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=1 deviceRemoved=False", line);
     }
+
+    [Fact]
+    public void Diagnose_pipeline_scissor_smoke_outputs_real_counter_fields()
+    {
+        var line = Program.BuildPipelineScissorSmokeDiagnosticLine(clippedCommandCount: 1, emptyIntersectionSkippedCount: 0, scissorStateChangeCount: 1, deviceRemoved: false);
+
+        Assert.Equal("Pipeline scissor smoke: source=ScrollContainerRectangle textClip=False clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=1 deviceRemoved=False passed=True", line);
+    }
+
+    [Fact]
+    public void Diagnose_empty_scissor_smoke_outputs_skip_counter()
+    {
+        var line = Program.BuildEmptyScissorSmokeDiagnosticLine(clippedCommandCount: 1, emptyIntersectionSkippedCount: 1, scissorStateChangeCount: 0, deviceRemoved: false);
+
+        Assert.Equal("Empty scissor smoke: kind=FillRect clippedCommands=1 emptyIntersectionSkipped=1 scissorStateChanges=0 deviceRemoved=False", line);
+    }
 }

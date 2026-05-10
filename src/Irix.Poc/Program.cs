@@ -41,7 +41,9 @@ internal static class Program
 
         // D3D12 rendering path
         var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-        var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        var clipMode = args.Contains("--enable-scissor") ? DrawingBackendClipMode.Scissor : DrawingBackendClipMode.Diagnostic;
+        var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, clipMode);
+        _backendClipMode = d3d12Backend.ClipMode;
 
         Action<double>? maxScrollYCallback = null;
         var drawCommandTranslator = new WindowDrawCommandTranslator(
@@ -87,6 +89,7 @@ internal static class Program
 
         Console.WriteLine($"Detected screens: {platformHost.Screens.Count}");
         Console.WriteLine("Rendering: D3D12 (clear color from FillRect)");
+        Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 
         await runtime.StartAsync();
@@ -145,6 +148,17 @@ internal static class Program
         return $"Scissor smoke: kind=FillRect clip={FormatRect(clipBounds)} effectiveClip={FormatEffectiveScissor(effectiveScissor)} nestedClip=False textClip=False gpuScissor={gpuScissor} clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved}";
     }
 
+    internal static string BuildPipelineScissorSmokeDiagnosticLine(int clippedCommandCount, int emptyIntersectionSkippedCount, int scissorStateChangeCount, bool deviceRemoved)
+    {
+        var passed = clippedCommandCount > 0 && scissorStateChangeCount > 0;
+        return $"Pipeline scissor smoke: source=ScrollContainerRectangle textClip=False clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved} passed={passed}";
+    }
+
+    internal static string BuildEmptyScissorSmokeDiagnosticLine(int clippedCommandCount, int emptyIntersectionSkippedCount, int scissorStateChangeCount, bool deviceRemoved)
+    {
+        return $"Empty scissor smoke: kind=FillRect clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved}";
+    }
+
     private static string FormatEffectiveScissor(EffectiveScissor scissor)
     {
         return scissor.IsEmpty ? "empty" : FormatRect(scissor.Bounds);
@@ -173,6 +187,7 @@ internal static class Program
 
     private static ScrollFramePump? _scrollFramePump;
     private static InputOwnershipState? _inputOwnershipState;
+    private static DrawingBackendClipMode _backendClipMode = DrawingBackendClipMode.Diagnostic;
 
     // ── Diagnostic readouts ────────────────────────────────────────────
 
@@ -184,6 +199,7 @@ internal static class Program
     internal static double DiagScrollLastDt => _scrollFramePump?.LastDt ?? 0;
     internal static double DiagScrollDrainedPixels => _scrollFramePump?.DrainedPixels ?? 0;
     internal static OwnershipSnapshot DiagInputOwnership => _inputOwnershipState?.Snapshot ?? default;
+    internal static DrawingBackendClipMode DiagBackendClipMode => _backendClipMode;
 
     internal static bool TryMapInputForRuntime(
         RawInputEvent inputEvent,
@@ -504,6 +520,7 @@ internal static class Program
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        _backendClipMode = d3d12Backend.ClipMode;
         using var compositor = new DrawingBackendCompositor(d3d12Backend);
 
         // Build a test frame: one rectangle + one text + one button
@@ -627,15 +644,40 @@ internal static class Program
                 Console.WriteLine($"  ScrollContainer[{sd.DfsIndex}]: visible={sd.VisibleHeight} content={sd.ContentHeight} scrollY={sd.ScrollY} maxScrollY={sd.MaxScrollY} elements={sd.VisibleElementCount}/{sd.VisibleElementCount + sd.ClippedElementCount} visible");
             }
         }
+        Console.WriteLine($"=== Pipeline Scissor Smoke ===");
+        d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);
+        _backendClipMode = d3d12Backend.ClipMode;
+        RunPipelineScissorSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
+        Console.WriteLine(BuildPipelineScissorSmokeDiagnosticLine(d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
+
         Console.WriteLine($"=== Clip Scissor Diagnostics ===");
         var smokeClip = new DrawRect(32, 32, 80, 40);
         d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);
+        _backendClipMode = d3d12Backend.ClipMode;
         RunClipScissorSmokeDiagnostic(d3d12Backend);
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
         Console.WriteLine(BuildClipScissorSmokeDiagnosticLine(smokeClip, d3d12Backend.LastEffectiveScissor, d3d12Backend.ClipMode == DrawingBackendClipMode.Scissor, d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
+        Console.WriteLine($"=== Empty Scissor Diagnostics ===");
+        RunEmptyScissorSmokeDiagnostic(d3d12Backend);
+        Console.WriteLine(BuildEmptyScissorSmokeDiagnosticLine(d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);
+    }
+
+    private static void RunPipelineScissorSmokeDiagnostic(DrawingBackendCompositor compositor, D3D12DrawingBackend backend, D3D12Renderer renderer)
+    {
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1000,
+            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(40))],
+            children: [VirtualNodeFactory.Rectangle(160, 80, 1001)]);
+        var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
+        using var batch = pipeline.Build(root, viewport);
+
+        backend.SetClipMode(DrawingBackendClipMode.Scissor);
+        compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
     }
 
     private static void RunClipScissorSmokeDiagnostic(D3D12DrawingBackend backend)
@@ -646,6 +688,22 @@ internal static class Program
                 DrawCommandKind.FillRect,
                 Rect: new DrawRect(16, 16, 160, 80),
                 ClipBounds: new DrawRect(32, 32, 80, 40),
+                Color: DrawColor.Opaque(72, 136, 255))
+        };
+
+        backend.BeginFrame(default);
+        backend.Execute(commands, FrameDrawingResources.Empty);
+        backend.EndFrame();
+    }
+
+    private static void RunEmptyScissorSmokeDiagnostic(D3D12DrawingBackend backend)
+    {
+        var commands = new[]
+        {
+            new DrawCommand(
+                DrawCommandKind.FillRect,
+                Rect: new DrawRect(16, 16, 160, 80),
+                ClipBounds: new DrawRect(2048, 2048, 80, 40),
                 Color: DrawColor.Opaque(72, 136, 255))
         };
 

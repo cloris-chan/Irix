@@ -517,6 +517,7 @@ public sealed class CounterInputRouterTests
         Assert.True(ContainsTextStartingWith(tree.Root, "Click a button"));
         Assert.False(ContainsTextStartingWith(tree.Root, "ScrollY:"));
         Assert.False(ContainsTextStartingWith(tree.Root, "Input:"));
+        Assert.False(ContainsTextStartingWith(tree.Root, "ClipMode:"));
     }
 
     [Fact]
@@ -540,6 +541,7 @@ public sealed class CounterInputRouterTests
 
         Assert.True(ContainsTextStartingWith(tree.Root, "ScrollY: applied=54"));
         Assert.True(ContainsTextStartingWith(tree.Root, "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=1"));
+        Assert.True(ContainsTextStartingWith(tree.Root, "ClipMode: Diagnostic"));
     }
 
     [Fact]

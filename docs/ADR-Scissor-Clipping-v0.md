@@ -20,7 +20,7 @@ Introduce backend clip capability as a diagnostic boundary before implementing G
 | `Diagnostic` | Backend observes/counts clipped commands but renders exactly as before. |
 | `Scissor` | Backend applies backend-native scissor/clipping for supported commands. |
 
-D3D12 defaults to `Diagnostic`: it receives `ClipBounds`, counts clipped commands, and continues rendering existing FillRect/Text paths unchanged. `Scissor` mode is available behind an explicit backend flag and currently applies only to FillRect commands; the normal PoC path still constructs the backend in `Diagnostic` mode.
+D3D12 defaults to `Diagnostic`: it receives `ClipBounds`, counts clipped commands, and continues rendering existing FillRect/Text paths unchanged. `Scissor` mode is available behind an explicit backend flag and through the PoC `--enable-scissor` switch; it currently applies only to FillRect commands. The normal PoC path still constructs the backend in `Diagnostic` mode.
 
 ## Per-command Scissor Shape
 
@@ -68,7 +68,7 @@ The first scissor smoke uses exactly one clipped FillRect command:
 - No text command.
 - No retained partial redraw.
 
-Current `--diagnose` smoke switches the backend to `Scissor` for exactly one clipped FillRect. It reports `effectiveClip=(32,32,80,40)`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, and `gpuScissor=True`, proving that enabling D3D12 scissor does not break the existing FillRect path.
+Current `--diagnose` smokes switch the backend to `Scissor` for FillRect-only checks. The direct smoke renders exactly one clipped FillRect and reports `effectiveClip=(32,32,80,40)`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, and `gpuScissor=True`. A pipeline smoke builds a ScrollContainer containing one clipped rectangle and verifies `clippedCommands > 0` and `scissorStateChanges > 0`. An empty-intersection smoke verifies a fully outside clip increments `emptyIntersectionSkipped=1`. These smokes prove D3D12 scissor does not break the existing FillRect path while keeping text clipping out of scope.
 
 ## Non-goals
 

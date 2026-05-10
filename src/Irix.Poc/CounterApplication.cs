@@ -99,7 +99,8 @@ internal sealed class CounterApplication(bool showDiagnostics = false) : IApplic
             VirtualNodeFactory.Text($"Count: {count}", 2),
             VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={scroll.TargetPosition:F1} pos={scroll.Position:F2} max={maxScrollText} acc={scroll.Accumulator:F3} anim={scroll.IsAnimating} pendingPx={pendingPx:F0} drained={Program.DiagScrollDrainedPixels:F0} frames={Program.DiagScrollDispatchedFrameCount} waitMs={Program.DiagScrollRenderWaitMs:F1} dt={Program.DiagScrollLastDt:F3} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
             VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
-            VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9)
+            VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
+            VirtualNodeFactory.Text($"ClipMode: {Program.DiagBackendClipMode}", 10)
         ];
     }
 
