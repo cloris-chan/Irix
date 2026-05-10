@@ -39,12 +39,42 @@ Layout dirty v1 is a diagnostic and planning step before partial layout. The cur
 - Do not skip `StyleOnly` layout in this stage. A dirty DFS node still causes the same full `LayoutTreeBuilder` rebuild path as before.
 - Do not implement partial layout, local subtree layout, or a `LayoutTreeBuilder` rewrite as part of layout dirty v1 closure.
 
-## StyleOnly Fast-Path Evaluation
+## StyleOnly Patch v0 Design
 
-This is design-only. It is not implemented in layout dirty v1.
+This section is design-only. It is not implemented in layout dirty v1, and it must not change `RenderPipeline.Build` behavior in the current stage.
 
-`StyleOnly` could reuse retained layout data only when the dirty node is known to preserve element count, element order, bounds, clip bounds, scroll diagnostics, and command range mapping. Candidate reusable data would be the retained `LayoutTreeResult.Elements`, layout tree node DFS-to-element ranges, viewport, scroll diagnostics, and existing element bounds/clip rectangles.
+### Reusable Layout Preconditions
 
-Even with retained layout reuse, the affected draw command ranges still need to be rerecorded because hover, pressed, and focused state can change button fill color. Hit targets also need to be rebuilt or patched for affected elements because `ActionId` is currently classified as style-only metadata: its geometry may be stable, but the target action string is not safe to reuse blindly. Resource ownership remains a separate concern; any command patch must respect the current frame resource lifetime and retained command buffer rules.
+A future style-only patch may reuse retained layout only when every dirty classification is `StyleOnly` and the retained layout context is otherwise identical. The following data must remain unchanged:
 
-A future `StyleOnly` fast path must bail out to full layout whenever the dirty classification contains `TextSizeAffecting`, `LayoutAffecting`, `TreeStructure`, `ViewportChanged`, unknown layout-affecting attributes, content changes that can affect measurement, or child shape/key/order changes. It also needs focused tests proving that bounds, clips, hit target geometry, scroll diagnostics, and command ranges are unchanged while visual commands and hit target metadata update correctly.
+- Viewport bounds and root clip semantics.
+- Flat layout element count and order.
+- DFS node to element range mapping.
+- Element bounds and clip bounds.
+- Hit target geometry: bounds and clip bounds.
+- Scroll diagnostics: visible height, content height, `ScrollY`, `MaxScrollY`, visible/clipped element counts.
+- Element to draw command range mapping.
+
+Any `TextSizeAffecting`, `LayoutAffecting`, `TreeStructure`, or `ViewportChanged` reason must bail out to the existing full layout path. Unknown attributes should also bail out unless they are explicitly added to the style-only allowlist with tests proving the invariants above.
+
+### Draw Command Rerecord Scope
+
+Layout reuse does not mean command reuse. The dirty element ranges still need to be mapped through the retained element-to-command ranges, and only those draw command ranges should be rerecorded. This is enough for hover, pressed, and focused visual changes because button fill color and related visual state live in draw commands, not in layout geometry.
+
+Command rerecord must not rebuild layout, must not reorder commands, and must not expand beyond the merged dirty element ranges unless the existing element-to-command mapping cannot prove a stable range. If a dirty element has no stable command range, the patch must bail out to full command recording for the frame.
+
+### Hit Target Metadata Patch
+
+Style-only dirty can reuse hit target geometry only when bounds and clip bounds are unchanged. Metadata must still be refreshed for affected hit targets. `ActionId` is currently classified as style-only because it does not move geometry, but it is unsafe to reuse old action metadata blindly: a stable rectangle can point at a different action.
+
+A future patch should therefore update hit target metadata for affected element ranges while preserving geometry from retained layout. If metadata cannot be mapped from the dirty element range to an existing hit target, or if the number/order of hit targets changes, the patch must bail out to full hit target rebuild.
+
+### Frame Resource Lifetime
+
+New draw commands must bind resources from the current frame's `FrameDrawingResources`. They must not reference text slices, text styles, or other handles owned by a previous frame. A style-only command patch must either record with the current frame resource arena or prove that retained resources are still owned by the same live retained frame scope.
+
+The retained command buffer may only accept partial command replacement when resource ownership is safe. If new commands are recorded against a different resource owner, the patch must update the retained frame's resource ownership consistently or fall back to a full apply. This prevents stale `TextSlice` / `ResourceHandle` references after old frame resources are returned to the pool.
+
+### Required Tests Before Implementation
+
+Before implementing a style-only patch path, add tests proving that layout rebuild count does not increase only for the intended fast path, and that retained bounds, clips, element ranges, hit target geometry, scroll diagnostics, and command ranges remain byte-for-byte stable. Also test that button visual commands update, `ActionId` metadata updates, current-frame resources are used, and every mixed or uncertain dirty reason falls back to the existing full layout behavior.

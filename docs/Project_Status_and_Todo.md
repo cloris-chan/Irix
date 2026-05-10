@@ -573,7 +573,7 @@ root clip semantics v0 已阶段完成：`Depth == 0` 的 root `ScrollContainer`
 | dirtyReason press | `reason=StyleOnly classifications=4:StyleOnly` |
 | dirtyReason release | `reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly` |
 
-Layout dirty v1 诊断到此闭环并冻结：reason tracking、`--debug-ui` 可视化、`--diagnose-input` CLI dirty reason、测试与文档均已覆盖；后续不继续扩展诊断面，除非修复现有输出的明确回归。`StyleOnly` fast-path 仅保留设计评估：未来可以复用 retained layout 的 bounds / clip / scroll diagnostics / element-command range，但仍需重录受影响 draw commands，并更新 hit target metadata；当前不跳过 `StyleOnly` layout，不做局部 layout，不改 `LayoutTreeBuilder`。
+Layout dirty v1 诊断到此闭环并冻结：reason tracking、`--debug-ui` 可视化、`--diagnose-input` CLI dirty reason、测试与文档均已覆盖；后续不继续扩展诊断面，除非修复现有输出的明确回归。`StyleOnly` patch v0 仅保留设计评估：未来复用 retained layout 时 bounds / clip / element ranges / hit target geometry / scroll diagnostics 必须保持不变；只允许按 dirty element range 重录 draw commands；hit target 可复用 bounds/clip 但必须更新 `ActionId` 等 metadata；新命令必须绑定当前 frame resources，不能引用旧 frame text/resource。当前不跳过 `StyleOnly` layout，不做局部 layout，不改 `RenderPipeline.Build` 或 `LayoutTreeBuilder`。
 
 ---
 
