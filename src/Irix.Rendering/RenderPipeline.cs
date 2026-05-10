@@ -3,13 +3,23 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle)
+internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle, ControlVisualStateResolver visualStateResolver)
 {
     private readonly LayoutTreeBuilder _layoutTreeBuilder = new LayoutTreeBuilder(layoutStyle);
-    private readonly DrawCommandRecorder _drawCommandRecorder = new DrawCommandRecorder(drawingStyle);
+    private readonly DrawCommandRecorder _drawCommandRecorder = new DrawCommandRecorder(drawingStyle, visualStateResolver);
 
     public RenderPipeline()
-        : this(LayoutStyle.Default, DrawingStyle.Default)
+        : this(RenderStylePreset.Default)
+    {
+    }
+
+    public RenderPipeline(RenderStylePreset stylePreset)
+        : this(stylePreset.Layout, stylePreset.Drawing, stylePreset.VisualStates)
+    {
+    }
+
+    public RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle)
+        : this(layoutStyle, drawingStyle, ControlVisualStateResolver.Default)
     {
     }
 

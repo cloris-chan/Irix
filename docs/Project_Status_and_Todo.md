@@ -80,12 +80,12 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - D3D12 渲染已接入 PoC：`D3D12Renderer` 使用 CsWin32 生成的裸指针 COM 包装（不再手写 vtable），`D3D12DrawingBackend` 已支持 FillRect 矩形渲染与 DirectWrite 文本叠加
 - 还没有 Skia + D3D12 集成
 - retained layout 与 draw command pipeline 已有最小闭环，但尚未实现正式 retained element tree、增量 layout dirty 标记和局部 patch 应用
-- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；236 个测试用例覆盖各场景
+- `VirtualNodeDiffer` 已实现局部 diff：递归深比较 + keyed reconciliation + Update/Add/Remove patches；`default` 树边界处理已完善；239 个测试用例覆盖各场景
 - `DrawCommand` 已移除内联 `string? Text`，改为 `TextSlice` + `IFrameResourceResolver` 传递文本内容；`ResourceHandle` 已回归资源职责并用于 `TextStyle`
 - DirectWrite backend 已缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`；显式 glyph atlas/cache 尚未实现，当前仍委托 DirectWrite 内部 glyph rasterization/cache
 - 渲染热路径仍有托管分配：`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还；`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new；`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner。`FrameTextArena.Seal()` 从 `ArrayPool` 租用 `char[]` 而非生成 `string`。热路径每帧仅剩 `ArrayPool` rent/return（非 GC 分配）
 - `PatchBatch` 已携带 `Root` 属性，消费者不再需要从 `Memory` 中反推根节点
-- 测试覆盖已扩展至 236 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、普通 diff patch render wait、Runtime.DispatchAndWaitAsync render completion wait、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 纯 TryApplyPartial 失败路径、Dispose 安全释放、资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、FrameDrawingResources Retain/Release/Return 幂等性、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、compositor 诊断计数、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移、ScrollFrame 首帧 delta、Counter 默认可滚动内容、Windows raw wheel 方向、scroll diagnostic smoke、input ownership v0、model-owned input visual refresh、input diagnostic smoke、input ownership event log、Button visual state v0、render wait 计入真实 dt 与低频 render completion 回归等）
+- 测试覆盖已扩展至 239 个测试（含 diff、DrawCommand 文本传递、FrameTextArena、FrameDrawingResources、arena reuse、pool Rent/Return、TextSlice 生命周期、patch 应用、文本渲染正确性、CompositorLoop 合并重绘请求、普通 diff patch render wait、Runtime.DispatchAndWaitAsync render completion wait、render request 与 empty diff 区分、RetainedTree patch apply（去重升序 dirty set）、LayoutTree 中间结构（DFS index → element range 映射、VirtualNodeKind 语义）、增量布局 dirty range 计算与合并（父子重叠/相邻区间合并）、DrawCommand range 映射（element→command range）、dirty command range 计算与传递、RangeUtils 工具类、RetainedCommandBuffer 局部替换、RetainedRenderFrame 纯 TryApplyPartial 失败路径、Dispose 安全释放、资源一致性保护与零分配读取、资源 generation 跟踪与显式所有权、FrameDrawingResources Retain/Release/Return 幂等性、DrawingBackendCompositor retained frame 与 partial apply pilot、cross-frame partial guard、compositor 诊断计数、layout dirty v0、retained layout、DrawingBackendCompositor、所有权转移、ScrollFrame 首帧 delta、Counter 默认可滚动内容、Windows raw wheel 方向、scroll diagnostic smoke、input ownership v0、model-owned input visual refresh、input diagnostic smoke、input ownership event log、Button visual state v0、style preset v0、render wait 计入真实 dt 与低频 render completion 回归等）
 - `CompositorLoop` 已实现两类 render wait：普通 diff patch 的 `PublishAndWaitRenderAsync` 在对应真实 `RenderAsync` 完成后 complete，供 `Runtime.DispatchAndWaitAsync` 等待本次状态更新的真实帧；`RequestRenderAndWaitAsync` 保留给 resize / retained repaint 等无 diff 的显式重绘请求
 - D3D12 resize 已改为 UI 线程只记录 pending size，Compositor 翻译/布局前应用 pending resize，并以 renderer 实际 swapchain 尺寸作为 layout viewport；fence event 由 renderer 持有 SafeHandle 且使用 auto-reset event，避免 GC 后 `E_HANDLE` 与 stale fence wait；交互运行默认关闭 ConsoleCompositor trace，swapchain 使用非拉伸 scaling；D3D12 窗口启用 external rendering 模式，避免 Win32 GDI `WM_PAINT`/erase 与 swapchain present 竞争
 - `RenderPipeline` 已引入 retained layout：缓存上一帧的 `LayoutElement[]`，仅在树或视口变化时重新布局，否则复用缓存并重新录制 DrawCommand
@@ -273,7 +273,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### P1
 
-- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation），并纳入当前 236 个全量测试覆盖
+- ✅ `VirtualNodeDiffer` 已从 `ReplaceRoot` 提升到局部 diff（Update/Add/Remove + keyed reconciliation），并纳入当前 239 个全量测试覆盖
 - 增加 `PatchBatch` / `IMemoryOwner<T>` 异常、取消、释放路径测试
 - 增加输入路由和命中测试的最小测试覆盖
 
@@ -365,7 +365,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 为 PoC 渲染回归增加最小测试
 - [x] 为 `WindowVisualCompositor` 命中测试增加最小覆盖
 - [x] 为 `CompositorLoop` 所有权转移增加最小测试
-- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中后补一帧、普通 empty diff 不等同 render request；`RequestRenderAndWaitAsync` 与普通 diff `PublishAndWaitRenderAsync` 都在对应 `RenderAsync` 完成后才 complete（236 个测试，全部通过）
+- [x] `CompositorLoop` 合并式 render request 行为测试：连续请求只排队一次、渲染中后补一帧、普通 empty diff 不等同 render request；`RequestRenderAndWaitAsync` 与普通 diff `PublishAndWaitRenderAsync` 都在对应 `RenderAsync` 完成后才 complete（239 个测试，全部通过）
 - [x] 引入最小 `RetainedTree`：单次 DFS 遍历应用 ReplaceRoot/Update/Add/Remove patch，返回去重升序 dirty 节点索引集合；13 个测试覆盖 replace root、update、add、remove、keyed reconciliation、多 patch 组合、empty batch、diff→apply 等价性、dirty 排序去重、layout dirty v0、RenderPipeline dirty-driven rebuild、Translator RetainedTree 集成
 - [x] `RenderPipeline` 接入 `RetainedTree`：Translator 持有 RetainedTree，diff batch 调用 Apply 并传递 dirty set，render request 只复用 retained tree；LayoutTreeBuilder 接受 dirty nodes 参数（v0 全量重建）
 - [x] Layout dirty v0：`LayoutTreeBuilder.Build(root, viewport, dirtyNodes)` 接口已落地，当前为全量重建，dirty set 透传用于后续增量布局
@@ -441,7 +441,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] `HasMaxScrollY` 状态标志：`ScrollState` 新增 `HasMaxScrollY`，区分"布局尚未报告 max"（`false`，target 不 clamp）和"已报告"（`true`，clamp 到 `[0, MaxScrollY]`）；`WithMaxScrollY(0)` 正确锁定 target 到 0
 - [x] Scroll 诊断字段扩展：debug 显示新增 `max=unknown/0(known-zero)`、`pendingPx`、`frameQueued`、`tickLoop`，可现场区分 pending 未 drain、frame 排队、max clamp 问题
 - [x] Counter 默认 scroll 内容：Counter PoC 默认内容高度超过 960×540 默认窗口的可见高度，初始 layout 反馈 `MaxScrollY >= 54`，避免首个 wheel delta 被 known-zero max 直接 clamp 成无反应
-- [x] Scroll 回归测试：新增覆盖首笔 pending delta 不丢、Windows 向下单刻度 target=54、默认窗口下 Counter view 可滚动、layout max 回传后单刻度仍得到 target=54、快速 100 次 wheel 在 render wait 阻塞期间合并为少量 ScrollFrame、低频 render completion 不堆积旧帧、普通 diff patch render wait、`RequestRenderAndWaitAsync` 保留给无 diff repaint、第二帧 `dt` 包含 render wait、raw wheel 方向、`--diagnose-scroll` synthetic pump 输出；全量 236 个测试通过
+- [x] Scroll 回归测试：新增覆盖首笔 pending delta 不丢、Windows 向下单刻度 target=54、默认窗口下 Counter view 可滚动、layout max 回传后单刻度仍得到 target=54、快速 100 次 wheel 在 render wait 阻塞期间合并为少量 ScrollFrame、低频 render completion 不堆积旧帧、普通 diff patch render wait、`RequestRenderAndWaitAsync` 保留给无 diff repaint、第二帧 `dt` 包含 render wait、raw wheel 方向、`--diagnose-scroll` synthetic pump 输出；全量 239 个测试通过
 - [x] `RetainedCommandBuffer`：全量 batch + dirty replacement ranges，内存层验证局部替换（v0，不接 D3D12）
 - [x] 明确 retained command 资源生命周期：`RetainedCommandBuffer` 为帧作用域，`TextSlice` 仅在 `FrameDrawingResources` 存活期间有效；partial apply 仅限同帧资源作用域内
 - [x] `RetainedRenderFrame`：组合 retained command buffer、resource resolver、dirty command ranges、hit targets；提供 `ApplyFull`、`ApplyPartial`、`Invalidate`、`ToBatch`
@@ -551,6 +551,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 已选择 **focus / hover / input capture 语义 v0** 作为下一步小方向；`clip` GPU scissor v0 暂缓，避免同时扰动渲染后端和输入语义。
 
+### Interaction foundation freeze
+
+当前 scroll pump、input ownership、Button visual state 三条交互基础链路已冻结：不继续修改 scroll coalescing / frame pump、ownership 事件规则、button state 派生与颜色优先级，除非有明确回归。短期只允许围绕 style preset、诊断与测试做不改变行为的整理。
+
 ### Input ownership v0
 
 当前 ownership 事件规则已冻结：不继续添加新的 ownership event 类型，不扩多 pointer、嵌套 focus scope、平台 capture API；后续只做明确回归修复。`CounterModel` 持有 `OwnershipSnapshot InputOwnership`，Button visual state v0 只从 model snapshot 派生布尔属性，不反向扩展 ownership 模型。ownership-only 输入变化（hover / press / focus / capture）通过 `CounterMessage.InputVisualStateChanged(snapshot)` 写入 model；action 输入通过 `CounterMessage.RoutedInput(action, snapshot)` 在同一次 MVU 更新中同时应用 action 与最新 snapshot，确保 release outside 后 pressed/capture 清空能进入同一帧。`Program.DiagInputOwnership` 保留为诊断读取，不再作为 Button visual state 的数据源。
@@ -575,6 +579,12 @@ Button 已基于 `CounterModel.InputOwnership` 派生 `IsHovered` / `IsPressed` 
 ### Button visual state scope freeze
 
 本轮 Button visual state 只冻结颜色状态链路与诊断输出；暂不做 focus ring / outline、hover cursor、animation transition、theme system、通用控件抽象，也不扩展新的 ownership event 类型或 D3D12 后端接口。后续只接受明确回归修复或诊断补强。
+
+### Style preset v0
+
+Style 分层已收敛为三个边界：`LayoutStyle` 只描述布局几何参数（padding、spacing、text/button/rectangle height、button width 估算）；`DrawingStyle` 只描述绘制 token（文本色、矩形色、button 各状态 fill color、文本样式）；`ControlVisualStateResolver` 只负责把 `ButtonVisualState` 按 `Pressed > Hovered > Focused > Normal` 映射到 `DrawingStyle` 的颜色 token。`RenderStylePreset.Default` 是 rendering 默认 preset，`CounterStylePreset.Default` 复用默认 layout/button token，仅覆盖 Counter PoC 的正文文本色。当前不引入 theme system、样式继承或通用控件抽象。
+
+已覆盖测试：默认 preset 的 button height、padding、text height、button width 参数不变；默认 preset 的 normal / focused / hovered / pressed button fill color 不变；Counter PoC preset 保持默认 layout/button token 且只覆盖正文文本色。
 
 ---
 

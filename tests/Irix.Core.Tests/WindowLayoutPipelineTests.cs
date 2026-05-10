@@ -85,6 +85,7 @@ public sealed class WindowLayoutPipelineTests
             ItemSpacing: 8,
             TextHeight: 28,
             ButtonHeight: 36,
+            RectangleHeight: 44,
             MinimumButtonWidth: 120,
             ButtonTextWidthFactor: 10,
             ButtonHorizontalPadding: 20));
@@ -127,6 +128,47 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(DrawColor.Opaque(200, 210, 220), result.Commands.Memory.Span[2].Color);
 
         result.Commands.Dispose();
+    }
+
+    [Fact]
+    public void Default_style_preset_keeps_current_layout_metrics()
+    {
+        var layout = RenderStylePreset.Default.Layout;
+
+        Assert.Equal(16, layout.HorizontalPadding);
+        Assert.Equal(16, layout.VerticalPadding);
+        Assert.Equal(12, layout.ItemSpacing);
+        Assert.Equal(32, layout.TextHeight);
+        Assert.Equal(40, layout.ButtonHeight);
+        Assert.Equal(48, layout.RectangleHeight);
+        Assert.Equal(140, layout.MinimumButtonWidth);
+        Assert.Equal(12, layout.ButtonTextWidthFactor);
+        Assert.Equal(32, layout.ButtonHorizontalPadding);
+    }
+
+    [Fact]
+    public void Default_style_preset_keeps_button_state_colors()
+    {
+        var preset = RenderStylePreset.Default;
+
+        Assert.Equal(DrawColor.Opaque(52, 120, 246), preset.VisualStates.ResolveButtonFillColor(preset.Drawing, default));
+        Assert.Equal(DrawColor.Opaque(84, 160, 255), preset.VisualStates.ResolveButtonFillColor(preset.Drawing, new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true)));
+        Assert.Equal(DrawColor.Opaque(72, 136, 255), preset.VisualStates.ResolveButtonFillColor(preset.Drawing, new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true)));
+        Assert.Equal(DrawColor.Opaque(36, 92, 210), preset.VisualStates.ResolveButtonFillColor(preset.Drawing, new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true)));
+    }
+
+    [Fact]
+    public void Counter_style_preset_keeps_default_layout_and_poc_text_color()
+    {
+        var preset = CounterStylePreset.Default;
+
+        Assert.Equal(RenderStylePreset.Default.Layout, preset.Layout);
+        Assert.Equal(DrawColor.Opaque(32, 32, 32), preset.Drawing.TextColor);
+        Assert.Equal(RenderStylePreset.Default.Drawing.RectangleFillColor, preset.Drawing.RectangleFillColor);
+        Assert.Equal(RenderStylePreset.Default.Drawing.ButtonFillColor, preset.Drawing.ButtonFillColor);
+        Assert.Equal(RenderStylePreset.Default.Drawing.ButtonHoverFillColor, preset.Drawing.ButtonHoverFillColor);
+        Assert.Equal(RenderStylePreset.Default.Drawing.ButtonPressedFillColor, preset.Drawing.ButtonPressedFillColor);
+        Assert.Equal(RenderStylePreset.Default.Drawing.ButtonFocusedFillColor, preset.Drawing.ButtonFocusedFillColor);
     }
 
     [Fact]
@@ -203,26 +245,7 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void RenderPipeline_builds_draw_commands_from_virtual_node()
     {
-        var pipeline = new RenderPipeline(
-            new LayoutStyle(
-                HorizontalPadding: 16,
-                VerticalPadding: 16,
-                ItemSpacing: 12,
-                TextHeight: 32,
-                ButtonHeight: 40,
-                MinimumButtonWidth: 140,
-                ButtonTextWidthFactor: 12,
-                ButtonHorizontalPadding: 32),
-            new DrawingStyle(
-                TextColor: DrawColor.Opaque(255, 255, 255),
-                RectangleFillColor: DrawColor.Opaque(72, 72, 72),
-                ButtonFillColor: DrawColor.Opaque(52, 120, 246),
-                ButtonHoverFillColor: DrawColor.Opaque(72, 136, 255),
-                ButtonPressedFillColor: DrawColor.Opaque(36, 92, 210),
-                ButtonFocusedFillColor: DrawColor.Opaque(84, 160, 255),
-                ButtonTextColor: DrawColor.Opaque(255, 255, 255),
-                TextStyle: TextStyle.Default,
-                ButtonTextStyle: TextStyle.Default));
+        var pipeline = new RenderPipeline(RenderStylePreset.Default);
         var root = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeFactory.Text("Count: 0", 2),

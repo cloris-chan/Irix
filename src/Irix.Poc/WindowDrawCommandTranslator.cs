@@ -1,4 +1,3 @@
-using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
 
@@ -14,18 +13,7 @@ internal sealed class WindowDrawCommandTranslator(
     private readonly Action? _prepareFrame = prepareFrame;
     private readonly Func<PixelRectangle>? _viewportProvider = viewportProvider;
     private readonly Action<double>? _postFrameCallback = postFrameCallback;
-    private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(
-        LayoutStyle.Default,
-        new DrawingStyle(
-        TextColor: DrawColor.Opaque(32, 32, 32),
-        RectangleFillColor: DrawColor.Opaque(72, 72, 72),
-        ButtonFillColor: DrawColor.Opaque(52, 120, 246),
-        ButtonHoverFillColor: DrawColor.Opaque(72, 136, 255),
-        ButtonPressedFillColor: DrawColor.Opaque(36, 92, 210),
-        ButtonFocusedFillColor: DrawColor.Opaque(84, 160, 255),
-        ButtonTextColor: DrawColor.Opaque(255, 255, 255),
-        TextStyle: TextStyle.Default,
-        ButtonTextStyle: TextStyle.Default));
+    private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(CounterStylePreset.Default);
 
     private readonly RetainedTree _retainedTree = new(default);
 

@@ -353,7 +353,8 @@ internal static class Program
 
     private static string FormatButtonState(ButtonVisualState state)
     {
-        var color = DrawingStyle.Default.ResolveButtonFillColor(state);
+        var stylePreset = CounterStylePreset.Default;
+        var color = stylePreset.VisualStates.ResolveButtonFillColor(stylePreset.Drawing, state);
         return $"hovered={state.IsHovered} pressed={state.IsPressed} focused={state.IsFocused} priority={FormatButtonStatePriority(state)} color={FormatColor(color)}";
     }
 

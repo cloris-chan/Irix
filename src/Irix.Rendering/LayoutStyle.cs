@@ -1,24 +1,15 @@
 namespace Irix.Rendering;
 
 internal readonly record struct LayoutStyle(
-    int HorizontalPadding = 16,
-    int VerticalPadding = 16,
-    int ItemSpacing = 12,
-    int TextHeight = 32,
-    int ButtonHeight = 40,
-    int RectangleHeight = 48,
-    int MinimumButtonWidth = 140,
-    int ButtonTextWidthFactor = 12,
-    int ButtonHorizontalPadding = 32)
+    int HorizontalPadding,
+    int VerticalPadding,
+    int ItemSpacing,
+    int TextHeight,
+    int ButtonHeight,
+    int RectangleHeight,
+    int MinimumButtonWidth,
+    int ButtonTextWidthFactor,
+    int ButtonHorizontalPadding)
 {
-    public static LayoutStyle Default => new(
-        HorizontalPadding: 16,
-        VerticalPadding: 16,
-        ItemSpacing: 12,
-        TextHeight: 32,
-        ButtonHeight: 40,
-        RectangleHeight: 48,
-        MinimumButtonWidth: 140,
-        ButtonTextWidthFactor: 12,
-        ButtonHorizontalPadding: 32);
+    public static LayoutStyle Default => RenderStylePreset.Default.Layout;
 }

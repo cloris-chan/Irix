@@ -3,14 +3,20 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal sealed class DrawCommandRecorder(DrawingStyle style)
+internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualStateResolver visualStateResolver)
 {
     private const int StackCommandThreshold = 64;
 
     private readonly DrawingStyle _style = style;
+    private readonly ControlVisualStateResolver _visualStateResolver = visualStateResolver;
 
     public DrawCommandRecorder()
-        : this(DrawingStyle.Default)
+        : this(RenderStylePreset.Default.Drawing, RenderStylePreset.Default.VisualStates)
+    {
+    }
+
+    public DrawCommandRecorder(DrawingStyle style)
+        : this(style, ControlVisualStateResolver.Default)
     {
     }
 
@@ -64,7 +70,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
     {
         Span<DrawCommand> stackCommands = stackalloc DrawCommand[maximumCommandCount];
         Span<ElementCommandRange> stackRanges = stackalloc ElementCommandRange[elements.Count];
-        var stackCommandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, stackCommands, stackRanges);
+        var stackCommandCount = RecordInto(elements, resources, _style, _visualStateResolver, textStyle, buttonTextStyle, stackCommands, stackRanges);
         resources.Seal();
 
         var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(stackCommandCount);
@@ -85,7 +91,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         var success = false;
         try
         {
-            var commandCount = RecordInto(elements, resources, _style, textStyle, buttonTextStyle, pooledOwner.Memory.Span, elementRanges);
+            var commandCount = RecordInto(elements, resources, _style, _visualStateResolver, textStyle, buttonTextStyle, pooledOwner.Memory.Span, elementRanges);
             resources.Seal();
             success = true;
             return (new DrawCommandBatch(pooledOwner, commandCount), resources, elementRanges);
@@ -103,6 +109,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
         IReadOnlyList<LayoutElement> elements,
         FrameDrawingResources resources,
         DrawingStyle style,
+        ControlVisualStateResolver visualStateResolver,
         ResourceHandle textStyle,
         ResourceHandle buttonTextStyle,
         Span<DrawCommand> commands,
@@ -141,7 +148,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                         DrawCommandKind.FillRect,
                         Rect: bounds,
                         ClipBounds: clip,
-                        Color: style.ResolveButtonFillColor(element.ButtonState));
+                        Color: visualStateResolver.ResolveButtonFillColor(style, element.ButtonState));
                     var buttonText = resources.AddText(element.Text);
                     commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.DrawTextRun,
