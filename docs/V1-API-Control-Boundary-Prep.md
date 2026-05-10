@@ -1,13 +1,14 @@
 # v1 API / Control Boundary Prep
 
 > Design-only boundary inventory for the next line after Program diagnostics runner split. This document does not move code, change APIs, enable StyleOnly fast-path, or introduce a unified diagnostics channel.
-> Status: design inventory complete and regression-only. The next line is implementation prep for `ControlVisualState projection helper`, not another documentation split.
+> Status: design inventory complete and regression-only. `ControlVisualState projection helper` is implemented as PoC-owned internal code; the next controls-boundary line should be documentation seal / focused test hardening, not scroll or translator work.
 
 ## 1. Scope
 
 Current status:
 
 - This design inventory is complete and sealed as regression-only.
+- `ControlVisualState projection helper` is implemented in `Irix.Poc` and remains PoC-owned.
 - Program diagnostics runner split is complete and regression-only.
 - Diagnostics snapshot v0 and debug UI bridge v0 remain regression-only.
 - Unified diagnostics channel / event bus / registry remains postponed.
@@ -298,20 +299,24 @@ Design inventory is complete. The next work should be a small implementation lin
 
 | Priority | Candidate | Scope | Decision |
 |----------|-----------|-------|----------|
-| P0 next code line | `ControlVisualState projection helper` | Introduce a small helper that projects existing input ownership facts into the current `IsHovered`, `IsPressed`, and `IsFocused` attributes. Keep the existing attributes and behavior unchanged. | Start here. This is the lowest-risk implementation prep because it clarifies Button ownership without moving runtime/input/window/backend files or changing public APIs. |
+| P0 implemented | `ControlVisualState projection helper` | Small PoC-owned helper projects existing input ownership facts into the current `IsHovered`, `IsPressed`, and `IsFocused` attributes. Existing attributes and behavior remain unchanged. | Done as internal `Irix.Poc` code. Keep target/action ids as strings; do not promote this to a framework controls API yet. |
+| P0 follow-up | Controls-boundary docs/test seal | Keep the next small line inside `ControlVisualState` documentation and focused equivalence tests. | Recommended next line. Do not use the helper implementation as permission to start typed ids, scroll extraction, or translator promotion. |
 | P1 postponed | Typed identity wrappers | Future role-specific wrappers for `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId`. | Do not implement yet. Keep current string ids until the projection helper proves the control boundary. |
 | P1 postponed | Scroll feedback vocabulary | Future typed metrics/feedback names for scroll container id, viewport extent, content extent, and max scroll. | Do not extract scroll yet. Vocabulary must precede settings provider, pure controller, state ownership, and pump/scheduler work. |
 | P2 postponed | Translator options / feedback records | Future contract records for style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and local diagnostics. | Do not promote `WindowDrawCommandTranslator` yet. Use the promotion checklist as the migration gate. |
 | Parked | `StyleOnly fast-path implementation` | Future render pipeline optimization. | Remains postponed; no `RenderPipeline.Build` behavior change in this line. |
 
-Next implementation line:
+Implemented helper line:
 
-1. Build `ControlVisualState projection helper` as a low-risk code line.
-2. Keep existing `IsHovered`, `IsPressed`, and `IsFocused` attributes as the compatibility output.
-3. Do not introduce typed id wrappers in that first implementation.
-4. Do not extract scroll primitives.
-5. Do not promote `WindowDrawCommandTranslator`.
-6. Do not enable StyleOnly fast-path.
+1. `ControlVisualState projection helper` exists as PoC-owned internal code.
+2. Existing `IsHovered`, `IsPressed`, and `IsFocused` attributes remain the compatibility output.
+3. Target/action ids remain strings.
+4. Typed id wrappers remain postponed.
+5. Scroll primitives remain unextracted.
+6. `WindowDrawCommandTranslator` remains unpromoted.
+7. StyleOnly fast-path remains disabled.
+
+Next recommended code line: stay inside the controls boundary with `ControlVisualState` docs seal or focused test hardening. Do not touch scroll or translator code.
 
 ## 10. Prep Checklist
 
@@ -322,7 +327,8 @@ No code moves in this line. The design inventory is complete and regression-only
 | Controls | Which node kinds are framework primitives? | `Text`, `Rectangle`, `Button`, and `ScrollContainer` are current primitives. Their factory methods are convenience constructors, not final controls APIs. |
 | Controls | Which parts are Counter-specific? | Action-id values, ownership-derived visual state, sample rows, debug rows, and Counter messages. |
 | Boundary prep | Is this document line still active design work? | No. Design inventory is complete; only regression repairs should touch this line. |
-| Next implementation | What is the first code line? | `ControlVisualState projection helper`, preserving existing visual-state attributes and behavior. |
+| Implemented helper | What shipped first? | `ControlVisualState projection helper`, preserving existing visual-state attributes and behavior as PoC-owned internal code. |
+| Next code line | What stays low risk? | `ControlVisualState` documentation seal or focused test hardening inside the controls boundary. |
 | Target/action ids | Which ids must stay distinct? | Hit-test target, control action, focus target, pointer capture target, and app command id are separate design concepts. Current strings remain unchanged. |
 | Typed identity | What representation is preferred later? | Role-specific string wrappers, preferably `readonly record struct`-style value types. Do not start with bare strings or a shared generic id as the promoted API shape. |
 | Visual state | Who owns `IsHovered` / `IsPressed` / `IsFocused`? | They are current rendering attributes whose values are projected from input ownership state. Future controls may own a typed visual-state projection. |
@@ -346,5 +352,5 @@ Regression-only rules remain in force:
 - Do not enable StyleOnly fast-path.
 - Do not move runtime, renderer, input, or backend files during this prep line.
 - Do not rename current target/action attributes or public APIs during this prep line.
-- Do not implement typed id wrappers, scroll extraction, or translator promotion as part of the first implementation line.
+- Do not implement typed id wrappers, scroll extraction, or translator promotion as part of the controls-boundary follow-up line.
 - Do not introduce unified diagnostics channel / event bus / registry.

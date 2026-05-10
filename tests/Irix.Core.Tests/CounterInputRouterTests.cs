@@ -325,6 +325,64 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void CounterApplication_button_attributes_match_derived_visual_state_for_each_input_state()
+    {
+        var app = new CounterApplication();
+        var targetId = nameof(CounterMessage.Increment);
+        var cases = new[]
+        {
+            default,
+            new OwnershipSnapshot(
+                HoveredTarget: targetId,
+                FocusedTarget: null,
+                PressedTarget: null,
+                CapturedTarget: null,
+                LastHoverEnteredTarget: targetId,
+                LastHoverLeftTarget: null,
+                HoverChangeCount: 1,
+                IsPointerPressed: false),
+            new OwnershipSnapshot(
+                HoveredTarget: null,
+                FocusedTarget: targetId,
+                PressedTarget: targetId,
+                CapturedTarget: targetId,
+                LastHoverEnteredTarget: null,
+                LastHoverLeftTarget: null,
+                HoverChangeCount: 0,
+                IsPointerPressed: true),
+            new OwnershipSnapshot(
+                HoveredTarget: null,
+                FocusedTarget: targetId,
+                PressedTarget: null,
+                CapturedTarget: null,
+                LastHoverEnteredTarget: null,
+                LastHoverLeftTarget: null,
+                HoverChangeCount: 0,
+                IsPointerPressed: false),
+            new OwnershipSnapshot(
+                HoveredTarget: null,
+                FocusedTarget: null,
+                PressedTarget: null,
+                CapturedTarget: null,
+                LastHoverEnteredTarget: null,
+                LastHoverLeftTarget: targetId,
+                HoverChangeCount: 2,
+                IsPointerPressed: false)
+        };
+
+        foreach (var snapshot in cases)
+        {
+            var model = app.Initialize() with { InputOwnership = snapshot };
+            var expected = CounterApplication.DeriveButtonState(snapshot, targetId);
+            var button = FindButton(app.BuildView(model).Root, targetId);
+
+            Assert.Equal(expected.IsHovered, GetBooleanAttribute(button, "IsHovered"));
+            Assert.Equal(expected.IsPressed, GetBooleanAttribute(button, "IsPressed"));
+            Assert.Equal(expected.IsFocused, GetBooleanAttribute(button, "IsFocused"));
+        }
+    }
+
+    [Fact]
     public void InputVisualStateChanged_updates_model_snapshot_without_changing_count_or_scroll()
     {
         var app = new CounterApplication();
