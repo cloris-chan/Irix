@@ -156,12 +156,16 @@ public sealed class ProgramDiagnosticsTests
             new CounterViewportDiagnostics(
                 new PixelRectangle(0, 0, 929, 454),
                 new PixelRectangle(0, 0, 929, 454),
-                "PhysicalPixelsV0"));
+                "PhysicalPixelsV0"),
+            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"));
 
         var tree = app.BuildView(app.Initialize());
 
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
             && node.Content.Text == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0");
+        Assert.Contains(tree.Root.Children, node =>
+            node.Kind == VirtualNodeKind.Text
+            && node.Content.Text == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
     }
 }

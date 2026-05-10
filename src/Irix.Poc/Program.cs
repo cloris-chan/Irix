@@ -46,9 +46,13 @@ internal static class Program
         var clipMode = args.Contains("--enable-scissor") ? DrawingBackendClipMode.Scissor : DrawingBackendClipMode.Diagnostic;
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, clipMode);
         _backendClipMode = d3d12Backend.ClipMode;
+        var showDiagnostics = args.Contains("--debug-ui");
 
         Action<double>? maxScrollYCallback = null;
-        var drawCommandTranslator = new WindowDrawCommandTranslator(
+        Action<CounterLayoutDiagnostics>? layoutDiagnosticsCallback = null;
+        var manualLayoutDiagnosticsRefresh = false;
+        WindowDrawCommandTranslator? drawCommandTranslator = null;
+        drawCommandTranslator = new WindowDrawCommandTranslator(
             window,
             () => _ = d3d12Renderer.ApplyPendingResize(),
             () =>
@@ -56,18 +60,41 @@ internal static class Program
                 var bounds = window.Region.PhysicalBounds;
                 return new PixelRectangle(bounds.X, bounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
             },
-            postFrameCallback: maxScrollY => maxScrollYCallback?.Invoke(maxScrollY));
+            postFrameCallback: maxScrollY =>
+            {
+                maxScrollYCallback?.Invoke(maxScrollY);
+                if (showDiagnostics && !manualLayoutDiagnosticsRefresh && drawCommandTranslator is not null)
+                {
+                    layoutDiagnosticsCallback?.Invoke(CreateLayoutDiagnostics(drawCommandTranslator));
+                }
+            });
         using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend);
         var compositor = args.Contains("--console")
             ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
             : (ICompositor)d3d12Compositor;
-        var showDiagnostics = args.Contains("--debug-ui");
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
-        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator)), compositorLoop);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator), CounterLayoutDiagnostics.Empty), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
         _scrollFramePump = scrollFramePump;
         var inputOwnershipState = new InputOwnershipState();
         _inputOwnershipState = inputOwnershipState;
+        var lastDispatchedLayoutDiagnostics = CounterLayoutDiagnostics.Empty;
+        var suppressNextLayoutDiagnosticsRefresh = false;
+
+        layoutDiagnosticsCallback = diagnostics =>
+        {
+            if (suppressNextLayoutDiagnosticsRefresh)
+            {
+                if (runtime.CurrentModel.LayoutDiagnostics == lastDispatchedLayoutDiagnostics)
+                {
+                    suppressNextLayoutDiagnosticsRefresh = false;
+                }
+
+                return;
+            }
+
+            DispatchLayoutDiagnostics(diagnostics);
+        };
 
         // Wire up MaxScrollY feedback after runtime is created
         double? lastKnownMaxScrollY = null;
@@ -144,12 +171,42 @@ internal static class Program
         {
             try
             {
+                manualLayoutDiagnosticsRefresh = true;
                 await compositorLoop.RequestRenderAndWaitAsync();
-                runtime.Dispatch(new CounterMessage.ViewportDiagnosticsChanged(CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator)));
+                manualLayoutDiagnosticsRefresh = false;
+                DispatchDebugDiagnostics(CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator), CreateLayoutDiagnostics(drawCommandTranslator));
             }
             catch (ObjectDisposedException)
             {
             }
+            finally
+            {
+                manualLayoutDiagnosticsRefresh = false;
+            }
+        }
+
+        void DispatchLayoutDiagnostics(CounterLayoutDiagnostics diagnostics)
+        {
+            if (!showDiagnostics || diagnostics == lastDispatchedLayoutDiagnostics)
+            {
+                return;
+            }
+
+            lastDispatchedLayoutDiagnostics = diagnostics;
+            suppressNextLayoutDiagnosticsRefresh = true;
+            runtime.Dispatch(new CounterMessage.LayoutDiagnosticsChanged(diagnostics));
+        }
+
+        void DispatchDebugDiagnostics(CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
+        {
+            if (!showDiagnostics)
+            {
+                return;
+            }
+
+            lastDispatchedLayoutDiagnostics = layoutDiagnostics;
+            suppressNextLayoutDiagnosticsRefresh = true;
+            runtime.Dispatch(new CounterMessage.DebugDiagnosticsChanged(viewportDiagnostics, layoutDiagnostics));
         }
 
         platformHost.TopologyChanged -= OnTopologyChanged;
@@ -166,6 +223,11 @@ internal static class Program
         }
 
         return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ScaleModePhysicalPixelsV0);
+    }
+
+    private static CounterLayoutDiagnostics CreateLayoutDiagnostics(WindowDrawCommandTranslator translator)
+    {
+        return new CounterLayoutDiagnostics(translator.LayoutRebuildCount, translator.LastLayoutRebuildReason, FormatLayoutDirtyClassifications(translator.LastDirtyClassifications));
     }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)

@@ -436,6 +436,45 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void RenderPipeline_mixed_style_and_layout_dirty_uses_higher_priority_reason()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
+            children:
+            [
+                VirtualNodeFactory.Button("Click", 2,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
+                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false)))
+            ]);
+        var root2 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
+            children:
+            [
+                VirtualNodeFactory.Button("Click", 2,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
+                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)))
+            ]);
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [0, 1]);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.LayoutAffecting, pipeline.LastLayoutRebuildReason);
+        Assert.Equal(
+            [
+                new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting),
+                new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)
+            ],
+            pipeline.LastDirtyClassifications);
+    }
+
+    [Fact]
     public void RenderPipeline_rebuilds_layout_when_tree_changes()
     {
         var pipeline = new RenderPipeline();
@@ -481,12 +520,114 @@ public sealed class WindowLayoutPipelineTests
         public event Action<int, int>? SizeChanged { add { } remove { } }
     }
 
+    private sealed class TranslatingPatchSink(WindowDrawCommandTranslator translator) : IVirtualNodePatchSink
+    {
+        public ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            return TranslateAsync(patchBatch);
+        }
+
+        public ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            return TranslateAsync(patchBatch);
+        }
+
+        private ValueTask TranslateAsync(PatchBatch patchBatch)
+        {
+            using (patchBatch)
+            using (translator.Translate(patchBatch))
+            {
+            }
+
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private static string? HitIncrementAtButton(int x, int y)
+    {
+        return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
+    }
+
     private sealed class NoOpBackend : IDrawingBackend
     {
         public void BeginFrame(in FrameContext frameContext) { }
         public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources) { }
         public void EndFrame() { }
         public void Dispose() { }
+    }
+
+    [Fact]
+    public async Task Poc_runtime_hover_only_input_classifies_style_only_dirty()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new TranslatingPatchSink(translator));
+        await runtime.StartAsync(cancellationToken);
+        var initialRebuildCount = translator.LayoutRebuildCount;
+        var ownershipState = new InputOwnershipState();
+
+        var mapped = Program.TryMapInputForRuntime(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementAtButton,
+            out var message);
+
+        Assert.True(mapped);
+        await runtime.DispatchAndWaitAsync(message!, cancellationToken);
+
+        Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, translator.LastLayoutRebuildReason);
+        Assert.Contains(translator.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.StyleOnly);
+    }
+
+    [Fact]
+    public async Task Poc_runtime_scroll_frame_classifies_layout_affecting_dirty()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new TranslatingPatchSink(translator));
+        await runtime.StartAsync(cancellationToken);
+        var initialRebuildCount = translator.LayoutRebuildCount;
+
+        await runtime.DispatchAndWaitAsync(new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 48), 0.1), cancellationToken);
+
+        Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.LayoutAffecting, translator.LastLayoutRebuildReason);
+        Assert.Contains(translator.LastDirtyClassifications, classification => classification is { DfsIndex: 0, Reason: LayoutRebuildReason.LayoutAffecting });
+    }
+
+    [Fact]
+    public void Poc_translator_render_request_resize_classifies_viewport_changed()
+    {
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(40, 50, 960, 540)));
+        var rendererWidth = 960;
+        var rendererHeight = 540;
+        var translator = new WindowDrawCommandTranslator(
+            window,
+            prepareFrame: null,
+            () =>
+            {
+                var bounds = window.Region.PhysicalBounds;
+                return new PixelRectangle(bounds.X, bounds.Y, rendererWidth, rendererHeight);
+            },
+            postFrameCallback: null);
+        var root = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("Resize", 2));
+
+        using var initialPatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var initialFrame = translator.Translate(initialPatch);
+        var initialRebuildCount = translator.LayoutRebuildCount;
+
+        rendererWidth = 800;
+        rendererHeight = 480;
+        window.Region = new ScreenRegion(0, new PixelRectangle(40, 50, rendererWidth, rendererHeight));
+        using var resizeRequest = PatchBatch.CreateRenderRequest();
+        using var resizeFrame = translator.Translate(resizeRequest);
+
+        Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.ViewportChanged, translator.LastLayoutRebuildReason);
+        Assert.Empty(translator.LastDirtyClassifications);
     }
 
     [Fact]

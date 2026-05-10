@@ -24,6 +24,8 @@ Layout dirty v1 is a diagnostic and planning step before partial layout. The cur
 ## Current Implementation Boundary
 
 - `RenderPipeline` records `LastLayoutRebuildReason`, `LayoutRebuildCount`, and per-node `LastDirtyClassifications`.
+- `--debug-ui` displays `layoutRebuildCount`, `LastLayoutRebuildReason`, and `LastDirtyClassifications` so hover, press, scroll, and resize can be observed manually.
+- Real PoC path tests cover hover-only `StyleOnly`, scroll `LayoutAffecting`, resize `ViewportChanged`, and mixed `StyleOnly` + `LayoutAffecting` priority.
 - `LayoutTreeBuilder` still performs a full layout rebuild for dirty nodes, tree changes, and viewport changes.
 - `dirtyElementRanges` and dirty command ranges remain diagnostics for retained command replacement; they are not partial layout.
 - `--diagnose` and tests use rebuild reason output to make future partial-layout work auditable before behavior changes.

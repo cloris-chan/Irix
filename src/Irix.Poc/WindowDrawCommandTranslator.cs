@@ -28,6 +28,8 @@ internal sealed class WindowDrawCommandTranslator(
 
     public LayoutRebuildReason LastLayoutRebuildReason => _renderPipeline.LastLayoutRebuildReason;
 
+    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications => _renderPipeline.LastDirtyClassifications;
+
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null)
     {
