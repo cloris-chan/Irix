@@ -140,6 +140,21 @@ internal static class Program
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
     }
 
+    internal static string BuildClipScissorSmokeDiagnosticLine(DrawRect clipBounds, EffectiveScissor effectiveScissor, int clippedCommandCount, bool deviceRemoved)
+    {
+        return $"Scissor smoke: kind=FillRect clip={FormatRect(clipBounds)} effectiveClip={FormatEffectiveScissor(effectiveScissor)} nestedClip=False textClip=False gpuScissor=False clippedCommands={clippedCommandCount} emptyIntersectionSkipped=0 scissorStateChanges=0 deviceRemoved={deviceRemoved}";
+    }
+
+    private static string FormatEffectiveScissor(EffectiveScissor scissor)
+    {
+        return scissor.IsEmpty ? "empty" : FormatRect(scissor.Bounds);
+    }
+
+    private static string FormatRect(DrawRect rect)
+    {
+        return $"({rect.X:0.##},{rect.Y:0.##},{rect.Width:0.##},{rect.Height:0.##})";
+    }
+
     private sealed class PlatformInputObserver(Action<RawInputEvent> onNext) : IObserver<RawInputEvent>
     {
         public void OnCompleted()
@@ -613,9 +628,12 @@ internal static class Program
             }
         }
         Console.WriteLine($"=== Clip Scissor Diagnostics ===");
+        var scissorViewport = new DrawRect(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
+        var smokeClip = new DrawRect(32, 32, 80, 40);
+        var effectiveScissor = DrawingScissor.ResolveEffectiveScissor(scissorViewport, smokeClip);
         RunClipScissorSmokeDiagnostic(d3d12Backend);
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
-        Console.WriteLine($"Scissor smoke: kind=FillRect clip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=False clippedCommands={d3d12Backend.ClippedCommandCount} deviceRemoved={d3d12Renderer.IsDeviceRemoved}");
+        Console.WriteLine(BuildClipScissorSmokeDiagnosticLine(smokeClip, effectiveScissor, d3d12Backend.ClippedCommandCount, d3d12Renderer.IsDeviceRemoved));
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);

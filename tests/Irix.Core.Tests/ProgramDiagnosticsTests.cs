@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
@@ -70,5 +71,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("buttonStateColor focused=#FF54A0FF", output);
         Assert.Contains("buttonStateColor hovered=#FF4888FF", output);
         Assert.Contains("buttonStateColor pressed=#FF245CD2", output);
+    }
+
+    [Fact]
+    public void Diagnose_clip_scissor_smoke_outputs_stable_fields()
+    {
+        var line = Program.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), 1, false);
+
+        Assert.Equal("Scissor smoke: kind=FillRect clip=(32,32,80,40) effectiveClip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=False clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=0 deviceRemoved=False", line);
     }
 }

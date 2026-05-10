@@ -1,6 +1,6 @@
 # ADR: Scissor Clipping v0
 
-Status: Proposed
+Status: Accepted
 
 Date: 2026-05-10
 
@@ -20,7 +20,7 @@ Introduce backend clip capability as a diagnostic boundary before implementing G
 | `Diagnostic` | Backend observes/counts clipped commands but renders exactly as before. |
 | `Scissor` | Backend applies backend-native scissor/clipping for supported commands. |
 
-D3D12 is currently `Diagnostic`: it receives `ClipBounds`, counts clipped commands, and continues rendering existing FillRect/Text paths unchanged. This lets diagnostics prove that clip metadata reaches the backend before rasterizer scissor is enabled.
+D3D12 is currently `Diagnostic` only: it receives `ClipBounds`, counts clipped commands, and continues rendering existing FillRect/Text paths unchanged. The diagnostic path computes and reports the effective scissor separately, proving that clip metadata reaches the backend before rasterizer scissor is enabled.
 
 ## Per-command Scissor Shape
 
@@ -31,6 +31,7 @@ Rules:
 - `DrawCommand.ClipBounds == default` means use the full viewport scissor.
 - Non-default `ClipBounds` is intersected with the current viewport before issuing D3D12 scissor state.
 - Empty intersections skip that FillRect command.
+- Effective scissor calculation is frozen as a pure Drawing-layer function before any D3D12 state changes.
 - Scissor state changes must preserve draw order. The first implementation should batch only consecutive FillRect commands with the same effective clip, not globally reorder by clip.
 - Scissor diagnostics should report clip mode, clipped command count, skipped empty-intersection count, and scissor state change count once implemented.
 
@@ -67,7 +68,7 @@ The first scissor smoke uses exactly one clipped FillRect command:
 - No text command.
 - No retained partial redraw.
 
-Current `Diagnostic` mode validates that the backend receives and counts the clipped FillRect without changing rendering behavior. Future `Scissor` mode should use the same smoke to verify that enabling D3D12 scissor does not break the existing FillRect path.
+Current `Diagnostic` mode validates that the backend receives and counts the clipped FillRect without changing rendering behavior. It also reports `effectiveClip=(32,32,80,40)`, `emptyIntersectionSkipped=0`, `scissorStateChanges=0`, and `gpuScissor=False`; these fields are format-stable placeholders until `Scissor` mode is implemented. Future `Scissor` mode should use the same smoke to verify that enabling D3D12 scissor does not break the existing FillRect path.
 
 ## Non-goals
 
