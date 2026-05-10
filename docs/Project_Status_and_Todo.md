@@ -1,9 +1,51 @@
 # Irix 项目进度与待办
 
 > 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。
-> 📅 **最后验证日期：** 2026-05-10。本文档描述的代码状态以此日期为准。
+> 📅 **最后验证日期：** 2026-05-11。本文档描述的代码状态以此日期为准。
 >
 > 📐 **架构设计详见：** [Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)。本文档不重复设计细节，仅记录实现状态与待办。
+---
+
+## 0. 当前阶段速查
+
+### 已完成阶段
+
+| 阶段线 | 当前状态 | 快速入口 |
+|--------|----------|----------|
+| Scroll v0 | ✅ 完成：wheel/raw scroll、首帧 delta、scroll pump diagnostic、可见/裁剪元素诊断已覆盖 | 本文 `Scroll 手动验证清单`、`--diagnose-scroll` |
+| Input ownership v0 | ✅ 完成：hover/focus/press/capture ownership、event log、`--diagnose-input` 已覆盖 | `ProgramDiagnosticsTests`、`--diagnose-input` |
+| Button visual state v0 | ✅ 完成：Normal/Focused/Hovered/Pressed 优先级与颜色诊断已固定 | `BuildStylePresetDiagnosticLines` |
+| Style preset v0 | ✅ 完成：默认布局 metrics 与 button color priority 诊断已固定 | `--diagnose` style preset block |
+| Clip / scissor / text clip v0 | ✅ 完成：clip bounds 传递、hit-test clip、FillRect scissor、D2D text clip、empty intersection skip 已验证 | [ADR-Scissor-Clipping-v0.md](ADR-Scissor-Clipping-v0.md) |
+| Viewport / resize physical v0 | ✅ 完成：renderer swapchain size 是 layout viewport source of truth，resize diagnostic 已固定 | 本文 `Viewport / resize physical v0`、`--diagnose-resize` |
+| Root `ScrollContainer` clip semantics v0 | ✅ 完成：root clip 使用 viewport 边界，content 仍从 padding 后开始 | 本文 `Root ScrollContainer clip semantics v0` |
+| Layout dirty diagnostics v1 | ✅ 完成：dirty reason、`--debug-ui` row、`--diagnose-input` dirty reason、真实 PoC path tests 已覆盖 | [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md) |
+| StyleOnly plan diagnostics | ✅ 完成：`--diagnose` 已输出 hover-only eligible 与 layout-affecting fallback smoke | [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#plan-builder-boundary) |
+
+### ADR / 设计入口索引
+
+| 文档 | 用途 |
+|------|------|
+| [Irix_Framework_Design.md](Irix_Framework_Design.md) | 总体架构、版本边界、主 ADR 索引、v1/v2 范围 |
+| [ADR-Scissor-Clipping-v0.md](ADR-Scissor-Clipping-v0.md) | clip/scissor/text clip v0 决策、smoke baseline、冻结边界 |
+| [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md) | layout dirty 分类、StyleOnly patch v0 设计、plan diagnostics、未来 fast-path 接入点 |
+| [RetainedElementTree-Design.md](RetainedElementTree-Design.md) | 真正 retained element tree / local patch apply 的草案 |
+| [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
+
+### 当前冻结线
+
+| 冻结线 | 当前规则 |
+|--------|----------|
+| Clip / scissor / text clip v0 | 只修 bug / regression；不扩 nested clip stack、默认启用策略、text batching、theme/control scope |
+| Viewport / resize physical v0 | 只修 source-of-truth / resize regression；不引入 per-monitor DPI 切换、logical layout、multi-window scale 策略 |
+| Layout dirty diagnostics v1 | 只修现有输出或分类 regression；不扩诊断面，不做 partial layout，不跳过 `StyleOnly` layout |
+| StyleOnly plan diagnostics | 只修 formatter/smoke regression；不继续扩 formatter，不接入 `RenderPipeline.Build`，不替换 retained frame apply |
+
+### 下一步候选
+
+- `StyleOnly fast-path implementation`：从 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point 开始，先把真实输入改为 retained layout + next `VirtualNode` metadata projection，不能依赖 next layout output。
+- `v1 architecture consolidation prep`：整理当前已冻结阶段的命名、文档入口、诊断命令、测试分组与架构边界，为后续 v1 主线收敛做准备。
+
 ---
 
 ## 1. 项目定位
