@@ -26,8 +26,10 @@ internal abstract record CounterMessage
     public sealed record RoutedInput(CounterMessage? Action, OwnershipSnapshot Snapshot) : CounterMessage;
 }
 
-internal sealed class CounterApplication : IApplication<CounterModel, CounterMessage>
+internal sealed class CounterApplication(bool showDiagnostics = false) : IApplication<CounterModel, CounterMessage>
 {
+    private readonly bool _showDiagnostics = showDiagnostics;
+
     public CounterModel Initialize() => new(0, ScrollState.Default, default);
 
     public UpdateResult<CounterModel, CounterMessage> Update(CounterModel model, CounterMessage message) =>
@@ -61,24 +63,20 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
     public VirtualNodeTree BuildView(CounterModel model)
     {
         var scrollY = ScrollController.GetScrollY(model.Scroll);
-        var s = model.Scroll;
-        var pendingPx = Program.DiagPendingPx;
         var inputOwnership = model.InputOwnership;
-        var maxScrollText = !s.HasMaxScrollY
-            ? "unknown"
-            : s.MaxScrollY == 0
-                ? "0(known-zero)"
-                : $"{s.MaxScrollY:F0}";
+        var headerRows = _showDiagnostics
+            ? BuildDiagnosticHeaderRows(model.Count, scrollY, model.Scroll, Program.DiagPendingPx, inputOwnership)
+            : [
+                VirtualNodeFactory.Text($"Count: {model.Count}", 2),
+                VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4)
+            ];
 
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
             attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
             children: [
-                VirtualNodeFactory.Text($"Count: {model.Count}", 2),
-                VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={s.TargetPosition:F1} pos={s.Position:F2} max={maxScrollText} acc={s.Accumulator:F3} anim={s.IsAnimating} pendingPx={pendingPx:F0} drained={Program.DiagScrollDrainedPixels:F0} frames={Program.DiagScrollDispatchedFrameCount} waitMs={Program.DiagScrollRenderWaitMs:F1} dt={Program.DiagScrollLastDt:F3} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
-                VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
-                VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
+                .. headerRows,
                 VirtualNodeFactory.Rectangle(220, 48, 5),
                 BuildButton("Increment", 6, nameof(CounterMessage.Increment), inputOwnership),
                 BuildButton("Decrement", 7, nameof(CounterMessage.Decrement), inputOwnership),
@@ -87,6 +85,22 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
             ]);
 
         return new VirtualNodeTree(root);
+    }
+
+    private static VirtualNode[] BuildDiagnosticHeaderRows(int count, int scrollY, ScrollState scroll, double pendingPx, OwnershipSnapshot inputOwnership)
+    {
+        var maxScrollText = !scroll.HasMaxScrollY
+            ? "unknown"
+            : scroll.MaxScrollY == 0
+                ? "0(known-zero)"
+                : $"{scroll.MaxScrollY:F0}";
+
+        return [
+            VirtualNodeFactory.Text($"Count: {count}", 2),
+            VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={scroll.TargetPosition:F1} pos={scroll.Position:F2} max={maxScrollText} acc={scroll.Accumulator:F3} anim={scroll.IsAnimating} pendingPx={pendingPx:F0} drained={Program.DiagScrollDrainedPixels:F0} frames={Program.DiagScrollDispatchedFrameCount} waitMs={Program.DiagScrollRenderWaitMs:F1} dt={Program.DiagScrollLastDt:F3} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
+            VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
+            VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9)
+        ];
     }
 
     internal static ButtonVisualState DeriveButtonState(OwnershipSnapshot ownership, string actionId)

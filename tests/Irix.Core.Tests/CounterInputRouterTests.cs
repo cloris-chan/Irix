@@ -508,6 +508,41 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Counter_default_view_hides_scroll_and_input_diagnostics()
+    {
+        var app = new CounterApplication();
+        var tree = app.BuildView(app.Initialize());
+
+        Assert.True(ContainsTextStartingWith(tree.Root, "Count: 0"));
+        Assert.True(ContainsTextStartingWith(tree.Root, "Click a button"));
+        Assert.False(ContainsTextStartingWith(tree.Root, "ScrollY:"));
+        Assert.False(ContainsTextStartingWith(tree.Root, "Input:"));
+    }
+
+    [Fact]
+    public void Counter_debug_view_shows_scroll_and_input_diagnostics()
+    {
+        var app = new CounterApplication(showDiagnostics: true);
+        var model = app.Initialize() with
+        {
+            Scroll = new ScrollState { TargetPosition = 54, Position = 54 },
+            InputOwnership = new OwnershipSnapshot(
+                HoveredTarget: nameof(CounterMessage.Increment),
+                FocusedTarget: nameof(CounterMessage.Increment),
+                PressedTarget: null,
+                CapturedTarget: null,
+                LastHoverEnteredTarget: nameof(CounterMessage.Increment),
+                LastHoverLeftTarget: null,
+                HoverChangeCount: 1,
+                IsPointerPressed: false)
+        };
+        var tree = app.BuildView(model);
+
+        Assert.True(ContainsTextStartingWith(tree.Root, "ScrollY: applied=54"));
+        Assert.True(ContainsTextStartingWith(tree.Root, "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=1"));
+    }
+
+    [Fact]
     public void TryMapInput_empty_press_clears_focus_and_does_not_trigger_action()
     {
         var ownershipState = new InputOwnershipState();
@@ -803,6 +838,24 @@ public sealed class CounterInputRouterTests
             if (attribute.Name == name)
             {
                 return attribute.Value.Boolean;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsTextStartingWith(VirtualNode node, string prefix)
+    {
+        if (node.Kind == VirtualNodeKind.Text && node.Content.Text?.StartsWith(prefix, StringComparison.Ordinal) == true)
+        {
+            return true;
+        }
+
+        foreach (var child in node.Children)
+        {
+            if (ContainsTextStartingWith(child, prefix))
+            {
+                return true;
             }
         }
 
@@ -1152,7 +1205,7 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void Debug_display_contains_target_and_position()
     {
-        var app = new CounterApplication();
+        var app = new CounterApplication(showDiagnostics: true);
         var model = app.Initialize() with
         {
             Scroll = new ScrollState { TargetPosition = 100, Position = 50, Accumulator = 0.5 }
@@ -1170,7 +1223,7 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void Debug_display_distinguishes_unknown_and_known_zero_max_scroll()
     {
-        var app = new CounterApplication();
+        var app = new CounterApplication(showDiagnostics: true);
         var model = app.Initialize();
 
         var debugText = app.BuildView(model).Root.Children[1].Content.Text;

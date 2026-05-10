@@ -58,7 +58,8 @@ internal static class Program
             ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
             : (ICompositor)d3d12Compositor;
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
-        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
+        var showDiagnostics = args.Contains("--debug-ui");
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
         _scrollFramePump = scrollFramePump;
         var inputOwnershipState = new InputOwnershipState();
