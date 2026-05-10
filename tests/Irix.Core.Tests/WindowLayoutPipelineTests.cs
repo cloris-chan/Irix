@@ -1144,6 +1144,34 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void WindowDrawCommandTranslator_builds_typed_scroll_feedback_alongside_legacy_max_scroll_callback()
+    {
+        double? callbackMaxScrollY = null;
+        var translator = new WindowDrawCommandTranslator(
+            new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 100))),
+            prepareFrame: null,
+            viewportProvider: null,
+            postFrameCallback: maxScrollY => callbackMaxScrollY = maxScrollY);
+        var children = new VirtualNode[10];
+        for (var index = 0; index < children.Length; index++)
+        {
+            children[index] = VirtualNodeFactory.Text($"item {index}", (ulong)(index + 2));
+        }
+
+        var root = new VirtualNode(VirtualNodeKind.ScrollContainer, key: 1, children: children);
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var frame = translator.Translate(batch);
+
+        Assert.True(callbackMaxScrollY.HasValue);
+        var metrics = Assert.Single(translator.LastScrollFeedback.Containers);
+        Assert.Equal("dfs:0", metrics.ContainerId);
+        Assert.Equal(100.0, metrics.ViewportExtent);
+        Assert.True(metrics.ContentExtent > metrics.ViewportExtent);
+        Assert.Equal(translator.LastMaxScrollY, metrics.MaxScrollY);
+        Assert.Equal(callbackMaxScrollY.Value, metrics.MaxScrollY);
+    }
+
+    [Fact]
     public void WindowDrawCommandTranslator_render_request_reuses_retained_tree()
     {
         var translator = new WindowDrawCommandTranslator(new FakeWindow(

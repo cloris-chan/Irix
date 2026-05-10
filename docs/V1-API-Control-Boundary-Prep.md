@@ -10,6 +10,7 @@ Current status:
 - This design inventory is complete and sealed as regression-only.
 - Controls-boundary helpers are complete and regression-only.
 - `ControlVisualState projection helper`, `Control action attribute helper`, and `Button attribute bundle helper` are implemented in `Irix.Poc` and remain PoC-owned.
+- `ScrollFeedback` / `ScrollContainerMetrics` vocabulary v0 is implemented in `Irix.Poc` as side-channel translator feedback; the legacy `Action<double>` max-scroll callback remains unchanged.
 - Program diagnostics runner split is complete and regression-only.
 - Diagnostics snapshot v0 and debug UI bridge v0 remain regression-only.
 - Unified diagnostics channel / event bus / registry remains postponed.
@@ -237,7 +238,7 @@ Scroll extraction preconditions:
 
 | Step | Candidate extraction | Allowed only after | Blocking issue if skipped |
 |------|----------------------|--------------------|---------------------------|
-| 1 | `ScrollMetrics` and max-scroll feedback vocabulary | `WindowDrawCommandTranslator` feedback names container id, viewport extent, content extent, and max scroll explicitly. | `ScrollState` would depend on a positional `double` callback and could only model the current single-container PoC. |
+| 1 | `ScrollMetrics` and max-scroll feedback vocabulary | `WindowDrawCommandTranslator` feedback names container id, viewport extent, content extent, and max scroll explicitly. | Complete as side-channel `ScrollFeedback` / `ScrollContainerMetrics`; legacy `Action<double>` still drives runtime behavior. |
 | 2 | `SystemScrollSettings` provider | Platform ownership for wheel lines/chars is named, with defaults preserved for non-Windows or missing settings. | Scroll delta conversion would bake PoC defaults into framework behavior. |
 | 3 | Pure `ScrollController` | Metrics and settings are explicit inputs, and controller messages no longer mention Counter types. | The controller would look reusable while still depending on sample message flow and single-container assumptions. |
 | 4 | `ScrollState` | Scroll container identity, app storage ownership, and default/empty state semantics are named. | State extraction would force a framework decision about where per-container scroll state lives before the model boundary is ready. |
@@ -266,8 +267,8 @@ If promoted later, the contract should inject or name these dependencies explici
 | Retained tree owner | Private `RetainedTree` inside the translator | Decide whether the bridge owns retained state or receives it from a higher render service. Patch application ownership must be explicit. |
 | Render pipeline | Private `RenderPipeline` instance | Inject or factory-create with explicit style and options. Avoid hidden sample defaults. |
 | Prepare-frame hook | Optional `Action? prepareFrame` | Keep as a named frame-preparation hook only if the backend/resource lifetime contract needs it. |
-| Post-frame feedback | Optional `Action<double>` receiving max scroll | Replace with typed feedback if promoted. Feedback should include named scroll metrics and layout diagnostics, not a positional double. |
-| Scroll metrics | `LastMaxScrollY` plus current layout viewport exposure | Model as explicit render feedback: max scroll, viewport extent, content extent, and target container identity. |
+| Post-frame feedback | Optional `Action<double>` receiving max scroll, plus `LastScrollFeedback` side-channel | Keep runtime callback unchanged for now. Promotion still needs a typed feedback contract that includes layout diagnostics, not only scroll metrics. |
+| Scroll metrics | `LastMaxScrollY`, current layout viewport exposure, and `LastScrollFeedback` side-channel | Side-channel now names max scroll, viewport extent, content extent, and container identity. It is not yet a promoted framework contract. |
 | Diagnostics exposure | `LastViewport`, `LastLayoutViewport`, rebuild counts, dirty classifications | Keep local diagnostics accessors or typed feedback; do not introduce a global diagnostics channel in this line. |
 
 Promotion preconditions:
@@ -287,8 +288,8 @@ Promotion checklist:
 | Retained-tree ownership | Patch application and retained tree lifetime are assigned to either the bridge or a higher render service. | Blocked: private retained tree is embedded without an external ownership contract. |
 | Render-pipeline creation | Pipeline construction takes explicit style/options and has no sample defaults. | Blocked: hidden Counter style default. |
 | Prepare-frame hook | Backend/resource preparation needs are named, or the hook is removed. | Partial: optional action exists but has no semantic contract. |
-| Post-frame feedback | Feedback is a typed result carrying layout diagnostics and scroll metrics. | Blocked: current callback is `Action<double>` for max scroll only. |
-| Scroll metrics | Feedback names scroll container id, viewport extent, content extent, and max scroll. | Blocked: only `LastMaxScrollY` is exposed. |
+| Post-frame feedback | Feedback is a typed result carrying layout diagnostics and scroll metrics. | Partial: scroll metrics side-channel exists, but runtime still uses `Action<double>` and no promoted feedback contract exists. |
+| Scroll metrics | Feedback names scroll container id, viewport extent, content extent, and max scroll. | Partial: `LastScrollFeedback` side-channel exists in PoC; extraction and promotion remain postponed. |
 | Diagnostics access | Local diagnostics stay local or are returned in typed feedback. | Partial: accessors exist; no global diagnostics channel should be introduced here. |
 | App isolation | Translator has no Counter messages, input router, or app command dependency. | Mostly satisfied, except style and scroll feedback remain sample-shaped. |
 
@@ -305,7 +306,7 @@ Design inventory is complete. The next work should be a small implementation lin
 | P1 implemented | `Button attribute bundle helper` | Small PoC-owned helper combines `ActionId` plus `ControlVisualState` attributes for `CounterApplication.BuildButton`. | Done as internal `Irix.Poc` code. It reduces hand-written wire contract in the sample without changing the `VirtualNode` contract. |
 | P1 complete | Controls-boundary helper seal | Static scan found no remaining raw `ActionId` construction in `src/**/*.cs`; focused tests cover bundle output and `BuildView` integration. | Complete / regression-only. Do not continue controls-boundary helper splitting. |
 | P2 postponed | Typed identity wrappers | Future role-specific wrappers for `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId`. | Do not implement yet. Keep current string ids until the control helper boundary is explicitly promoted. |
-| P3 postponed | Scroll feedback vocabulary | Future typed metrics/feedback names for scroll container id, viewport extent, content extent, and max scroll. | Do not extract scroll yet. Vocabulary must precede settings provider, pure controller, state ownership, and pump/scheduler work. |
+| P3 first step complete | Scroll feedback vocabulary | PoC-owned `ScrollFeedback` / `ScrollContainerMetrics` records name scroll container id, viewport extent, content extent, and max scroll. | Complete as translator side-channel only. Do not extract scroll yet; settings provider, pure controller, state ownership, and pump/scheduler work remain postponed. |
 | P3 postponed | Translator options / feedback records | Future contract records for style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and local diagnostics. | Do not promote `WindowDrawCommandTranslator` yet. Use the promotion checklist as the migration gate. |
 | P3 parked | `StyleOnly fast-path implementation` | Future render pipeline optimization. | Remains postponed; no `RenderPipeline.Build` behavior change in this line. |
 
@@ -317,9 +318,10 @@ Implemented helper line:
 4. Existing `ActionId`, `IsHovered`, `IsPressed`, and `IsFocused` attributes remain the compatibility output.
 5. Target/action ids remain strings.
 6. Typed id wrappers remain postponed.
-7. Scroll primitives remain unextracted.
-8. `WindowDrawCommandTranslator` remains unpromoted.
-9. StyleOnly fast-path remains disabled.
+7. Scroll feedback vocabulary v0 exists as side-channel translator data.
+8. Scroll controller, state ownership, settings provider, and pump/scheduler remain unextracted.
+9. `WindowDrawCommandTranslator` remains unpromoted.
+10. StyleOnly fast-path remains disabled.
 
 Next recommended code line: choose a new low-risk line explicitly. Do not continue controls-boundary helper splitting, and do not use this line as permission to start typed ids, scroll extraction, translator promotion, or StyleOnly fast-path.
 
@@ -342,7 +344,8 @@ No code moves in this line. The design inventory is complete and regression-only
 | Input | What is Counter-specific today? | Routing raw input to Counter messages and wrapping visual-state updates into the Counter model. |
 | Scroll | What does `ScrollY` own? | `ScrollY` is the layout/render offset attribute, not scroll animation state. |
 | Scroll | What remains outside the node primitive? | `ScrollState`, pump scheduling, system settings, metrics feedback, and app-level scroll storage remain separately owned until extraction contracts are explicit. |
-| Scroll extraction | What order prevents premature movement? | Define metrics / feedback vocabulary first; settings provider second; pure controller third; state ownership fourth; pump / scheduler last. |
+| Scroll feedback | What first step is complete? | `ScrollFeedback` / `ScrollContainerMetrics` side-channel vocabulary exists in `Irix.Poc`; old max-scroll callback remains active. |
+| Scroll extraction | What order prevents premature movement? | Metrics / feedback vocabulary first is complete; settings provider second; pure controller third; state ownership fourth; pump / scheduler last. |
 | Window glue | What is platform-owned? | `IPlatformHost` / `INativeWindow` abstractions and `WindowsPlatformHost` implementation. |
 | Window glue | What is bridge-owned later? | A future version of `WindowDrawCommandTranslator`, once style, viewport, retained-tree, and post-frame contracts are named. |
 | Window translator | What must be injected before promotion? | Style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and scroll metrics. |
@@ -359,4 +362,5 @@ Regression-only rules remain in force:
 - Do not rename current target/action attributes or public APIs during this prep line.
 - Do not continue controls-boundary helper splitting.
 - Do not implement typed id wrappers, scroll extraction, or translator promotion as part of this sealed controls-boundary line.
+- Do not move `ScrollController`, `ScrollState`, or `ScrollFramePump`; scheduler/message flow remains PoC-owned and unchanged.
 - Do not introduce unified diagnostics channel / event bus / registry.

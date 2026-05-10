@@ -45,13 +45,15 @@
 | StyleOnly plan diagnostics | 只修 formatter/smoke regression；不继续扩 formatter，不接入 `RenderPipeline.Build`，不替换 retained frame apply |
 | V1 API/control boundary prep | design inventory complete / regression-only；`ControlVisualState projection helper` 已实现且仍为 PoC-owned |
 | ControlVisualState / action attribute helpers | ✅ 完成 / regression-only：internal PoC projection helper、ActionId attribute helper、button attribute bundle helper；PoC source raw `ActionId` 构造已清；target/action 继续用 string；不改 renderer / VirtualNode wire contract |
+| Scroll feedback vocabulary v0 | ✅ 第一小步完成：`ScrollFeedback` / `ScrollContainerMetrics` side-channel 由 translator 生成；旧 `Action<double>` max-scroll callback 仍保留；不移动 controller/state/pump |
 
 ### 下一步候选
 
 - 当前选择：controls-boundary helper line 已完成 / regression-only；下一条代码线需要重新显式选择，且不默认进入 typed ids、scroll、translator 或 StyleOnly。
 - 已封版：`v1 API/control boundary prep` 为 design inventory complete / regression-only；只修 boundary 文档 regression。
 - 已实现：`ControlVisualState projection helper`、`Control action attribute helper`、`Button attribute bundle helper` 仍为 PoC-owned internal code；PoC source raw `ActionId` 构造已清；target/action 继续用 string，不引入 typed id wrappers。
-- 暂缓：typed id wrappers、scroll extraction、translator promotion、`StyleOnly fast-path implementation`；StyleOnly 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point，不接入 `RenderPipeline.Build`，不启用新行为。
+- 已实现：`ScrollFeedback` / `ScrollContainerMetrics` vocabulary v0 作为 translator side-channel；旧 `Action<double>` callback 继续驱动 runtime 行为。
+- 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion、`StyleOnly fast-path implementation`；StyleOnly 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point，不接入 `RenderPipeline.Build`，不启用新行为。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 
 ---

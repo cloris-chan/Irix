@@ -20,6 +20,8 @@ internal sealed class WindowDrawCommandTranslator(
     /// <summary>MaxScrollY from the last layout pass. 0 if no scroll needed.</summary>
     public double LastMaxScrollY => _renderPipeline.LastMaxScrollY;
 
+    public ScrollFeedback LastScrollFeedback { get; private set; } = ScrollFeedback.Empty;
+
     public PixelRectangle LastViewport { get; private set; }
 
     public PixelRectangle LastLayoutViewport => _renderPipeline.LastViewport;
@@ -57,7 +59,29 @@ internal sealed class WindowDrawCommandTranslator(
         var viewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
         LastViewport = viewport;
         var batch = _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
+        LastScrollFeedback = BuildScrollFeedback(_renderPipeline.LastLayoutResult);
         _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
         return batch;
+    }
+
+    private static ScrollFeedback BuildScrollFeedback(LayoutTreeResult? layoutResult)
+    {
+        if (layoutResult is null || layoutResult.ScrollDiagnostics.Count == 0)
+        {
+            return ScrollFeedback.Empty;
+        }
+
+        var containers = new ScrollContainerMetrics[layoutResult.ScrollDiagnostics.Count];
+        for (var index = 0; index < containers.Length; index++)
+        {
+            var diagnostics = layoutResult.ScrollDiagnostics[index];
+            containers[index] = new ScrollContainerMetrics(
+                ContainerId: $"dfs:{diagnostics.DfsIndex}",
+                ViewportExtent: diagnostics.VisibleHeight,
+                ContentExtent: diagnostics.ContentHeight,
+                MaxScrollY: diagnostics.MaxScrollY);
+        }
+
+        return new ScrollFeedback(containers);
     }
 }
