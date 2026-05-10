@@ -438,11 +438,11 @@ internal static class Program
         Console.WriteLine($"=== Pipeline Scissor Smoke ===");
         d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);
         _backendClipMode = d3d12Backend.ClipMode;
-        RunPipelineScissorSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
+        BackendClipTextSmokeDiagnostics.RunPipelineScissorSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
         var pipelineScissorSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
         Console.WriteLine(DiagnosticsFormatter.BuildPipelineScissorSmokeDiagnosticLine(pipelineScissorSnapshot));
         Console.WriteLine($"=== Pipeline Text Clip Smoke ===");
-        RunPipelineTextClipSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
+        BackendClipTextSmokeDiagnostics.RunPipelineTextClipSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
         var pipelineTextClipSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
         Console.WriteLine(DiagnosticsFormatter.BuildPipelineTextClipSmokeDiagnosticLine(pipelineTextClipSnapshot));
 
@@ -450,124 +450,21 @@ internal static class Program
         var smokeClip = new DrawRect(32, 32, 80, 40);
         d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);
         _backendClipMode = d3d12Backend.ClipMode;
-        RunClipScissorSmokeDiagnostic(d3d12Backend);
+        BackendClipTextSmokeDiagnostics.RunClipScissorSmokeDiagnostic(d3d12Backend);
         var clipScissorSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
         Console.WriteLine(DiagnosticsFormatter.BuildBackendClipModeDiagnosticLine(clipScissorSnapshot));
         Console.WriteLine(DiagnosticsFormatter.BuildClipScissorSmokeDiagnosticLine(smokeClip, clipScissorSnapshot));
         Console.WriteLine($"=== Empty Scissor Diagnostics ===");
-        RunEmptyScissorSmokeDiagnostic(d3d12Backend);
+        BackendClipTextSmokeDiagnostics.RunEmptyScissorSmokeDiagnostic(d3d12Backend);
         var emptyScissorSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
         Console.WriteLine(DiagnosticsFormatter.BuildEmptyScissorSmokeDiagnosticLine(emptyScissorSnapshot));
         Console.WriteLine($"=== Text Clip Diagnostics ===");
-        RunTextClipSmokeDiagnostic(d3d12Backend);
+        BackendClipTextSmokeDiagnostics.RunTextClipSmokeDiagnostic(d3d12Backend);
         var textClipSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
         Console.WriteLine(DiagnosticsFormatter.BuildTextClipSmokeDiagnosticLine(textClipSnapshot));
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);
-    }
-
-    private static void RunPipelineScissorSmokeDiagnostic(DrawingBackendCompositor compositor, D3D12DrawingBackend backend, D3D12Renderer renderer)
-    {
-        var pipeline = new RenderPipeline();
-        var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
-            key: 1000,
-            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(40))],
-            children: [VirtualNodeFactory.Rectangle(160, 80, 1001)]);
-        var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
-        using var batch = pipeline.Build(root, viewport);
-
-        backend.SetClipMode(DrawingBackendClipMode.Scissor);
-        compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
-    }
-
-    private static void RunPipelineTextClipSmokeDiagnostic(DrawingBackendCompositor compositor, D3D12DrawingBackend backend, D3D12Renderer renderer)
-    {
-        var pipeline = new RenderPipeline();
-        var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
-            key: 1100,
-            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(20))],
-            children:
-            [
-                VirtualNodeFactory.Button("PipelineClip", 1101, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("PipelineClip")))
-            ]);
-        var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
-        using var batch = pipeline.Build(root, viewport);
-
-        backend.SetClipMode(DrawingBackendClipMode.Scissor);
-        compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
-    }
-
-    private static void RunClipScissorSmokeDiagnostic(D3D12DrawingBackend backend)
-    {
-        var commands = new[]
-        {
-            new DrawCommand(
-                DrawCommandKind.FillRect,
-                Rect: new DrawRect(16, 16, 160, 80),
-                ClipBounds: new DrawRect(32, 32, 80, 40),
-                Color: DrawColor.Opaque(72, 136, 255))
-        };
-
-        backend.BeginFrame(default);
-        backend.Execute(commands, FrameDrawingResources.Empty);
-        backend.EndFrame();
-    }
-
-    private static void RunEmptyScissorSmokeDiagnostic(D3D12DrawingBackend backend)
-    {
-        var commands = new[]
-        {
-            new DrawCommand(
-                DrawCommandKind.FillRect,
-                Rect: new DrawRect(16, 16, 160, 80),
-                ClipBounds: new DrawRect(2048, 2048, 80, 40),
-                Color: DrawColor.Opaque(72, 136, 255))
-        };
-
-        backend.BeginFrame(default);
-        backend.Execute(commands, FrameDrawingResources.Empty);
-        backend.EndFrame();
-    }
-
-    private static void RunTextClipSmokeDiagnostic(D3D12DrawingBackend backend)
-    {
-        var resources = FrameDrawingResources.Rent();
-        try
-        {
-            var textStyle = resources.AddTextStyle(TextStyle.Default);
-            var skippedText = resources.AddText("Skipped text clip smoke");
-            var clippedText = resources.AddText("Clipped text clip smoke");
-            resources.Seal();
-
-            var commands = new[]
-            {
-                new DrawCommand(
-                    DrawCommandKind.DrawTextRun,
-                    Rect: new DrawRect(16, 16, 160, 80),
-                    Resource: textStyle,
-                    Text: skippedText,
-                    ClipBounds: new DrawRect(2048, 2048, 80, 40),
-                    Color: DrawColor.Opaque(255, 255, 255)),
-                new DrawCommand(
-                    DrawCommandKind.DrawTextRun,
-                    Rect: new DrawRect(16, 16, 160, 80),
-                    Resource: textStyle,
-                    Text: clippedText,
-                    ClipBounds: new DrawRect(32, 32, 80, 40),
-                    Color: DrawColor.Opaque(255, 255, 255))
-            };
-
-            backend.BeginFrame(default);
-            backend.Execute(commands, resources);
-            backend.EndFrame();
-        }
-        finally
-        {
-            FrameDrawingResources.Return(resources);
-        }
     }
 
 }
