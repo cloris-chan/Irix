@@ -16,18 +16,17 @@ internal struct LayoutContext
     public List<ScrollContainerDiag> ScrollDiags;
 
     /// <summary>
-    /// Default height for nested containers that have no explicit Height attribute.
-    /// Uses the remaining viewport height clamped to a reasonable minimum.
+    /// Implicit visible height for a container without a usable explicit Height.
+    /// Root containers fill the remaining viewport; nested containers keep a small
+    /// measurable fallback when they start below the viewport.
     /// </summary>
-    public int DefaultContainerHeight(int containerTop)
+    public int ResolveImplicitVisibleHeight(int containerTop)
     {
         if (Depth == 0)
         {
-            // Root: fill remaining viewport
             return Math.Max(ViewportHeight - containerTop, 0);
         }
 
-        // Nested: use remaining viewport or a sensible minimum
         var remaining = Math.Max(ViewportHeight - containerTop, 0);
         return remaining > 0 ? remaining : Style.TextHeight * 3;
     }
@@ -93,25 +92,22 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var childDfsIndex = dfsIndex + 1;
                 var containerTop = cursorY;
 
-                // Container visible height: explicit Height, or default based on depth
+                var implicitVisibleHeight = ctx.ResolveImplicitVisibleHeight(containerTop);
                 var explicitHeight = GetDimension(node, "Height", 0);
                 var containerVisibleHeight = explicitHeight > 0
-                    ? Math.Min(explicitHeight, ctx.DefaultContainerHeight(containerTop))
-                    : ctx.DefaultContainerHeight(containerTop);
+                    ? Math.Min(explicitHeight, implicitVisibleHeight)
+                    : implicitVisibleHeight;
 
-                // Clip bounds: the visible area for children within this container
                 var containerClip = new PixelRectangle(
                     ctx.Style.HorizontalPadding,
                     containerTop,
                     ctx.AvailableWidth,
                     containerVisibleHeight);
-                // Intersect with parent clip to prevent children from overflowing
                 if (ctx.ClipBounds.Width > 0 && ctx.ClipBounds.Height > 0)
                 {
                     containerClip = IntersectRect(containerClip, ctx.ClipBounds);
                 }
 
-                // Lay out children to measure content height
                 var childCtx = ctx;
                 childCtx.Depth = ctx.Depth + 1;
                 childCtx.ClipBounds = containerClip;
@@ -123,7 +119,6 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 }
                 var contentHeight = Math.Max(cursorY - containerTop, 0);
 
-                // Scroll offset: clamp to [0, MaxScrollY], then shift children
                 var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
                 var scrollY = Math.Clamp(GetDimension(node, "ScrollY", 0), 0, maxScrollY);
 
@@ -132,7 +127,6 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     OffsetElementY(elements, children, -scrollY);
                 }
 
-                // Count visible vs clipped elements for diagnostics
                 var visibleCount = 0;
                 var clippedCount = 0;
                 foreach (var child in children)
@@ -152,7 +146,6 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     }
                 }
 
-                // Collect scroll diagnostics
                 ctx.ScrollDiags.Add(new ScrollContainerDiag(
                     dfsIndex,
                     containerVisibleHeight,
@@ -162,7 +155,6 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     visibleCount,
                     clippedCount));
 
-                // Advance cursor past the container
                 cursorY = containerTop + containerVisibleHeight + ctx.Style.ItemSpacing;
 
                 if (children.Count == 0)

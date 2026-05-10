@@ -7,6 +7,8 @@ internal readonly record struct RenderStylePreset(
     DrawingStyle Drawing,
     ControlVisualStateResolver VisualStates)
 {
+    public const string DefaultName = "RenderStylePreset.Default";
+
     public static RenderStylePreset Default { get; } = new(
         Layout: new LayoutStyle(
             HorizontalPadding: 16,

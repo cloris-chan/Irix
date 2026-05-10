@@ -661,7 +661,7 @@ public sealed class WindowLayoutPipelineTests
     {
         var builder = new LayoutTreeBuilder();
         // 10 text items × (32 height + 12 spacing) = 440 content height
-        // Visible height = 100 - 16 = 84 (viewport 100, container top at 16)
+        // Root implicit visible height = 100 - 16 = 84.
         // MaxScrollY = 440 - 84 = 356
         var children = new VirtualNode[10];
         for (var i = 0; i < 10; i++)
@@ -715,7 +715,7 @@ public sealed class WindowLayoutPipelineTests
     public void ScrollContainer_diagnostics_counts_visible_and_clipped_elements()
     {
         var builder = new LayoutTreeBuilder();
-        // 5 items, visible height = 50-16 = 34 (viewport 50)
+        // Root implicit visible height = 50 - 16 = 34.
         // Item height = 32 + 12 = 44 per item
         // Item 0: y=16, bottom=48 → inside clip (16..50) ✓
         // Item 1: y=60, bottom=92 → outside clip (16..50) ✗

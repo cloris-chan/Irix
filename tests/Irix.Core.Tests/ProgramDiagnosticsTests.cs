@@ -1,4 +1,5 @@
 using Irix.Poc;
+using Irix.Rendering;
 using Xunit;
 
 namespace Irix.Core.Tests;
@@ -54,5 +55,20 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("PressedChanged previousPressed=- currentPressed=Increment", output);
         Assert.Contains("PressedChanged previousPressed=Increment currentPressed=-", output);
         Assert.Contains("FocusChanged previous=Increment current=-", output);
+    }
+
+    [Fact]
+    public void Diagnose_style_preset_outputs_metrics_and_button_colors()
+    {
+        var output = string.Join(Environment.NewLine, Program.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+
+        Assert.Contains("=== Style Preset Diagnostics ===", output);
+        Assert.Contains("stylePreset name=RenderStylePreset.Default", output);
+        Assert.Contains("layoutMetrics horizontalPadding=16 verticalPadding=16 itemSpacing=12 textHeight=32 buttonHeight=40 rectangleHeight=48 minimumButtonWidth=140 buttonTextWidthFactor=12 buttonHorizontalPadding=32", output);
+        Assert.Contains("buttonStateColorPriority Pressed > Hovered > Focused > Normal", output);
+        Assert.Contains("buttonStateColor normal=#FF3478F6", output);
+        Assert.Contains("buttonStateColor focused=#FF54A0FF", output);
+        Assert.Contains("buttonStateColor hovered=#FF4888FF", output);
+        Assert.Contains("buttonStateColor pressed=#FF245CD2", output);
     }
 }

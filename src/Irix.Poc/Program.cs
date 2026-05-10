@@ -393,6 +393,24 @@ internal static class Program
         };
     }
 
+    internal static string[] BuildStylePresetDiagnosticLines(string presetName, RenderStylePreset preset)
+    {
+        var layout = preset.Layout;
+        var drawing = preset.Drawing;
+        var visualStates = preset.VisualStates;
+
+        return [
+            "=== Style Preset Diagnostics ===",
+            $"stylePreset name={presetName}",
+            $"layoutMetrics horizontalPadding={layout.HorizontalPadding} verticalPadding={layout.VerticalPadding} itemSpacing={layout.ItemSpacing} textHeight={layout.TextHeight} buttonHeight={layout.ButtonHeight} rectangleHeight={layout.RectangleHeight} minimumButtonWidth={layout.MinimumButtonWidth} buttonTextWidthFactor={layout.ButtonTextWidthFactor} buttonHorizontalPadding={layout.ButtonHorizontalPadding}",
+            "buttonStateColorPriority Pressed > Hovered > Focused > Normal",
+            $"buttonStateColor normal={FormatColor(visualStates.ResolveButtonFillColor(drawing, default))}",
+            $"buttonStateColor focused={FormatColor(visualStates.ResolveButtonFillColor(drawing, new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true)))}",
+            $"buttonStateColor hovered={FormatColor(visualStates.ResolveButtonFillColor(drawing, new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true)))}",
+            $"buttonStateColor pressed={FormatColor(visualStates.ResolveButtonFillColor(drawing, new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true)))}"
+        ];
+    }
+
     internal static async Task RunScrollDiagnosticModeAsync(
         TextWriter output,
         string? reportPath = null,
@@ -528,6 +546,10 @@ internal static class Program
         Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
         Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
         Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
+        foreach (var line in BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default))
+        {
+            Console.WriteLine(line);
+        }
         Console.WriteLine($"=== Compositor Diagnostics ===");
         Console.WriteLine($"Render count: {compositor.RenderCount}");
         Console.WriteLine($"Partial apply: {compositor.PartialApplyCount}");
