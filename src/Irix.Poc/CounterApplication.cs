@@ -52,6 +52,7 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
         var scrollY = ScrollController.GetScrollY(model.Scroll);
         var s = model.Scroll;
         var pendingPx = Program.DiagPendingPx;
+        var inputOwnership = Program.DiagInputOwnership;
         var maxScrollText = !s.HasMaxScrollY
             ? "unknown"
             : s.MaxScrollY == 0
@@ -66,7 +67,7 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
                 VirtualNodeFactory.Text($"Count: {model.Count}", 2),
                 VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={s.TargetPosition:F1} pos={s.Position:F2} max={maxScrollText} acc={s.Accumulator:F3} anim={s.IsAnimating} pendingPx={pendingPx:F0} drained={Program.DiagScrollDrainedPixels:F0} frames={Program.DiagScrollDispatchedFrameCount} waitMs={Program.DiagScrollRenderWaitMs:F1} dt={Program.DiagScrollLastDt:F3} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
                 VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
-                VirtualNodeFactory.Text($"Input: hover={FormatTarget(Program.DiagHoveredTarget)} focus={FormatTarget(Program.DiagFocusedTarget)} pressed={FormatTarget(Program.DiagPressedTarget)} capture={FormatTarget(Program.DiagCapturedTarget)} hoverChanges={Program.DiagHoverChangeCount}", 9),
+                VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
                 VirtualNodeFactory.Rectangle(220, 48, 5),
                 VirtualNodeFactory.Button(
                     "Increment",

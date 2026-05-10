@@ -28,6 +28,12 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-input"))
+        {
+            await RunInputDiagnosticModeAsync(Console.Out, Path.Combine("TestResults", "diagnose-input.txt"));
+            return;
+        }
+
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
         window.ExternalRenderingEnabled = true;
@@ -161,11 +167,130 @@ internal static class Program
     internal static double DiagScrollRenderWaitMs => _scrollFramePump?.RenderWaitMs ?? 0;
     internal static double DiagScrollLastDt => _scrollFramePump?.LastDt ?? 0;
     internal static double DiagScrollDrainedPixels => _scrollFramePump?.DrainedPixels ?? 0;
-    internal static string? DiagHoveredTarget => _inputOwnershipState?.HoveredTarget;
-    internal static string? DiagFocusedTarget => _inputOwnershipState?.FocusedTarget;
-    internal static string? DiagPressedTarget => _inputOwnershipState?.PressedTarget;
-    internal static string? DiagCapturedTarget => _inputOwnershipState?.CapturedTarget;
-    internal static long DiagHoverChangeCount => _inputOwnershipState?.HoverChangeCount ?? 0;
+    internal static OwnershipSnapshot DiagInputOwnership => _inputOwnershipState?.Snapshot ?? default;
+
+    internal static async Task RunInputDiagnosticModeAsync(
+        TextWriter output,
+        string? reportPath = null,
+        CancellationToken cancellationToken = default)
+    {
+        var ownershipState = new InputOwnershipState();
+        var lines = new List<string>
+        {
+            "=== Input Ownership Diagnostics ==="
+        };
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitDiagnosticTarget,
+            out _);
+        lines.Add($"afterMove {FormatOwnership(ownershipState.Snapshot)}");
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitDiagnosticTarget,
+            out _);
+        lines.Add($"afterPress {FormatOwnership(ownershipState.Snapshot)}");
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 3, X: 32, Y: 200),
+            ownershipState,
+            HitDiagnosticTarget,
+            out _);
+        lines.Add($"duringCaptureMove {FormatOwnership(ownershipState.Snapshot)}");
+
+        var releaseMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 4,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitDiagnosticTarget,
+            out var releaseMessage);
+        lines.Add($"releaseOutside mapped={releaseMapped} message={FormatMessage(releaseMessage)} {FormatOwnership(ownershipState.Snapshot)}");
+
+        var pressEmptyMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 5,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitDiagnosticTarget,
+            out _);
+        lines.Add($"pressEmpty mapped={pressEmptyMapped} {FormatOwnership(ownershipState.Snapshot)}");
+
+        var releaseEmptyMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 6,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitDiagnosticTarget,
+            out _);
+        lines.Add($"releaseAfterEmptyPress mapped={releaseEmptyMapped} {FormatOwnership(ownershipState.Snapshot)}");
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 7, X: 0, Y: 0),
+            ownershipState,
+            HitDiagnosticTarget,
+            out _);
+        lines.Add($"focusLost {FormatOwnership(ownershipState.Snapshot)}");
+        lines.Add("=== Input diagnostic mode complete ===");
+
+        foreach (var line in lines)
+        {
+            await output.WriteLineAsync(line);
+        }
+
+        if (reportPath is not null)
+        {
+            var directory = Path.GetDirectoryName(reportPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await File.WriteAllLinesAsync(reportPath, lines, cancellationToken);
+        }
+
+        static string? HitDiagnosticTarget(int x, int y)
+        {
+            return (x, y) switch
+            {
+                (32, 140) => nameof(CounterMessage.Increment),
+                (32, 200) => nameof(CounterMessage.Decrement),
+                _ => null
+            };
+        }
+    }
+
+    private static string FormatOwnership(OwnershipSnapshot snapshot)
+    {
+        return $"hover={FormatTarget(snapshot.HoveredTarget)} focus={FormatTarget(snapshot.FocusedTarget)} pressed={FormatTarget(snapshot.PressedTarget)} capture={FormatTarget(snapshot.CapturedTarget)} hoverChanges={snapshot.HoverChangeCount} pointerPressed={snapshot.IsPointerPressed}";
+    }
+
+    private static string FormatTarget(string? target)
+    {
+        return string.IsNullOrWhiteSpace(target) ? "-" : target;
+    }
+
+    private static string FormatMessage(CounterMessage? message)
+    {
+        return message?.GetType().Name ?? "-";
+    }
 
     internal static async Task RunScrollDiagnosticModeAsync(
         TextWriter output,

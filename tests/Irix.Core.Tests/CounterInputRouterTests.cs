@@ -112,6 +112,101 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void TryMapInput_hover_can_change_during_capture_without_changing_capture()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out _);
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 2, X: 32, Y: 200),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out _);
+
+        var snapshot = ownershipState.Snapshot;
+        Assert.Equal(nameof(CounterMessage.Decrement), snapshot.HoveredTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), snapshot.PressedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), snapshot.CapturedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), snapshot.FocusedTarget);
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 3,
+                X: 32,
+                Y: 200,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out var message);
+
+        snapshot = ownershipState.Snapshot;
+        Assert.True(mapped);
+        Assert.IsType<CounterMessage.Increment>(message);
+        Assert.Equal(nameof(CounterMessage.Decrement), snapshot.HoveredTarget);
+        Assert.Null(snapshot.PressedTarget);
+        Assert.Null(snapshot.CapturedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), snapshot.FocusedTarget);
+        Assert.False(snapshot.IsPointerPressed);
+    }
+
+    [Fact]
+    public void TryMapInput_empty_press_clears_focus_and_does_not_trigger_action()
+    {
+        var ownershipState = new InputOwnershipState();
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        Assert.False(mapped);
+        Assert.Null(ownershipState.FocusedTarget);
+        Assert.Null(ownershipState.PressedTarget);
+        Assert.Null(ownershipState.CapturedTarget);
+
+        mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 3,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+
+        Assert.False(mapped);
+        Assert.False(ownershipState.Snapshot.IsPointerPressed);
+    }
+
+    [Fact]
     public void TryMapInput_activates_focused_target_for_enter_or_space()
     {
         var ownershipState = new InputOwnershipState();
@@ -281,6 +376,16 @@ public sealed class CounterInputRouterTests
     private static string? HitIncrementAtButton(int x, int y)
     {
         return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
+    }
+
+    private static string? HitIncrementOrDecrement(int x, int y)
+    {
+        return (x, y) switch
+        {
+            (32, 140) => nameof(CounterMessage.Increment),
+            (32, 200) => nameof(CounterMessage.Decrement),
+            _ => null
+        };
     }
 
     [Fact]
