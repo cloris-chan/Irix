@@ -170,6 +170,40 @@ internal static class Program
         return $"Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(effectiveClip)} clippedCommands={clippedCommandCount} textClipSkipped={textClipSkippedCount} deviceRemoved={deviceRemoved} passed={passed}";
     }
 
+    internal readonly record struct ResizeViewportDiagnostics(
+        PixelRectangle WindowPhysicalBounds,
+        PixelRectangle RendererSwapchainBounds,
+        PixelRectangle TranslatorViewport,
+        PixelRectangle LayoutViewport,
+        PixelRectangle LastAppliedPendingResize,
+        long RenderCount,
+        float ScreenScale,
+        string DpiAwareness,
+        string ScaleMode)
+    {
+        public bool ViewportMatchesRenderer => TranslatorViewport.Width == RendererSwapchainBounds.Width && TranslatorViewport.Height == RendererSwapchainBounds.Height;
+
+        public bool LayoutUsesRendererSize => LayoutViewport.Width == RendererSwapchainBounds.Width && LayoutViewport.Height == RendererSwapchainBounds.Height;
+    }
+
+    internal static string[] BuildResizeViewportDiagnosticLines(ResizeViewportDiagnostics diagnostics)
+    {
+        return [
+            $"windowPhysicalSize={FormatSize(diagnostics.WindowPhysicalBounds)}",
+            $"rendererSwapchainSize={FormatSize(diagnostics.RendererSwapchainBounds)}",
+            $"translatorViewportSize={FormatSize(diagnostics.TranslatorViewport)}",
+            $"layoutViewportSize={FormatSize(diagnostics.LayoutViewport)}",
+            $"lastAppliedPendingResize={FormatSize(diagnostics.LastAppliedPendingResize)}",
+            $"renderCount={diagnostics.RenderCount}",
+            $"viewportMatchesRenderer={diagnostics.ViewportMatchesRenderer}",
+            $"layoutUsesRendererSize={diagnostics.LayoutUsesRendererSize}",
+            $"scaleMode={diagnostics.ScaleMode}",
+            $"screenScale={diagnostics.ScreenScale:0.###}",
+            $"dpiAwareness={diagnostics.DpiAwareness}",
+            "coordinateSpace=PhysicalPixels logicalCoordinates=False"
+        ];
+    }
+
     private static string FormatEffectiveScissor(EffectiveScissor scissor)
     {
         return scissor.IsEmpty ? "empty" : FormatRect(scissor.Bounds);
@@ -178,6 +212,11 @@ internal static class Program
     private static string FormatRect(DrawRect rect)
     {
         return $"({rect.X:0.##},{rect.Y:0.##},{rect.Width:0.##},{rect.Height:0.##})";
+    }
+
+    private static string FormatSize(PixelRectangle rectangle)
+    {
+        return $"{rectangle.Width}x{rectangle.Height}";
     }
 
     private sealed class PlatformInputObserver(Action<RawInputEvent> onNext) : IObserver<RawInputEvent>
@@ -788,68 +827,90 @@ internal static class Program
     private static void RunResizeDiagnosticMode()
     {
         using var platformHost = new WindowsPlatformHost();
-        using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
+        var screen = platformHost.Screens[0];
+        using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        using var compositor = new DrawingBackendCompositor(d3d12Backend);
+        var lastAppliedPendingResize = window.Region.PhysicalBounds;
+        var translator = new WindowDrawCommandTranslator(
+            window,
+            () =>
+            {
+                if (d3d12Renderer.ApplyPendingResize())
+                {
+                    var bounds = window.Region.PhysicalBounds;
+                    lastAppliedPendingResize = new PixelRectangle(bounds.X, bounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
+                }
+            },
+            () =>
+            {
+                var bounds = window.Region.PhysicalBounds;
+                return new PixelRectangle(bounds.X, bounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
+            },
+            postFrameCallback: null);
 
-        var resources = FrameDrawingResources.Rent();
-        try
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1200,
+            children:
+            [
+                VirtualNodeFactory.Text("Resize Diagnostic: renderer/layout viewport", 1201),
+                VirtualNodeFactory.Rectangle(300, 44, 1202),
+                VirtualNodeFactory.Button("ResizeBtn", 1203, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("ResizeBtn")))
+            ]);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+
+        for (var i = 0; i < 80; i++)
         {
-            var textStyle = resources.AddTextStyle(TextStyle.Default);
-            var text = resources.AddText("Resize Diagnostic: DirectWrite + D3D12 fence stress");
-            resources.Seal();
+            var width = 720 + i % 17 * 19;
+            var height = 420 + i % 11 * 17;
+            var oldBounds = window.Region.PhysicalBounds;
+            window.Region = new ScreenRegion(window.Region.ScreenId, new PixelRectangle(oldBounds.X, oldBounds.Y, width, height));
+            d3d12Renderer.Resize(width, height);
 
-            var commands = new DrawCommand[]
+            using var patch = i == 0
+                ? VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root))
+                : PatchBatch.CreateRenderRequest();
+            using var frame = translator.Translate(patch);
+            compositor.RenderAsync(frame).AsTask().GetAwaiter().GetResult();
+
+            if (d3d12Renderer.IsDeviceRemoved)
             {
-                new(DrawCommandKind.FillRect,
-                    Rect: new DrawRect(0, 0, 1280, 720),
-                    Color: DrawColor.Opaque(32, 32, 32)),
-                new(DrawCommandKind.FillRect,
-                    Rect: new DrawRect(16, 80, 300, 44),
-                    Color: DrawColor.Opaque(52, 120, 246)),
-                new(DrawCommandKind.DrawTextRun,
-                    Rect: new DrawRect(16, 16, 900, 36),
-                    Resource: textStyle,
-                    Text: text,
-                    Color: DrawColor.Opaque(255, 255, 255))
-            };
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-
-            for (var i = 0; i < 80; i++)
-            {
-                var width = 720 + i % 17 * 19;
-                var height = 420 + i % 11 * 17;
-                d3d12Renderer.Resize(width, height);
-                _ = d3d12Renderer.ApplyPendingResize();
-
-                d3d12Backend.BeginFrame(default);
-                d3d12Backend.Execute(commands, resources);
-                d3d12Backend.EndFrame();
-
-                if (d3d12Renderer.IsDeviceRemoved)
-                {
-                    break;
-                }
-
-                if (i % 8 == 0)
-                {
-                    GC.Collect();
-                    GC.WaitForPendingFinalizers();
-                }
+                break;
             }
 
-            Console.WriteLine("=== D3D12 Resize Diagnostics ===");
-            Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
-            Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
-            Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
-            Console.WriteLine("=== Resize diagnostic mode complete ===");
+            if (i % 8 == 0)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+            }
         }
-        finally
+
+        var windowBounds = window.Region.PhysicalBounds;
+        var rendererBounds = new PixelRectangle(windowBounds.X, windowBounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
+        var diagnostics = new ResizeViewportDiagnostics(
+            windowBounds,
+            rendererBounds,
+            translator.LastViewport,
+            translator.LastLayoutViewport,
+            lastAppliedPendingResize,
+            compositor.RenderCount,
+            screen.DpiScale,
+            "ProcessDefault",
+            "PhysicalPixelsV0");
+
+        Console.WriteLine("=== D3D12 Resize Diagnostics ===");
+        Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
+        Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
+        Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
+        foreach (var line in BuildResizeViewportDiagnosticLines(diagnostics))
         {
-            FrameDrawingResources.Return(resources);
+            Console.WriteLine(line);
         }
+        Console.WriteLine("=== Resize diagnostic mode complete ===");
     }
 }

@@ -60,7 +60,7 @@ public sealed class ScrollFramePumpTests
         }
 
         await Task.Delay(50, cancellationToken);
-        Assert.Equal(1, frames.Count);
+        Assert.Single(frames);
         Assert.True(pump.IsFrameQueued);
 
         renderGate.Release();

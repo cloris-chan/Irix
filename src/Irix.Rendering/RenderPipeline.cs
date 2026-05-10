@@ -53,6 +53,10 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     /// </summary>
     public RetainedRenderFrame RetainedFrame => _retainedFrame;
 
+    public PixelRectangle LastViewport { get; private set; }
+
+    public long LayoutRebuildCount { get; private set; }
+
     /// <summary>
     /// The layout tree result from the last Build call, if available.
     /// Exposes scroll container diagnostics and tree structure.
@@ -73,12 +77,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     /// </summary>
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
+        LastViewport = viewportBounds;
         var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(_retainedRoot, root);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
 
         if (treeChanged || viewportChanged || hasDirty)
         {
+            LayoutRebuildCount++;
             _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
             _retainedLayout = _retainedLayoutResult.Elements;
             _retainedRoot = root;

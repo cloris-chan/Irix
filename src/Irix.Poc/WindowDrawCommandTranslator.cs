@@ -20,6 +20,12 @@ internal sealed class WindowDrawCommandTranslator(
     /// <summary>MaxScrollY from the last layout pass. 0 if no scroll needed.</summary>
     public double LastMaxScrollY => _renderPipeline.LastMaxScrollY;
 
+    public PixelRectangle LastViewport { get; private set; }
+
+    public PixelRectangle LastLayoutViewport => _renderPipeline.LastViewport;
+
+    public long LayoutRebuildCount => _renderPipeline.LayoutRebuildCount;
+
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null)
     {
@@ -45,6 +51,7 @@ internal sealed class WindowDrawCommandTranslator(
 
         _prepareFrame?.Invoke();
         var viewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
+        LastViewport = viewport;
         var batch = _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
         _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
         return batch;

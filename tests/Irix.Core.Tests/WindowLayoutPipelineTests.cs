@@ -516,6 +516,79 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void WindowDrawCommandTranslator_synthetic_resize_uses_renderer_size_for_layout_viewport()
+    {
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(40, 50, 960, 540)));
+        var rendererWidth = 960;
+        var rendererHeight = 540;
+        var pendingWidth = 0;
+        var pendingHeight = 0;
+        var pendingResize = false;
+        var lastAppliedPendingResize = window.Region.PhysicalBounds;
+
+        var translator = new WindowDrawCommandTranslator(
+            window,
+            () =>
+            {
+                if (!pendingResize)
+                {
+                    return;
+                }
+
+                rendererWidth = pendingWidth;
+                rendererHeight = pendingHeight;
+                pendingResize = false;
+                var bounds = window.Region.PhysicalBounds;
+                lastAppliedPendingResize = new PixelRectangle(bounds.X, bounds.Y, rendererWidth, rendererHeight);
+            },
+            () =>
+            {
+                var bounds = window.Region.PhysicalBounds;
+                return new PixelRectangle(bounds.X, bounds.Y, rendererWidth, rendererHeight);
+            },
+            postFrameCallback: null);
+        var root = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("Resize", 2));
+
+        using var initialPatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var initialFrame = translator.Translate(initialPatch);
+        var initialRebuildCount = translator.LayoutRebuildCount;
+
+        RequestResize(777, 333);
+        window.Region = new ScreenRegion(0, new PixelRectangle(40, 50, 777, 333));
+        using var resizeRequest = PatchBatch.CreateRenderRequest();
+        using var resizedFrame = translator.Translate(resizeRequest);
+
+        var expectedViewport = new PixelRectangle(40, 50, 777, 333);
+        Assert.Equal(expectedViewport, lastAppliedPendingResize);
+        Assert.Equal(expectedViewport, translator.LastViewport);
+        Assert.Equal(expectedViewport, translator.LastLayoutViewport);
+        Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+        Assert.Equal(745, resizedFrame.Commands.Memory.Span[0].Rect.Width);
+
+        RequestResize(777, 333);
+        using var duplicateRequest = PatchBatch.CreateRenderRequest();
+        using var duplicateFrame = translator.Translate(duplicateRequest);
+
+        Assert.Equal(expectedViewport, translator.LastViewport);
+        Assert.Equal(expectedViewport, translator.LastLayoutViewport);
+        Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+        Assert.Equal(resizedFrame.Commands.Memory.Span[0].Rect, duplicateFrame.Commands.Memory.Span[0].Rect);
+
+        void RequestResize(int width, int height)
+        {
+            if (width == rendererWidth && height == rendererHeight)
+            {
+                pendingResize = false;
+                return;
+            }
+
+            pendingWidth = width;
+            pendingHeight = height;
+            pendingResize = true;
+        }
+    }
+
+    [Fact]
     public void LayoutTree_text_update_produces_correct_dirty_range()
     {
         var builder = new LayoutTreeBuilder();

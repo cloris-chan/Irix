@@ -1,4 +1,5 @@
 using Irix.Drawing;
+using Irix.Platform;
 using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
@@ -111,5 +112,35 @@ public sealed class ProgramDiagnosticsTests
         var line = Program.BuildPipelineTextClipSmokeDiagnosticLine(new EffectiveScissor(new DrawRect(16, 16, 928, 20), false), clippedCommandCount: 2, textClipSkippedCount: 0, deviceRemoved: false);
 
         Assert.Equal("Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip=(16,16,928,20) clippedCommands=2 textClipSkipped=0 deviceRemoved=False passed=True", line);
+    }
+
+    [Fact]
+    public void Diagnose_resize_viewport_outputs_source_of_truth_fields()
+    {
+        var diagnostics = new Program.ResizeViewportDiagnostics(
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            RenderCount: 80,
+            ScreenScale: 1.25f,
+            DpiAwareness: "ProcessDefault",
+            ScaleMode: "PhysicalPixelsV0");
+
+        var output = string.Join(Environment.NewLine, Program.BuildResizeViewportDiagnosticLines(diagnostics));
+
+        Assert.Contains("windowPhysicalSize=929x454", output);
+        Assert.Contains("rendererSwapchainSize=929x454", output);
+        Assert.Contains("translatorViewportSize=929x454", output);
+        Assert.Contains("layoutViewportSize=929x454", output);
+        Assert.Contains("lastAppliedPendingResize=929x454", output);
+        Assert.Contains("renderCount=80", output);
+        Assert.Contains("viewportMatchesRenderer=True", output);
+        Assert.Contains("layoutUsesRendererSize=True", output);
+        Assert.Contains("scaleMode=PhysicalPixelsV0", output);
+        Assert.Contains("screenScale=1.25", output);
+        Assert.Contains("dpiAwareness=ProcessDefault", output);
+        Assert.Contains("coordinateSpace=PhysicalPixels logicalCoordinates=False", output);
     }
 }
