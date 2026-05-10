@@ -22,7 +22,7 @@
 | 入口 | 当前归属 | 覆盖内容 | 后续 channel 方向 |
 |------|----------|----------|-------------------|
 | `--diagnose` | `Irix.Poc.Program.RunDiagnosticMode` | D3D12 text cache/device、style preset、compositor partial apply、layout pipeline、StyleOnly plan smoke、pipeline scissor/text clip smoke、backend scissor/text clip smoke | 拆成 diagnostics providers，再由统一 runner 汇总输出；当前 stdout contract 保持冻结。 |
-| `--diagnose-resize` | `Irix.Poc.Program.RunResizeDiagnosticMode` | window physical size、renderer swapchain size、translator/layout viewport、pending resize apply、viewport dirty reason、physical-pixels mode | 未来归入 viewport/platform diagnostics provider；当前仍保持 PoC smoke。 |
+| `--diagnose-resize` | `Irix.Poc.ResizeDiagnosticRunner.Run` | window physical size、renderer swapchain size、translator/layout viewport、pending resize apply、viewport dirty reason、physical-pixels mode | Second runner split sample. Keep as PoC smoke; future migration waits until viewport/platform diagnostics ownership is settled. |
 | `--diagnose-scroll` | `Irix.Poc.ScrollDiagnosticRunner.RunAsync` | scroll pump frame count、render wait、dt、drained pixels、pending pixels | First runner split sample. Keep as PoC diagnostic; future migration waits until scroll controller/pump ownership is settled. |
 | `--diagnose-input` | `Irix.Poc.Program.RunInputDiagnosticModeAsync` | input ownership transitions、button visual priority、keyboard/pointer mapping、dirty reason smoke | 未来输入模型框架化后提供 input diagnostics provider；现在不移动 input router。 |
 | `--debug-ui` | `CounterApplication.BuildDiagnosticHeaderRows` plus `Program` diagnostic readouts | in-app scroll/input/clip mode/viewport/layout dirty rows | 未来由统一 diagnostics snapshot 驱动 debug overlay；现在保持 Counter sample 内部实现。 |
@@ -43,8 +43,8 @@ Diagnostics snapshot v0 and debug bridge v0 are sealed; unified diagnostics chan
 Recommended order:
 
 1. `--diagnose-scroll` → `ScrollDiagnosticRunner` (done; smallest async runner, no window/D3D12 setup).
-2. `--diagnose-resize` → `ResizeDiagnosticRunner` (next candidate; focused window/viewport smoke, still smaller than full `--diagnose`).
-3. `--diagnose-input` → `InputDiagnosticRunner` (after scroll/resize, because it still hosts ownership and dirty-reason scripted flows).
+2. `--diagnose-resize` → `ResizeDiagnosticRunner` (done; focused window/viewport smoke, still smaller than full `--diagnose`).
+3. `--diagnose-input` → `InputDiagnosticRunner` (next; it still hosts ownership and dirty-reason scripted flows).
 4. StyleOnly plan smoke helpers → dedicated diagnostics smoke file only after the CLI runner surface is thinner.
 5. Full `RunDiagnosticMode` last; it touches text cache, style preset, compositor, layout, StyleOnly, scissor, text clip, and backend counters in one flow.
 

@@ -446,6 +446,49 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("coordinateSpace=PhysicalPixels logicalCoordinates=False", output);
     }
 
+    [Fact]
+    public void Diagnose_resize_runner_report_outputs_stable_fields()
+    {
+        var snapshot = new ViewportDiagnosticsSnapshot(
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            RenderCount: 80,
+            LayoutRebuildCount: 80,
+            LayoutRebuildReason: "ViewportChanged",
+            ScreenScale: 1.25f,
+            DpiAwareness: "ProcessDefault",
+            ScaleMode: "PhysicalPixelsV0");
+        var writer = new StringWriter();
+
+        ResizeDiagnosticRunner.WriteReport(writer, deviceRemoved: false, deviceErrorReason: null, swapchainWidth: 929, swapchainHeight: 454, snapshot);
+
+        Assert.Equal(string.Join(Environment.NewLine, [
+            "=== D3D12 Resize Diagnostics ===",
+            "Device removed: False",
+            "Device error reason: (none)",
+            "Swapchain size: 929x454",
+            "windowPhysicalSize=929x454",
+            "rendererSwapchainSize=929x454",
+            "translatorViewportSize=929x454",
+            "layoutViewportSize=929x454",
+            "lastAppliedPendingResize=929x454",
+            "renderCount=80",
+            "layoutRebuildCount=80",
+            "layoutRebuildReason=ViewportChanged",
+            "viewportMatchesRenderer=True",
+            "layoutUsesRendererSize=True",
+            "scaleMode=PhysicalPixelsV0",
+            "screenScale=1.25",
+            "dpiAwareness=ProcessDefault",
+            "coordinateSpace=PhysicalPixels logicalCoordinates=False",
+            "=== Resize diagnostic mode complete ===",
+            string.Empty
+        ]), writer.ToString());
+    }
+
     #endregion
 
     #region Debug UI Bridge Baseline
