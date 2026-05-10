@@ -475,6 +475,113 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleOnlyPatchEligibility_accepts_only_style_dirty_when_viewport_unchanged()
+    {
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var eligible = StyleOnlyPatchEligibility.IsLayoutReuseEligible(
+            [
+                new LayoutDirtyClassification(2, LayoutRebuildReason.StyleOnly),
+                new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)
+            ],
+            viewport,
+            viewport);
+
+        Assert.True(eligible);
+        Assert.False(StyleOnlyPatchEligibility.IsLayoutReuseEligible([], viewportChanged: false));
+    }
+
+    [Theory]
+    [InlineData((int)LayoutRebuildReason.TextSizeAffecting)]
+    [InlineData((int)LayoutRebuildReason.LayoutAffecting)]
+    [InlineData((int)LayoutRebuildReason.TreeStructure)]
+    public void StyleOnlyPatchEligibility_rejects_non_style_dirty_reasons(int reasonValue)
+    {
+        var reason = (LayoutRebuildReason)reasonValue;
+        var eligible = StyleOnlyPatchEligibility.IsLayoutReuseEligible(
+            [new LayoutDirtyClassification(1, reason)],
+            viewportChanged: false);
+
+        Assert.False(eligible);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchEligibility_rejects_viewport_change()
+    {
+        var eligible = StyleOnlyPatchEligibility.IsLayoutReuseEligible(
+            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            viewportChanged: true);
+
+        Assert.False(eligible);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchEligibility_rejects_mixed_dirty_reasons()
+    {
+        var eligible = StyleOnlyPatchEligibility.IsLayoutReuseEligible(
+            [
+                new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly),
+                new LayoutDirtyClassification(2, LayoutRebuildReason.LayoutAffecting)
+            ],
+            viewportChanged: false);
+
+        Assert.False(eligible);
+    }
+
+    [Fact]
+    public void StyleOnly_hover_preserves_layout_reuse_invariant_snapshot()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 160);
+        var root1 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            children:
+            [
+                VirtualNodeFactory.Text("Count: 0", 2),
+                VirtualNodeFactory.Button("Increment", 3,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                VirtualNodeFactory.Rectangle(220, 48, 4)
+            ]);
+        var root2 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            children:
+            [
+                VirtualNodeFactory.Text("Count: 0", 2),
+                VirtualNodeFactory.Button("Increment", 3,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+                VirtualNodeFactory.Rectangle(220, 48, 4)
+            ]);
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var initialLayout = pipeline.LastLayoutResult!;
+        var initialElementSnapshot = SnapshotLayoutElementInvariants(initialLayout.Elements);
+        var initialRangeSnapshot = SnapshotLayoutTreeRanges(initialLayout.TreeNodes);
+        ScrollContainerDiag[] initialScrollDiagnostics = [.. initialLayout.ScrollDiagnostics];
+        ElementCommandRange[] initialCommandRanges = [.. pipeline.LastElementCommandRanges];
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+
+        using var frame2 = pipeline.Build(root2, viewport, [2]);
+        var nextLayout = pipeline.LastLayoutResult!;
+
+        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
+        Assert.Equal(initialElementSnapshot, SnapshotLayoutElementInvariants(nextLayout.Elements));
+        Assert.Equal(initialRangeSnapshot, SnapshotLayoutTreeRanges(nextLayout.TreeNodes));
+        Assert.Equal(initialScrollDiagnostics, nextLayout.ScrollDiagnostics);
+        Assert.Equal(initialCommandRanges, pipeline.LastElementCommandRanges);
+        Assert.Equal([new LayoutDirtyClassification(2, LayoutRebuildReason.StyleOnly)], pipeline.LastDirtyClassifications);
+        Assert.Equal([(1, 1)], pipeline.LastDirtyElementRanges);
+        Assert.Equal([(1, 2)], pipeline.LastDirtyCommandRanges);
+    }
+
+    [Fact]
     public void RenderPipeline_rebuilds_layout_when_tree_changes()
     {
         var pipeline = new RenderPipeline();
@@ -489,6 +596,56 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.Equal("Hello", text1);
         Assert.Equal("World", text2);
+    }
+
+    private readonly record struct LayoutElementInvariant(
+        LayoutElementKind Kind,
+        PixelRectangle Bounds,
+        PixelRectangle ClipBounds,
+        string? Text,
+        string? ActionId);
+
+    private readonly record struct LayoutTreeRangeInvariant(
+        int DfsIndex,
+        VirtualNodeKind Kind,
+        int ElementStart,
+        int ElementCount);
+
+    private static LayoutElementInvariant[] SnapshotLayoutElementInvariants(IReadOnlyList<LayoutElement> elements)
+    {
+        var snapshot = new LayoutElementInvariant[elements.Count];
+        for (var elementIndex = 0; elementIndex < elements.Count; elementIndex++)
+        {
+            var element = elements[elementIndex];
+            snapshot[elementIndex] = new LayoutElementInvariant(
+                element.Kind,
+                element.Bounds,
+                element.ClipBounds,
+                element.Text,
+                element.ActionId);
+        }
+
+        return snapshot;
+    }
+
+    private static LayoutTreeRangeInvariant[] SnapshotLayoutTreeRanges(LayoutTreeNode[] treeNodes)
+    {
+        var snapshot = new List<LayoutTreeRangeInvariant>();
+        AppendLayoutTreeRanges(treeNodes, snapshot);
+        return [.. snapshot];
+    }
+
+    private static void AppendLayoutTreeRanges(LayoutTreeNode[] treeNodes, List<LayoutTreeRangeInvariant> snapshot)
+    {
+        foreach (var treeNode in treeNodes)
+        {
+            snapshot.Add(new LayoutTreeRangeInvariant(
+                treeNode.DfsIndex,
+                treeNode.Kind,
+                treeNode.ElementStart,
+                treeNode.ElementCount));
+            AppendLayoutTreeRanges(treeNode.Children, snapshot);
+        }
     }
 
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow
@@ -1319,6 +1476,60 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.Single(result);
         Assert.Equal((0, 3), result[0]); // commands 0-2
+    }
+
+    [Fact]
+    public void StyleOnlyPatchEligibility_maps_stable_dirty_element_range_to_command_range()
+    {
+        var elementCommandRanges = new ElementCommandRange[]
+        {
+            new(0, 1),
+            new(1, 2),
+            new(3, 1)
+        };
+
+        var stable = StyleOnlyPatchEligibility.TryMapStableCommandRanges(
+            elementCommandRanges,
+            [(1, 1)],
+            out var dirtyCommandRanges);
+
+        Assert.True(stable);
+        Assert.Equal([(1, 2)], dirtyCommandRanges);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchEligibility_refuses_unstable_dirty_element_command_mapping()
+    {
+        var elementCommandRanges = new ElementCommandRange[]
+        {
+            new(0, 1),
+            new(3, 1)
+        };
+
+        var stable = StyleOnlyPatchEligibility.TryMapStableCommandRanges(
+            elementCommandRanges,
+            [(0, 2)],
+            out var dirtyCommandRanges);
+
+        Assert.False(stable);
+        Assert.Empty(dirtyCommandRanges);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchEligibility_refuses_out_of_range_dirty_element_mapping()
+    {
+        var elementCommandRanges = new ElementCommandRange[]
+        {
+            new(0, 1)
+        };
+
+        var stable = StyleOnlyPatchEligibility.TryMapStableCommandRanges(
+            elementCommandRanges,
+            [(1, 1)],
+            out var dirtyCommandRanges);
+
+        Assert.False(stable);
+        Assert.Empty(dirtyCommandRanges);
     }
 
     [Fact]
