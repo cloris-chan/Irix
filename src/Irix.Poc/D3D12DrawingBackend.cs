@@ -5,6 +5,8 @@ namespace Irix.Poc;
 
 internal readonly record struct D3D12FillRectScissorPlan(EffectiveScissor EffectiveScissor, IntegerScissorRect RenderScissor, bool Skip);
 
+internal readonly record struct D3D12FillRectScissorDiagnostics(int ClippedCommandCount, int EmptyIntersectionSkippedCount, int ScissorStateChangeCount, EffectiveScissor LastEffectiveScissor);
+
 /// <summary>
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
@@ -62,6 +64,46 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return new D3D12FillRectScissorPlan(effectiveScissor, renderScissor, false);
     }
 
+    internal static D3D12FillRectScissorDiagnostics ComputeFillRectScissorDiagnostics(DrawingBackendClipMode clipMode, in DrawRect viewport, ReadOnlySpan<DrawCommand> commands)
+    {
+        var clippedCommandCount = 0;
+        var emptyIntersectionSkippedCount = 0;
+        var scissorStateChangeCount = 0;
+        var hasPreviousScissor = false;
+        var previousScissor = IntegerScissorRect.Empty;
+        var lastEffectiveScissor = EffectiveScissor.Empty;
+
+        foreach (var command in commands)
+        {
+            if (command.ClipBounds.Width > 0 && command.ClipBounds.Height > 0)
+            {
+                clippedCommandCount++;
+            }
+
+            if (command.Kind != DrawCommandKind.FillRect)
+            {
+                continue;
+            }
+
+            var scissorPlan = ResolveFillRectScissor(clipMode, viewport, command.ClipBounds);
+            lastEffectiveScissor = scissorPlan.EffectiveScissor;
+            if (scissorPlan.Skip)
+            {
+                emptyIntersectionSkippedCount++;
+                continue;
+            }
+
+            if (clipMode == DrawingBackendClipMode.Scissor && (!hasPreviousScissor || scissorPlan.RenderScissor != previousScissor))
+            {
+                scissorStateChangeCount++;
+                previousScissor = scissorPlan.RenderScissor;
+                hasPreviousScissor = true;
+            }
+        }
+
+        return new D3D12FillRectScissorDiagnostics(clippedCommandCount, emptyIntersectionSkippedCount, scissorStateChangeCount, lastEffectiveScissor);
+    }
+
     public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
     {
         _dirtyCommandRanges = ranges;
@@ -77,40 +119,24 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
     {
         _resources = resources;
-        _clippedCommandCount = 0;
-        _emptyIntersectionSkippedCount = 0;
-        _scissorStateChangeCount = 0;
-        _lastEffectiveScissor = EffectiveScissor.Empty;
         var viewportWidth = _renderer.Width;
         var viewportHeight = _renderer.Height;
         var viewport = new DrawRect(0, 0, viewportWidth, viewportHeight);
-        var hasPreviousScissor = false;
-        var previousScissor = IntegerScissorRect.Empty;
+        var diagnostics = ComputeFillRectScissorDiagnostics(ClipMode, viewport, commands);
+        _clippedCommandCount = diagnostics.ClippedCommandCount;
+        _emptyIntersectionSkippedCount = diagnostics.EmptyIntersectionSkippedCount;
+        _scissorStateChangeCount = diagnostics.ScissorStateChangeCount;
+        _lastEffectiveScissor = diagnostics.LastEffectiveScissor;
 
         foreach (var command in commands)
         {
-            // Track clip diagnostics; Scissor mode applies only to FillRect below.
-            if (command.ClipBounds.Width > 0 && command.ClipBounds.Height > 0)
-            {
-                _clippedCommandCount++;
-            }
-
             switch (command.Kind)
             {
                 case DrawCommandKind.FillRect:
                     var scissorPlan = ResolveFillRectScissor(ClipMode, viewport, command.ClipBounds);
-                    _lastEffectiveScissor = scissorPlan.EffectiveScissor;
                     if (scissorPlan.Skip)
                     {
-                        _emptyIntersectionSkippedCount++;
                         break;
-                    }
-
-                    if (ClipMode == DrawingBackendClipMode.Scissor && (!hasPreviousScissor || scissorPlan.RenderScissor != previousScissor))
-                    {
-                        _scissorStateChangeCount++;
-                        previousScissor = scissorPlan.RenderScissor;
-                        hasPreviousScissor = true;
                     }
 
                     if (_rects.Count == 0)

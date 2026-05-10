@@ -6,7 +6,7 @@ Date: 2026-05-10
 
 ## Context
 
-The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics, but GPU scissor is not applied to individual draw commands yet.
+The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor is available behind an explicit opt-in mode; text clipping remains out of scope.
 
 The current interaction and style preset phase is frozen. Scissor work must not change scroll pumping, input ownership, button visual state, style preset behavior, theme behavior, or retained partial redraw behavior.
 
@@ -68,7 +68,13 @@ The first scissor smoke uses exactly one clipped FillRect command:
 - No text command.
 - No retained partial redraw.
 
-Current `--diagnose` smokes switch the backend to `Scissor` for FillRect-only checks. The direct smoke renders exactly one clipped FillRect and reports `effectiveClip=(32,32,80,40)`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, and `gpuScissor=True`. A pipeline smoke builds a ScrollContainer containing one clipped rectangle and verifies `clippedCommands > 0` and `scissorStateChanges > 0`. An empty-intersection smoke verifies a fully outside clip increments `emptyIntersectionSkipped=1`. These smokes prove D3D12 scissor does not break the existing FillRect path while keeping text clipping out of scope.
+Current `--diagnose` smokes switch the backend to `Scissor` for FillRect-only checks. Expected stable fields:
+
+- Direct: `effectiveClip=(32,32,80,40)`, `gpuScissor=True`, `clippedCommands=1`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, `deviceRemoved=False`.
+- Pipeline: `source=ScrollContainerRectangle`, `textClip=False`, `clippedCommands=1`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, `deviceRemoved=False`, `passed=True`.
+- Empty: `kind=FillRect`, `clippedCommands=1`, `emptyIntersectionSkipped=1`, `scissorStateChanges=0`, `deviceRemoved=False`.
+
+These smokes prove D3D12 scissor does not break the existing FillRect path while keeping text clipping out of scope.
 
 ## Non-goals
 
