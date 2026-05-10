@@ -399,6 +399,33 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void CounterApplication_build_view_button_includes_action_and_visual_state_bundle()
+    {
+        var app = new CounterApplication();
+        var targetId = nameof(CounterMessage.Increment);
+        var model = app.Initialize() with
+        {
+            InputOwnership = new OwnershipSnapshot(
+                HoveredTarget: targetId,
+                FocusedTarget: targetId,
+                PressedTarget: targetId,
+                CapturedTarget: targetId,
+                LastHoverEnteredTarget: targetId,
+                LastHoverLeftTarget: null,
+                HoverChangeCount: 1,
+                IsPointerPressed: true)
+        };
+
+        var button = FindButton(app.BuildView(model).Root, targetId);
+
+        Assert.Equal(targetId, GetTextAttribute(button, "ActionId"));
+        Assert.True(GetBooleanAttribute(button, "IsHovered"));
+        Assert.True(GetBooleanAttribute(button, "IsPressed"));
+        Assert.True(GetBooleanAttribute(button, "IsFocused"));
+        Assert.DoesNotContain(button.Attributes, attribute => attribute.Name == "IsEnabled");
+    }
+
+    [Fact]
     public void InputVisualStateChanged_updates_model_snapshot_without_changing_count_or_scroll()
     {
         var app = new CounterApplication();
