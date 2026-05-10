@@ -612,9 +612,29 @@ internal static class Program
                 Console.WriteLine($"  ScrollContainer[{sd.DfsIndex}]: visible={sd.VisibleHeight} content={sd.ContentHeight} scrollY={sd.ScrollY} maxScrollY={sd.MaxScrollY} elements={sd.VisibleElementCount}/{sd.VisibleElementCount + sd.ClippedElementCount} visible");
             }
         }
+        Console.WriteLine($"=== Clip Scissor Diagnostics ===");
+        RunClipScissorSmokeDiagnostic(d3d12Backend);
+        Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
+        Console.WriteLine($"Scissor smoke: kind=FillRect clip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=False clippedCommands={d3d12Backend.ClippedCommandCount} deviceRemoved={d3d12Renderer.IsDeviceRemoved}");
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);
+    }
+
+    private static void RunClipScissorSmokeDiagnostic(D3D12DrawingBackend backend)
+    {
+        var commands = new[]
+        {
+            new DrawCommand(
+                DrawCommandKind.FillRect,
+                Rect: new DrawRect(16, 16, 160, 80),
+                ClipBounds: new DrawRect(32, 32, 80, 40),
+                Color: DrawColor.Opaque(72, 136, 255))
+        };
+
+        backend.BeginFrame(default);
+        backend.Execute(commands, FrameDrawingResources.Empty);
+        backend.EndFrame();
     }
 
     private static void RunResizeDiagnosticMode()

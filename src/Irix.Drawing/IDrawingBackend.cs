@@ -9,6 +9,18 @@ public interface IDrawingBackend : IDisposable
     void EndFrame();
 }
 
+public enum DrawingBackendClipMode
+{
+    None,
+    Diagnostic,
+    Scissor
+}
+
+public interface IClipScissorCapability
+{
+    DrawingBackendClipMode ClipMode { get; }
+}
+
 /// <summary>
 /// Optional interface for backends that want read-only access to dirty command ranges
 /// for diagnostics or selective rendering. The compositor sets the ranges before Execute.

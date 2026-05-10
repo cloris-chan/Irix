@@ -38,6 +38,22 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public void BackendClipMode_reports_none_without_capability()
+    {
+        var compositor = new DrawingBackendCompositor(new PoCDrawingBackend(new FakeWindow()));
+
+        Assert.Equal(DrawingBackendClipMode.None, compositor.BackendClipMode);
+    }
+
+    [Fact]
+    public void BackendClipMode_reports_backend_capability()
+    {
+        var compositor = new DrawingBackendCompositor(new ClipCapabilityBackend(DrawingBackendClipMode.Diagnostic));
+
+        Assert.Equal(DrawingBackendClipMode.Diagnostic, compositor.BackendClipMode);
+    }
+
+    [Fact]
     public async Task RenderAsync_with_empty_commands_does_not_push_elements()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -488,6 +504,16 @@ public sealed class DrawingBackendCompositorTests
         {
             ExecuteCount++;
         }
+        public void EndFrame() { }
+        public void Dispose() { }
+    }
+
+    private sealed class ClipCapabilityBackend(DrawingBackendClipMode clipMode) : IDrawingBackend, IClipScissorCapability
+    {
+        public DrawingBackendClipMode ClipMode { get; } = clipMode;
+
+        public void BeginFrame(in FrameContext frameContext) { }
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources) { }
         public void EndFrame() { }
         public void Dispose() { }
     }

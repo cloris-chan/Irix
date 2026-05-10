@@ -7,7 +7,7 @@ namespace Irix.Poc;
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
 /// </summary>
-internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBackend, IDirtyRangeAware
+internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability
 {
     private readonly D3D12Renderer _renderer = renderer;
     private float _bgR, _bgG, _bgB, _bgA = 1.0f;
@@ -22,6 +22,8 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
 
     /// <summary>Number of commands with non-default clip bounds from the last Execute.</summary>
     public int ClippedCommandCount => _clippedCommandCount;
+
+    public DrawingBackendClipMode ClipMode => DrawingBackendClipMode.Diagnostic;
 
     public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
     {

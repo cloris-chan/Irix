@@ -51,6 +51,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// <summary>Number of empty frames received (commands.Count == 0).</summary>
     public long EmptyFrameCount => _emptyFrameCount;
 
+    public DrawingBackendClipMode BackendClipMode => _backend is IClipScissorCapability capability
+        ? capability.ClipMode
+        : DrawingBackendClipMode.None;
+
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
         if (renderFrameBatch.Commands.Count == 0)
