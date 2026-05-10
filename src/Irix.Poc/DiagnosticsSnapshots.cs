@@ -85,7 +85,10 @@ internal readonly record struct ScrollDiagnosticsSnapshot(
     int AppliedScrollY,
     double TargetPosition,
     double MaxScrollY,
-    bool HasMaxScrollY);
+    bool HasMaxScrollY,
+    double Position = 0,
+    double Accumulator = 0,
+    bool IsAnimating = false);
 
 internal readonly record struct InputDiagnosticsSnapshot(
     OwnershipSnapshot Ownership,

@@ -643,7 +643,10 @@ internal static class Program
             ScrollController.GetScrollY(scrollState),
             scrollState.TargetPosition,
             scrollState.MaxScrollY,
-            scrollState.HasMaxScrollY);
+            scrollState.HasMaxScrollY,
+            scrollState.Position,
+            scrollState.Accumulator,
+            scrollState.IsAnimating);
         var lines = DiagnosticsFormatter.BuildScrollDiagnosticLines(snapshot);
 
         foreach (var line in lines)

@@ -1,6 +1,6 @@
 # Diagnostics Snapshot v0 Design
 
-> 本文记录 diagnostics snapshot 的 v0 数据边界与已落地样板。不改变 `--diagnose*` / `--debug-ui` 的文本输出。当前 CLI diagnostics surface 已经 snapshot-first 闭环，formatter 已抽出，debug UI snapshot bridge 已轻接 layout dirty 行；统一 diagnostics channel 尚未完成。
+> 本文记录 diagnostics snapshot 的 v0 数据边界与已落地样板。不改变 `--diagnose*` / `--debug-ui` 的文本输出。当前 CLI diagnostics surface 已经 snapshot-first 闭环，formatter 已抽出，debug UI snapshot bridge 已接入 Viewport / Scroll / ClipMode / LayoutDirty 行；统一 diagnostics channel 尚未完成。
 
 ## 1. 目标
 
@@ -24,9 +24,9 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 | Snapshot | 所属能力 | v0 字段草案 | 当前文本入口 | 状态 |
 |----------|----------|-------------|--------------|------|
 | `RenderingPipelineDiagnosticSnapshot` | render pipeline / compositor | render count, partial apply count, full apply count, empty frame count, partial hit rate, compositor dirty command ranges, backend dirty command ranges, dirty range alignment, layout command count, clipped command count, layout rebuild count/reason/classifications, hit target summary, scroll container diagnostics | `--diagnose` compositor + layout pipeline blocks, future `--debug-ui` pipeline rows | Implemented in `DiagnosticsSnapshots.cs`; formatter consumes snapshot for compositor counters, dirty ranges, layout counters, hit target detail, and scroll container summary. |
-| `BackendClipTextDiagnosticSnapshot` | backend clip / scissor / text clip | backend clip mode, clipped command count, empty intersection skipped count, scissor state change count, last effective scissor, last effective text clip, text clip skipped count, device removed, device error reason | `--diagnose` pipeline scissor/text clip, clip scissor, empty scissor, text clip blocks; future `--debug-ui` clip rows | Implemented in `DiagnosticsSnapshots.cs`; backend device, clip mode, scissor, empty scissor, text clip, and pipeline smoke formatters consume snapshot and CLI text is unchanged. |
+| `BackendClipTextDiagnosticSnapshot` | backend clip / scissor / text clip | backend clip mode, clipped command count, empty intersection skipped count, scissor state change count, last effective scissor, last effective text clip, text clip skipped count, device removed, device error reason | `--diagnose` pipeline scissor/text clip, clip scissor, empty scissor, text clip blocks; debug UI clip mode bridge | Implemented in `DiagnosticsSnapshots.cs`; backend device, clip mode, scissor, empty scissor, text clip, and pipeline smoke formatters consume snapshot and CLI text is unchanged. |
 | `ViewportDiagnosticsSnapshot` | viewport / resize physical v0 | window physical bounds, renderer swapchain bounds, translator viewport, layout viewport, last applied pending resize, render count, layout rebuild count/reason, viewport matches renderer, layout uses renderer size, scale mode, screen scale, DPI awareness, coordinate space | `--diagnose-resize`, future `--debug-ui` viewport bridge | Implemented in `DiagnosticsSnapshots.cs`; formatter consumes snapshot and CLI text is unchanged. |
-| `ScrollDiagnosticsSnapshot` | scroll pump / scroll model | dispatched frame count, render wait ms, last dt, drained pixels, last frame drained pixels, pending pixels, frame queued, tick loop running, applied scroll Y, target position, max scroll state | `--diagnose-scroll`, `DefaultDebugDiagnosticsSnapshotBridge` | Implemented in `DiagnosticsSnapshots.cs`; formatter consumes snapshot and CLI text is unchanged. |
+| `ScrollDiagnosticsSnapshot` | scroll pump / scroll model | dispatched frame count, render wait ms, last dt, drained pixels, last frame drained pixels, pending pixels, frame queued, tick loop running, applied scroll Y, target position, max scroll state, position, accumulator, animation state | `--diagnose-scroll`, `DefaultDebugDiagnosticsSnapshotBridge` | Implemented in `DiagnosticsSnapshots.cs`; formatter consumes snapshot and CLI text is unchanged. |
 | `InputDiagnosticsSnapshot` | input ownership / routed input | hovered target, focused target, pressed target, captured target, hover change count, pointer pressed, ownership events, mapped messages, button visual state lines, input dirty reason lines | `--diagnose-input`, future `--debug-ui` input bridge | Implemented in `DiagnosticsSnapshots.cs`; snapshot carries final ownership, ordered diagnostic lines, ownership lines, event lines, button visual state lines, and dirty reason lines. |
 | `StyleOnlyPatchPlanDiagnosticSnapshot` | style-only plan smoke | case name, eligible, fallback reason, dirty element ranges, dirty command ranges, patched hit target count | `--diagnose` StyleOnly Patch Plan Diagnostics block | Implemented as first v0 snapshot sample; smoke builds snapshots before formatting. |
 
@@ -35,7 +35,7 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 | Snapshot | Producer owner | Current v0 producer adapter | Consumers | PoC static fields |
 |----------|----------------|-----------------------------|-----------|-------------------|
 | `RenderingPipelineDiagnosticSnapshot` | `Irix.Rendering` for `RenderPipeline` / `DrawingBackendCompositor` counters | `Irix.Poc.Program.RunDiagnosticMode` assembles the snapshot from `RenderPipeline`, `DrawingBackendCompositor`, and `D3D12DrawingBackend` until channel exists | CLI diagnostics, future debug UI pipeline rows, tests | Allowed only as a temporary read adapter for debug UI rows; not the source of truth for pipeline counters. |
-| `BackendClipTextDiagnosticSnapshot` | backend adapter owner; currently `Irix.Poc.D3D12DrawingBackend`, future backend adapter layer | `Program` smoke runners ask `D3D12DrawingBackend` and `D3D12Renderer` for counters/device state after each smoke | CLI clip/text diagnostics, tests | Allowed for `DiagBackendClipMode` only as a debug UI bridge; backend counters must come from backend instance state. |
+| `BackendClipTextDiagnosticSnapshot` | backend adapter owner; currently `Irix.Poc.D3D12DrawingBackend`, future backend adapter layer | `Program` smoke runners ask `D3D12DrawingBackend` and `D3D12Renderer` for counters/device state after each smoke; `DefaultDebugDiagnosticsSnapshotBridge` reads `DiagBackendClipMode` for the existing overlay row | CLI clip/text diagnostics, debug bridge, tests | Allowed for `DiagBackendClipMode` only as a debug UI bridge; backend counters must come from backend instance state. |
 | `ViewportDiagnosticsSnapshot` | platform/render bridge owner; current data crosses `WindowsPlatformWindow`, `D3D12Renderer`, `WindowDrawCommandTranslator` | `RunResizeDiagnosticMode` assembles the CLI snapshot; debug UI still uses `CounterViewportDiagnostics` through the bridge aggregate | `--diagnose-resize`, future debug UI viewport bridge, tests | Allowed for debug UI dispatch gating only; dimensions must come from window/renderer/translator, not cached statics. |
 | `ScrollDiagnosticsSnapshot` | scroll service owner; currently PoC scroll pump/controller | `RunScrollDiagnosticModeAsync` assembles from `ScrollFramePump` and the local scripted `ScrollState`; `DefaultDebugDiagnosticsSnapshotBridge` assembles a read-only debug snapshot from model scroll state and existing statics | `--diagnose-scroll`, debug bridge, tests | Allowed in v0 because `ScrollFramePump` is still PoC-owned; static access must stay read-only and local to diagnostics. |
 | `InputDiagnosticsSnapshot` | input routing/focus owner; currently PoC input ownership state/router | `BuildInputDiagnosticsSnapshot` assembles from `InputOwnershipState`, `CounterInputRouter`, button state derivation, and dirty reason smoke | `--diagnose-input`, future debug UI input bridge, tests | Allowed in v0 because input ownership is still PoC-owned; do not expose statics as framework API. |
@@ -48,7 +48,7 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 - `DiagnosticsSnapshots.cs` owns `ViewportDiagnosticsSnapshot`, `ScrollDiagnosticsSnapshot`, `InputDiagnosticsSnapshot`, `BackendClipTextDiagnosticSnapshot`, and `RenderingPipelineDiagnosticSnapshot`.
 - `Program.cs` still owns scripted diagnostic runners and snapshot production adapters.
 - CLI snapshot v0 is closed for the current text surface: every existing `--diagnose*` block either formats from a snapshot directly or builds snapshot lines before writing stdout.
-- Debug UI is partially bridge-backed: the layout dirty row now receives `CounterLayoutDiagnostics` through `DefaultDebugDiagnosticsSnapshotBridge` / `DebugUiDiagnosticsSnapshot`; other rows still read existing model state and `Program.Diag*` statics.
+- Debug UI is partially bridge-backed: Viewport, Scroll, ClipMode, and LayoutDirty rows now format from `DefaultDebugDiagnosticsSnapshotBridge` / `DebugUiDiagnosticsSnapshot`; Input still reads existing model state directly.
 - Unified diagnostics channel is not implemented. No event bus, subscription API, or debug overlay replacement exists in this stage.
 
 ## 6. CLI 文本冻结规则
@@ -61,14 +61,14 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 
 ## 7. Debug UI Snapshot Bridge 设计
 
-Debug UI 后续应通过一个 snapshot bridge 获取诊断数据，而不是继续直接读取散落的 statics。当前阶段只接入 layout dirty row，不替换 overlay、不改变 debug UI 文本。
+Debug UI 后续应通过一个 snapshot bridge 获取诊断数据，而不是继续直接读取散落的 statics。当前阶段接入 Viewport、Scroll、ClipMode、LayoutDirty 四行，不替换 overlay、不改变 debug UI 文本。
 
 Implemented minimal bridge contract and default implementation: `DebugUiDiagnosticsSnapshotBridge.cs`. `DefaultDebugDiagnosticsSnapshotBridge` reads current PoC model state plus existing `Program.Diag*` statics and returns `DebugUiDiagnosticsSnapshot`.
 
 ```csharp
 internal interface IDebugDiagnosticsSnapshotBridge
+	: IDiagnosticsProvider<DebugUiDiagnosticsSnapshot>
 {
-	DebugUiDiagnosticsSnapshot Capture();
 }
 
 internal readonly record struct DebugUiDiagnosticsSnapshot(
@@ -83,6 +83,17 @@ internal sealed class DefaultDebugDiagnosticsSnapshotBridge(
 	CounterLayoutDiagnostics layout,
 	ScrollState scroll) : IDebugDiagnosticsSnapshotBridge;
 ```
+
+Provider v0 direction:
+
+```csharp
+internal interface IDiagnosticsProvider<out TSnapshot>
+{
+	TSnapshot Capture();
+}
+```
+
+This is only a local capture contract. It does not introduce a global diagnostics channel, event bus, or runner replacement.
 
 Bridge rules:
 
@@ -115,7 +126,7 @@ Implemented sixth sample: `InputDiagnosticsSnapshot` minimal. `--diagnose-input`
 
 Snapshot type extraction is complete for the v0 CLI-facing PoC snapshots: `DiagnosticsFormatter` no longer references `Program.XSnapshot` nested types.
 
-Debug bridge partial wiring is complete for the layout dirty row: `CounterApplication` captures `DebugUiDiagnosticsSnapshot` through `DefaultDebugDiagnosticsSnapshotBridge` and uses its `Layout` value to generate the existing row text.
+Debug bridge partial wiring is complete for the Viewport, Scroll, ClipMode, and LayoutDirty rows: `CounterApplication` captures `DebugUiDiagnosticsSnapshot` through `DefaultDebugDiagnosticsSnapshotBridge` and uses snapshot values to generate the existing row text.
 
 ## 9. 暂不迁出文件
 
@@ -141,6 +152,7 @@ Further implementation steps should add snapshot data next to the current owner 
 | Pick minimum implementation candidate | `StyleOnlyPatchPlanDiagnosticSnapshot`, `ViewportDiagnosticsSnapshot`, `BackendClipTextDiagnosticSnapshot`, `RenderingPipelineDiagnosticSnapshot`, `ScrollDiagnosticsSnapshot`, and minimal `InputDiagnosticsSnapshot` are implemented. |
 | Close CLI snapshot v0 loop | Done for `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input`; formatter logic lives in `DiagnosticsFormatter`. |
 | Extract snapshot type files | Done in `DiagnosticsSnapshots.cs`; `DiagnosticsFormatter` no longer depends on `Program.XSnapshot`. |
+| Design diagnostics provider v0 | Done in `DiagnosticsProvider.cs`; it defines local `Capture()` direction only and does not replace runners. |
 | Design debug UI snapshot bridge | Done in `DebugUiDiagnosticsSnapshotBridge.cs`; default bridge is unit-testable. |
-| Partially wire debug UI bridge | Done for the layout dirty row; overlay text remains unchanged. |
+| Partially wire debug UI bridge | Done for Viewport, Scroll, ClipMode, and LayoutDirty rows; overlay text remains unchanged. |
 | Do not move runtime ownership | Covered by the no-move list. |

@@ -460,8 +460,10 @@ public sealed class ProgramDiagnosticsTests
         var layout = new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly");
         var scroll = ScrollState.Default with
         {
+            Accumulator = 0.375,
             Position = 42.4,
             TargetPosition = 48,
+            IsAnimating = true,
             MaxScrollY = 240,
             HasMaxScrollY = true
         };
@@ -471,15 +473,41 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(viewport, snapshot.Viewport);
         Assert.Equal(layout, snapshot.Layout);
         Assert.Equal(42, snapshot.Scroll.AppliedScrollY);
+        Assert.Equal(42.4, snapshot.Scroll.Position);
         Assert.Equal(48, snapshot.Scroll.TargetPosition);
+        Assert.Equal(0.375, snapshot.Scroll.Accumulator);
+        Assert.True(snapshot.Scroll.IsAnimating);
         Assert.Equal(240, snapshot.Scroll.MaxScrollY);
         Assert.True(snapshot.Scroll.HasMaxScrollY);
+        Assert.Equal(Program.DiagScrollDispatchedFrameCount, snapshot.Scroll.DispatchedFrameCount);
+        Assert.Equal(Program.DiagScrollRenderWaitMs, snapshot.Scroll.RenderWaitMs);
+        Assert.Equal(Program.DiagScrollLastDt, snapshot.Scroll.LastDt);
+        Assert.Equal(Program.DiagScrollDrainedPixels, snapshot.Scroll.DrainedPixels);
+        Assert.Equal(Program.DiagPendingPx, snapshot.Scroll.PendingPixels);
+        Assert.Equal(Program.DiagScrollFrameQueued, snapshot.Scroll.FrameQueued);
+        Assert.Equal(Program.DiagTickLoopRunning, snapshot.Scroll.TickLoopRunning);
         Assert.Equal(Program.DiagInputOwnership, snapshot.InputOwnership);
         Assert.Equal(Program.DiagBackendClipMode, snapshot.BackendClipMode);
     }
 
     [Fact]
-    public void Debug_ui_outputs_viewport_diagnostic_row()
+    public void Default_debug_bridge_exposes_provider_contract()
+    {
+        IDiagnosticsProvider<DebugUiDiagnosticsSnapshot> provider = new DefaultDebugDiagnosticsSnapshotBridge(
+            new CounterViewportDiagnostics(
+                new PixelRectangle(0, 0, 929, 454),
+                new PixelRectangle(0, 0, 929, 454),
+                "PhysicalPixelsV0"),
+            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"),
+            ScrollState.Default);
+
+        var snapshot = provider.Capture();
+
+        Assert.Equal("PhysicalPixelsV0", snapshot.Viewport.ScaleMode);
+    }
+
+    [Fact]
+    public void Debug_ui_outputs_bridge_backed_diagnostic_rows()
     {
         var app = new CounterApplication(
             showDiagnostics: true,
@@ -496,12 +524,18 @@ public sealed class ProgramDiagnosticsTests
             && node.Content.Text == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0");
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
+            && node.Content.Text == "ScrollY: applied=0 target=0.0 pos=0.00 max=unknown acc=0.000 anim=False pendingPx=0 drained=0 frames=0 waitMs=0.0 dt=0.000 frameQueued=False tickLoop=False");
+        Assert.Contains(tree.Root.Children, node =>
+            node.Kind == VirtualNodeKind.Text
+            && node.Content.Text == "ClipMode: Diagnostic");
+        Assert.Contains(tree.Root.Children, node =>
+            node.Kind == VirtualNodeKind.Text
             && node.Content.Text == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
     }
 
-            #endregion
+    #endregion
 
-            #region Test Helpers
+    #region Test Helpers
 
     private static BackendClipTextDiagnosticSnapshot CreateBackendClipTextSnapshot(
         int clippedCommandCount,

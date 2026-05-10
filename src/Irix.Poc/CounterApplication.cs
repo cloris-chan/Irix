@@ -94,7 +94,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         var scrollY = ScrollController.GetScrollY(model.Scroll);
         var inputOwnership = model.InputOwnership;
         var headerRows = _showDiagnostics
-            ? BuildDiagnosticHeaderRows(model.Count, scrollY, model.Scroll, Program.DiagPendingPx, inputOwnership, model.ViewportDiagnostics, model.LayoutDiagnostics)
+            ? BuildDiagnosticHeaderRows(model.Count, model.Scroll, inputOwnership, model.ViewportDiagnostics, model.LayoutDiagnostics)
             : [
                 VirtualNodeFactory.Text($"Count: {model.Count}", 2),
                 VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4)
@@ -116,28 +116,46 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         return new VirtualNodeTree(root);
     }
 
-    private static VirtualNode[] BuildDiagnosticHeaderRows(int count, int scrollY, ScrollState scroll, double pendingPx, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
+    private static VirtualNode[] BuildDiagnosticHeaderRows(int count, ScrollState scroll, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
     {
         var debugDiagnostics = new DefaultDebugDiagnosticsSnapshotBridge(viewportDiagnostics, layoutDiagnostics, scroll).Capture();
-        var maxScrollText = !scroll.HasMaxScrollY
+        var maxScrollText = !debugDiagnostics.Scroll.HasMaxScrollY
             ? "unknown"
-            : scroll.MaxScrollY == 0
+            : debugDiagnostics.Scroll.MaxScrollY == 0
                 ? "0(known-zero)"
-                : $"{scroll.MaxScrollY:F0}";
+                : $"{debugDiagnostics.Scroll.MaxScrollY:F0}";
 
         return [
             VirtualNodeFactory.Text($"Count: {count}", 2),
-            VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={scroll.TargetPosition:F1} pos={scroll.Position:F2} max={maxScrollText} acc={scroll.Accumulator:F3} anim={scroll.IsAnimating} pendingPx={pendingPx:F0} drained={Program.DiagScrollDrainedPixels:F0} frames={Program.DiagScrollDispatchedFrameCount} waitMs={Program.DiagScrollRenderWaitMs:F1} dt={Program.DiagScrollLastDt:F3} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
+            VirtualNodeFactory.Text(FormatScrollDiagnosticRow(debugDiagnostics, maxScrollText), 3),
             VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
             VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
-            VirtualNodeFactory.Text($"ClipMode: {Program.DiagBackendClipMode}", 10),
-            VirtualNodeFactory.Text($"Viewport: renderer={FormatSize(viewportDiagnostics.RendererViewport)} layout={FormatSize(viewportDiagnostics.LayoutViewport)} scaleMode={viewportDiagnostics.ScaleMode}", 11),
-            VirtualNodeFactory.Text(FormatLayoutDirtyDiagnosticRow(debugDiagnostics.Layout), 12)
+            VirtualNodeFactory.Text(FormatClipModeDiagnosticRow(debugDiagnostics), 10),
+            VirtualNodeFactory.Text(FormatViewportDiagnosticRow(debugDiagnostics), 11),
+            VirtualNodeFactory.Text(FormatLayoutDirtyDiagnosticRow(debugDiagnostics), 12)
         ];
     }
 
-    private static string FormatLayoutDirtyDiagnosticRow(CounterLayoutDiagnostics layoutDiagnostics)
+    private static string FormatScrollDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics, string maxScrollText)
     {
+        var scroll = debugDiagnostics.Scroll;
+        return $"ScrollY: applied={scroll.AppliedScrollY} target={scroll.TargetPosition:F1} pos={scroll.Position:F2} max={maxScrollText} acc={scroll.Accumulator:F3} anim={scroll.IsAnimating} pendingPx={scroll.PendingPixels:F0} drained={scroll.DrainedPixels:F0} frames={scroll.DispatchedFrameCount} waitMs={scroll.RenderWaitMs:F1} dt={scroll.LastDt:F3} frameQueued={scroll.FrameQueued} tickLoop={scroll.TickLoopRunning}";
+    }
+
+    private static string FormatClipModeDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics)
+    {
+        return $"ClipMode: {debugDiagnostics.BackendClipMode}";
+    }
+
+    private static string FormatViewportDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics)
+    {
+        var viewportDiagnostics = debugDiagnostics.Viewport;
+        return $"Viewport: renderer={FormatSize(viewportDiagnostics.RendererViewport)} layout={FormatSize(viewportDiagnostics.LayoutViewport)} scaleMode={viewportDiagnostics.ScaleMode}";
+    }
+
+    private static string FormatLayoutDirtyDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics)
+    {
+        var layoutDiagnostics = debugDiagnostics.Layout;
         return $"LayoutDirty: layoutRebuildCount={layoutDiagnostics.LayoutRebuildCount} LastLayoutRebuildReason={layoutDiagnostics.LastLayoutRebuildReason} LastDirtyClassifications={layoutDiagnostics.LastDirtyClassifications}";
     }
 

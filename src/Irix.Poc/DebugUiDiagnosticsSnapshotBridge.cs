@@ -3,9 +3,8 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal interface IDebugDiagnosticsSnapshotBridge
+internal interface IDebugDiagnosticsSnapshotBridge : IDiagnosticsProvider<DebugUiDiagnosticsSnapshot>
 {
-    DebugUiDiagnosticsSnapshot Capture();
 }
 
 internal readonly record struct DebugUiDiagnosticsSnapshot(
@@ -34,7 +33,10 @@ internal sealed class DefaultDebugDiagnosticsSnapshotBridge(
             ScrollController.GetScrollY(scroll),
             scroll.TargetPosition,
             scroll.MaxScrollY,
-            scroll.HasMaxScrollY);
+            scroll.HasMaxScrollY,
+            scroll.Position,
+            scroll.Accumulator,
+            scroll.IsAnimating);
 
         return new DebugUiDiagnosticsSnapshot(
             viewport,
