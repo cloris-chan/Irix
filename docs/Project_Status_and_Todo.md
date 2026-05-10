@@ -46,7 +46,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
   - 已有屏幕枚举、窗口线程、原生窗口创建、输入事件流、拓扑变化通知
   - Windows-targeted projects 使用 `net10.0-windows10.0.17763.0` 编译，并声明 Windows 10.0.10240+ 为最低 API 边界
   - Win32 互操作优先走 `CsWin32`
-  - `Irix.Platform.Windows` 已启用 `CsWin32RunAsBuildTask=true`，CsWin32 绑定以实体 `obj/.../Generated/CsWin32/Windows.Win32.NativeMethods.g.cs` 参与编译，避免依赖易失效的 Roslyn `roslyn-source-generated://` 虚拟文档
+  - `Irix.Platform.Windows` 已启用 `CsWin32RunAsBuildTask=true`，CsWin32 绑定以实体 `obj/.../Generated/CsWin32/Windows.Win32.NativeMethods.g.cs` 参与编译，并显式排除 CsWin32 analyzer/source-generator 资产，避免依赖易失效的 Roslyn `roslyn-source-generated://` 虚拟文档
   - 已有 `D3D12Renderer`，使用 CsWin32 生成的裸指针 COM 包装（`allowMarshaling: false`），支持设备创建、交换链、清屏、矩形 + 文本帧合成、呈现、resize
   - 已有 `D3D12Renderer2D`，运行时 HLSL 编译 + 顶点缓冲区渲染彩色矩形
   - 已有 `D3D12TextRenderer`，通过 D3D11On12 + Direct2D + DirectWrite 在 D3D12 back buffer 上叠加文本
@@ -226,7 +226,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - DrawCommand 不内联文本，通过 frame-local `TextSlice + IFrameResourceResolver` 传递文本内容（ADR-011, ADR-015）
 - TextStyle 通过 `ResourceHandle` 引用，DirectWrite backend 缓存 `IDWriteTextFormat` / `IDWriteTextLayout`（ADR-016）
 - PatchBatch 携带 Root 属性，消费者直接使用而非从 Memory 反推（ADR-012）
-- D3D12 互操作使用 CsWin32 `allowMarshaling: false` 生成的裸指针 COM 包装；Windows 平台项目使用 `CsWin32RunAsBuildTask=true` 将绑定生成为实体 `obj` 编译输入，减少 Roslyn source-generated virtual document 噪音（ADR-013）
+- D3D12 互操作使用 CsWin32 `allowMarshaling: false` 生成的裸指针 COM 包装；Windows 平台项目使用 `CsWin32RunAsBuildTask=true` 将绑定生成为实体 `obj` 编译输入，并排除 CsWin32 analyzer/source-generator 资产，减少 Roslyn source-generated virtual document 噪音（ADR-013）
 - Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12（ADR-014）
 - 文本内容优先使用 frame-local arena，不在早期阶段引入无边界全局字符串池（ADR-015）
 - `TextStyle` 使用 `ResourceHandle`，backend 负责缓存对应原生文本资源（ADR-016）
@@ -304,7 +304,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 搭 `D3D12` 基础渲染循环
 - [x] 实现 `D3D12DrawingBackend`（`IDrawingBackend` 的 D3D12 实现，已接入矩形与文本）
 - [x] 从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装
-- [x] 将 Windows 平台 CsWin32 生成模式切到 build task，生成实体 `Windows.Win32.NativeMethods.g.cs` 并避免编辑器反复请求过期 `roslyn-source-generated://` 文档
+- [x] 将 Windows 平台 CsWin32 生成模式切到 build task，生成实体 `Windows.Win32.NativeMethods.g.cs`，并从 PackageReference 资产中排除 CsWin32 analyzer/source-generator，避免编辑器反复请求过期 `roslyn-source-generated://` 文档
 - [x] Phase 2: D3D12 矩形绘制（`D3D12Renderer2D`：运行时 HLSL 编译 + 顶点缓冲区）
 - [x] 移除 D3D12 viewport 硬编码，接入真实窗口尺寸 + resize 支持
 - [x] 添加 GitHub Actions CI（build + test + AOT check）
