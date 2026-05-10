@@ -57,6 +57,10 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
     public long LayoutRebuildCount { get; private set; }
 
+    public LayoutRebuildReason LastLayoutRebuildReason { get; private set; }
+
+    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; private set; } = [];
+
     /// <summary>
     /// The layout tree result from the last Build call, if available.
     /// Exposes scroll container diagnostics and tree structure.
@@ -78,9 +82,15 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         LastViewport = viewportBounds;
+        var hadRetainedLayout = _retainedLayout is not null;
         var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(_retainedRoot, root);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
+        var dirtyClassifications = hasDirty && hadRetainedLayout
+            ? ClassifyDirtyNodes(_retainedRoot, root, dirtyNodes!)
+            : [];
+        LastDirtyClassifications = dirtyClassifications;
+        LastLayoutRebuildReason = ResolveLayoutRebuildReason(hadRetainedLayout, treeChanged, viewportChanged, hasDirty, dirtyClassifications);
 
         if (treeChanged || viewportChanged || hasDirty)
         {
@@ -118,6 +128,227 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         }
 
         return batch;
+    }
+
+    private static LayoutRebuildReason ResolveLayoutRebuildReason(
+        bool hadRetainedLayout,
+        bool treeChanged,
+        bool viewportChanged,
+        bool hasDirty,
+        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications)
+    {
+        if (!hadRetainedLayout)
+        {
+            return LayoutRebuildReason.TreeStructure;
+        }
+
+        if (viewportChanged)
+        {
+            return LayoutRebuildReason.ViewportChanged;
+        }
+
+        if (hasDirty)
+        {
+            var reason = LayoutRebuildReason.None;
+            foreach (var classification in dirtyClassifications)
+            {
+                reason = MaxReason(reason, classification.Reason);
+            }
+
+            return reason == LayoutRebuildReason.None ? LayoutRebuildReason.StyleOnly : reason;
+        }
+
+        return treeChanged ? LayoutRebuildReason.TreeStructure : LayoutRebuildReason.None;
+    }
+
+    private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes)
+    {
+        var classifications = new List<LayoutDirtyClassification>(dirtyNodes.Count);
+        var seen = new HashSet<int>();
+        foreach (var dirtyNode in dirtyNodes)
+        {
+            if (!seen.Add(dirtyNode))
+            {
+                continue;
+            }
+
+            var reason = TryFindNode(previousRoot, dirtyNode, out var previousNode) && TryFindNode(nextRoot, dirtyNode, out var nextNode)
+                ? ClassifyNodeChange(previousNode, nextNode)
+                : LayoutRebuildReason.TreeStructure;
+            classifications.Add(new LayoutDirtyClassification(dirtyNode, reason));
+        }
+
+        return classifications;
+    }
+
+    private static LayoutRebuildReason ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode)
+    {
+        if (previousNode.Kind != nextNode.Kind || previousNode.Key != nextNode.Key || ChildrenShapeChanged(previousNode.Children, nextNode.Children))
+        {
+            return LayoutRebuildReason.TreeStructure;
+        }
+
+        var reason = LayoutRebuildReason.None;
+        if (previousNode.Content != nextNode.Content)
+        {
+            reason = MaxReason(reason, ClassifyContentChange(previousNode.Content, nextNode.Content));
+        }
+
+        if (!AttributesEqual(previousNode.Attributes, nextNode.Attributes))
+        {
+            reason = MaxReason(reason, ClassifyAttributeChanges(previousNode.Attributes, nextNode.Attributes));
+        }
+
+        return reason == LayoutRebuildReason.None ? LayoutRebuildReason.StyleOnly : reason;
+    }
+
+    private static LayoutRebuildReason ClassifyContentChange(NodeContent previousContent, NodeContent nextContent)
+    {
+        return previousContent.Kind == NodeContentKind.Text || nextContent.Kind == NodeContentKind.Text
+            ? LayoutRebuildReason.TextSizeAffecting
+            : LayoutRebuildReason.LayoutAffecting;
+    }
+
+    private static LayoutRebuildReason ClassifyAttributeChanges(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    {
+        var reason = LayoutRebuildReason.None;
+        foreach (var attributeName in GetChangedAttributeNames(previousAttributes, nextAttributes))
+        {
+            reason = MaxReason(reason, ClassifyAttribute(attributeName));
+        }
+
+        return reason == LayoutRebuildReason.None ? LayoutRebuildReason.StyleOnly : reason;
+    }
+
+    private static IEnumerable<string> GetChangedAttributeNames(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var attribute in previousAttributes)
+        {
+            names.Add(attribute.Name);
+        }
+
+        foreach (var attribute in nextAttributes)
+        {
+            names.Add(attribute.Name);
+        }
+
+        foreach (var name in names)
+        {
+            if (!TryGetAttribute(previousAttributes, name, out var previousAttribute)
+                || !TryGetAttribute(nextAttributes, name, out var nextAttribute)
+                || previousAttribute.Value != nextAttribute.Value)
+            {
+                yield return name;
+            }
+        }
+    }
+
+    private static LayoutRebuildReason ClassifyAttribute(string attributeName)
+    {
+        return attributeName switch
+        {
+            "IsHovered" or "IsPressed" or "IsFocused" or "ActionId" => LayoutRebuildReason.StyleOnly,
+            "Text" or "TextStyle" or "FontFamily" or "FontSize" or "FontWeight" or "Wrapping" => LayoutRebuildReason.TextSizeAffecting,
+            "ScrollY" or "Width" or "Height" or "HorizontalPadding" or "VerticalPadding" or "ItemSpacing" or "TextHeight" or "ButtonHeight" or "RectangleHeight" or "MinimumButtonWidth" or "ButtonTextWidthFactor" or "ButtonHorizontalPadding" => LayoutRebuildReason.LayoutAffecting,
+            _ => LayoutRebuildReason.LayoutAffecting
+        };
+    }
+
+    private static bool AttributesEqual(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    {
+        if (previousAttributes.Length != nextAttributes.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < previousAttributes.Length; i++)
+        {
+            if (previousAttributes[i] != nextAttributes[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryGetAttribute(VirtualNodeAttribute[] attributes, string name, out VirtualNodeAttribute attribute)
+    {
+        foreach (var candidate in attributes)
+        {
+            if (candidate.Name == name)
+            {
+                attribute = candidate;
+                return true;
+            }
+        }
+
+        attribute = default;
+        return false;
+    }
+
+    private static bool ChildrenShapeChanged(VirtualNode[] previousChildren, VirtualNode[] nextChildren)
+    {
+        if (previousChildren.Length != nextChildren.Length)
+        {
+            return true;
+        }
+
+        for (var i = 0; i < previousChildren.Length; i++)
+        {
+            if (previousChildren[i].Kind != nextChildren[i].Kind || previousChildren[i].Key != nextChildren[i].Key)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryFindNode(VirtualNode root, int targetIndex, out VirtualNode node)
+    {
+        var currentIndex = 0;
+        return TryFindNodeRecursive(root, targetIndex, ref currentIndex, out node);
+    }
+
+    private static bool TryFindNodeRecursive(VirtualNode candidate, int targetIndex, ref int currentIndex, out VirtualNode node)
+    {
+        if (currentIndex == targetIndex)
+        {
+            node = candidate;
+            return true;
+        }
+
+        currentIndex++;
+        foreach (var child in candidate.Children)
+        {
+            if (TryFindNodeRecursive(child, targetIndex, ref currentIndex, out node))
+            {
+                return true;
+            }
+        }
+
+        node = default;
+        return false;
+    }
+
+    private static LayoutRebuildReason MaxReason(LayoutRebuildReason left, LayoutRebuildReason right)
+    {
+        return ReasonPriority(left) >= ReasonPriority(right) ? left : right;
+    }
+
+    private static int ReasonPriority(LayoutRebuildReason reason)
+    {
+        return reason switch
+        {
+            LayoutRebuildReason.ViewportChanged => 5,
+            LayoutRebuildReason.TreeStructure => 4,
+            LayoutRebuildReason.LayoutAffecting => 3,
+            LayoutRebuildReason.TextSizeAffecting => 2,
+            LayoutRebuildReason.StyleOnly => 1,
+            _ => 0
+        };
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)

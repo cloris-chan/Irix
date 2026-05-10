@@ -326,6 +326,8 @@ public sealed class WindowLayoutPipelineTests
         using var frame2 = pipeline.Build(root, viewport);
         var frame2Text = frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString();
 
+        Assert.Equal(1, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.None, pipeline.LastLayoutRebuildReason);
         // Both frames should have identical layout
         Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
         Assert.Equal(frame1.HitTargets.Count, frame2.HitTargets.Count);
@@ -352,6 +354,85 @@ public sealed class WindowLayoutPipelineTests
         var text1 = frame1.Commands.Memory.Span[0];
         var text2 = frame2.Commands.Memory.Span[0];
         Assert.NotEqual(text1.Rect.Width, text2.Rect.Width);
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.ViewportChanged, pipeline.LastLayoutRebuildReason);
+    }
+
+    [Fact]
+    public void RenderPipeline_classifies_layout_affecting_dirty_rebuild()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("A", 2));
+        var root2 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
+            children: [VirtualNodeFactory.Text("A", 2)]);
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [0]);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.LayoutAffecting, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting)], pipeline.LastDirtyClassifications);
+    }
+
+    [Fact]
+    public void RenderPipeline_classifies_style_only_dirty_rebuild()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Click", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Click", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)], pipeline.LastDirtyClassifications);
+        Assert.Equal(frame1.HitTargets[0].Bounds, frame2.HitTargets[0].Bounds);
+    }
+
+    [Fact]
+    public void RenderPipeline_classifies_text_size_affecting_dirty_rebuild()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("Short", 2));
+        var root2 = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("Longer text", 2));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.TextSizeAffecting, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.TextSizeAffecting)], pipeline.LastDirtyClassifications);
+    }
+
+    [Fact]
+    public void RenderPipeline_classifies_tree_structure_dirty_rebuild()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1, VirtualNodeFactory.Text("A", 2));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("A", 2),
+            VirtualNodeFactory.Text("B", 3));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [0]);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.TreeStructure, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(0, LayoutRebuildReason.TreeStructure)], pipeline.LastDirtyClassifications);
     }
 
     [Fact]

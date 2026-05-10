@@ -125,6 +125,7 @@ public sealed class ProgramDiagnosticsTests
             new PixelRectangle(10, 20, 929, 454),
             RenderCount: 80,
             LayoutRebuildCount: 80,
+            LayoutRebuildReason: "ViewportChanged",
             ScreenScale: 1.25f,
             DpiAwareness: "ProcessDefault",
             ScaleMode: "PhysicalPixelsV0");
@@ -138,6 +139,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("lastAppliedPendingResize=929x454", output);
         Assert.Contains("renderCount=80", output);
         Assert.Contains("layoutRebuildCount=80", output);
+        Assert.Contains("layoutRebuildReason=ViewportChanged", output);
         Assert.Contains("viewportMatchesRenderer=True", output);
         Assert.Contains("layoutUsesRendererSize=True", output);
         Assert.Contains("scaleMode=PhysicalPixelsV0", output);

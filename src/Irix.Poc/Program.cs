@@ -213,6 +213,7 @@ internal static class Program
         PixelRectangle LastAppliedPendingResize,
         long RenderCount,
         long LayoutRebuildCount,
+        string LayoutRebuildReason,
         float ScreenScale,
         string DpiAwareness,
         string ScaleMode)
@@ -232,6 +233,7 @@ internal static class Program
             $"lastAppliedPendingResize={FormatSize(diagnostics.LastAppliedPendingResize)}",
             $"renderCount={diagnostics.RenderCount}",
             $"layoutRebuildCount={diagnostics.LayoutRebuildCount}",
+            $"layoutRebuildReason={diagnostics.LayoutRebuildReason}",
             $"viewportMatchesRenderer={diagnostics.ViewportMatchesRenderer}",
             $"layoutUsesRendererSize={diagnostics.LayoutUsesRendererSize}",
             $"scaleMode={diagnostics.ScaleMode}",
@@ -254,6 +256,16 @@ internal static class Program
     private static string FormatSize(PixelRectangle rectangle)
     {
         return $"{rectangle.Width}x{rectangle.Height}";
+    }
+
+    private static string FormatLayoutDirtyClassifications(IReadOnlyList<LayoutDirtyClassification> classifications)
+    {
+        if (classifications.Count == 0)
+        {
+            return "(none)";
+        }
+
+        return string.Join(",", classifications.Select(classification => $"{classification.DfsIndex}:{classification.Reason}"));
     }
 
     private sealed class PlatformInputObserver(Action<RawInputEvent> onNext) : IObserver<RawInputEvent>
@@ -717,6 +729,9 @@ internal static class Program
         }
         Console.WriteLine($"Layout commands: {layoutBatch.Commands.Count}");
         Console.WriteLine($"Layout clipped commands: {layoutClipCount}");
+        Console.WriteLine($"Layout rebuild count: {layoutPipeline.LayoutRebuildCount}");
+        Console.WriteLine($"Layout rebuild reason: {layoutPipeline.LastLayoutRebuildReason}");
+        Console.WriteLine($"Layout dirty classifications: {FormatLayoutDirtyClassifications(layoutPipeline.LastDirtyClassifications)}");
         Console.WriteLine($"Layout hit targets: {layoutBatch.HitTargets.Count}");
         if (layoutBatch.HitTargets.Count > 0)
         {
@@ -937,6 +952,7 @@ internal static class Program
             lastAppliedPendingResize,
             compositor.RenderCount,
             translator.LayoutRebuildCount,
+            translator.LastLayoutRebuildReason.ToString(),
             screen.DpiScale,
             "ProcessDefault",
             ScaleModePhysicalPixelsV0);

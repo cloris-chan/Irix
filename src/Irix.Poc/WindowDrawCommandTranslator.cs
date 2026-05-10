@@ -26,6 +26,8 @@ internal sealed class WindowDrawCommandTranslator(
 
     public long LayoutRebuildCount => _renderPipeline.LayoutRebuildCount;
 
+    public LayoutRebuildReason LastLayoutRebuildReason => _renderPipeline.LastLayoutRebuildReason;
+
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null)
     {

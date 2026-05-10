@@ -23,6 +23,18 @@ internal readonly record struct LayoutElement(
     string? ActionId = null,
     ButtonVisualState ButtonState = default);
 
+internal enum LayoutRebuildReason : byte
+{
+    None,
+    StyleOnly,
+    TextSizeAffecting,
+    LayoutAffecting,
+    TreeStructure,
+    ViewportChanged
+}
+
+internal readonly record struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildReason Reason);
+
 /// <summary>
 /// A node in the layout tree, mapping a VirtualNode's DFS index to its
 /// layout element range in the flat <see cref="LayoutElement"/> array.
