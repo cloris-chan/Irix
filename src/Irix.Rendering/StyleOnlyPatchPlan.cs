@@ -43,6 +43,26 @@ internal sealed record StyleOnlyPatchPlan(
     }
 }
 
+internal readonly record struct StyleOnlyPatchPlanDiagnosticSnapshot(
+    string CaseName,
+    bool Eligible,
+    StyleOnlyPatchFallbackReason FallbackReason,
+    IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
+    IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
+    int HitTargetCount)
+{
+    public static StyleOnlyPatchPlanDiagnosticSnapshot FromPlan(string caseName, StyleOnlyPatchPlan plan)
+    {
+        return new StyleOnlyPatchPlanDiagnosticSnapshot(
+            caseName,
+            plan.Eligible,
+            plan.FallbackReason,
+            plan.DirtyElementRanges.ToArray(),
+            plan.DirtyCommandRanges.ToArray(),
+            plan.PatchedHitTargets.Count);
+    }
+}
+
 internal static class StyleOnlyPatchPlanBuilder
 {
     public static StyleOnlyPatchPlan Build(

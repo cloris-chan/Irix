@@ -305,17 +305,20 @@ internal static class Program
         ];
     }
 
-    internal static string BuildStyleOnlyPatchPlanDiagnosticLine(string name, StyleOnlyPatchPlan plan)
+    internal static string BuildStyleOnlyPatchPlanDiagnosticLine(StyleOnlyPatchPlanDiagnosticSnapshot snapshot)
     {
-        return $"styleOnlyPlan {name} eligible={plan.Eligible} fallback={plan.FallbackReason} dirtyElementRanges={FormatRanges(plan.DirtyElementRanges)} dirtyCommandRanges={FormatRanges(plan.DirtyCommandRanges)} hitTargetCount={plan.PatchedHitTargets.Count}";
+        return $"styleOnlyPlan {snapshot.CaseName} eligible={snapshot.Eligible} fallback={snapshot.FallbackReason} dirtyElementRanges={FormatRanges(snapshot.DirtyElementRanges)} dirtyCommandRanges={FormatRanges(snapshot.DirtyCommandRanges)} hitTargetCount={snapshot.HitTargetCount}";
     }
 
     internal static string[] BuildStyleOnlyPatchPlanSmokeDiagnosticLines()
     {
+        var hoverOnlySnapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", BuildHoverOnlyStyleOnlyPatchPlan());
+        var layoutAffectingSnapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("layoutAffecting", BuildLayoutAffectingStyleOnlyPatchPlan());
+
         return [
             "=== StyleOnly Patch Plan Diagnostics ===",
-            BuildStyleOnlyPatchPlanDiagnosticLine("hoverOnly", BuildHoverOnlyStyleOnlyPatchPlan()),
-            BuildStyleOnlyPatchPlanDiagnosticLine("layoutAffecting", BuildLayoutAffectingStyleOnlyPatchPlan())
+            BuildStyleOnlyPatchPlanDiagnosticLine(hoverOnlySnapshot),
+            BuildStyleOnlyPatchPlanDiagnosticLine(layoutAffectingSnapshot)
         ];
     }
 

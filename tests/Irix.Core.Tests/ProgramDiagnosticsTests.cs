@@ -79,14 +79,33 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Diagnose_style_only_patch_plan_formatter_outputs_stable_fields()
+    public void Diagnose_style_only_patch_plan_snapshot_captures_formatter_fields()
     {
         var plan = StyleOnlyPatchPlan.CreateEligible(
             [(0, 1)],
             [(0, 2)],
             [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment", new PixelRectangle(0, 0, 960, 540))]);
 
-        var line = Program.BuildStyleOnlyPatchPlanDiagnosticLine("hoverOnly", plan);
+        var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", plan);
+
+        Assert.Equal("hoverOnly", snapshot.CaseName);
+        Assert.True(snapshot.Eligible);
+        Assert.Equal(StyleOnlyPatchFallbackReason.None, snapshot.FallbackReason);
+        Assert.Equal([(0, 1)], snapshot.DirtyElementRanges);
+        Assert.Equal([(0, 2)], snapshot.DirtyCommandRanges);
+        Assert.Equal(1, snapshot.HitTargetCount);
+    }
+
+    [Fact]
+    public void Diagnose_style_only_patch_plan_formatter_outputs_stable_fields()
+    {
+        var plan = StyleOnlyPatchPlan.CreateEligible(
+            [(0, 1)],
+            [(0, 2)],
+            [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment", new PixelRectangle(0, 0, 960, 540))]);
+        var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", plan);
+
+        var line = Program.BuildStyleOnlyPatchPlanDiagnosticLine(snapshot);
 
         Assert.Equal("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", line);
     }
