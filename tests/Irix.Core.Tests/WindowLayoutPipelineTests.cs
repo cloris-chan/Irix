@@ -654,6 +654,196 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleOnlyPatchPlanBuilder_creates_eligible_hover_only_plan()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var retainedLayout = pipeline.LastLayoutResult;
+        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var plan = StyleOnlyPatchPlanBuilder.Build(
+            pipeline.LastDirtyClassifications,
+            viewportChanged: false,
+            retainedLayout,
+            retainedCommandRanges,
+            retainedHitTargets,
+            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastDirtyElementRanges);
+
+        Assert.True(plan.Eligible);
+        Assert.Equal(StyleOnlyPatchFallbackReason.None, plan.FallbackReason);
+        Assert.Equal([(0, 1)], plan.DirtyElementRanges);
+        Assert.Equal([(0, 2)], plan.DirtyCommandRanges);
+        var patchedHitTarget = Assert.Single(plan.PatchedHitTargets);
+        Assert.Equal("Increment", patchedHitTarget.ActionId);
+        Assert.Equal(retainedHitTargets[0].Bounds, patchedHitTarget.Bounds);
+        Assert.Equal(retainedHitTargets[0].ClipBounds, patchedHitTarget.ClipBounds);
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchPlanBuilder_patches_action_id_hit_target_metadata()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var retainedLayout = pipeline.LastLayoutResult;
+        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var plan = StyleOnlyPatchPlanBuilder.Build(
+            pipeline.LastDirtyClassifications,
+            viewportChanged: false,
+            retainedLayout,
+            retainedCommandRanges,
+            retainedHitTargets,
+            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastDirtyElementRanges);
+
+        Assert.True(plan.Eligible);
+        Assert.Equal(StyleOnlyPatchFallbackReason.None, plan.FallbackReason);
+        var patchedHitTarget = Assert.Single(plan.PatchedHitTargets);
+        Assert.Equal("Increment.Secondary", patchedHitTarget.ActionId);
+        Assert.Equal(retainedHitTargets[0].Bounds, patchedHitTarget.Bounds);
+        Assert.Equal(retainedHitTargets[0].ClipBounds, patchedHitTarget.ClipBounds);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchPlanBuilder_falls_back_for_layout_affecting_dirty()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
+            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+        var root2 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
+            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var retainedLayout = pipeline.LastLayoutResult;
+        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+
+        using var frame2 = pipeline.Build(root2, viewport, [0]);
+        var plan = StyleOnlyPatchPlanBuilder.Build(
+            pipeline.LastDirtyClassifications,
+            viewportChanged: false,
+            retainedLayout,
+            retainedCommandRanges,
+            retainedHitTargets,
+            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastDirtyElementRanges);
+
+        Assert.False(plan.Eligible);
+        Assert.Equal(StyleOnlyPatchFallbackReason.NotStyleOnly, plan.FallbackReason);
+        Assert.Equal(pipeline.LastDirtyElementRanges, plan.DirtyElementRanges);
+        Assert.Empty(plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchPlanBuilder_falls_back_for_unstable_command_mapping()
+    {
+        var nextElements = new[]
+        {
+            new LayoutElement(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "A"),
+            new LayoutElement(LayoutElementKind.Rectangle, new PixelRectangle(0, 44, 100, 48))
+        };
+        var retainedLayout = new LayoutTreeResult(nextElements, [], [(0, 2)]);
+        var unstableCommandRanges = new ElementCommandRange[]
+        {
+            new(0, 1),
+            new(3, 1)
+        };
+
+        var plan = StyleOnlyPatchPlanBuilder.Build(
+            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            viewportChanged: false,
+            retainedLayout,
+            unstableCommandRanges,
+            [],
+            nextElements,
+            [(0, 2)]);
+
+        Assert.False(plan.Eligible);
+        Assert.Equal(StyleOnlyPatchFallbackReason.UnstableCommandRange, plan.FallbackReason);
+        Assert.Equal([(0, 2)], plan.DirtyElementRanges);
+        Assert.Empty(plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchPlanBuilder_records_missing_retained_layout_fallback()
+    {
+        var nextElements = new[]
+        {
+            new LayoutElement(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "A")
+        };
+
+        var plan = StyleOnlyPatchPlanBuilder.Build(
+            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            viewportChanged: false,
+            retainedLayout: null,
+            retainedElementCommandRanges: [],
+            retainedHitTargets: [],
+            nextElements,
+            [(0, 1)]);
+
+        Assert.False(plan.Eligible);
+        Assert.Equal(StyleOnlyPatchFallbackReason.MissingRetainedLayout, plan.FallbackReason);
+        Assert.Equal([(0, 1)], plan.DirtyElementRanges);
+    }
+
+    [Fact]
+    public void StyleOnlyPatchPlanBuilder_records_viewport_changed_fallback()
+    {
+        var nextElements = new[]
+        {
+            new LayoutElement(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "A")
+        };
+        var retainedLayout = new LayoutTreeResult(nextElements, [], [(0, 1)]);
+
+        var plan = StyleOnlyPatchPlanBuilder.Build(
+            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            viewportChanged: true,
+            retainedLayout,
+            [new ElementCommandRange(0, 1)],
+            [],
+            nextElements,
+            [(0, 1)]);
+
+        Assert.False(plan.Eligible);
+        Assert.Equal(StyleOnlyPatchFallbackReason.ViewportChanged, plan.FallbackReason);
+        Assert.Equal([(0, 1)], plan.DirtyElementRanges);
+    }
+
+    [Fact]
     public void RenderPipeline_rebuilds_layout_when_tree_changes()
     {
         var pipeline = new RenderPipeline();
