@@ -26,7 +26,7 @@
 | `--diagnose-scroll` | `Irix.Poc.ScrollDiagnosticRunner.RunAsync` | scroll pump frame count、render wait、dt、drained pixels、pending pixels | First runner split sample. Keep as PoC diagnostic; future migration waits until scroll controller/pump ownership is settled. |
 | `--diagnose-input` | `Irix.Poc.InputDiagnosticRunner.RunAsync` | input ownership transitions、button visual priority、keyboard/pointer mapping、dirty reason smoke | Third runner split sample. Keep as PoC diagnostic; future migration waits until input model ownership is settled. |
 | `--debug-ui` | `CounterApplication.BuildDiagnosticHeaderRows` plus `Program` diagnostic readouts | in-app scroll/input/clip mode/viewport/layout dirty rows | 未来由统一 diagnostics snapshot 驱动 debug overlay；现在保持 Counter sample 内部实现。 |
-| StyleOnly plan smoke | `Program.BuildStyleOnlyPatchPlanSmokeDiagnosticLines` plus `StyleOnlyPatchPlanBuilder` | hover-only eligible、layout-affecting fallback、dirty element/command ranges、patched hit target count | Planning logic belongs to `Irix.Rendering`; smoke output currently hosted by PoC until diagnostics channel exists。 |
+| StyleOnly plan smoke | `Irix.Poc.StyleOnlyPatchPlanSmokeDiagnostics.BuildDiagnosticLines` plus `StyleOnlyPatchPlanBuilder` | hover-only eligible、layout-affecting fallback、dirty element/command ranges、patched hit target count | Planning logic stays in `Irix.Rendering`; PoC smoke host is split out while stdout remains frozen。 |
 | Scissor/text clip smoke | `Program` smoke runners plus `D3D12DrawingBackend` diagnostics | FillRect scissor, empty intersection skip, D2D text clip, pipeline clip propagation | Backend counters can later move with backend adapter; stable smoke strings stay frozen until channel replacement is ready。 |
 
 ### 统一 diagnostics channel 的最小方向
@@ -45,8 +45,8 @@ Recommended order:
 1. `--diagnose-scroll` → `ScrollDiagnosticRunner` (done; smallest async runner, no window/D3D12 setup).
 2. `--diagnose-resize` → `ResizeDiagnosticRunner` (done; focused window/viewport smoke, still smaller than full `--diagnose`).
 3. `--diagnose-input` → `InputDiagnosticRunner` (done; ownership and dirty-reason scripted flows are out of `Program.cs`).
-4. StyleOnly plan smoke helpers → dedicated diagnostics smoke file next, with CLI text still frozen.
-5. Full `RunDiagnosticMode` last; it touches text cache, style preset, compositor, layout, StyleOnly, scissor, text clip, and backend counters in one flow.
+4. StyleOnly plan smoke helpers → `StyleOnlyPatchPlanSmokeDiagnostics` (done; PoC smoke host only, rendering planner unchanged).
+5. Full `RunDiagnosticMode` last; it still touches text cache, style preset, compositor, layout, scissor, text clip, and backend counters in one flow.
 
 Rules for this split:
 

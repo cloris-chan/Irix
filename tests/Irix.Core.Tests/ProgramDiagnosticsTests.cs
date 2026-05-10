@@ -224,7 +224,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_style_only_patch_plan_smoke_outputs_eligible_and_fallback()
     {
-        var output = string.Join(Environment.NewLine, Program.BuildStyleOnlyPatchPlanSmokeDiagnosticLines());
+        var output = string.Join(Environment.NewLine, StyleOnlyPatchPlanSmokeDiagnostics.BuildDiagnosticLines());
 
         Assert.Contains("=== StyleOnly Patch Plan Diagnostics ===", output);
         Assert.Contains("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", output);
