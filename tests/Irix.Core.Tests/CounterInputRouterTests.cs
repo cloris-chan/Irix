@@ -222,6 +222,35 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void CounterApplication_derives_button_state_from_ownership_snapshot()
+    {
+        var snapshot = new OwnershipSnapshot(
+            HoveredTarget: nameof(CounterMessage.Increment),
+            FocusedTarget: nameof(CounterMessage.Increment),
+            PressedTarget: nameof(CounterMessage.Increment),
+            CapturedTarget: nameof(CounterMessage.Increment),
+            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
+            LastHoverLeftTarget: null,
+            HoverChangeCount: 1,
+            IsPointerPressed: true);
+
+        var incrementState = CounterApplication.DeriveButtonState(snapshot, nameof(CounterMessage.Increment));
+        var decrementState = CounterApplication.DeriveButtonState(snapshot, nameof(CounterMessage.Decrement));
+
+        Assert.True(incrementState.IsHovered);
+        Assert.True(incrementState.IsPressed);
+        Assert.True(incrementState.IsFocused);
+        Assert.False(decrementState.IsHovered);
+        Assert.False(decrementState.IsPressed);
+        Assert.False(decrementState.IsFocused);
+
+        var releasedState = CounterApplication.DeriveButtonState(
+            snapshot with { IsPointerPressed = false },
+            nameof(CounterMessage.Increment));
+        Assert.False(releasedState.IsPressed);
+    }
+
+    [Fact]
     public void TryMapInput_empty_press_clears_focus_and_does_not_trigger_action()
     {
         var ownershipState = new InputOwnershipState();

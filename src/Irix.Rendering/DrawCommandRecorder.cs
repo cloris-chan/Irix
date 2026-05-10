@@ -141,7 +141,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style)
                         DrawCommandKind.FillRect,
                         Rect: bounds,
                         ClipBounds: clip,
-                        Color: style.ButtonFillColor);
+                        Color: style.ResolveButtonFillColor(element.ButtonState));
                     var buttonText = resources.AddText(element.Text);
                     commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.DrawTextRun,

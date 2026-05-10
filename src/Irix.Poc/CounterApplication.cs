@@ -1,3 +1,5 @@
+using Irix.Rendering;
+
 namespace Irix.Poc;
 
 internal sealed record CounterModel(int Count, ScrollState Scroll);
@@ -69,22 +71,33 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
                 VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
                 VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
                 VirtualNodeFactory.Rectangle(220, 48, 5),
-                VirtualNodeFactory.Button(
-                    "Increment",
-                    6,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText(nameof(CounterMessage.Increment)))),
-                VirtualNodeFactory.Button(
-                    "Decrement",
-                    7,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText(nameof(CounterMessage.Decrement)))),
-                VirtualNodeFactory.Button(
-                    "Reset",
-                    8,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText(nameof(CounterMessage.Reset)))),
+                BuildButton("Increment", 6, nameof(CounterMessage.Increment), inputOwnership),
+                BuildButton("Decrement", 7, nameof(CounterMessage.Decrement), inputOwnership),
+                BuildButton("Reset", 8, nameof(CounterMessage.Reset), inputOwnership),
                 .. BuildScrollProbeRows()
             ]);
 
         return new VirtualNodeTree(root);
+    }
+
+    internal static ButtonVisualState DeriveButtonState(OwnershipSnapshot ownership, string actionId)
+    {
+        return new ButtonVisualState(
+            IsHovered: ownership.HoveredTarget == actionId,
+            IsPressed: ownership.IsPointerPressed && ownership.PressedTarget == actionId,
+            IsFocused: ownership.FocusedTarget == actionId);
+    }
+
+    private static VirtualNode BuildButton(string label, ulong key, string actionId, OwnershipSnapshot ownership)
+    {
+        var state = DeriveButtonState(ownership, actionId);
+        return VirtualNodeFactory.Button(
+            label,
+            key,
+            new VirtualNodeAttribute("ActionId", AttributeValue.FromText(actionId)),
+            new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(state.IsHovered)),
+            new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(state.IsPressed)),
+            new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(state.IsFocused)));
     }
 
     private static VirtualNode[] BuildScrollProbeRows()

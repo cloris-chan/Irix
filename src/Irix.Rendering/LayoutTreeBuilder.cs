@@ -215,13 +215,18 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     label.Length * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
                 var bounds = new PixelRectangle(ctx.Style.HorizontalPadding, cursorY, width, ctx.Style.ButtonHeight);
                 var actionId = GetTextAttribute(node, "ActionId");
+                var buttonState = new ButtonVisualState(
+                    IsHovered: GetBooleanAttribute(node, "IsHovered"),
+                    IsPressed: GetBooleanAttribute(node, "IsPressed"),
+                    IsFocused: GetBooleanAttribute(node, "IsFocused"));
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
                     bounds,
                     ClipBounds: ctx.ClipBounds,
                     Text: label,
-                    ActionId: actionId));
+                    ActionId: actionId,
+                    ButtonState: buttonState));
                 cursorY += ctx.Style.ButtonHeight + ctx.Style.ItemSpacing;
                 return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, [])];
             }
@@ -308,6 +313,19 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         }
 
         return null;
+    }
+
+    private static bool GetBooleanAttribute(VirtualNode node, string attributeName)
+    {
+        foreach (var attribute in node.Attributes)
+        {
+            if (attribute.Name == attributeName && attribute.Value.Kind == AttributeValueKind.Boolean)
+            {
+                return attribute.Value.Boolean;
+            }
+        }
+
+        return false;
     }
 
     private static string? GetTextContent(VirtualNode node)

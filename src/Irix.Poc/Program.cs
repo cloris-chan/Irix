@@ -198,6 +198,7 @@ internal static class Program
             HitDiagnosticTarget,
             out _);
         lines.Add($"afterPress {FormatOwnership(ownershipState.Snapshot)}");
+        lines.Add($"buttonState afterPress Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 3, X: 32, Y: 200),
@@ -205,6 +206,7 @@ internal static class Program
             HitDiagnosticTarget,
             out _);
         lines.Add($"duringCaptureMove {FormatOwnership(ownershipState.Snapshot)}");
+        lines.Add($"buttonState duringCaptureMove Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
 
         var releaseMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -310,6 +312,11 @@ internal static class Program
     private static string FormatMessage(CounterMessage? message)
     {
         return message?.GetType().Name ?? "-";
+    }
+
+    private static string FormatButtonState(ButtonVisualState state)
+    {
+        return $"hovered={state.IsHovered} pressed={state.IsPressed} focused={state.IsFocused}";
     }
 
     private static string FormatOwnershipEvent(InputOwnershipEvent diagnosticEvent)

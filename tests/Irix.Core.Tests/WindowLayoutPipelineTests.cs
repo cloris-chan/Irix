@@ -102,6 +102,9 @@ public sealed class WindowLayoutPipelineTests
             TextColor: DrawColor.Opaque(230, 230, 230),
             RectangleFillColor: DrawColor.Opaque(20, 30, 40),
             ButtonFillColor: DrawColor.Opaque(10, 20, 30),
+            ButtonHoverFillColor: DrawColor.Opaque(11, 21, 31),
+            ButtonPressedFillColor: DrawColor.Opaque(12, 22, 32),
+            ButtonFocusedFillColor: DrawColor.Opaque(13, 23, 33),
             ButtonTextColor: DrawColor.Opaque(200, 210, 220),
             TextStyle: TextStyle.Default,
             ButtonTextStyle: TextStyle.Default));
@@ -127,6 +130,73 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void LayoutTreeBuilder_carries_button_visual_state_attributes()
+    {
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Button(
+                "Increment",
+                2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(true))));
+        var builder = new LayoutTreeBuilder();
+
+        var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
+
+        Assert.Single(elements);
+        Assert.Equal(new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true), elements[0].ButtonState);
+    }
+
+    [Fact]
+    public void DrawCommandRecorder_uses_button_visual_state_fill_priority()
+    {
+        var recorder = new DrawCommandRecorder(new DrawingStyle(
+            TextColor: DrawColor.Opaque(230, 230, 230),
+            RectangleFillColor: DrawColor.Opaque(20, 30, 40),
+            ButtonFillColor: DrawColor.Opaque(10, 20, 30),
+            ButtonHoverFillColor: DrawColor.Opaque(40, 50, 60),
+            ButtonPressedFillColor: DrawColor.Opaque(70, 80, 90),
+            ButtonFocusedFillColor: DrawColor.Opaque(100, 110, 120),
+            ButtonTextColor: DrawColor.Opaque(200, 210, 220),
+            TextStyle: TextStyle.Default,
+            ButtonTextStyle: TextStyle.Default));
+        var elements = new[]
+        {
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(0, 0, 100, 40),
+                Text: "normal",
+                ButtonState: default),
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(0, 40, 100, 40),
+                Text: "focused",
+                ButtonState: new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true)),
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(0, 80, 100, 40),
+                Text: "hovered",
+                ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true)),
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(0, 120, 100, 40),
+                Text: "pressed",
+                ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true)),
+        };
+
+        var result = recorder.Record(elements);
+
+        Assert.Equal(DrawColor.Opaque(10, 20, 30), result.Commands.Memory.Span[0].Color);
+        Assert.Equal(DrawColor.Opaque(100, 110, 120), result.Commands.Memory.Span[2].Color);
+        Assert.Equal(DrawColor.Opaque(40, 50, 60), result.Commands.Memory.Span[4].Color);
+        Assert.Equal(DrawColor.Opaque(70, 80, 90), result.Commands.Memory.Span[6].Color);
+
+        result.Commands.Dispose();
+    }
+
+    [Fact]
     public void RenderPipeline_builds_draw_commands_from_virtual_node()
     {
         var pipeline = new RenderPipeline(
@@ -143,6 +213,9 @@ public sealed class WindowLayoutPipelineTests
                 TextColor: DrawColor.Opaque(255, 255, 255),
                 RectangleFillColor: DrawColor.Opaque(72, 72, 72),
                 ButtonFillColor: DrawColor.Opaque(52, 120, 246),
+                ButtonHoverFillColor: DrawColor.Opaque(72, 136, 255),
+                ButtonPressedFillColor: DrawColor.Opaque(36, 92, 210),
+                ButtonFocusedFillColor: DrawColor.Opaque(84, 160, 255),
                 ButtonTextColor: DrawColor.Opaque(255, 255, 255),
                 TextStyle: TextStyle.Default,
                 ButtonTextStyle: TextStyle.Default));

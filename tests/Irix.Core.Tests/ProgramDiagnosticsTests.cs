@@ -32,7 +32,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("=== Input Ownership Diagnostics ===", output);
         Assert.Contains("afterMove hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False", output);
         Assert.Contains("afterPress hover=Increment focus=Increment pressed=Increment capture=Increment", output);
+        Assert.Contains("buttonState afterPress Increment hovered=True pressed=True focused=True", output);
         Assert.Contains("duringCaptureMove hover=Decrement focus=Increment pressed=Increment capture=Increment", output);
+        Assert.Contains("buttonState duringCaptureMove Increment hovered=False pressed=True focused=True", output);
         Assert.Contains("releaseOutside mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
         Assert.Contains("keyboardEnter mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
         Assert.Contains("keyboardSpace mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);

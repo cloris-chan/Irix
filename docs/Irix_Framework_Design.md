@@ -509,7 +509,7 @@ VirtualNode
 
 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> WindowBackend`
 
-**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已支持合并式显式重绘请求。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + DirectWrite 文本）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013），并通过 `CsWin32RunAsBuildTask=true` 生成实体 `obj` 编译输入，同时排除 CsWin32 analyzer/source-generator 资产，避免编辑器依赖易失效的 Roslyn 虚拟生成文档。
+**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已支持合并式显式重绘请求。Button visual state v0 已通过 `OwnershipSnapshot` 派生 `IsHovered` / `IsPressed` / `IsFocused`，并在 layout/recording 层用现有 `DrawCommand.Color` 选择 style token，不扩展 backend 接口。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + DirectWrite 文本）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013），并通过 `CsWin32RunAsBuildTask=true` 生成实体 `obj` 编译输入，同时排除 CsWin32 analyzer/source-generator 资产，避免编辑器依赖易失效的 Roslyn 虚拟生成文档。
 
 **下一步：** 补齐裁剪、透明度、热路径池化/arena 化、显式 glyph atlas/cache（若后续脱离 DirectWrite 或需要跨 backend glyph 资源复用）与 GPU device-lost recovery；随后让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
 

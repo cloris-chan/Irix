@@ -10,12 +10,18 @@ internal enum LayoutElementKind : byte
     Button
 }
 
+internal readonly record struct ButtonVisualState(
+    bool IsHovered,
+    bool IsPressed,
+    bool IsFocused);
+
 internal readonly record struct LayoutElement(
     LayoutElementKind Kind,
     PixelRectangle Bounds,
     PixelRectangle ClipBounds = default,
     string? Text = null,
-    string? ActionId = null);
+    string? ActionId = null,
+    ButtonVisualState ButtonState = default);
 
 /// <summary>
 /// A node in the layout tree, mapping a VirtualNode's DFS index to its
