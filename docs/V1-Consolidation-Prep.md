@@ -23,7 +23,7 @@
 |------|----------|----------|-------------------|
 | `--diagnose` | `Irix.Poc.Program.RunDiagnosticMode` | D3D12 text cache/device、style preset、compositor partial apply、layout pipeline、StyleOnly plan smoke、pipeline scissor/text clip smoke、backend scissor/text clip smoke | 拆成 diagnostics providers，再由统一 runner 汇总输出；当前 stdout contract 保持冻结。 |
 | `--diagnose-resize` | `Irix.Poc.Program.RunResizeDiagnosticMode` | window physical size、renderer swapchain size、translator/layout viewport、pending resize apply、viewport dirty reason、physical-pixels mode | 未来归入 viewport/platform diagnostics provider；当前仍保持 PoC smoke。 |
-| `--diagnose-scroll` | `Irix.Poc.Program.RunScrollDiagnosticModeAsync` | scroll pump frame count、render wait、dt、drained pixels、pending pixels | 未来若 scroll controller/pump 提升为 framework control/service，再迁出；现在只作为 PoC diagnostic。 |
+| `--diagnose-scroll` | `Irix.Poc.ScrollDiagnosticRunner.RunAsync` | scroll pump frame count、render wait、dt、drained pixels、pending pixels | First runner split sample. Keep as PoC diagnostic; future migration waits until scroll controller/pump ownership is settled. |
 | `--diagnose-input` | `Irix.Poc.Program.RunInputDiagnosticModeAsync` | input ownership transitions、button visual priority、keyboard/pointer mapping、dirty reason smoke | 未来输入模型框架化后提供 input diagnostics provider；现在不移动 input router。 |
 | `--debug-ui` | `CounterApplication.BuildDiagnosticHeaderRows` plus `Program` diagnostic readouts | in-app scroll/input/clip mode/viewport/layout dirty rows | 未来由统一 diagnostics snapshot 驱动 debug overlay；现在保持 Counter sample 内部实现。 |
 | StyleOnly plan smoke | `Program.BuildStyleOnlyPatchPlanSmokeDiagnosticLines` plus `StyleOnlyPatchPlanBuilder` | hover-only eligible、layout-affecting fallback、dirty element/command ranges、patched hit target count | Planning logic belongs to `Irix.Rendering`; smoke output currently hosted by PoC until diagnostics channel exists。 |
@@ -35,6 +35,25 @@
 - Provider 粒度按 owner 分：rendering pipeline、drawing backend、platform viewport、input、scroll。
 - CLI 和 debug UI 只消费 snapshot，不直接读取 scattered statics。
 - 迁移时保留当前 `--diagnose*` 文本测试，新增 channel tests 后再替换 formatter。
+
+### Program diagnostics runner split 顺序
+
+Diagnostics snapshot v0 and debug bridge v0 are sealed; unified diagnostics channel is paused. The current consolidation line is runner split only: move scripted diagnostics out of `Program.cs` one small runner at a time while preserving stdout and overlay contracts.
+
+Recommended order:
+
+1. `--diagnose-scroll` → `ScrollDiagnosticRunner` (done; smallest async runner, no window/D3D12 setup).
+2. `--diagnose-resize` → `ResizeDiagnosticRunner` (next candidate; focused window/viewport smoke, still smaller than full `--diagnose`).
+3. `--diagnose-input` → `InputDiagnosticRunner` (after scroll/resize, because it still hosts ownership and dirty-reason scripted flows).
+4. StyleOnly plan smoke helpers → dedicated diagnostics smoke file only after the CLI runner surface is thinner.
+5. Full `RunDiagnosticMode` last; it touches text cache, style preset, compositor, layout, StyleOnly, scissor, text clip, and backend counters in one flow.
+
+Rules for this split:
+
+- Do not move scroll/input/backend/runtime code while splitting runners.
+- Do not change `DiagnosticsFormatter`, `DebugDiagnosticsFormatter`, or snapshot fields unless fixing a regression.
+- Do not enable StyleOnly fast-path during runner split.
+- Run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke after each extracted runner.
 
 ## 3. 测试分组盘点
 
@@ -85,11 +104,11 @@
 
 ## 7. 推荐收敛顺序
 
-1. Start from [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md): add diagnostics snapshot/channel types beside current CLI output.
-2. Wire `--diagnose*` to consume snapshots while preserving exact formatter tests.
-3. Split backend diagnostics from PoC smoke runners after channel coverage exists.
+1. Treat [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) as sealed; only repair regressions in that line.
+2. Continue Program diagnostics runner split in the order above, keeping CLI output and debug overlay rows unchanged.
+3. Leave unified diagnostics channel, event bus, registry, and provider replacement paused until runner debt is lower.
 4. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
-5. Move one axis at a time and run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input` after each move.
+5. Move one axis at a time and run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke after each move.
 
 ## 8. 当前完成标准对照
 

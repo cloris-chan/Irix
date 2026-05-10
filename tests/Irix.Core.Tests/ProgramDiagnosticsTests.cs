@@ -15,7 +15,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var writer = new StringWriter();
 
-        await Program.RunScrollDiagnosticModeAsync(writer, cancellationToken: TestContext.Current.CancellationToken);
+        await ScrollDiagnosticRunner.RunAsync(writer, cancellationToken: TestContext.Current.CancellationToken);
 
         var output = writer.ToString();
         Assert.Contains("=== Scroll Pump Diagnostics ===", output);

@@ -26,7 +26,7 @@ internal static class Program
 
         if (args.Contains("--diagnose-scroll"))
         {
-            await RunScrollDiagnosticModeAsync(Console.Out, Path.Combine("TestResults", "diagnose-scroll.txt"));
+            await ScrollDiagnosticRunner.RunAsync(Console.Out, Path.Combine("TestResults", "diagnose-scroll.txt"));
             return;
         }
 
@@ -547,6 +547,7 @@ internal static class Program
         {
             var initialDirty = retainedTree.Apply(initialPatch);
             using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialDirty);
+            pipeline.RetainedFrame.Invalidate();
         }
 
         var lines = new List<string>
@@ -583,6 +584,7 @@ internal static class Program
             using var patch = VirtualNodeDiffer.CreatePatchBatch(currentTree, nextTree);
             var dirty = retainedTree.Apply(patch);
             using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, dirty);
+            pipeline.RetainedFrame.Invalidate();
             lines.Add($"dirtyReason {name} reason={pipeline.LastLayoutRebuildReason} classifications={DiagnosticsFormatter.FormatLayoutDirtyClassifications(pipeline.LastDirtyClassifications)}");
             currentTree = nextTree;
         }
@@ -590,79 +592,6 @@ internal static class Program
         static string? HitDiagnosticTarget(int x, int y)
         {
             return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
-        }
-    }
-
-    internal static async Task RunScrollDiagnosticModeAsync(
-        TextWriter output,
-        string? reportPath = null,
-        CancellationToken cancellationToken = default)
-    {
-        var pump = new ScrollFramePump();
-        var scrollState = ScrollState.Default with { MaxScrollY = 240, HasMaxScrollY = true };
-        var frameCount = 0;
-        var totalDrainedPixels = 0.0;
-
-        pump.AddPendingPixels(54);
-
-        await pump.RunUntilIdleAsync(
-            async (frame, token) =>
-            {
-                frameCount++;
-                totalDrainedPixels += frame.Delta.Value;
-                scrollState = ScrollController.ApplyScrollDelta(
-                    scrollState,
-                    frame.Delta,
-                    ScrollMetrics.DefaultText,
-                    SystemScrollSettings.Default);
-                scrollState = ScrollController.Tick(scrollState, frame.DeltaTime);
-
-                await Task.Delay(20, token);
-
-                if (frameCount >= 2)
-                {
-                    scrollState = scrollState with
-                    {
-                        Position = scrollState.TargetPosition,
-                        IsAnimating = false
-                    };
-                }
-            },
-            () => scrollState,
-            cancellationToken);
-
-        var snapshot = new ScrollDiagnosticsSnapshot(
-            pump.DispatchedFrameCount,
-            pump.RenderWaitMs,
-            pump.LastDt,
-            totalDrainedPixels,
-            pump.DrainedPixels,
-            pump.PendingPixels,
-            pump.IsFrameQueued,
-            pump.IsLoopRunning,
-            ScrollController.GetScrollY(scrollState),
-            scrollState.TargetPosition,
-            scrollState.MaxScrollY,
-            scrollState.HasMaxScrollY,
-            scrollState.Position,
-            scrollState.Accumulator,
-            scrollState.IsAnimating);
-        var lines = DiagnosticsFormatter.BuildScrollDiagnosticLines(snapshot);
-
-        foreach (var line in lines)
-        {
-            await output.WriteLineAsync(line);
-        }
-
-        if (reportPath is not null)
-        {
-            var directory = Path.GetDirectoryName(reportPath);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            await File.WriteAllLinesAsync(reportPath, lines, cancellationToken);
         }
     }
 
