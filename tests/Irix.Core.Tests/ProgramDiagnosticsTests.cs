@@ -30,6 +30,11 @@ public sealed class ProgramDiagnosticsTests
 
         var output = writer.ToString();
         Assert.Contains("=== Input Ownership Diagnostics ===", output);
+        Assert.Contains("buttonPriorityOrder Pressed > Hovered > Focused > Normal", output);
+        Assert.Contains("buttonState normal Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", output);
+        Assert.Contains("buttonState hovered Increment hovered=True pressed=False focused=True priority=Hovered color=#FF4888FF", output);
+        Assert.Contains("buttonState pressed Increment hovered=True pressed=True focused=True priority=Pressed color=#FF245CD2", output);
+        Assert.Contains("buttonState focused Increment hovered=False pressed=False focused=True priority=Focused color=#FF54A0FF", output);
         Assert.Contains("afterMove hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False", output);
         Assert.Contains("buttonState afterMove Increment hovered=True pressed=False focused=False priority=Hovered color=#FF4888FF", output);
         Assert.Contains("afterPress hover=Increment focus=Increment pressed=Increment capture=Increment", output);

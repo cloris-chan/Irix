@@ -208,6 +208,12 @@ internal static class Program
             "=== Input Ownership Diagnostics ==="
         };
 
+        lines.Add("buttonPriorityOrder Pressed > Hovered > Focused > Normal");
+        lines.Add($"buttonState normal Increment {FormatButtonState(default)}");
+        lines.Add($"buttonState hovered Increment {FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true))}");
+        lines.Add($"buttonState pressed Increment {FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true))}");
+        lines.Add($"buttonState focused Increment {FormatButtonState(new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true))}");
+
         CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
             ownershipState,

@@ -566,7 +566,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | Stateless overload | `CounterInputRouter.TryMapInput(inputEvent, hitTest, out message)` 仅用于旧单事件测试和简单 release hit-test；不能表达 hover/focus/capture，真实 PoC 输入应使用带 `InputOwnershipState` 的 overload |
 | Diagnostic events | ownership 变化追加 `HoverChanged`、`FocusChanged`、`PressedChanged` 到诊断事件日志；事件类型冻结，不再为视觉状态新增 ownership event |
 
-已覆盖测试：hover enter/leave、capture 期间移动到另一个 target 不改变 captured target、pressed capture 后 release outside 仍触发原 button、release 后 capture 清空但 focus 保留、press 空白清除 focus 且不触发 action、focused target 的 Enter/Space 激活、focus 后 Up/Down/R 仍可用、FocusLost 清理 ownership、ownership event log、model-owned ownership visual refresh、hover-only/press/release outside/press empty/focus lost 后 model 与 button state 同步、Button visual state 派生、`--diagnose-input` synthetic ownership / button state 输出。
+已覆盖测试：hover enter/leave、capture 期间移动到另一个 target 不改变 captured target、pressed capture 后 release outside 仍触发原 button、release 后 capture 清空但 focus 保留、press 空白清除 focus 且不触发 action、focused target 的 Enter/Space 激活、focus 后 Up/Down/R 仍可用、FocusLost 清理 ownership、ownership event log、model-owned ownership visual refresh、hover-only/press/release outside/press empty/focus lost 后 model 与 button state 同步、release outside 同帧 focused FillRect 颜色、Button visual state 派生、`--diagnose-input` normal / hovered / pressed / focused button state 与 priority 输出。
 
 ### Button visual state v0
 
@@ -574,7 +574,7 @@ Button 已基于 `CounterModel.InputOwnership` 派生 `IsHovered` / `IsPressed` 
 
 ### Button visual state scope freeze
 
-本轮 Button visual state 只冻结颜色状态链路与诊断输出；暂不做 focus outline、animation transition、theme system、hover cursor，也不扩展新的 ownership event 类型或 D3D12 后端接口。后续只接受明确回归修复或诊断补强。
+本轮 Button visual state 只冻结颜色状态链路与诊断输出；暂不做 focus ring / outline、hover cursor、animation transition、theme system、通用控件抽象，也不扩展新的 ownership event 类型或 D3D12 后端接口。后续只接受明确回归修复或诊断补强。
 
 ---
 

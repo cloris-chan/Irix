@@ -1,4 +1,5 @@
 using Irix;
+using Irix.Drawing;
 using Irix.Platform;
 using Irix.Poc;
 using Irix.Rendering;
@@ -434,6 +435,7 @@ public sealed class CounterInputRouterTests
         Assert.Null(model.InputOwnership.CapturedTarget);
         Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.FocusedTarget);
         AssertButtonState(app.BuildView(model), isHovered: false, isPressed: false, isFocused: true);
+        AssertButtonFillColor(app.BuildView(model), DrawColor.Opaque(84, 160, 255));
     }
 
     [Fact]
@@ -740,6 +742,26 @@ public sealed class CounterInputRouterTests
         Assert.Equal(isHovered, GetBooleanAttribute(button, "IsHovered"));
         Assert.Equal(isPressed, GetBooleanAttribute(button, "IsPressed"));
         Assert.Equal(isFocused, GetBooleanAttribute(button, "IsFocused"));
+    }
+
+    private static void AssertButtonFillColor(VirtualNodeTree tree, DrawColor expectedColor)
+    {
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(tree.Root, new PixelRectangle(0, 0, 960, 540));
+        var hitTarget = Assert.Single(frame.HitTargets, target => target.ActionId == nameof(CounterMessage.Increment));
+        var commands = frame.Commands.Memory.Span;
+
+        for (var i = 0; i < frame.Commands.Count; i++)
+        {
+            var command = commands[i];
+            if (command.Kind == DrawCommandKind.FillRect && command.Rect == new DrawRect(hitTarget.Bounds.X, hitTarget.Bounds.Y, hitTarget.Bounds.Width, hitTarget.Bounds.Height))
+            {
+                Assert.Equal(expectedColor, command.Color);
+                return;
+            }
+        }
+
+        Assert.Fail("Increment button fill command was not recorded.");
     }
 
     private static VirtualNode FindButton(VirtualNode node, string actionId)
