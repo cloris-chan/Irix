@@ -57,7 +57,8 @@ The minimal text clip step clips each `DrawTextRun` in the Direct2D overlay path
 1. Preserve `DrawCommand.ClipBounds` through the text translation path. `D3D12DrawingBackend` resolves the DrawTextRun clip and passes `EffectiveScissor` into `D3D12TextRenderer.TextData`.
 2. Resolve `viewport + ClipBounds/default` with `DrawingScissor.ResolveEffectiveScissor` so FillRect and text agree on default clip, viewport intersection, and empty-intersection semantics.
 3. If the effective text clip is empty, skip that DrawTextRun.
-4. Before `ID2D1DeviceContext2.DrawTextLayout`, push one axis-aligned D2D clip matching the effective clip bounds; immediately pop it after that DrawTextRun. The scope must be per text run so later runs cannot inherit stale clip state.
+4. If the effective text clip is the full viewport/default target, draw through the original text path without pushing an extra D2D clip.
+5. Otherwise, before `ID2D1DeviceContext2.DrawTextLayout`, push one axis-aligned D2D clip matching the effective clip bounds; immediately pop it after that DrawTextRun. The scope must be per text run so later runs cannot inherit stale clip state.
 6. Keep `D2D1_DRAW_TEXT_OPTIONS_CLIP` for layout-box clipping. The new D2D axis-aligned clip is for scroll/container `ClipBounds`; the existing layout clip is only the text layout rectangle.
 7. Diagnostics report `textClip=True`, the effective text clip, and empty text clip skip count.
 

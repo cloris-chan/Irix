@@ -98,9 +98,39 @@ public sealed class D3D12DrawingBackendScissorTests
     {
         var plan = D3D12DrawingBackend.ResolveTextClip(DrawingBackendClipMode.Scissor, Viewport, new DrawRect(240, 24, 80, 40));
 
-        Assert.True(plan.ClipEnabled);
+        Assert.False(plan.ClipEnabled);
         Assert.True(plan.Skip);
         Assert.True(plan.EffectiveClip.IsEmpty);
+    }
+
+    [Fact]
+    public void ResolveTextClip_scissor_mode_enables_clip_for_partial_intersection()
+    {
+        var plan = D3D12DrawingBackend.ResolveTextClip(DrawingBackendClipMode.Scissor, Viewport, ClipA);
+
+        Assert.True(plan.ClipEnabled);
+        Assert.False(plan.Skip);
+        Assert.Equal(ClipA, plan.EffectiveClip.Bounds);
+    }
+
+    [Fact]
+    public void ResolveTextClip_scissor_mode_default_clip_uses_viewport_without_d2d_scope()
+    {
+        var plan = D3D12DrawingBackend.ResolveTextClip(DrawingBackendClipMode.Scissor, Viewport, default);
+
+        Assert.False(plan.ClipEnabled);
+        Assert.False(plan.Skip);
+        Assert.Equal(Viewport, plan.EffectiveClip.Bounds);
+    }
+
+    [Fact]
+    public void ResolveTextClip_scissor_mode_full_viewport_clip_uses_original_text_path()
+    {
+        var plan = D3D12DrawingBackend.ResolveTextClip(DrawingBackendClipMode.Scissor, Viewport, Viewport);
+
+        Assert.False(plan.ClipEnabled);
+        Assert.False(plan.Skip);
+        Assert.Equal(Viewport, plan.EffectiveClip.Bounds);
     }
 
     [Fact]

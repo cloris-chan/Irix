@@ -82,7 +82,12 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             return new D3D12TextClipPlan(effectiveClip, false, false);
         }
 
-        return new D3D12TextClipPlan(effectiveClip, true, effectiveClip.IsEmpty);
+        if (effectiveClip.IsEmpty)
+        {
+            return new D3D12TextClipPlan(effectiveClip, false, true);
+        }
+
+        return new D3D12TextClipPlan(effectiveClip, effectiveClip.Bounds != viewport, false);
     }
 
     internal static D3D12FillRectScissorDiagnostics ComputeFillRectScissorDiagnostics(DrawingBackendClipMode clipMode, in DrawRect viewport, ReadOnlySpan<DrawCommand> commands)
