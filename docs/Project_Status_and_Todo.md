@@ -456,7 +456,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 ### Viewport / resize physical v0
 
-physical viewport v0 已收口，不引入 per-monitor DPI 切换、fractional logical layout 或多窗口 scale 策略。当前 `scaleMode=PhysicalPixelsV0`，layout、hit-test、D3D12 viewport/scissor 都使用 physical pixel 尺寸；`IScreenInfo.DpiScale` 只作为诊断字段输出，不参与布局缩放。`--debug-ui` 显示 `Viewport: renderer=... layout=... scaleMode=PhysicalPixelsV0`，用于手测 resize 时直接观察 renderer/layout viewport 是否同步。
+physical viewport v0 已阶段完成，不引入 per-monitor DPI 切换、fractional logical layout 或多窗口 scale 策略。当前 `scaleMode=PhysicalPixelsV0`，layout、hit-test、D3D12 viewport/scissor 都使用 physical pixel 尺寸；`IScreenInfo.DpiScale` 只作为诊断字段输出，不参与布局缩放。DPI-aware logical coordinate/layout 尚未开始。`--debug-ui` 显示 `Viewport: renderer=... layout=... scaleMode=PhysicalPixelsV0`，用于手测 resize 时直接观察 renderer/layout viewport 是否同步。
 
 ```text
 WM_SIZE / GetClientRect physical client size
@@ -477,7 +477,13 @@ Resize 后 renderer 已应用的 swapchain size 是 layout viewport size 的 sou
 
 曾观察到 `--enable-scissor` 下 root `ScrollContainer` 的 clip 从 `VerticalPadding` 开始，内容会在距离窗口顶部一个 padding 的位置被裁掉。这个差异属于 layout semantics 问题：D3D12 scissor、D2D text clip 与 `DrawingScissor` 都只是执行 layout 传入的 `ClipBounds`，不是 backend scissor bug。
 
-v0 语义：`Depth == 0` 的 root `ScrollContainer` 使用 viewport 边界作为 clip rect，children 仍从 `HorizontalPadding` / `VerticalPadding` 后开始布局。`LayoutTreeBuilder` 区分 `containerClipTop` 与 `contentTop`：clip 决定裁剪边界，`contentTop` 决定子元素起始位置。nested `ScrollContainer` 暂时保持原有 padding clip 语义，后续如果要扩展 nested semantics 另开任务。
+root clip semantics v0 已阶段完成：`Depth == 0` 的 root `ScrollContainer` 使用 viewport 边界作为 clip rect，children 仍从 `HorizontalPadding` / `VerticalPadding` 后开始布局。`LayoutTreeBuilder` 区分 `containerClipTop` 与 `contentTop`：clip 决定裁剪边界，`contentTop` 决定子元素起始位置。nested `ScrollContainer` 暂时保持原有 padding clip 语义，后续如果要扩展 nested semantics 另开任务。
+
+### 2026-05-10 阶段验收记录
+
+- 手测通过：默认模式、`--enable-scissor`、`--debug-ui --enable-scissor` 下滚动与 button hit smoke 均通过；resize 后继续滚动也通过，未观察到背景/文本裁剪不同步、命中偏移或 device removed。
+- `--enable-scissor` 继续保持显式开关，不默认启用；当前阶段继续 soak，不扩展 nested clip stack、GPU partial redraw、text batching 或通用控件抽象。
+- 阶段回归基线保持为：`dotnet test`、`--diagnose`、`--diagnose-resize`、`--diagnose-scroll`、`--diagnose-input`。
 
 ### `--diagnose` 标准模式
 

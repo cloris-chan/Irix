@@ -95,4 +95,4 @@ Current `--diagnose` smokes switch the backend to `Scissor` for FillRect and tex
 
 ## Follow-up
 
-Before making `--enable-scissor` the default, keep one explicit-switch soak round even though normal UI, `--debug-ui`, scrolling, background hover wheel, and button hover/press/focus have passed manual checks with text clip v0 enabled. During that soak, do not expand the clip scope into nested clip stacks, retained partial redraw, text batching, theme work, or generic control abstraction.
+Before making `--enable-scissor` the default, keep one explicit-switch soak round even though normal UI, `--enable-scissor`, `--debug-ui --enable-scissor`, resize-after-scroll, background hover wheel, and button hover/press/focus have passed manual checks with text clip v0 enabled. During that soak, do not expand the clip scope into nested clip stacks, retained partial redraw, text batching, theme work, or generic control abstraction.
