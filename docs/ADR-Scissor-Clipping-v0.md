@@ -1,6 +1,6 @@
 # ADR: Scissor Clipping v0
 
-Status: Accepted
+Status: Accepted; v0 complete behind explicit switch
 
 Date: 2026-05-10
 
@@ -8,7 +8,7 @@ Date: 2026-05-10
 
 The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor and Direct2D text clipping are available behind the explicit `--enable-scissor` opt-in mode.
 
-Current behavior under `--enable-scissor`: clipped FillRect content is clipped by the D3D12 rasterizer scissor; DrawTextRun content is clipped by a per-run Direct2D axis-aligned clip around `DrawTextLayout`. The default PoC path remains `Diagnostic`, so this behavior is still explicit opt-in while it gets one hand-test pass.
+Current behavior under `--enable-scissor`: clipped FillRect content is clipped by the D3D12 rasterizer scissor; DrawTextRun content is clipped by a per-run Direct2D axis-aligned clip around `DrawTextLayout`. This v0 path has completed diagnostic and manual validation, but the default PoC path remains `Diagnostic` for one explicit-switch soak round.
 
 The current interaction and style preset phase is frozen. Scissor work must not change scroll pumping, input ownership, button visual state, style preset behavior, theme behavior, or retained partial redraw behavior.
 
@@ -22,7 +22,7 @@ Introduce backend clip capability as a diagnostic boundary before implementing G
 | `Diagnostic` | Backend observes/counts clipped commands but renders exactly as before. |
 | `Scissor` | Backend applies backend-native scissor/clipping for supported commands. |
 
-D3D12 defaults to `Diagnostic`: it receives `ClipBounds`, counts clipped commands, and continues rendering existing FillRect/Text paths unchanged. `Scissor` mode is available behind an explicit backend flag and through the PoC `--enable-scissor` switch; it currently applies FillRect scissor and DrawTextRun Direct2D clipping. The normal PoC path still constructs the backend in `Diagnostic` mode, and `--enable-scissor` must not become the default until this text clip v0 path has been hand-tested.
+D3D12 defaults to `Diagnostic`: it receives `ClipBounds`, counts clipped commands, and continues rendering existing FillRect/Text paths unchanged. `Scissor` mode is available behind an explicit backend flag and through the PoC `--enable-scissor` switch; it currently applies FillRect scissor and DrawTextRun Direct2D clipping. The normal PoC path still constructs the backend in `Diagnostic` mode; default enablement remains a later decision after the explicit-switch soak round.
 
 ## Per-command Scissor Shape
 
@@ -88,11 +88,11 @@ Current `--diagnose` smokes switch the backend to `Scissor` for FillRect and tex
 
 - GPU partial redraw.
 - Nested clip stack redesign.
-- Default-enabling `--enable-scissor` before a hand-test pass with text clip v0.
+- Default-enabling `--enable-scissor` during the explicit-switch soak round.
 - Theme system.
 - Generic control abstraction.
 - Reworking scroll/input/button/style preset foundations.
 
 ## Follow-up
 
-Before making `--enable-scissor` the default, keep one explicit-switch soak round even though normal UI, `--debug-ui`, scrolling, background hover wheel, and button hover/press/focus have passed manual checks with text clip v0 enabled.
+Before making `--enable-scissor` the default, keep one explicit-switch soak round even though normal UI, `--debug-ui`, scrolling, background hover wheel, and button hover/press/focus have passed manual checks with text clip v0 enabled. During that soak, do not expand the clip scope into nested clip stacks, retained partial redraw, text batching, theme work, or generic control abstraction.
