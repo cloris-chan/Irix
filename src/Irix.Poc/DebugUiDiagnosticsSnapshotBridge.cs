@@ -17,7 +17,8 @@ internal readonly record struct DebugUiDiagnosticsSnapshot(
 internal sealed class DefaultDebugDiagnosticsSnapshotBridge(
     CounterViewportDiagnostics viewport,
     CounterLayoutDiagnostics layout,
-    ScrollState scroll) : IDebugDiagnosticsSnapshotBridge
+    ScrollState scroll,
+    OwnershipSnapshot inputOwnership) : IDebugDiagnosticsSnapshotBridge
 {
     public DebugUiDiagnosticsSnapshot Capture()
     {
@@ -42,7 +43,7 @@ internal sealed class DefaultDebugDiagnosticsSnapshotBridge(
             viewport,
             layout,
             scrollSnapshot,
-            Program.DiagInputOwnership,
+            inputOwnership,
             Program.DiagBackendClipMode);
     }
 }

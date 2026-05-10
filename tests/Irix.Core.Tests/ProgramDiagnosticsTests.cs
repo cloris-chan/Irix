@@ -458,6 +458,15 @@ public sealed class ProgramDiagnosticsTests
             new PixelRectangle(0, 0, 929, 454),
             "PhysicalPixelsV0");
         var layout = new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly");
+        var input = new OwnershipSnapshot(
+            HoveredTarget: nameof(CounterMessage.Increment),
+            FocusedTarget: nameof(CounterMessage.Increment),
+            PressedTarget: null,
+            CapturedTarget: null,
+            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
+            LastHoverLeftTarget: null,
+            HoverChangeCount: 5,
+            IsPointerPressed: false);
         var scroll = ScrollState.Default with
         {
             Accumulator = 0.375,
@@ -468,7 +477,7 @@ public sealed class ProgramDiagnosticsTests
             HasMaxScrollY = true
         };
 
-        var snapshot = new DefaultDebugDiagnosticsSnapshotBridge(viewport, layout, scroll).Capture();
+        var snapshot = new DefaultDebugDiagnosticsSnapshotBridge(viewport, layout, scroll, input).Capture();
 
         Assert.Equal(viewport, snapshot.Viewport);
         Assert.Equal(layout, snapshot.Layout);
@@ -486,8 +495,51 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(Program.DiagPendingPx, snapshot.Scroll.PendingPixels);
         Assert.Equal(Program.DiagScrollFrameQueued, snapshot.Scroll.FrameQueued);
         Assert.Equal(Program.DiagTickLoopRunning, snapshot.Scroll.TickLoopRunning);
-        Assert.Equal(Program.DiagInputOwnership, snapshot.InputOwnership);
+        Assert.Equal(input, snapshot.InputOwnership);
         Assert.Equal(Program.DiagBackendClipMode, snapshot.BackendClipMode);
+    }
+
+    [Fact]
+    public void Debug_diagnostics_formatter_outputs_stable_bridge_rows()
+    {
+        var snapshot = new DebugUiDiagnosticsSnapshot(
+            new CounterViewportDiagnostics(
+                new PixelRectangle(0, 0, 929, 454),
+                new PixelRectangle(0, 0, 929, 454),
+                "PhysicalPixelsV0"),
+            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"),
+            new ScrollDiagnosticsSnapshot(
+                DispatchedFrameCount: 2,
+                RenderWaitMs: 12.25,
+                LastDt: 0.0167,
+                DrainedPixels: 54,
+                LastFrameDrainedPixels: 0,
+                PendingPixels: 3,
+                FrameQueued: true,
+                TickLoopRunning: true,
+                AppliedScrollY: 42,
+                TargetPosition: 48,
+                MaxScrollY: 240,
+                HasMaxScrollY: true,
+                Position: 42.4,
+                Accumulator: 0.375,
+                IsAnimating: true),
+            new OwnershipSnapshot(
+                HoveredTarget: nameof(CounterMessage.Increment),
+                FocusedTarget: nameof(CounterMessage.Increment),
+                PressedTarget: null,
+                CapturedTarget: null,
+                LastHoverEnteredTarget: nameof(CounterMessage.Increment),
+                LastHoverLeftTarget: null,
+                HoverChangeCount: 5,
+                IsPointerPressed: false),
+            DrawingBackendClipMode.Diagnostic);
+
+        Assert.Equal("Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0", DebugDiagnosticsFormatter.FormatViewportDiagnosticRow(snapshot));
+        Assert.Equal("ScrollY: applied=42 target=48.0 pos=42.40 max=240 acc=0.375 anim=True pendingPx=3 drained=54 frames=2 waitMs=12.2 dt=0.017 frameQueued=True tickLoop=True", DebugDiagnosticsFormatter.FormatScrollDiagnosticRow(snapshot));
+        Assert.Equal("ClipMode: Diagnostic", DebugDiagnosticsFormatter.FormatClipModeDiagnosticRow(snapshot));
+        Assert.Equal("LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly", DebugDiagnosticsFormatter.FormatLayoutDirtyDiagnosticRow(snapshot));
+        Assert.Equal("Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=5", DebugDiagnosticsFormatter.FormatInputDiagnosticRow(snapshot));
     }
 
     [Fact]
@@ -499,7 +551,8 @@ public sealed class ProgramDiagnosticsTests
                 new PixelRectangle(0, 0, 929, 454),
                 "PhysicalPixelsV0"),
             new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"),
-            ScrollState.Default);
+            ScrollState.Default,
+            default);
 
         var snapshot = provider.Capture();
 
@@ -516,8 +569,18 @@ public sealed class ProgramDiagnosticsTests
                 new PixelRectangle(0, 0, 929, 454),
                 "PhysicalPixelsV0"),
             new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"));
+        var input = new OwnershipSnapshot(
+            HoveredTarget: nameof(CounterMessage.Increment),
+            FocusedTarget: nameof(CounterMessage.Increment),
+            PressedTarget: null,
+            CapturedTarget: null,
+            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
+            LastHoverLeftTarget: null,
+            HoverChangeCount: 5,
+            IsPointerPressed: false);
+        var model = app.Initialize() with { InputOwnership = input };
 
-        var tree = app.BuildView(app.Initialize());
+        var tree = app.BuildView(model);
 
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
@@ -531,6 +594,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
             && node.Content.Text == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
+        Assert.Contains(tree.Root.Children, node =>
+            node.Kind == VirtualNodeKind.Text
+            && node.Content.Text == "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=5");
     }
 
     #endregion

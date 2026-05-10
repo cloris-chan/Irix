@@ -118,45 +118,17 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
 
     private static VirtualNode[] BuildDiagnosticHeaderRows(int count, ScrollState scroll, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
     {
-        var debugDiagnostics = new DefaultDebugDiagnosticsSnapshotBridge(viewportDiagnostics, layoutDiagnostics, scroll).Capture();
-        var maxScrollText = !debugDiagnostics.Scroll.HasMaxScrollY
-            ? "unknown"
-            : debugDiagnostics.Scroll.MaxScrollY == 0
-                ? "0(known-zero)"
-                : $"{debugDiagnostics.Scroll.MaxScrollY:F0}";
+        var debugDiagnostics = new DefaultDebugDiagnosticsSnapshotBridge(viewportDiagnostics, layoutDiagnostics, scroll, inputOwnership).Capture();
 
         return [
             VirtualNodeFactory.Text($"Count: {count}", 2),
-            VirtualNodeFactory.Text(FormatScrollDiagnosticRow(debugDiagnostics, maxScrollText), 3),
+            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatScrollDiagnosticRow(debugDiagnostics), 3),
             VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
-            VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
-            VirtualNodeFactory.Text(FormatClipModeDiagnosticRow(debugDiagnostics), 10),
-            VirtualNodeFactory.Text(FormatViewportDiagnosticRow(debugDiagnostics), 11),
-            VirtualNodeFactory.Text(FormatLayoutDirtyDiagnosticRow(debugDiagnostics), 12)
+            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatInputDiagnosticRow(debugDiagnostics), 9),
+            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatClipModeDiagnosticRow(debugDiagnostics), 10),
+            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatViewportDiagnosticRow(debugDiagnostics), 11),
+            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatLayoutDirtyDiagnosticRow(debugDiagnostics), 12)
         ];
-    }
-
-    private static string FormatScrollDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics, string maxScrollText)
-    {
-        var scroll = debugDiagnostics.Scroll;
-        return $"ScrollY: applied={scroll.AppliedScrollY} target={scroll.TargetPosition:F1} pos={scroll.Position:F2} max={maxScrollText} acc={scroll.Accumulator:F3} anim={scroll.IsAnimating} pendingPx={scroll.PendingPixels:F0} drained={scroll.DrainedPixels:F0} frames={scroll.DispatchedFrameCount} waitMs={scroll.RenderWaitMs:F1} dt={scroll.LastDt:F3} frameQueued={scroll.FrameQueued} tickLoop={scroll.TickLoopRunning}";
-    }
-
-    private static string FormatClipModeDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics)
-    {
-        return $"ClipMode: {debugDiagnostics.BackendClipMode}";
-    }
-
-    private static string FormatViewportDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics)
-    {
-        var viewportDiagnostics = debugDiagnostics.Viewport;
-        return $"Viewport: renderer={FormatSize(viewportDiagnostics.RendererViewport)} layout={FormatSize(viewportDiagnostics.LayoutViewport)} scaleMode={viewportDiagnostics.ScaleMode}";
-    }
-
-    private static string FormatLayoutDirtyDiagnosticRow(DebugUiDiagnosticsSnapshot debugDiagnostics)
-    {
-        var layoutDiagnostics = debugDiagnostics.Layout;
-        return $"LayoutDirty: layoutRebuildCount={layoutDiagnostics.LayoutRebuildCount} LastLayoutRebuildReason={layoutDiagnostics.LastLayoutRebuildReason} LastDirtyClassifications={layoutDiagnostics.LastDirtyClassifications}";
     }
 
     private static CounterLayoutDiagnostics NormalizeLayoutDiagnostics(CounterLayoutDiagnostics diagnostics)
@@ -193,16 +165,6 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         }
 
         return rows;
-    }
-
-    private static string FormatTarget(string? target)
-    {
-        return string.IsNullOrWhiteSpace(target) ? "-" : target;
-    }
-
-    private static string FormatSize(PixelRectangle rectangle)
-    {
-        return $"{rectangle.Width}x{rectangle.Height}";
     }
 
     private static UpdateResult<CounterModel, CounterMessage> ApplyRoutedInput(CounterModel model, CounterMessage.RoutedInput input)
