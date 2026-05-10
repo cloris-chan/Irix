@@ -138,22 +138,24 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
 
     internal static ButtonVisualState DeriveButtonState(OwnershipSnapshot ownership, string actionId)
     {
-        return new ButtonVisualState(
-            IsHovered: ownership.HoveredTarget == actionId,
-            IsPressed: ownership.IsPointerPressed && ownership.PressedTarget == actionId,
-            IsFocused: ownership.FocusedTarget == actionId);
+        var state = ControlVisualStateProjection.Project(ownership, actionId);
+        return new ButtonVisualState(state.IsHovered, state.IsPressed, state.IsFocused);
     }
 
     private static VirtualNode BuildButton(string label, ulong key, string actionId, OwnershipSnapshot ownership)
     {
-        var state = DeriveButtonState(ownership, actionId);
+        var visualState = ControlVisualStateProjection.Project(ownership, actionId);
+        var visualStateAttributes = ControlVisualStateAttributeAdapter.ToAttributes(visualState);
+        VirtualNodeAttribute[] attributes =
+        [
+            new VirtualNodeAttribute("ActionId", AttributeValue.FromText(actionId)),
+            .. visualStateAttributes
+        ];
+
         return VirtualNodeFactory.Button(
             label,
             key,
-            new VirtualNodeAttribute("ActionId", AttributeValue.FromText(actionId)),
-            new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(state.IsHovered)),
-            new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(state.IsPressed)),
-            new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(state.IsFocused)));
+            attributes);
     }
 
     private static VirtualNode[] BuildScrollProbeRows()

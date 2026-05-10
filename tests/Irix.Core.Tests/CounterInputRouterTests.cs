@@ -252,6 +252,79 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void ControlVisualState_projection_and_adapter_preserve_existing_button_attributes()
+    {
+        var targetId = nameof(CounterMessage.Increment);
+        var cases = new[]
+        {
+            (
+                Name: "normal",
+                Snapshot: default,
+                Expected: default(ControlVisualState)),
+            (
+                Name: "hovered",
+                Snapshot: new OwnershipSnapshot(
+                    HoveredTarget: targetId,
+                    FocusedTarget: null,
+                    PressedTarget: null,
+                    CapturedTarget: null,
+                    LastHoverEnteredTarget: targetId,
+                    LastHoverLeftTarget: null,
+                    HoverChangeCount: 1,
+                    IsPointerPressed: false),
+                Expected: new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false)),
+            (
+                Name: "pressed",
+                Snapshot: new OwnershipSnapshot(
+                    HoveredTarget: null,
+                    FocusedTarget: targetId,
+                    PressedTarget: targetId,
+                    CapturedTarget: targetId,
+                    LastHoverEnteredTarget: null,
+                    LastHoverLeftTarget: null,
+                    HoverChangeCount: 0,
+                    IsPointerPressed: true),
+                Expected: new ControlVisualState(IsHovered: false, IsPressed: true, IsFocused: true)),
+            (
+                Name: "focused",
+                Snapshot: new OwnershipSnapshot(
+                    HoveredTarget: null,
+                    FocusedTarget: targetId,
+                    PressedTarget: null,
+                    CapturedTarget: null,
+                    LastHoverEnteredTarget: null,
+                    LastHoverLeftTarget: null,
+                    HoverChangeCount: 0,
+                    IsPointerPressed: false),
+                Expected: new ControlVisualState(IsHovered: false, IsPressed: false, IsFocused: true)),
+            (
+                Name: "focusLost",
+                Snapshot: new OwnershipSnapshot(
+                    HoveredTarget: null,
+                    FocusedTarget: null,
+                    PressedTarget: null,
+                    CapturedTarget: null,
+                    LastHoverEnteredTarget: null,
+                    LastHoverLeftTarget: targetId,
+                    HoverChangeCount: 2,
+                    IsPointerPressed: false),
+                Expected: default(ControlVisualState))
+        };
+
+        foreach (var caseItem in cases)
+        {
+            var state = ControlVisualStateProjection.Project(caseItem.Snapshot, targetId);
+            var attributes = ControlVisualStateAttributeAdapter.ToAttributes(state);
+
+            Assert.Equal(caseItem.Expected, state);
+            Assert.Equal(caseItem.Expected.IsHovered, GetBooleanAttribute(attributes, "IsHovered"));
+            Assert.Equal(caseItem.Expected.IsPressed, GetBooleanAttribute(attributes, "IsPressed"));
+            Assert.Equal(caseItem.Expected.IsFocused, GetBooleanAttribute(attributes, "IsFocused"));
+            Assert.DoesNotContain(attributes, attribute => attribute.Name == "IsEnabled");
+        }
+    }
+
+    [Fact]
     public void InputVisualStateChanged_updates_model_snapshot_without_changing_count_or_scroll()
     {
         var app = new CounterApplication();
@@ -378,6 +451,14 @@ public sealed class CounterInputRouterTests
 
         Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.HoveredTarget);
         AssertButtonState(app.BuildView(model), isHovered: true, isPressed: false, isFocused: false);
+    }
+
+    [Fact]
+    public void CounterApplication_default_view_emits_normal_button_visual_state_attributes()
+    {
+        var app = new CounterApplication();
+
+        AssertButtonState(app.BuildView(app.Initialize()), isHovered: false, isPressed: false, isFocused: false);
     }
 
     [Fact]
@@ -836,6 +917,19 @@ public sealed class CounterInputRouterTests
     private static bool GetBooleanAttribute(VirtualNode node, string name)
     {
         foreach (var attribute in node.Attributes)
+        {
+            if (attribute.Name == name)
+            {
+                return attribute.Value.Boolean;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool GetBooleanAttribute(VirtualNodeAttribute[] attributes, string name)
+    {
+        foreach (var attribute in attributes)
         {
             if (attribute.Name == name)
             {
