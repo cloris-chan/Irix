@@ -155,23 +155,16 @@ Naming rules for future work:
 - Keep the current `ActionId` attribute and string target ids unchanged during this prep line.
 - Treat Counter command ids as sample vocabulary until an app command abstraction is explicitly designed.
 
-Typed identity representation prep:
+Typed identity prep:
 
-| Option | Fit | Recommendation |
-|--------|-----|----------------|
-| Raw `string` everywhere | Matches current PoC and is simple to serialize/debug | Do not promote as the v1 API shape. It keeps the current ambiguity between hit-test, focus, capture, action, and app command ids. |
-| Shared generic id, such as `Id<TRole>` | Provides compile-time separation with one implementation | Defer. It may be useful internally later, but it makes public API signatures less obvious and can leak marker-type plumbing into app code too early. |
-| Non-generic `readonly record struct` wrappers around string values | Gives role-specific types while preserving current string payloads and diagnostics readability | Recommended first v1 direction. Use separate wrappers such as `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and possibly app-owned command wrappers. |
-| Numeric handles | Fast and compact if backed by a registry | Do not start here. The current system has no stable control registry, generation counter, or lifetime model for handles. |
+| Option | Fit for v1 | Notes |
+|--------|------------|-------|
+| Bare `string` | Current implementation only | Easy to pass through `VirtualNodeAttribute`, but it lets hit-test, focus, capture, action, and app command identities be mixed accidentally. Keep for existing wire compatibility, not as the recommended promoted API shape. |
+| Role-specific string wrapper | Recommended direction | Prefer small role-specific value types such as `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId` that wrap the current string payload. This preserves current id vocabulary while making API boundaries explicit. |
+| Shared generic id, such as `Id<TScope>` | Not first choice for v1 | It can reduce duplicate code, but it hides the domain vocabulary at call sites and makes public APIs harder to read. Reconsider only after role-specific wrappers prove too repetitive. |
+| Numeric/runtime handle | Not appropriate yet | Hit-test and control action ids are currently authored as stable strings in the view tree. A numeric handle would require lifetime, recycling, and diagnostics naming rules that do not exist yet. |
 
-Recommended direction: start with role-specific string-backed `readonly record struct` identity wrappers when implementation begins. They keep equality/value semantics straightforward, preserve existing string ids as the payload, and make accidental cross-use visible at compile time. Avoid a generic id type in the first public pass unless a repeated implementation cost appears after the non-generic wrappers are designed.
-
-Identity prep gates before implementation:
-
-- Decide which ids are frame-local (`HitTestTargetId`) and which may persist across frames (`FocusTargetId`, `PointerCaptureTargetId`, `ControlActionId`).
-- Decide whether empty/default values are allowed and how they map to "no target" without changing current behavior.
-- Keep conversion from current strings at the boundary; do not require all `VirtualNode` attributes to become typed in the same step.
-- Keep `AppCommandId` app-owned unless a separate command abstraction is explicitly opened.
+Recommendation: when this becomes implementation work, prefer `readonly record struct`-style role wrappers over strings, with explicit conversion at the current attribute/hit-test boundary. Do not introduce a generic id abstraction before the roles are stable. Default/empty identity semantics must be designed before any wrapper becomes public API.
 
 ## 6. Visual State Ownership
 
@@ -191,26 +184,25 @@ Future Button API boundary:
 - App code owns command handling and model updates after activation; it should not need to hand-roll hover/press/focus projection once a generic controls layer exists.
 - Until that layer exists, `CounterApplication` remains the projection site and the existing attributes remain the wire contract.
 
+Design answer for `Button` v1 prep: the three attributes are current rendering attributes whose values are produced by input-state projection. They are likely future control visual state, but they are not Counter app state and should not be computed inside the renderer.
+
 `ControlVisualState` prep:
 
-| Field | Source | Projection rule | Compatibility with current attributes |
-|-------|--------|-----------------|---------------------------------------|
-| `IsHovered` | Hit-test target plus hover ownership | True when the control's target id is the current hover target | Continue emitting the existing `IsHovered` boolean attribute. |
-| `IsPressed` | Pointer capture / active press ownership | True when the control owns the active press/capture sequence | Continue emitting the existing `IsPressed` boolean attribute. |
-| `IsFocused` | Focus ownership | True when the control owns keyboard focus | Continue emitting the existing `IsFocused` boolean attribute. |
-| `IsFocusVisible` | Future focus modality policy | Optional future field for keyboard-visible focus rings | Do not add an attribute in this prep line; renderer can keep using `IsFocused`. |
-| `IsEnabled` | Future control/app policy | Optional future field for disabled controls | Do not add an attribute in this prep line; no disabled behavior exists today. |
+| Draft field | Source | Projection rule | Current compatibility |
+|-------------|--------|-----------------|-----------------------|
+| `IsHovered` | Current hover target from input ownership | True when the control target is the current hover target and not blocked by capture/focus policy. | Writes the existing `IsHovered` attribute. |
+| `IsPressed` | Current pointer capture / pressed target from input ownership | True while the control owns the active press/capture sequence. | Writes the existing `IsPressed` attribute. |
+| `IsFocused` | Current focus target from input ownership | True when keyboard focus belongs to the control target. | Writes the existing `IsFocused` attribute. |
+| `IsEnabled` | Future control/app policy | Default would be enabled unless app/control state says otherwise. | No current attribute; do not add during this prep line. |
 
-Projection location recommendation:
+Projection location:
 
-1. Today: `CounterApplication` continues deriving the three attributes from `OwnershipSnapshot`.
-2. First future controls step: introduce a pure projection helper that maps typed target/focus/capture ownership into `ControlVisualState`.
-3. Compatibility adapter: convert `ControlVisualState` back into the existing `IsHovered`, `IsPressed`, and `IsFocused` attributes so rendering behavior and diagnostics remain unchanged.
-4. Later renderer cleanup: rendering may read a typed visual-state payload only after the attribute compatibility path is proven equivalent.
+- Input ownership should expose facts such as hover target, focus target, and pointer capture target.
+- A future controls layer should project those facts plus control policy into `ControlVisualState`.
+- Rendering should consume the projected state as style/layout input; it should not compute hover, focus, or capture rules.
+- App code should receive activation results and own command handling, but it should not manually derive the common hover/press/focus attributes once a controls layer exists.
 
-Do not make the renderer compute `ControlVisualState`; it should consume visual-state inputs and decide style/draw output. Do not make app command handling depend on visual-state fields; activation remains a routing concern.
-
-Design answer for `Button` v1 prep: the three attributes are current rendering attributes whose values are produced by input-state projection. They are likely future control visual state, but they are not Counter app state and should not be computed inside the renderer.
+Compatibility rule: the future `ControlVisualState` must remain source-compatible with existing `IsHovered`, `IsPressed`, and `IsFocused` attributes until the renderer has a typed state input. The first implementation step should be an adapter that emits the existing attributes, not a renderer contract change.
 
 ## 7. Scroll Ownership
 
@@ -236,16 +228,17 @@ Future extraction boundary:
 
 Do not extract scroll primitives until these names are explicit: scroll container id, scroll state owner, metrics feedback owner, settings provider, frame scheduler, and app model handoff.
 
-Extraction sequence and blockers:
+Scroll extraction preconditions:
 
-| Step | Candidate | Must be true before extraction | Blockers that keep it in `Irix.Poc` |
-|------|-----------|--------------------------------|------------------------------------|
-| 1 | `ScrollState` value model | Scroll container identity, max-scroll feedback, and app persistence ownership are named | Current state is single-container and stored in the Counter model shape. |
-| 2 | `ScrollController` pure transforms | Inputs are explicit: `ScrollDelta`, `ScrollMetrics`, `SystemScrollSettings`, `ScrollState`, and elapsed time | Any hidden dependency on Counter messages, debug rows, or current default metrics blocks promotion. |
-| 3 | `ScrollMetrics` / layout feedback contract | Render/layout feedback reports typed container metrics instead of only a positional max-scroll double | `WindowDrawCommandTranslator` currently reports `Action<double>` max-scroll feedback only. |
-| 4 | `ScrollFramePump` scheduler | Frame request, cancellation, pending-delta draining, and dispatch callback are named without `CounterMessage` | Current pump dispatches `CounterMessage.ScrollFrame` and reads Counter scroll state. It must move last. |
+| Step | Candidate extraction | Allowed only after | Blocking issue if skipped |
+|------|----------------------|--------------------|---------------------------|
+| 1 | `ScrollMetrics` and max-scroll feedback vocabulary | `WindowDrawCommandTranslator` feedback names container id, viewport extent, content extent, and max scroll explicitly. | `ScrollState` would depend on a positional `double` callback and could only model the current single-container PoC. |
+| 2 | `SystemScrollSettings` provider | Platform ownership for wheel lines/chars is named, with defaults preserved for non-Windows or missing settings. | Scroll delta conversion would bake PoC defaults into framework behavior. |
+| 3 | Pure `ScrollController` | Metrics and settings are explicit inputs, and controller messages no longer mention Counter types. | The controller would look reusable while still depending on sample message flow and single-container assumptions. |
+| 4 | `ScrollState` | Scroll container identity, app storage ownership, and default/empty state semantics are named. | State extraction would force a framework decision about where per-container scroll state lives before the model boundary is ready. |
+| 5 | `ScrollFramePump` or scheduler | Frame request/cancellation semantics are independent from `CounterMessage.ScrollFrame`. | The pump would become runtime infrastructure while still dispatching Counter-specific messages. |
 
-Recommended order: extract nothing until the feedback contract is typed; then move pure value/types and `ScrollController` before any scheduler. `ScrollFramePump` is last because it touches async scheduling, cancellation, render wait timing, and app message dispatch. Moving the pump before the model/controller contract is stable would bake Counter-specific flow into framework runtime.
+Recommended order: extract vocabulary and feedback first, then settings, then pure controller logic, then state ownership, and only then scheduler/pump behavior. Until those gates are met, keep `ScrollController`, `ScrollState`, and `ScrollFramePump` together in `Irix.Poc`.
 
 ## 8. Window Translator Contract Draft
 
@@ -264,21 +257,29 @@ If promoted later, the contract should inject or name these dependencies explici
 | Scroll metrics | `LastMaxScrollY` plus current layout viewport exposure | Model as explicit render feedback: max scroll, viewport extent, content extent, and target container identity. |
 | Diagnostics exposure | `LastViewport`, `LastLayoutViewport`, rebuild counts, dirty classifications | Keep local diagnostics accessors or typed feedback; do not introduce a global diagnostics channel in this line. |
 
-Promotion preconditions checklist:
+Promotion preconditions:
 
-| Gate | Required before promotion |
-|------|---------------------------|
-| Style injection | Translator construction accepts a style preset/resolver or render-pipeline factory; no `CounterStylePreset.Default` dependency remains. |
-| Viewport source | Viewport source is explicit, typed in physical pixels, and has a clear resize timing contract. |
-| Retained-tree ownership | The promoted contract states whether the translator owns `RetainedTree` or receives retained state from a render service. |
-| Render-pipeline creation | `RenderPipeline` creation is injected or factory-created with explicit style/options; no hidden sample defaults. |
-| Post-frame feedback | Feedback is typed instead of `Action<double>`; max scroll, viewport, content extent, and diagnostics have named fields. |
-| Scroll metrics | Scroll feedback identifies the relevant scroll container and can support future multi-container scroll state. |
-| Prepare-frame hook | Any prepare-frame callback has a named backend/resource-lifetime purpose, or it is removed before promotion. |
-| Diagnostics access | Existing local diagnostics can still be read without introducing a global diagnostics channel. |
-| Responsibility boundary | Translator remains patch-to-render-frame glue only; it does not own app messages, input routing, compositor execution, or backend rendering. |
-| Regression proof | CLI diagnostics text, debug UI rows, scroll/input behavior, and rendering output have explicit regression coverage for the migration. |
-| Migration scope | No promotion happens in this prep line; this checklist is a future gate. |
+- Style injection no longer references Counter defaults.
+- Viewport, retained-tree ownership, render-pipeline creation, and post-frame feedback are named independently.
+- Scroll feedback is typed before it is shared with a generic scroll primitive.
+- The translator remains a patch-to-render-frame bridge; it should not own app messages, input routing, or backend rendering execution.
+- No migration happens in this prep line.
+
+Promotion checklist:
+
+| Gate | Requirement | Status in current PoC |
+|------|-------------|-----------------------|
+| Style injection | Style preset/resolver or pipeline factory is injected by the composition root. | Blocked: translator constructs `RenderPipeline(CounterStylePreset.Default)`. |
+| Viewport source | Viewport provider contract names pixel units, resize timing, and fallback behavior. | Partial: optional `Func<PixelRectangle>` exists, but it is not a named framework contract. |
+| Retained-tree ownership | Patch application and retained tree lifetime are assigned to either the bridge or a higher render service. | Blocked: private retained tree is embedded without an external ownership contract. |
+| Render-pipeline creation | Pipeline construction takes explicit style/options and has no sample defaults. | Blocked: hidden Counter style default. |
+| Prepare-frame hook | Backend/resource preparation needs are named, or the hook is removed. | Partial: optional action exists but has no semantic contract. |
+| Post-frame feedback | Feedback is a typed result carrying layout diagnostics and scroll metrics. | Blocked: current callback is `Action<double>` for max scroll only. |
+| Scroll metrics | Feedback names scroll container id, viewport extent, content extent, and max scroll. | Blocked: only `LastMaxScrollY` is exposed. |
+| Diagnostics access | Local diagnostics stay local or are returned in typed feedback. | Partial: accessors exist; no global diagnostics channel should be introduced here. |
+| App isolation | Translator has no Counter messages, input router, or app command dependency. | Mostly satisfied, except style and scroll feedback remain sample-shaped. |
+
+Migration rule: do not move `WindowDrawCommandTranslator` until every blocked gate has either a concrete contract or an explicit decision to keep it sample-owned.
 
 ## 9. Prep Checklist
 
@@ -289,18 +290,18 @@ No code moves in this line. The next useful work is design inventory only:
 | Controls | Which node kinds are framework primitives? | `Text`, `Rectangle`, `Button`, and `ScrollContainer` are current primitives. Their factory methods are convenience constructors, not final controls APIs. |
 | Controls | Which parts are Counter-specific? | Action-id values, ownership-derived visual state, sample rows, debug rows, and Counter messages. |
 | Target/action ids | Which ids must stay distinct? | Hit-test target, control action, focus target, pointer capture target, and app command id are separate design concepts. Current strings remain unchanged. |
-| Typed identity | What representation is recommended? | Role-specific string-backed `readonly record struct` wrappers are the recommended first v1 direction; raw strings remain current behavior and generic ids are deferred. |
+| Typed identity | What representation is preferred later? | Role-specific string wrappers, preferably `readonly record struct`-style value types. Do not start with bare strings or a shared generic id as the promoted API shape. |
 | Visual state | Who owns `IsHovered` / `IsPressed` / `IsFocused`? | They are current rendering attributes whose values are projected from input ownership state. Future controls may own a typed visual-state projection. |
-| Visual state | How does future `ControlVisualState` stay compatible? | Project typed fields back to existing `IsHovered`, `IsPressed`, and `IsFocused` attributes before changing renderer inputs. |
+| Control visual state | What should `ControlVisualState` contain first? | Hovered, pressed, and focused fields mapped back to existing attributes; enabled can be designed later without changing current attributes now. |
 | Input | What is generic today? | Raw platform input facts and raw event publication. |
 | Input | What is Counter-specific today? | Routing raw input to Counter messages and wrapping visual-state updates into the Counter model. |
 | Scroll | What does `ScrollY` own? | `ScrollY` is the layout/render offset attribute, not scroll animation state. |
 | Scroll | What remains outside the node primitive? | `ScrollState`, pump scheduling, system settings, metrics feedback, and app-level scroll storage remain separately owned until extraction contracts are explicit. |
-| Scroll | What extraction order is allowed? | Type metrics/feedback first, then pure state/controller; `ScrollFramePump` moves last only after it no longer dispatches Counter messages. |
+| Scroll extraction | What order prevents premature movement? | Define feedback/metrics vocabulary first, then settings, pure controller, state ownership, and scheduler/pump last. |
 | Window glue | What is platform-owned? | `IPlatformHost` / `INativeWindow` abstractions and `WindowsPlatformHost` implementation. |
 | Window glue | What is bridge-owned later? | A future version of `WindowDrawCommandTranslator`, once style, viewport, retained-tree, and post-frame contracts are named. |
 | Window translator | What must be injected before promotion? | Style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and scroll metrics. |
-| Window translator | What blocks promotion? | Hidden Counter styling, positional max-scroll feedback, implicit retained-tree ownership, and missing regression proof block promotion. |
+| Translator promotion | What blocks movement today? | Counter style construction, private retained-tree ownership, positional max-scroll callback, incomplete viewport contract, and untyped feedback. |
 | Window glue | What remains sample-owned? | `Program.Main` orchestration and `CounterApplication` model/view semantics. |
 
 Regression-only rules remain in force:
