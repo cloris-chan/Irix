@@ -57,6 +57,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("PressedChanged previousPressed=- currentPressed=Increment", output);
         Assert.Contains("PressedChanged previousPressed=Increment currentPressed=-", output);
         Assert.Contains("FocusChanged previous=Increment current=-", output);
+        Assert.Contains("dirtyReasons:", output);
+        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly", output);
+        Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly", output);
+        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly", output);
     }
 
     [Fact]

@@ -500,6 +500,8 @@ internal static class Program
             lines.Add($"  {FormatOwnershipEvent(diagnosticEvent)}");
         }
 
+        lines.AddRange(BuildInputDirtyReasonDiagnosticLines());
+
         lines.Add("=== Input diagnostic mode complete ===");
 
         foreach (var line in lines)
@@ -526,6 +528,65 @@ internal static class Program
                 (32, 200) => nameof(CounterMessage.Decrement),
                 _ => null
             };
+        }
+    }
+
+    internal static string[] BuildInputDirtyReasonDiagnosticLines()
+    {
+        var app = new CounterApplication();
+        var ownershipState = new InputOwnershipState();
+        var model = app.Initialize();
+        var currentTree = app.BuildView(model);
+        var retainedTree = new RetainedTree(default);
+        var pipeline = new RenderPipeline(CounterStylePreset.Default);
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        using (var initialPatch = VirtualNodeDiffer.CreatePatchBatch(default, currentTree))
+        {
+            var initialDirty = retainedTree.Apply(initialPatch);
+            using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialDirty);
+        }
+
+        var lines = new List<string>
+        {
+            "dirtyReasons:"
+        };
+
+        ApplyInput("hoverOnly", new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140));
+        ApplyInput("press", new RawInputEvent(
+            RawInputEventKind.PointerPressed,
+            Timestamp: 2,
+            X: 32,
+            Y: 140,
+            Button: PointerButton.Left));
+        ApplyInput("release", new RawInputEvent(
+            RawInputEventKind.PointerReleased,
+            Timestamp: 3,
+            X: 500,
+            Y: 500,
+            Button: PointerButton.Left));
+
+        return lines.ToArray();
+
+        void ApplyInput(string name, RawInputEvent inputEvent)
+        {
+            if (!TryMapInputForRuntime(inputEvent, ownershipState, HitDiagnosticTarget, out var message) || message is null or CounterMessage.WheelRaw)
+            {
+                lines.Add($"dirtyReason {name} reason={LayoutRebuildReason.None} classifications=(none)");
+                return;
+            }
+
+            model = app.Update(model, message).NextModel;
+            var nextTree = app.BuildView(model);
+            using var patch = VirtualNodeDiffer.CreatePatchBatch(currentTree, nextTree);
+            var dirty = retainedTree.Apply(patch);
+            using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, dirty);
+            lines.Add($"dirtyReason {name} reason={pipeline.LastLayoutRebuildReason} classifications={FormatLayoutDirtyClassifications(pipeline.LastDirtyClassifications)}");
+            currentTree = nextTree;
+        }
+
+        static string? HitDiagnosticTarget(int x, int y)
+        {
+            return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
         }
     }
 

@@ -369,7 +369,7 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 - [x] 引入最小 `RetainedTree`：单次 DFS 遍历应用 ReplaceRoot/Update/Add/Remove patch，返回去重升序 dirty 节点索引集合；13 个测试覆盖 replace root、update、add、remove、keyed reconciliation、多 patch 组合、empty batch、diff→apply 等价性、dirty 排序去重、layout dirty v0、RenderPipeline dirty-driven rebuild、Translator RetainedTree 集成
 - [x] `RenderPipeline` 接入 `RetainedTree`：Translator 持有 RetainedTree，diff batch 调用 Apply 并传递 dirty set，render request 只复用 retained tree；LayoutTreeBuilder 接受 dirty nodes 参数（v0 全量重建）
 - [x] Layout dirty v0：`LayoutTreeBuilder.Build(root, viewport, dirtyNodes)` 接口已落地，当前为全量重建，dirty set 透传用于后续增量布局
-- [x] Layout dirty v1 诊断设计：见 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md)；`RenderPipeline` 记录 `LastLayoutRebuildReason`、`LayoutRebuildCount` 与 `LastDirtyClassifications`，`--debug-ui` 显示 layout dirty 行；真实 PoC 路径测试覆盖 hover-only `StyleOnly`、scroll `LayoutAffecting`、resize `ViewportChanged` 与混合 dirty 优先级；当前仍全量 rebuild，不做 partial layout
+- [x] Layout dirty v1 诊断设计：见 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md)；`RenderPipeline` 记录 `LastLayoutRebuildReason`、`LayoutRebuildCount` 与 `LastDirtyClassifications`，`--debug-ui` 显示 layout dirty 行且手测 hover/press/scroll/resize dirty reason 已通过；`--diagnose-input` 输出 hover-only / press / release dirty reason；真实 PoC 路径测试覆盖 hover-only `StyleOnly`、press `StyleOnly`、scroll `LayoutAffecting`、resize `ViewportChanged`、release `TextSizeAffecting` 与混合 dirty 优先级；当前仍全量 rebuild，不做 partial layout
 - [x] 建立 LayoutTree 中间结构：`LayoutTreeNode` 记录 DFS index、element kind、element range；`LayoutTreeResult` 携带 flat elements、tree nodes、dirty element ranges
 - [x] dirty layout v1：dirty 非空时，构建 layout tree 并计算 dirty node 对应的 layout element ranges；单个 Text update 只影响 1 个 element range
 - [x] dirty → affected layout range 映射：`RenderPipeline.LastDirtyElementRanges` 暴露最近一次 Build 的 dirty element ranges，可定位需要重录的 draw commands
@@ -569,6 +569,9 @@ root clip semantics v0 已阶段完成：`Depth == 0` 的 root `ScrollContainer`
 | focusLost | `hover=- focus=- pressed=- capture=-` |
 | buttonState focusLost | `Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6` |
 | events | 输出 `HoverChanged` / `FocusChanged` / `PressedChanged` 诊断事件流 |
+| dirtyReason hoverOnly | `reason=StyleOnly classifications=4:StyleOnly` |
+| dirtyReason press | `reason=StyleOnly classifications=4:StyleOnly` |
+| dirtyReason release | `reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly` |
 
 ---
 
@@ -623,7 +626,7 @@ Counter PoC 默认 UI 隐藏 `ScrollY:` 与 `Input:` 调试文本，只保留计
 | Stateless overload | `CounterInputRouter.TryMapInput(inputEvent, hitTest, out message)` 仅用于旧单事件测试和简单 release hit-test；不能表达 hover/focus/capture，真实 PoC 输入应使用带 `InputOwnershipState` 的 overload |
 | Diagnostic events | ownership 变化追加 `HoverChanged`、`FocusChanged`、`PressedChanged` 到诊断事件日志；事件类型冻结，不再为视觉状态新增 ownership event |
 
-已覆盖测试：hover enter/leave、capture 期间移动到另一个 target 不改变 captured target、pressed capture 后 release outside 仍触发原 button、release 后 capture 清空但 focus 保留、press 空白清除 focus 且不触发 action、focused target 的 Enter/Space 激活、focus 后 Up/Down/R 仍可用、FocusLost 清理 ownership、ownership event log、model-owned ownership visual refresh、hover-only/press/release outside/press empty/focus lost 后 model 与 button state 同步、release outside 同帧 focused FillRect 颜色、Button visual state 派生、`--diagnose-input` normal / hovered / pressed / focused button state 与 priority 输出。
+已覆盖测试：hover enter/leave、capture 期间移动到另一个 target 不改变 captured target、pressed capture 后 release outside 仍触发原 button、release 后 capture 清空但 focus 保留、press 空白清除 focus 且不触发 action、focused target 的 Enter/Space 激活、focus 后 Up/Down/R 仍可用、FocusLost 清理 ownership、ownership event log、model-owned ownership visual refresh、hover-only/press/release outside/press empty/focus lost 后 model 与 button state 同步、release outside 同帧 focused FillRect 颜色、Button visual state 派生、`--diagnose-input` normal / hovered / pressed / focused button state 与 priority 输出、hover-only / press / release dirty reason 输出。
 
 ### Button visual state v0
 
