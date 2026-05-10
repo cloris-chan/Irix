@@ -78,7 +78,7 @@ Current `--diagnose` smokes switch the backend to `Scissor` for FillRect and tex
 
 - Direct: `effectiveClip=(32,32,80,40)`, `textClip=False`, `gpuScissor=True`, `clippedCommands=1`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, `deviceRemoved=False`.
 - Pipeline: `source=ScrollContainerRectangle`, `textClip=False`, `clippedCommands=1`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, `deviceRemoved=False`, `passed=True`.
-- Pipeline text: `source=ScrollContainerButton`, `textClip=True`, `layoutClip=True`, `effectiveClip=(16,16,928,20)`, `clippedCommands=2`, `textClipSkipped=0`, `deviceRemoved=False`, `passed=True`.
+- Pipeline text: `source=ScrollContainerButton`, `textClip=True`, `layoutClip=True`, `effectiveClip=(0,0,960,20)`, `clippedCommands=2`, `textClipSkipped=0`, `deviceRemoved=False`, `passed=True`.
 - Empty: `kind=FillRect`, `clippedCommands=1`, `emptyIntersectionSkipped=1`, `scissorStateChanges=0`, `deviceRemoved=False`.
 - Text: `kind=DrawTextRun`, `textClip=True`, `layoutClip=True`, `effectiveClip=(32,32,80,40)`, `textClipSkipped=1`, `deviceRemoved=False`.
 

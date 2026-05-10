@@ -109,9 +109,9 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_pipeline_text_clip_smoke_outputs_pipeline_fields()
     {
-        var line = Program.BuildPipelineTextClipSmokeDiagnosticLine(new EffectiveScissor(new DrawRect(16, 16, 928, 20), false), clippedCommandCount: 2, textClipSkippedCount: 0, deviceRemoved: false);
+        var line = Program.BuildPipelineTextClipSmokeDiagnosticLine(new EffectiveScissor(new DrawRect(0, 0, 960, 20), false), clippedCommandCount: 2, textClipSkippedCount: 0, deviceRemoved: false);
 
-        Assert.Equal("Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip=(16,16,928,20) clippedCommands=2 textClipSkipped=0 deviceRemoved=False passed=True", line);
+        Assert.Equal("Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip=(0,0,960,20) clippedCommands=2 textClipSkipped=0 deviceRemoved=False passed=True", line);
     }
 
     [Fact]

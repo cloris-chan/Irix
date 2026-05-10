@@ -264,8 +264,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(frame.HitTargets);
         Assert.Equal(new PixelRectangle(16, 60, 140, 40), frame.HitTargets[0].Bounds);
         Assert.Equal("Increment", frame.HitTargets[0].ActionId);
-        // Clip bounds from ScrollContainer (container starts at y=16, height=540-16=524)
-        Assert.Equal(new PixelRectangle(16, 16, 928, 524), frame.HitTargets[0].ClipBounds);
+        Assert.Equal(new PixelRectangle(0, 0, 960, 540), frame.HitTargets[0].ClipBounds);
 
         Assert.Equal("Count: 0", frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString());
         Assert.Equal("Increment", frame.Resources.Resolve(frame.Commands.Memory.Span[2].Text).ToString());
@@ -295,8 +294,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(frame.HitTargets);
         Assert.Equal(new PixelRectangle(16, 60, 140, 40), frame.HitTargets[0].Bounds);
         Assert.Equal("Increment", frame.HitTargets[0].ActionId);
-        // Clip bounds from ScrollContainer (container starts at y=16, height=540-16=524)
-        Assert.Equal(new PixelRectangle(16, 16, 928, 524), frame.HitTargets[0].ClipBounds);
+        Assert.Equal(new PixelRectangle(0, 0, 960, 540), frame.HitTargets[0].ClipBounds);
     }
 
     [Fact]
@@ -758,8 +756,8 @@ public sealed class WindowLayoutPipelineTests
     {
         var builder = new LayoutTreeBuilder();
         // 10 text items × (32 height + 12 spacing) = 440 content height
-        // Root implicit visible height = 100 - 16 = 84.
-        // MaxScrollY = 440 - 84 = 356
+        // Root implicit visible height uses the full viewport height.
+        // MaxScrollY = 440 - 100 = 340
         var children = new VirtualNode[10];
         for (var i = 0; i < 10; i++)
         {
@@ -776,12 +774,12 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.Single(result.ScrollDiagnostics);
         var diag = result.ScrollDiagnostics[0];
-        Assert.Equal(356, diag.MaxScrollY);
-        Assert.Equal(356, diag.ScrollY); // clamped from 9999 to 356
+        Assert.Equal(340, diag.MaxScrollY);
+        Assert.Equal(340, diag.ScrollY); // clamped from 9999 to 340
 
-        // First element should be scrolled up by 356
-        // Original y = 16, after scroll: 16 - 356 = -340
-        Assert.Equal(-340, result.Elements[0].Bounds.Y);
+        // First element should be scrolled up by 340
+        // Original y = 16, after scroll: 16 - 340 = -324
+        Assert.Equal(-324, result.Elements[0].Bounds.Y);
     }
 
     [Fact]
@@ -812,10 +810,10 @@ public sealed class WindowLayoutPipelineTests
     public void ScrollContainer_diagnostics_counts_visible_and_clipped_elements()
     {
         var builder = new LayoutTreeBuilder();
-        // Root implicit visible height = 50 - 16 = 34.
+        // Root implicit visible height uses the full viewport height.
         // Item height = 32 + 12 = 44 per item
-        // Item 0: y=16, bottom=48 → inside clip (16..50) ✓
-        // Item 1: y=60, bottom=92 → outside clip (16..50) ✗
+        // Item 0: y=16, bottom=48 -> inside clip (0..50)
+        // Item 1: y=60, bottom=92 -> outside clip (0..50)
         // Item 2+: also outside
         var children = new VirtualNode[5];
         for (var i = 0; i < 5; i++)
@@ -832,7 +830,7 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.Single(result.ScrollDiagnostics);
         var diag = result.ScrollDiagnostics[0];
-        Assert.Equal(1, diag.VisibleElementCount); // only item 0 fully visible
+        Assert.Equal(1, diag.VisibleElementCount); // only item 0 intersects the viewport
         Assert.Equal(4, diag.ClippedElementCount); // items 1-4 outside clip
         Assert.Equal(0, diag.ScrollY); // no scroll, content extends beyond clip
     }
@@ -1232,7 +1230,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void LayoutElement_clip_bounds_set_for_scroll_container_children()
+    public void Root_scroll_container_uses_viewport_clip_and_padded_content_start()
     {
         var builder = new LayoutTreeBuilder();
         var root = VirtualNodeFactory.ScrollContainer(1,
@@ -1244,17 +1242,36 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.Equal(2, result.Elements.Count);
 
-        // Both children should have non-default clip bounds (the container's visible area)
         var textClip = result.Elements[0].ClipBounds;
         var buttonClip = result.Elements[1].ClipBounds;
 
-        Assert.True(textClip.Width > 0);
-        Assert.True(textClip.Height > 0);
-        Assert.Equal(textClip, buttonClip); // same container → same clip
+        Assert.Equal(new PixelRectangle(0, 0, 960, 540), textClip);
+        Assert.Equal(textClip, buttonClip);
+        Assert.Equal(16, result.Elements[0].Bounds.Y);
+        Assert.Equal(60, result.Elements[1].Bounds.Y);
+    }
 
-        // Clip should be smaller than viewport (padding applied)
-        Assert.True(textClip.Width < viewport.Width);
-        Assert.True(textClip.Height < viewport.Height);
+    [Fact]
+    public void Root_scroll_container_scrolled_child_clips_at_viewport_top()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(30))],
+            children:
+            [
+                VirtualNodeFactory.Button("First", 2),
+                VirtualNodeFactory.Button("Second", 3)
+            ]);
+        var viewport = new PixelRectangle(0, 0, 200, 60);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Equal(new PixelRectangle(0, 0, 200, 60), result.Elements[0].ClipBounds);
+        Assert.Equal(-14, result.Elements[0].Bounds.Y);
+        Assert.True(result.Elements[0].Bounds.Y < result.Elements[0].ClipBounds.Y);
+        Assert.Equal(0, result.Elements[0].ClipBounds.Y);
     }
 
     [Fact]

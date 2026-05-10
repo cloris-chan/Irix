@@ -17,17 +17,17 @@ internal struct LayoutContext
 
     /// <summary>
     /// Implicit visible height for a container without a usable explicit Height.
-    /// Root containers fill the remaining viewport; nested containers keep a small
+    /// Root containers fill the viewport; nested containers keep a small
     /// measurable fallback when they start below the viewport.
     /// </summary>
-    public int ResolveImplicitVisibleHeight(int containerTop)
+    public int ResolveImplicitVisibleHeight(int contentTop)
     {
         if (Depth == 0)
         {
-            return Math.Max(ViewportHeight - containerTop, 0);
+            return Math.Max(ViewportHeight, 0);
         }
 
-        var remaining = Math.Max(ViewportHeight - containerTop, 0);
+        var remaining = Math.Max(ViewportHeight - contentTop, 0);
         return remaining > 0 ? remaining : Style.TextHeight * 3;
     }
 }
@@ -90,18 +90,22 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             {
                 var children = new List<LayoutTreeNode>();
                 var childDfsIndex = dfsIndex + 1;
-                var containerTop = cursorY;
+                var contentTop = cursorY;
+                var isRootContainer = ctx.Depth == 0;
+                var containerClipLeft = isRootContainer ? 0 : ctx.Style.HorizontalPadding;
+                var containerClipTop = isRootContainer ? 0 : contentTop;
+                var containerClipWidth = isRootContainer ? ctx.AvailableWidth + (ctx.Style.HorizontalPadding * 2) : ctx.AvailableWidth;
 
-                var implicitVisibleHeight = ctx.ResolveImplicitVisibleHeight(containerTop);
+                var implicitVisibleHeight = ctx.ResolveImplicitVisibleHeight(contentTop);
                 var explicitHeight = GetDimension(node, "Height", 0);
                 var containerVisibleHeight = explicitHeight > 0
                     ? Math.Min(explicitHeight, implicitVisibleHeight)
                     : implicitVisibleHeight;
 
                 var containerClip = new PixelRectangle(
-                    ctx.Style.HorizontalPadding,
-                    containerTop,
-                    ctx.AvailableWidth,
+                    containerClipLeft,
+                    containerClipTop,
+                    containerClipWidth,
                     containerVisibleHeight);
                 if (ctx.ClipBounds.Width > 0 && ctx.ClipBounds.Height > 0)
                 {
@@ -111,13 +115,13 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var childCtx = ctx;
                 childCtx.Depth = ctx.Depth + 1;
                 childCtx.ClipBounds = containerClip;
-                cursorY = containerTop;
+                cursorY = contentTop;
                 foreach (var child in node.Children)
                 {
                     children.AddRange(LayoutNode(child, childDfsIndex, ref cursorY, elements, ref childCtx));
                     childDfsIndex += CountVirtualNodes(child);
                 }
-                var contentHeight = Math.Max(cursorY - containerTop, 0);
+                var contentHeight = Math.Max(cursorY - contentTop, 0);
 
                 var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
                 var scrollY = Math.Clamp(GetDimension(node, "ScrollY", 0), 0, maxScrollY);
@@ -134,8 +138,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     for (var i = child.ElementStart; i < child.ElementStart + child.ElementCount; i++)
                     {
                         var el = elements[i];
-                        if (el.Bounds.Y + el.Bounds.Height <= containerTop
-                            || el.Bounds.Y >= containerTop + containerVisibleHeight)
+                        if (el.Bounds.Y + el.Bounds.Height <= containerClip.Y
+                            || el.Bounds.Y >= containerClip.Y + containerClip.Height)
                         {
                             clippedCount++;
                         }
@@ -155,7 +159,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     visibleCount,
                     clippedCount));
 
-                cursorY = containerTop + containerVisibleHeight + ctx.Style.ItemSpacing;
+                cursorY = contentTop + containerVisibleHeight + ctx.Style.ItemSpacing;
 
                 if (children.Count == 0)
                 {
