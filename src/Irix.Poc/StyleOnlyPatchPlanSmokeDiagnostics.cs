@@ -24,12 +24,10 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                ButtonAttributeBundle.Create("Increment", new ControlVisualState(IsHovered: false, IsPressed: false, IsFocused: false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                ButtonAttributeBundle.Create("Increment", new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         var retainedLayout = pipeline.LastLayoutResult;
@@ -55,12 +53,12 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
             VirtualNodeKind.ScrollContainer,
             key: 1,
             attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
-            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+            children: [VirtualNodeFactory.Button("Increment", 2, ControlActionAttributeAdapter.ToAttribute("Increment"))]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
             attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
-            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+            children: [VirtualNodeFactory.Button("Increment", 2, ControlActionAttributeAdapter.ToAttribute("Increment"))]);
 
         using var frame1 = pipeline.Build(root1, viewport);
         var retainedLayout = pipeline.LastLayoutResult;

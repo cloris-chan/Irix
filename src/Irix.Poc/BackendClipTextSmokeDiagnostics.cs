@@ -32,7 +32,7 @@ internal static class BackendClipTextSmokeDiagnostics
             attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(20))],
             children:
             [
-                VirtualNodeFactory.Button("PipelineClip", 1101, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("PipelineClip")))
+                VirtualNodeFactory.Button("PipelineClip", 1101, ControlActionAttributeAdapter.ToAttribute("PipelineClip"))
             ]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
         using var batch = pipeline.Build(root, viewport);

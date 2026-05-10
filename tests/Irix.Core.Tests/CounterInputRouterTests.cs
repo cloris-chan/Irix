@@ -325,6 +325,22 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void ButtonAttributeBundle_preserves_action_and_visual_state_wire_contract()
+    {
+        var actionId = nameof(CounterMessage.Increment);
+        var attributes = ButtonAttributeBundle.Create(
+            actionId,
+            new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: true));
+
+        Assert.Equal(4, attributes.Length);
+        Assert.Equal(actionId, GetTextAttribute(attributes, "ActionId"));
+        Assert.True(GetBooleanAttribute(attributes, "IsHovered"));
+        Assert.False(GetBooleanAttribute(attributes, "IsPressed"));
+        Assert.True(GetBooleanAttribute(attributes, "IsFocused"));
+        Assert.DoesNotContain(attributes, attribute => attribute.Name == "IsEnabled");
+    }
+
+    [Fact]
     public void CounterApplication_button_attributes_match_derived_visual_state_for_each_input_state()
     {
         var app = new CounterApplication();
@@ -996,6 +1012,19 @@ public sealed class CounterInputRouterTests
         }
 
         return false;
+    }
+
+    private static string? GetTextAttribute(VirtualNodeAttribute[] attributes, string name)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (attribute.Name == name)
+            {
+                return attribute.Value.Text;
+            }
+        }
+
+        return null;
     }
 
     private static bool ContainsTextStartingWith(VirtualNode node, string prefix)

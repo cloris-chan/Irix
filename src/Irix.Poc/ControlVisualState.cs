@@ -23,3 +23,18 @@ internal static class ControlVisualStateAttributeAdapter
             new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(state.IsFocused))
         ];
 }
+
+internal static class ControlActionAttributeAdapter
+{
+    internal static VirtualNodeAttribute ToAttribute(string actionId) =>
+        new("ActionId", AttributeValue.FromText(actionId));
+}
+
+internal static class ButtonAttributeBundle
+{
+    internal static VirtualNodeAttribute[] Create(string actionId, ControlVisualState visualState) =>
+        [
+            ControlActionAttributeAdapter.ToAttribute(actionId),
+            .. ControlVisualStateAttributeAdapter.ToAttributes(visualState)
+        ];
+}

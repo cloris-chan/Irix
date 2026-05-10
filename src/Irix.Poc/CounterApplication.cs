@@ -145,17 +145,10 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
     private static VirtualNode BuildButton(string label, ulong key, string actionId, OwnershipSnapshot ownership)
     {
         var visualState = ControlVisualStateProjection.Project(ownership, actionId);
-        var visualStateAttributes = ControlVisualStateAttributeAdapter.ToAttributes(visualState);
-        VirtualNodeAttribute[] attributes =
-        [
-            new VirtualNodeAttribute("ActionId", AttributeValue.FromText(actionId)),
-            .. visualStateAttributes
-        ];
-
         return VirtualNodeFactory.Button(
             label,
             key,
-            attributes);
+            ButtonAttributeBundle.Create(actionId, visualState));
     }
 
     private static VirtualNode[] BuildScrollProbeRows()
