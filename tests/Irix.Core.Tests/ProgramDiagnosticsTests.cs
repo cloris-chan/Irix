@@ -161,9 +161,9 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Diagnose_resize_viewport_outputs_source_of_truth_fields()
+    public void Diagnose_resize_viewport_snapshot_captures_source_of_truth_fields()
     {
-        var diagnostics = new Program.ResizeViewportDiagnostics(
+        var snapshot = new Program.ViewportDiagnosticsSnapshot(
             new PixelRectangle(10, 20, 929, 454),
             new PixelRectangle(10, 20, 929, 454),
             new PixelRectangle(10, 20, 929, 454),
@@ -176,7 +176,38 @@ public sealed class ProgramDiagnosticsTests
             DpiAwareness: "ProcessDefault",
             ScaleMode: "PhysicalPixelsV0");
 
-        var output = string.Join(Environment.NewLine, Program.BuildResizeViewportDiagnosticLines(diagnostics));
+        Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.WindowPhysicalBounds);
+        Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.RendererSwapchainBounds);
+        Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.TranslatorViewport);
+        Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.LayoutViewport);
+        Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.LastAppliedPendingResize);
+        Assert.Equal(80, snapshot.RenderCount);
+        Assert.Equal(80, snapshot.LayoutRebuildCount);
+        Assert.Equal("ViewportChanged", snapshot.LayoutRebuildReason);
+        Assert.True(snapshot.ViewportMatchesRenderer);
+        Assert.True(snapshot.LayoutUsesRendererSize);
+        Assert.Equal(1.25f, snapshot.ScreenScale);
+        Assert.Equal("ProcessDefault", snapshot.DpiAwareness);
+        Assert.Equal("PhysicalPixelsV0", snapshot.ScaleMode);
+    }
+
+    [Fact]
+    public void Diagnose_resize_viewport_outputs_source_of_truth_fields()
+    {
+        var snapshot = new Program.ViewportDiagnosticsSnapshot(
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            new PixelRectangle(10, 20, 929, 454),
+            RenderCount: 80,
+            LayoutRebuildCount: 80,
+            LayoutRebuildReason: "ViewportChanged",
+            ScreenScale: 1.25f,
+            DpiAwareness: "ProcessDefault",
+            ScaleMode: "PhysicalPixelsV0");
+
+        var output = string.Join(Environment.NewLine, Program.BuildResizeViewportDiagnosticLines(snapshot));
 
         Assert.Contains("windowPhysicalSize=929x454", output);
         Assert.Contains("rendererSwapchainSize=929x454", output);

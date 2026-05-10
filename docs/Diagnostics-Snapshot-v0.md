@@ -1,6 +1,6 @@
 # Diagnostics Snapshot v0 Design
 
-> 本文只定义 diagnostics snapshot 的 v0 数据边界，不写实现，不移动文件，不改变 `--diagnose*` / `--debug-ui` 的文本输出。当前 CLI formatter 和文本测试继续作为回归 contract。
+> 本文记录 diagnostics snapshot 的 v0 数据边界与已落地样板。不移动文件，不改变 `--diagnose*` / `--debug-ui` 的文本输出。当前 CLI formatter 和文本测试继续作为回归 contract。
 
 ## 1. 目标
 
@@ -12,7 +12,7 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 
 ## 2. 非目标
 
-- 不新增代码类型。
+- 不新增未选定的 snapshot 类型。
 - 不改 `Program.cs`。
 - 不迁出 scroll/input/clip/backend 文件。
 - 不改变 `ProgramDiagnosticsTests` 的现有文本断言。
@@ -21,14 +21,14 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 
 ## 3. Snapshot 类型清单
 
-| Snapshot | 所属能力 | v0 字段草案 | 当前文本入口 |
-|----------|----------|-------------|--------------|
-| `RenderingPipelineDiagnosticSnapshot` | render pipeline / compositor | render count, partial apply count, full apply count, empty frame count, partial hit rate, compositor dirty command ranges, backend dirty command ranges, dirty range alignment, layout command count, clipped command count, layout rebuild count/reason/classifications, hit target summary, scroll container diagnostics | `--diagnose` compositor + layout pipeline blocks, `--debug-ui` layout dirty row |
-| `BackendClipTextDiagnosticSnapshot` | backend clip / scissor / text clip | backend clip mode, clipped command count, empty intersection skipped count, scissor state change count, last effective scissor, last effective text clip, text clip skipped count, device removed, device error reason | `--diagnose` pipeline scissor/text clip, clip scissor, empty scissor, text clip blocks; `--debug-ui` clip mode row |
-| `ViewportDiagnosticsSnapshot` | viewport / resize physical v0 | window physical bounds, renderer swapchain bounds, translator viewport, layout viewport, last applied pending resize, render count, layout rebuild count/reason, viewport matches renderer, layout uses renderer size, scale mode, screen scale, DPI awareness, coordinate space | `--diagnose-resize`, `--debug-ui` viewport row |
-| `ScrollDiagnosticsSnapshot` | scroll pump / scroll model | dispatched frame count, render wait ms, last dt, drained pixels, last frame drained pixels, pending pixels, frame queued, tick loop running, applied scroll Y, target position, max scroll state | `--diagnose-scroll`, `--debug-ui` scroll row |
-| `InputDiagnosticsSnapshot` | input ownership / routed input | hovered target, focused target, pressed target, captured target, hover change count, pointer pressed, ownership events, mapped messages, button visual state lines, input dirty reason lines | `--diagnose-input`, `--debug-ui` input row |
-| `StyleOnlyPatchPlanDiagnosticSnapshot` | style-only plan smoke | case name, eligible, fallback reason, dirty element ranges, dirty command ranges, patched hit target count | `--diagnose` StyleOnly Patch Plan Diagnostics block |
+| Snapshot | 所属能力 | v0 字段草案 | 当前文本入口 | 状态 |
+|----------|----------|-------------|--------------|------|
+| `RenderingPipelineDiagnosticSnapshot` | render pipeline / compositor | render count, partial apply count, full apply count, empty frame count, partial hit rate, compositor dirty command ranges, backend dirty command ranges, dirty range alignment, layout command count, clipped command count, layout rebuild count/reason/classifications, hit target summary, scroll container diagnostics | `--diagnose` compositor + layout pipeline blocks, `--debug-ui` layout dirty row | Not started |
+| `BackendClipTextDiagnosticSnapshot` | backend clip / scissor / text clip | backend clip mode, clipped command count, empty intersection skipped count, scissor state change count, last effective scissor, last effective text clip, text clip skipped count, device removed, device error reason | `--diagnose` pipeline scissor/text clip, clip scissor, empty scissor, text clip blocks; `--debug-ui` clip mode row | Not started |
+| `ViewportDiagnosticsSnapshot` | viewport / resize physical v0 | window physical bounds, renderer swapchain bounds, translator viewport, layout viewport, last applied pending resize, render count, layout rebuild count/reason, viewport matches renderer, layout uses renderer size, scale mode, screen scale, DPI awareness, coordinate space | `--diagnose-resize`, `--debug-ui` viewport row | Implemented as second v0 snapshot sample; formatter consumes snapshot and CLI text is unchanged. |
+| `ScrollDiagnosticsSnapshot` | scroll pump / scroll model | dispatched frame count, render wait ms, last dt, drained pixels, last frame drained pixels, pending pixels, frame queued, tick loop running, applied scroll Y, target position, max scroll state | `--diagnose-scroll`, `--debug-ui` scroll row | Not started |
+| `InputDiagnosticsSnapshot` | input ownership / routed input | hovered target, focused target, pressed target, captured target, hover change count, pointer pressed, ownership events, mapped messages, button visual state lines, input dirty reason lines | `--diagnose-input`, `--debug-ui` input row | Not started |
+| `StyleOnlyPatchPlanDiagnosticSnapshot` | style-only plan smoke | case name, eligible, fallback reason, dirty element ranges, dirty command ranges, patched hit target count | `--diagnose` StyleOnly Patch Plan Diagnostics block | Implemented as first v0 snapshot sample; smoke builds snapshots before formatting. |
 
 ## 4. Provider 边界
 
@@ -51,7 +51,7 @@ Diagnostics snapshot v0 的目标是在现有 stdout diagnostics 和未来统一
 
 ## 6. 最小实现候选
 
-Recommended first candidate: `StyleOnlyPatchPlanDiagnosticSnapshot`.
+Implemented first sample: `StyleOnlyPatchPlanDiagnosticSnapshot`.
 
 Reasons:
 
@@ -61,7 +61,7 @@ Reasons:
 - It has a small formatter surface and existing tests around `BuildStyleOnlyPatchPlanDiagnosticLine` and smoke lines.
 - It keeps consolidation away from scroll/input/clip/backend migration risk.
 
-Second candidate: `ViewportDiagnosticsSnapshot`, but only after the first snapshot path proves the pattern. Viewport is still low risk compared with input/scroll, but it crosses window, renderer, translator, and resize apply state, so it has more ownership edges than StyleOnly plan.
+Implemented second sample: `ViewportDiagnosticsSnapshot`. It reuses the stable resize diagnostic field shape and keeps `RunResizeDiagnosticMode` intact; only the formatter data layer changed. Input, scroll, clip, and backend diagnostics remain untouched.
 
 ## 7. 暂不迁出文件
 
@@ -75,7 +75,7 @@ Snapshot v0 does not move files. These files stay where they are during this pre
 - `src/Irix.Poc/D3D12DrawingBackend.cs`
 - `src/Irix.Rendering/RenderPipeline.cs`
 
-The first implementation step, when it happens, should add snapshot data next to the current owner and adapt existing formatters without changing observable output.
+Further implementation steps should add snapshot data next to the current owner and adapt existing formatters without changing observable output.
 
 ## 8. Completion Checklist
 
@@ -84,5 +84,5 @@ The first implementation step, when it happens, should add snapshot data next to
 | Define snapshot v0 types | Covered by the snapshot type table. |
 | Set provider boundaries | Covered by the producer/adapter/consumer/static field table. |
 | Keep CLI text frozen | Covered by CLI freeze rules. |
-| Pick minimum implementation candidate | `StyleOnlyPatchPlanDiagnosticSnapshot` is recommended first; `ViewportDiagnosticsSnapshot` is second. |
+| Pick minimum implementation candidate | `StyleOnlyPatchPlanDiagnosticSnapshot` is implemented first; `ViewportDiagnosticsSnapshot` is implemented second. |
 | Do not move files | Covered by the no-move list. |

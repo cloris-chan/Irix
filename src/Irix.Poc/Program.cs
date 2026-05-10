@@ -267,7 +267,7 @@ internal static class Program
         return $"Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(effectiveClip)} clippedCommands={clippedCommandCount} textClipSkipped={textClipSkippedCount} deviceRemoved={deviceRemoved} passed={passed}";
     }
 
-    internal readonly record struct ResizeViewportDiagnostics(
+    internal readonly record struct ViewportDiagnosticsSnapshot(
         PixelRectangle WindowPhysicalBounds,
         PixelRectangle RendererSwapchainBounds,
         PixelRectangle TranslatorViewport,
@@ -285,22 +285,22 @@ internal static class Program
         public bool LayoutUsesRendererSize => LayoutViewport.Width == RendererSwapchainBounds.Width && LayoutViewport.Height == RendererSwapchainBounds.Height;
     }
 
-    internal static string[] BuildResizeViewportDiagnosticLines(ResizeViewportDiagnostics diagnostics)
+    internal static string[] BuildResizeViewportDiagnosticLines(ViewportDiagnosticsSnapshot snapshot)
     {
         return [
-            $"windowPhysicalSize={FormatSize(diagnostics.WindowPhysicalBounds)}",
-            $"rendererSwapchainSize={FormatSize(diagnostics.RendererSwapchainBounds)}",
-            $"translatorViewportSize={FormatSize(diagnostics.TranslatorViewport)}",
-            $"layoutViewportSize={FormatSize(diagnostics.LayoutViewport)}",
-            $"lastAppliedPendingResize={FormatSize(diagnostics.LastAppliedPendingResize)}",
-            $"renderCount={diagnostics.RenderCount}",
-            $"layoutRebuildCount={diagnostics.LayoutRebuildCount}",
-            $"layoutRebuildReason={diagnostics.LayoutRebuildReason}",
-            $"viewportMatchesRenderer={diagnostics.ViewportMatchesRenderer}",
-            $"layoutUsesRendererSize={diagnostics.LayoutUsesRendererSize}",
-            $"scaleMode={diagnostics.ScaleMode}",
-            $"screenScale={diagnostics.ScreenScale:0.###}",
-            $"dpiAwareness={diagnostics.DpiAwareness}",
+            $"windowPhysicalSize={FormatSize(snapshot.WindowPhysicalBounds)}",
+            $"rendererSwapchainSize={FormatSize(snapshot.RendererSwapchainBounds)}",
+            $"translatorViewportSize={FormatSize(snapshot.TranslatorViewport)}",
+            $"layoutViewportSize={FormatSize(snapshot.LayoutViewport)}",
+            $"lastAppliedPendingResize={FormatSize(snapshot.LastAppliedPendingResize)}",
+            $"renderCount={snapshot.RenderCount}",
+            $"layoutRebuildCount={snapshot.LayoutRebuildCount}",
+            $"layoutRebuildReason={snapshot.LayoutRebuildReason}",
+            $"viewportMatchesRenderer={snapshot.ViewportMatchesRenderer}",
+            $"layoutUsesRendererSize={snapshot.LayoutUsesRendererSize}",
+            $"scaleMode={snapshot.ScaleMode}",
+            $"screenScale={snapshot.ScreenScale:0.###}",
+            $"dpiAwareness={snapshot.DpiAwareness}",
             "coordinateSpace=PhysicalPixels logicalCoordinates=False"
         ];
     }
@@ -1158,7 +1158,7 @@ internal static class Program
 
         var windowBounds = window.Region.PhysicalBounds;
         var rendererBounds = new PixelRectangle(windowBounds.X, windowBounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
-        var diagnostics = new ResizeViewportDiagnostics(
+        var snapshot = new ViewportDiagnosticsSnapshot(
             windowBounds,
             rendererBounds,
             translator.LastViewport,
@@ -1175,7 +1175,7 @@ internal static class Program
         Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");
         Console.WriteLine($"Device error reason: {d3d12Renderer.DeviceErrorReason ?? "(none)"}");
         Console.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
-        foreach (var line in BuildResizeViewportDiagnosticLines(diagnostics))
+        foreach (var line in BuildResizeViewportDiagnosticLines(snapshot))
         {
             Console.WriteLine(line);
         }
