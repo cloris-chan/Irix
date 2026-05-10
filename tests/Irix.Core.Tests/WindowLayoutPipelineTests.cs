@@ -516,7 +516,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void WindowDrawCommandTranslator_synthetic_resize_uses_renderer_size_for_layout_viewport()
+    public void WindowDrawCommandTranslator_synthetic_resize_rebuilds_only_when_viewport_size_changes()
     {
         var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(40, 50, 960, 540)));
         var rendererWidth = 960;
@@ -573,6 +573,30 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(expectedViewport, translator.LastLayoutViewport);
         Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
         Assert.Equal(resizedFrame.Commands.Memory.Span[0].Rect, duplicateFrame.Commands.Memory.Span[0].Rect);
+
+        for (var i = 0; i < 3; i++)
+        {
+            RequestResize(777, 333);
+            using var sameSizeRequest = PatchBatch.CreateRenderRequest();
+            using var sameSizeFrame = translator.Translate(sameSizeRequest);
+
+            Assert.Equal(expectedViewport, translator.LastViewport);
+            Assert.Equal(expectedViewport, translator.LastLayoutViewport);
+            Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+            Assert.Equal(resizedFrame.Commands.Memory.Span[0].Rect, sameSizeFrame.Commands.Memory.Span[0].Rect);
+        }
+
+        RequestResize(880, 360);
+        window.Region = new ScreenRegion(0, new PixelRectangle(40, 50, 880, 360));
+        using var secondResizeRequest = PatchBatch.CreateRenderRequest();
+        using var secondResizedFrame = translator.Translate(secondResizeRequest);
+
+        var secondExpectedViewport = new PixelRectangle(40, 50, 880, 360);
+        Assert.Equal(secondExpectedViewport, lastAppliedPendingResize);
+        Assert.Equal(secondExpectedViewport, translator.LastViewport);
+        Assert.Equal(secondExpectedViewport, translator.LastLayoutViewport);
+        Assert.Equal(initialRebuildCount + 2, translator.LayoutRebuildCount);
+        Assert.Equal(848, secondResizedFrame.Commands.Memory.Span[0].Rect.Width);
 
         void RequestResize(int width, int height)
         {

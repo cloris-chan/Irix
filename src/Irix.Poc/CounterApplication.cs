@@ -1,8 +1,11 @@
+using Irix.Platform;
 using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed record CounterModel(int Count, ScrollState Scroll, OwnershipSnapshot InputOwnership);
+internal readonly record struct CounterViewportDiagnostics(PixelRectangle RendererViewport, PixelRectangle LayoutViewport, string ScaleMode);
+
+internal sealed record CounterModel(int Count, ScrollState Scroll, OwnershipSnapshot InputOwnership, CounterViewportDiagnostics ViewportDiagnostics);
 
 internal abstract record CounterMessage
 {
@@ -23,14 +26,17 @@ internal abstract record CounterMessage
 
     public sealed record InputVisualStateChanged(OwnershipSnapshot Snapshot) : CounterMessage;
 
+    public sealed record ViewportDiagnosticsChanged(CounterViewportDiagnostics Diagnostics) : CounterMessage;
+
     public sealed record RoutedInput(CounterMessage? Action, OwnershipSnapshot Snapshot) : CounterMessage;
 }
 
-internal sealed class CounterApplication(bool showDiagnostics = false) : IApplication<CounterModel, CounterMessage>
+internal sealed class CounterApplication(bool showDiagnostics = false, CounterViewportDiagnostics initialViewportDiagnostics = default) : IApplication<CounterModel, CounterMessage>
 {
     private readonly bool _showDiagnostics = showDiagnostics;
+    private readonly CounterViewportDiagnostics _initialViewportDiagnostics = initialViewportDiagnostics;
 
-    public CounterModel Initialize() => new(0, ScrollState.Default, default);
+    public CounterModel Initialize() => new(0, ScrollState.Default, default, _initialViewportDiagnostics);
 
     public UpdateResult<CounterModel, CounterMessage> Update(CounterModel model, CounterMessage message) =>
         message switch
@@ -56,6 +62,10 @@ internal sealed class CounterApplication(bool showDiagnostics = false) : IApplic
             {
                 InputOwnership = input.Snapshot,
             }),
+            CounterMessage.ViewportDiagnosticsChanged viewport => new UpdateResult<CounterModel, CounterMessage>(model with
+            {
+                ViewportDiagnostics = viewport.Diagnostics,
+            }),
             CounterMessage.RoutedInput input => ApplyRoutedInput(model, input),
             _ => throw new NotSupportedException($"Unsupported message type: {message.GetType().Name}")
         };
@@ -65,7 +75,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false) : IApplic
         var scrollY = ScrollController.GetScrollY(model.Scroll);
         var inputOwnership = model.InputOwnership;
         var headerRows = _showDiagnostics
-            ? BuildDiagnosticHeaderRows(model.Count, scrollY, model.Scroll, Program.DiagPendingPx, inputOwnership)
+            ? BuildDiagnosticHeaderRows(model.Count, scrollY, model.Scroll, Program.DiagPendingPx, inputOwnership, model.ViewportDiagnostics)
             : [
                 VirtualNodeFactory.Text($"Count: {model.Count}", 2),
                 VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4)
@@ -87,7 +97,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false) : IApplic
         return new VirtualNodeTree(root);
     }
 
-    private static VirtualNode[] BuildDiagnosticHeaderRows(int count, int scrollY, ScrollState scroll, double pendingPx, OwnershipSnapshot inputOwnership)
+    private static VirtualNode[] BuildDiagnosticHeaderRows(int count, int scrollY, ScrollState scroll, double pendingPx, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics)
     {
         var maxScrollText = !scroll.HasMaxScrollY
             ? "unknown"
@@ -100,7 +110,8 @@ internal sealed class CounterApplication(bool showDiagnostics = false) : IApplic
             VirtualNodeFactory.Text($"ScrollY: applied={scrollY} target={scroll.TargetPosition:F1} pos={scroll.Position:F2} max={maxScrollText} acc={scroll.Accumulator:F3} anim={scroll.IsAnimating} pendingPx={pendingPx:F0} drained={Program.DiagScrollDrainedPixels:F0} frames={Program.DiagScrollDispatchedFrameCount} waitMs={Program.DiagScrollRenderWaitMs:F1} dt={Program.DiagScrollLastDt:F3} frameQueued={Program.DiagScrollFrameQueued} tickLoop={Program.DiagTickLoopRunning}", 3),
             VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
             VirtualNodeFactory.Text($"Input: hover={FormatTarget(inputOwnership.HoveredTarget)} focus={FormatTarget(inputOwnership.FocusedTarget)} pressed={FormatTarget(inputOwnership.PressedTarget)} capture={FormatTarget(inputOwnership.CapturedTarget)} hoverChanges={inputOwnership.HoverChangeCount}", 9),
-            VirtualNodeFactory.Text($"ClipMode: {Program.DiagBackendClipMode}", 10)
+            VirtualNodeFactory.Text($"ClipMode: {Program.DiagBackendClipMode}", 10),
+            VirtualNodeFactory.Text($"Viewport: renderer={FormatSize(viewportDiagnostics.RendererViewport)} layout={FormatSize(viewportDiagnostics.LayoutViewport)} scaleMode={viewportDiagnostics.ScaleMode}", 11)
         ];
     }
 
@@ -138,6 +149,11 @@ internal sealed class CounterApplication(bool showDiagnostics = false) : IApplic
     private static string FormatTarget(string? target)
     {
         return string.IsNullOrWhiteSpace(target) ? "-" : target;
+    }
+
+    private static string FormatSize(PixelRectangle rectangle)
+    {
+        return $"{rectangle.Width}x{rectangle.Height}";
     }
 
     private static UpdateResult<CounterModel, CounterMessage> ApplyRoutedInput(CounterModel model, CounterMessage.RoutedInput input)

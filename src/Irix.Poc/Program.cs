@@ -8,6 +8,8 @@ namespace Irix.Poc;
 
 internal static class Program
 {
+    private const string ScaleModePhysicalPixelsV0 = "PhysicalPixelsV0";
+
     public static async Task Main(string[] args)
     {
         if (args.Contains("--diagnose"))
@@ -59,9 +61,9 @@ internal static class Program
         var compositor = args.Contains("--console")
             ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
             : (ICompositor)d3d12Compositor;
-        await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
         var showDiagnostics = args.Contains("--debug-ui");
-        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics), compositorLoop);
+        await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator)), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
         _scrollFramePump = scrollFramePump;
         var inputOwnershipState = new InputOwnershipState();
@@ -81,7 +83,14 @@ internal static class Program
         window.SizeChanged += (w, h) =>
         {
             d3d12Renderer.Resize(w, h);
-            _ = compositorLoop.RequestRenderAsync();
+            if (showDiagnostics)
+            {
+                _ = RequestResizeRenderAndRefreshDiagnosticsAsync();
+            }
+            else
+            {
+                _ = compositorLoop.RequestRenderAsync();
+            }
         };
         using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
 
@@ -131,8 +140,34 @@ internal static class Program
             Console.WriteLine($"Topology changed. Screen count: {args.Screens.Count}");
         }
 
+        async Task RequestResizeRenderAndRefreshDiagnosticsAsync()
+        {
+            try
+            {
+                await compositorLoop.RequestRenderAndWaitAsync();
+                runtime.Dispatch(new CounterMessage.ViewportDiagnosticsChanged(CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator)));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }
+
         platformHost.TopologyChanged -= OnTopologyChanged;
     }
+
+    private static CounterViewportDiagnostics CreateViewportDiagnostics(INativeWindow window, D3D12Renderer renderer, WindowDrawCommandTranslator? translator)
+    {
+        var bounds = window.Region.PhysicalBounds;
+        var rendererViewport = new PixelRectangle(bounds.X, bounds.Y, renderer.Width, renderer.Height);
+        var layoutViewport = translator?.LastLayoutViewport ?? rendererViewport;
+        if (layoutViewport.Width <= 0 || layoutViewport.Height <= 0)
+        {
+            layoutViewport = rendererViewport;
+        }
+
+        return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ScaleModePhysicalPixelsV0);
+    }
+
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
     {
         const int windowWidth = 960;
@@ -177,6 +212,7 @@ internal static class Program
         PixelRectangle LayoutViewport,
         PixelRectangle LastAppliedPendingResize,
         long RenderCount,
+        long LayoutRebuildCount,
         float ScreenScale,
         string DpiAwareness,
         string ScaleMode)
@@ -195,6 +231,7 @@ internal static class Program
             $"layoutViewportSize={FormatSize(diagnostics.LayoutViewport)}",
             $"lastAppliedPendingResize={FormatSize(diagnostics.LastAppliedPendingResize)}",
             $"renderCount={diagnostics.RenderCount}",
+            $"layoutRebuildCount={diagnostics.LayoutRebuildCount}",
             $"viewportMatchesRenderer={diagnostics.ViewportMatchesRenderer}",
             $"layoutUsesRendererSize={diagnostics.LayoutUsesRendererSize}",
             $"scaleMode={diagnostics.ScaleMode}",
@@ -899,9 +936,10 @@ internal static class Program
             translator.LastLayoutViewport,
             lastAppliedPendingResize,
             compositor.RenderCount,
+            translator.LayoutRebuildCount,
             screen.DpiScale,
             "ProcessDefault",
-            "PhysicalPixelsV0");
+            ScaleModePhysicalPixelsV0);
 
         Console.WriteLine("=== D3D12 Resize Diagnostics ===");
         Console.WriteLine($"Device removed: {d3d12Renderer.IsDeviceRemoved}");

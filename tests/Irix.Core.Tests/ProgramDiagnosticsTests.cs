@@ -124,6 +124,7 @@ public sealed class ProgramDiagnosticsTests
             new PixelRectangle(10, 20, 929, 454),
             new PixelRectangle(10, 20, 929, 454),
             RenderCount: 80,
+            LayoutRebuildCount: 80,
             ScreenScale: 1.25f,
             DpiAwareness: "ProcessDefault",
             ScaleMode: "PhysicalPixelsV0");
@@ -136,11 +137,29 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("layoutViewportSize=929x454", output);
         Assert.Contains("lastAppliedPendingResize=929x454", output);
         Assert.Contains("renderCount=80", output);
+        Assert.Contains("layoutRebuildCount=80", output);
         Assert.Contains("viewportMatchesRenderer=True", output);
         Assert.Contains("layoutUsesRendererSize=True", output);
         Assert.Contains("scaleMode=PhysicalPixelsV0", output);
         Assert.Contains("screenScale=1.25", output);
         Assert.Contains("dpiAwareness=ProcessDefault", output);
         Assert.Contains("coordinateSpace=PhysicalPixels logicalCoordinates=False", output);
+    }
+
+    [Fact]
+    public void Debug_ui_outputs_viewport_diagnostic_row()
+    {
+        var app = new CounterApplication(
+            showDiagnostics: true,
+            new CounterViewportDiagnostics(
+                new PixelRectangle(0, 0, 929, 454),
+                new PixelRectangle(0, 0, 929, 454),
+                "PhysicalPixelsV0"));
+
+        var tree = app.BuildView(app.Initialize());
+
+        Assert.Contains(tree.Root.Children, node =>
+            node.Kind == VirtualNodeKind.Text
+            && node.Content.Text == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0");
     }
 }
