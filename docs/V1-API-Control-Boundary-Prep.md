@@ -1,11 +1,13 @@
 # v1 API / Control Boundary Prep
 
 > Design-only boundary inventory for the next line after Program diagnostics runner split. This document does not move code, change APIs, enable StyleOnly fast-path, or introduce a unified diagnostics channel.
+> Status: design inventory complete and regression-only. The next line is implementation prep for `ControlVisualState projection helper`, not another documentation split.
 
 ## 1. Scope
 
 Current status:
 
+- This design inventory is complete and sealed as regression-only.
 - Program diagnostics runner split is complete and regression-only.
 - Diagnostics snapshot v0 and debug UI bridge v0 remain regression-only.
 - Unified diagnostics channel / event bus / registry remains postponed.
@@ -25,6 +27,7 @@ Non-goals:
 - Do not rename public APIs.
 - Do not change `VirtualNode`, layout, input, window, renderer, or compositor behavior.
 - Do not introduce new abstractions just to tidy file placement.
+- Do not continue splitting this document line; use it as the closed inventory for the next code line.
 
 ## 2. Controls Boundary
 
@@ -289,14 +292,37 @@ Promotion checklist:
 
 Migration rule: do not move `WindowDrawCommandTranslator` until every blocked gate has either a concrete contract or an explicit decision to keep it sample-owned.
 
-## 9. Prep Checklist
+## 9. Implementation Candidates
 
-No code moves in this line. The next useful work is design inventory only:
+Design inventory is complete. The next work should be a small implementation line, with all broader extraction candidates held behind explicit gates.
+
+| Priority | Candidate | Scope | Decision |
+|----------|-----------|-------|----------|
+| P0 next code line | `ControlVisualState projection helper` | Introduce a small helper that projects existing input ownership facts into the current `IsHovered`, `IsPressed`, and `IsFocused` attributes. Keep the existing attributes and behavior unchanged. | Start here. This is the lowest-risk implementation prep because it clarifies Button ownership without moving runtime/input/window/backend files or changing public APIs. |
+| P1 postponed | Typed identity wrappers | Future role-specific wrappers for `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId`. | Do not implement yet. Keep current string ids until the projection helper proves the control boundary. |
+| P1 postponed | Scroll feedback vocabulary | Future typed metrics/feedback names for scroll container id, viewport extent, content extent, and max scroll. | Do not extract scroll yet. Vocabulary must precede settings provider, pure controller, state ownership, and pump/scheduler work. |
+| P2 postponed | Translator options / feedback records | Future contract records for style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and local diagnostics. | Do not promote `WindowDrawCommandTranslator` yet. Use the promotion checklist as the migration gate. |
+| Parked | `StyleOnly fast-path implementation` | Future render pipeline optimization. | Remains postponed; no `RenderPipeline.Build` behavior change in this line. |
+
+Next implementation line:
+
+1. Build `ControlVisualState projection helper` as a low-risk code line.
+2. Keep existing `IsHovered`, `IsPressed`, and `IsFocused` attributes as the compatibility output.
+3. Do not introduce typed id wrappers in that first implementation.
+4. Do not extract scroll primitives.
+5. Do not promote `WindowDrawCommandTranslator`.
+6. Do not enable StyleOnly fast-path.
+
+## 10. Prep Checklist
+
+No code moves in this line. The design inventory is complete and regression-only:
 
 | Area | Prep question | Current answer |
 |------|---------------|----------------|
 | Controls | Which node kinds are framework primitives? | `Text`, `Rectangle`, `Button`, and `ScrollContainer` are current primitives. Their factory methods are convenience constructors, not final controls APIs. |
 | Controls | Which parts are Counter-specific? | Action-id values, ownership-derived visual state, sample rows, debug rows, and Counter messages. |
+| Boundary prep | Is this document line still active design work? | No. Design inventory is complete; only regression repairs should touch this line. |
+| Next implementation | What is the first code line? | `ControlVisualState projection helper`, preserving existing visual-state attributes and behavior. |
 | Target/action ids | Which ids must stay distinct? | Hit-test target, control action, focus target, pointer capture target, and app command id are separate design concepts. Current strings remain unchanged. |
 | Typed identity | What representation is preferred later? | Role-specific string wrappers, preferably `readonly record struct`-style value types. Do not start with bare strings or a shared generic id as the promoted API shape. |
 | Visual state | Who owns `IsHovered` / `IsPressed` / `IsFocused`? | They are current rendering attributes whose values are projected from input ownership state. Future controls may own a typed visual-state projection. |
@@ -314,9 +340,11 @@ No code moves in this line. The next useful work is design inventory only:
 
 Regression-only rules remain in force:
 
+- Treat this document as sealed design inventory; do not continue scope discovery here unless a regression in the documented boundary is found.
 - Do not change CLI diagnostics text.
 - Do not change debug UI rows.
 - Do not enable StyleOnly fast-path.
 - Do not move runtime, renderer, input, or backend files during this prep line.
 - Do not rename current target/action attributes or public APIs during this prep line.
+- Do not implement typed id wrappers, scroll extraction, or translator promotion as part of the first implementation line.
 - Do not introduce unified diagnostics channel / event bus / registry.

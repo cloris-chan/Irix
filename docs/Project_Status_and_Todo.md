@@ -43,11 +43,13 @@
 | Viewport / resize physical v0 | 只修 source-of-truth / resize regression；不引入 per-monitor DPI 切换、logical layout、multi-window scale 策略 |
 | Layout dirty diagnostics v1 | 只修现有输出或分类 regression；不扩诊断面，不做 partial layout，不跳过 `StyleOnly` layout |
 | StyleOnly plan diagnostics | 只修 formatter/smoke regression；不继续扩 formatter，不接入 `RenderPipeline.Build`，不替换 retained frame apply |
+| V1 API/control boundary prep | design inventory complete / regression-only；下一条线转为 `ControlVisualState projection helper` 低风险实现 prep |
 
 ### 下一步候选
 
-- 当前选择：`v1 API/control boundary prep`，入口文档是 [V1-API-Control-Boundary-Prep.md](V1-API-Control-Boundary-Prep.md)，用于盘点 controls、input、window glue 边界并为 ownership 和 API 命名收敛做准备。
-- 暂缓：`StyleOnly fast-path implementation` 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point；不接入 `RenderPipeline.Build`，不启用新行为。
+- 当前选择：`ControlVisualState projection helper` 低风险实现 prep，从 [V1-API-Control-Boundary-Prep.md](V1-API-Control-Boundary-Prep.md) 已封版的 implementation candidates 开始；不再继续文档拆分。
+- 已封版：`v1 API/control boundary prep` 为 design inventory complete / regression-only；只修 boundary 文档 regression。
+- 暂缓：typed id wrappers、scroll extraction、translator promotion、`StyleOnly fast-path implementation`；StyleOnly 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point，不接入 `RenderPipeline.Build`，不启用新行为。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 
 ---
