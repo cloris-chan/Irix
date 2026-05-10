@@ -238,7 +238,15 @@ Scroll extraction preconditions:
 | 4 | `ScrollState` | Scroll container identity, app storage ownership, and default/empty state semantics are named. | State extraction would force a framework decision about where per-container scroll state lives before the model boundary is ready. |
 | 5 | `ScrollFramePump` or scheduler | Frame request/cancellation semantics are independent from `CounterMessage.ScrollFrame`. | The pump would become runtime infrastructure while still dispatching Counter-specific messages. |
 
-Recommended order: extract vocabulary and feedback first, then settings, then pure controller logic, then state ownership, and only then scheduler/pump behavior. Until those gates are met, keep `ScrollController`, `ScrollState`, and `ScrollFramePump` together in `Irix.Poc`.
+Extraction order is fixed for future work:
+
+1. Define metrics / feedback vocabulary.
+2. Extract settings provider.
+3. Extract pure controller logic.
+4. Decide state ownership.
+5. Extract pump / scheduler last.
+
+Until those gates are met, keep `ScrollController`, `ScrollState`, and `ScrollFramePump` together in `Irix.Poc`.
 
 ## 8. Window Translator Contract Draft
 
@@ -297,7 +305,7 @@ No code moves in this line. The next useful work is design inventory only:
 | Input | What is Counter-specific today? | Routing raw input to Counter messages and wrapping visual-state updates into the Counter model. |
 | Scroll | What does `ScrollY` own? | `ScrollY` is the layout/render offset attribute, not scroll animation state. |
 | Scroll | What remains outside the node primitive? | `ScrollState`, pump scheduling, system settings, metrics feedback, and app-level scroll storage remain separately owned until extraction contracts are explicit. |
-| Scroll extraction | What order prevents premature movement? | Define feedback/metrics vocabulary first, then settings, pure controller, state ownership, and scheduler/pump last. |
+| Scroll extraction | What order prevents premature movement? | Define metrics / feedback vocabulary first; settings provider second; pure controller third; state ownership fourth; pump / scheduler last. |
 | Window glue | What is platform-owned? | `IPlatformHost` / `INativeWindow` abstractions and `WindowsPlatformHost` implementation. |
 | Window glue | What is bridge-owned later? | A future version of `WindowDrawCommandTranslator`, once style, viewport, retained-tree, and post-frame contracts are named. |
 | Window translator | What must be injected before promotion? | Style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and scroll metrics. |
