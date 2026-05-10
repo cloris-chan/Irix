@@ -269,6 +269,10 @@ internal static class Program
     }
 
     internal readonly record struct RenderingPipelineDiagnosticSnapshot(
+        long RenderCount,
+        long PartialApplyCount,
+        long FullApplyCount,
+        long EmptyFrameCount,
         IReadOnlyList<(int Start, int Count)> CompositorDirtyCommandRanges,
         IReadOnlyList<(int Start, int Count)> BackendDirtyCommandRanges,
         int BackendClippedCommandCount,
@@ -276,8 +280,12 @@ internal static class Program
         int LayoutClippedCommandCount,
         long LayoutRebuildCount,
         LayoutRebuildReason LayoutRebuildReason,
-        IReadOnlyList<LayoutDirtyClassification> LayoutDirtyClassifications)
+        IReadOnlyList<LayoutDirtyClassification> LayoutDirtyClassifications,
+        IReadOnlyList<HitTestTarget> HitTargets,
+        IReadOnlyList<ScrollContainerDiag> ScrollContainerDiagnostics)
     {
+        public double PartialHitRate => RenderCount > 0 ? 100.0 * PartialApplyCount / RenderCount : 0;
+
         public bool DirtyRangesAligned => CompositorDirtyCommandRanges.Count == BackendDirtyCommandRanges.Count &&
             CompositorDirtyCommandRanges.Zip(BackendDirtyCommandRanges).All(pair => pair.First == pair.Second);
     }
@@ -322,9 +330,16 @@ internal static class Program
         return $"Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(snapshot.LastEffectiveTextClip)} clippedCommands={snapshot.ClippedCommandCount} textClipSkipped={snapshot.TextClipSkippedCount} deviceRemoved={snapshot.DeviceRemoved} passed={passed}";
     }
 
-    internal static string[] BuildRenderingPipelineDirtyRangeDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)
+    internal static string[] BuildRenderingPipelineCompositorDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)
     {
-        var lines = new List<string>();
+        var lines = new List<string>
+        {
+            $"Render count: {snapshot.RenderCount}",
+            $"Partial apply: {snapshot.PartialApplyCount}",
+            $"Full apply: {snapshot.FullApplyCount}",
+            $"Empty frames: {snapshot.EmptyFrameCount}",
+            $"Partial hit rate: {snapshot.PartialHitRate:F1}%"
+        };
         AppendDirtyCommandRangeDiagnosticLines(lines, "Compositor", snapshot.CompositorDirtyCommandRanges);
         AppendDirtyCommandRangeDiagnosticLines(lines, "Backend", snapshot.BackendDirtyCommandRanges);
         lines.Add($"Dirty ranges aligned: {snapshot.DirtyRangesAligned}");
@@ -334,13 +349,24 @@ internal static class Program
 
     internal static string[] BuildRenderingPipelineLayoutDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)
     {
-        return [
+        var lines = new List<string>
+        {
             $"Layout commands: {snapshot.LayoutCommandCount}",
             $"Layout clipped commands: {snapshot.LayoutClippedCommandCount}",
             $"Layout rebuild count: {snapshot.LayoutRebuildCount}",
             $"Layout rebuild reason: {snapshot.LayoutRebuildReason}",
-            $"Layout dirty classifications: {FormatLayoutDirtyClassifications(snapshot.LayoutDirtyClassifications)}"
-        ];
+            $"Layout dirty classifications: {FormatLayoutDirtyClassifications(snapshot.LayoutDirtyClassifications)}",
+            $"Layout hit targets: {snapshot.HitTargets.Count}"
+        };
+        foreach (var hitTarget in snapshot.HitTargets)
+        {
+            lines.Add($"  Hit target: {hitTarget.ActionId} bounds=({hitTarget.Bounds.X},{hitTarget.Bounds.Y},{hitTarget.Bounds.Width},{hitTarget.Bounds.Height}) clip=({hitTarget.ClipBounds.X},{hitTarget.ClipBounds.Y},{hitTarget.ClipBounds.Width},{hitTarget.ClipBounds.Height})");
+        }
+        foreach (var scrollDiagnostics in snapshot.ScrollContainerDiagnostics)
+        {
+            lines.Add($"  ScrollContainer[{scrollDiagnostics.DfsIndex}]: visible={scrollDiagnostics.VisibleHeight} content={scrollDiagnostics.ContentHeight} scrollY={scrollDiagnostics.ScrollY} maxScrollY={scrollDiagnostics.MaxScrollY} elements={scrollDiagnostics.VisibleElementCount}/{scrollDiagnostics.VisibleElementCount + scrollDiagnostics.ClippedElementCount} visible");
+        }
+        return [.. lines];
     }
 
     internal readonly record struct ViewportDiagnosticsSnapshot(
@@ -378,6 +404,34 @@ internal static class Program
             $"screenScale={snapshot.ScreenScale:0.###}",
             $"dpiAwareness={snapshot.DpiAwareness}",
             "coordinateSpace=PhysicalPixels logicalCoordinates=False"
+        ];
+    }
+
+    internal readonly record struct ScrollDiagnosticsSnapshot(
+        long DispatchedFrameCount,
+        double RenderWaitMs,
+        double LastDt,
+        double DrainedPixels,
+        double LastFrameDrainedPixels,
+        double PendingPixels,
+        bool FrameQueued,
+        bool TickLoopRunning,
+        int AppliedScrollY,
+        double TargetPosition,
+        double MaxScrollY,
+        bool HasMaxScrollY);
+
+    internal static string[] BuildScrollDiagnosticLines(ScrollDiagnosticsSnapshot snapshot)
+    {
+        return [
+            "=== Scroll Pump Diagnostics ===",
+            $"frames={snapshot.DispatchedFrameCount}",
+            $"waitMs={snapshot.RenderWaitMs:F3}",
+            $"dt={snapshot.LastDt:F4}",
+            $"drained={snapshot.DrainedPixels:F1}",
+            $"lastFrameDrained={snapshot.LastFrameDrainedPixels:F1}",
+            $"pending={snapshot.PendingPixels:F1}",
+            "=== Scroll diagnostic mode complete ==="
         ];
     }
 
@@ -567,114 +621,8 @@ internal static class Program
         string? reportPath = null,
         CancellationToken cancellationToken = default)
     {
-        var ownershipState = new InputOwnershipState();
-        var lines = new List<string>
-        {
-            "=== Input Ownership Diagnostics ==="
-        };
-
-        lines.Add("buttonPriorityOrder Pressed > Hovered > Focused > Normal");
-        lines.Add($"buttonState normal Increment {FormatButtonState(default)}");
-        lines.Add($"buttonState hovered Increment {FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true))}");
-        lines.Add($"buttonState pressed Increment {FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true))}");
-        lines.Add($"buttonState focused Increment {FormatButtonState(new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true))}");
-
-        CounterInputRouter.TryMapInput(
-            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
-            ownershipState,
-            HitDiagnosticTarget,
-            out _);
-        lines.Add($"afterMove {FormatOwnership(ownershipState.Snapshot)}");
-        lines.Add($"buttonState afterMove Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
-
-        CounterInputRouter.TryMapInput(
-            new RawInputEvent(
-                RawInputEventKind.PointerPressed,
-                Timestamp: 2,
-                X: 32,
-                Y: 140,
-                Button: PointerButton.Left),
-            ownershipState,
-            HitDiagnosticTarget,
-            out _);
-        lines.Add($"afterPress {FormatOwnership(ownershipState.Snapshot)}");
-        lines.Add($"buttonState afterPress Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
-
-        CounterInputRouter.TryMapInput(
-            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 3, X: 32, Y: 200),
-            ownershipState,
-            HitDiagnosticTarget,
-            out _);
-        lines.Add($"duringCaptureMove {FormatOwnership(ownershipState.Snapshot)}");
-        lines.Add($"buttonState duringCaptureMove Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
-
-        var releaseMapped = CounterInputRouter.TryMapInput(
-            new RawInputEvent(
-                RawInputEventKind.PointerReleased,
-                Timestamp: 4,
-                X: 500,
-                Y: 500,
-                Button: PointerButton.Left),
-            ownershipState,
-            HitDiagnosticTarget,
-            out var releaseMessage);
-        lines.Add($"releaseOutside mapped={releaseMapped} message={FormatMessage(releaseMessage)} {FormatOwnership(ownershipState.Snapshot)}");
-        lines.Add($"buttonState releaseOutside Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
-
-        var enterMapped = CounterInputRouter.TryMapInput(
-            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 5, X: 0, Y: 0, KeyCode: 0x0D),
-            ownershipState,
-            HitDiagnosticTarget,
-            out var enterMessage);
-        lines.Add($"keyboardEnter mapped={enterMapped} message={FormatMessage(enterMessage)} {FormatOwnership(ownershipState.Snapshot)}");
-
-        var spaceMapped = CounterInputRouter.TryMapInput(
-            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 6, X: 0, Y: 0, KeyCode: 0x20),
-            ownershipState,
-            HitDiagnosticTarget,
-            out var spaceMessage);
-        lines.Add($"keyboardSpace mapped={spaceMapped} message={FormatMessage(spaceMessage)} {FormatOwnership(ownershipState.Snapshot)}");
-
-        var pressEmptyMapped = CounterInputRouter.TryMapInput(
-            new RawInputEvent(
-                RawInputEventKind.PointerPressed,
-                Timestamp: 7,
-                X: 500,
-                Y: 500,
-                Button: PointerButton.Left),
-            ownershipState,
-            HitDiagnosticTarget,
-            out _);
-        lines.Add($"pressEmpty mapped={pressEmptyMapped} {FormatOwnership(ownershipState.Snapshot)}");
-
-        var releaseEmptyMapped = CounterInputRouter.TryMapInput(
-            new RawInputEvent(
-                RawInputEventKind.PointerReleased,
-                Timestamp: 8,
-                X: 32,
-                Y: 140,
-                Button: PointerButton.Left),
-            ownershipState,
-            HitDiagnosticTarget,
-            out _);
-        lines.Add($"releaseAfterEmptyPress mapped={releaseEmptyMapped} {FormatOwnership(ownershipState.Snapshot)}");
-
-        CounterInputRouter.TryMapInput(
-            new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 9, X: 0, Y: 0),
-            ownershipState,
-            HitDiagnosticTarget,
-            out _);
-        lines.Add($"focusLost {FormatOwnership(ownershipState.Snapshot)}");
-        lines.Add($"buttonState focusLost Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
-        lines.Add("events:");
-        foreach (var diagnosticEvent in ownershipState.DiagnosticEvents)
-        {
-            lines.Add($"  {FormatOwnershipEvent(diagnosticEvent)}");
-        }
-
-        lines.AddRange(BuildInputDirtyReasonDiagnosticLines());
-
-        lines.Add("=== Input diagnostic mode complete ===");
+        var snapshot = BuildInputDiagnosticsSnapshot();
+        var lines = BuildInputDiagnosticLines(snapshot);
 
         foreach (var line in lines)
         {
@@ -691,16 +639,160 @@ internal static class Program
 
             await File.WriteAllLinesAsync(reportPath, lines, cancellationToken);
         }
+    }
 
-        static string? HitDiagnosticTarget(int x, int y)
+    internal readonly record struct InputDiagnosticsSnapshot(
+        OwnershipSnapshot Ownership,
+        IReadOnlyList<string> OrderedDiagnosticLines,
+        IReadOnlyList<string> OwnershipLines,
+        IReadOnlyList<string> ButtonVisualStateLines,
+        IReadOnlyList<string> EventLines,
+        IReadOnlyList<string> DirtyReasonLines);
+
+    internal static InputDiagnosticsSnapshot BuildInputDiagnosticsSnapshot()
+    {
+        var ownershipState = new InputOwnershipState();
+        var lines = new List<string>();
+        var ownershipLines = new List<string>();
+        var buttonVisualStateLines = new List<string>();
+
+        lines.Add("buttonPriorityOrder Pressed > Hovered > Focused > Normal");
+        AddButtonVisualStateLine($"buttonState normal Increment {FormatButtonState(default)}");
+        AddButtonVisualStateLine($"buttonState hovered Increment {FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true))}");
+        AddButtonVisualStateLine($"buttonState pressed Increment {FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true))}");
+        AddButtonVisualStateLine($"buttonState focused Increment {FormatButtonState(new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true))}");
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out _);
+        AddOwnershipLine($"afterMove {FormatOwnership(ownershipState.Snapshot)}");
+        AddButtonVisualStateLine($"buttonState afterMove Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out _);
+        AddOwnershipLine($"afterPress {FormatOwnership(ownershipState.Snapshot)}");
+        AddButtonVisualStateLine($"buttonState afterPress Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 3, X: 32, Y: 200),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out _);
+        AddOwnershipLine($"duringCaptureMove {FormatOwnership(ownershipState.Snapshot)}");
+        AddButtonVisualStateLine($"buttonState duringCaptureMove Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+
+        var releaseMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 4,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out var releaseMessage);
+        AddOwnershipLine($"releaseOutside mapped={releaseMapped} message={FormatMessage(releaseMessage)} {FormatOwnership(ownershipState.Snapshot)}");
+        AddButtonVisualStateLine($"buttonState releaseOutside Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+
+        var enterMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 5, X: 0, Y: 0, KeyCode: 0x0D),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out var enterMessage);
+        AddOwnershipLine($"keyboardEnter mapped={enterMapped} message={FormatMessage(enterMessage)} {FormatOwnership(ownershipState.Snapshot)}");
+
+        var spaceMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 6, X: 0, Y: 0, KeyCode: 0x20),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out var spaceMessage);
+        AddOwnershipLine($"keyboardSpace mapped={spaceMapped} message={FormatMessage(spaceMessage)} {FormatOwnership(ownershipState.Snapshot)}");
+
+        var pressEmptyMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 7,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out _);
+        AddOwnershipLine($"pressEmpty mapped={pressEmptyMapped} {FormatOwnership(ownershipState.Snapshot)}");
+
+        var releaseEmptyMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 8,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out _);
+        AddOwnershipLine($"releaseAfterEmptyPress mapped={releaseEmptyMapped} {FormatOwnership(ownershipState.Snapshot)}");
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 9, X: 0, Y: 0),
+            ownershipState,
+            HitInputDiagnosticTarget,
+            out _);
+        AddOwnershipLine($"focusLost {FormatOwnership(ownershipState.Snapshot)}");
+        AddButtonVisualStateLine($"buttonState focusLost Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+        lines.Add("events:");
+        var eventLines = new List<string>();
+        foreach (var diagnosticEvent in ownershipState.DiagnosticEvents)
         {
-            return (x, y) switch
-            {
-                (32, 140) => nameof(CounterMessage.Increment),
-                (32, 200) => nameof(CounterMessage.Decrement),
-                _ => null
-            };
+            var eventLine = $"  {FormatOwnershipEvent(diagnosticEvent)}";
+            eventLines.Add(eventLine);
+            lines.Add(eventLine);
         }
+
+        var dirtyReasonLines = BuildInputDirtyReasonDiagnosticLines();
+        lines.AddRange(dirtyReasonLines);
+
+        return new InputDiagnosticsSnapshot(ownershipState.Snapshot, lines, ownershipLines, buttonVisualStateLines, eventLines, dirtyReasonLines);
+
+        void AddOwnershipLine(string line)
+        {
+            ownershipLines.Add(line);
+            lines.Add(line);
+        }
+
+        void AddButtonVisualStateLine(string line)
+        {
+            buttonVisualStateLines.Add(line);
+            lines.Add(line);
+        }
+    }
+
+    internal static string[] BuildInputDiagnosticLines(InputDiagnosticsSnapshot snapshot)
+    {
+        return [
+            "=== Input Ownership Diagnostics ===",
+            .. snapshot.OrderedDiagnosticLines,
+            "=== Input diagnostic mode complete ==="
+        ];
+    }
+
+    private static string? HitInputDiagnosticTarget(int x, int y)
+    {
+        return (x, y) switch
+        {
+            (32, 140) => nameof(CounterMessage.Increment),
+            (32, 200) => nameof(CounterMessage.Decrement),
+            _ => null
+        };
     }
 
     internal static string[] BuildInputDirtyReasonDiagnosticLines()
@@ -874,17 +966,20 @@ internal static class Program
             () => scrollState,
             cancellationToken);
 
-        var lines = new[]
-        {
-            "=== Scroll Pump Diagnostics ===",
-            $"frames={pump.DispatchedFrameCount}",
-            $"waitMs={pump.RenderWaitMs:F3}",
-            $"dt={pump.LastDt:F4}",
-            $"drained={totalDrainedPixels:F1}",
-            $"lastFrameDrained={pump.DrainedPixels:F1}",
-            $"pending={pump.PendingPixels:F1}",
-            "=== Scroll diagnostic mode complete ==="
-        };
+        var snapshot = new ScrollDiagnosticsSnapshot(
+            pump.DispatchedFrameCount,
+            pump.RenderWaitMs,
+            pump.LastDt,
+            totalDrainedPixels,
+            pump.DrainedPixels,
+            pump.PendingPixels,
+            pump.IsFrameQueued,
+            pump.IsLoopRunning,
+            ScrollController.GetScrollY(scrollState),
+            scrollState.TargetPosition,
+            scrollState.MaxScrollY,
+            scrollState.HasMaxScrollY);
+        var lines = BuildScrollDiagnosticLines(snapshot);
 
         foreach (var line in lines)
         {
@@ -980,11 +1075,10 @@ internal static class Program
             Console.WriteLine(line);
         }
         Console.WriteLine($"=== Compositor Diagnostics ===");
-        Console.WriteLine($"Render count: {compositor.RenderCount}");
-        Console.WriteLine($"Partial apply: {compositor.PartialApplyCount}");
-        Console.WriteLine($"Full apply: {compositor.FullApplyCount}");
-        Console.WriteLine($"Empty frames: {compositor.EmptyFrameCount}");
-        Console.WriteLine($"Partial hit rate: {(compositor.RenderCount > 0 ? 100.0 * compositor.PartialApplyCount / compositor.RenderCount : 0):F1}%");
+        var renderCount = compositor.RenderCount;
+        var partialApplyCount = compositor.PartialApplyCount;
+        var fullApplyCount = compositor.FullApplyCount;
+        var emptyFrameCount = compositor.EmptyFrameCount;
         var dirty = compositor.LastDirtyCommandRanges;
         var backendDirty = d3d12Backend.LastDirtyCommandRanges;
         var backendClippedCommandCount = d3d12Backend.ClippedCommandCount;
@@ -1012,6 +1106,10 @@ internal static class Program
             }
         }
         var renderingSnapshot = new RenderingPipelineDiagnosticSnapshot(
+            renderCount,
+            partialApplyCount,
+            fullApplyCount,
+            emptyFrameCount,
             dirty,
             backendDirty,
             backendClippedCommandCount,
@@ -1019,8 +1117,10 @@ internal static class Program
             layoutClipCount,
             layoutPipeline.LayoutRebuildCount,
             layoutPipeline.LastLayoutRebuildReason,
-            layoutPipeline.LastDirtyClassifications);
-        foreach (var line in BuildRenderingPipelineDirtyRangeDiagnosticLines(renderingSnapshot))
+            layoutPipeline.LastDirtyClassifications,
+            layoutBatch.HitTargets,
+            layoutPipeline.LastLayoutResult?.ScrollDiagnostics ?? []);
+        foreach (var line in BuildRenderingPipelineCompositorDiagnosticLines(renderingSnapshot))
         {
             Console.WriteLine(line);
         }
@@ -1028,20 +1128,6 @@ internal static class Program
         foreach (var line in BuildRenderingPipelineLayoutDiagnosticLines(renderingSnapshot))
         {
             Console.WriteLine(line);
-        }
-        Console.WriteLine($"Layout hit targets: {layoutBatch.HitTargets.Count}");
-        if (layoutBatch.HitTargets.Count > 0)
-        {
-            var ht = layoutBatch.HitTargets[0];
-            Console.WriteLine($"  Hit target: {ht.ActionId} bounds=({ht.Bounds.X},{ht.Bounds.Y},{ht.Bounds.Width},{ht.Bounds.Height}) clip=({ht.ClipBounds.X},{ht.ClipBounds.Y},{ht.ClipBounds.Width},{ht.ClipBounds.Height})");
-        }
-        var layoutResult = layoutPipeline.LastLayoutResult;
-        if (layoutResult is not null)
-        {
-            foreach (var sd in layoutResult.ScrollDiagnostics)
-            {
-                Console.WriteLine($"  ScrollContainer[{sd.DfsIndex}]: visible={sd.VisibleHeight} content={sd.ContentHeight} scrollY={sd.ScrollY} maxScrollY={sd.MaxScrollY} elements={sd.VisibleElementCount}/{sd.VisibleElementCount + sd.ClippedElementCount} visible");
-            }
         }
         foreach (var line in BuildStyleOnlyPatchPlanSmokeDiagnosticLines())
         {

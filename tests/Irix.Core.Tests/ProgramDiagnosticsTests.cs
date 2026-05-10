@@ -25,6 +25,68 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Diagnose_scroll_snapshot_captures_formatter_fields()
+    {
+        var snapshot = new Program.ScrollDiagnosticsSnapshot(
+            DispatchedFrameCount: 2,
+            RenderWaitMs: 30.125,
+            LastDt: 0.0376,
+            DrainedPixels: 54,
+            LastFrameDrainedPixels: 0,
+            PendingPixels: 0,
+            FrameQueued: false,
+            TickLoopRunning: false,
+            AppliedScrollY: 54,
+            TargetPosition: 54,
+            MaxScrollY: 240,
+            HasMaxScrollY: true);
+
+        Assert.Equal(2, snapshot.DispatchedFrameCount);
+        Assert.Equal(30.125, snapshot.RenderWaitMs);
+        Assert.Equal(0.0376, snapshot.LastDt);
+        Assert.Equal(54, snapshot.DrainedPixels);
+        Assert.Equal(0, snapshot.LastFrameDrainedPixels);
+        Assert.Equal(0, snapshot.PendingPixels);
+        Assert.False(snapshot.FrameQueued);
+        Assert.False(snapshot.TickLoopRunning);
+        Assert.Equal(54, snapshot.AppliedScrollY);
+        Assert.Equal(54, snapshot.TargetPosition);
+        Assert.Equal(240, snapshot.MaxScrollY);
+        Assert.True(snapshot.HasMaxScrollY);
+    }
+
+    [Fact]
+    public void Diagnose_scroll_formatter_outputs_stable_fields()
+    {
+        var snapshot = new Program.ScrollDiagnosticsSnapshot(
+            DispatchedFrameCount: 2,
+            RenderWaitMs: 30.125,
+            LastDt: 0.0376,
+            DrainedPixels: 54,
+            LastFrameDrainedPixels: 0,
+            PendingPixels: 0,
+            FrameQueued: false,
+            TickLoopRunning: false,
+            AppliedScrollY: 54,
+            TargetPosition: 54,
+            MaxScrollY: 240,
+            HasMaxScrollY: true);
+
+        var output = string.Join(Environment.NewLine, Program.BuildScrollDiagnosticLines(snapshot));
+
+        Assert.Equal(string.Join(Environment.NewLine, [
+            "=== Scroll Pump Diagnostics ===",
+            "frames=2",
+            "waitMs=30.125",
+            "dt=0.0376",
+            "drained=54.0",
+            "lastFrameDrained=0.0",
+            "pending=0.0",
+            "=== Scroll diagnostic mode complete ==="
+        ]), output);
+    }
+
+    [Fact]
     public async Task Diagnose_input_outputs_ownership_state_transitions()
     {
         var writer = new StringWriter();
@@ -61,6 +123,41 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly", output);
         Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly", output);
         Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly", output);
+    }
+
+    [Fact]
+    public void Diagnose_input_snapshot_captures_formatter_fields()
+    {
+        var snapshot = Program.BuildInputDiagnosticsSnapshot();
+
+        Assert.Null(snapshot.Ownership.HoveredTarget);
+        Assert.Null(snapshot.Ownership.FocusedTarget);
+        Assert.Null(snapshot.Ownership.PressedTarget);
+        Assert.Null(snapshot.Ownership.CapturedTarget);
+        Assert.Equal(3, snapshot.Ownership.HoverChangeCount);
+        Assert.False(snapshot.Ownership.IsPointerPressed);
+        Assert.Contains("afterMove hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False", snapshot.OwnershipLines);
+        Assert.Contains(snapshot.OwnershipLines, line => line.StartsWith("keyboardEnter mapped=True message=Increment hover=Decrement focus=Increment", StringComparison.Ordinal));
+        Assert.Contains("buttonState normal Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", snapshot.ButtonVisualStateLines);
+        Assert.Contains("buttonState focusLost Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", snapshot.ButtonVisualStateLines);
+        Assert.Contains("  HoverChanged previous=- current=Increment", snapshot.EventLines);
+        Assert.Contains("  FocusChanged previous=Increment current=-", snapshot.EventLines);
+        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly", snapshot.DirtyReasonLines);
+        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly", snapshot.DirtyReasonLines);
+    }
+
+    [Fact]
+    public void Diagnose_input_formatter_outputs_stable_fields()
+    {
+        var output = string.Join(Environment.NewLine, Program.BuildInputDiagnosticLines(Program.BuildInputDiagnosticsSnapshot()));
+
+        Assert.Contains("=== Input Ownership Diagnostics ===", output);
+        Assert.Contains("buttonPriorityOrder Pressed > Hovered > Focused > Normal", output);
+        Assert.Contains("afterPress hover=Increment focus=Increment pressed=Increment capture=Increment", output);
+        Assert.Contains("events:", output);
+        Assert.Contains("dirtyReasons:", output);
+        Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly", output);
+        Assert.Contains("=== Input diagnostic mode complete ===", output);
     }
 
     [Fact]
@@ -206,11 +303,32 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Diagnose_rendering_pipeline_dirty_ranges_output_stable_fields()
+    public void Diagnose_rendering_pipeline_snapshot_captures_additional_fields()
     {
-        var output = string.Join(Environment.NewLine, Program.BuildRenderingPipelineDirtyRangeDiagnosticLines(CreateRenderingPipelineSnapshot()));
+        var snapshot = CreateRenderingPipelineSnapshot();
+
+        Assert.Equal(3, snapshot.RenderCount);
+        Assert.Equal(2, snapshot.PartialApplyCount);
+        Assert.Equal(1, snapshot.FullApplyCount);
+        Assert.Equal(0, snapshot.EmptyFrameCount);
+        Assert.Equal(66.7, Math.Round(snapshot.PartialHitRate, 1));
+        Assert.Single(snapshot.HitTargets);
+        Assert.Equal("LayoutBtn", snapshot.HitTargets[0].ActionId);
+        Assert.Single(snapshot.ScrollContainerDiagnostics);
+        Assert.Equal(540, snapshot.ScrollContainerDiagnostics[0].VisibleHeight);
+    }
+
+    [Fact]
+    public void Diagnose_rendering_pipeline_compositor_outputs_stable_fields()
+    {
+        var output = string.Join(Environment.NewLine, Program.BuildRenderingPipelineCompositorDiagnosticLines(CreateRenderingPipelineSnapshot()));
 
         Assert.Equal(string.Join(Environment.NewLine, [
+            "Render count: 3",
+            "Partial apply: 2",
+            "Full apply: 1",
+            "Empty frames: 0",
+            "Partial hit rate: 66.7%",
             "Compositor dirty ranges: 1 ranges",
             "  [0..3] (4 commands)",
             "Backend dirty ranges: 1 ranges",
@@ -230,7 +348,10 @@ public sealed class ProgramDiagnosticsTests
             "Layout clipped commands: 3",
             "Layout rebuild count: 1",
             "Layout rebuild reason: TreeStructure",
-            "Layout dirty classifications: 4:StyleOnly"
+            "Layout dirty classifications: 4:StyleOnly",
+            "Layout hit targets: 1",
+            "  Hit target: LayoutBtn bounds=(16,60,140,40) clip=(0,0,960,540)",
+            "  ScrollContainer[0]: visible=540 content=96 scrollY=0 maxScrollY=0 elements=2/2 visible"
         ]), output);
     }
 
@@ -345,13 +466,19 @@ public sealed class ProgramDiagnosticsTests
     private static Program.RenderingPipelineDiagnosticSnapshot CreateRenderingPipelineSnapshot()
     {
         return new Program.RenderingPipelineDiagnosticSnapshot(
-            [(0, 4)],
-            [(0, 4)],
+            RenderCount: 3,
+            PartialApplyCount: 2,
+            FullApplyCount: 1,
+            EmptyFrameCount: 0,
+            CompositorDirtyCommandRanges: [(0, 4)],
+            BackendDirtyCommandRanges: [(0, 4)],
             BackendClippedCommandCount: 0,
             LayoutCommandCount: 3,
             LayoutClippedCommandCount: 3,
             LayoutRebuildCount: 1,
             LayoutRebuildReason: LayoutRebuildReason.TreeStructure,
-            LayoutDirtyClassifications: [new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)]);
+            LayoutDirtyClassifications: [new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)],
+            HitTargets: [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "LayoutBtn", new PixelRectangle(0, 0, 960, 540))],
+            ScrollContainerDiagnostics: [new ScrollContainerDiag(0, 540, 96, 0, 0, 2, 0)]);
     }
 }
