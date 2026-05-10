@@ -21,13 +21,13 @@
 
 | 入口 | 当前归属 | 覆盖内容 | 后续 channel 方向 |
 |------|----------|----------|-------------------|
-| `--diagnose` | `Irix.Poc.Program.RunDiagnosticMode` | D3D12 text cache/device、style preset、compositor partial apply、layout pipeline、StyleOnly plan smoke、pipeline scissor/text clip smoke、backend scissor/text clip smoke | 拆成 diagnostics providers，再由统一 runner 汇总输出；当前 stdout contract 保持冻结。 |
+| `--diagnose` | `Irix.Poc.FullDiagnosticRunner.Run` | D3D12 text cache/device、style preset、compositor partial apply、layout pipeline、StyleOnly plan smoke、pipeline scissor/text clip smoke、backend scissor/text clip smoke | Runner split complete. Future provider/channel migration can happen behind the frozen stdout contract. |
 | `--diagnose-resize` | `Irix.Poc.ResizeDiagnosticRunner.Run` | window physical size、renderer swapchain size、translator/layout viewport、pending resize apply、viewport dirty reason、physical-pixels mode | Second runner split sample. Keep as PoC smoke; future migration waits until viewport/platform diagnostics ownership is settled. |
 | `--diagnose-scroll` | `Irix.Poc.ScrollDiagnosticRunner.RunAsync` | scroll pump frame count、render wait、dt、drained pixels、pending pixels | First runner split sample. Keep as PoC diagnostic; future migration waits until scroll controller/pump ownership is settled. |
 | `--diagnose-input` | `Irix.Poc.InputDiagnosticRunner.RunAsync` | input ownership transitions、button visual priority、keyboard/pointer mapping、dirty reason smoke | Third runner split sample. Keep as PoC diagnostic; future migration waits until input model ownership is settled. |
 | `--debug-ui` | `CounterApplication.BuildDiagnosticHeaderRows` plus `Program` diagnostic readouts | in-app scroll/input/clip mode/viewport/layout dirty rows | 未来由统一 diagnostics snapshot 驱动 debug overlay；现在保持 Counter sample 内部实现。 |
 | StyleOnly plan smoke | `Irix.Poc.StyleOnlyPatchPlanSmokeDiagnostics.BuildDiagnosticLines` plus `StyleOnlyPatchPlanBuilder` | hover-only eligible、layout-affecting fallback、dirty element/command ranges、patched hit target count | Planning logic stays in `Irix.Rendering`; PoC smoke host is split out while stdout remains frozen。 |
-| Scissor/text clip smoke | `Irix.Poc.BackendClipTextSmokeDiagnostics` plus `D3D12DrawingBackend` diagnostics | FillRect scissor, empty intersection skip, D2D text clip, pipeline clip propagation | Smoke host is split out; `RunDiagnosticMode` only orchestrates these smoke calls and formats snapshots. Backend counters can later move with backend adapter; stable smoke strings stay frozen until channel replacement is ready。 |
+| Scissor/text clip smoke | `Irix.Poc.BackendClipTextSmokeDiagnostics` plus `D3D12DrawingBackend` diagnostics | FillRect scissor, empty intersection skip, D2D text clip, pipeline clip propagation | Smoke host is split out; `FullDiagnosticRunner` orchestrates these smoke calls and formats snapshots. Backend counters can later move with backend adapter; stable smoke strings stay frozen until channel replacement is ready。 |
 
 ### 统一 diagnostics channel 的最小方向
 
@@ -38,7 +38,7 @@
 
 ### Program diagnostics runner split 顺序
 
-Diagnostics snapshot v0 and debug bridge v0 are sealed; unified diagnostics channel is paused. The current consolidation line is runner split only: move scripted diagnostics out of `Program.cs` one small runner at a time while preserving stdout and overlay contracts.
+Diagnostics snapshot v0 and debug bridge v0 are sealed; unified diagnostics channel is paused. Program diagnostics runner split is complete: scripted diagnostics now live outside `Program.cs` while stdout and overlay contracts remain frozen.
 
 Recommended order:
 
@@ -47,7 +47,9 @@ Recommended order:
 3. `--diagnose-input` → `InputDiagnosticRunner` (done; ownership and dirty-reason scripted flows are out of `Program.cs`).
 4. StyleOnly plan smoke helpers → `StyleOnlyPatchPlanSmokeDiagnostics` (done; PoC smoke host only, rendering planner unchanged).
 5. Backend clip/text smoke helpers → `BackendClipTextSmokeDiagnostics` (done; smoke host only, D3D12 backend/runtime ownership unchanged).
-6. Full `RunDiagnosticMode` orchestration last; it still coordinates text cache, style preset, compositor, layout, extracted smoke helpers, and backend snapshots in one flow.
+6. Full `--diagnose` orchestration → `FullDiagnosticRunner` (done; first pass moved the existing flow as a whole without regrouping internal blocks).
+
+This runner split line is sealed. Future work should start from provider/channel ownership design, not additional `Program.cs` runner moves.
 
 Rules for this split:
 
@@ -106,10 +108,10 @@ Rules for this split:
 ## 7. 推荐收敛顺序
 
 1. Treat [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) as sealed; only repair regressions in that line.
-2. Continue Program diagnostics runner split in the order above, keeping CLI output and debug overlay rows unchanged.
-3. Leave unified diagnostics channel, event bus, registry, and provider replacement paused until runner debt is lower.
+2. Keep Program diagnostics runner split sealed; new diagnostics work should preserve CLI output and debug overlay rows.
+3. Leave unified diagnostics channel, event bus, registry, and provider replacement paused until a separate ownership design is ready.
 4. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
-5. Move one axis at a time and run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke after each move.
+5. For any future diagnostics ownership move, run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke.
 
 ## 8. 当前完成标准对照
 
@@ -119,4 +121,5 @@ Rules for this split:
 | 诊断入口盘点 | 已列出 `--diagnose*`、`--debug-ui`、StyleOnly plan smoke、scissor/text clip smoke 的当前归属和 channel 方向。 |
 | 测试分组盘点 | 已按 scroll/input/clip/viewport/layout dirty/style-only plan/retained frame 分组。 |
 | 标记不移动清单 | 已明确 scroll/input/clip/render pipeline 核心代码暂不移动。 |
+| Program diagnostics runner split | 已完成并封版：`Program.Main` 只分发 diagnostics runners，后续不在此线继续拆 block。 |
 | consolidation prep 文档 | 本文即输出；当前阶段不改运行行为。 |
