@@ -7,7 +7,7 @@ namespace Irix.Poc;
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
 /// </summary>
-internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability
+internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Diagnostic) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability
 {
     private readonly D3D12Renderer _renderer = renderer;
     private float _bgR, _bgG, _bgB, _bgA = 1.0f;
@@ -16,6 +16,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
     private IFrameResourceResolver? _resources;
     private IReadOnlyList<(int Start, int Count)> _dirtyCommandRanges = [];
     private int _clippedCommandCount;
+    private int _emptyIntersectionSkippedCount;
+    private int _scissorStateChangeCount;
+    private EffectiveScissor _lastEffectiveScissor = EffectiveScissor.Empty;
 
     /// <summary>Dirty command ranges from the last SetDirtyCommandRanges call.</summary>
     public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges => _dirtyCommandRanges;
@@ -23,7 +26,18 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
     /// <summary>Number of commands with non-default clip bounds from the last Execute.</summary>
     public int ClippedCommandCount => _clippedCommandCount;
 
-    public DrawingBackendClipMode ClipMode => DrawingBackendClipMode.Diagnostic;
+    public int EmptyIntersectionSkippedCount => _emptyIntersectionSkippedCount;
+
+    public int ScissorStateChangeCount => _scissorStateChangeCount;
+
+    public EffectiveScissor LastEffectiveScissor => _lastEffectiveScissor;
+
+    public DrawingBackendClipMode ClipMode { get; private set; } = clipMode;
+
+    public void SetClipMode(DrawingBackendClipMode clipMode)
+    {
+        ClipMode = clipMode;
+    }
 
     public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
     {
@@ -41,10 +55,19 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
     {
         _resources = resources;
         _clippedCommandCount = 0;
+        _emptyIntersectionSkippedCount = 0;
+        _scissorStateChangeCount = 0;
+        _lastEffectiveScissor = EffectiveScissor.Empty;
+        var viewportWidth = _renderer.Width;
+        var viewportHeight = _renderer.Height;
+        var viewport = new DrawRect(0, 0, viewportWidth, viewportHeight);
+        var fullScissor = DrawingScissor.ToIntegerScissorRect(new EffectiveScissor(viewport, false), viewportWidth, viewportHeight);
+        var hasPreviousScissor = false;
+        var previousScissor = IntegerScissorRect.Empty;
 
         foreach (var command in commands)
         {
-            // Track clip diagnostics (read-only; no GPU scissor yet)
+            // Track clip diagnostics; Scissor mode applies only to FillRect below.
             if (command.ClipBounds.Width > 0 && command.ClipBounds.Height > 0)
             {
                 _clippedCommandCount++;
@@ -53,6 +76,26 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
             switch (command.Kind)
             {
                 case DrawCommandKind.FillRect:
+                    var effectiveScissor = DrawingScissor.ResolveEffectiveScissor(viewport, command.ClipBounds);
+                    _lastEffectiveScissor = effectiveScissor;
+                    var renderScissor = fullScissor;
+                    if (ClipMode == DrawingBackendClipMode.Scissor)
+                    {
+                        if (effectiveScissor.IsEmpty)
+                        {
+                            _emptyIntersectionSkippedCount++;
+                            break;
+                        }
+
+                        renderScissor = DrawingScissor.ToIntegerScissorRect(effectiveScissor, viewportWidth, viewportHeight);
+                        if (!hasPreviousScissor || renderScissor != previousScissor)
+                        {
+                            _scissorStateChangeCount++;
+                            previousScissor = renderScissor;
+                            hasPreviousScissor = true;
+                        }
+                    }
+
                     if (_rects.Count == 0)
                     {
                         _bgR = command.Color.R / 255f;
@@ -64,7 +107,8 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer) : IDrawingBack
                         command.Rect.X, command.Rect.Y,
                         command.Rect.Width, command.Rect.Height,
                         command.Color.R / 255f, command.Color.G / 255f,
-                        command.Color.B / 255f, command.Color.A / 255f));
+                        command.Color.B / 255f, command.Color.A / 255f,
+                        renderScissor));
                     break;
                 case DrawCommandKind.DrawTextRun:
                     if (resources.Resolve(command.Text).IsEmpty)

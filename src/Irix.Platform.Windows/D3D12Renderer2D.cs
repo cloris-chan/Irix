@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Irix.Drawing;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -169,9 +170,38 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         var vbv = _vbv;
         list->IASetVertexBuffers(0, 1, &vbv);
-        list->DrawInstanced((uint)count, 1, 0, 0);
+        var rectCount = count / 6;
+        var runStart = 0;
+        var runScissor = rects[0].Scissor;
+        for (var i = 1; i < rectCount; i++)
+        {
+            var scissor = rects[i].Scissor;
+            if (scissor == runScissor)
+            {
+                continue;
+            }
 
-        return rects.Length;
+            DrawRun(runStart, i - runStart, runScissor);
+            runStart = i;
+            runScissor = scissor;
+        }
+
+        DrawRun(runStart, rectCount - runStart, runScissor);
+
+        return rectCount;
+
+        void DrawRun(int startRect, int rectCountInRun, IntegerScissorRect integerScissor)
+        {
+            var scissor = new RECT
+            {
+                left = integerScissor.Left,
+                top = integerScissor.Top,
+                right = integerScissor.Right,
+                bottom = integerScissor.Bottom
+            };
+            list->RSSetScissorRects(1, &scissor);
+            list->DrawInstanced((uint)(rectCountInRun * 6), 1, (uint)(startRect * 6), 0);
+        }
     }
 
     public void Dispose()
@@ -198,7 +228,7 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         public Vector4 Color;
     }
 
-    public readonly record struct RectData(float X, float Y, float Width, float Height, float R, float G, float B, float A);
+    public readonly record struct RectData(float X, float Y, float Width, float Height, float R, float G, float B, float A, IntegerScissorRect Scissor);
 
     private const string VsHlsl = @"
 struct VS_IN { float2 pos : POSITION; float4 col : COLOR; };

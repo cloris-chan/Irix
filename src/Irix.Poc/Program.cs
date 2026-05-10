@@ -140,9 +140,9 @@ internal static class Program
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
     }
 
-    internal static string BuildClipScissorSmokeDiagnosticLine(DrawRect clipBounds, EffectiveScissor effectiveScissor, int clippedCommandCount, bool deviceRemoved)
+    internal static string BuildClipScissorSmokeDiagnosticLine(DrawRect clipBounds, EffectiveScissor effectiveScissor, bool gpuScissor, int clippedCommandCount, int emptyIntersectionSkippedCount, int scissorStateChangeCount, bool deviceRemoved)
     {
-        return $"Scissor smoke: kind=FillRect clip={FormatRect(clipBounds)} effectiveClip={FormatEffectiveScissor(effectiveScissor)} nestedClip=False textClip=False gpuScissor=False clippedCommands={clippedCommandCount} emptyIntersectionSkipped=0 scissorStateChanges=0 deviceRemoved={deviceRemoved}";
+        return $"Scissor smoke: kind=FillRect clip={FormatRect(clipBounds)} effectiveClip={FormatEffectiveScissor(effectiveScissor)} nestedClip=False textClip=False gpuScissor={gpuScissor} clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved}";
     }
 
     private static string FormatEffectiveScissor(EffectiveScissor scissor)
@@ -628,12 +628,11 @@ internal static class Program
             }
         }
         Console.WriteLine($"=== Clip Scissor Diagnostics ===");
-        var scissorViewport = new DrawRect(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
         var smokeClip = new DrawRect(32, 32, 80, 40);
-        var effectiveScissor = DrawingScissor.ResolveEffectiveScissor(scissorViewport, smokeClip);
+        d3d12Backend.SetClipMode(DrawingBackendClipMode.Scissor);
         RunClipScissorSmokeDiagnostic(d3d12Backend);
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
-        Console.WriteLine(BuildClipScissorSmokeDiagnosticLine(smokeClip, effectiveScissor, d3d12Backend.ClippedCommandCount, d3d12Renderer.IsDeviceRemoved));
+        Console.WriteLine(BuildClipScissorSmokeDiagnosticLine(smokeClip, d3d12Backend.LastEffectiveScissor, d3d12Backend.ClipMode == DrawingBackendClipMode.Scissor, d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);

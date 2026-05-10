@@ -76,8 +76,8 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_clip_scissor_smoke_outputs_stable_fields()
     {
-        var line = Program.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), 1, false);
+        var line = Program.BuildClipScissorSmokeDiagnosticLine(new DrawRect(32, 32, 80, 40), new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), true, 1, 0, 1, false);
 
-        Assert.Equal("Scissor smoke: kind=FillRect clip=(32,32,80,40) effectiveClip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=False clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=0 deviceRemoved=False", line);
+        Assert.Equal("Scissor smoke: kind=FillRect clip=(32,32,80,40) effectiveClip=(32,32,80,40) nestedClip=False textClip=False gpuScissor=True clippedCommands=1 emptyIntersectionSkipped=0 scissorStateChanges=1 deviceRemoved=False", line);
     }
 }
