@@ -20,6 +20,8 @@ internal abstract record CounterMessage
 
     /// <summary>Raw wheel delta from input. Never reaches Update — coalesced by HandleInput.</summary>
     public sealed record WheelRaw(int RawDelta) : CounterMessage;
+
+    public sealed record InputVisualStateChanged : CounterMessage;
 }
 
 internal sealed class CounterApplication : IApplication<CounterModel, CounterMessage>
@@ -46,6 +48,7 @@ internal sealed class CounterApplication : IApplication<CounterModel, CounterMes
             {
                 Scroll = ScrollController.WithMaxScrollY(model.Scroll, update.MaxScrollY),
             }),
+            CounterMessage.InputVisualStateChanged => new UpdateResult<CounterModel, CounterMessage>(model),
             _ => throw new NotSupportedException($"Unsupported message type: {message.GetType().Name}")
         };
 

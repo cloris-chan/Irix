@@ -96,7 +96,7 @@ internal static class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            if (CounterInputRouter.TryMapInput(inputEvent, inputOwnershipState, TryGetActionIdAt, out var message))
+            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, TryGetActionIdAt, out var message, out var shouldRefreshInputVisualState))
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
@@ -110,10 +110,14 @@ internal static class Program
                         (frame, cancellationToken) => runtime.DispatchAndWaitAsync(frame, cancellationToken),
                         () => runtime.CurrentModel.Scroll);
                 }
-                else
+                else if (message is not null)
                 {
                     runtime.Dispatch(message);
                 }
+            }
+            else if (shouldRefreshInputVisualState)
+            {
+                runtime.Dispatch(new CounterMessage.InputVisualStateChanged());
             }
         }
 
@@ -168,6 +172,22 @@ internal static class Program
     internal static double DiagScrollLastDt => _scrollFramePump?.LastDt ?? 0;
     internal static double DiagScrollDrainedPixels => _scrollFramePump?.DrainedPixels ?? 0;
     internal static OwnershipSnapshot DiagInputOwnership => _inputOwnershipState?.Snapshot ?? default;
+
+    internal static bool TryMapInputForRuntime(
+        RawInputEvent inputEvent,
+        InputOwnershipState ownershipState,
+        Func<int, int, string?> tryGetActionIdAt,
+        out CounterMessage? message,
+        out bool shouldRefreshInputVisualState)
+    {
+        var before = ownershipState.Snapshot;
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, tryGetActionIdAt, out var mappedMessage);
+        var after = ownershipState.Snapshot;
+
+        message = mapped ? mappedMessage : null;
+        shouldRefreshInputVisualState = !mapped && before != after;
+        return mapped;
+    }
 
     internal static async Task RunInputDiagnosticModeAsync(
         TextWriter output,

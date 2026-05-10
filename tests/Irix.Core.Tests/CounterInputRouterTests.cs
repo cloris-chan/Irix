@@ -251,6 +251,94 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void InputVisualStateChanged_keeps_model_unchanged()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize();
+
+        var result = app.Update(model, new CounterMessage.InputVisualStateChanged());
+
+        Assert.Equal(model, result.NextModel);
+    }
+
+    [Fact]
+    public void Program_input_mapping_requests_visual_refresh_for_hover_only_change()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        var mapped = Program.TryMapInputForRuntime(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementAtButton,
+            out var message,
+            out var shouldRefreshInputVisualState);
+
+        Assert.False(mapped);
+        Assert.Null(message);
+        Assert.True(shouldRefreshInputVisualState);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.HoveredTarget);
+    }
+
+    [Fact]
+    public void Program_input_mapping_skips_visual_refresh_when_ownership_does_not_change()
+    {
+        var ownershipState = new InputOwnershipState();
+        Program.TryMapInputForRuntime(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementAtButton,
+            out _,
+            out _);
+
+        var mapped = Program.TryMapInputForRuntime(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 2, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementAtButton,
+            out var message,
+            out var shouldRefreshInputVisualState);
+
+        Assert.False(mapped);
+        Assert.Null(message);
+        Assert.False(shouldRefreshInputVisualState);
+    }
+
+    [Fact]
+    public void Program_input_mapping_uses_action_message_to_refresh_release_state()
+    {
+        var ownershipState = new InputOwnershipState();
+        Program.TryMapInputForRuntime(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _,
+            out var pressRefresh);
+
+        var mapped = Program.TryMapInputForRuntime(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 2,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out var message,
+            out var shouldRefreshInputVisualState);
+
+        Assert.True(pressRefresh);
+        Assert.True(mapped);
+        Assert.IsType<CounterMessage.Increment>(message);
+        Assert.False(shouldRefreshInputVisualState);
+        Assert.Null(ownershipState.PressedTarget);
+        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.FocusedTarget);
+    }
+
+    [Fact]
     public void TryMapInput_empty_press_clears_focus_and_does_not_trigger_action()
     {
         var ownershipState = new InputOwnershipState();
