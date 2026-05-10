@@ -104,4 +104,12 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal("Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip=(32,32,80,40) textClipSkipped=1 deviceRemoved=False", line);
     }
+
+    [Fact]
+    public void Diagnose_pipeline_text_clip_smoke_outputs_pipeline_fields()
+    {
+        var line = Program.BuildPipelineTextClipSmokeDiagnosticLine(new EffectiveScissor(new DrawRect(16, 16, 928, 20), false), clippedCommandCount: 2, textClipSkippedCount: 0, deviceRemoved: false);
+
+        Assert.Equal("Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip=(16,16,928,20) clippedCommands=2 textClipSkipped=0 deviceRemoved=False passed=True", line);
+    }
 }

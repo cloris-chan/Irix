@@ -164,6 +164,12 @@ internal static class Program
         return $"Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(effectiveClip)} textClipSkipped={textClipSkippedCount} deviceRemoved={deviceRemoved}";
     }
 
+    internal static string BuildPipelineTextClipSmokeDiagnosticLine(EffectiveScissor effectiveClip, int clippedCommandCount, int textClipSkippedCount, bool deviceRemoved)
+    {
+        var passed = !effectiveClip.IsEmpty && clippedCommandCount > 0 && textClipSkippedCount == 0;
+        return $"Pipeline text clip smoke: source=ScrollContainerButton textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(effectiveClip)} clippedCommands={clippedCommandCount} textClipSkipped={textClipSkippedCount} deviceRemoved={deviceRemoved} passed={passed}";
+    }
+
     private static string FormatEffectiveScissor(EffectiveScissor scissor)
     {
         return scissor.IsEmpty ? "empty" : FormatRect(scissor.Bounds);
@@ -654,6 +660,9 @@ internal static class Program
         _backendClipMode = d3d12Backend.ClipMode;
         RunPipelineScissorSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
         Console.WriteLine(BuildPipelineScissorSmokeDiagnosticLine(d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
+        Console.WriteLine($"=== Pipeline Text Clip Smoke ===");
+        RunPipelineTextClipSmokeDiagnostic(compositor, d3d12Backend, d3d12Renderer);
+        Console.WriteLine(BuildPipelineTextClipSmokeDiagnosticLine(d3d12Backend.LastEffectiveTextClip, d3d12Backend.ClippedCommandCount, d3d12Backend.TextClipSkippedCount, d3d12Renderer.IsDeviceRemoved));
 
         Console.WriteLine($"=== Clip Scissor Diagnostics ===");
         var smokeClip = new DrawRect(32, 32, 80, 40);
@@ -681,6 +690,24 @@ internal static class Program
             key: 1000,
             attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(40))],
             children: [VirtualNodeFactory.Rectangle(160, 80, 1001)]);
+        var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
+        using var batch = pipeline.Build(root, viewport);
+
+        backend.SetClipMode(DrawingBackendClipMode.Scissor);
+        compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
+    }
+
+    private static void RunPipelineTextClipSmokeDiagnostic(DrawingBackendCompositor compositor, D3D12DrawingBackend backend, D3D12Renderer renderer)
+    {
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1100,
+            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(20))],
+            children:
+            [
+                VirtualNodeFactory.Button("PipelineClip", 1101, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("PipelineClip")))
+            ]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
         using var batch = pipeline.Build(root, viewport);
 

@@ -78,6 +78,7 @@ Current `--diagnose` smokes switch the backend to `Scissor` for FillRect and tex
 
 - Direct: `effectiveClip=(32,32,80,40)`, `textClip=False`, `gpuScissor=True`, `clippedCommands=1`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, `deviceRemoved=False`.
 - Pipeline: `source=ScrollContainerRectangle`, `textClip=False`, `clippedCommands=1`, `emptyIntersectionSkipped=0`, `scissorStateChanges=1`, `deviceRemoved=False`, `passed=True`.
+- Pipeline text: `source=ScrollContainerButton`, `textClip=True`, `layoutClip=True`, `effectiveClip=(16,16,928,20)`, `clippedCommands=2`, `textClipSkipped=0`, `deviceRemoved=False`, `passed=True`.
 - Empty: `kind=FillRect`, `clippedCommands=1`, `emptyIntersectionSkipped=1`, `scissorStateChanges=0`, `deviceRemoved=False`.
 - Text: `kind=DrawTextRun`, `textClip=True`, `layoutClip=True`, `effectiveClip=(32,32,80,40)`, `textClipSkipped=1`, `deviceRemoved=False`.
 
@@ -94,4 +95,4 @@ Current `--diagnose` smokes switch the backend to `Scissor` for FillRect and tex
 
 ## Follow-up
 
-Before making `--enable-scissor` the default, hand-test the normal UI, `--debug-ui`, scrolling, and button hover/press with text clip v0 enabled.
+Before making `--enable-scissor` the default, keep one explicit-switch soak round even though normal UI, `--debug-ui`, scrolling, background hover wheel, and button hover/press/focus have passed manual checks with text clip v0 enabled.
