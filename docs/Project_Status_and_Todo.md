@@ -507,15 +507,18 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 | 阶段 | 预期/基线 |
 |------|-----------|
 | afterMove | `hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False` |
+| buttonState afterMove | `Increment hovered=True pressed=False focused=False priority=Hovered color=#FF4888FF` |
 | afterPress | `hover=Increment focus=Increment pressed=Increment capture=Increment` |
-| buttonState afterPress | `Increment hovered=True pressed=True focused=True` |
+| buttonState afterPress | `Increment hovered=True pressed=True focused=True priority=Pressed color=#FF245CD2` |
 | duringCaptureMove | `hover=Decrement focus=Increment pressed=Increment capture=Increment` |
-| buttonState duringCaptureMove | `Increment hovered=False pressed=True focused=True` |
+| buttonState duringCaptureMove | `Increment hovered=False pressed=True focused=True priority=Pressed color=#FF245CD2` |
 | releaseOutside | `mapped=True message=Increment ... pressed=- capture=-` |
+| buttonState releaseOutside | `Increment hovered=False pressed=False focused=True priority=Focused color=#FF54A0FF` |
 | keyboardEnter / keyboardSpace | focused target 为 `Increment` 时映射为 `Increment` action |
 | pressEmpty | `mapped=False ... focus=- pressed=- capture=- pointerPressed=True` |
 | releaseAfterEmptyPress | `mapped=False ... pointerPressed=False` |
 | focusLost | `hover=- focus=- pressed=- capture=-` |
+| buttonState focusLost | `Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6` |
 | events | 输出 `HoverChanged` / `FocusChanged` / `PressedChanged` 诊断事件流 |
 
 ---
@@ -568,6 +571,10 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 ### Button visual state v0
 
 Button 已基于 `OwnershipSnapshot` 派生 `IsHovered` / `IsPressed` / `IsFocused`，由 `CounterApplication.BuildView` 写入 `VirtualNodeAttribute`，`LayoutTreeBuilder` 携带到 `LayoutElement.ButtonState`，`DrawCommandRecorder` 通过现有 `DrawCommand.Color` 选择 button fill color。v0 不直接修改 `DrawCommand`、`IDrawingBackend` 或 D3D12 backend；颜色优先级固定为 `Pressed > Hovered > Focused > Normal`。
+
+### Button visual state scope freeze
+
+本轮 Button visual state 只冻结颜色状态链路与诊断输出；暂不做 focus outline、animation transition、theme system、hover cursor，也不扩展新的 ownership event 类型或 D3D12 后端接口。后续只接受明确回归修复或诊断补强。
 
 ---
 

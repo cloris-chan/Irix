@@ -188,9 +188,13 @@ public sealed class WindowLayoutPipelineTests
 
         var result = recorder.Record(elements);
 
+        Assert.Equal(DrawCommandKind.FillRect, result.Commands.Memory.Span[0].Kind);
         Assert.Equal(DrawColor.Opaque(10, 20, 30), result.Commands.Memory.Span[0].Color);
+        Assert.Equal(DrawCommandKind.FillRect, result.Commands.Memory.Span[2].Kind);
         Assert.Equal(DrawColor.Opaque(100, 110, 120), result.Commands.Memory.Span[2].Color);
+        Assert.Equal(DrawCommandKind.FillRect, result.Commands.Memory.Span[4].Kind);
         Assert.Equal(DrawColor.Opaque(40, 50, 60), result.Commands.Memory.Span[4].Color);
+        Assert.Equal(DrawCommandKind.FillRect, result.Commands.Memory.Span[6].Kind);
         Assert.Equal(DrawColor.Opaque(70, 80, 90), result.Commands.Memory.Span[6].Color);
 
         result.Commands.Dispose();

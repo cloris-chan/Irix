@@ -186,6 +186,7 @@ internal static class Program
             HitDiagnosticTarget,
             out _);
         lines.Add($"afterMove {FormatOwnership(ownershipState.Snapshot)}");
+        lines.Add($"buttonState afterMove Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -219,6 +220,7 @@ internal static class Program
             HitDiagnosticTarget,
             out var releaseMessage);
         lines.Add($"releaseOutside mapped={releaseMapped} message={FormatMessage(releaseMessage)} {FormatOwnership(ownershipState.Snapshot)}");
+        lines.Add($"buttonState releaseOutside Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
 
         var enterMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 5, X: 0, Y: 0, KeyCode: 0x0D),
@@ -264,6 +266,7 @@ internal static class Program
             HitDiagnosticTarget,
             out _);
         lines.Add($"focusLost {FormatOwnership(ownershipState.Snapshot)}");
+        lines.Add($"buttonState focusLost Increment {FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
         lines.Add("events:");
         foreach (var diagnosticEvent in ownershipState.DiagnosticEvents)
         {
@@ -316,7 +319,28 @@ internal static class Program
 
     private static string FormatButtonState(ButtonVisualState state)
     {
-        return $"hovered={state.IsHovered} pressed={state.IsPressed} focused={state.IsFocused}";
+        var color = DrawingStyle.Default.ResolveButtonFillColor(state);
+        return $"hovered={state.IsHovered} pressed={state.IsPressed} focused={state.IsFocused} priority={FormatButtonStatePriority(state)} color={FormatColor(color)}";
+    }
+
+    private static string FormatButtonStatePriority(ButtonVisualState state)
+    {
+        if (state.IsPressed)
+        {
+            return "Pressed";
+        }
+
+        if (state.IsHovered)
+        {
+            return "Hovered";
+        }
+
+        return state.IsFocused ? "Focused" : "Normal";
+    }
+
+    private static string FormatColor(DrawColor color)
+    {
+        return $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
     }
 
     private static string FormatOwnershipEvent(InputOwnershipEvent diagnosticEvent)
