@@ -5,7 +5,11 @@ namespace Irix.Poc;
 
 internal readonly record struct D3D12FillRectScissorPlan(EffectiveScissor EffectiveScissor, IntegerScissorRect RenderScissor, bool Skip);
 
+internal readonly record struct D3D12TextClipPlan(EffectiveScissor EffectiveClip, bool ClipEnabled, bool Skip);
+
 internal readonly record struct D3D12FillRectScissorDiagnostics(int ClippedCommandCount, int EmptyIntersectionSkippedCount, int ScissorStateChangeCount, EffectiveScissor LastEffectiveScissor);
+
+internal readonly record struct D3D12TextClipDiagnostics(int TextClipSkippedCount, EffectiveScissor LastEffectiveTextClip);
 
 /// <summary>
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
@@ -22,7 +26,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     private int _clippedCommandCount;
     private int _emptyIntersectionSkippedCount;
     private int _scissorStateChangeCount;
+    private int _textClipSkippedCount;
     private EffectiveScissor _lastEffectiveScissor = EffectiveScissor.Empty;
+    private EffectiveScissor _lastEffectiveTextClip = EffectiveScissor.Empty;
 
     /// <summary>Dirty command ranges from the last SetDirtyCommandRanges call.</summary>
     public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges => _dirtyCommandRanges;
@@ -34,7 +40,11 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public int ScissorStateChangeCount => _scissorStateChangeCount;
 
+    public int TextClipSkippedCount => _textClipSkippedCount;
+
     public EffectiveScissor LastEffectiveScissor => _lastEffectiveScissor;
+
+    public EffectiveScissor LastEffectiveTextClip => _lastEffectiveTextClip;
 
     public DrawingBackendClipMode ClipMode { get; private set; } = clipMode;
 
@@ -62,6 +72,17 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
         var renderScissor = DrawingScissor.ToIntegerScissorRect(effectiveScissor, viewportWidth, viewportHeight);
         return new D3D12FillRectScissorPlan(effectiveScissor, renderScissor, false);
+    }
+
+    internal static D3D12TextClipPlan ResolveTextClip(DrawingBackendClipMode clipMode, in DrawRect viewport, in DrawRect clipBounds)
+    {
+        var effectiveClip = DrawingScissor.ResolveEffectiveScissor(viewport, clipBounds);
+        if (clipMode != DrawingBackendClipMode.Scissor)
+        {
+            return new D3D12TextClipPlan(effectiveClip, false, false);
+        }
+
+        return new D3D12TextClipPlan(effectiveClip, true, effectiveClip.IsEmpty);
     }
 
     internal static D3D12FillRectScissorDiagnostics ComputeFillRectScissorDiagnostics(DrawingBackendClipMode clipMode, in DrawRect viewport, ReadOnlySpan<DrawCommand> commands)
@@ -104,6 +125,29 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return new D3D12FillRectScissorDiagnostics(clippedCommandCount, emptyIntersectionSkippedCount, scissorStateChangeCount, lastEffectiveScissor);
     }
 
+    internal static D3D12TextClipDiagnostics ComputeTextClipDiagnostics(DrawingBackendClipMode clipMode, in DrawRect viewport, ReadOnlySpan<DrawCommand> commands)
+    {
+        var textClipSkippedCount = 0;
+        var lastEffectiveTextClip = EffectiveScissor.Empty;
+
+        foreach (var command in commands)
+        {
+            if (command.Kind != DrawCommandKind.DrawTextRun)
+            {
+                continue;
+            }
+
+            var textClipPlan = ResolveTextClip(clipMode, viewport, command.ClipBounds);
+            lastEffectiveTextClip = textClipPlan.EffectiveClip;
+            if (textClipPlan.Skip)
+            {
+                textClipSkippedCount++;
+            }
+        }
+
+        return new D3D12TextClipDiagnostics(textClipSkippedCount, lastEffectiveTextClip);
+    }
+
     public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
     {
         _dirtyCommandRanges = ranges;
@@ -123,10 +167,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         var viewportHeight = _renderer.Height;
         var viewport = new DrawRect(0, 0, viewportWidth, viewportHeight);
         var diagnostics = ComputeFillRectScissorDiagnostics(ClipMode, viewport, commands);
+        var textDiagnostics = ComputeTextClipDiagnostics(ClipMode, viewport, commands);
         _clippedCommandCount = diagnostics.ClippedCommandCount;
         _emptyIntersectionSkippedCount = diagnostics.EmptyIntersectionSkippedCount;
         _scissorStateChangeCount = diagnostics.ScissorStateChangeCount;
         _lastEffectiveScissor = diagnostics.LastEffectiveScissor;
+        _textClipSkippedCount = textDiagnostics.TextClipSkippedCount;
+        _lastEffectiveTextClip = textDiagnostics.LastEffectiveTextClip;
 
         foreach (var command in commands)
         {
@@ -159,6 +206,12 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                         break;
                     }
 
+                    var textClipPlan = ResolveTextClip(ClipMode, viewport, command.ClipBounds);
+                    if (textClipPlan.Skip)
+                    {
+                        break;
+                    }
+
                     _texts.Add(new D3D12TextRenderer.TextData(
                         command.Rect.X,
                         command.Rect.Y,
@@ -169,7 +222,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                         command.Color.B / 255f,
                         command.Color.A / 255f,
                         command.Text,
-                        command.Resource));
+                        command.Resource,
+                        textClipPlan.EffectiveClip,
+                        textClipPlan.ClipEnabled));
                     break;
             }
         }

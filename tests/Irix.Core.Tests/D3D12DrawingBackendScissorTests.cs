@@ -93,8 +93,46 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.True(scissor.ScissorStateChangeCount > 0);
     }
 
+    [Fact]
+    public void ResolveTextClip_scissor_mode_skips_empty_intersection()
+    {
+        var plan = D3D12DrawingBackend.ResolveTextClip(DrawingBackendClipMode.Scissor, Viewport, new DrawRect(240, 24, 80, 40));
+
+        Assert.True(plan.ClipEnabled);
+        Assert.True(plan.Skip);
+        Assert.True(plan.EffectiveClip.IsEmpty);
+    }
+
+    [Fact]
+    public void ResolveTextClip_diagnostic_mode_resolves_but_does_not_enable_clip()
+    {
+        var plan = D3D12DrawingBackend.ResolveTextClip(DrawingBackendClipMode.Diagnostic, Viewport, ClipA);
+
+        Assert.False(plan.ClipEnabled);
+        Assert.False(plan.Skip);
+        Assert.Equal(ClipA, plan.EffectiveClip.Bounds);
+    }
+
+    [Fact]
+    public void ComputeTextClipDiagnostics_counts_empty_skip_and_keeps_last_effective_clip()
+    {
+        var diagnostics = D3D12DrawingBackend.ComputeTextClipDiagnostics(DrawingBackendClipMode.Scissor, Viewport,
+        [
+            Text(new DrawRect(240, 24, 80, 40)),
+            Text(ClipA)
+        ]);
+
+        Assert.Equal(1, diagnostics.TextClipSkippedCount);
+        Assert.Equal(ClipA, diagnostics.LastEffectiveTextClip.Bounds);
+    }
+
     private static DrawCommand Fill(DrawRect clipBounds)
     {
         return new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 50, 50), ClipBounds: clipBounds, Color: DrawColor.Opaque(1, 2, 3));
+    }
+
+    private static DrawCommand Text(DrawRect clipBounds)
+    {
+        return new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 50, 50), ClipBounds: clipBounds, Color: DrawColor.Opaque(1, 2, 3));
     }
 }

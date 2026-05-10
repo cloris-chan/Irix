@@ -96,4 +96,12 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal("Empty scissor smoke: kind=FillRect clippedCommands=1 emptyIntersectionSkipped=1 scissorStateChanges=0 deviceRemoved=False", line);
     }
+
+    [Fact]
+    public void Diagnose_text_clip_smoke_outputs_effective_clip_and_skip_counter()
+    {
+        var line = Program.BuildTextClipSmokeDiagnosticLine(new EffectiveScissor(new DrawRect(32, 32, 80, 40), false), textClipSkippedCount: 1, deviceRemoved: false);
+
+        Assert.Equal("Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip=(32,32,80,40) textClipSkipped=1 deviceRemoved=False", line);
+    }
 }

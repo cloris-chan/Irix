@@ -206,11 +206,28 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
                         y = textRun.Y
                     };
 
-                    _d2dContext->DrawTextLayout(
-                        origin,
-                        layout,
-                        (ID2D1Brush*)_textBrush,
-                        D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                    var clipPushed = textRun.ClipEnabled && !textRun.EffectiveClip.IsEmpty;
+                    if (clipPushed)
+                    {
+                        var clipRect = ToD2DClipRect(textRun.EffectiveClip);
+                        _d2dContext->PushAxisAlignedClip(&clipRect, D2D1_ANTIALIAS_MODE.D2D1_ANTIALIAS_MODE_ALIASED);
+                    }
+
+                    try
+                    {
+                        _d2dContext->DrawTextLayout(
+                            origin,
+                            layout,
+                            (ID2D1Brush*)_textBrush,
+                            D2D1_DRAW_TEXT_OPTIONS.D2D1_DRAW_TEXT_OPTIONS_CLIP);
+                    }
+                    finally
+                    {
+                        if (clipPushed)
+                        {
+                            _d2dContext->PopAxisAlignedClip();
+                        }
+                    }
                 }
 
                 endDrawResult = _d2dContext->EndDraw(null, null);
@@ -249,6 +266,18 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         _deviceRemoved = true;
         _deviceErrorReason = reason;
         System.Diagnostics.Debug.WriteLine($"[D3D12TextRenderer] {reason}");
+    }
+
+    private static D2D_RECT_F ToD2DClipRect(EffectiveScissor effectiveClip)
+    {
+        var bounds = effectiveClip.Bounds;
+        return new D2D_RECT_F
+        {
+            left = bounds.X,
+            top = bounds.Y,
+            right = bounds.X + bounds.Width,
+            bottom = bounds.Y + bounds.Height
+        };
     }
 
     private IDWriteTextLayout* GetTextLayout(ReadOnlySpan<char> text, TextStyle style, float width, float height)
@@ -560,7 +589,9 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         float B,
         float A,
         TextSlice Text,
-        ResourceHandle Style);
+        ResourceHandle Style,
+        EffectiveScissor EffectiveClip,
+        bool ClipEnabled);
 
     private sealed class CachedTextFormat(TextStyle style, nint format)
     {

@@ -159,6 +159,11 @@ internal static class Program
         return $"Empty scissor smoke: kind=FillRect clippedCommands={clippedCommandCount} emptyIntersectionSkipped={emptyIntersectionSkippedCount} scissorStateChanges={scissorStateChangeCount} deviceRemoved={deviceRemoved}";
     }
 
+    internal static string BuildTextClipSmokeDiagnosticLine(EffectiveScissor effectiveClip, int textClipSkippedCount, bool deviceRemoved)
+    {
+        return $"Text clip smoke: kind=DrawTextRun textClip=True layoutClip=True effectiveClip={FormatEffectiveScissor(effectiveClip)} textClipSkipped={textClipSkippedCount} deviceRemoved={deviceRemoved}";
+    }
+
     private static string FormatEffectiveScissor(EffectiveScissor scissor)
     {
         return scissor.IsEmpty ? "empty" : FormatRect(scissor.Bounds);
@@ -660,6 +665,9 @@ internal static class Program
         Console.WriteLine($"=== Empty Scissor Diagnostics ===");
         RunEmptyScissorSmokeDiagnostic(d3d12Backend);
         Console.WriteLine(BuildEmptyScissorSmokeDiagnosticLine(d3d12Backend.ClippedCommandCount, d3d12Backend.EmptyIntersectionSkippedCount, d3d12Backend.ScissorStateChangeCount, d3d12Renderer.IsDeviceRemoved));
+        Console.WriteLine($"=== Text Clip Diagnostics ===");
+        RunTextClipSmokeDiagnostic(d3d12Backend);
+        Console.WriteLine(BuildTextClipSmokeDiagnosticLine(d3d12Backend.LastEffectiveTextClip, d3d12Backend.TextClipSkippedCount, d3d12Renderer.IsDeviceRemoved));
         Console.WriteLine("=== Diagnostic mode complete ===");
 
         FrameDrawingResources.Return(resources);
@@ -710,6 +718,44 @@ internal static class Program
         backend.BeginFrame(default);
         backend.Execute(commands, FrameDrawingResources.Empty);
         backend.EndFrame();
+    }
+
+    private static void RunTextClipSmokeDiagnostic(D3D12DrawingBackend backend)
+    {
+        var resources = FrameDrawingResources.Rent();
+        try
+        {
+            var textStyle = resources.AddTextStyle(TextStyle.Default);
+            var skippedText = resources.AddText("Skipped text clip smoke");
+            var clippedText = resources.AddText("Clipped text clip smoke");
+            resources.Seal();
+
+            var commands = new[]
+            {
+                new DrawCommand(
+                    DrawCommandKind.DrawTextRun,
+                    Rect: new DrawRect(16, 16, 160, 80),
+                    Resource: textStyle,
+                    Text: skippedText,
+                    ClipBounds: new DrawRect(2048, 2048, 80, 40),
+                    Color: DrawColor.Opaque(255, 255, 255)),
+                new DrawCommand(
+                    DrawCommandKind.DrawTextRun,
+                    Rect: new DrawRect(16, 16, 160, 80),
+                    Resource: textStyle,
+                    Text: clippedText,
+                    ClipBounds: new DrawRect(32, 32, 80, 40),
+                    Color: DrawColor.Opaque(255, 255, 255))
+            };
+
+            backend.BeginFrame(default);
+            backend.Execute(commands, resources);
+            backend.EndFrame();
+        }
+        finally
+        {
+            FrameDrawingResources.Return(resources);
+        }
     }
 
     private static void RunResizeDiagnosticMode()
