@@ -582,6 +582,78 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleOnly_action_id_change_preserves_geometry_but_refreshes_hit_target_metadata()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var initialLayout = pipeline.LastLayoutResult!;
+        var initialGeometry = SnapshotLayoutGeometryInvariants(initialLayout.Elements);
+        var initialHitTarget = Assert.Single(frame1.HitTargets);
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var nextLayout = pipeline.LastLayoutResult!;
+        var nextHitTarget = Assert.Single(frame2.HitTargets);
+
+        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
+        Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(nextLayout.Elements));
+        Assert.Equal(initialHitTarget.Bounds, nextHitTarget.Bounds);
+        Assert.Equal(initialHitTarget.ClipBounds, nextHitTarget.ClipBounds);
+        Assert.Equal("Increment", initialHitTarget.ActionId);
+        Assert.Equal("Increment.Secondary", nextHitTarget.ActionId);
+        Assert.NotEqual(initialHitTarget.ActionId, nextHitTarget.ActionId);
+
+        var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
+            frame1.HitTargets,
+            nextLayout.Elements,
+            pipeline.LastDirtyElementRanges,
+            out var patchedHitTargets);
+
+        Assert.True(patched);
+        var patchedHitTarget = Assert.Single(patchedHitTargets);
+        Assert.Equal(initialHitTarget.Bounds, patchedHitTarget.Bounds);
+        Assert.Equal(initialHitTarget.ClipBounds, patchedHitTarget.ClipBounds);
+        Assert.Equal("Increment.Secondary", patchedHitTarget.ActionId);
+    }
+
+    [Fact]
+    public void StyleOnly_command_rerecord_uses_current_frame_resources()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var resources1 = Assert.IsType<FrameDrawingResources>(frame1.Resources);
+
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var resources2 = Assert.IsType<FrameDrawingResources>(frame2.Resources);
+
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
+        Assert.NotSame(resources1, resources2);
+        Assert.Same(resources2, pipeline.RetainedFrame.Resources);
+        Assert.Equal("Increment", resources2.Resolve(frame2.Commands.Memory.Span[1].Text).ToString());
+    }
+
+    [Fact]
     public void RenderPipeline_rebuilds_layout_when_tree_changes()
     {
         var pipeline = new RenderPipeline();
@@ -611,6 +683,11 @@ public sealed class WindowLayoutPipelineTests
         int ElementStart,
         int ElementCount);
 
+    private readonly record struct LayoutGeometryInvariant(
+        LayoutElementKind Kind,
+        PixelRectangle Bounds,
+        PixelRectangle ClipBounds);
+
     private static LayoutElementInvariant[] SnapshotLayoutElementInvariants(IReadOnlyList<LayoutElement> elements)
     {
         var snapshot = new LayoutElementInvariant[elements.Count];
@@ -633,6 +710,18 @@ public sealed class WindowLayoutPipelineTests
         var snapshot = new List<LayoutTreeRangeInvariant>();
         AppendLayoutTreeRanges(treeNodes, snapshot);
         return [.. snapshot];
+    }
+
+    private static LayoutGeometryInvariant[] SnapshotLayoutGeometryInvariants(IReadOnlyList<LayoutElement> elements)
+    {
+        var snapshot = new LayoutGeometryInvariant[elements.Count];
+        for (var elementIndex = 0; elementIndex < elements.Count; elementIndex++)
+        {
+            var element = elements[elementIndex];
+            snapshot[elementIndex] = new LayoutGeometryInvariant(element.Kind, element.Bounds, element.ClipBounds);
+        }
+
+        return snapshot;
     }
 
     private static void AppendLayoutTreeRanges(LayoutTreeNode[] treeNodes, List<LayoutTreeRangeInvariant> snapshot)
@@ -1530,6 +1619,90 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.False(stable);
         Assert.Empty(dirtyCommandRanges);
+    }
+
+    [Fact]
+    public void StyleOnlyHitTargetPatch_updates_dirty_target_metadata_without_changing_geometry()
+    {
+        var retainedHitTargets = new[]
+        {
+            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Old", new PixelRectangle(0, 0, 960, 540))
+        };
+        var nextElements = new[]
+        {
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(16, 60, 140, 40),
+                ClipBounds: new PixelRectangle(0, 0, 960, 540),
+                Text: "Increment",
+                ActionId: "New")
+        };
+
+        var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
+            retainedHitTargets,
+            nextElements,
+            [(0, 1)],
+            out var patchedHitTargets);
+
+        Assert.True(patched);
+        var patchedHitTarget = Assert.Single(patchedHitTargets);
+        Assert.Equal(retainedHitTargets[0].Bounds, patchedHitTarget.Bounds);
+        Assert.Equal(retainedHitTargets[0].ClipBounds, patchedHitTarget.ClipBounds);
+        Assert.Equal("New", patchedHitTarget.ActionId);
+    }
+
+    [Fact]
+    public void StyleOnlyHitTargetPatch_refuses_changed_hit_target_count()
+    {
+        var retainedHitTargets = new[]
+        {
+            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Old", new PixelRectangle(0, 0, 960, 540))
+        };
+        var nextElements = new[]
+        {
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(16, 60, 140, 40),
+                ClipBounds: new PixelRectangle(0, 0, 960, 540),
+                Text: "Increment",
+                ActionId: null)
+        };
+
+        var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
+            retainedHitTargets,
+            nextElements,
+            [(0, 1)],
+            out var patchedHitTargets);
+
+        Assert.False(patched);
+        Assert.Empty(patchedHitTargets);
+    }
+
+    [Fact]
+    public void StyleOnlyHitTargetPatch_refuses_changed_hit_target_geometry()
+    {
+        var retainedHitTargets = new[]
+        {
+            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Old", new PixelRectangle(0, 0, 960, 540))
+        };
+        var nextElements = new[]
+        {
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(16, 72, 140, 40),
+                ClipBounds: new PixelRectangle(0, 0, 960, 540),
+                Text: "Increment",
+                ActionId: "New")
+        };
+
+        var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
+            retainedHitTargets,
+            nextElements,
+            [(0, 1)],
+            out var patchedHitTargets);
+
+        Assert.False(patched);
+        Assert.Empty(patchedHitTargets);
     }
 
     [Fact]
