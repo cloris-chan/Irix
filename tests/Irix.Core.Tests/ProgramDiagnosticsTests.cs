@@ -97,7 +97,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var writer = new StringWriter();
 
-        await Program.RunInputDiagnosticModeAsync(writer, cancellationToken: TestContext.Current.CancellationToken);
+        await InputDiagnosticRunner.RunAsync(writer, cancellationToken: TestContext.Current.CancellationToken);
 
         var output = writer.ToString();
         Assert.Contains("=== Input Ownership Diagnostics ===", output);
@@ -134,7 +134,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_input_snapshot_captures_formatter_fields()
     {
-        var snapshot = Program.BuildInputDiagnosticsSnapshot();
+        var snapshot = InputDiagnosticRunner.BuildInputDiagnosticsSnapshot();
 
         Assert.Null(snapshot.Ownership.HoveredTarget);
         Assert.Null(snapshot.Ownership.FocusedTarget);
@@ -155,7 +155,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_input_formatter_outputs_stable_fields()
     {
-        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildInputDiagnosticLines(Program.BuildInputDiagnosticsSnapshot()));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildInputDiagnosticLines(InputDiagnosticRunner.BuildInputDiagnosticsSnapshot()));
 
         Assert.Contains("=== Input Ownership Diagnostics ===", output);
         Assert.Contains("buttonPriorityOrder Pressed > Hovered > Focused > Normal", output);
