@@ -79,6 +79,31 @@ internal readonly record struct RetainedResourceSegment(int CommandStart, int Co
     public int CommandEnd => CommandStart + CommandCount;
 }
 
+internal readonly record struct SegmentedFrameRead(int CommandStart, DrawCommand[] Commands, IFrameResourceResolver Resolver);
+
+internal sealed class SegmentedRetainedFrameReader(RetainedCommandBuffer commandBuffer, RetainedResourceSegmentTable segmentTable)
+{
+    public IReadOnlyList<SegmentedFrameRead> ReadSegments()
+    {
+        var commands = commandBuffer.Commands;
+        var reads = new List<SegmentedFrameRead>(segmentTable.Segments.Count);
+        foreach (var segment in segmentTable.Segments)
+        {
+            if (segment.CommandStart < 0 || segment.CommandCount <= 0 || segment.CommandStart > commands.Length - segment.CommandCount)
+            {
+                throw new InvalidOperationException("Resource segment is outside the retained command buffer.");
+            }
+
+            reads.Add(new SegmentedFrameRead(
+                segment.CommandStart,
+                commands.Slice(segment.CommandStart, segment.CommandCount).ToArray(),
+                segment.Snapshot.Resolver));
+        }
+
+        return reads;
+    }
+}
+
 internal sealed class RetainedResourceSegmentTable : IDisposable
 {
     private RetainedResourceSegment[] _segments = [];
@@ -123,6 +148,7 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
 
     public bool TryGetSnapshotForCommand(int commandIndex, out RetainedResourceSnapshot snapshot)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         foreach (var segment in _segments)
         {
             if (commandIndex >= segment.CommandStart && commandIndex < segment.CommandEnd)
@@ -138,6 +164,7 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
 
     public void Invalidate()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ReplaceSegments([], retainBeforeRelease: false);
     }
 

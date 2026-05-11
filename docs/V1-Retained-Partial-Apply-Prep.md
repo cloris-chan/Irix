@@ -16,7 +16,7 @@
 | StyleOnly plan diagnostics | Already available | Planning remains post-layout diagnostics only; not a fast path. |
 | Retained-input snapshot seam | Implemented locally | `RenderPipeline.LastRetainedInputSnapshot` collects retained layout result, element command ranges, hit targets, retained root, viewport, dirty classifications, dirty ranges, and rebuild reason. |
 | Retained data-only local planner | Implemented locally | `RetainedPartialApplyPlanner` consumes the snapshot and returns `AppliedPartial`, `FallbackFull`, or `Rejected` planning data without changing render behavior. Planner-only boundary tests cover every local reason. |
-| Partial apply preflight scaffold | Implemented locally / not wired | [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) selects resource snapshot / composite resolver, defines internal resource segment and hit target metadata projector scaffolds, and lists integration gates. |
+| Partial apply preflight scaffold | Implemented locally / not wired | [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) selects resource snapshot / composite resolver, defines internal resource segment, segmented reader, hit target metadata projector, retained root update strategy, and integration gates. |
 
 ## 2. Blocked Decisions
 

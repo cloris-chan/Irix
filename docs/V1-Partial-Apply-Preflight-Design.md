@@ -11,7 +11,7 @@
 | Resource cache | Do not add one for v1 preflight. |
 | Backend contract | Do not touch D3D12 or `IDrawingBackend` in this line. |
 | Hit targets | Preserve retained geometry; reproject metadata from next `VirtualNode` through a local projector prototype only. |
-| Runtime hookup | Postponed until every gate in section 5 is satisfied. |
+| Runtime hookup | Postponed until every gate in section 6 is satisfied. |
 
 Stable global text/style handles are not the next step. They would require a durable resource table, recycling/invalidation rules, backend cache identity, and memory pressure policy. The smaller next design is a retained resource snapshot plus a resolver that can serve old retained commands and new replacement commands during one merged retained frame.
 
@@ -40,6 +40,8 @@ Current scaffold:
 | `RetainedResourceSnapshot` | Internal / preflight tests | Captures a resolver plus `FrameId` generation and optional retain/release probes. |
 | `RetainedResourceSegment` | Internal / preflight tests | Describes `(commandStart, commandCount, resolverSnapshot)` ownership. |
 | `RetainedResourceSegmentTable` | Internal / preflight tests | Models full apply, partial accept, invalidate, dispose, and per-command resolver lookup. |
+| `SegmentedRetainedFrameReader` | Internal / preflight tests | Reads retained commands by resource segment and returns the resolver owned by each segment. |
+| `SegmentedFrameRead` | Internal / preflight tests | Carries a command slice copy plus its segment resolver for assertion/prototyping. |
 
 This scaffold is not connected to `RetainedRenderFrame`, `DrawingBackendCompositor`, `IDrawingBackend.Execute`, or D3D12. It exists to prove ownership rules before runtime hookup.
 
@@ -76,15 +78,18 @@ The lookup boundary must preserve zero ambiguity:
 
 If the backend API still accepts one `IFrameResourceResolver`, the retained frame needs an adapter that either executes per segment or remaps resources into one namespace before calling the backend. Until that adapter exists, cross-frame partial apply must continue to return `ResourceOwnershipMismatch` or full fallback.
 
+Current segmented reader prototype proves the facade shape without touching `IDrawingBackend.Execute`: old retained command segments read through the old resolver, while accepted replacement dirty ranges read through the replacement resolver. It copies command slices for tests only; it is not a backend hot path.
+
 ### Test Strategy
 
 | Test area | Required proof |
 |-----------|----------------|
 | Planner fallback | `ResourceOwnershipMismatch` remains side-effect-free when old/new resources differ. |
-| Ownership | Accepted partial retains old and new snapshots; replaced snapshots release only after last command segment disappears. |
+| Ownership | Accepted partial retains old and new snapshots; replaced snapshots release only after last command segment disappears; repeated partial accepts are idempotent. |
 | Resolver correctness | Old text resolves from old resources and replacement text resolves from new resources in one retained frame. |
 | Pool safety | Re-rented `FrameDrawingResources` with a new `FrameId` is never treated as the old snapshot. |
 | Full fallback | Full apply releases all previous snapshots and exposes only the new full-frame resolver. |
+| Range edges | Multiple dirty ranges, adjacent merge, invalid ranges, disposed table/snapshot behavior are explicit. |
 | Backend neutrality | Existing compositor/backend behavior is unchanged until an explicit integration step lands. |
 
 ## 3. Hit Target Metadata Projection
@@ -116,6 +121,8 @@ Current scaffold:
 
 This prototype does not call layout, does not change hit-test runtime, and does not infer bounds/clip geometry.
 
+Current projector tests cover dirty DFS that is not an action node, non-dirty action id changes, key/path mismatch, multiple buttons, and nested trees. Success still only means metadata can be reprojected; geometry remains retained and must already be proven stable.
+
 Fallback conditions:
 
 | Condition | Reason |
@@ -129,7 +136,21 @@ Fallback conditions:
 | Retained bounds or clip would change | `HitTargetPatchFailed` |
 | `ActionId` metadata is ambiguous or missing for an existing target | `HitTargetPatchFailed` |
 
-## 4. Planner-Only Boundary
+## 4. Retained Root Update Preflight
+
+Accepted partial apply must advance retained root/control metadata or the next diff will compare against stale input. The update rule is intentionally narrower than generic `VirtualNode` replacement:
+
+| Metadata | Accepted partial update | Full fallback trigger |
+|----------|-------------------------|-----------------------|
+| `ActionId` | May update on dirty action nodes after hit target metadata projection succeeds. | Missing/ambiguous action metadata, changed hit target count/order, or non-dirty action id drift. |
+| `IsHovered` / `IsPressed` / `IsFocused` | May update on dirty controls when dirty classification is style-only. | Any unknown visual state attribute or mismatch between retained and next node path/key. |
+| Text label/content | Do not update in partial path. | Any text/content change remains text-size-affecting unless a future measurement proof exists. |
+| Layout-affecting attributes | Do not update in partial path. | Width/height/spacing/scroll/clip-affecting changes require full layout. |
+| Tree shape / keys / kinds | Do not update in partial path. | Child count/order, key mismatch, kind mismatch, add/remove/move require full fallback. |
+
+Future retained root update should run after command range planning, resource ownership, and hit target metadata projection all succeed. It should apply only the accepted dirty metadata patch to the retained root snapshot, then expose that root as the next retained baseline. If any dirty node cannot be updated from next-node metadata alone, the path must use the existing full layout/full apply behavior.
+
+## 5. Planner-Only Boundary
 
 `RetainedPartialApplyPlanner` is allowed to read `RenderPipeline.LastRetainedInputSnapshot`, current viewport, retained resources, and replacement resources. It is not allowed to:
 
@@ -143,7 +164,7 @@ Fallback conditions:
 
 Regression tests should keep every planner result reason covered: `None` for a data-only eligible plan, plus `NotStyleOnly`, `ViewportChanged`, `MissingRetainedSnapshot`, `UnstableCommandRange`, `HitTargetPatchFailed`, and `ResourceOwnershipMismatch`.
 
-## 5. Integration Gates
+## 6. Integration Gates
 
 No partial apply hookup should land until every gate below is satisfied.
 
@@ -160,7 +181,9 @@ No partial apply hookup should land until every gate below is satisfied.
 
 The internal `PartialApplyIntegrationGateChecklist` mirrors this table as a regression guard. Every gate currently remains unsatisfied and `CanHookUpPartialApply` is false.
 
-## 6. Sealed Lines
+Each checklist item now carries an evidence string. Evidence can be a preflight test, a no-change regression test, or a design-only blocker. A gate is not satisfied until runtime ownership/hookup exists; preflight evidence alone must not flip `CanHookUpPartialApply`.
+
+## 7. Sealed Lines
 
 - Diagnostics stay regression-only; no unified diagnostics channel/event bus/registry.
 - Controls helpers stay PoC-owned; no typed ids.

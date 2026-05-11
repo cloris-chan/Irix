@@ -37,6 +37,7 @@ internal static class HitTargetMetadataProjector
             return HitTargetMetadataProjection.CreateFallback();
         }
 
+        var projectedDirtyCount = 0;
         var patched = retainedHitTargets.Count == 0 ? [] : retainedHitTargets.ToArray();
         for (var i = 0; i < actionNodes.Count; i++)
         {
@@ -44,6 +45,7 @@ internal static class HitTargetMetadataProjector
             var retainedHitTarget = retainedHitTargets[i];
             if (dirtySet.Contains(actionNode.DfsIndex))
             {
+                projectedDirtyCount++;
                 patched[i] = new HitTestTarget(retainedHitTarget.Bounds, actionNode.ActionId, retainedHitTarget.ClipBounds);
                 continue;
             }
@@ -52,6 +54,11 @@ internal static class HitTargetMetadataProjector
             {
                 return HitTargetMetadataProjection.CreateFallback();
             }
+        }
+
+        if (projectedDirtyCount != dirtySet.Count)
+        {
+            return HitTargetMetadataProjection.CreateFallback();
         }
 
         return HitTargetMetadataProjection.CreateSucceeded(patched);
