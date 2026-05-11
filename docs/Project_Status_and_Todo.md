@@ -34,6 +34,7 @@
 | [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md) | v1 translator feedback contract prep：promotion gates、style/viewport/retained-tree/pipeline/feedback 边界 |
 | [V1-Scroll-Settings-Provider-Prep.md](V1-Scroll-Settings-Provider-Prep.md) | v1 scroll settings provider prep：Windows wheel lines/chars 来源、fallback defaults、非 Windows 行为 |
 | [V1-Retained-Partial-Apply-Prep.md](V1-Retained-Partial-Apply-Prep.md) | v1 retained / partial apply prep：已有资产、blocked decisions、最小安全实现线 |
+| [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) | v1 partial apply preflight：resource snapshot / composite resolver 选型、hit target metadata projection、接入前 gates |
 | [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) | diagnostics snapshot v0：snapshot 类型、provider 边界、CLI 文本冻结、最小实现候选 |
 | [RetainedElementTree-Design.md](RetainedElementTree-Design.md) | 真正 retained element tree / local patch apply 的草案 |
 | [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
@@ -52,7 +53,7 @@
 | Scroll feedback vocabulary v0 | ✅ 第一小步完成：`ScrollFeedback` / `ScrollContainerMetrics` side-channel 由 translator 生成；旧 `Action<double>` max-scroll callback 仍保留；不移动 controller/state/pump |
 | Translator feedback contract prep | ✅ internal seam 完成 / no behavior change：`TranslatorRenderPipelineFactory` 可替换 pipeline creation；默认仍走 `CounterStylePreset.Default`；translator 仍留在 `Irix.Poc` |
 | Scroll settings provider design | ✅ decision recorded：runtime 继续 postponed；若重开，先做 fallback-only internal provider；不读 Win32、不接 controller |
-| Retained / partial apply prep | ✅ data-only planner 完成：`LastRetainedInputSnapshot` + `RetainedPartialApplyPlanner` 只产出 local planning result；cross-frame resources 仍 blocked |
+| Retained / partial apply prep | ✅ planner-only 加固完成：每个 local reason 有 regression test；preflight 设计已记录 resource snapshot / composite resolver、hit target projection、接入 gates；cross-frame resources 仍 blocked |
 
 ### 下一步候选
 
@@ -61,7 +62,7 @@
 - 已实现：`ControlVisualState projection helper`、`Control action attribute helper`、`Button attribute bundle helper` 仍为 PoC-owned internal code；PoC source raw `ActionId` 构造已清；target/action 继续用 string，不引入 typed id wrappers。
 - 已实现：`ScrollFeedback` / `ScrollContainerMetrics` vocabulary v0 作为 translator side-channel；旧 `Action<double>` callback 继续驱动 runtime 行为。
 - 已记录：[Scroll settings provider design](V1-Scroll-Settings-Provider-Prep.md) 决策为 runtime 继续 postponed；若重开，先做 fallback-only internal provider，不读 Win32、不接线到 controller。
-- 已记录：[Retained / partial apply prep](V1-Retained-Partial-Apply-Prep.md) 盘点：retained-input snapshot seam 与 data-only local planner 已落地；下一条安全线仍是 planner-only，不做 full partial apply。
+- 已记录：[Retained / partial apply prep](V1-Retained-Partial-Apply-Prep.md) 与 [Partial apply preflight design](V1-Partial-Apply-Preflight-Design.md)：retained-input snapshot seam、data-only local planner、planner-only reason coverage、resource snapshot / composite resolver 选型、hit target metadata projection、接入 gates 已落地/记录；下一条安全线仍是 planner-only，不做 full partial apply。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion、`StyleOnly fast-path implementation`；StyleOnly 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point，不接入 `RenderPipeline.Build`，不启用新行为。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 
@@ -78,7 +79,7 @@
 | IRIX-V1-007 | P2 | Typed identity wrappers | Postponed | 保留设计词汇；不新增 public API，string id 行为不变。 |
 | IRIX-V1-008 | P2 | Scroll extraction | Postponed | 不抽 `ScrollController` / `ScrollState` / `ScrollFramePump`。 |
 | IRIX-V1-009 | P2 | `WindowDrawCommandTranslator` promotion | Postponed / seam only | Translator 留在 `Irix.Poc`；style/pipeline creation 只是 internal seam，viewport/retained-tree/typed feedback 仍未 promotion。 |
-| IRIX-V1-013 | P2 | Retained data-only planner / partial apply prep | Planner seam 完成 | [V1-Retained-Partial-Apply-Prep.md](V1-Retained-Partial-Apply-Prep.md) 已记录 resource snapshot 推荐方向、local result vocabulary、hit target metadata patching 边界；不启用 StyleOnly fast-path。 |
+| IRIX-V1-013 | P2 | Retained planner-only hardening / partial apply preflight | Planner-only 完成 | [V1-Retained-Partial-Apply-Prep.md](V1-Retained-Partial-Apply-Prep.md) 与 [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) 已记录 reason coverage、resource snapshot / composite resolver 选型、hit target metadata projection、接入 gates；不启用 StyleOnly fast-path。 |
 | IRIX-V1-010 | P3 | StyleOnly fast-path | Postponed | 不接入 `RenderPipeline.Build`，只修 diagnostics/planning regression。 |
 | IRIX-V1-011 | P3 | Unified diagnostics channel / event bus / registry | Postponed | 不新增全局 diagnostics abstraction。 |
 | IRIX-V1-012 | P0 | 当前进度判断 | Tracking | v1 约 86%～88%；下一轮聚焦 contract hardening，不代表 GA readiness。 |

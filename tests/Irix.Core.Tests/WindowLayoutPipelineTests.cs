@@ -806,6 +806,9 @@ public sealed class WindowLayoutPipelineTests
         var snapshot = pipeline.LastRetainedInputSnapshot!;
         var retainedFrameCommandCount = pipeline.RetainedFrame.CommandCount;
         var retainedFrameResources = pipeline.RetainedFrame.Resources;
+        var retainedFrameDirtyRanges = pipeline.RetainedFrame.DirtyCommandRanges.ToArray();
+        var layoutRebuildCount = pipeline.LayoutRebuildCount;
+        var lastDirtyRanges = pipeline.LastDirtyCommandRanges.ToArray();
 
         var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, frame1.Resources, frame2.Resources);
 
@@ -816,8 +819,117 @@ public sealed class WindowLayoutPipelineTests
         Assert.Empty(plan.PatchedHitTargets);
         Assert.Equal(retainedFrameCommandCount, pipeline.RetainedFrame.CommandCount);
         Assert.Same(retainedFrameResources, pipeline.RetainedFrame.Resources);
+        Assert.Equal(retainedFrameDirtyRanges, pipeline.RetainedFrame.DirtyCommandRanges);
+        Assert.Equal(layoutRebuildCount, pipeline.LayoutRebuildCount);
+        Assert.Equal(lastDirtyRanges, pipeline.LastDirtyCommandRanges);
         Assert.Equal(frame2.HitTargets, snapshot.HitTargets);
         Assert.Equal(frame2.DirtyCommandRanges, snapshot.DirtyCommandRanges);
+    }
+
+    [Fact]
+    public void RetainedPartialApplyPlanner_falls_back_for_unstable_command_range()
+    {
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var elements = new[]
+        {
+            new LayoutElement(LayoutElementKind.Text, new PixelRectangle(0, 0, 100, 32), Text: "A"),
+            new LayoutElement(LayoutElementKind.Rectangle, new PixelRectangle(0, 44, 100, 48))
+        };
+        var layoutResult = new LayoutTreeResult(elements, [], [(0, 2)]);
+        var snapshot = new RenderPipelineRetainedInputSnapshot(
+            layoutResult,
+            [new ElementCommandRange(0, 1), new ElementCommandRange(3, 1)],
+            [],
+            VirtualNodeFactory.ScrollContainer(1),
+            viewport,
+            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            [(0, 2)],
+            [],
+            LayoutRebuildReason.StyleOnly);
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, FrameDrawingResources.Empty, FrameDrawingResources.Empty);
+
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.UnstableCommandRange, plan.Reason);
+        Assert.Equal([(0, 2)], plan.DirtyElementRanges);
+        Assert.Empty(plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+    }
+
+    [Fact]
+    public void RetainedPartialApplyPlanner_falls_back_for_hit_target_patch_failed()
+    {
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var elements = new[]
+        {
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(32, 120, 140, 40),
+                Text: "Increment",
+                ActionId: "Increment.Secondary")
+        };
+        var layoutResult = new LayoutTreeResult(elements, [], [(0, 1)]);
+        var snapshot = new RenderPipelineRetainedInputSnapshot(
+            layoutResult,
+            [new ElementCommandRange(0, 2)],
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            VirtualNodeFactory.ScrollContainer(1),
+            viewport,
+            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            [(0, 1)],
+            [],
+            LayoutRebuildReason.StyleOnly);
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, FrameDrawingResources.Empty, FrameDrawingResources.Empty);
+
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, plan.Reason);
+        Assert.Equal([(0, 1)], plan.DirtyElementRanges);
+        Assert.Empty(plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+    }
+
+    [Fact]
+    public async Task RetainedPartialApplyPlanner_does_not_mutate_drawing_backend_compositor()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        await compositor.RenderAsync(frame2, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var renderCount = compositor.RenderCount;
+        var fullApplyCount = compositor.FullApplyCount;
+        var partialApplyCount = compositor.PartialApplyCount;
+        var lastPartialApplySucceeded = compositor.LastPartialApplySucceeded;
+        var retainedFrameCommandCount = compositor.RetainedFrame.CommandCount;
+        var retainedFrameResources = compositor.RetainedFrame.Resources;
+        var retainedDirtyRanges = compositor.RetainedFrame.DirtyCommandRanges.ToArray();
+        var compositorDirtyRanges = compositor.LastDirtyCommandRanges.ToArray();
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, frame1.Resources, frame2.Resources);
+
+        Assert.Equal(RetainedPartialApplyResultKind.Rejected, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.ResourceOwnershipMismatch, plan.Reason);
+        Assert.Equal(renderCount, compositor.RenderCount);
+        Assert.Equal(fullApplyCount, compositor.FullApplyCount);
+        Assert.Equal(partialApplyCount, compositor.PartialApplyCount);
+        Assert.Equal(lastPartialApplySucceeded, compositor.LastPartialApplySucceeded);
+        Assert.Equal(retainedFrameCommandCount, compositor.RetainedFrame.CommandCount);
+        Assert.Same(retainedFrameResources, compositor.RetainedFrame.Resources);
+        Assert.Equal(retainedDirtyRanges, compositor.RetainedFrame.DirtyCommandRanges);
+        Assert.Equal(compositorDirtyRanges, compositor.LastDirtyCommandRanges);
     }
 
     [Fact]

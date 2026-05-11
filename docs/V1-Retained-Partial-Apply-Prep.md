@@ -15,7 +15,8 @@
 | `DrawingBackendCompositor` retained frame pilot | Already available | Applies retained frame and records partial/full counters; cross-frame partial remains guarded. |
 | StyleOnly plan diagnostics | Already available | Planning remains post-layout diagnostics only; not a fast path. |
 | Retained-input snapshot seam | Implemented locally | `RenderPipeline.LastRetainedInputSnapshot` collects retained layout result, element command ranges, hit targets, retained root, viewport, dirty classifications, dirty ranges, and rebuild reason. |
-| Retained data-only local planner | Implemented locally | `RetainedPartialApplyPlanner` consumes the snapshot and returns `AppliedPartial`, `FallbackFull`, or `Rejected` planning data without changing render behavior. |
+| Retained data-only local planner | Implemented locally | `RetainedPartialApplyPlanner` consumes the snapshot and returns `AppliedPartial`, `FallbackFull`, or `Rejected` planning data without changing render behavior. Planner-only boundary tests cover every local reason. |
+| Partial apply preflight design | Recorded | [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) selects resource snapshot / composite resolver, defines hit target metadata projection, and lists integration gates. |
 
 ## 2. Blocked Decisions
 
@@ -54,7 +55,7 @@ True cross-frame partial apply is still blocked by frame-scoped resource ownersh
 | Resource snapshot per retained frame | Retained commands keep the exact resources they need, even across frames. | Multiple resource snapshots can coexist; memory ownership and resolver lookup become more complex. | Recommended next design direction, likely through a composite resolver. |
 | Ownership model with explicit transfer/retain | Keeps current frame-resource shape but formalizes when retained frames own resources. | Still does not solve replacing one command range with resources from a different frame unless mixed-resource resolution exists. | Current v0 model only supports full apply across frames and same-frame partial pilot. |
 
-Recommendation: use a resource snapshot / composite resolver direction before stable global handles. It preserves the current frame-scoped `FrameDrawingResources` model while giving a future partial path a way to resolve both old retained commands and new replacement commands. Stable handles remain a larger later option because they imply cache identity, recycling, invalidation, and backend coordination. Explicit retain/transfer remains a necessary ownership guardrail, but by itself it does not solve mixed old/new resource resolution.
+Recommendation: use a resource snapshot / composite resolver direction before stable global handles. It preserves the current frame-scoped `FrameDrawingResources` model while giving a future partial path a way to resolve both old retained commands and new replacement commands. Stable handles remain a larger later option because they imply cache identity, recycling, invalidation, and backend coordination. Explicit retain/transfer remains a necessary ownership guardrail, but by itself it does not solve mixed old/new resource resolution. The detailed preflight design is in [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md).
 
 Minimum blocker conclusion: do not attempt cross-frame partial apply until replacement commands can resolve both retained old resources and current new resources safely.
 
@@ -100,9 +101,10 @@ Current local planner does not perform real metadata projection from next `Virtu
 The safest next implementation line is not a full partial-rendering feature. After the retained-input snapshot seam and data-only local planner, the next safe step is still planner-only:
 
 1. Keep using `RenderPipeline.LastRetainedInputSnapshot` as the only retained input bundle.
-2. Extend planner-only tests around unstable command ranges and hit target patch failure if needed.
+2. Keep every local planner result reason covered by planner-only regression tests.
 3. Keep `RenderPipeline.Build` on the existing full layout path.
 4. Do not apply replacement commands across frames until resource ownership is solved.
+5. Require every gate in [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) before any runtime hookup.
 
 ## 8. Guardrails
 
