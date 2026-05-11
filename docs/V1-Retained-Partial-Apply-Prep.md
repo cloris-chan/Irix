@@ -15,6 +15,7 @@
 | `DrawingBackendCompositor` retained frame pilot | Already available | Applies retained frame and records partial/full counters; cross-frame partial remains guarded. |
 | StyleOnly plan diagnostics | Already available | Planning remains post-layout diagnostics only; not a fast path. |
 | Retained-input snapshot seam | Implemented locally | `RenderPipeline.LastRetainedInputSnapshot` collects retained layout result, element command ranges, hit targets, retained root, viewport, dirty classifications, dirty ranges, and rebuild reason. |
+| Retained data-only local planner | Implemented locally | `RetainedPartialApplyPlanner` consumes the snapshot and returns `AppliedPartial`, `FallbackFull`, or `Rejected` planning data without changing render behavior. |
 
 ## 2. Blocked Decisions
 
@@ -24,7 +25,7 @@
 | Fast-path input shape | Current style-only planner consumes next layout output, so it cannot be the actual layout-skipping input boundary. |
 | Retained layout ownership | `RenderPipeline` owns retained layout state today; promotion of partial apply needs explicit owner/lifetime rules. |
 | Hit target metadata patching | Bounds/clip can be retained, but metadata updates need a stable projection from next `VirtualNode` without layout. |
-| Fallback reporting | A future partial path needs explicit `AppliedPartial`, `FallbackFull`, or `Rejected` result data without expanding diagnostics channel scope. |
+| Fallback reporting | Local vocabulary exists, but it is not wired to runtime/compositor or diagnostics formatter. |
 
 ## 3. Retained-Input Snapshot Seam
 
@@ -50,20 +51,22 @@ True cross-frame partial apply is still blocked by frame-scoped resource ownersh
 | Direction | Benefit | Cost / risk | Current decision |
 |-----------|---------|-------------|------------------|
 | Stable text/style handles | Commands could reference durable resource ids across frames. | Requires a resource table, lifetime/recycling rules, invalidation strategy, and backend cache coordination. | Postponed; likely larger than the next safe line. |
-| Resource snapshot per retained frame | Retained commands keep the exact resources they need, even across frames. | Multiple resource snapshots can coexist; memory ownership and resolver lookup become more complex. | Viable design direction, but not implemented. |
+| Resource snapshot per retained frame | Retained commands keep the exact resources they need, even across frames. | Multiple resource snapshots can coexist; memory ownership and resolver lookup become more complex. | Recommended next design direction, likely through a composite resolver. |
 | Ownership model with explicit transfer/retain | Keeps current frame-resource shape but formalizes when retained frames own resources. | Still does not solve replacing one command range with resources from a different frame unless mixed-resource resolution exists. | Current v0 model only supports full apply across frames and same-frame partial pilot. |
+
+Recommendation: use a resource snapshot / composite resolver direction before stable global handles. It preserves the current frame-scoped `FrameDrawingResources` model while giving a future partial path a way to resolve both old retained commands and new replacement commands. Stable handles remain a larger later option because they imply cache identity, recycling, invalidation, and backend coordination. Explicit retain/transfer remains a necessary ownership guardrail, but by itself it does not solve mixed old/new resource resolution.
 
 Minimum blocker conclusion: do not attempt cross-frame partial apply until replacement commands can resolve both retained old resources and current new resources safely.
 
 ## 5. Local Partial Apply Result Vocabulary
 
-Future partial paths should report local result data without expanding the global diagnostics surface.
+Local partial paths report result data without expanding the global diagnostics surface.
 
 | Draft result | Meaning | Notes |
 |--------------|---------|-------|
-| `AppliedPartial` | The local retained path replaced only dirty command ranges and kept retained state valid. | Only valid after resource ownership, hit target metadata, and retained root updates all succeed. |
-| `FallbackFull` | The path intentionally used the existing full layout/full apply behavior. | Correctness-preserving fallback; should carry a local reason. |
-| `Rejected` | The proposed partial path was not safe before mutating retained state. | Must be side-effect-free, like current `TryApplyPartial` failure. |
+| `AppliedPartial` | The local retained path has enough data to describe a partial update. | Data-only today; no command ranges are replaced. |
+| `FallbackFull` | The path intentionally uses the existing full layout/full apply behavior. | Correctness-preserving fallback with a local reason. |
+| `Rejected` | The proposed partial path is not safe before mutating retained state. | Side-effect-free, like current `TryApplyPartial` failure. |
 
 Candidate local fallback reasons:
 
@@ -76,18 +79,32 @@ Candidate local fallback reasons:
 | `ResourceOwnershipMismatch` | Replacement commands cannot safely resolve resources across frames. |
 | `HitTargetPatchFailed` | Hit target geometry/metadata cannot be patched from retained data. |
 
-This vocabulary remains local to future retained/partial planning. It must not add a diagnostics channel, event bus, or formatter surface in this line.
+This vocabulary remains local to retained/partial planning. It must not add a diagnostics channel, event bus, or formatter surface in this line.
 
-## 6. Safest Next Implementation Line
+## 6. Hit Target Metadata Patching
 
-The safest next implementation line is not a full partial-rendering feature. After the retained-input snapshot seam, the next safe step is a local planner that consumes the snapshot but still falls back to the existing full path:
+Future hit target patching must separate retained geometry from reprojected metadata.
+
+| Hit target data | Future handling | Fallback trigger |
+|-----------------|-----------------|------------------|
+| Bounds | Preserve from retained layout when dirty classification is style-only and viewport is unchanged. | Any bounds change, layout-affecting dirty reason, tree structure change, or missing retained layout. |
+| Clip bounds | Preserve from retained layout when root/nested clip identity is unchanged. | Viewport change, scroll/layout change, clip-affecting attributes, or changed container geometry. |
+| Action id | Reproject from the next `VirtualNode` / control metadata for dirty hit targets. | Missing next node, target count/order mismatch, or control/action identity ambiguity. |
+| Hit target count/order | Preserve only when dirty element ranges map to stable command/hit-target ranges. | Added/removed hit targets or unstable element-to-command mapping. |
+| Visual command metadata | Reproject hover/pressed/focused style inputs for replacement draw commands. | Any text-size/layout-affecting metadata, changed label measurement, or unknown attribute. |
+
+Current local planner does not perform real metadata projection from next `VirtualNode`; it validates that the current snapshot and emitted frame data are consistent. A future planner must read retained geometry plus next-node metadata without consuming next layout output.
+
+## 7. Safest Next Implementation Line
+
+The safest next implementation line is not a full partial-rendering feature. After the retained-input snapshot seam and data-only local planner, the next safe step is still planner-only:
 
 1. Keep using `RenderPipeline.LastRetainedInputSnapshot` as the only retained input bundle.
-2. Add a data-only planner result using the local vocabulary above.
+2. Extend planner-only tests around unstable command ranges and hit target patch failure if needed.
 3. Keep `RenderPipeline.Build` on the existing full layout path.
 4. Do not apply replacement commands across frames until resource ownership is solved.
 
-## 7. Guardrails
+## 8. Guardrails
 
 - Do not enable StyleOnly fast-path.
 - Do not skip layout rebuilds for style-only changes yet.

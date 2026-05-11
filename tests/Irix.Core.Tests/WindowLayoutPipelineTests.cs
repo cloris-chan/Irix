@@ -682,6 +682,145 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void RetainedPartialApplyPlanner_builds_data_only_applied_partial_plan_from_snapshot()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, frame2.Resources, frame2.Resources);
+
+        Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.None, plan.Reason);
+        Assert.Equal(snapshot.DirtyElementRanges, plan.DirtyElementRanges);
+        Assert.Equal(snapshot.DirtyCommandRanges, plan.DirtyCommandRanges);
+        Assert.Equal(snapshot.HitTargets, plan.PatchedHitTargets);
+        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(2, frame2.Commands.Count);
+        Assert.Equal(frame2.HitTargets, snapshot.HitTargets);
+        Assert.Equal(frame2.DirtyCommandRanges, plan.DirtyCommandRanges);
+    }
+
+    [Fact]
+    public void RetainedPartialApplyPlanner_falls_back_for_not_style_only_dirty()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
+            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+        var root2 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
+            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [0]);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, frame2.Resources, frame2.Resources);
+
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.NotStyleOnly, plan.Reason);
+        Assert.Equal(snapshot.DirtyElementRanges, plan.DirtyElementRanges);
+        Assert.Empty(plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+        Assert.Equal(LayoutRebuildReason.LayoutAffecting, snapshot.LayoutRebuildReason);
+        Assert.Equal(frame2.DirtyCommandRanges, snapshot.DirtyCommandRanges);
+    }
+
+    [Fact]
+    public void RetainedPartialApplyPlanner_falls_back_for_viewport_changed()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, new PixelRectangle(0, 0, 800, 480), frame2.Resources, frame2.Resources);
+
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.ViewportChanged, plan.Reason);
+        Assert.Equal(snapshot.DirtyElementRanges, plan.DirtyElementRanges);
+        Assert.Empty(plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+    }
+
+    [Fact]
+    public void RetainedPartialApplyPlanner_falls_back_for_missing_snapshot()
+    {
+        var plan = RetainedPartialApplyPlanner.Plan(
+            snapshot: null,
+            new PixelRectangle(0, 0, 960, 540),
+            FrameDrawingResources.Empty,
+            FrameDrawingResources.Empty);
+
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.MissingRetainedSnapshot, plan.Reason);
+        Assert.Empty(plan.DirtyElementRanges);
+        Assert.Empty(plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+    }
+
+    [Fact]
+    public void RetainedPartialApplyPlanner_rejects_resource_mismatch_without_side_effects()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var retainedFrameCommandCount = pipeline.RetainedFrame.CommandCount;
+        var retainedFrameResources = pipeline.RetainedFrame.Resources;
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, frame1.Resources, frame2.Resources);
+
+        Assert.Equal(RetainedPartialApplyResultKind.Rejected, plan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.ResourceOwnershipMismatch, plan.Reason);
+        Assert.Equal(snapshot.DirtyElementRanges, plan.DirtyElementRanges);
+        Assert.Equal(snapshot.DirtyCommandRanges, plan.DirtyCommandRanges);
+        Assert.Empty(plan.PatchedHitTargets);
+        Assert.Equal(retainedFrameCommandCount, pipeline.RetainedFrame.CommandCount);
+        Assert.Same(retainedFrameResources, pipeline.RetainedFrame.Resources);
+        Assert.Equal(frame2.HitTargets, snapshot.HitTargets);
+        Assert.Equal(frame2.DirtyCommandRanges, snapshot.DirtyCommandRanges);
+    }
+
+    [Fact]
     public void StyleOnly_hover_preserves_layout_reuse_invariant_snapshot()
     {
         var pipeline = new RenderPipeline();
