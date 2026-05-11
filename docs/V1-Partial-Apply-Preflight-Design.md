@@ -7,10 +7,10 @@
 | Area | Decision |
 |------|----------|
 | Cross-frame resources | Prefer resource snapshot / composite resolver over stable global handles. |
-| Current implementation scope | Keep `RetainedPartialApplyPlanner` data-only and side-effect-free. |
+| Current implementation scope | Keep `RetainedPartialApplyPlanner` data-only and side-effect-free; keep resource segments and metadata projection as internal/test-only scaffold. |
 | Resource cache | Do not add one for v1 preflight. |
 | Backend contract | Do not touch D3D12 or `IDrawingBackend` in this line. |
-| Hit targets | Preserve retained geometry; reproject metadata from next `VirtualNode` only after a dedicated projector exists. |
+| Hit targets | Preserve retained geometry; reproject metadata from next `VirtualNode` through a local projector prototype only. |
 | Runtime hookup | Postponed until every gate in section 5 is satisfied. |
 
 Stable global text/style handles are not the next step. They would require a durable resource table, recycling/invalidation rules, backend cache identity, and memory pressure policy. The smaller next design is a retained resource snapshot plus a resolver that can serve old retained commands and new replacement commands during one merged retained frame.
@@ -32,6 +32,16 @@ Each `DrawCommand` carries `TextSlice` and `ResourceHandle`, but no resource-sco
 | Stable global handles | Commands use durable ids independent of frame resources. | Postponed. Larger resource table/cache problem. |
 
 Preferred direction: resource snapshot per retained frame plus range-indexed resolver metadata. The retained command buffer remains the owner of command order. A future retained frame would also own a compact list of resource segments, for example `(commandStart, commandCount, resolverSnapshot)`. This keeps old commands resolving through the old snapshot and dirty replacement commands resolving through the new snapshot.
+
+Current scaffold:
+
+| Type | Scope | Purpose |
+|------|-------|---------|
+| `RetainedResourceSnapshot` | Internal / preflight tests | Captures a resolver plus `FrameId` generation and optional retain/release probes. |
+| `RetainedResourceSegment` | Internal / preflight tests | Describes `(commandStart, commandCount, resolverSnapshot)` ownership. |
+| `RetainedResourceSegmentTable` | Internal / preflight tests | Models full apply, partial accept, invalidate, dispose, and per-command resolver lookup. |
+
+This scaffold is not connected to `RetainedRenderFrame`, `DrawingBackendCompositor`, `IDrawingBackend.Execute`, or D3D12. It exists to prove ownership rules before runtime hookup.
 
 ### Ownership
 
@@ -97,6 +107,15 @@ Retained layout tree + retained hit targets + retained root + next root + dirty 
 
 The projector should locate the matching next node by retained DFS/key path, read `ActionId` from the next node, and patch metadata only for targets whose retained geometry is unchanged. It must not run layout, mutate input routing, or infer geometry from visual state.
 
+Current scaffold:
+
+| Type | Scope | Purpose |
+|------|-------|---------|
+| `HitTargetMetadataProjector` | Internal / preflight tests | Reprojects `ActionId` from next `VirtualNode` for stable retained hit target order. |
+| `HitTargetMetadataProjection` | Internal / preflight tests | Reports success or local `HitTargetPatchFailed` fallback. |
+
+This prototype does not call layout, does not change hit-test runtime, and does not infer bounds/clip geometry.
+
 Fallback conditions:
 
 | Condition | Reason |
@@ -138,6 +157,8 @@ No partial apply hookup should land until every gate below is satisfied.
 | Fallback reporting | Local `AppliedPartial` / `FallbackFull` / `Rejected` result is available without global diagnostics expansion. | Prevents silent behavior changes. |
 | Compositor ownership | Compositor can own multiple retained resource snapshots or explicit segments without changing backend behavior unexpectedly. | Prevents backend/runtime coupling leaks. |
 | Regression coverage | Planner, retained frame, compositor, diagnostics, and hit-test behavior all have no-change tests. | Prevents accidental StyleOnly fast-path enablement. |
+
+The internal `PartialApplyIntegrationGateChecklist` mirrors this table as a regression guard. Every gate currently remains unsatisfied and `CanHookUpPartialApply` is false.
 
 ## 6. Sealed Lines
 
