@@ -298,6 +298,42 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void WindowDrawCommandTranslator_default_factory_matches_explicit_counter_style_source()
+    {
+        var defaultTranslator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+        var explicitTranslator = new WindowDrawCommandTranslator(
+            new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))),
+            prepareFrame: null,
+            viewportProvider: null,
+            postFrameCallback: null,
+            renderPipelineFactory: TranslatorRenderPipelineFactory.FromStyle(CounterStylePreset.Default));
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button(
+                "Increment",
+                3,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+
+        using var defaultBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var explicitBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var defaultFrame = defaultTranslator.Translate(defaultBatch);
+        using var explicitFrame = explicitTranslator.Translate(explicitBatch);
+
+        AssertRenderFramesEquivalent(defaultFrame, explicitFrame);
+        Assert.Equal(new PixelRectangle(0, 0, 960, 540), defaultTranslator.LastViewport);
+        Assert.Equal(defaultTranslator.LastViewport, explicitTranslator.LastViewport);
+        Assert.Equal(defaultTranslator.LastLayoutViewport, explicitTranslator.LastLayoutViewport);
+        Assert.Equal(defaultTranslator.LayoutRebuildCount, explicitTranslator.LayoutRebuildCount);
+        Assert.Equal(defaultTranslator.LastLayoutRebuildReason, explicitTranslator.LastLayoutRebuildReason);
+        Assert.Equal(defaultTranslator.LastMaxScrollY, explicitTranslator.LastMaxScrollY);
+        Assert.Equal(defaultTranslator.LastScrollFeedback.Containers.Count, explicitTranslator.LastScrollFeedback.Containers.Count);
+        Assert.Equal(DrawColor.Opaque(32, 32, 32), defaultFrame.Commands.Memory.Span[0].Color);
+        Assert.Equal(DrawColor.Opaque(32, 32, 32), explicitFrame.Commands.Memory.Span[0].Color);
+    }
+
+    [Fact]
     public void RenderRequest_before_first_diff_does_not_crash()
     {
         var translator = new WindowDrawCommandTranslator(new FakeWindow(
@@ -914,6 +950,36 @@ public sealed class WindowLayoutPipelineTests
         return snapshot;
     }
 
+    private static void AssertRenderFramesEquivalent(RenderFrameBatch expected, RenderFrameBatch actual)
+    {
+        Assert.Equal(expected.Commands.Count, actual.Commands.Count);
+        for (var commandIndex = 0; commandIndex < expected.Commands.Count; commandIndex++)
+        {
+            var expectedCommand = expected.Commands.Memory.Span[commandIndex];
+            var actualCommand = actual.Commands.Memory.Span[commandIndex];
+            Assert.Equal(expectedCommand.Kind, actualCommand.Kind);
+            Assert.Equal(expectedCommand.Rect, actualCommand.Rect);
+            Assert.Equal(expectedCommand.Color, actualCommand.Color);
+            Assert.Equal(expectedCommand.Resource.Kind, actualCommand.Resource.Kind);
+
+            if (expectedCommand.Kind == DrawCommandKind.DrawTextRun)
+            {
+                Assert.Equal(expected.Resources.Resolve(expectedCommand.Text).ToString(), actual.Resources.Resolve(actualCommand.Text).ToString());
+                Assert.Equal(expected.Resources.ResolveTextStyle(expectedCommand.Resource), actual.Resources.ResolveTextStyle(actualCommand.Resource));
+            }
+        }
+
+        Assert.Equal(expected.HitTargets.Count, actual.HitTargets.Count);
+        for (var hitTargetIndex = 0; hitTargetIndex < expected.HitTargets.Count; hitTargetIndex++)
+        {
+            Assert.Equal(expected.HitTargets[hitTargetIndex].Bounds, actual.HitTargets[hitTargetIndex].Bounds);
+            Assert.Equal(expected.HitTargets[hitTargetIndex].ClipBounds, actual.HitTargets[hitTargetIndex].ClipBounds);
+            Assert.Equal(expected.HitTargets[hitTargetIndex].ActionId, actual.HitTargets[hitTargetIndex].ActionId);
+        }
+
+        Assert.Equal(expected.DirtyCommandRanges, actual.DirtyCommandRanges);
+    }
+
     private static void AppendLayoutTreeRanges(LayoutTreeNode[] treeNodes, List<LayoutTreeRangeInvariant> snapshot)
     {
         foreach (var treeNode in treeNodes)
@@ -1211,6 +1277,58 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(140.0, renderRequestMetrics.ViewportExtent);
         Assert.True(renderRequestMetrics.ContentExtent > renderRequestMetrics.ViewportExtent);
         Assert.True(renderRequestMetrics.MaxScrollY < initialMetrics.MaxScrollY);
+        Assert.Equal(translator.LastMaxScrollY, renderRequestMetrics.MaxScrollY);
+        Assert.Equal(callbackMaxScrollYs[^1], renderRequestMetrics.MaxScrollY);
+        Assert.Equal(initialFrame.Commands.Count, renderRequestFrame.Commands.Count);
+    }
+
+    [Fact]
+    public void WindowDrawCommandTranslator_pipeline_factory_creates_once_and_keeps_feedback_diagnostics()
+    {
+        var creationCount = 0;
+        var callbackMaxScrollYs = new List<double>();
+        var viewport = new PixelRectangle(0, 0, 960, 100);
+        var factory = new TranslatorRenderPipelineFactory(() =>
+        {
+            creationCount++;
+            return new RenderPipeline(CounterStylePreset.Default);
+        });
+        var translator = new WindowDrawCommandTranslator(
+            new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))),
+            prepareFrame: null,
+            viewportProvider: () => viewport,
+            postFrameCallback: callbackMaxScrollYs.Add,
+            renderPipelineFactory: factory);
+        var children = new VirtualNode[10];
+        for (var childIndex = 0; childIndex < children.Length; childIndex++)
+        {
+            children[childIndex] = VirtualNodeFactory.Text($"item {childIndex}", (ulong)(childIndex + 2));
+        }
+
+        var root = new VirtualNode(VirtualNodeKind.ScrollContainer, key: 1, children: children);
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var initialFrame = translator.Translate(batch);
+        var initialMetrics = Assert.Single(translator.LastScrollFeedback.Containers);
+        var initialRebuildCount = translator.LayoutRebuildCount;
+
+        Assert.Equal(1, creationCount);
+        Assert.Single(callbackMaxScrollYs);
+        Assert.Equal(viewport, translator.LastViewport);
+        Assert.Equal(viewport, translator.LastLayoutViewport);
+        Assert.Equal(translator.LastMaxScrollY, initialMetrics.MaxScrollY);
+        Assert.Equal(callbackMaxScrollYs[0], initialMetrics.MaxScrollY);
+
+        viewport = new PixelRectangle(0, 0, 960, 140);
+        using var renderRequest = PatchBatch.CreateRenderRequest();
+        using var renderRequestFrame = translator.Translate(renderRequest);
+        var renderRequestMetrics = Assert.Single(translator.LastScrollFeedback.Containers);
+
+        Assert.Equal(1, creationCount);
+        Assert.Equal(2, callbackMaxScrollYs.Count);
+        Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.ViewportChanged, translator.LastLayoutRebuildReason);
+        Assert.Empty(translator.LastDirtyClassifications);
+        Assert.Equal(140.0, renderRequestMetrics.ViewportExtent);
         Assert.Equal(translator.LastMaxScrollY, renderRequestMetrics.MaxScrollY);
         Assert.Equal(callbackMaxScrollYs[^1], renderRequestMetrics.MaxScrollY);
         Assert.Equal(initialFrame.Commands.Count, renderRequestFrame.Commands.Count);

@@ -11,6 +11,12 @@ Current shape:
 - `ScrollController.ConvertToPixels` already receives settings explicitly, so the future provider can be introduced without changing the controller math.
 - Horizontal wheel chars are not part of the current vertical scroll runtime, but the provider boundary should name them before pure controller extraction.
 
+Current decision:
+
+- Continue postponed for runtime wiring.
+- If implementation is reopened, first add only a fallback-only internal provider returning `SystemScrollSettings.Default`.
+- Do not read Win32 settings before the provider shape has tests and a platform ownership decision.
+
 Non-goals:
 
 - Do not connect a provider to `CounterApplication`, `Program`, or `ScrollController`.
@@ -65,3 +71,16 @@ Before moving scroll controller code, future work must decide:
 5. How tests inject deterministic fallback settings.
 
 Until those decisions are made, current PoC code should keep passing `SystemScrollSettings.Default` explicitly.
+
+## 6. Implementation Prep Decision
+
+Decision: keep runtime postponed, but the first safe implementation is a fallback-only internal provider.
+
+| Option | Decision | Reason |
+|--------|----------|--------|
+| Keep direct `SystemScrollSettings.Default` usage | Current runtime behavior | It is explicit, deterministic, and already tested. |
+| Add fallback-only internal provider | First safe implementation when reopened | It can prove injection/testing shape without Win32 reads or delta changes. |
+| Read Windows settings now | Postponed | It would introduce host-dependent behavior before provider ownership and page-scroll semantics are settled. |
+| Connect provider to controller/runtime now | Postponed | It would change the runtime wiring surface without a need for current v1 guardrails. |
+
+The fallback-only provider should return the exact current defaults and should be tested for equivalence before any runtime call site is changed.

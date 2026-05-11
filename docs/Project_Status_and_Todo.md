@@ -33,6 +33,7 @@
 | [V1-API-Control-Boundary-Prep.md](V1-API-Control-Boundary-Prep.md) | v1 API/control boundary prep：controls、input、window glue 的 ownership 与命名边界 |
 | [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md) | v1 translator feedback contract prep：promotion gates、style/viewport/retained-tree/pipeline/feedback 边界 |
 | [V1-Scroll-Settings-Provider-Prep.md](V1-Scroll-Settings-Provider-Prep.md) | v1 scroll settings provider prep：Windows wheel lines/chars 来源、fallback defaults、非 Windows 行为 |
+| [V1-Retained-Partial-Apply-Prep.md](V1-Retained-Partial-Apply-Prep.md) | v1 retained / partial apply prep：已有资产、blocked decisions、最小安全实现线 |
 | [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) | diagnostics snapshot v0：snapshot 类型、provider 边界、CLI 文本冻结、最小实现候选 |
 | [RetainedElementTree-Design.md](RetainedElementTree-Design.md) | 真正 retained element tree / local patch apply 的草案 |
 | [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
@@ -49,16 +50,18 @@
 | V1 API/control boundary prep | design inventory complete / regression-only；`ControlVisualState projection helper` 已实现且仍为 PoC-owned |
 | ControlVisualState / action attribute helpers | ✅ 完成 / regression-only：internal PoC projection helper、ActionId attribute helper、button attribute bundle helper；PoC source raw `ActionId` 构造已清；target/action 继续用 string；不改 renderer / VirtualNode wire contract |
 | Scroll feedback vocabulary v0 | ✅ 第一小步完成：`ScrollFeedback` / `ScrollContainerMetrics` side-channel 由 translator 生成；旧 `Action<double>` max-scroll callback 仍保留；不移动 controller/state/pump |
-| Translator feedback contract prep | ✅ design-only 收口：promotion gates 已标 blocked / partial / mostly satisfied；translator 仍留在 `Irix.Poc`；不新增 framework API |
-| Scroll settings provider design | ✅ design-only 草案：只命名 Windows wheel lines/chars 来源、fallback defaults、非 Windows 行为；不接线到 controller |
+| Translator feedback contract prep | ✅ internal seam 完成 / no behavior change：`TranslatorRenderPipelineFactory` 可替换 pipeline creation；默认仍走 `CounterStylePreset.Default`；translator 仍留在 `Irix.Poc` |
+| Scroll settings provider design | ✅ decision recorded：runtime 继续 postponed；若重开，先做 fallback-only internal provider；不读 Win32、不接 controller |
+| Retained / partial apply prep | ✅ 粗粒度盘点完成：已有 retained tree/layout ranges/command ranges/retained frame pilot；cross-frame resources 与 fast-path input shape 仍 blocked |
 
 ### 下一步候选
 
-- 当前主线：[Translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md) 已 design-only 收口；只整理 style source、viewport source、retained-tree owner、render-pipeline creation、post-frame feedback 命名与 promotion gates；不移动 translator，不新增 framework API。
+- 当前主线：[Translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md) 已完成 internal factory seam；默认行为不变，translator 仍留在 `Irix.Poc`，不新增 framework API。
 - 已封版：`v1 API/control boundary prep` 为 design inventory complete / regression-only；只修 boundary 文档 regression。
 - 已实现：`ControlVisualState projection helper`、`Control action attribute helper`、`Button attribute bundle helper` 仍为 PoC-owned internal code；PoC source raw `ActionId` 构造已清；target/action 继续用 string，不引入 typed id wrappers。
 - 已实现：`ScrollFeedback` / `ScrollContainerMetrics` vocabulary v0 作为 translator side-channel；旧 `Action<double>` callback 继续驱动 runtime 行为。
-- 已记录：[Scroll settings provider design](V1-Scroll-Settings-Provider-Prep.md) 只命名 Windows wheel lines/chars 来源、fallback defaults、非 Windows 行为；不接线到 controller。
+- 已记录：[Scroll settings provider design](V1-Scroll-Settings-Provider-Prep.md) 决策为 runtime 继续 postponed；若重开，先做 fallback-only internal provider，不读 Win32、不接线到 controller。
+- 已记录：[Retained / partial apply prep](V1-Retained-Partial-Apply-Prep.md) 盘点：下一条安全线是 retained-input snapshot seam，不做 full partial apply。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion、`StyleOnly fast-path implementation`；StyleOnly 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point，不接入 `RenderPipeline.Build`，不启用新行为。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 
@@ -69,12 +72,13 @@
 | IRIX-V1-001 | P0 | Diagnostics consolidation | Regression-only | 只修 `--diagnose*` / debug UI / formatter regression；不新增 diagnostics channel。 |
 | IRIX-V1-002 | P0 | Controls-boundary helpers | Regression-only | Helper 保持 PoC-owned internal；不继续拆、不提升 framework。 |
 | IRIX-V1-003 | P0 | Scroll feedback vocabulary v0 | Regression-only | `ScrollFeedback` side-channel 只补测/修 regression；旧 `Action<double>` 继续驱动 runtime。 |
-| IRIX-V1-004 | P1 | Translator feedback contract draft | Design-only 收口完成 | [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md) 已列出 promotion gates、留在 PoC 的原因、promotion 前置顺序。 |
-| IRIX-V1-005 | P1 | Scroll settings provider design | Design-only 草案完成 | [V1-Scroll-Settings-Provider-Prep.md](V1-Scroll-Settings-Provider-Prep.md) 已命名 settings provider 边界；不抽 controller/state/pump。 |
-| IRIX-V1-006 | P1 | Scroll feedback regression tests | Focused test 完成 | 只补测 side-channel、legacy callback、viewport/layout diagnostics 不分叉；不做 extraction。 |
+| IRIX-V1-004 | P1 | Translator feedback contract / internal seam | Internal seam 完成 | `TranslatorRenderPipelineFactory` 已允许 internal style/pipeline creation 替换；默认仍走 `CounterStylePreset.Default`，不做 promotion。 |
+| IRIX-V1-005 | P1 | Scroll settings provider design | Decision 完成 | Runtime 继续 postponed；若重开，第一步只做 fallback-only internal provider；不抽 controller/state/pump。 |
+| IRIX-V1-006 | P1 | Translator feedback regression tests | Focused tests 完成 | 覆盖 default factory 等价、style source 等价、pipeline creation 不改变 layout viewport / scroll feedback / diagnostics。 |
 | IRIX-V1-007 | P2 | Typed identity wrappers | Postponed | 保留设计词汇；不新增 public API，string id 行为不变。 |
 | IRIX-V1-008 | P2 | Scroll extraction | Postponed | 不抽 `ScrollController` / `ScrollState` / `ScrollFramePump`。 |
-| IRIX-V1-009 | P2 | `WindowDrawCommandTranslator` promotion | Postponed / 前置清单完成 | Translator 留在 `Irix.Poc`；style/viewport/retained-tree/pipeline/feedback contracts 的实施顺序已记录。 |
+| IRIX-V1-009 | P2 | `WindowDrawCommandTranslator` promotion | Postponed / seam only | Translator 留在 `Irix.Poc`；style/pipeline creation 只是 internal seam，viewport/retained-tree/typed feedback 仍未 promotion。 |
+| IRIX-V1-013 | P2 | Retained / partial apply next-line prep | 粗粒度盘点完成 | [V1-Retained-Partial-Apply-Prep.md](V1-Retained-Partial-Apply-Prep.md) 建议下一步只做 retained-input snapshot seam。 |
 | IRIX-V1-010 | P3 | StyleOnly fast-path | Postponed | 不接入 `RenderPipeline.Build`，只修 diagnostics/planning regression。 |
 | IRIX-V1-011 | P3 | Unified diagnostics channel / event bus / registry | Postponed | 不新增全局 diagnostics abstraction。 |
 | IRIX-V1-012 | P0 | 当前进度判断 | Tracking | v1 约 86%～88%；下一轮聚焦 contract hardening，不代表 GA readiness。 |

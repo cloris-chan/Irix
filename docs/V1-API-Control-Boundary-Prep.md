@@ -256,16 +256,16 @@ Until those gates are met, keep `ScrollController`, `ScrollState`, and `ScrollFr
 
 ## 8. Window Translator Contract Draft
 
-`WindowDrawCommandTranslator` is the likely future render/platform bridge candidate, but promotion requires an explicit contract. The current type constructs `RenderPipeline` with `CounterStylePreset.Default`, pulls viewport data from a window/provider, owns a retained tree, and reports max scroll through an `Action<double>` callback plus `LastScrollFeedback` side-channel. The active follow-up draft is [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md).
+`WindowDrawCommandTranslator` is the likely future render/platform bridge candidate, but promotion requires an explicit contract. The current type creates `RenderPipeline` through an internal `TranslatorRenderPipelineFactory` seam that defaults to `CounterStylePreset.Default`, pulls viewport data from a window/provider, owns a retained tree, and reports max scroll through an `Action<double>` callback plus `LastScrollFeedback` side-channel. The active follow-up draft is [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md).
 
 If promoted later, the contract should inject or name these dependencies explicitly:
 
 | Contract part | Current shape | Future boundary requirement |
 |---------------|---------------|-----------------------------|
-| Style source | Hardcoded `CounterStylePreset.Default` inside the translator | Inject a style preset/resolver/pipeline factory. A framework translator must not depend on Counter styling. |
+| Style source | Internal factory defaults to `CounterStylePreset.Default` | Inject a style preset/resolver/pipeline factory before promotion. A framework translator must not depend on Counter styling. |
 | Viewport source | `INativeWindow.Region.PhysicalBounds` or optional `Func<PixelRectangle>` | Inject a viewport source with clear pixel units and resize timing. The translator should not assume one native window shape. |
 | Retained tree owner | Private `RetainedTree` inside the translator | Decide whether the bridge owns retained state or receives it from a higher render service. Patch application ownership must be explicit. |
-| Render pipeline | Private `RenderPipeline` instance | Inject or factory-create with explicit style and options. Avoid hidden sample defaults. |
+| Render pipeline | Private `RenderPipeline` instance created by internal `TranslatorRenderPipelineFactory` | Promotion still needs explicit style/options and framework-owned factory shape. Avoid hidden sample defaults. |
 | Prepare-frame hook | Optional `Action? prepareFrame` | Keep as a named frame-preparation hook only if the backend/resource lifetime contract needs it. |
 | Post-frame feedback | Optional `Action<double>` receiving max scroll, plus `LastScrollFeedback` side-channel | Keep runtime callback unchanged for now. Promotion still needs a typed feedback contract that includes layout diagnostics, not only scroll metrics. |
 | Scroll metrics | `LastMaxScrollY`, current layout viewport exposure, and `LastScrollFeedback` side-channel | Side-channel now names max scroll, viewport extent, content extent, and container identity. It is not yet a promoted framework contract. |
@@ -283,10 +283,10 @@ Promotion checklist:
 
 | Gate | Requirement | Status in current PoC |
 |------|-------------|-----------------------|
-| Style injection | Style preset/resolver or pipeline factory is injected by the composition root. | Blocked: translator constructs `RenderPipeline(CounterStylePreset.Default)`. |
+| Style injection | Style preset/resolver or pipeline factory is injected by the composition root. | Partial: internal factory seam exists; default remains `CounterStylePreset.Default`. |
 | Viewport source | Viewport provider contract names pixel units, resize timing, and fallback behavior. | Partial: optional `Func<PixelRectangle>` exists, but it is not a named framework contract. |
 | Retained-tree ownership | Patch application and retained tree lifetime are assigned to either the bridge or a higher render service. | Blocked: private retained tree is embedded without an external ownership contract. |
-| Render-pipeline creation | Pipeline construction takes explicit style/options and has no sample defaults. | Blocked: hidden Counter style default. |
+| Render-pipeline creation | Pipeline construction takes explicit style/options and has no sample defaults. | Partial: internal factory creates the pipeline; promoted factory/options contract is still absent. |
 | Prepare-frame hook | Backend/resource preparation needs are named, or the hook is removed. | Partial: optional action exists but has no semantic contract. |
 | Post-frame feedback | Feedback is a typed result carrying layout diagnostics and scroll metrics. | Partial: scroll metrics side-channel exists, but runtime still uses `Action<double>` and no promoted feedback contract exists. |
 | Scroll metrics | Feedback names scroll container id, viewport extent, content extent, and max scroll. | Partial: `LastScrollFeedback` side-channel exists in PoC; extraction and promotion remain postponed. |

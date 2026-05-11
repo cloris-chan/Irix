@@ -7,13 +7,14 @@ internal sealed class WindowDrawCommandTranslator(
     INativeWindow window,
     Action? prepareFrame,
     Func<PixelRectangle>? viewportProvider,
-    Action<double>? postFrameCallback) : IPatchBatchTranslator
+    Action<double>? postFrameCallback,
+    TranslatorRenderPipelineFactory? renderPipelineFactory = null) : IPatchBatchTranslator
 {
     private readonly INativeWindow _window = window;
     private readonly Action? _prepareFrame = prepareFrame;
     private readonly Func<PixelRectangle>? _viewportProvider = viewportProvider;
     private readonly Action<double>? _postFrameCallback = postFrameCallback;
-    private readonly Irix.Rendering.RenderPipeline _renderPipeline = new(CounterStylePreset.Default);
+    private readonly RenderPipeline _renderPipeline = (renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create();
 
     private readonly RetainedTree _retainedTree = new(default);
 
@@ -33,7 +34,7 @@ internal sealed class WindowDrawCommandTranslator(
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications => _renderPipeline.LastDirtyClassifications;
 
     public WindowDrawCommandTranslator(INativeWindow window)
-        : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null)
+        : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null, renderPipelineFactory: null)
     {
     }
 
@@ -84,4 +85,13 @@ internal sealed class WindowDrawCommandTranslator(
 
         return new ScrollFeedback(containers);
     }
+}
+
+internal sealed class TranslatorRenderPipelineFactory(Func<RenderPipeline> create)
+{
+    public static TranslatorRenderPipelineFactory Default { get; } = FromStyle(CounterStylePreset.Default);
+
+    public static TranslatorRenderPipelineFactory FromStyle(RenderStylePreset stylePreset) => new(() => new RenderPipeline(stylePreset));
+
+    public RenderPipeline Create() => create();
 }
