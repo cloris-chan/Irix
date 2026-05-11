@@ -565,6 +565,123 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void RenderPipeline_retained_input_snapshot_captures_current_fields()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Count: 0", 2),
+            VirtualNodeFactory.Button("Increment", 3,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+
+        using var frame = pipeline.Build(root, viewport);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        Assert.NotNull(snapshot);
+        Assert.Same(pipeline.LastLayoutResult, snapshot.LayoutResult);
+        Assert.Equal(pipeline.LastElementCommandRanges, snapshot.ElementCommandRanges);
+        Assert.Equal(frame.HitTargets, snapshot.HitTargets);
+        Assert.Equal(root.Kind, snapshot.RetainedRoot.Kind);
+        Assert.Equal(root.Key, snapshot.RetainedRoot.Key);
+        Assert.Equal(root.Children.Length, snapshot.RetainedRoot.Children.Length);
+        Assert.Equal(viewport, snapshot.Viewport);
+        Assert.Empty(snapshot.DirtyClassifications);
+        Assert.Empty(snapshot.DirtyElementRanges);
+        Assert.Empty(snapshot.DirtyCommandRanges);
+        Assert.Equal(pipeline.LastLayoutRebuildReason, snapshot.LayoutRebuildReason);
+        Assert.Equal(frame.DirtyCommandRanges, snapshot.DirtyCommandRanges);
+        Assert.Equal(3, frame.Commands.Count);
+    }
+
+    [Fact]
+    public void RenderPipeline_retained_input_snapshot_stays_stable_for_hover_only_style_change()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 160);
+        var root1 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            children:
+            [
+                VirtualNodeFactory.Text("Count: 0", 2),
+                VirtualNodeFactory.Button("Increment", 3,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                VirtualNodeFactory.Rectangle(220, 48, 4)
+            ]);
+        var root2 = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            children:
+            [
+                VirtualNodeFactory.Text("Count: 0", 2),
+                VirtualNodeFactory.Button("Increment", 3,
+                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+                VirtualNodeFactory.Rectangle(220, 48, 4)
+            ]);
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        var initialSnapshot = pipeline.LastRetainedInputSnapshot!;
+        var initialElementSnapshot = SnapshotLayoutElementInvariants(initialSnapshot.LayoutResult.Elements);
+        var initialRangeSnapshot = SnapshotLayoutTreeRanges(initialSnapshot.LayoutResult.TreeNodes);
+        ScrollContainerDiag[] initialScrollDiagnostics = [.. initialSnapshot.LayoutResult.ScrollDiagnostics];
+        ElementCommandRange[] initialCommandRanges = [.. initialSnapshot.ElementCommandRanges];
+        HitTestTarget[] initialHitTargets = [.. initialSnapshot.HitTargets];
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+
+        using var frame2 = pipeline.Build(root2, viewport, [2]);
+        var nextSnapshot = pipeline.LastRetainedInputSnapshot!;
+
+        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, nextSnapshot.LayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(2, LayoutRebuildReason.StyleOnly)], nextSnapshot.DirtyClassifications);
+        Assert.Equal(pipeline.LastDirtyClassifications, nextSnapshot.DirtyClassifications);
+        Assert.Equal([(1, 1)], nextSnapshot.DirtyElementRanges);
+        Assert.Equal([(1, 2)], nextSnapshot.DirtyCommandRanges);
+        Assert.Equal(initialElementSnapshot, SnapshotLayoutElementInvariants(nextSnapshot.LayoutResult.Elements));
+        Assert.Equal(initialRangeSnapshot, SnapshotLayoutTreeRanges(nextSnapshot.LayoutResult.TreeNodes));
+        Assert.Equal(initialScrollDiagnostics, nextSnapshot.LayoutResult.ScrollDiagnostics);
+        Assert.Equal(initialCommandRanges, nextSnapshot.ElementCommandRanges);
+        Assert.Equal(initialHitTargets, nextSnapshot.HitTargets);
+        Assert.Equal(frame2.HitTargets, nextSnapshot.HitTargets);
+        Assert.Equal(frame2.DirtyCommandRanges, nextSnapshot.DirtyCommandRanges);
+        Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
+    }
+
+    [Fact]
+    public void RenderPipeline_retained_input_snapshot_matches_diagnostics_and_frame_for_action_id_style_change()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+        var root2 = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+
+        using var frame1 = pipeline.Build(root1, viewport);
+        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal(pipeline.LastLayoutRebuildReason, snapshot.LayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)], snapshot.DirtyClassifications);
+        Assert.Equal(pipeline.LastDirtyClassifications, snapshot.DirtyClassifications);
+        Assert.Equal(pipeline.LastDirtyElementRanges, snapshot.DirtyElementRanges);
+        Assert.Equal(pipeline.LastDirtyCommandRanges, snapshot.DirtyCommandRanges);
+        Assert.Equal(pipeline.LastElementCommandRanges, snapshot.ElementCommandRanges);
+        Assert.Equal(frame2.HitTargets, snapshot.HitTargets);
+        Assert.Equal(frame2.DirtyCommandRanges, snapshot.DirtyCommandRanges);
+        Assert.Equal("Increment.Secondary", Assert.Single(snapshot.HitTargets).ActionId);
+        Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+    }
+
+    [Fact]
     public void StyleOnly_hover_preserves_layout_reuse_invariant_snapshot()
     {
         var pipeline = new RenderPipeline();

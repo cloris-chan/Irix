@@ -61,6 +61,8 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; private set; } = [];
 
+    public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; private set; }
+
     /// <summary>
     /// The layout tree result from the last Build call, if available.
     /// Exposes scroll container diagnostics and tree structure.
@@ -117,7 +119,18 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         LastDirtyCommandRanges = result.DirtyCommandRanges;
         LastElementCommandRanges = result.ElementCommandRanges;
 
-        var batch = new RenderFrameBatch(result.Commands, BuildHitTargets(layout), result.Resources, result.DirtyCommandRanges);
+        var hitTargets = BuildHitTargets(layout);
+        var batch = new RenderFrameBatch(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
+        LastRetainedInputSnapshot = new RenderPipelineRetainedInputSnapshot(
+            _retainedLayoutResult!,
+            [.. result.ElementCommandRanges],
+            [.. hitTargets],
+            _retainedRoot,
+            _retainedViewport,
+            [.. LastDirtyClassifications],
+            [.. LastDirtyElementRanges],
+            [.. LastDirtyCommandRanges],
+            LastLayoutRebuildReason);
 
         // Update retained render frame: try partial apply when dirty ranges exist,
         // which only succeeds when resources are the same instance (same frame scope).
@@ -385,3 +398,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return hitTargets;
     }
 }
+
+internal sealed record RenderPipelineRetainedInputSnapshot(
+    LayoutTreeResult LayoutResult,
+    ElementCommandRange[] ElementCommandRanges,
+    IReadOnlyList<HitTestTarget> HitTargets,
+    VirtualNode RetainedRoot,
+    PixelRectangle Viewport,
+    IReadOnlyList<LayoutDirtyClassification> DirtyClassifications,
+    IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
+    IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
+    LayoutRebuildReason LayoutRebuildReason);
