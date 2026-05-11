@@ -86,7 +86,18 @@ internal sealed class SegmentedRetainedFrameReader(RetainedCommandBuffer command
     public IReadOnlyList<SegmentedFrameRead> ReadSegments()
     {
         var commands = commandBuffer.Commands;
+        if (commands.Length == 0)
+        {
+            return [];
+        }
+
+        if (segmentTable.Segments.Count == 0)
+        {
+            throw new InvalidOperationException("Resource segment table is empty for a non-empty retained command buffer.");
+        }
+
         var reads = new List<SegmentedFrameRead>(segmentTable.Segments.Count);
+        var cursor = 0;
         foreach (var segment in segmentTable.Segments)
         {
             if (segment.CommandStart < 0 || segment.CommandCount <= 0 || segment.CommandStart > commands.Length - segment.CommandCount)
@@ -94,10 +105,21 @@ internal sealed class SegmentedRetainedFrameReader(RetainedCommandBuffer command
                 throw new InvalidOperationException("Resource segment is outside the retained command buffer.");
             }
 
+            if (segment.CommandStart != cursor)
+            {
+                throw new InvalidOperationException("Resource segments must cover the retained command buffer contiguously without overlap.");
+            }
+
             reads.Add(new SegmentedFrameRead(
                 segment.CommandStart,
                 commands.Slice(segment.CommandStart, segment.CommandCount).ToArray(),
                 segment.Snapshot.Resolver));
+            cursor = segment.CommandEnd;
+        }
+
+        if (cursor != commands.Length)
+        {
+            throw new InvalidOperationException("Resource segment coverage does not match the retained command buffer command count.");
         }
 
         return reads;
@@ -120,6 +142,12 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
         }
 
         ReplaceSegments([new RetainedResourceSegment(0, commandCount, snapshot)], retainBeforeRelease: false);
+    }
+
+    internal void ApplyUncheckedForPreflight(IReadOnlyList<RetainedResourceSegment> segments)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ReplaceSegments([.. segments], retainBeforeRelease: false);
     }
 
     public bool TryAcceptPartial(IReadOnlyList<(int Start, int Count)> dirtyCommandRanges, RetainedResourceSnapshot replacementSnapshot)

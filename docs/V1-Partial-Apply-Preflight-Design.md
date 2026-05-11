@@ -7,7 +7,7 @@
 | Area | Decision |
 |------|----------|
 | Cross-frame resources | Prefer resource snapshot / composite resolver over stable global handles. |
-| Current implementation scope | Keep `RetainedPartialApplyPlanner` data-only and side-effect-free; keep resource segments and metadata projection as internal/test-only scaffold. |
+| Current implementation scope | Keep `RetainedPartialApplyPlanner` data-only and side-effect-free; keep resource segments, metadata projection, retained-root metadata patching, and dry-run flow as internal/test-only scaffold. |
 | Resource cache | Do not add one for v1 preflight. |
 | Backend contract | Do not touch D3D12 or `IDrawingBackend` in this line. |
 | Hit targets | Preserve retained geometry; reproject metadata from next `VirtualNode` through a local projector prototype only. |
@@ -40,7 +40,7 @@ Current scaffold:
 | `RetainedResourceSnapshot` | Internal / preflight tests | Captures a resolver plus `FrameId` generation and optional retain/release probes. |
 | `RetainedResourceSegment` | Internal / preflight tests | Describes `(commandStart, commandCount, resolverSnapshot)` ownership. |
 | `RetainedResourceSegmentTable` | Internal / preflight tests | Models full apply, partial accept, invalidate, dispose, and per-command resolver lookup. |
-| `SegmentedRetainedFrameReader` | Internal / preflight tests | Reads retained commands by resource segment and returns the resolver owned by each segment. |
+| `SegmentedRetainedFrameReader` | Internal / preflight tests | Reads retained commands by resource segment and returns the resolver owned by each segment; rejects malformed coverage. |
 | `SegmentedFrameRead` | Internal / preflight tests | Carries a command slice copy plus its segment resolver for assertion/prototyping. |
 
 This scaffold is not connected to `RetainedRenderFrame`, `DrawingBackendCompositor`, `IDrawingBackend.Execute`, or D3D12. It exists to prove ownership rules before runtime hookup.
@@ -89,7 +89,7 @@ Current segmented reader prototype proves the facade shape without touching `IDr
 | Resolver correctness | Old text resolves from old resources and replacement text resolves from new resources in one retained frame. |
 | Pool safety | Re-rented `FrameDrawingResources` with a new `FrameId` is never treated as the old snapshot. |
 | Full fallback | Full apply releases all previous snapshots and exposes only the new full-frame resolver. |
-| Range edges | Multiple dirty ranges, adjacent merge, invalid ranges, disposed table/snapshot behavior are explicit. |
+| Range edges | Multiple dirty ranges, adjacent merge, invalid ranges, empty segment table, out-of-buffer segments, gaps, overlaps, command-count mismatch, and disposed table/snapshot behavior are explicit. |
 | Backend neutrality | Existing compositor/backend behavior is unchanged until an explicit integration step lands. |
 
 ## 3. Hit Target Metadata Projection
@@ -150,6 +150,15 @@ Accepted partial apply must advance retained root/control metadata or the next d
 
 Future retained root update should run after command range planning, resource ownership, and hit target metadata projection all succeed. It should apply only the accepted dirty metadata patch to the retained root snapshot, then expose that root as the next retained baseline. If any dirty node cannot be updated from next-node metadata alone, the path must use the existing full layout/full apply behavior.
 
+Current scaffold:
+
+| Type | Scope | Purpose |
+|------|-------|---------|
+| `RetainedRootMetadataPatcher` | Internal / preflight tests | Projects dirty `ActionId`, `IsHovered`, `IsPressed`, and `IsFocused` metadata from next root into a retained-root copy. |
+| `RetainedRootMetadataPatch` | Internal / preflight tests | Reports success plus patched root, or local fallback reason. |
+
+The prototype requires stable kind/key/child path, style-only dirty classifications, unchanged content, unchanged non-dirty metadata, and no layout/tree/text drift. It is not wired to `RenderPipeline.Build` and does not change the retained diff baseline.
+
 ## 5. Planner-Only Boundary
 
 `RetainedPartialApplyPlanner` is allowed to read `RenderPipeline.LastRetainedInputSnapshot`, current viewport, retained resources, and replacement resources. It is not allowed to:
@@ -166,24 +175,28 @@ Regression tests should keep every planner result reason covered: `None` for a d
 
 ## 6. Integration Gates
 
-No partial apply hookup should land until every gate below is satisfied.
+No partial apply hookup should land until every gate below is satisfied. Evidence is intentionally split so preflight proof cannot be mistaken for runtime readiness.
 
-| Gate | Required proof | Blocks premature fast-path by |
-|------|----------------|-------------------------------|
-| Resource resolver ownership | Old retained commands and new replacement commands resolve correct text/style resources in one retained frame. | Prevents mixed old/new commands from using the wrong `FrameDrawingResources`. |
-| Resource dispose policy | Retained snapshots release exactly once across partial, full fallback, invalidate, and compositor dispose. | Prevents pooled resource reuse while retained commands still hold `TextSlice` references. |
-| Command range stability | Dirty element ranges map to contiguous command ranges with unchanged total command count. | Prevents unsafe command buffer surgery. |
-| Hit target metadata projection | Action metadata is reprojected from next `VirtualNode` without next layout output, while geometry stays retained. | Prevents stale or geometrically wrong hit targets. |
-| Retained root update | Accepted partial updates retained root/control metadata consistently with command and hit-target changes. | Prevents future diffs from comparing against stale input. |
-| Fallback reporting | Local `AppliedPartial` / `FallbackFull` / `Rejected` result is available without global diagnostics expansion. | Prevents silent behavior changes. |
-| Compositor ownership | Compositor can own multiple retained resource snapshots or explicit segments without changing backend behavior unexpectedly. | Prevents backend/runtime coupling leaks. |
-| Regression coverage | Planner, retained frame, compositor, diagnostics, and hit-test behavior all have no-change tests. | Prevents accidental StyleOnly fast-path enablement. |
+| Gate | Preflight evidence | Runtime evidence | No-change regression evidence | Still blocking |
+|------|--------------------|------------------|-------------------------------|----------------|
+| Resource resolver ownership | Segmented reader proves old/new resolver ownership by command segment. | None. Runtime retained frame still exposes a single resolver boundary. | Backend contract and D3D12 execution stay unchanged. | Runtime retained frame must expose segmented resolver reads before hookup. |
+| Resource dispose policy | Segment table lifecycle tests cover partial accept, full fallback, invalidate, dispose, replaced old ranges, and malformed reads. | None. Production retained frame does not own multiple retained snapshots. | Existing retained frame resource ownership tests keep same-frame behavior sealed. | Production retained frame must release retained snapshots exactly once across every path. |
+| Command range stability | Planner, segment table, and segmented reader cover unstable, invalid, overlapping, and non-contiguous ranges. | None. Runtime still does not replace cross-frame command ranges. | Compositor no-change tests keep current full/guarded partial behavior sealed. | Runtime command replacement must require stable contiguous dirty command ranges. |
+| Hit target metadata projection | Projector covers action metadata projection, dirty DFS mismatch, non-dirty drift, key/path mismatch, and nested controls. | None. Hit-test runtime still consumes full layout output only. | Hit-test behavior tests keep retained geometry and compositor lookup unchanged. | Runtime projector must reproject action metadata without next layout output. |
+| Retained root update | Root metadata patcher covers dirty control metadata projection plus non-dirty drift, key/path, text, layout, and tree fallback. | None. `RenderPipeline` retained root baseline is not patched by a partial path. | `RenderPipeline.Build` tests keep the current diff/layout baseline unchanged. | Accepted partial updates must advance retained root metadata for the next diff. |
+| Fallback reporting | Planner tests cover `AppliedPartial`, `FallbackFull`, `Rejected`, and every local reason. | None. No runtime/compositor reporting hookup exists. | Diagnostics formatter tests keep CLI output unchanged. | Runtime hookup must preserve local reporting without diagnostics expansion. |
+| Compositor ownership | Dry-run tests keep segment ownership outside compositor mutation. | None. `DrawingBackendCompositor` owns one retained frame with one resolver boundary. | Compositor no-mutation tests keep counters, retained frame, and backend execution unchanged. | Compositor ownership of multiple retained snapshots must be explicit before hookup. |
+| Regression coverage | Preflight tests cover planner, projector, root patch, segment table, and segmented reader scaffolds. | None. No partial apply runtime hookup exists to cover. | Focused and full test suites act as the no-change regression guard. | Planner, retained frame, compositor, diagnostics, and hit-test coverage must remain green. |
 
 The internal `PartialApplyIntegrationGateChecklist` mirrors this table as a regression guard. Every gate currently remains unsatisfied and `CanHookUpPartialApply` is false.
 
-Each checklist item now carries an evidence string. Evidence can be a preflight test, a no-change regression test, or a design-only blocker. A gate is not satisfied until runtime ownership/hookup exists; preflight evidence alone must not flip `CanHookUpPartialApply`.
+Each checklist item carries separate `PreflightEvidence`, `RuntimeEvidence`, `NoChangeRegressionEvidence`, and `BlockingCondition` fields. A gate is not satisfied until runtime ownership/hookup exists; preflight evidence alone must not flip `CanHookUpPartialApply`.
 
-## 7. Sealed Lines
+## 7. Pipeline Dry-Run Boundary
+
+The current pure-test dry-run chains `RetainedPartialApplyPlanner`, `HitTargetMetadataProjector`, `RetainedRootMetadataPatcher`, `RetainedResourceSegmentTable`, and `SegmentedRetainedFrameReader` to prove decision flow. It uses synthetic retained data and test-only resolvers, does not replace production command ranges, does not retain production resources, and leaves `RetainedRenderFrame` / `DrawingBackendCompositor` sentinels unmutated.
+
+## 8. Sealed Lines
 
 - Diagnostics stay regression-only; no unified diagnostics channel/event bus/registry.
 - Controls helpers stay PoC-owned; no typed ids.

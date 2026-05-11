@@ -53,6 +53,102 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
+    public void SegmentedRetainedFrameReader_fails_for_empty_segment_table()
+    {
+        using var table = new RetainedResourceSegmentTable();
+        using var commandBuffer = new RetainedCommandBuffer();
+        using var batch = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        commandBuffer.ApplyFull(batch);
+        var reader = new SegmentedRetainedFrameReader(commandBuffer, table);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => reader.ReadSegments());
+
+        Assert.Contains("empty", exception.Message);
+    }
+
+    [Fact]
+    public void SegmentedRetainedFrameReader_fails_when_segment_exceeds_command_buffer()
+    {
+        var tracker = new SnapshotTracker();
+        using var table = new RetainedResourceSegmentTable();
+        using var commandBuffer = new RetainedCommandBuffer();
+        using var batch = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        commandBuffer.ApplyFull(batch);
+        table.ApplyUncheckedForPreflight([new RetainedResourceSegment(0, 2, tracker.CreateSnapshot())]);
+        var reader = new SegmentedRetainedFrameReader(commandBuffer, table);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => reader.ReadSegments());
+
+        Assert.Contains("outside", exception.Message);
+    }
+
+    [Fact]
+    public void SegmentedRetainedFrameReader_fails_for_non_contiguous_segments()
+    {
+        var oldTracker = new SnapshotTracker();
+        var replacementTracker = new SnapshotTracker();
+        using var table = new RetainedResourceSegmentTable();
+        using var commandBuffer = new RetainedCommandBuffer();
+        using var batch = CreateCommandBatch(
+            new DrawCommand(DrawCommandKind.FillRect),
+            new DrawCommand(DrawCommandKind.FillRect),
+            new DrawCommand(DrawCommandKind.FillRect));
+        commandBuffer.ApplyFull(batch);
+        table.ApplyUncheckedForPreflight(
+        [
+            new RetainedResourceSegment(0, 1, oldTracker.CreateSnapshot()),
+            new RetainedResourceSegment(2, 1, replacementTracker.CreateSnapshot())
+        ]);
+        var reader = new SegmentedRetainedFrameReader(commandBuffer, table);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => reader.ReadSegments());
+
+        Assert.Contains("contiguously", exception.Message);
+    }
+
+    [Fact]
+    public void SegmentedRetainedFrameReader_fails_for_overlapping_segments()
+    {
+        var oldTracker = new SnapshotTracker();
+        var replacementTracker = new SnapshotTracker();
+        using var table = new RetainedResourceSegmentTable();
+        using var commandBuffer = new RetainedCommandBuffer();
+        using var batch = CreateCommandBatch(
+            new DrawCommand(DrawCommandKind.FillRect),
+            new DrawCommand(DrawCommandKind.FillRect),
+            new DrawCommand(DrawCommandKind.FillRect));
+        commandBuffer.ApplyFull(batch);
+        table.ApplyUncheckedForPreflight(
+        [
+            new RetainedResourceSegment(0, 2, oldTracker.CreateSnapshot()),
+            new RetainedResourceSegment(1, 1, replacementTracker.CreateSnapshot())
+        ]);
+        var reader = new SegmentedRetainedFrameReader(commandBuffer, table);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => reader.ReadSegments());
+
+        Assert.Contains("contiguously", exception.Message);
+    }
+
+    [Fact]
+    public void SegmentedRetainedFrameReader_fails_when_segment_coverage_does_not_match_command_count()
+    {
+        var tracker = new SnapshotTracker();
+        using var table = new RetainedResourceSegmentTable();
+        using var commandBuffer = new RetainedCommandBuffer();
+        using var batch = CreateCommandBatch(
+            new DrawCommand(DrawCommandKind.FillRect),
+            new DrawCommand(DrawCommandKind.FillRect));
+        commandBuffer.ApplyFull(batch);
+        table.ApplyUncheckedForPreflight([new RetainedResourceSegment(0, 1, tracker.CreateSnapshot())]);
+        var reader = new SegmentedRetainedFrameReader(commandBuffer, table);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => reader.ReadSegments());
+
+        Assert.Contains("command count", exception.Message);
+    }
+
+    [Fact]
     public void RetainedResourceSegmentTable_resolves_old_and_replacement_resources_by_command_range()
     {
         var oldResources = FrameDrawingResources.Rent();
@@ -490,6 +586,218 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
+    public void RetainedRootMetadataPatcher_projects_dirty_control_metadata_from_next_root()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false)),
+                new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(false)),
+                new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(true))));
+
+        var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
+
+        Assert.True(patch.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.None, patch.FallbackReason);
+        var patchedButton = patch.Root.Children[0];
+        AssertTextAttribute(patchedButton, "ActionId", "Increment.Secondary");
+        AssertBooleanAttribute(patchedButton, "IsHovered", true);
+        AssertBooleanAttribute(patchedButton, "IsPressed", true);
+        AssertBooleanAttribute(patchedButton, "IsFocused", true);
+        Assert.Equal(retainedRoot.Children[0].Children[0], patchedButton.Children[0]);
+        AssertTextAttribute(retainedRoot.Children[0], "ActionId", "Increment");
+    }
+
+    [Fact]
+    public void RetainedRootMetadataPatcher_falls_back_when_non_dirty_control_metadata_drifts()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+            VirtualNodeFactory.Button("Decrement", 4,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+            VirtualNodeFactory.Button("Decrement", 4,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
+
+        Assert.False(patch.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, patch.FallbackReason);
+    }
+
+    [Fact]
+    public void RetainedRootMetadataPatcher_falls_back_on_key_path_mismatch()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 99,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
+
+        Assert.False(patch.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, patch.FallbackReason);
+    }
+
+    [Fact]
+    public void RetainedRootMetadataPatcher_falls_back_when_text_changes()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment v2", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
+
+        Assert.False(patch.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.NotStyleOnly, patch.FallbackReason);
+    }
+
+    [Fact]
+    public void RetainedRootMetadataPatcher_falls_back_when_layout_attribute_changes()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute("ButtonHeight", AttributeValue.FromNumber(52))));
+
+        var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
+
+        Assert.False(patch.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.NotStyleOnly, patch.FallbackReason);
+    }
+
+    [Fact]
+    public void RetainedRootMetadataPatcher_falls_back_when_tree_shape_changes()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+            VirtualNodeFactory.Button("Decrement", 4,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement"))));
+
+        var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
+
+        Assert.False(patch.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, patch.FallbackReason);
+    }
+
+    [Fact]
+    public void Planner_projector_segment_table_dry_run_chains_preflight_without_runtime_mutation()
+    {
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var buttonBounds = new PixelRectangle(16, 120, 140, 40);
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+        var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, "Increment") };
+        var layoutResult = new LayoutTreeResult(
+            [
+                new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24), Text: "Static"),
+                new LayoutElement(LayoutElementKind.Button, buttonBounds, Text: "Increment", ActionId: "Increment.Secondary", ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
+            ],
+            [],
+            [(1, 1)]);
+        var snapshot = new RenderPipelineRetainedInputSnapshot(
+            layoutResult,
+            [new ElementCommandRange(0, 1), new ElementCommandRange(1, 1)],
+            retainedHitTargets,
+            retainedRoot,
+            viewport,
+            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            [(1, 1)],
+            [(1, 1)],
+            LayoutRebuildReason.StyleOnly);
+        var planningResolver = new NamedResolver("planning");
+        using var retainedFrame = new RetainedRenderFrame();
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        var retainedFrameCommandCount = retainedFrame.CommandCount;
+        var compositorRenderCount = compositor.RenderCount;
+        var compositorFullApplyCount = compositor.FullApplyCount;
+        var compositorPartialApplyCount = compositor.PartialApplyCount;
+
+        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, planningResolver, planningResolver);
+        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], retainedHitTargets);
+        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, snapshot.DirtyClassifications);
+
+        Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, plan.Kind);
+        Assert.Equal([(1, 1)], plan.DirtyCommandRanges);
+        Assert.True(hitTargetProjection.Succeeded);
+        Assert.Equal("Increment.Secondary", hitTargetProjection.HitTargets[0].ActionId);
+        Assert.True(rootPatch.Succeeded);
+        AssertTextAttribute(rootPatch.Root.Children[0], "ActionId", "Increment.Secondary");
+        AssertBooleanAttribute(rootPatch.Root.Children[0], "IsHovered", true);
+
+        using var commandBuffer = new RetainedCommandBuffer();
+        using var table = new RetainedResourceSegmentTable();
+        using var mergedCommands = CreateCommandBatch(
+            new DrawCommand(DrawCommandKind.DrawTextRun),
+            new DrawCommand(DrawCommandKind.DrawTextRun));
+        var oldSnapshot = RetainedResourceSnapshot.Capture(new NamedResolver("old"));
+        var replacementSnapshot = RetainedResourceSnapshot.Capture(new NamedResolver("replacement"));
+
+        commandBuffer.ApplyFull(mergedCommands);
+        table.ApplyFull(2, oldSnapshot);
+        Assert.True(table.TryAcceptPartial(plan.DirtyCommandRanges, replacementSnapshot));
+        var reads = new SegmentedRetainedFrameReader(commandBuffer, table).ReadSegments();
+
+        Assert.Collection(reads,
+            segment =>
+            {
+                Assert.Equal(0, segment.CommandStart);
+                Assert.Same(oldSnapshot.Resolver, segment.Resolver);
+                Assert.Equal("old", segment.Resolver.Resolve(segment.Commands[0].Text).ToString());
+            },
+            segment =>
+            {
+                Assert.Equal(1, segment.CommandStart);
+                Assert.Same(replacementSnapshot.Resolver, segment.Resolver);
+                Assert.Equal("replacement", segment.Resolver.Resolve(segment.Commands[0].Text).ToString());
+            });
+        Assert.Equal(retainedFrameCommandCount, retainedFrame.CommandCount);
+        Assert.Equal(compositorRenderCount, compositor.RenderCount);
+        Assert.Equal(compositorFullApplyCount, compositor.FullApplyCount);
+        Assert.Equal(compositorPartialApplyCount, compositor.PartialApplyCount);
+        Assert.Equal(0, compositor.RetainedFrame.CommandCount);
+    }
+
+    [Fact]
     public void PartialApplyIntegrationGateChecklist_blocks_hookup_until_every_gate_is_satisfied()
     {
         var gates = PartialApplyIntegrationGateChecklist.RequiredGates;
@@ -502,8 +810,44 @@ public sealed class PartialApplyPreflightTests
             var status = Assert.Single(gates, gate => gate.Gate == expectedGate);
             Assert.False(status.Satisfied);
             Assert.False(string.IsNullOrWhiteSpace(status.BlockingCondition));
-            Assert.False(string.IsNullOrWhiteSpace(status.Evidence));
+            Assert.False(string.IsNullOrWhiteSpace(status.PreflightEvidence));
+            Assert.False(string.IsNullOrWhiteSpace(status.RuntimeEvidence));
+            Assert.False(string.IsNullOrWhiteSpace(status.NoChangeRegressionEvidence));
+            Assert.Contains("None", status.RuntimeEvidence);
         }
+    }
+
+    private static void AssertTextAttribute(VirtualNode node, string name, string expected)
+    {
+        var attribute = GetSingleAttribute(node, name);
+        Assert.Equal(AttributeValueKind.Text, attribute.Value.Kind);
+        Assert.Equal(expected, attribute.Value.Text);
+    }
+
+    private static void AssertBooleanAttribute(VirtualNode node, string name, bool expected)
+    {
+        var attribute = GetSingleAttribute(node, name);
+        Assert.Equal(AttributeValueKind.Boolean, attribute.Value.Kind);
+        Assert.Equal(expected, attribute.Value.Boolean);
+    }
+
+    private static VirtualNodeAttribute GetSingleAttribute(VirtualNode node, string name)
+    {
+        var matchCount = 0;
+        var match = default(VirtualNodeAttribute);
+        foreach (var attribute in node.Attributes)
+        {
+            if (attribute.Name != name)
+            {
+                continue;
+            }
+
+            matchCount++;
+            match = attribute;
+        }
+
+        Assert.Equal(1, matchCount);
+        return match;
     }
 
     private static DrawCommandBatch CreateCommandBatch(params DrawCommand[] commands)
@@ -537,5 +881,31 @@ public sealed class PartialApplyPreflightTests
         public ReadOnlySpan<char> Resolve(TextSlice slice) => default;
 
         public TextStyle ResolveTextStyle(ResourceHandle handle) => TextStyle.Default;
+    }
+
+    private sealed class NamedResolver(string text) : IFrameResourceResolver
+    {
+        public ReadOnlySpan<char> Resolve(TextSlice slice) => text.AsSpan();
+
+        public TextStyle ResolveTextStyle(ResourceHandle handle) => TextStyle.Default;
+    }
+
+    private sealed class NoOpBackend : IDrawingBackend
+    {
+        public void BeginFrame(in FrameContext frameContext)
+        {
+        }
+
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+        }
+
+        public void EndFrame()
+        {
+        }
+
+        public void Dispose()
+        {
+        }
     }
 }
