@@ -17,7 +17,7 @@
 - `Irix.Poc` 当前承担了三类债务：sample app semantics、cross-layer wiring、diagnostic entrypoints。
 - Program diagnostics runner split 已完成并封版为 regression-only；后续不继续拆 diagnostics，也暂不做 unified diagnostics channel / event bus / registry。
 - `v1 API/control boundary prep` 已完成并封版为 regression-only；controls-boundary helpers 和 scroll feedback vocabulary v0 均保持 PoC-owned。
-- 下一条低风险线选择 [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md)：只整理 style source、viewport source、retained-tree owner、render-pipeline creation、post-frame feedback 的命名与 promotion gates；不要移动 translator，不新增 framework API。
+- 当前低风险线已收口为 [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md) 和 [scroll settings provider prep](V1-Scroll-Settings-Provider-Prep.md)：只整理 contract 命名、promotion gates、Windows wheel settings 来源与 fallback；不要移动 translator，不新增 framework API，不接线 scroll controller。
 
 ## 2. 诊断入口盘点
 
@@ -51,7 +51,7 @@ Recommended order:
 5. Backend clip/text smoke helpers → `BackendClipTextSmokeDiagnostics` (done; smoke host only, D3D12 backend/runtime ownership unchanged).
 6. Full `--diagnose` orchestration → `FullDiagnosticRunner` (done; first pass moved the existing flow as a whole without regrouping internal blocks).
 
-This runner split line is sealed. Future work should not continue diagnostics runner moves or provider/channel ownership design; current low-risk work is translator feedback contract prep.
+This runner split line is sealed. Future work should not continue diagnostics runner moves or provider/channel ownership design; current low-risk work remains contract prep only.
 
 Rules for this split:
 
@@ -113,9 +113,10 @@ Rules for this split:
 2. Keep Program diagnostics runner split sealed as regression-only; new diagnostics work should preserve CLI output and debug overlay rows.
 3. Leave unified diagnostics channel, event bus, registry, and provider replacement paused until explicitly reopened.
 4. Treat [v1 API/control boundary prep](V1-API-Control-Boundary-Prep.md) as sealed regression-only unless repairing boundary docs/tests.
-5. Start the next low-risk line as [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md), without moving translator or introducing framework APIs.
-6. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
-7. For any future diagnostics ownership move, run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke.
+5. Use [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md) as the promotion gate source, without moving translator or introducing framework APIs.
+6. Use [scroll settings provider prep](V1-Scroll-Settings-Provider-Prep.md) as the settings boundary source, without wiring it into the controller.
+7. Promote only generic scroll/input primitives after names and contracts no longer reference Counter sample behavior.
+8. For any future diagnostics ownership move, run full tests plus `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, `--diagnose-input`, and a `--debug-ui` smoke.
 
 ## 8. 当前完成标准对照
 
@@ -126,5 +127,5 @@ Rules for this split:
 | 测试分组盘点 | 已按 scroll/input/clip/viewport/layout dirty/style-only plan/retained frame 分组。 |
 | 标记不移动清单 | 已明确 scroll/input/clip/render pipeline 核心代码暂不移动。 |
 | Program diagnostics runner split | 已完成并封版为 regression-only：`Program.Main` 只分发 diagnostics runners，后续不在此线继续拆 block。 |
-| 下一条线 | 选择 [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md)；暂不做 StyleOnly fast-path implementation，也暂不做 unified diagnostics channel。 |
+| 下一条线 | [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md) 和 [scroll settings provider prep](V1-Scroll-Settings-Provider-Prep.md) 已作为 design-only contract prep 收口；暂不做 StyleOnly fast-path implementation，也暂不做 unified diagnostics channel。 |
 | consolidation prep 文档 | 本文即输出；当前阶段不改运行行为。 |

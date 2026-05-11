@@ -1172,6 +1172,51 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void WindowDrawCommandTranslator_keeps_feedback_callback_and_viewport_diagnostics_aligned_on_render_request()
+    {
+        var callbackMaxScrollYs = new List<double>();
+        var viewport = new PixelRectangle(10, 20, 960, 100);
+        var translator = new WindowDrawCommandTranslator(
+            new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))),
+            prepareFrame: null,
+            viewportProvider: () => viewport,
+            postFrameCallback: callbackMaxScrollYs.Add);
+        var children = new VirtualNode[10];
+        for (var index = 0; index < children.Length; index++)
+        {
+            children[index] = VirtualNodeFactory.Text($"item {index}", (ulong)(index + 2));
+        }
+
+        var root = new VirtualNode(VirtualNodeKind.ScrollContainer, key: 1, children: children);
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+        using var initialFrame = translator.Translate(batch);
+        var initialMetrics = Assert.Single(translator.LastScrollFeedback.Containers);
+
+        Assert.Single(callbackMaxScrollYs);
+        Assert.Equal(viewport, translator.LastViewport);
+        Assert.Equal(viewport, translator.LastLayoutViewport);
+        Assert.Equal(translator.LastMaxScrollY, initialMetrics.MaxScrollY);
+        Assert.Equal(callbackMaxScrollYs[0], initialMetrics.MaxScrollY);
+
+        viewport = new PixelRectangle(10, 20, 960, 140);
+        using var renderRequest = PatchBatch.CreateRenderRequest();
+        using var renderRequestFrame = translator.Translate(renderRequest);
+        var renderRequestMetrics = Assert.Single(translator.LastScrollFeedback.Containers);
+
+        Assert.Equal(2, callbackMaxScrollYs.Count);
+        Assert.Equal(viewport, translator.LastViewport);
+        Assert.Equal(viewport, translator.LastLayoutViewport);
+        Assert.Equal(LayoutRebuildReason.ViewportChanged, translator.LastLayoutRebuildReason);
+        Assert.Empty(translator.LastDirtyClassifications);
+        Assert.Equal(140.0, renderRequestMetrics.ViewportExtent);
+        Assert.True(renderRequestMetrics.ContentExtent > renderRequestMetrics.ViewportExtent);
+        Assert.True(renderRequestMetrics.MaxScrollY < initialMetrics.MaxScrollY);
+        Assert.Equal(translator.LastMaxScrollY, renderRequestMetrics.MaxScrollY);
+        Assert.Equal(callbackMaxScrollYs[^1], renderRequestMetrics.MaxScrollY);
+        Assert.Equal(initialFrame.Commands.Count, renderRequestFrame.Commands.Count);
+    }
+
+    [Fact]
     public void WindowDrawCommandTranslator_render_request_reuses_retained_tree()
     {
         var translator = new WindowDrawCommandTranslator(new FakeWindow(

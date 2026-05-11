@@ -10,6 +10,7 @@ Current status:
 - Controls-boundary helpers are regression-only: `ControlVisualState`, `ControlActionAttributeAdapter`, and `ButtonAttributeBundle` remain PoC-owned internal code.
 - Scroll feedback vocabulary v0 is regression-only: `ScrollFeedback` / `ScrollContainerMetrics` are side-channel translator feedback; the legacy `Action<double>` max-scroll callback still drives runtime behavior.
 - `WindowDrawCommandTranslator` is not ready for promotion. It still embeds Counter style defaults, private retained-tree ownership, private pipeline creation, and sample-shaped feedback.
+- Contract naming is sufficient for the next implementation planning step; this line remains design-only unless a regression test is added to preserve existing behavior.
 
 Non-goals:
 
@@ -47,6 +48,16 @@ These names are design vocabulary only. Do not implement them in this line.
 | `TranslatorFrameFeedback` | Typed post-frame result carrying layout diagnostics and scroll feedback. | Should include `ScrollFeedback`, viewport, layout rebuild reason, dirty classifications, and future layout diagnostics. |
 | `TranslatorDiagnosticsSnapshot` | Optional local snapshot for tests/debug readers. | Must remain local; do not introduce a global diagnostics channel. |
 
+Naming sufficiency check:
+
+| Required boundary | Chosen name | Status |
+|-------------------|-------------|--------|
+| Style source | `TranslatorStyleSource` | Clear enough for design; implementation still blocked by hidden `CounterStylePreset.Default`. |
+| Viewport source | `TranslatorViewportSource` | Clear enough for design; implementation must still define pixel units, resize timing, and fallback behavior. |
+| Retained-tree owner | `TranslatorRetainedTreeOwner` | Clear enough for design; ownership decision remains blocked. |
+| Render-pipeline creation | `RenderPipelineFactory` | Clear enough for design; implementation must remove hidden pipeline construction. |
+| Post-frame feedback | `TranslatorFrameFeedback` | Clear enough for design; implementation must preserve legacy callback until migration is explicit. |
+
 ## 4. Promotion Gates
 
 | Gate | Requirement | Current status | Decision |
@@ -61,7 +72,34 @@ These names are design vocabulary only. Do not implement them in this line.
 | Diagnostics exposure | Local diagnostics are either exposed through typed feedback or remain local accessors. | Partial: local accessors exist; no typed frame feedback record. | Do not create global channel. |
 | App isolation | Translator has no Counter messages, input router, or app command dependency. | Mostly satisfied, except style and feedback are sample-shaped. | Keep in PoC. |
 
-## 5. Allowed Next Work
+## 5. Why It Stays In Irix.Poc
+
+`WindowDrawCommandTranslator` remains in `Irix.Poc` because the bridge still has unresolved framework contracts:
+
+- Style source is sample-shaped through `CounterStylePreset.Default`.
+- Viewport source is a delegate/window fallback, not a named physical-pixel source contract.
+- Retained tree ownership is embedded privately, so patch application lifetime is not a framework decision yet.
+- Render-pipeline creation is private and carries hidden style defaults.
+- Post-frame feedback is split between legacy `Action<double>` and `LastScrollFeedback`; no promoted typed feedback record exists.
+- Prepare-frame semantics are unnamed and may represent backend/resource lifetime details.
+- Local diagnostics are useful for tests/debugging, but they are not a diagnostics channel.
+
+Moving the translator before these contracts are explicit would promote PoC composition policy as framework API.
+
+## 6. Promotion Precondition Order
+
+Future implementation should follow this order:
+
+1. Preserve feedback compatibility with tests for `LastScrollFeedback`, `LastMaxScrollY`, and legacy max-scroll callback alignment.
+2. Define `TranslatorStyleSource` and remove hidden Counter style construction from the bridge.
+3. Define `TranslatorViewportSource` with physical-pixel units, resize timing, and fallback semantics.
+4. Decide `TranslatorRetainedTreeOwner`: embedded bridge ownership or external render service ownership.
+5. Introduce a `RenderPipelineFactory` or equivalent explicit pipeline creation contract.
+6. Define `FramePreparationHook` semantics or remove the hook from the promoted shape.
+7. Define `TranslatorFrameFeedback` with scroll feedback and local layout diagnostics.
+8. Only then reconsider moving `WindowDrawCommandTranslator` out of `Irix.Poc`.
+
+## 7. Allowed Next Work
 
 Allowed:
 
@@ -79,7 +117,7 @@ Not allowed in this line:
 - Enabling StyleOnly fast-path.
 - Adding unified diagnostics channel / event bus / registry.
 
-## 6. Completion Standard
+## 8. Completion Standard
 
 This line is complete when:
 
@@ -88,3 +126,7 @@ This line is complete when:
 - Existing runtime behavior is unchanged.
 - `WindowDrawCommandTranslator` remains in `Irix.Poc`.
 - Scroll scheduler/message flow remains unchanged.
+
+Current status: complete as design contract prep. Future work must reopen this line explicitly before adding framework APIs or moving code.
+
+Guardrail: this document does not imply runtime, API, or file-move permission.

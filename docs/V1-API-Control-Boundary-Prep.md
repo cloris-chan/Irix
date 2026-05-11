@@ -239,7 +239,7 @@ Scroll extraction preconditions:
 | Step | Candidate extraction | Allowed only after | Blocking issue if skipped |
 |------|----------------------|--------------------|---------------------------|
 | 1 | `ScrollMetrics` and max-scroll feedback vocabulary | `WindowDrawCommandTranslator` feedback names container id, viewport extent, content extent, and max scroll explicitly. | Complete as side-channel `ScrollFeedback` / `ScrollContainerMetrics`; legacy `Action<double>` still drives runtime behavior. |
-| 2 | `SystemScrollSettings` provider | Platform ownership for wheel lines/chars is named, with defaults preserved for non-Windows or missing settings. | Scroll delta conversion would bake PoC defaults into framework behavior. |
+| 2 | `SystemScrollSettings` provider | Platform ownership for wheel lines/chars is named, with defaults preserved for non-Windows or missing settings. | Design tracked in [V1-Scroll-Settings-Provider-Prep.md](V1-Scroll-Settings-Provider-Prep.md); no provider wiring or delta conversion change. |
 | 3 | Pure `ScrollController` | Metrics and settings are explicit inputs, and controller messages no longer mention Counter types. | The controller would look reusable while still depending on sample message flow and single-container assumptions. |
 | 4 | `ScrollState` | Scroll container identity, app storage ownership, and default/empty state semantics are named. | State extraction would force a framework decision about where per-container scroll state lives before the model boundary is ready. |
 | 5 | `ScrollFramePump` or scheduler | Frame request/cancellation semantics are independent from `CounterMessage.ScrollFrame`. | The pump would become runtime infrastructure while still dispatching Counter-specific messages. |
@@ -319,7 +319,7 @@ Implemented helper line:
 5. Target/action ids remain strings.
 6. Typed id wrappers remain postponed.
 7. Scroll feedback vocabulary v0 exists as side-channel translator data.
-8. Scroll controller, state ownership, settings provider, and pump/scheduler remain unextracted.
+8. Scroll controller, state ownership, settings provider implementation, and pump/scheduler remain unextracted; settings provider design is tracked separately.
 9. `WindowDrawCommandTranslator` remains unpromoted.
 10. StyleOnly fast-path remains disabled.
 
