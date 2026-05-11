@@ -1483,6 +1483,32 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
+    public void RetainedRenderFrameHandoffHarness_enabled_missing_owner_does_not_execute_or_change_counters()
+    {
+        using var retainedFrame = new RetainedRenderFrame();
+        using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Disabled);
+        var backend = new DirtyRangeAwareCapturingBackend();
+        using var harness = new RetainedRenderFrameHandoffHarness(backend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
+
+        var result = harness.ExecuteCandidateFrame(ownership, new FrameContext(100, 100), [(0, 1)]);
+        var hit = harness.TryGetActionIdAt(1, 1, out var actionId);
+
+        Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.MissingSegmentedOwner, result.Kind);
+        Assert.Empty(result.Reads);
+        Assert.Empty(result.DirtyRangePlan);
+        Assert.Equal(0, result.Counters.RenderCount);
+        Assert.Equal(0, result.Counters.FullApplyCount);
+        Assert.Equal(0, result.Counters.PartialApplyCount);
+        Assert.Equal(0, result.Counters.EmptyFrameCount);
+        Assert.False(result.Counters.LastPartialApplySucceeded);
+        Assert.Empty(backend.Calls);
+        Assert.Empty(backend.ExecuteCalls);
+        Assert.Equal(0, backend.SetDirtyCommandRangeCount);
+        Assert.False(hit);
+        Assert.Equal(string.Empty, actionId);
+    }
+
+    [Fact]
     public async Task RetainedRenderFrameHandoffHarness_enabled_executes_candidate_source_without_changing_production_outputs()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1558,6 +1584,42 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(directActionId, feedActionId);
         Assert.Equal(directActionId, harnessActionId);
         Assert.Equal(diagnosticsBefore, diagnosticsAfter);
+    }
+
+    [Fact]
+    public void RetainedRenderFrameHandoffHarness_enabled_uses_owner_side_clip_and_no_hit_metadata()
+    {
+        using var retainedFrame = new RetainedRenderFrame();
+        using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
+        using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        using var batch = new RenderFrameBatch(
+            commands,
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Clipped", new PixelRectangle(10, 10, 20, 20))],
+            new NamedResolver("clipped"),
+            [(0, 1)]);
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Clipped", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Clipped"))));
+        ownership.Update(null, root, new PixelRectangle(0, 0, 100, 100), batch);
+        var backend = new DirtyRangeAwareCapturingBackend();
+        using var harness = new RetainedRenderFrameHandoffHarness(backend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
+
+        var result = harness.ExecuteCandidateFrame(ownership, new FrameContext(100, 100), [(0, 1)]);
+        var inClipHit = harness.TryGetActionIdAt(15, 15, out var inClipActionId);
+        var outsideClipHit = harness.TryGetActionIdAt(5, 5, out var outsideClipActionId);
+        var outsideBoundsHit = harness.TryGetActionIdAt(101, 101, out var outsideBoundsActionId);
+
+        Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Executed, result.Kind);
+        Assert.Single(result.Reads);
+        Assert.Equal(["BeginFrame", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal(1, backend.SetDirtyCommandRangeCount);
+        Assert.Single(backend.DirtyRanges);
+        Assert.Equal([(0, 1)], backend.DirtyRanges[0]);
+        Assert.True(inClipHit);
+        Assert.Equal("Clipped", inClipActionId);
+        Assert.False(outsideClipHit);
+        Assert.Equal(string.Empty, outsideClipActionId);
+        Assert.False(outsideBoundsHit);
+        Assert.Equal(string.Empty, outsideBoundsActionId);
     }
 
     [Fact]
@@ -2842,8 +2904,8 @@ public sealed class PartialApplyPreflightTests
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.ProductionOffRuntimeEvidence.Contains("multiple FrameDrawingResources") && gate.ProductionOffRuntimeEvidence.Contains("throw path") && gate.ProductionOffRuntimeEvidence.Contains("repeated replacement") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CommandRangeStability && gate.ProductionOffRuntimeEvidence.Contains("commands, resources, retained root, and hit targets") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.HitTargetMetadataProjection && gate.ProductionOffRuntimeEvidence.Contains("handoff harness uses owner-side hit targets") && gate.ProductionOffRuntimeEvidence.Contains("projection-failure fallback") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ProductionOffRuntimeEvidence.Contains("default-off/enabled handoff harness") && gate.ProductionOffRuntimeEvidence.Contains("segment-local dirty ranges") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RegressionCoverage && gate.ProductionOffRuntimeEvidence.Contains("candidate render-source backend call order") && gate.ProductionOffRuntimeEvidence.Contains("segment-local dirty-range handoff") && gate.ProductionOffRuntimeEvidence.Contains("diagnostics text no-change") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ProductionOffRuntimeEvidence.Contains("default-off/enabled/missing-owner handoff harness") && gate.ProductionOffRuntimeEvidence.Contains("segment-local dirty ranges") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RegressionCoverage && gate.ProductionOffRuntimeEvidence.Contains("candidate render-source backend call order") && gate.ProductionOffRuntimeEvidence.Contains("missing-owner") && gate.ProductionOffRuntimeEvidence.Contains("clipped/no-hit hit-test") && gate.ProductionOffRuntimeEvidence.Contains("diagnostics text no-change") && gate.ProductionRuntimeEvidence.Contains("None"));
         foreach (var gate in gates)
         {
             Assert.False(gate.Satisfied);
