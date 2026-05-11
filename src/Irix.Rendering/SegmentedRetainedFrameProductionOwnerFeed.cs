@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Irix.Platform;
 
 namespace Irix.Rendering;
@@ -15,7 +16,11 @@ internal readonly record struct SegmentedRetainedFrameProductionOwnerFeedResult(
     SegmentedRetainedFrameShadowResult ShadowResult,
     bool RuntimeOwnerEnabled,
     bool FallbackApplied,
-    bool OwnerStatePreservedBeforeFallback)
+    bool OwnerStatePreservedBeforeFallback,
+    ulong BatchFrameId = 0,
+    int BatchCommandCount = 0,
+    IFrameResourceResolver? BatchResources = null,
+    object? BatchCommandOwner = null)
 {
     public static SegmentedRetainedFrameProductionOwnerFeedResult Disabled { get; } = new(
         SegmentedRetainedFrameShadowResult.Disabled,

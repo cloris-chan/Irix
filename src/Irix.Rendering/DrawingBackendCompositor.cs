@@ -12,8 +12,11 @@ namespace Irix.Rendering;
 public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IDisposable
 {
     private readonly IDrawingBackend _backend = backend;
+    private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
+    private readonly Func<IDrawingBackend>? _handoffCandidateBackendFactory;
     private readonly Lock _hitTargetsLock = new();
     private readonly RetainedRenderFrame _retainedFrame = new();
+    private RetainedRenderFrameHandoffHarness? _handoffCandidateHarness;
     private HitTestTarget[] _hitTargets = [];
     private ulong _lastAppliedFrameId;
     private long _renderCount;
@@ -39,6 +42,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// </summary>
     internal RetainedRenderFrame RetainedFrame => _retainedFrame;
 
+    internal DrawingBackendCompositorHandoffResult LastHandoffResult { get; private set; } = DrawingBackendCompositorHandoffResult.Disabled;
+
+    internal bool HasHandoffCandidateHarness => _handoffCandidateHarness is not null;
+
     /// <summary>Total non-empty frames rendered.</summary>
     public long RenderCount => _renderCount;
 
@@ -55,7 +62,26 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         ? capability.ClipMode
         : DrawingBackendClipMode.None;
 
+    internal DrawingBackendCompositor(
+        IDrawingBackend backend,
+        DrawingBackendCompositorHandoffOptions handoffOptions,
+        Func<IDrawingBackend>? handoffCandidateBackendFactory)
+        : this(backend)
+    {
+        _handoffOptions = handoffOptions;
+        _handoffCandidateBackendFactory = handoffCandidateBackendFactory;
+    }
+
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
+    {
+        return RenderAsync(renderFrameBatch, null, new FrameContext(0, 0), cancellationToken);
+    }
+
+    internal ValueTask RenderAsync(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership,
+        FrameContext frameContext,
+        CancellationToken cancellationToken = default)
     {
         if (renderFrameBatch.Commands.Count == 0)
         {
@@ -70,6 +96,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _lastAppliedFrameId = 0;
             LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
             LastPartialApplySucceeded = false;
+            LastHandoffResult = ExecuteHandoffCandidate(renderFrameBatch, ownership, frameContext);
             return ValueTask.CompletedTask;
         }
 
@@ -116,8 +143,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 dirtyAware.SetDirtyCommandRanges(LastDirtyCommandRanges);
             }
 
-            var frameContext = new FrameContext(0, 0); // Viewport size not needed for PoC backend
-            _backend.BeginFrame(frameContext);
+            var backendFrameContext = new FrameContext(0, 0); // Viewport size not needed for PoC backend
+            _backend.BeginFrame(backendFrameContext);
 
             _backend.Execute(commands, resources);
 
@@ -129,7 +156,96 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _hitTargets = [.. _retainedFrame.HitTargets];
         }
 
+        LastHandoffResult = ExecuteHandoffCandidate(renderFrameBatch, ownership, frameContext);
         return ValueTask.CompletedTask;
+    }
+
+    internal bool TryGetCandidateActionIdAt(int x, int y, out string actionId)
+    {
+        if (_handoffCandidateHarness is null)
+        {
+            actionId = string.Empty;
+            return false;
+        }
+
+        return _handoffCandidateHarness.TryGetActionIdAt(x, y, out actionId);
+    }
+
+    private DrawingBackendCompositorHandoffResult ExecuteHandoffCandidate(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership,
+        in FrameContext frameContext)
+    {
+        if (!_handoffOptions.EnableSegmentedRenderSourceCandidate)
+        {
+            return DrawingBackendCompositorHandoffResult.Disabled;
+        }
+
+        var ownerResult = ownership?.LastResult ?? SegmentedRetainedFrameProductionOwnerFeedResult.Disabled;
+        if (ownership?.RuntimeOwner is null)
+        {
+            return DrawingBackendCompositorHandoffResult.MissingOwner(ownerResult);
+        }
+
+        if (!IsOwnerResultFresh(ownerResult, renderFrameBatch)
+            || ownerResult.Kind == SegmentedRetainedFrameShadowResultKind.ShadowRejected
+            || ownerResult.ShadowResult.PlanKind == RetainedPartialApplyResultKind.Rejected)
+        {
+            return DrawingBackendCompositorHandoffResult.Rejected(ownerResult);
+        }
+
+        if (ownerResult.Kind == SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull)
+        {
+            return DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult);
+        }
+
+        if (ownerResult.Kind != SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial)
+        {
+            return DrawingBackendCompositorHandoffResult.Rejected(ownerResult);
+        }
+
+        if (ownerResult.ShadowResult.Reads.Count == 0)
+        {
+            return DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult);
+        }
+
+        var harness = _handoffCandidateHarness ??= new RetainedRenderFrameHandoffHarness(_handoffCandidateBackendFactory!(), RetainedRenderFrameHandoffHarnessOptions.Enabled);
+        try
+        {
+            return MapCandidateResult(ownerResult, harness.ExecuteCandidateFrame(ownership, frameContext, LastDirtyCommandRanges));
+        }
+        catch
+        {
+            LastHandoffResult = MapCandidateResult(ownerResult, harness.LastResult);
+            throw;
+        }
+    }
+
+    private static DrawingBackendCompositorHandoffResult MapCandidateResult(
+        SegmentedRetainedFrameProductionOwnerFeedResult ownerResult,
+        RetainedRenderFrameHandoffHarnessResult candidateResult)
+    {
+        return candidateResult.Kind switch
+        {
+            RetainedRenderFrameHandoffHarnessResultKind.Disabled => DrawingBackendCompositorHandoffResult.Disabled,
+            RetainedRenderFrameHandoffHarnessResultKind.MissingSegmentedOwner => DrawingBackendCompositorHandoffResult.MissingOwner(ownerResult),
+            RetainedRenderFrameHandoffHarnessResultKind.EmptyFrame => DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult),
+            _ => DrawingBackendCompositorHandoffResult.Executed(ownerResult, candidateResult)
+        };
+    }
+
+    private static bool IsOwnerResultFresh(SegmentedRetainedFrameProductionOwnerFeedResult ownerResult, RenderFrameBatch renderFrameBatch)
+    {
+        return ownerResult.RuntimeOwnerEnabled
+            && ReferenceEquals(ownerResult.BatchResources, renderFrameBatch.Resources)
+            && ReferenceEquals(ownerResult.BatchCommandOwner, renderFrameBatch.Commands.Owner)
+            && ownerResult.BatchCommandCount == renderFrameBatch.Commands.Count
+            && ownerResult.BatchFrameId == GetBatchFrameId(renderFrameBatch);
+    }
+
+    private static ulong GetBatchFrameId(RenderFrameBatch renderFrameBatch)
+    {
+        return renderFrameBatch.Resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0;
     }
 
     public bool TryGetActionIdAt(int x, int y, out string actionId)
@@ -170,6 +286,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     public void Dispose()
     {
+        _handoffCandidateHarness?.Dispose();
         _retainedFrame.ReleaseResources();
         _retainedFrame.Dispose();
         _backend.Dispose();

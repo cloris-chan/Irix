@@ -32,8 +32,19 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
         PixelRectangle viewportBounds,
         RenderFrameBatch batch)
     {
-        LastResult = UpdateSegmentedOwner(snapshot, root, viewportBounds, batch);
+        LastResult = StampBatch(UpdateSegmentedOwner(snapshot, root, viewportBounds, batch), batch);
         return LastResult;
+    }
+
+    private static SegmentedRetainedFrameProductionOwnerFeedResult StampBatch(SegmentedRetainedFrameProductionOwnerFeedResult result, RenderFrameBatch batch)
+    {
+        return result with
+        {
+            BatchFrameId = batch.Resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0,
+            BatchCommandCount = batch.Commands.Count,
+            BatchResources = batch.Resources,
+            BatchCommandOwner = batch.Commands.Owner
+        };
     }
 
     private SegmentedRetainedFrameProductionOwnerFeedResult UpdateSegmentedOwner(
