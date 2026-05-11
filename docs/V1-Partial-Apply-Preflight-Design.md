@@ -42,7 +42,7 @@ Current scaffold:
 | `RetainedResourceSegmentTable` | Internal / preflight tests | Models full apply, partial accept, invalidate, dispose, and per-command resolver lookup. |
 | `SegmentedRetainedFrameReader` | Internal / preflight tests | Reads retained commands by resource segment and returns the resolver owned by each segment; rejects malformed coverage. |
 | `SegmentedFrameRead` | Internal / preflight tests | Carries a command slice copy plus its segment resolver for assertion/prototyping. |
-| `SegmentedRetainedFramePrototype` | Internal / preflight tests | Future retained-frame seam prototype that owns command buffer, resource segment table, and retained root metadata together. |
+| `SegmentedRetainedFramePrototype` | Internal / preflight tests | Future retained-frame seam prototype that owns command buffer, resource segment table, and retained root metadata together; opt-in harness can consume real `RenderFrameBatch` inputs. |
 
 This scaffold is not connected to `RetainedRenderFrame`, `DrawingBackendCompositor`, `IDrawingBackend.Execute`, or D3D12. It exists to prove ownership rules before runtime hookup.
 
@@ -81,18 +81,19 @@ If the backend API still accepts one `IFrameResourceResolver`, the retained fram
 
 Current segmented reader prototype proves the facade shape without touching `IDrawingBackend.Execute`: old retained command segments read through the old resolver, while accepted replacement dirty ranges read through the replacement resolver. It copies command slices for tests only; it is not a backend hot path.
 
-Current retained-frame seam prototype proves the first runtime checkpoint target without replacing the existing retained frame: command buffer + resource segment table + retained root metadata can be owned together, full-applied, invalidated, and disposed while retaining/releasing multiple snapshots exactly once.
+Current retained-frame seam prototype proves the first runtime checkpoint target without replacing the existing retained frame: command buffer + resource segment table + retained root metadata can be owned together, full-applied, partially rehearsed, invalidated, and disposed while retaining/releasing multiple snapshots exactly once.
 
 ### Test Strategy
 
 | Test area | Required proof |
 |-----------|----------------|
 | Planner fallback | `ResourceOwnershipMismatch` remains side-effect-free when old/new resources differ. |
-| Ownership | Accepted partial retains old and new snapshots; replaced snapshots release only after last command segment disappears; repeated partial accepts are idempotent. |
+| Ownership | Accepted partial retains old and new snapshots; replaced snapshots release only after last command segment disappears; repeated partial accepts are idempotent; failed partial returns false before mutation and explicit full fallback replaces ownership. |
 | Resolver correctness | Old text resolves from old resources and replacement text resolves from new resources in one retained frame. |
 | Pool safety | Re-rented `FrameDrawingResources` with a new `FrameId` is never treated as the old snapshot. |
 | Full fallback | Full apply releases all previous snapshots and exposes only the new full-frame resolver. |
 | Range edges | Multiple dirty ranges, adjacent merge, invalid ranges, empty segment table, out-of-buffer segments, gaps, overlaps, command-count mismatch, and disposed table/snapshot behavior are explicit. |
+| Adapter behavior | Per-segment execute preserves order, pairs `BeginFrame`/`EndFrame` on execute throws, handles empty segments, and does not leak dirty ranges. |
 | Backend neutrality | Existing compositor/backend behavior is unchanged until an explicit integration step lands. |
 
 ## 3. Hit Target Metadata Projection
@@ -195,11 +196,13 @@ No partial apply hookup should land until every gate below is satisfied. Evidenc
 
 The internal `PartialApplyIntegrationGateChecklist` mirrors this table as a regression guard. Every gate currently remains unsatisfied and `CanHookUpPartialApply` is false.
 
-Each checklist item carries separate `PreflightEvidence`, `RuntimeEvidence`, `NoChangeRegressionEvidence`, and `BlockingCondition` fields. A gate is not satisfied until runtime ownership/hookup exists; preflight evidence alone must not flip `CanHookUpPartialApply`.
+Each checklist item carries separate `PreflightEvidence`, `RuntimeEvidence`, `NoChangeRegressionEvidence`, `BlockingCondition`, and `RuntimePromotionCondition` fields. A gate is not satisfied until runtime ownership/hookup exists; preflight evidence alone must not flip `CanHookUpPartialApply`.
 
 ## 7. Pipeline Dry-Run Boundary
 
-The current pure-test dry-run chains `RetainedPartialApplyPlanner`, `HitTargetMetadataProjector`, `RetainedRootMetadataPatcher`, `RetainedResourceSegmentTable`, and `SegmentedRetainedFrameReader` to prove decision flow. It uses synthetic retained data and test-only resolvers, does not replace production command ranges, does not retain production resources, and leaves `RetainedRenderFrame` / `DrawingBackendCompositor` sentinels unmutated.
+The current pure-test dry-run chains `RetainedPartialApplyPlanner`, `HitTargetMetadataProjector`, `RetainedRootMetadataPatcher`, `RetainedResourceSegmentTable`, and `SegmentedRetainedFrameReader` to prove decision flow. It uses synthetic retained data and test-only resolvers, does not replace production command ranges, does not retain production resources, and leaves `RenderPipeline`, `RetainedRenderFrame`, and `DrawingBackendCompositor` sentinels unmutated after each step.
+
+The opt-in segmented retained-frame harness can also consume a real `RenderFrameBatch` plus explicit retained root and resource snapshot. This remains a test harness: it is not called by `RenderPipeline.Build`, is not owned by `DrawingBackendCompositor`, and does not replace the current `RetainedRenderFrame` read path.
 
 ## 8. Sealed Lines
 

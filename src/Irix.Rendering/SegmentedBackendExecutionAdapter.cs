@@ -29,11 +29,16 @@ internal sealed class SegmentedBackendExecutionAdapter(IDrawingBackend backend)
     public void Execute(in FrameContext frameContext, IReadOnlyList<SegmentedFrameRead> segments)
     {
         backend.BeginFrame(frameContext);
-        foreach (var segment in segments)
+        try
         {
-            backend.Execute(segment.Commands, segment.Resolver);
+            foreach (var segment in segments)
+            {
+                backend.Execute(segment.Commands, segment.Resolver);
+            }
         }
-
-        backend.EndFrame();
+        finally
+        {
+            backend.EndFrame();
+        }
     }
 }

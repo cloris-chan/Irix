@@ -23,6 +23,29 @@ internal sealed class SegmentedRetainedFramePrototype : IDisposable
         _retainedRoot = retainedRoot;
     }
 
+    public void ApplyFull(RenderFrameBatch batch, RetainedResourceSnapshot snapshot, VirtualNode retainedRoot)
+    {
+        ApplyFull(batch.Commands, snapshot, retainedRoot);
+    }
+
+    public bool TryAcceptPartial(RenderFrameBatch batch, RetainedResourceSnapshot replacementSnapshot, RetainedRootMetadataPatch rootPatch)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!rootPatch.Succeeded || _commandBuffer.Count == 0 || batch.Commands.Count != _commandBuffer.Count || batch.DirtyCommandRanges.Count == 0)
+        {
+            return false;
+        }
+
+        if (!_resourceSegments.TryAcceptPartial(batch.DirtyCommandRanges, replacementSnapshot))
+        {
+            return false;
+        }
+
+        _commandBuffer.ApplyPartial(batch.Commands, batch.DirtyCommandRanges);
+        _retainedRoot = rootPatch.Root;
+        return true;
+    }
+
     public IReadOnlyList<SegmentedFrameRead> ReadSegments()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

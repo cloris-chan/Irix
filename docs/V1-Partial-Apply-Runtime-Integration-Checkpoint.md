@@ -6,8 +6,8 @@
 
 | Gate | Preflight evidence exists | Runtime evidence still missing |
 |------|---------------------------|--------------------------------|
-| Resource resolver ownership | `RetainedResourceSegmentTable`, `SegmentedRetainedFrameReader`, and segmented backend adapter prototype prove command-range resolver ownership. | Production retained frame does not expose segmented resource ownership. |
-| Resource dispose policy | Segment table and segmented retained-frame prototype tests prove full apply, partial accept, invalidate, dispose, and replaced-snapshot release rules. | Production retained frame does not own multiple retained snapshots. |
+| Resource resolver ownership | `RetainedResourceSegmentTable`, `SegmentedRetainedFrameReader`, opt-in segmented retained-frame harness, and segmented backend adapter prototype prove command-range resolver ownership. | Production retained frame does not expose segmented resource ownership. |
+| Resource dispose policy | Segment table and segmented retained-frame prototype tests prove full apply, accepted partial rehearsal, full fallback, invalidate, dispose, and replaced-snapshot release rules. | Production retained frame does not own multiple retained snapshots. |
 | Command range stability | Planner and segment reader tests reject unstable, invalid, overlapping, non-contiguous, and command-count-mismatched ranges. | Runtime still does not replace cross-frame command ranges. |
 | Hit target metadata projection | `HitTargetMetadataProjector` proves action metadata projection from next root without next layout output. | Hit-test runtime still consumes full layout output from the existing path. |
 | Retained root update | `RetainedRootMetadataPatcher` proves dirty control metadata projection for `ActionId`, `IsHovered`, `IsPressed`, and `IsFocused`. | `RenderPipeline` retained root baseline is not patched by any partial path. |
@@ -32,7 +32,19 @@ RetainedCommandBuffer
   -> segmented read facade
 ```
 
-Current test-only prototype: `SegmentedRetainedFramePrototype`. It owns a command buffer, resource segment table, and retained root metadata, but it is not used by `RetainedRenderFrame` or `DrawingBackendCompositor`.
+Current test-only prototype: `SegmentedRetainedFramePrototype`. It owns a command buffer, resource segment table, and retained root metadata, but it is not used by `RetainedRenderFrame` or `DrawingBackendCompositor`. The opt-in harness can now be fed a real `RenderFrameBatch`, a retained root, and an explicit `RetainedResourceSnapshot`; tests verify the existing `RetainedRenderFrame` state is unchanged.
+
+Accepted partial rehearsal remains test-only. The rehearsal sequence is:
+
+```text
+planner result
+  -> hit target projector
+  -> retained root metadata patcher
+  -> segmented frame TryAcceptPartial
+  -> segmented reader
+```
+
+Success must advance command segments, resource snapshots, and retained root metadata together. Failure must return false before command buffer, segment table, or retained root mutation; full fallback is then an explicit separate `ApplyFull` rehearsal.
 
 ## 3. Backend Execution Adapter Decision
 
@@ -45,9 +57,24 @@ Preferred adapter direction: per-segment execute.
 | Resource rebase | Postponed. Requires copying text/style resources into one namespace and rewriting commands. | No signature change after rebase, but much higher implementation risk. |
 | Stable global handles | Explicitly out of scope. | Would change the resource model and backend cache identity rules. |
 
-Current test-only prototype: `SegmentedBackendExecutionAdapter`. It executes segment reads through the existing `IDrawingBackend` interface and is not connected to D3D12 or compositor runtime.
+Current test-only prototype: `SegmentedBackendExecutionAdapter`. It executes segment reads through the existing `IDrawingBackend` interface and is not connected to D3D12 or compositor runtime. Adapter tests pin call order, empty segment behavior, execute-throw `BeginFrame`/`EndFrame` pairing, and confirm dirty command ranges are not pushed through `IDirtyRangeAware`.
 
-## 4. Candidate Hookup Order
+## 4. Runtime Evidence Promotion Checklist
+
+Preflight evidence can be promoted only when each condition below is met in runtime-owned code while the no-change regression suite remains green.
+
+| Gate | Promotion condition |
+|------|---------------------|
+| Resource resolver ownership | Runtime retained-frame owner exposes segmented reads from real retained state without changing the existing `TryReadFrame` contract. |
+| Resource dispose policy | Production ownership paths cover accepted partial, rejected partial, full fallback, empty frame, invalidate, and dispose with multiple `FrameDrawingResources` snapshots. |
+| Command range stability | Runtime rejects mismatched command counts and malformed dirty ranges before any command buffer or segment table mutation. |
+| Hit target metadata projection | Runtime partial path consumes retained geometry plus next-root action metadata without reading next layout output. |
+| Retained root update | Accepted runtime partials atomically advance retained root metadata with command segments and hit targets; failed partials leave the old baseline intact. |
+| Fallback reporting | Runtime callers can observe local `AppliedPartial` / `FallbackFull` / `Rejected` vocabulary without changing CLI diagnostics output. |
+| Compositor ownership | Compositor integration is explicitly opt-in and proves segmented execution does not change existing full-frame behavior or hit-test lookup. |
+| Regression coverage | Runtime-seam tests and existing no-change suites pass together on every supported validation path. |
+
+## 5. Candidate Hookup Order
 
 1. Add an internal segmented retained-frame owner beside the existing retained frame path.
 2. Feed it only from an opt-in test or diagnostic harness, not from `RenderPipeline.Build`.
@@ -57,7 +84,7 @@ Current test-only prototype: `SegmentedBackendExecutionAdapter`. It executes seg
 
 No step above enables StyleOnly fast-path. Every failure path continues to use existing full layout/full apply behavior until all gates have runtime evidence.
 
-## 5. Sealed Lines
+## 6. Sealed Lines
 
 - Do not modify `RenderPipeline.Build`.
 - Do not replace current `RetainedRenderFrame` behavior.
