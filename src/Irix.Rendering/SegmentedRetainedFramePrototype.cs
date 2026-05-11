@@ -4,72 +4,41 @@ namespace Irix.Rendering;
 
 internal sealed class SegmentedRetainedFramePrototype : IDisposable
 {
-    private readonly RetainedCommandBuffer _commandBuffer = new();
-    private readonly RetainedResourceSegmentTable _resourceSegments = new();
-    private VirtualNode _retainedRoot;
-    private bool _disposed;
+    private readonly SegmentedRetainedFrameOwner _owner = new();
 
-    public int CommandCount => _commandBuffer.Count;
+    public int CommandCount => _owner.CommandCount;
 
-    public VirtualNode RetainedRoot => _retainedRoot;
+    public VirtualNode RetainedRoot => _owner.RetainedRoot;
 
-    public IReadOnlyList<RetainedResourceSegment> ResourceSegments => _resourceSegments.Segments;
+    public IReadOnlyList<RetainedResourceSegment> ResourceSegments => _owner.ResourceSegments;
 
     public void ApplyFull(DrawCommandBatch commands, RetainedResourceSnapshot snapshot, VirtualNode retainedRoot)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _commandBuffer.ApplyFull(commands);
-        _resourceSegments.ApplyFull(_commandBuffer.Count, snapshot);
-        _retainedRoot = retainedRoot;
+        _owner.ApplyFull(commands, snapshot, retainedRoot);
     }
 
     public void ApplyFull(RenderFrameBatch batch, RetainedResourceSnapshot snapshot, VirtualNode retainedRoot)
     {
-        ApplyFull(batch.Commands, snapshot, retainedRoot);
+        _owner.ApplyFull(batch, snapshot, retainedRoot);
     }
 
     public bool TryAcceptPartial(RenderFrameBatch batch, RetainedResourceSnapshot replacementSnapshot, RetainedRootMetadataPatch rootPatch)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!rootPatch.Succeeded || _commandBuffer.Count == 0 || batch.Commands.Count != _commandBuffer.Count || batch.DirtyCommandRanges.Count == 0)
-        {
-            return false;
-        }
-
-        if (!_resourceSegments.TryAcceptPartial(batch.DirtyCommandRanges, replacementSnapshot))
-        {
-            return false;
-        }
-
-        _commandBuffer.ApplyPartial(batch.Commands, batch.DirtyCommandRanges);
-        _retainedRoot = rootPatch.Root;
-        return true;
+        return _owner.TryAcceptPartial(batch, replacementSnapshot, rootPatch);
     }
 
     public IReadOnlyList<SegmentedFrameRead> ReadSegments()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        return new SegmentedRetainedFrameReader(_commandBuffer, _resourceSegments).ReadSegments();
+        return _owner.ReadSegments();
     }
 
     public void Invalidate()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        _commandBuffer.Reset();
-        _resourceSegments.Invalidate();
-        _retainedRoot = default;
+        _owner.Invalidate();
     }
 
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _commandBuffer.Dispose();
-        _resourceSegments.Dispose();
-        _retainedRoot = default;
-        _disposed = true;
+        _owner.Dispose();
     }
 }
