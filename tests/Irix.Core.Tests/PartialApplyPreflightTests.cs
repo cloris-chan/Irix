@@ -938,6 +938,83 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(diagnosticsBefore, diagnosticsAfter);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SegmentedRetainedFrameProductionOwnerFeed_visible_outputs_match_production_in_default_off_and_enabled_secondary_modes(bool enabled)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Static", 10),
+            VirtualNodeFactory.Button("Increment", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var partialRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Static", 10),
+            VirtualNodeFactory.Button("Increment", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+
+        var directPipeline = new RenderPipeline();
+        using var directFrame1 = directPipeline.Build(retainedRoot, viewport);
+        using var directFrame2 = directPipeline.Build(partialRoot, viewport, [2]);
+        var hitTarget = Assert.Single(directFrame2.HitTargets);
+        var hitTestX = hitTarget.Bounds.X + 1;
+        var hitTestY = hitTarget.Bounds.Y + 1;
+        var directBackend = new DirtyRangeAwareCapturingBackend();
+        using var directCompositor = new DrawingBackendCompositor(directBackend);
+        await directCompositor.RenderAsync(directFrame1, cancellationToken);
+        await directCompositor.RenderAsync(directFrame2, cancellationToken);
+        var directHit = directCompositor.TryGetActionIdAt(hitTestX, hitTestY, out var directActionId);
+
+        var feedPipeline = new RenderPipeline();
+        var options = enabled
+            ? RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled
+            : RenderPipelineProductionOwnerOptions.Disabled;
+        using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, options);
+        using var feedFrame1 = feed.Build(retainedRoot, viewport);
+        using var feedFrame2 = feed.Build(partialRoot, viewport, [2]);
+        var feedBackend = new DirtyRangeAwareCapturingBackend();
+        using var feedCompositor = new DrawingBackendCompositor(feedBackend);
+        await feedCompositor.RenderAsync(feedFrame1, cancellationToken);
+        await feedCompositor.RenderAsync(feedFrame2, cancellationToken);
+        var feedHit = feedCompositor.TryGetActionIdAt(hitTestX, hitTestY, out var feedActionId);
+        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+
+        Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
+        Assert.Equal(directPipeline.LastViewport, feedPipeline.LastViewport);
+        Assert.Equal(directPipeline.LastDirtyCommandRanges, feedPipeline.LastDirtyCommandRanges);
+        Assert.Equal(directPipeline.RetainedFrame.CommandCount, feedPipeline.RetainedFrame.CommandCount);
+        Assert.Equal(directPipeline.RetainedFrame.DirtyCommandRanges, feedPipeline.RetainedFrame.DirtyCommandRanges);
+        Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
+        Assert.Equal(directCompositor.FullApplyCount, feedCompositor.FullApplyCount);
+        Assert.Equal(directCompositor.PartialApplyCount, feedCompositor.PartialApplyCount);
+        Assert.Equal(directCompositor.EmptyFrameCount, feedCompositor.EmptyFrameCount);
+        Assert.Equal(directCompositor.LastDirtyCommandRanges, feedCompositor.LastDirtyCommandRanges);
+        Assert.Equal(directBackend.SetDirtyCommandRangeCount, feedBackend.SetDirtyCommandRangeCount);
+        Assert.Equal(directBackend.DirtyRanges, feedBackend.DirtyRanges);
+        AssertExecuteCommandCountsEqual(directBackend.ExecuteCalls, feedBackend.ExecuteCalls);
+        Assert.True(directHit);
+        Assert.Equal(directHit, feedHit);
+        Assert.Equal(directActionId, feedActionId);
+        Assert.Equal("Increment.Secondary", feedActionId);
+        Assert.Equal(diagnosticsBefore, diagnosticsAfter);
+        if (enabled)
+        {
+            Assert.True(feed.HasRuntimeOwner);
+            Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, feed.LastResult.Kind);
+            Assert.NotSame(feed.RuntimeOwner, feedCompositor.RetainedFrame);
+        }
+        else
+        {
+            Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, feed.LastResult.Kind);
+            Assert.False(feed.HasRuntimeOwner);
+            Assert.Null(feed.RuntimeOwner);
+        }
+    }
+
     [Fact]
     public async Task SegmentedRetainedFrameProductionOwnerFeed_enabled_follows_build_for_partial_fallback_and_rebuild_without_rendering_from_owner()
     {
@@ -1020,6 +1097,113 @@ public sealed class PartialApplyPreflightTests
         Assert.False(rebuildResult.FallbackApplied);
         var rebuildSegment = Assert.Single(feed.RuntimeOwner.ResourceSegments);
         Assert.Same(frame4.Resources, rebuildSegment.Snapshot.Resolver);
+    }
+
+    [Fact]
+    public async Task SegmentedRetainedFrameProductionOwnerFeed_enabled_handles_empty_batch_as_secondary_rebuild_without_backend_execute()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+        var emptyRoot = VirtualNodeFactory.ScrollContainer(1);
+
+        var directPipeline = new RenderPipeline();
+        using var directFrame1 = directPipeline.Build(retainedRoot, viewport);
+        using var directEmptyFrame = directPipeline.Build(emptyRoot, viewport);
+        var directBackend = new DirtyRangeAwareCapturingBackend();
+        using var directCompositor = new DrawingBackendCompositor(directBackend);
+        await directCompositor.RenderAsync(directFrame1, cancellationToken);
+        await directCompositor.RenderAsync(directEmptyFrame, cancellationToken);
+        var directHit = directCompositor.TryGetActionIdAt(16, 16, out var directActionId);
+
+        var feedPipeline = new RenderPipeline();
+        using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
+        using var feedFrame1 = feed.Build(retainedRoot, viewport);
+        using var feedEmptyFrame = feed.Build(emptyRoot, viewport);
+        var emptyResult = feed.LastResult;
+        var feedBackend = new DirtyRangeAwareCapturingBackend();
+        using var feedCompositor = new DrawingBackendCompositor(feedBackend);
+        await feedCompositor.RenderAsync(feedFrame1, cancellationToken);
+        await feedCompositor.RenderAsync(feedEmptyFrame, cancellationToken);
+        var feedHit = feedCompositor.TryGetActionIdAt(16, 16, out var feedActionId);
+
+        Assert.Equal(0, directEmptyFrame.Commands.Count);
+        Assert.Equal(0, feedEmptyFrame.Commands.Count);
+        Assert.True(feed.HasRuntimeOwner);
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, emptyResult.Kind);
+        Assert.False(emptyResult.FallbackApplied);
+        Assert.Empty(emptyResult.ShadowResult.Reads);
+        Assert.Equal(0, feed.RuntimeOwner!.CommandCount);
+        Assert.Empty(feed.RuntimeOwner.ResourceSegments);
+        Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
+        Assert.Equal(directPipeline.LastDirtyCommandRanges, feedPipeline.LastDirtyCommandRanges);
+        Assert.Equal(directPipeline.RetainedFrame.CommandCount, feedPipeline.RetainedFrame.CommandCount);
+        Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
+        Assert.Equal(directCompositor.EmptyFrameCount, feedCompositor.EmptyFrameCount);
+        Assert.Equal(directCompositor.FullApplyCount, feedCompositor.FullApplyCount);
+        Assert.Equal(directCompositor.PartialApplyCount, feedCompositor.PartialApplyCount);
+        Assert.Equal(directBackend.SetDirtyCommandRangeCount, feedBackend.SetDirtyCommandRangeCount);
+        Assert.Equal(directBackend.DirtyRanges, feedBackend.DirtyRanges);
+        AssertExecuteCommandCountsEqual(directBackend.ExecuteCalls, feedBackend.ExecuteCalls);
+        Assert.False(directHit);
+        Assert.Equal(directHit, feedHit);
+        Assert.Equal(directActionId, feedActionId);
+    }
+
+    [Fact]
+    public void SegmentedRetainedFrameProductionOwnerFeed_enabled_falls_back_full_for_malformed_dirty_ranges_after_preserving_owner_state()
+    {
+        var pipeline = new RenderPipeline();
+        using var feed = new SegmentedRetainedFrameProductionOwnerFeed(pipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Static", 10),
+            VirtualNodeFactory.Button("Increment", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var partialRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Static", 10),
+            VirtualNodeFactory.Button("Increment", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = feed.Build(retainedRoot, viewport);
+        using var frame2 = feed.Build(partialRoot, viewport, [2]);
+        var acceptedResult = feed.LastResult;
+        var beforeRoot = feed.RuntimeOwner!.RetainedRoot;
+        var beforeSegments = feed.RuntimeOwner.ResourceSegments.ToArray();
+        var malformedCommandArray = new DrawCommand[frame2.Commands.Count];
+        Array.Fill(malformedCommandArray, new DrawCommand(DrawCommandKind.FillRect));
+        using var malformedCommands = CreateCommandBatch(malformedCommandArray);
+        using var malformedBatch = new RenderFrameBatch(
+            malformedCommands,
+            frame2.HitTargets,
+            new NamedResolver("malformed"),
+            [(1, 1), (frame2.Commands.Count, 1)]);
+
+        var fallbackResult = InvokeProductionOwnerFeedUpdate(feed, partialRoot, viewport, malformedBatch);
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, acceptedResult.Kind);
+        Assert.Equal(VirtualNodeKind.ScrollContainer, beforeRoot.Kind);
+        Assert.Equal(2, beforeRoot.Children.Length);
+        AssertTextAttribute(beforeRoot.Children[1], "ActionId", "Increment.Secondary");
+        AssertBooleanAttribute(beforeRoot.Children[1], "IsHovered", true);
+        Assert.Collection(beforeSegments,
+            segment => Assert.Same(frame1.Resources, segment.Snapshot.Resolver),
+            segment => Assert.Same(frame2.Resources, segment.Snapshot.Resolver));
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fallbackResult.Kind);
+        Assert.True(fallbackResult.FallbackApplied);
+        Assert.True(fallbackResult.OwnerStatePreservedBeforeFallback);
+        Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, fallbackResult.ShadowResult.PlanKind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.UnstableCommandRange, fallbackResult.ShadowResult.Reason);
+        AssertTextAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], "ActionId", "Increment.Secondary");
+        AssertBooleanAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], "IsHovered", true);
+        var fallbackSegment = Assert.Single(feed.RuntimeOwner.ResourceSegments);
+        Assert.Equal(0, fallbackSegment.CommandStart);
+        Assert.Equal(frame2.Commands.Count, fallbackSegment.CommandCount);
+        Assert.Same(malformedBatch.Resources, fallbackSegment.Snapshot.Resolver);
     }
 
     [Fact]
@@ -1973,6 +2157,27 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(0, compositor.RetainedFrame.CommandCount);
     }
 
+    private static void AssertExecuteCommandCountsEqual(
+        IReadOnlyList<(int CommandCount, IFrameResourceResolver Resolver)> expected,
+        IReadOnlyList<(int CommandCount, IFrameResourceResolver Resolver)> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        for (var callIndex = 0; callIndex < expected.Count; callIndex++)
+        {
+            Assert.Equal(expected[callIndex].CommandCount, actual[callIndex].CommandCount);
+        }
+    }
+
+    private static SegmentedRetainedFrameProductionOwnerFeedResult InvokeProductionOwnerFeedUpdate(
+        SegmentedRetainedFrameProductionOwnerFeed feed,
+        VirtualNode root,
+        PixelRectangle viewport,
+        RenderFrameBatch batch)
+    {
+        var method = typeof(SegmentedRetainedFrameProductionOwnerFeed).GetMethod("UpdateRuntimeOwner", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        return (SegmentedRetainedFrameProductionOwnerFeedResult)method.Invoke(feed, [root, viewport, batch])!;
+    }
+
     private static DrawCommandBatch CreateCommandBatch(params DrawCommand[] commands)
     {
         return new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(commands), commands.Length);
@@ -2080,9 +2285,12 @@ public sealed class PartialApplyPreflightTests
     {
         public int SetDirtyCommandRangeCount { get; private set; }
 
+        public List<(int Start, int Count)[]> DirtyRanges { get; } = [];
+
         public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
         {
             SetDirtyCommandRangeCount++;
+            DirtyRanges.Add(ranges.ToArray());
         }
     }
 
