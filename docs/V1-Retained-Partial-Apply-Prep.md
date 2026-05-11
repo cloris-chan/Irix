@@ -16,7 +16,7 @@
 | StyleOnly plan diagnostics | Already available | Planning remains post-layout diagnostics only; not a fast path. |
 | Retained-input snapshot seam | Implemented locally | `RenderPipeline.LastRetainedInputSnapshot` collects retained layout result, element command ranges, hit targets, retained root, viewport, dirty classifications, dirty ranges, and rebuild reason. |
 | Retained data-only local planner | Implemented locally | `RetainedPartialApplyPlanner` consumes the snapshot and returns `AppliedPartial`, `FallbackFull`, or `Rejected` planning data without changing render behavior. Planner-only boundary tests cover every local reason. |
-| Partial apply preflight scaffold | Implemented locally / not wired | [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) selects resource snapshot / composite resolver, defines internal resource segment, segmented reader with malformed-coverage guards, hit target metadata projector, retained root metadata patcher, dry-run flow, and layered integration gate evidence. |
+| Partial apply preflight scaffold | Implemented locally / not wired | [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) selects resource snapshot / composite resolver, defines internal resource segment, segmented reader with malformed-coverage guards, segmented retained-frame seam prototype, per-segment backend adapter prototype, hit target metadata projector, retained root metadata patcher, dry-run flow, and layered integration gate evidence. Runtime checkpoint: [V1-Partial-Apply-Runtime-Integration-Checkpoint.md](V1-Partial-Apply-Runtime-Integration-Checkpoint.md). |
 
 ## 2. Blocked Decisions
 
@@ -105,6 +105,8 @@ The safest next implementation line is not a full partial-rendering feature. Aft
 3. Keep `RenderPipeline.Build` on the existing full layout path.
 4. Do not apply replacement commands across frames until resource ownership is solved.
 5. Require every gate in [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) before any runtime hookup.
+
+Checkpoint decision: the first runtime seam should be retained frame segment ownership, not compositor segmented execution. The compositor cannot safely execute segments until a retained frame owner can expose correct command-range resolver ownership.
 
 The current preflight dry-run is only a decision-flow proof. It does not replace production command ranges, retain production resources, mutate `RetainedRenderFrame`, or touch compositor/backend behavior.
 

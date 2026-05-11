@@ -27,14 +27,14 @@ internal static class PartialApplyIntegrationGateChecklist
         new(
             PartialApplyIntegrationGate.ResourceResolverOwnership,
             false,
-            "Segmented reader preflight tests prove old/new resolver ownership by command segment.",
+            "Segmented reader and per-segment backend adapter preflight tests prove old/new resolver ownership by command segment.",
             "None; runtime retained frame still exposes a single resolver boundary.",
             "Backend contract and D3D12 execution tests remain unchanged.",
             "Runtime retained frame must expose segmented resolver reads before hookup."),
         new(
             PartialApplyIntegrationGate.ResourceDisposePolicy,
             false,
-            "Segment table lifecycle tests cover partial accept, full fallback, invalidate, dispose, replaced old ranges, and invalid segment reads.",
+            "Segment table and segmented retained-frame prototype lifecycle tests cover partial accept, full fallback, invalidate, dispose, replaced old ranges, and invalid segment reads.",
             "None; production retained frame does not own multiple retained snapshots.",
             "Existing retained frame resource ownership tests keep same-frame behavior sealed.",
             "Production retained frame must release retained snapshots exactly once across every path."),
@@ -69,7 +69,7 @@ internal static class PartialApplyIntegrationGateChecklist
         new(
             PartialApplyIntegrationGate.CompositorOwnership,
             false,
-            "Dry-run preflight tests keep segment ownership outside compositor mutation.",
+            "Dry-run and adapter preflight tests keep segment ownership/execution outside compositor mutation.",
             "None; DrawingBackendCompositor owns one retained frame with one resolver boundary.",
             "Compositor no-mutation tests keep current counters, retained frame, and backend execution unchanged.",
             "Compositor ownership of multiple retained snapshots must be explicit before hookup."),
