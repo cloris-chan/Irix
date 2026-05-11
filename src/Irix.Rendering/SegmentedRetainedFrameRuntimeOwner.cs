@@ -9,6 +9,8 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner : IDisposable
 
     public VirtualNode RetainedRoot => _owner.RetainedRoot;
 
+    public IReadOnlyList<HitTestTarget> HitTargets => _owner.HitTargets;
+
     public IReadOnlyList<RetainedResourceSegment> ResourceSegments => _owner.ResourceSegments;
 
     public SegmentedRetainedFrameShadowResult ApplyFull(RenderFrameBatch batch, VirtualNode retainedRoot)
@@ -26,6 +28,12 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _owner.TryAcceptPartial(batch, RetainedResourceSnapshot.Capture(batch.Resources), rootPatch);
+    }
+
+    public bool TryAcceptPartial(RenderFrameBatch batch, RetainedRootMetadataPatch rootPatch, IReadOnlyList<HitTestTarget> hitTargets)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _owner.TryAcceptPartial(batch, RetainedResourceSnapshot.Capture(batch.Resources), rootPatch, hitTargets);
     }
 
     public SegmentedRetainedFrameShadowResult ApplyFallbackFull(RenderFrameBatch batch, VirtualNode retainedRoot, RetainedPartialApplyFallbackReason reason)

@@ -68,6 +68,18 @@ internal sealed class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline p
             return ApplyFallback(owner, batch, root, plan.Reason, plan.Kind, ownerStatePreserved: true);
         }
 
+        var dirtyDfsIndices = new int[snapshot.DirtyClassifications.Count];
+        for (var i = 0; i < snapshot.DirtyClassifications.Count; i++)
+        {
+            dirtyDfsIndices[i] = snapshot.DirtyClassifications[i].DfsIndex;
+        }
+
+        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(owner.RetainedRoot, root, dirtyDfsIndices, owner.HitTargets);
+        if (!hitTargetProjection.Succeeded)
+        {
+            return ApplyFallback(owner, batch, root, hitTargetProjection.FallbackReason, plan.Kind, ownerStatePreserved: true);
+        }
+
         var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(owner.RetainedRoot, root, snapshot.DirtyClassifications);
         if (!rootPatch.Succeeded)
         {
@@ -76,7 +88,9 @@ internal sealed class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline p
 
         var beforeRoot = owner.RetainedRoot;
         var beforeSegments = owner.ResourceSegments.ToArray();
-        if (owner.TryAcceptPartial(batch, rootPatch))
+        var beforeHitTargets = owner.HitTargets.ToArray();
+        var beforeReads = owner.ReadSegments();
+        if (owner.TryAcceptPartial(batch, rootPatch, hitTargetProjection.HitTargets))
         {
             return new SegmentedRetainedFrameProductionOwnerFeedResult(
                 new SegmentedRetainedFrameShadowResult(
@@ -89,7 +103,10 @@ internal sealed class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline p
                 true);
         }
 
-        var statePreserved = beforeRoot.Equals(owner.RetainedRoot) && SegmentsEqual(beforeSegments, owner.ResourceSegments);
+        var statePreserved = beforeRoot.Equals(owner.RetainedRoot)
+            && SegmentsEqual(beforeSegments, owner.ResourceSegments)
+            && HitTargetsEqual(beforeHitTargets, owner.HitTargets)
+            && ReadsEqual(beforeReads, owner.ReadSegments());
         return ApplyFallback(owner, batch, root, RetainedPartialApplyFallbackReason.UnstableCommandRange, plan.Kind, statePreserved);
     }
 
@@ -123,6 +140,52 @@ internal sealed class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline p
                 || !ReferenceEquals(left[i].Snapshot, right[i].Snapshot))
             {
                 return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HitTargetsEqual(IReadOnlyList<HitTestTarget> left, IReadOnlyList<HitTestTarget> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ReadsEqual(IReadOnlyList<SegmentedFrameRead> left, IReadOnlyList<SegmentedFrameRead> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i].CommandStart != right[i].CommandStart
+                || !ReferenceEquals(left[i].Resolver, right[i].Resolver)
+                || left[i].Commands.Length != right[i].Commands.Length)
+            {
+                return false;
+            }
+
+            for (var commandIndex = 0; commandIndex < left[i].Commands.Length; commandIndex++)
+            {
+                if (left[i].Commands[commandIndex] != right[i].Commands[commandIndex])
+                {
+                    return false;
+                }
             }
         }
 

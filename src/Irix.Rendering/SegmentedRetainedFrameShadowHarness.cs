@@ -63,7 +63,7 @@ internal sealed class SegmentedRetainedFrameShadowHarness : IDisposable
             dirtyDfsIndices[i] = snapshot.DirtyClassifications[i].DfsIndex;
         }
 
-        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(_owner.RetainedRoot, nextRoot, dirtyDfsIndices, snapshot.HitTargets);
+        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(_owner.RetainedRoot, nextRoot, dirtyDfsIndices, _owner.HitTargets);
         if (!hitTargetProjection.Succeeded)
         {
             return new SegmentedRetainedFrameShadowResult(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, hitTargetProjection.FallbackReason, plan.Kind, []);
@@ -75,7 +75,7 @@ internal sealed class SegmentedRetainedFrameShadowHarness : IDisposable
             return new SegmentedRetainedFrameShadowResult(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, rootPatch.FallbackReason, plan.Kind, []);
         }
 
-        if (!_owner.TryAcceptPartial(batch, RetainedResourceSnapshot.Capture(batch.Resources), rootPatch))
+        if (!_owner.TryAcceptPartial(batch, RetainedResourceSnapshot.Capture(batch.Resources), rootPatch, hitTargetProjection.HitTargets))
         {
             return new SegmentedRetainedFrameShadowResult(SegmentedRetainedFrameShadowResultKind.ShadowRejected, RetainedPartialApplyFallbackReason.UnstableCommandRange, plan.Kind, []);
         }
