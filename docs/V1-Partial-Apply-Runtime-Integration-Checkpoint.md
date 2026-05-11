@@ -6,14 +6,14 @@
 
 | Gate | Preflight evidence exists | Shadow runtime evidence exists | Production runtime hookup still missing |
 |------|---------------------------|--------------------------------|------------------------------------------|
-| Resource resolver ownership | `RetainedResourceSegmentTable`, `SegmentedRetainedFrameReader`, and segmented backend adapter prototype prove command-range resolver ownership. | `SegmentedRetainedFrameDiagnosticHarness` opt-in feeds real `RenderPipeline.Build` batches into `SegmentedRetainedFrameOwner` and exposes segmented resolver reads. | Production retained frame does not expose segmented resource ownership. |
-| Resource dispose policy | Segment table lifecycle tests prove retain/release rules. | Shadow owner and diagnostic harness tests prove full apply, accepted partial rehearsal, explicit full fallback, disabled mode, invalidate, dispose, and replaced-snapshot release rules. | Production retained frame does not own multiple retained snapshots. |
+| Resource resolver ownership | `RetainedResourceSegmentTable`, `SegmentedRetainedFrameReader`, and segmented backend adapter prototype prove command-range resolver ownership. | `SegmentedRetainedFrameDiagnosticHarness` and `SegmentedRetainedFrameRuntimeOwner` feed real batches into `SegmentedRetainedFrameOwner`; `DrawingBackendCompositorShadowProbe` verifies segmented resolver ownership outside the compositor. | Production retained frame does not expose segmented resource ownership. |
+| Resource dispose policy | Segment table lifecycle tests prove retain/release rules. | Shadow owner, runtime owner seam, and diagnostic harness tests prove full apply, accepted partial rehearsal, explicit full fallback, rebuild, disabled mode, invalidate, dispose, and replaced-snapshot release rules. | Production retained frame does not own multiple retained snapshots. |
 | Command range stability | Planner and segment reader tests reject unstable, invalid, overlapping, non-contiguous, and command-count-mismatched ranges. | Shadow owner reports `ShadowRejected` and leaves state unchanged when an applied plan cannot be accepted by the owner. | Production runtime still does not replace cross-frame command ranges. |
 | Hit target metadata projection | `HitTargetMetadataProjector` proves action metadata projection from next root without next layout output. | Shadow harness consumes projector output while leaving hit-test runtime untouched. | Hit-test runtime still consumes full layout output from the existing path. |
 | Retained root update | `RetainedRootMetadataPatcher` proves dirty control metadata projection for `ActionId`, `IsHovered`, `IsPressed`, and `IsFocused`. | Opt-in shadow end-to-end tests prove accepted shadow partial rehearsal advances retained root metadata with command/resource segments. | `RenderPipeline` retained root baseline is not patched by any partial path. |
 | Fallback reporting | `RetainedPartialApplyPlanner` reports local `AppliedPartial`, `FallbackFull`, and `Rejected` reasons. | Local shadow result vocabulary reports `Disabled`, `ShadowAppliedPartial`, `ShadowFallbackFull`, and `ShadowRejected` for tests/internal diagnostics only. | No runtime/compositor result propagation exists. |
-| Compositor ownership | Dry-run sentinel tests keep planner/projector/root patcher/segment reader flow outside compositor mutation. | Disabled sentinel tests compare production pipeline/compositor/backend/hit-test behavior; opt-in tests execute shadow owner reads through the adapter without compositor involvement. | `DrawingBackendCompositor` still owns one retained frame and one resolver boundary. |
-| Regression coverage | Focused preflight tests and existing layout/compositor tests cover no-change behavior. | Shadow owner, diagnostic harness, result vocabulary, disabled no-change sentinel, opt-in end-to-end, fallback, rejection, and adapter tests cover the current shadow path. | Runtime partial apply has no production hookup to cover yet. |
+| Compositor ownership | Dry-run sentinel tests keep planner/projector/root patcher/segment reader flow outside compositor mutation. | `DrawingBackendCompositorShadowProbe` executes shadow segmented reads through the adapter outside `DrawingBackendCompositor` and verifies execute order, resolver ownership, and hit-test no-change. | `DrawingBackendCompositor` still owns one retained frame and one resolver boundary. |
+| Regression coverage | Focused preflight tests and existing layout/compositor tests cover no-change behavior. | Shadow owner, runtime owner seam, compositor shadow probe, diagnostic harness, result vocabulary, disabled no-change sentinel, opt-in end-to-end, fallback, rejection, and adapter tests cover the current shadow path. | Runtime partial apply has no production hookup to cover yet. |
 
 `PartialApplyIntegrationGateChecklist.CanHookUpPartialApply` must remain false until runtime evidence exists for every gate.
 
@@ -101,7 +101,41 @@ Implemented access point: `SegmentedRetainedFrameDiagnosticHarness` with `Render
 
 The switch must not change `--diagnose` or `--diagnose-*` text, must not become a global diagnostics channel, and must not affect compositor/backend/hit-test runtime. Rollback is disabling or removing the wrapper; the production path has no dependency on the shadow owner.
 
-## 7. Sealed Lines
+## 7. First Production Hookup Design Cut
+
+The first real production hookup, when allowed, should be retained frame segment ownership. It should not be compositor segmented execution.
+
+Minimal access point:
+
+```text
+RenderPipeline existing full Build path
+  -> retained input snapshot + emitted batch
+  -> opt-in retained segment owner candidate
+  -> existing RetainedRenderFrame remains the render source
+```
+
+Default strategy:
+
+- The production option is disabled by default and must be removable without changing default rendering.
+- The first implementation can allocate a runtime-owned segmented owner only behind the option.
+- Accepted partials may update the segmented owner state, but rendering still uses the existing retained frame until the owner has production ownership evidence for every gate.
+- Full fallback must call the existing full apply behavior and rebuild the segmented owner from the full batch as secondary state.
+
+Rollback:
+
+- Disable the option and stop constructing the runtime-owned segmented owner.
+- Remove the owner feed without touching `RetainedRenderFrame`, `DrawingBackendCompositor`, `IDrawingBackend`, D3D12, or diagnostics formatting.
+
+Test gates before implementation:
+
+- Default-off tests prove no allocation, no counter change, no hit-test change, and no CLI output change.
+- Runtime owner tests prove full apply, accepted partial, rejected partial, fallback, rebuild, invalidate, dispose, and malformed range rejection.
+- Compositor tests prove rendering still comes from `DrawingBackendCompositor`'s existing retained frame.
+- Existing full test suite, `WindowLayoutPipelineTests`, diagnostics formatter tests, and D3D12 no-change boundary scans stay green.
+
+This design cut does not implement production hookup and does not enable StyleOnly fast-path.
+
+## 8. Sealed Lines
 
 - Do not modify `RenderPipeline.Build`.
 - Do not replace current `RetainedRenderFrame` behavior.
