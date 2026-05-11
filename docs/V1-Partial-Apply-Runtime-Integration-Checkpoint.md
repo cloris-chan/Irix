@@ -6,14 +6,14 @@
 
 | Gate | Preflight evidence exists | Shadow runtime evidence exists | Production-off runtime evidence exists | Production runtime hookup still missing |
 |------|---------------------------|--------------------------------|-----------------------------------------|------------------------------------------|
-| Resource resolver ownership | `RetainedResourceSegmentTable`, `SegmentedRetainedFrameReader`, and segmented backend adapter prototype prove command-range resolver ownership. | `SegmentedRetainedFrameDiagnosticHarness` and `SegmentedRetainedFrameRuntimeOwner` feed real batches into `SegmentedRetainedFrameOwner`; `DrawingBackendCompositorShadowProbe` verifies segmented resolver ownership outside the compositor. | `RetainedRenderFrameSegmentOwnership` can sit beside the production `RetainedRenderFrame`, follow normal batches, and expose segmented reads plus owner-side hit target metadata while `TryReadFrame` remains unchanged. | Production retained frame does not expose segmented resource ownership through `TryReadFrame`. |
-| Resource dispose policy | Segment table lifecycle tests prove retain/release rules. | Shadow owner, runtime owner seam, and diagnostic harness tests prove full apply, accepted partial rehearsal, explicit full fallback, rebuild, disabled mode, invalidate, dispose, and replaced-snapshot release rules. | Retained-frame segment ownership tests cover default-off no segmented owner plus enabled full apply, accepted partial, rejected partial before fallback, fallback full, empty batch, malformed dirty ranges, invalidate, disposal, repeated replacement, and multiple `FrameDrawingResources` retain/release exactly-once while `TryReadFrame` survives. | Production retained frame is still not the segmented render-source owner of multiple snapshots across command ranges. |
+| Resource resolver ownership | `RetainedResourceSegmentTable`, `SegmentedRetainedFrameReader`, and segmented backend adapter prototype prove command-range resolver ownership. | `SegmentedRetainedFrameDiagnosticHarness` and `SegmentedRetainedFrameRuntimeOwner` feed real batches into `SegmentedRetainedFrameOwner`; `DrawingBackendCompositorShadowProbe` verifies segmented resolver ownership outside the compositor. | `RetainedRenderFrameSegmentOwnership` can sit beside the production `RetainedRenderFrame`; `RetainedRenderFrameHandoffHarness` can execute `RuntimeOwner.ReadSegments()` through the per-segment adapter while `TryReadFrame` remains unchanged. | Production retained frame does not expose segmented resource ownership through `TryReadFrame`. |
+| Resource dispose policy | Segment table lifecycle tests prove retain/release rules. | Shadow owner, runtime owner seam, and diagnostic harness tests prove full apply, accepted partial rehearsal, explicit full fallback, rebuild, disabled mode, invalidate, dispose, and replaced-snapshot release rules. | Retained-frame segment ownership and handoff harness tests cover default-off no segmented owner plus enabled full apply, accepted partial, rejected partial before fallback, fallback full, empty batch, malformed dirty ranges, invalidate, disposal, repeated replacement, throw path, and multiple `FrameDrawingResources` retain/release exactly-once while `TryReadFrame` survives. | Production retained frame is still not the segmented render-source owner of multiple snapshots across command ranges. |
 | Command range stability | Planner and segment reader tests reject unstable, invalid, overlapping, non-contiguous, and command-count-mismatched ranges. | Shadow owner reports `ShadowRejected` and leaves state unchanged when an applied plan cannot be accepted by the owner. | Retained-frame segment ownership runs planner to hit target projection to root patch to owner partial accept, reports failed rehearsal on projection or malformed dirty ranges, preserves owner state before fallback, then explicitly full-applies fallback state. | Production retained frame still does not replace cross-frame command ranges from segmented ownership. |
-| Hit target metadata projection | `HitTargetMetadataProjector` proves action metadata projection from next root without next layout output. | Shadow harness consumes projector output while leaving hit-test runtime untouched. | Retained-frame segment ownership stores secondary hit target metadata and rehearses owner-side lookup for normal hit, clipped hit, no-hit, dirty action id projection, and projection-failure fallback while leaving production hit-test unchanged. | Hit-test runtime still consumes full layout output from the existing retained frame path. |
+| Hit target metadata projection | `HitTargetMetadataProjector` proves action metadata projection from next root without next layout output. | Shadow harness consumes projector output while leaving hit-test runtime untouched. | Retained-frame segment ownership stores secondary hit target metadata; handoff harness uses owner-side hit targets for normal hit, clipped hit, no-hit, dirty action id projection, and projection-failure fallback while leaving production hit-test unchanged. | Hit-test runtime still consumes full layout output from the existing retained frame path. |
 | Retained root update | `RetainedRootMetadataPatcher` proves dirty control metadata projection for `ActionId`, `IsHovered`, `IsPressed`, and `IsFocused`. | Opt-in shadow end-to-end tests prove accepted shadow partial rehearsal advances retained root metadata with command/resource segments. | Retained-frame segment ownership accepted partial rehearsal advances secondary retained root metadata and hit target metadata while the production `RenderPipeline` baseline remains unchanged. | `RenderPipeline` retained root baseline is not patched by any production partial path. |
 | Fallback reporting | `RetainedPartialApplyPlanner` reports local `AppliedPartial`, `FallbackFull`, and `Rejected` reasons. | Local shadow result vocabulary reports `Disabled`, `ShadowAppliedPartial`, `ShadowFallbackFull`, and `ShadowRejected` for tests/internal diagnostics only. | Production-off feed reports `Disabled`, partial/full fallback kind, fallback-applied, and owner-state-preserved flags for tests/internal diagnostics only. | No runtime/compositor result propagation exists. |
-| Compositor ownership | Dry-run sentinel tests keep planner/projector/root patcher/segment reader flow outside compositor mutation. | `DrawingBackendCompositorShadowProbe` executes shadow segmented reads through the adapter outside `DrawingBackendCompositor` and verifies execute order, resolver ownership, and hit-test no-change. | Default-off and enabled-secondary feed tests prove compositor counters, backend execute calls, dirty range propagation, hit-test results, and diagnostics text are unchanged; counter semantics and segment-local dirty-range handoff rules are rehearsed as internal/test-only design. | `DrawingBackendCompositor` still owns one retained frame and one resolver boundary. |
-| Regression coverage | Focused preflight tests and existing layout/compositor tests cover no-change behavior. | Shadow owner, runtime owner seam, compositor shadow probe, diagnostic harness, result vocabulary, disabled no-change sentinel, opt-in end-to-end, fallback, rejection, and adapter tests cover the current shadow path. | Production-off tests cover retained-frame segment ownership default-off and enabled-secondary equivalence, accepted partial, rejected partial fallback, owner-side hit target lookup, projection failure fallback, multiple `FrameDrawingResources` lifecycle exact-once, repeated replacement, counter semantics, dirty-range handoff planning, four-piece atomicity, fallback, rebuild, empty batch, malformed dirty ranges, dispose, empty segments, throw path, clipped hit-test, dirty-range isolation, and diagnostics text no-change. | Runtime partial apply has no production render-source hookup to cover yet. |
+| Compositor ownership | Dry-run sentinel tests keep planner/projector/root patcher/segment reader flow outside compositor mutation. | `DrawingBackendCompositorShadowProbe` executes shadow segmented reads through the adapter outside `DrawingBackendCompositor` and verifies execute order, resolver ownership, and hit-test no-change. | Default-off and enabled-secondary feed/handoff-harness tests prove compositor counters, backend execute calls, dirty range propagation, hit-test results, and diagnostics text are unchanged; enabled harness uses segment-local dirty ranges and internal handoff counters only. | `DrawingBackendCompositor` still owns one retained frame and one resolver boundary. |
+| Regression coverage | Focused preflight tests and existing layout/compositor tests cover no-change behavior. | Shadow owner, runtime owner seam, compositor shadow probe, diagnostic harness, result vocabulary, disabled no-change sentinel, opt-in end-to-end, fallback, rejection, and adapter tests cover the current shadow path. | Production-off tests cover retained-frame segment ownership and handoff harness default-off and enabled-secondary equivalence, candidate render-source backend call order, accepted partial, rejected partial fallback, owner-side hit target lookup, projection failure fallback, multiple `FrameDrawingResources` lifecycle exact-once, repeated replacement, handoff counter semantics, segment-local dirty-range handoff, four-piece atomicity, fallback, rebuild, empty batch, malformed dirty ranges, dispose, empty segments, throw path, clipped hit-test, dirty-range isolation, and diagnostics text no-change. | Runtime partial apply has no production render-source hookup to cover yet. |
 
 `PartialApplyIntegrationGateChecklist.CanHookUpPartialApply` must remain false until production runtime hookup evidence exists for every gate. Production-off evidence is stronger than shadow evidence, but it still does not satisfy a gate.
 
@@ -67,6 +67,8 @@ Current dirty-range handoff rehearsal: `SegmentedBackendDirtyRangeHandoffPlanner
 
 Current counter semantics rehearsal: `RetainedRenderFrameHandoffCounterSemantics` records that existing compositor counters keep their current meaning until a segmented owner is the approved production render source. Secondary owner partial/fallback/empty rehearsals require internal-only counters and do not affect `RenderCount`, `FullApplyCount`, `PartialApplyCount`, `EmptyFrameCount`, `LastDirtyCommandRanges`, or `LastPartialApplySucceeded`.
 
+Current render-source handoff harness: `RetainedRenderFrameHandoffHarness`. It is internal/test-only and disabled by default. Disabled mode executes nothing. Enabled mode reads `RetainedRenderFrameSegmentOwnership.RuntimeOwner.ReadSegments()`, routes those reads through `SegmentedBackendExecutionAdapter`, pushes segment-local dirty ranges only to the harness backend, uses owner-side hit targets, and records internal candidate counters. It does not call or mutate `DrawingBackendCompositor`, does not change diagnostics output, and does not make the segmented owner the production render source.
+
 ## 4. Runtime Evidence Promotion Checklist
 
 Preflight evidence can be promoted only when each condition below is met in runtime-owned code while the no-change regression suite remains green.
@@ -86,14 +88,14 @@ Production-off gate pre-review:
 
 | Gate | What can be upgraded from production-off evidence | Remaining production blocker |
 |------|-----------------------------------------------|-----------------------------|
-| Resource resolver ownership | The retained-frame seam proves real batches can produce segmented reads as secondary state beside a real `RetainedRenderFrame`. | `RetainedRenderFrame.TryReadFrame` still exposes one resolver and remains the production render-source contract. |
-| Resource dispose policy | The seam covers full, accepted partial, rejected partial before fallback, fallback, rebuild, empty batch, malformed dirty ranges, hit target projection failure, invalidate, repeated replacement, disposal, and multiple `FrameDrawingResources` exact-once retain/release as secondary ownership. | Production retained ownership still is not the segmented render source and does not own multiple snapshots across command ranges. |
+| Resource resolver ownership | The retained-frame seam plus handoff harness prove real batches can execute segmented reads as a candidate render source beside a real `RetainedRenderFrame`. | `RetainedRenderFrame.TryReadFrame` still exposes one resolver and remains the production render-source contract. |
+| Resource dispose policy | The seam and harness cover full, accepted partial, rejected partial before fallback, fallback, rebuild, empty batch, malformed dirty ranges, hit target projection failure, invalidate, repeated replacement, disposal, throw path, and multiple `FrameDrawingResources` exact-once retain/release as secondary ownership. | Production retained ownership still is not the segmented render source and does not own multiple snapshots across command ranges. |
 | Command range stability | Projection and malformed dirty range failures now prove owner-state-preserved-before-fallback before explicit full fallback. | Production command replacement still does not reject and apply ranges inside the production retained-frame owner. |
-| Hit target metadata projection | Production-off tests prove owner-side lookup matches production for normal hit, clipped hit, no-hit, dirty action id projection, and projection-failure fallback. | `DrawingBackendCompositor.TryGetActionIdAt` still reads production full-layout output and does not consume owner-side hit targets. |
+| Hit target metadata projection | Production-off handoff harness tests prove owner-side lookup matches production for normal hit, clipped hit, no-hit, dirty action id projection, and projection-failure fallback. | `DrawingBackendCompositor.TryGetActionIdAt` still reads production full-layout output and does not consume owner-side hit targets. |
 | Retained root update | Accepted production-off partial rehearsal advances the secondary owner's retained root metadata and hit target metadata atomically. | `RenderPipeline` retained root baseline is still advanced only by the full build path. |
 | Fallback reporting | Internal result vocabulary is available without diagnostics formatter changes. | Production callers and compositor still do not consume or report partial/fallback/rejected results. |
-| Compositor ownership | Default-off and enabled-secondary sentinels prove compositor counters, backend calls, dirty ranges, hit-test, and diagnostics text are unchanged; counter semantics and segment-local dirty ranges are rehearsed internally. | `DrawingBackendCompositor` still owns one `RetainedRenderFrame`, never consumes segmented reads, and has no segmented execution option. |
-| Regression coverage | Focused production-off coverage now includes accepted partial, rejected partial fallback, fallback, rebuild, empty batch, malformed ranges, exact-once resource lifecycle, repeated replacement, owner-side hit-test lookup, counter semantics, dirty-range handoff planning, probe hardening, and visible-output equivalence. | A true production render-source path still needs its own no-change suite before any gate can be satisfied. |
+| Compositor ownership | Default-off and enabled-secondary sentinels prove compositor counters, backend calls, dirty ranges, hit-test, and diagnostics text are unchanged while the harness runs candidate segmented execution internally. | `DrawingBackendCompositor` still owns one `RetainedRenderFrame`, never consumes segmented reads, and has no segmented execution option. |
+| Regression coverage | Focused production-off coverage now includes accepted partial, rejected partial fallback, fallback, rebuild, empty batch, malformed ranges, exact-once resource lifecycle, repeated replacement, owner-side hit-test lookup, handoff counter semantics, segment-local dirty-range handoff, throw path, probe hardening, and visible-output equivalence. | A true production render-source path still needs its own no-change suite before any gate can be satisfied. |
 
 ## 5. Candidate Hookup Order
 
@@ -193,7 +195,69 @@ Rollback plan:
 
 This design cut still does not implement production hookup and does not enable StyleOnly fast-path.
 
-## 9. Sealed Lines
+## 9. Minimal Production Render-Source Handoff Design
+
+This section is the next implementation guide only. It does not implement the hookup.
+
+Minimal shape:
+
+```text
+RenderPipeline.Build existing path
+  -> RetainedRenderFrameSegmentOwnership.Update secondary owner
+  -> DrawingBackendCompositor default path remains current TryReadFrame
+  -> optional RenderSource = SegmentedCandidate behind default-off option
+```
+
+Default-off option:
+
+- Add a separate production option, for example `EnableSegmentedRenderSourceCandidate`, defaulting to false.
+- Disabled mode must use the current `DrawingBackendCompositor` retained-frame path with identical counters, dirty ranges, hit-test, backend calls, diagnostics text, and resource lifetime.
+- Enabled mode may select the segmented owner only after `RetainedRenderFrameSegmentOwnership.LastResult` is internally accepted for the current frame; otherwise it must render from the existing retained frame.
+
+Rollback:
+
+1. Disable `EnableSegmentedRenderSourceCandidate`.
+2. Render through `RetainedRenderFrame.TryReadFrame` exactly as today.
+3. Leave or remove secondary owner state without changing `RenderPipeline.Build`, `DrawingBackendCompositor.TryGetActionIdAt`, `IDrawingBackend.Execute`, D3D12, or diagnostics formatting.
+
+Counter semantics:
+
+| Counter | Disabled behavior | Enabled handoff behavior |
+|---------|-------------------|--------------------------|
+| `RenderCount` | Current non-empty production frames rendered. | Increment once per non-empty production frame, not once per segment. |
+| `FullApplyCount` | Current production retained-frame full apply count. | Increment when the selected production render source uses full/fallback/rebuild state. |
+| `PartialApplyCount` | Current production retained-frame partial apply count. | Increment only when the selected production render source is an accepted segmented partial. |
+| `EmptyFrameCount` | Current empty input batch count. | Increment only for empty input batches; owner rebuilds are not empty frames. |
+| `LastDirtyCommandRanges` | Current production retained-frame dirty ranges. | Disabled stays identical; enabled stores production-frame ranges and may expose segment-local ranges only as internal detail. |
+| `LastPartialApplySucceeded` | Current production partial success flag. | True only when the selected production render source accepted segmented partial for that frame. |
+
+Hit-test ownership:
+
+- Disabled mode keeps `DrawingBackendCompositor.TryGetActionIdAt` reading current production hit targets.
+- Enabled mode may read owner-side hit targets only after the same frame's segmented owner state was selected as render source.
+- Projection failure, malformed ranges, viewport change, tree/layout/text drift, or missing owner state must fall back to current production hit targets.
+
+Dirty-range behavior:
+
+- Disabled mode calls `IDirtyRangeAware.SetDirtyCommandRanges` exactly as today.
+- Enabled segmented execution intersects `LastDirtyCommandRanges` with each segment and converts to segment-local ranges before that segment's `Execute`.
+- Segments outside dirty ranges receive an empty range list, and the backend contract remains unchanged.
+
+Backend adapter constraints:
+
+- Keep `IDrawingBackend.Execute(ReadOnlySpan<DrawCommand>, IFrameResourceResolver)` unchanged.
+- Use per-segment execution behind the option; do not route this into D3D12 until the generic backend harness is green.
+- Preserve `BeginFrame`/`EndFrame` pairing on throws.
+- Do not expose handoff result vocabulary through diagnostics formatter or a diagnostics channel.
+
+Promotion blockers after this harness:
+
+- Production compositor still has no default-off render-source selector.
+- Production hit-test still does not consume owner-side hit targets.
+- Production counters still do not count segmented render-source outcomes.
+- Production resource lifetime still depends on secondary owner proof, not an owned render-source path.
+
+## 10. Sealed Lines
 
 - Do not modify `RenderPipeline.Build`.
 - Do not replace current `RetainedRenderFrame` behavior.
