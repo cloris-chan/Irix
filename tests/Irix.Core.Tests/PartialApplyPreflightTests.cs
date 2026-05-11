@@ -921,6 +921,7 @@ public sealed class PartialApplyPreflightTests
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, feed.LastResult.Kind);
+        Assert.Null(feed.SegmentOwnership);
         Assert.False(feed.HasRuntimeOwner);
         Assert.Null(feed.RuntimeOwner);
         Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
@@ -1004,15 +1005,119 @@ public sealed class PartialApplyPreflightTests
         if (enabled)
         {
             Assert.True(feed.HasRuntimeOwner);
+            Assert.NotNull(feed.SegmentOwnership);
+            Assert.Same(feedPipeline.RetainedFrame, feed.SegmentOwnership.RetainedFrame);
             Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, feed.LastResult.Kind);
             Assert.NotSame(feed.RuntimeOwner, feedCompositor.RetainedFrame);
         }
         else
         {
             Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, feed.LastResult.Kind);
+            Assert.Null(feed.SegmentOwnership);
             Assert.False(feed.HasRuntimeOwner);
             Assert.Null(feed.RuntimeOwner);
         }
+    }
+
+    [Fact]
+    public void RetainedRenderFrameSegmentOwnership_disabled_preserves_try_read_frame_contract_and_has_no_segmented_owner()
+    {
+        var root = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+        var resources = new NamedResolver("frame");
+        using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.DrawTextRun));
+        using var batch = new RenderFrameBatch(
+            commands,
+            [new HitTestTarget(new PixelRectangle(16, 16, 140, 40), "Increment")],
+            resources,
+            [(0, 1)]);
+        using var retainedFrame = new RetainedRenderFrame();
+        retainedFrame.ApplyFull(batch);
+        using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Disabled);
+
+        var result = ownership.Update(null, root, new PixelRectangle(0, 0, 960, 540), batch);
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, result.Kind);
+        Assert.False(result.RuntimeOwnerEnabled);
+        Assert.False(ownership.HasSegmentedOwner);
+        Assert.Null(ownership.RuntimeOwner);
+        Assert.Same(retainedFrame, ownership.RetainedFrame);
+        Assert.True(retainedFrame.TryReadFrame(out var readCommands, out var readResources));
+        Assert.Equal(1, readCommands.Length);
+        Assert.Same(resources, readResources);
+        Assert.Single(retainedFrame.HitTargets);
+
+        ownership.Dispose();
+
+        Assert.True(retainedFrame.TryReadFrame(out var afterDisposeCommands, out var afterDisposeResources));
+        Assert.Equal(1, afterDisposeCommands.Length);
+        Assert.Same(resources, afterDisposeResources);
+    }
+
+    [Fact]
+    public void RetainedRenderFrameSegmentOwnership_enabled_syncs_secondary_owner_with_full_partial_fallback_and_dispose_without_becoming_render_source()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Static", 10),
+            VirtualNodeFactory.Button("Increment", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var partialRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Static", 10),
+            VirtualNodeFactory.Button("Increment", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+        var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Text("Static", 10),
+            VirtualNodeFactory.Button("Increment fallback", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Fallback")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        using var ownership = new RetainedRenderFrameSegmentOwnership(pipeline.RetainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
+
+        using var frame1 = pipeline.Build(retainedRoot, viewport);
+        var fullResult = ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
+        using var frame2 = pipeline.Build(partialRoot, viewport, [2]);
+        var partialResult = ownership.Update(pipeline.LastRetainedInputSnapshot, partialRoot, viewport, frame2);
+
+        Assert.Same(pipeline.RetainedFrame, ownership.RetainedFrame);
+        Assert.True(ownership.HasSegmentedOwner);
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fullResult.Kind);
+        Assert.False(fullResult.FallbackApplied);
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, partialResult.Kind);
+        Assert.False(partialResult.FallbackApplied);
+        Assert.True(partialResult.OwnerStatePreservedBeforeFallback);
+        Assert.Collection(ownership.RuntimeOwner!.ResourceSegments,
+            segment => Assert.Same(frame1.Resources, segment.Snapshot.Resolver),
+            segment => Assert.Same(frame2.Resources, segment.Snapshot.Resolver));
+        AssertTextAttribute(ownership.RuntimeOwner.RetainedRoot.Children[1], "ActionId", "Increment.Secondary");
+        var partialHitTarget = Assert.Single(ownership.RuntimeOwner.HitTargets);
+        Assert.Equal("Increment.Secondary", partialHitTarget.ActionId);
+        Assert.True(pipeline.RetainedFrame.TryReadFrame(out var retainedCommands, out var retainedResources));
+        Assert.Equal(frame2.Commands.Count, retainedCommands.Length);
+        Assert.Same(frame2.Resources, retainedResources);
+
+        using var frame3 = pipeline.Build(fallbackRoot, viewport, [2]);
+        var fallbackResult = ownership.Update(pipeline.LastRetainedInputSnapshot, fallbackRoot, viewport, frame3);
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fallbackResult.Kind);
+        Assert.True(fallbackResult.FallbackApplied);
+        Assert.Equal(RetainedPartialApplyFallbackReason.NotStyleOnly, fallbackResult.ShadowResult.Reason);
+        var fallbackSegment = Assert.Single(ownership.RuntimeOwner.ResourceSegments);
+        Assert.Same(frame3.Resources, fallbackSegment.Snapshot.Resolver);
+        var fallbackHitTarget = Assert.Single(ownership.RuntimeOwner.HitTargets);
+        Assert.Equal("Increment.Fallback", fallbackHitTarget.ActionId);
+        Assert.True(pipeline.RetainedFrame.TryReadFrame(out var fallbackCommands, out var fallbackResources));
+        Assert.Equal(frame3.Commands.Count, fallbackCommands.Length);
+        Assert.Same(frame3.Resources, fallbackResources);
+
+        ownership.Dispose();
+
+        Assert.True(pipeline.RetainedFrame.TryReadFrame(out var afterDisposeCommands, out var afterDisposeResources));
+        Assert.Equal(frame3.Commands.Count, afterDisposeCommands.Length);
+        Assert.Same(frame3.Resources, afterDisposeResources);
     }
 
     [Fact]
@@ -2126,11 +2231,11 @@ public sealed class PartialApplyPreflightTests
     {
         var gates = PartialApplyIntegrationGateChecklist.RequiredGates;
 
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.ProductionOffRuntimeEvidence.Contains("SegmentedRetainedFrameProductionOwnerFeed") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.ProductionOffRuntimeEvidence.Contains("RetainedRenderFrameSegmentOwnership") && gate.ProductionOffRuntimeEvidence.Contains("TryReadFrame remains unchanged") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CommandRangeStability && gate.ProductionOffRuntimeEvidence.Contains("commands, resources, retained root, and hit targets") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.HitTargetMetadataProjection && gate.ProductionOffRuntimeEvidence.Contains("secondary hit target metadata") && gate.ProductionOffRuntimeEvidence.Contains("projection failure") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ProductionOffRuntimeEvidence.Contains("diagnostics text") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RegressionCoverage && gate.ProductionOffRuntimeEvidence.Contains("four-piece atomicity") && gate.ProductionOffRuntimeEvidence.Contains("clipped hit-test") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RegressionCoverage && gate.ProductionOffRuntimeEvidence.Contains("dispose") && gate.ProductionOffRuntimeEvidence.Contains("four-piece atomicity") && gate.ProductionOffRuntimeEvidence.Contains("clipped hit-test") && gate.ProductionRuntimeEvidence.Contains("None"));
         foreach (var gate in gates)
         {
             Assert.False(gate.Satisfied);
