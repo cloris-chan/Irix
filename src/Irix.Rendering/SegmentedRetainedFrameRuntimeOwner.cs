@@ -1,7 +1,10 @@
+using Irix.Drawing;
+
 namespace Irix.Rendering;
 
-internal sealed class SegmentedRetainedFrameRuntimeOwner : IDisposable
+internal sealed class SegmentedRetainedFrameRuntimeOwner(Func<IFrameResourceResolver, RetainedResourceSnapshot>? captureSnapshot = null) : IDisposable
 {
+    private readonly Func<IFrameResourceResolver, RetainedResourceSnapshot> _captureSnapshot = captureSnapshot ?? (resolver => RetainedResourceSnapshot.Capture(resolver));
     private readonly SegmentedRetainedFrameOwner _owner = new();
     private bool _disposed;
 
@@ -16,7 +19,7 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner : IDisposable
     public SegmentedRetainedFrameShadowResult ApplyFull(RenderFrameBatch batch, VirtualNode retainedRoot)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _owner.ApplyFull(batch, RetainedResourceSnapshot.Capture(batch.Resources), retainedRoot);
+        _owner.ApplyFull(batch, _captureSnapshot(batch.Resources), retainedRoot);
         return new SegmentedRetainedFrameShadowResult(
             SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull,
             RetainedPartialApplyFallbackReason.None,
@@ -27,19 +30,19 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner : IDisposable
     public bool TryAcceptPartial(RenderFrameBatch batch, RetainedRootMetadataPatch rootPatch)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _owner.TryAcceptPartial(batch, RetainedResourceSnapshot.Capture(batch.Resources), rootPatch);
+        return _owner.TryAcceptPartial(batch, _captureSnapshot(batch.Resources), rootPatch);
     }
 
     public bool TryAcceptPartial(RenderFrameBatch batch, RetainedRootMetadataPatch rootPatch, IReadOnlyList<HitTestTarget> hitTargets)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _owner.TryAcceptPartial(batch, RetainedResourceSnapshot.Capture(batch.Resources), rootPatch, hitTargets);
+        return _owner.TryAcceptPartial(batch, _captureSnapshot(batch.Resources), rootPatch, hitTargets);
     }
 
     public SegmentedRetainedFrameShadowResult ApplyFallbackFull(RenderFrameBatch batch, VirtualNode retainedRoot, RetainedPartialApplyFallbackReason reason)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        _owner.ApplyFull(batch, RetainedResourceSnapshot.Capture(batch.Resources), retainedRoot);
+        _owner.ApplyFull(batch, _captureSnapshot(batch.Resources), retainedRoot);
         return new SegmentedRetainedFrameShadowResult(
             SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull,
             reason,
@@ -52,6 +55,12 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner : IDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         _owner.Invalidate();
         return ApplyFull(batch, retainedRoot);
+    }
+
+    public void Invalidate()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _owner.Invalidate();
     }
 
     public IReadOnlyList<SegmentedFrameRead> ReadSegments()

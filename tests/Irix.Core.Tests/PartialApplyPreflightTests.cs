@@ -1121,6 +1121,310 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
+    public void RetainedRenderFrameSegmentOwnership_retains_and_releases_frame_resource_snapshots_once_across_lifecycle_paths()
+    {
+        var tracker = new FrameResourceSnapshotCaptureTracker();
+        using var retainedFrame = new RetainedRenderFrame();
+        using var retainedCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        using var retainedBatch = new RenderFrameBatch(retainedCommands, [], new NamedResolver("retained"), [(0, 1)]);
+        retainedFrame.ApplyFull(retainedBatch);
+        var retainedCommandCount = retainedFrame.CommandCount;
+        var retainedResources = retainedFrame.Resources;
+        var retainedDirtyRanges = retainedFrame.DirtyCommandRanges.ToArray();
+        var options = new RetainedRenderFrameSegmentOwnershipOptions
+        {
+            EnableSegmentedOwner = true,
+            ResourceSnapshotFactory = tracker.Capture
+        };
+        using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, options);
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var changedViewport = new PixelRectangle(0, 0, 640, 480);
+        var buttonBounds = new PixelRectangle(16, 16, 140, 40);
+        var root1 = CreateActionButtonRoot("Action.One");
+        var root2 = CreateActionButtonRoot("Action.Two");
+        var root3 = CreateActionButtonRoot("Action.Three");
+        var root4 = CreateActionButtonRoot("Action.Four");
+        var root6 = CreateActionButtonRoot("Action.Six");
+        var root7 = CreateActionButtonRoot("Action.Seven");
+        var emptyRoot = VirtualNodeFactory.ScrollContainer(1);
+
+        using var frame1 = CreateFrameResourceTextBatch("one", [new HitTestTarget(buttonBounds, "Action.One")], [], commandCount: 2);
+        var fullResult = ownership.Update(null, root1, viewport, frame1);
+        frame1.Dispose();
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fullResult.Kind);
+        AssertFrameResourceCapture(tracker.Captures[0], frame1.Resources, retainCount: 1, releaseCount: 0);
+        Assert.Equal("one", ResolveSegmentText(Assert.Single(ownership.RuntimeOwner!.ReadSegments())));
+
+        using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, "Action.Two")], [(1, 1)], commandCount: 2);
+        var snapshot1 = CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
+        var partialResult = ownership.Update(snapshot1, root2, viewport, frame2);
+        frame2.Dispose();
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, partialResult.Kind);
+        AssertFrameResourceCapture(tracker.Captures[0], frame1.Resources, retainCount: 1, releaseCount: 0);
+        AssertFrameResourceCapture(tracker.Captures[1], frame2.Resources, retainCount: 1, releaseCount: 0);
+        Assert.Collection(ownership.RuntimeOwner.ReadSegments(),
+            segment => Assert.Equal("one", ResolveSegmentText(segment)),
+            segment => Assert.Equal("two", ResolveSegmentText(segment)));
+
+        using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, "Action.Three")], [(2, 1)], commandCount: 2);
+        var snapshot2 = CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
+        var rejectedFallbackResult = ownership.Update(snapshot2, root3, viewport, frame3);
+        frame3.Dispose();
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, rejectedFallbackResult.Kind);
+        Assert.True(rejectedFallbackResult.FallbackApplied);
+        Assert.True(rejectedFallbackResult.OwnerStatePreservedBeforeFallback);
+        Assert.Equal(RetainedPartialApplyFallbackReason.UnstableCommandRange, rejectedFallbackResult.ShadowResult.Reason);
+        Assert.Equal(4, tracker.Captures.Count);
+        AssertFrameResourceCapture(tracker.Captures[0], frame1.Resources, retainCount: 1, releaseCount: 1);
+        AssertFrameResourceCapture(tracker.Captures[1], frame2.Resources, retainCount: 1, releaseCount: 1);
+        AssertFrameResourceCapture(tracker.Captures[2], frame3.Resources, retainCount: 0, releaseCount: 0);
+        AssertFrameResourceCapture(tracker.Captures[3], frame3.Resources, retainCount: 1, releaseCount: 0);
+        Assert.Equal("three", ResolveSegmentText(Assert.Single(ownership.RuntimeOwner.ReadSegments())));
+
+        using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, "Action.Four")], [(1, 1)], commandCount: 2);
+        var snapshot3 = CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
+        var fallbackResult = ownership.Update(snapshot3, root4, changedViewport, frame4);
+        frame4.Dispose();
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fallbackResult.Kind);
+        Assert.True(fallbackResult.FallbackApplied);
+        Assert.Equal(RetainedPartialApplyFallbackReason.ViewportChanged, fallbackResult.ShadowResult.Reason);
+        AssertFrameResourceCapture(tracker.Captures[3], frame3.Resources, retainCount: 1, releaseCount: 1);
+        AssertFrameResourceCapture(tracker.Captures[4], frame4.Resources, retainCount: 1, releaseCount: 0);
+        Assert.Equal("four", ResolveSegmentText(Assert.Single(ownership.RuntimeOwner.ReadSegments())));
+
+        using var emptyFrame = CreateFrameResourceTextBatch("", [], [], commandCount: 0);
+        var emptyResult = ownership.Update(null, emptyRoot, viewport, emptyFrame);
+        emptyFrame.Dispose();
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, emptyResult.Kind);
+        Assert.False(emptyResult.FallbackApplied);
+        Assert.Empty(emptyResult.ShadowResult.Reads);
+        Assert.Equal(0, ownership.RuntimeOwner.CommandCount);
+        Assert.Empty(ownership.RuntimeOwner.ResourceSegments);
+        AssertFrameResourceCapture(tracker.Captures[4], frame4.Resources, retainCount: 1, releaseCount: 1);
+        AssertFrameResourceCapture(tracker.Captures[5], emptyFrame.Resources, retainCount: 0, releaseCount: 0);
+
+        using var frame6 = CreateFrameResourceTextBatch("six", [new HitTestTarget(buttonBounds, "Action.Six")], [], commandCount: 1);
+        ownership.Update(null, root6, viewport, frame6);
+        frame6.Dispose();
+        AssertFrameResourceCapture(tracker.Captures[6], frame6.Resources, retainCount: 1, releaseCount: 0);
+        ownership.InvalidateSegmentedOwner();
+        ownership.InvalidateSegmentedOwner();
+
+        Assert.Equal(0, ownership.RuntimeOwner.CommandCount);
+        Assert.Empty(ownership.RuntimeOwner.ResourceSegments);
+        AssertFrameResourceCapture(tracker.Captures[6], frame6.Resources, retainCount: 1, releaseCount: 1);
+
+        using var frame7 = CreateFrameResourceTextBatch("seven", [new HitTestTarget(buttonBounds, "Action.Seven")], [], commandCount: 1);
+        ownership.Update(null, root7, viewport, frame7);
+        frame7.Dispose();
+        ownership.Dispose();
+        ownership.Dispose();
+
+        AssertFrameResourceCapture(tracker.Captures[7], frame7.Resources, retainCount: 1, releaseCount: 1);
+        Assert.All(tracker.Captures, capture => Assert.Equal(capture.RetainCount, capture.ReleaseCount));
+        Assert.Equal(retainedCommandCount, retainedFrame.CommandCount);
+        Assert.Same(retainedResources, retainedFrame.Resources);
+        Assert.Equal(retainedDirtyRanges, retainedFrame.DirtyCommandRanges);
+    }
+
+    [Fact]
+    public void RetainedRenderFrameSegmentOwnership_repeated_replacement_releases_replaced_snapshots_once_without_touching_retained_frame()
+    {
+        var tracker = new FrameResourceSnapshotCaptureTracker();
+        using var retainedFrame = new RetainedRenderFrame();
+        using var retainedCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        using var retainedBatch = new RenderFrameBatch(retainedCommands, [], new NamedResolver("retained"), [(0, 1)]);
+        retainedFrame.ApplyFull(retainedBatch);
+        var retainedCommandCount = retainedFrame.CommandCount;
+        var retainedResources = retainedFrame.Resources;
+        var options = new RetainedRenderFrameSegmentOwnershipOptions
+        {
+            EnableSegmentedOwner = true,
+            ResourceSnapshotFactory = tracker.Capture
+        };
+        using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, options);
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var buttonBounds = new PixelRectangle(16, 16, 140, 40);
+        var root1 = CreateActionButtonRoot("Action.One");
+        var root2 = CreateActionButtonRoot("Action.Two");
+        var root3 = CreateActionButtonRoot("Action.Three");
+        var root4 = CreateActionButtonRoot("Action.Four");
+
+        using var frame1 = CreateFrameResourceTextBatch("one", [new HitTestTarget(buttonBounds, "Action.One")], [], commandCount: 2);
+        ownership.Update(null, root1, viewport, frame1);
+        frame1.Dispose();
+        using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, "Action.Two")], [(1, 1)], commandCount: 2);
+        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner!.HitTargets, LayoutRebuildReason.StyleOnly), root2, viewport, frame2);
+        frame2.Dispose();
+        using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, "Action.Three")], [(1, 1)], commandCount: 2);
+        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly), root3, viewport, frame3);
+        frame3.Dispose();
+        using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, "Action.Four")], [(0, 1)], commandCount: 2);
+        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly), root4, viewport, frame4);
+        frame4.Dispose();
+
+        AssertFrameResourceCapture(tracker.Captures[0], frame1.Resources, retainCount: 1, releaseCount: 1);
+        AssertFrameResourceCapture(tracker.Captures[1], frame2.Resources, retainCount: 1, releaseCount: 1);
+        AssertFrameResourceCapture(tracker.Captures[2], frame3.Resources, retainCount: 1, releaseCount: 0);
+        AssertFrameResourceCapture(tracker.Captures[3], frame4.Resources, retainCount: 1, releaseCount: 0);
+        Assert.Collection(ownership.RuntimeOwner.ReadSegments(),
+            segment => Assert.Equal("four", ResolveSegmentText(segment)),
+            segment => Assert.Equal("three", ResolveSegmentText(segment)));
+        Assert.Equal(retainedCommandCount, retainedFrame.CommandCount);
+        Assert.Same(retainedResources, retainedFrame.Resources);
+
+        ownership.Dispose();
+
+        AssertFrameResourceCapture(tracker.Captures[2], frame3.Resources, retainCount: 1, releaseCount: 1);
+        AssertFrameResourceCapture(tracker.Captures[3], frame4.Resources, retainCount: 1, releaseCount: 1);
+        Assert.All(tracker.Captures, capture => Assert.Equal(capture.RetainCount, capture.ReleaseCount));
+    }
+
+    [Fact]
+    public async Task RetainedRenderFrameSegmentOwnership_owner_side_hit_test_matches_production_for_hit_clip_and_no_hit()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var retainedFrame = new RetainedRenderFrame();
+        using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
+        using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        var hitTarget = new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Action.Clip", new PixelRectangle(10, 10, 20, 20));
+        using var batch = new RenderFrameBatch(commands, [hitTarget], new NamedResolver("frame"), [(0, 1)]);
+        var root = CreateActionButtonRoot("Action.Clip");
+        using var compositor = new DrawingBackendCompositor(new CapturingBackend());
+
+        ownership.Update(null, root, new PixelRectangle(0, 0, 100, 100), batch);
+        await compositor.RenderAsync(batch, cancellationToken);
+
+        AssertOwnerAndProductionHit(ownership, compositor, 11, 11, expectedHit: true, "Action.Clip");
+        AssertOwnerAndProductionHit(ownership, compositor, 5, 5, expectedHit: false, string.Empty);
+        AssertOwnerAndProductionHit(ownership, compositor, 120, 120, expectedHit: false, string.Empty);
+    }
+
+    [Fact]
+    public async Task RetainedRenderFrameSegmentOwnership_owner_side_hit_test_tracks_dirty_action_id_projection()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pipeline = new RenderPipeline();
+        using var ownership = new RetainedRenderFrameSegmentOwnership(pipeline.RetainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
+        using var compositor = new DrawingBackendCompositor(new CapturingBackend());
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var retainedRoot = CreateActionButtonRoot("Increment");
+        var nextRoot = CreateActionButtonRoot("Increment.Secondary");
+
+        using var frame1 = pipeline.Build(retainedRoot, viewport);
+        ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
+        await compositor.RenderAsync(frame1, cancellationToken);
+        var hitTarget = Assert.Single(frame1.HitTargets);
+        using var frame2 = pipeline.Build(nextRoot, viewport, [1]);
+        var result = ownership.Update(pipeline.LastRetainedInputSnapshot, nextRoot, viewport, frame2);
+        await compositor.RenderAsync(frame2, cancellationToken);
+        var hitX = hitTarget.Bounds.X + 1;
+        var hitY = hitTarget.Bounds.Y + 1;
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, result.Kind);
+        AssertOwnerAndProductionHit(ownership, compositor, hitX, hitY, expectedHit: true, "Increment.Secondary");
+    }
+
+    [Fact]
+    public async Task RetainedRenderFrameSegmentOwnership_owner_side_hit_test_uses_fallback_hit_targets_after_projection_failure()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pipeline = new RenderPipeline();
+        using var ownership = new RetainedRenderFrameSegmentOwnership(pipeline.RetainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
+        using var compositor = new DrawingBackendCompositor(new CapturingBackend());
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Primary", 10,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Primary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+            VirtualNodeFactory.Button("Secondary", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Secondary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Primary", 10,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Primary.Changed")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+            VirtualNodeFactory.Button("Secondary", 20,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Secondary")),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+
+        using var frame1 = pipeline.Build(retainedRoot, viewport);
+        ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
+        await compositor.RenderAsync(frame1, cancellationToken);
+        var primaryHitTarget = frame1.HitTargets[0];
+        using var frame2 = pipeline.Build(nextRoot, viewport, [3]);
+        var result = ownership.Update(pipeline.LastRetainedInputSnapshot, nextRoot, viewport, frame2);
+        await compositor.RenderAsync(frame2, cancellationToken);
+        var hitX = primaryHitTarget.Bounds.X + 1;
+        var hitY = primaryHitTarget.Bounds.Y + 1;
+
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, result.Kind);
+        Assert.True(result.FallbackApplied);
+        Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, result.ShadowResult.Reason);
+        AssertOwnerAndProductionHit(ownership, compositor, hitX, hitY, expectedHit: true, "Primary.Changed");
+    }
+
+    [Fact]
+    public void RetainedRenderFrameHandoffCounterSemantics_keep_existing_counters_unchanged_until_render_source_promotion()
+    {
+        var semantics = RetainedRenderFrameHandoffCounterSemantics.All;
+
+        Assert.Equal(6, semantics.Count);
+        Assert.All(semantics, semantic => Assert.True(semantic.ExistingCounterBehaviorUnchanged));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "RenderCount" && semantic.HandoffRule.Contains("retained segments"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "FullApplyCount" && semantic.InternalOnlyCounterRule.Contains("internal-only fallback counter"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "PartialApplyCount" && semantic.InternalOnlyCounterRule.Contains("internal-only partial counter"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "EmptyFrameCount" && semantic.HandoffRule.Contains("empty input batches"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "LastDirtyCommandRanges" && semantic.HandoffRule.Contains("segment-local dirty ranges"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "LastPartialApplySucceeded" && semantic.HandoffRule.Contains("approved production render source"));
+    }
+
+    [Fact]
+    public void SegmentedBackendDirtyRangeHandoffPlanner_maps_retained_dirty_ranges_to_segment_local_ranges_without_backend_contract_change()
+    {
+        var resolver = new NamedResolver("segment");
+        var reads = new[]
+        {
+            new SegmentedFrameRead(0, [new DrawCommand(DrawCommandKind.FillRect), new DrawCommand(DrawCommandKind.FillRect)], resolver),
+            new SegmentedFrameRead(2, [new DrawCommand(DrawCommandKind.FillRect), new DrawCommand(DrawCommandKind.FillRect), new DrawCommand(DrawCommandKind.FillRect)], resolver),
+            new SegmentedFrameRead(5, [new DrawCommand(DrawCommandKind.FillRect)], resolver)
+        };
+        var backend = new DirtyRangeAwareCapturingBackend();
+        var adapter = new SegmentedBackendExecutionAdapter(backend);
+
+        var plan = SegmentedBackendDirtyRangeHandoffPlanner.Plan(reads, [(1, 3), (5, 1)]);
+        adapter.Execute(new FrameContext(100, 100), reads);
+
+        Assert.Collection(plan,
+            segment =>
+            {
+                Assert.Equal(0, segment.CommandStart);
+                Assert.Equal(2, segment.CommandCount);
+                Assert.Equal([(1, 1)], segment.SegmentDirtyRanges);
+            },
+            segment =>
+            {
+                Assert.Equal(2, segment.CommandStart);
+                Assert.Equal(3, segment.CommandCount);
+                Assert.Equal([(0, 2)], segment.SegmentDirtyRanges);
+            },
+            segment =>
+            {
+                Assert.Equal(5, segment.CommandStart);
+                Assert.Equal(1, segment.CommandCount);
+                Assert.Equal([(0, 1)], segment.SegmentDirtyRanges);
+            });
+        Assert.Equal(0, backend.SetDirtyCommandRangeCount);
+        Assert.Empty(backend.DirtyRanges);
+        Assert.Equal(["BeginFrame", "Execute:2", "Execute:3", "Execute:1", "EndFrame"], backend.Calls);
+    }
+
+    [Fact]
     public async Task SegmentedRetainedFrameProductionOwnerFeed_enabled_follows_build_for_partial_fallback_and_rebuild_without_rendering_from_owner()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -2205,7 +2509,7 @@ public sealed class PartialApplyPreflightTests
 
         Assert.False(PartialApplyIntegrationGateChecklist.CanHookUpPartialApply);
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.RuntimePromotionCondition.Contains("segment reads"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.RuntimePromotionCondition.Contains("multiple FrameDrawingResources snapshots"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.RuntimePromotionCondition.Contains("repeated replacement") && gate.RuntimePromotionCondition.Contains("multiple FrameDrawingResources snapshots"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RetainedRootUpdate && gate.RuntimePromotionCondition.Contains("atomically advance retained root metadata"));
         foreach (var gate in gates)
         {
@@ -2232,10 +2536,11 @@ public sealed class PartialApplyPreflightTests
         var gates = PartialApplyIntegrationGateChecklist.RequiredGates;
 
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.ProductionOffRuntimeEvidence.Contains("RetainedRenderFrameSegmentOwnership") && gate.ProductionOffRuntimeEvidence.Contains("TryReadFrame remains unchanged") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.ProductionOffRuntimeEvidence.Contains("multiple FrameDrawingResources") && gate.ProductionOffRuntimeEvidence.Contains("repeated replacement") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CommandRangeStability && gate.ProductionOffRuntimeEvidence.Contains("commands, resources, retained root, and hit targets") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.HitTargetMetadataProjection && gate.ProductionOffRuntimeEvidence.Contains("secondary hit target metadata") && gate.ProductionOffRuntimeEvidence.Contains("projection failure") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ProductionOffRuntimeEvidence.Contains("diagnostics text") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RegressionCoverage && gate.ProductionOffRuntimeEvidence.Contains("dispose") && gate.ProductionOffRuntimeEvidence.Contains("four-piece atomicity") && gate.ProductionOffRuntimeEvidence.Contains("clipped hit-test") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.HitTargetMetadataProjection && gate.ProductionOffRuntimeEvidence.Contains("owner-side hit lookup") && gate.ProductionOffRuntimeEvidence.Contains("projection-failure fallback") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ProductionOffRuntimeEvidence.Contains("counter semantics") && gate.ProductionOffRuntimeEvidence.Contains("segment-local dirty-range") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RegressionCoverage && gate.ProductionOffRuntimeEvidence.Contains("dirty-range handoff planning") && gate.ProductionOffRuntimeEvidence.Contains("multiple FrameDrawingResources") && gate.ProductionOffRuntimeEvidence.Contains("clipped hit-test") && gate.ProductionRuntimeEvidence.Contains("None"));
         foreach (var gate in gates)
         {
             Assert.False(gate.Satisfied);
@@ -2302,6 +2607,16 @@ public sealed class PartialApplyPreflightTests
         VirtualNode retainedRoot,
         IReadOnlyList<HitTestTarget> retainedHitTargets)
     {
+        return CreateDirtySnapshot(viewport, buttonBounds, retainedRoot, retainedHitTargets, LayoutRebuildReason.StyleOnly);
+    }
+
+    private static RenderPipelineRetainedInputSnapshot CreateDirtySnapshot(
+        PixelRectangle viewport,
+        PixelRectangle buttonBounds,
+        VirtualNode retainedRoot,
+        IReadOnlyList<HitTestTarget> retainedHitTargets,
+        LayoutRebuildReason reason)
+    {
         var layoutResult = new LayoutTreeResult(
             [
                 new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24), Text: "Static"),
@@ -2315,10 +2630,66 @@ public sealed class PartialApplyPreflightTests
             retainedHitTargets,
             retainedRoot,
             viewport,
-            [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
+            [new LayoutDirtyClassification(1, reason)],
             [(1, 1)],
             [(1, 1)],
-            LayoutRebuildReason.StyleOnly);
+            reason);
+    }
+
+    private static VirtualNode CreateActionButtonRoot(string actionId)
+    {
+        return VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Increment", 2,
+                new VirtualNodeAttribute("ActionId", AttributeValue.FromText(actionId)),
+                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+    }
+
+    private static RenderFrameBatch CreateFrameResourceTextBatch(
+        string text,
+        IReadOnlyList<HitTestTarget> hitTargets,
+        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
+        int commandCount)
+    {
+        var resources = FrameDrawingResources.Rent();
+        var textSlice = string.IsNullOrEmpty(text) ? default : resources.AddText(text);
+        resources.Seal();
+        var commands = new DrawCommand[commandCount];
+        Array.Fill(commands, new DrawCommand(DrawCommandKind.DrawTextRun, Text: textSlice));
+        return new RenderFrameBatch(CreateCommandBatch(commands), hitTargets, resources, dirtyCommandRanges);
+    }
+
+    private static string ResolveSegmentText(SegmentedFrameRead segment)
+    {
+        Assert.NotEmpty(segment.Commands);
+        return segment.Resolver.Resolve(segment.Commands[0].Text).ToString();
+    }
+
+    private static void AssertOwnerAndProductionHit(
+        RetainedRenderFrameSegmentOwnership ownership,
+        DrawingBackendCompositor compositor,
+        int x,
+        int y,
+        bool expectedHit,
+        string expectedActionId)
+    {
+        var ownerHit = ownership.TryGetSegmentedOwnerActionIdAt(x, y, out var ownerActionId);
+        var productionHit = compositor.TryGetActionIdAt(x, y, out var productionActionId);
+
+        Assert.Equal(expectedHit, ownerHit);
+        Assert.Equal(expectedHit, productionHit);
+        Assert.Equal(expectedActionId, ownerActionId);
+        Assert.Equal(expectedActionId, productionActionId);
+    }
+
+    private static void AssertFrameResourceCapture(
+        FrameResourceSnapshotCapture capture,
+        IFrameResourceResolver resolver,
+        int retainCount,
+        int releaseCount)
+    {
+        Assert.Same(resolver, capture.Resolver);
+        Assert.Equal(retainCount, capture.RetainCount);
+        Assert.Equal(releaseCount, capture.ReleaseCount);
     }
 
     private static SegmentedRetainedFrameOwner CreateTwoSegmentShadowOwner(out IFrameResourceResolver oldResolver, out IFrameResourceResolver replacementResolver)
@@ -2452,6 +2823,30 @@ public sealed class PartialApplyPreflightTests
                 release: () => ReleaseCount++);
             return Snapshot;
         }
+    }
+
+    private sealed class FrameResourceSnapshotCaptureTracker
+    {
+        public List<FrameResourceSnapshotCapture> Captures { get; } = [];
+
+        public RetainedResourceSnapshot Capture(IFrameResourceResolver resolver)
+        {
+            var capture = new FrameResourceSnapshotCapture(resolver);
+            Captures.Add(capture);
+            return RetainedResourceSnapshot.Capture(
+                resolver,
+                retain: () => capture.RetainCount++,
+                release: () => capture.ReleaseCount++);
+        }
+    }
+
+    private sealed class FrameResourceSnapshotCapture(IFrameResourceResolver resolver)
+    {
+        public IFrameResourceResolver Resolver { get; } = resolver;
+
+        public int RetainCount { get; set; }
+
+        public int ReleaseCount { get; set; }
     }
 
     private sealed class TrackingResolver(string text = "") : IFrameResourceResolver

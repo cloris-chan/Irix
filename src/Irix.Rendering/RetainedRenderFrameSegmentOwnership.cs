@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Irix.Platform;
 
 namespace Irix.Rendering;
@@ -5,6 +6,8 @@ namespace Irix.Rendering;
 internal readonly record struct RetainedRenderFrameSegmentOwnershipOptions
 {
     public bool EnableSegmentedOwner { get; init; }
+
+    public Func<IFrameResourceResolver, RetainedResourceSnapshot>? ResourceSnapshotFactory { get; init; }
 
     public static RetainedRenderFrameSegmentOwnershipOptions Disabled => default;
 
@@ -44,7 +47,7 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             return SegmentedRetainedFrameProductionOwnerFeedResult.Disabled;
         }
 
-        var owner = _runtimeOwner ??= new SegmentedRetainedFrameRuntimeOwner();
+        var owner = _runtimeOwner ??= new SegmentedRetainedFrameRuntimeOwner(options.ResourceSnapshotFactory);
         if (owner.CommandCount == 0)
         {
             return new SegmentedRetainedFrameProductionOwnerFeedResult(owner.ApplyFull(batch, root), true, false, true);
@@ -183,6 +186,48 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
         }
 
         return true;
+    }
+
+    public void InvalidateSegmentedOwner()
+    {
+        _runtimeOwner?.Invalidate();
+    }
+
+    public bool TryGetSegmentedOwnerActionIdAt(int x, int y, out string actionId)
+    {
+        if (_runtimeOwner is null)
+        {
+            actionId = string.Empty;
+            return false;
+        }
+
+        foreach (var hitTarget in _runtimeOwner.HitTargets)
+        {
+            if (x < hitTarget.Bounds.X
+                || y < hitTarget.Bounds.Y
+                || x >= hitTarget.Bounds.X + hitTarget.Bounds.Width
+                || y >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
+            {
+                continue;
+            }
+
+            if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
+            {
+                if (x < hitTarget.ClipBounds.X
+                    || y < hitTarget.ClipBounds.Y
+                    || x >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
+                    || y >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
+                {
+                    continue;
+                }
+            }
+
+            actionId = hitTarget.ActionId;
+            return true;
+        }
+
+        actionId = string.Empty;
+        return false;
     }
 
     public void Dispose()
