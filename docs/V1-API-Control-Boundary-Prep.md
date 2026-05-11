@@ -256,7 +256,7 @@ Until those gates are met, keep `ScrollController`, `ScrollState`, and `ScrollFr
 
 ## 8. Window Translator Contract Draft
 
-`WindowDrawCommandTranslator` is the likely future render/platform bridge candidate, but promotion requires an explicit contract. The current type constructs `RenderPipeline` with `CounterStylePreset.Default`, pulls viewport data from a window/provider, owns a retained tree, and reports only max scroll through an `Action<double>` callback.
+`WindowDrawCommandTranslator` is the likely future render/platform bridge candidate, but promotion requires an explicit contract. The current type constructs `RenderPipeline` with `CounterStylePreset.Default`, pulls viewport data from a window/provider, owns a retained tree, and reports max scroll through an `Action<double>` callback plus `LastScrollFeedback` side-channel. The active follow-up draft is [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md).
 
 If promoted later, the contract should inject or name these dependencies explicitly:
 
@@ -307,7 +307,7 @@ Design inventory is complete. The next work should be a small implementation lin
 | P1 complete | Controls-boundary helper seal | Static scan found no remaining raw `ActionId` construction in `src/**/*.cs`; focused tests cover bundle output and `BuildView` integration. | Complete / regression-only. Do not continue controls-boundary helper splitting. |
 | P2 postponed | Typed identity wrappers | Future role-specific wrappers for `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId`. | Do not implement yet. Keep current string ids until the control helper boundary is explicitly promoted. |
 | P3 first step complete | Scroll feedback vocabulary | PoC-owned `ScrollFeedback` / `ScrollContainerMetrics` records name scroll container id, viewport extent, content extent, and max scroll. | Complete as translator side-channel only. Do not extract scroll yet; settings provider, pure controller, state ownership, and pump/scheduler work remain postponed. |
-| P3 postponed | Translator options / feedback records | Future contract records for style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and local diagnostics. | Do not promote `WindowDrawCommandTranslator` yet. Use the promotion checklist as the migration gate. |
+| P3 design draft active | Translator options / feedback records | Future contract records for style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and local diagnostics. | Draft is tracked in [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md). Do not promote `WindowDrawCommandTranslator` yet. Use the promotion checklist as the migration gate. |
 | P3 parked | `StyleOnly fast-path implementation` | Future render pipeline optimization. | Remains postponed; no `RenderPipeline.Build` behavior change in this line. |
 
 Implemented helper line:
@@ -323,7 +323,7 @@ Implemented helper line:
 9. `WindowDrawCommandTranslator` remains unpromoted.
 10. StyleOnly fast-path remains disabled.
 
-Next recommended code line: choose a new low-risk line explicitly. Do not continue controls-boundary helper splitting, and do not use this line as permission to start typed ids, scroll extraction, translator promotion, or StyleOnly fast-path.
+Next chosen low-risk line: [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md). Do not continue controls-boundary helper splitting, and do not use this line as permission to start typed ids, scroll extraction, translator promotion, or StyleOnly fast-path.
 
 ## 10. Prep Checklist
 
