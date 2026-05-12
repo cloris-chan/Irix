@@ -83,7 +83,7 @@ internal static class PartialApplyIntegrationGateChecklist
             "Planner result tests cover AppliedPartial, FallbackFull, Rejected, and every local reason.",
             "Shadow result vocabulary reports Disabled, ShadowAppliedPartial, ShadowFallbackFull, and ShadowRejected for tests/internal diagnostics only.",
             "Production-owner feed result reports Disabled, ShadowAppliedPartial, ShadowFallbackFull, owner-state-preserved-before-fallback flags, and batch freshness stamps; DrawingBackendCompositor.LastHandoffResult maps selector outcomes to Disabled, MissingOwner, Executed, FallbackFull, and Rejected for tests/internal callers only.",
-            "DrawingBackendCompositor.LastHandoffResult includes internal reason vocabulary for Disabled, MissingOwner, StaleOwner, OwnerRejected, OwnerFallbackFull, EmptySegmentRead, DirtyRangeMismatch, MalformedSegmentCoverage, and BackendThrewBeforeCommit without changing CLI diagnostics.",
+            "DrawingBackendCompositor.LastHandoffResult includes internal reason vocabulary for Disabled, MissingOwner, StaleOwner, OwnerRejected, OwnerFallbackFull, EmptySegmentRead, DirtyRangeMismatch, MalformedSegmentCoverage, and BackendThrewBeforeCommit without changing CLI diagnostics; EmptySegmentRead is wired for empty-segment validation but not directly asserted on LastHandoffResult because the owner reports ShadowFallbackFull before reaching that path.",
             "Diagnostics formatter tests keep CLI output unchanged.",
             "Satisfied for V1 core; unified diagnostics channel remains postponed.",
             "Internal/default-off selected path is promoted; CLI diagnostics text remains unchanged."),

@@ -2263,6 +2263,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, emptyResult.Kind);
         Assert.Equal(DrawingBackendCompositorHandoffReason.OwnerFallbackFull, initialFullResult.Reason);
         Assert.Equal(DrawingBackendCompositorHandoffReason.OwnerFallbackFull, fallbackResult.Reason);
+        Assert.Equal(DrawingBackendCompositorHandoffReason.OwnerFallbackFull, emptyResult.Reason);
         Assert.Equal(RetainedPartialApplyFallbackReason.NotStyleOnly, fallbackResult.OwnerResult.ShadowResult.Reason);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, fallbackResult.CandidateResult.Kind);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, emptyResult.CandidateResult.Kind);
