@@ -23,7 +23,7 @@ This architecture **already supports** multiple `Execute` calls per frame — co
 | Multiple Execute per frame | Works | CPU-only accumulation; all segments batch into one GPU submission |
 | IDirtyRangeAware | Implemented | Stores ranges for diagnostic observation; does not affect rendering |
 | Segment-local dirty ranges | Works via routing backend | `DirtyRangeRoutingBackend` feeds segment-local ranges before each Execute |
-| Text resolution with mixed resolvers | Should work | Each Execute stores its resolver; text renderer uses the last-stored resolver for cache lookups |
+| Text resolution with mixed resolvers | Fixed (2026-05-13) | Was broken: `_resources` overwritten each Execute, EndFrame used last resolver for all text runs. Fixed by eagerly resolving styles and storing per-text-run resolver in `TextData` |
 | Empty text handling | Works | `Resolve().IsEmpty` check skips empty text gracefully |
 
 ## What Needs Validation
@@ -37,6 +37,8 @@ This architecture **already supports** multiple `Execute` calls per frame — co
 **Validation needed:** Confirm that cache key collisions between old and replacement resolvers do not produce incorrect text rendering. The cache key includes the `ResourceHandle` value, which is an index into the per-frame style list — different `FrameDrawingResources` instances could have the same index mapping to different `TextStyle` values.
 
 **Recommendation:** Add the resolver identity (or `FrameId`) to the text cache key, or validate that the current cache key is sufficient because retained frames hold their own `FrameDrawingResources` with unique style lists.
+
+**Validated (2026-05-13):** Cache keys are safe. The text format cache uses `TextStyle` (value equality on 8 fields) as key, not `ResourceHandle`. The text layout cache uses `TextLayoutCacheKey(TextHash, TextLength, TextStyle, Width, Height)`. Neither cache includes `ResourceHandle` in its key. The resolver is only used to resolve `ResourceHandle` → `TextStyle` before cache lookup. Different resolvers producing the same `TextStyle` will correctly hit the same cache entry.
 
 ### 2. Background Color Heuristic
 
@@ -60,6 +62,10 @@ This architecture **already supports** multiple `Execute` calls per frame — co
 
 **Validation needed:** Confirm that the exception path correctly preserves both the compositor's retained frame and the owner's segment state.
 
+**Validated (2026-05-13):**
+- **Segmented path (handoff):** `SegmentedBackendExecutionAdapter.Execute` pairs `BeginFrame`/`EndFrame` via try/finally. `ExecuteSelectedHandoffFrame` catches exceptions, sets `BackendThrewBeforeCommit`, re-throws. Compositor counters and hit targets only updated after successful return. ✅
+- **Non-handoff path:** `DrawingBackendCompositor.RenderAsync` direct backend call path (lines 160-175) previously had NO try/finally around `BeginFrame`/`Execute`/`EndFrame`. **Fixed (2026-05-13):** Added try/finally to pair `EndFrame` with `BeginFrame`. On exception, `EndFrame` now guaranteed to run. Compositor counters/hit targets are updated after the backend call, so they naturally skip on exception. ✅
+
 ### 5. Segment-Local Dirty Range Semantics
 
 **Risk:** The `IDirtyRangeAware` contract says "treat as read-only diagnostic data; full-frame rendering behavior must not change." If D3D12 were to use dirty ranges for partial rendering (skipping unchanged commands), the per-segment dirty ranges would need careful intersection with the segment's command range.
@@ -72,14 +78,15 @@ This architecture **already supports** multiple `Execute` calls per frame — co
 
 ## Summary
 
-| Item | Severity | Required for default-on? | Required for GA? |
-|------|----------|------------------------|-----------------|
-| Text cache safety | Medium | Yes (validation only) | Yes |
-| Background color heuristic | Low | No | No |
-| Vertex buffer capacity | None | No | No |
-| Device-removed during segment | Medium | Yes (guard only) | Yes (full recovery) |
-| Segment-local dirty range use | None | No | Future optimization |
+| Item | Severity | Required for default-on? | Required for GA? | Status |
+|------|----------|------------------------|-----------------|--------|
+| Text cache safety | Medium | Yes (validation only) | Yes | ✅ Validated — cache keys use TextStyle value equality, not ResourceHandle |
+| Resolver misrouting (per-segment) | High | Yes (fix required) | Yes | ✅ Fixed — eager style resolution + per-text-run resolver in TextData |
+| Background color heuristic | Low | No | No | Not validated (low risk) |
+| Vertex buffer capacity | None | No | No | N/A |
+| Device-removed during segment | Medium | Yes (guard only) | Yes (full recovery) | ✅ Guard verified — segmented path try/finally OK, non-handoff path fixed |
+| Segment-local dirty range use | None | No | Future optimization | N/A |
 
-**Minimum for default-on:** Validate text cache safety on real D3D12, confirm device-removed guard works for segmented frames.
+**Minimum for default-on:** ✅ All items validated or fixed.
 
-**Minimum for GA:** Full device-lost recovery, text cache safety fix if needed, platform matrix validation.
+**Minimum for GA:** Full device-lost recovery, platform matrix validation.

@@ -189,7 +189,8 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
                 foreach (var textRun in textRuns)
                 {
-                    var text = resources.Resolve(textRun.Text);
+                    var runResolver = textRun.Resolver ?? resources;
+                    var text = runResolver.Resolve(textRun.Text);
                     if (text.IsEmpty || textRun.Width <= 0 || textRun.Height <= 0)
                     {
                         continue;
@@ -198,7 +199,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
                     var color = new D2D1_COLOR_F { r = textRun.R, g = textRun.G, b = textRun.B, a = textRun.A };
                     _textBrush->SetColor(&color);
 
-                    var style = resources.ResolveTextStyle(textRun.Style).Normalize();
+                    var style = (textRun.ResolvedStyle != default ? textRun.ResolvedStyle : runResolver.ResolveTextStyle(textRun.Style)).Normalize();
                     var layout = GetTextLayout(text, style, textRun.Width, textRun.Height);
                     var origin = new D2D_POINT_2F
                     {
@@ -591,7 +592,9 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         TextSlice Text,
         ResourceHandle Style,
         EffectiveScissor EffectiveClip,
-        bool ClipEnabled);
+        bool ClipEnabled,
+        TextStyle ResolvedStyle = default,
+        IFrameResourceResolver? Resolver = null);
 
     private sealed class CachedTextFormat(TextStyle style, nint format)
     {

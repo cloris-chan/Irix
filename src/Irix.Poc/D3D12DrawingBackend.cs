@@ -229,7 +229,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                         command.Text,
                         command.Resource,
                         textClipPlan.EffectiveClip,
-                        textClipPlan.ClipEnabled));
+                        textClipPlan.ClipEnabled,
+                        resources.ResolveTextStyle(command.Resource),
+                        resources));
                     break;
             }
         }

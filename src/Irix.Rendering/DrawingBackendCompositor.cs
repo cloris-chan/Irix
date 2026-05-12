@@ -168,10 +168,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
             var backendFrameContext = new FrameContext(0, 0); // Viewport size not needed for PoC backend
             _backend.BeginFrame(backendFrameContext);
-
-            _backend.Execute(commands, resources);
-
-            _backend.EndFrame();
+            try
+            {
+                _backend.Execute(commands, resources);
+            }
+            finally
+            {
+                _backend.EndFrame();
+            }
         }
 
         lock (_hitTargetsLock)
