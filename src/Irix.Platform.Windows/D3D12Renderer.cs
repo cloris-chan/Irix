@@ -43,6 +43,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private int _pendingHeight;
     private bool _pendingResize;
 
+    /// <summary>
+    /// When true, inserts a GPU fence wait after D2D text overlay rendering
+    /// and before Present. Forces all queued GPU work (D3D12 rects + D3D11/D2D text)
+    /// to complete before the swap chain presents. Diagnostic only — confirms whether
+    /// text-lag during scroll is caused by missing D3D12/D2D synchronization.
+    /// </summary>
+    public bool SyncTextOverlay { get; set; }
+
     public D3D12Renderer(nint hwnd, int width, int height)
     {
         _hwnd = hwnd;
@@ -404,6 +412,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
                 }
                 return;
             }
+
+            // Diagnostic sync: wait for all GPU work (D3D12 rects + D3D11/D2D text)
+            // to complete before presenting. Confirms whether text-lag is a sync issue.
+            if (SyncTextOverlay)
+            {
+                if (!WaitForQueueIdle()) return;
+            }
         }
 
         if (!Present()) return;
@@ -487,6 +502,28 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         catch (COMException ex)
         {
             HandleDeviceError(ex, "WaitForGpu");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Signal the D3D12 command queue and wait for all pending GPU work to complete.
+    /// Used for diagnostic synchronization between D3D12 rect pass and D3D11/D2D text overlay.
+    /// </summary>
+    private bool WaitForQueueIdle()
+    {
+        try
+        {
+            var fenceValue = _fenceValues[_frameIndex] + 1;
+            _queue->Signal(_fence, fenceValue);
+            _fence->SetEventOnCompletion(fenceValue, _fenceEvent);
+            PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
+            _fenceValues[_frameIndex] = fenceValue + 1;
+            return true;
+        }
+        catch (COMException ex)
+        {
+            HandleDeviceError(ex, "WaitForQueueIdle");
             return false;
         }
     }
