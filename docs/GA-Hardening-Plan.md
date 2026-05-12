@@ -20,7 +20,7 @@
 |------|--------------|----------------|----------|
 | 60Hz refresh | Works (default PoC) | Already done | — |
 | 120Hz / 144Hz / 240Hz | Not validated | Validate animation timing and fence behavior | P1 |
-| DPI scaling (100%-200%) | Platform-neutral `DisplayScale` model; compositor owns scale boundary; layout in logical units, backend in physical pixels; app.manifest PerMonitorV2 (2026-05-13) | Validate no bitmap stretch at each DPI; logical→physical conversion correct | P1 |
+| DPI scaling (100%-200%) | Platform-neutral `DisplayScale` model; compositor owns scale boundary; layout in logical units, backend in physical pixels; text/font scaled consistently; `WM_DPICHANGED` runtime handling; app.manifest PerMonitorV2; hand-tested 100%/150%/200% (2026-05-13) | Validate no bitmap stretch at each DPI; logical→physical conversion correct | P1 |
 | Multi-monitor | Single monitor only | Validate viewport change on monitor switch | P2 |
 | Fractional DPI (125%, 150%) | Not validated | Validate no rounding artifacts in layout/clip | P2 |
 | HDR / wide color gamut | Not applicable | Not required for v1.0 GA | P3 |
@@ -58,7 +58,7 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| CI test suite | 460 tests, all passing | Maintain green | — |
+| CI test suite | 476 tests, all passing | Maintain green | — |
 | D3D12-specific tests | None (PoC-only) | Add smoke tests for D3D12 backend integration | P1 |
 | Platform matrix CI | Single Windows runner | Add matrix for Windows versions | P2 |
 | Performance regression CI | None | Add frame time regression check | P2 |
@@ -67,7 +67,7 @@
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. GA hardening first batch planned (2026-05-13).
+**Current state:** PoC V1 core architecture-complete. Display scale pipeline complete and hand-tested (100%/150%/200%). GA hardening first batch planned (2026-05-13).
 
 **Minimum for GA:**
 1. Device-lost recovery (P0)

@@ -193,6 +193,7 @@ public class DisplayScaleTests
     }
 
     [Theory]
+    [InlineData(1.0f)]
     [InlineData(1.25f)]
     [InlineData(1.5f)]
     [InlineData(2.0f)]
@@ -218,5 +219,105 @@ public class DisplayScaleTests
         Assert.Equal(200 * scaleValue, physicalCmd.Rect.Width);
         Assert.Equal(30 * scaleValue, physicalCmd.Rect.Height);
         Assert.Equal(16f * scaleValue, physicalStyle.FontSize);
+    }
+
+    [Theory]
+    [InlineData(1.0f)]
+    [InlineData(1.25f)]
+    [InlineData(1.5f)]
+    [InlineData(2.0f)]
+    public void Clip_bounds_scale_with_display_scale(float scaleValue)
+    {
+        var scale = new DisplayScale(scaleValue, scaleValue);
+        var logical = new DrawCommand(
+            DrawCommandKind.PushClipRect,
+            Rect: new DrawRect(50, 100, 400, 300),
+            ClipBounds: new DrawRect(10, 20, 380, 260));
+
+        var physical = logical.Scale(scale);
+
+        Assert.Equal(50 * scaleValue, physical.Rect.X);
+        Assert.Equal(100 * scaleValue, physical.Rect.Y);
+        Assert.Equal(400 * scaleValue, physical.Rect.Width);
+        Assert.Equal(300 * scaleValue, physical.Rect.Height);
+        Assert.Equal(10 * scaleValue, physical.ClipBounds.X);
+        Assert.Equal(20 * scaleValue, physical.ClipBounds.Y);
+        Assert.Equal(380 * scaleValue, physical.ClipBounds.Width);
+        Assert.Equal(260 * scaleValue, physical.ClipBounds.Height);
+    }
+
+    [Theory]
+    [InlineData(1.0f)]
+    [InlineData(1.25f)]
+    [InlineData(1.5f)]
+    [InlineData(2.0f)]
+    public void Hit_test_target_clip_bounds_scale_with_display_scale(float scaleValue)
+    {
+        var scale = new DisplayScale(scaleValue, scaleValue);
+        var logical = new HitTestTarget(
+            new PixelRectangle(100, 200, 300, 400),
+            "action1",
+            new PixelRectangle(50, 100, 250, 350));
+
+        var physical = logical.Scale(scale);
+
+        Assert.Equal((int)(100 * scaleValue), physical.Bounds.X);
+        Assert.Equal((int)(200 * scaleValue), physical.Bounds.Y);
+        Assert.Equal((int)(300 * scaleValue), physical.Bounds.Width);
+        Assert.Equal((int)(400 * scaleValue), physical.Bounds.Height);
+        Assert.Equal((int)(50 * scaleValue), physical.ClipBounds.X);
+        Assert.Equal((int)(100 * scaleValue), physical.ClipBounds.Y);
+        Assert.Equal((int)(250 * scaleValue), physical.ClipBounds.Width);
+        Assert.Equal((int)(350 * scaleValue), physical.ClipBounds.Height);
+    }
+
+    [Theory]
+    [InlineData(1.25f)]
+    [InlineData(1.5f)]
+    [InlineData(2.0f)]
+    public void Multiple_text_styles_all_scaled_consistently(float scaleValue)
+    {
+        var scale = new DisplayScale(scaleValue, scaleValue);
+
+        using var resources = FrameDrawingResources.Rent();
+        var headingStyle = new TextStyle("Segoe UI", 24f, TextFontWeight.Bold, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var bodyStyle = new TextStyle("Segoe UI", 14f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Top, TextWrapping.Wrap);
+        var buttonStyle = new TextStyle("Segoe UI", 16f, TextFontWeight.SemiBold, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Center, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+
+        var headingHandle = resources.AddTextStyle(headingStyle);
+        var bodyHandle = resources.AddTextStyle(bodyStyle);
+        var buttonHandle = resources.AddTextStyle(buttonStyle);
+
+        resources.ScaleTextStyles(scale);
+
+        var scaledHeading = resources.ResolveTextStyle(headingHandle);
+        var scaledBody = resources.ResolveTextStyle(bodyHandle);
+        var scaledButton = resources.ResolveTextStyle(buttonHandle);
+
+        Assert.Equal(24f * scaleValue, scaledHeading.FontSize);
+        Assert.Equal(14f * scaleValue, scaledBody.FontSize);
+        Assert.Equal(16f * scaleValue, scaledButton.FontSize);
+
+        Assert.Equal(TextFontWeight.Bold, scaledHeading.FontWeight);
+        Assert.Equal(TextWrapping.Wrap, scaledBody.Wrapping);
+        Assert.Equal(TextHorizontalAlignment.Center, scaledButton.HorizontalAlignment);
+    }
+
+    [Theory]
+    [InlineData(1.0f)]
+    [InlineData(1.25f)]
+    [InlineData(1.5f)]
+    [InlineData(2.0f)]
+    public void Logical_viewport_matches_physical_divided_by_scale(float scaleValue)
+    {
+        var scale = new DisplayScale(scaleValue, scaleValue);
+        var physical = new PixelRectangle(0, 0, 1920, 1080);
+        var ctx = new FrameContext(physical.Width, physical.Height, scale);
+
+        var expectedW = scale.IsIdentity ? 1920 : (int)(1920 / scaleValue);
+        var expectedH = scale.IsIdentity ? 1080 : (int)(1080 / scaleValue);
+
+        Assert.Equal(expectedW, ctx.LogicalWidth);
+        Assert.Equal(expectedH, ctx.LogicalHeight);
     }
 }

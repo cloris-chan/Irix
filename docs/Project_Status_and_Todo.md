@@ -72,6 +72,7 @@
 - **已验证（2026-05-13）：** D3D12 text cache safety — cache keys 使用 `TextStyle` value equality（非 `ResourceHandle`），跨 resolver 安全。Default-on go/no-go checklist — **GO**：Gate 1-5 全部满足，Counter PoC D3D12 smoke test 通过（多刷新率，无渲染错误，无 crash）。HiDPI 下功能正常但因缺 app.manifest 被系统拉伸略模糊（非阻塞 visual quality issue）。详见 [Default-On-Partial-Apply-Prep.md](Default-On-Partial-Apply-Prep.md)。
 - **已翻转（2026-05-13）：** Default-on partial apply — `Program.cs` 预设启用 partial apply（`--no-partial-apply` 可显式关闭）。所有 435 tests 通过。
 - **已实现（2026-05-13）：** Platform-neutral display scale pipeline — `DisplayScale` 类型（`Irix.Drawing`），compositor 持有 scale boundary，layout 在 logical units 工作，draw commands/hit targets/text styles 缩放回 physical pixels。`WM_DPICHANGED` 运行时处理：窗口移动到不同 DPI 屏幕或系统缩放变化时，compositor/translator 自动更新 scale 并触发 relayout。`TextStyle.FontSize` 按 `DisplayScale` 缩放，确保文字与矩形视觉比例一致。所有 460 tests 通过。
+- **手测通过（2026-05-13）：** Display scale pipeline — 100% / 150% / 200% DPI 下文字、按钮、hit-test、scroll、resize、partial apply 均正常；运行时改系统缩放后下一幀 relayout 正确，文字/矩形/hit-test 不错位。39 DisplayScale regression tests 覆盖 command rect、clip bounds、hit target、text font size、logical viewport（1.0/1.25/1.5/2.0）。所有 476 tests 通过。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 - **下一步：** Default-on partial apply go/no-go 已达 GO 结论；下一步可执行 default-on 翻转（单选项变更）。Post-V1 backlog 已拆为 4 batch，GA hardening first batch 已规划 5 项实现步骤。详见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
@@ -90,6 +91,7 @@
 | IRIX-V1-008 | P2 | Scroll extraction | Postponed | 不抽 `ScrollController` / `ScrollState` / `ScrollFramePump`。 |
 | IRIX-V1-009 | P2 | `WindowDrawCommandTranslator` promotion | Postponed / seam only | Translator 留在 `Irix.Poc`；style/pipeline creation 只是 internal seam，viewport/retained-tree/typed feedback 仍未 promotion。 |
 | IRIX-V1-013 | P2 | Retained planner / partial apply V1 core | **Default-on (2026-05-13)** | Default-on selected segmented render-source path；go/no-go 全部满足；`--no-partial-apply` 可回退；不改 public API / `IDrawingBackend.Execute` / D3D12 架構。 |
+| IRIX-V1-014 | P0 | Display scale pipeline | **Complete (2026-05-13)** | 平台中性 `DisplayScale` 模型；compositor-owned scale boundary；text style/font scaling；`WM_DPICHANGED` runtime handling；hit-test/clip/scroll scale consistency；39 DisplayScale regression tests。详见下方手测记录。 |
 | IRIX-V1-010 | P3 | StyleOnly fast-path | Default-off pre-switch only | `StyleOnlyFastPathOptions` 已作为 internal/default-off pre-switch；不跳过 layout，不接入 `RenderPipeline.Build`，不启用新行为。 |
 | IRIX-V1-011 | P3 | Unified diagnostics channel / event bus / registry | Postponed | 不新增全局 diagnostics abstraction。 |
 | IRIX-V1-012 | P0 | 当前进度判断 | V1 core complete | PoC v1 core architecture-complete / default-off；所有 V1 core gate satisfied，`CanHookUpPartialApply=true`；MVP/GA 仍未完成。 |
