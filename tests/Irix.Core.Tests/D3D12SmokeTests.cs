@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
@@ -9,6 +10,7 @@ namespace Irix.Core.Tests;
 /// <summary>
 /// Headless D3D12 smoke tests. No window, no swapchain, no GPU execution.
 /// Validates device creation, command list recording, and resource allocation.
+/// Tests skip gracefully if D3D12 is not available (e.g. CI without GPU).
 /// </summary>
 [Trait("Category", "D3D12")]
 public sealed unsafe class D3D12SmokeTests
@@ -19,10 +21,44 @@ public sealed unsafe class D3D12SmokeTests
         return (ID3D12Device*)obj;
     }
 
+    private static bool? _d3d12Available;
+
+    private static bool CheckD3D12Available()
+    {
+        if (_d3d12Available.HasValue) return _d3d12Available.Value;
+        try
+        {
+            var device = CreateDevice();
+            if ((nint)device == 0)
+            {
+                _d3d12Available = false;
+                return false;
+            }
+            device->Release();
+            _d3d12Available = true;
+            return true;
+        }
+        catch
+        {
+            _d3d12Available = false;
+            return false;
+        }
+    }
+
+    private static ID3D12Device* CreateDeviceOrSkip()
+    {
+        if (!CheckD3D12Available())
+        {
+            Assert.Skip("D3D12 not available in this environment");
+            return null; // unreachable
+        }
+        return CreateDevice();
+    }
+
     [Fact]
     public void D3D12_device_creation_succeeds()
     {
-        var device = CreateDevice();
+        var device = CreateDeviceOrSkip();
         Assert.True((nint)device != 0, "D3D12CreateDevice returned null device");
         device->Release();
     }
@@ -30,7 +66,7 @@ public sealed unsafe class D3D12SmokeTests
     [Fact]
     public void CommandAllocator_and_CommandList_recording_succeeds()
     {
-        var device = CreateDevice();
+        var device = CreateDeviceOrSkip();
 
         device->CreateCommandAllocator(
             D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -58,7 +94,7 @@ public sealed unsafe class D3D12SmokeTests
     [Fact]
     public void DescriptorHeap_creation_succeeds()
     {
-        var device = CreateDevice();
+        var device = CreateDeviceOrSkip();
 
         var desc = new D3D12_DESCRIPTOR_HEAP_DESC
         {
@@ -82,7 +118,7 @@ public sealed unsafe class D3D12SmokeTests
     [Fact]
     public void UploadBuffer_creation_succeeds()
     {
-        var device = CreateDevice();
+        var device = CreateDeviceOrSkip();
 
         var heapProps = new D3D12_HEAP_PROPERTIES
         {
@@ -119,7 +155,7 @@ public sealed unsafe class D3D12SmokeTests
     [Fact]
     public void CommandQueue_creation_succeeds()
     {
-        var device = CreateDevice();
+        var device = CreateDeviceOrSkip();
 
         var qd = new D3D12_COMMAND_QUEUE_DESC
         {
@@ -137,7 +173,7 @@ public sealed unsafe class D3D12SmokeTests
     [Fact]
     public void Fence_creation_succeeds()
     {
-        var device = CreateDevice();
+        var device = CreateDeviceOrSkip();
 
         device->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, typeof(ID3D12Fence).GUID, out void* fenceObj);
         var fence = (ID3D12Fence*)fenceObj;

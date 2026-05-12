@@ -36,6 +36,15 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-sync"))
+        {
+            var syncFrameCount = 300;
+            var syncFrameArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(1).FirstOrDefault();
+            if (int.TryParse(syncFrameArg, out var n) && n > 0) syncFrameCount = n;
+            SyncDiagnosticRunner.Run(Console.Out, syncFrameCount);
+            return;
+        }
+
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
         window.ExternalRenderingEnabled = true;

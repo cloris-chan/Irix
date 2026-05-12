@@ -32,7 +32,7 @@
 | 1000-frame soak test | 3 tests: render count, empty/nonempty interleave, memory stability | Already done | — |
 | Long-run memory stability | 1100-frame memory growth test (100 warmup + 1000 soak, <50% growth threshold) | Already done | — |
 | Resize stress test | 4 tests: scale consistency (1x/1.5x/2x), extreme sizes, runtime scale change, 1000 rapid resizes | Already done | — |
-| Concurrent input + render | Works in PoC | Validate no deadlocks or race conditions | P1 |
+| Concurrent input + render | 5 tests: sequential scroll render, ScrollFramePump dispatch, rapid coalescing, thread-safe AddPendingPixels, multi-cycle render | Already done | — |
 | Exception recovery | Compositor catches backend exceptions; `IDeviceRecovery` interface; 2 tests (recovery succeeds/fails) | Already done | — |
 | D2D text overlay sync under scroll | GPU fence wait after D2D text overlay, before Present; default-on with `--no-sync-text-overlay` escape hatch; 4 scroll text-sync regression tests | Already done | — |
 
@@ -60,8 +60,8 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| CI test suite | 497 tests, all passing | Maintain green | — |
-| D3D12-specific tests | 7 headless smoke tests (device, allocator, command list, descriptor heap, upload buffer, queue, fence) | Already done | — |
+| CI test suite | 502 tests, all passing | Maintain green | — |
+| D3D12-specific tests | 7 headless smoke tests (device, allocator, command list, descriptor heap, upload buffer, queue, fence); CI-integrated with graceful skip when D3D12 unavailable | Already done | — |
 | Platform matrix CI | Single Windows runner | Add matrix for Windows versions | P2 |
 | Performance regression CI | None | Add frame time regression check | P2 |
 
@@ -78,6 +78,7 @@
 4. ~~Frame time profiling (P1)~~ — Done (compositor-level: LastFrameTimeUs, AverageFrameTimeUs, MaxFrameTimeUs)
 5. ~~D3D12 smoke tests in CI (P1)~~ — Done (7 headless tests, 1s total)
 6. ~~D2D text overlay sync (P0)~~ — Done (GPU fence wait, default-on, 4 regression tests)
+7. ~~Concurrent input + render (P1)~~ — Done (5 tests: sequential scroll, pump dispatch, coalescing, thread safety, multi-cycle)
 
 **Estimated scope:** 5-10 focused work items, primarily in `Irix.Platform.Windows` and `Irix.Poc`.
 

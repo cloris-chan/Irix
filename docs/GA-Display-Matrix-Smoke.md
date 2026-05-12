@@ -58,14 +58,22 @@
 | 4.2 | Verify counter number | Number updates on each click |
 | 4.3 | Rapid click + 20 times | All text updates render correctly |
 
-### 5. Hit-test
+### 5. Text overlay sync (scroll)
 
 | Step | Action | Expected |
 |------|--------|----------|
-| 5.1 | Click each button precisely at edges | Hit-test works, no offset |
-| 5.2 | Click between buttons | No false activation |
+| 5.1 | Mouse wheel scroll continuously for 10+ seconds | Button text stays synchronized with rectangles, no visible lag |
+| 5.2 | Stop scrolling, then resume | Text catches up on stop, stays sync on resume |
+| 5.3 | Rapid scroll at 60Hz | No text lag behind rectangles |
 
-### 6. Runtime scale change (row F only)
+### 6. Hit-test
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 6.1 | Click each button precisely at edges | Hit-test works, no offset |
+| 6.2 | Click between buttons | No false activation |
+
+### 7. Runtime scale change (row F only)
 
 | Step | Action | Expected |
 |------|--------|----------|
@@ -74,7 +82,7 @@
 | 6.3 | Verify hit-test | Clicks still work at correct positions |
 | 6.4 | Change DPI back | Returns to original scale correctly |
 
-### 7. Diagnostics
+### 8. Diagnostics
 
 | Step | Action | Expected |
 |------|--------|----------|
@@ -99,6 +107,7 @@ Re-run this checklist after changes to:
 - `FrameDrawingResources` (text style scaling)
 - `D3D12DrawingBackend` (backend accumulate/submit)
 - `D3D12TextRenderer` (text cache, style resolution, font size)
+- `D3D12Renderer` (sync fence, `WaitForQueueIdle`, `SyncTextOverlay`)
 - `WindowsNativeWindow` (WM_DPICHANGED handling)
 - `DisplayScale` / `FrameContext` types
 - `DrawCommand.Scale` / `HitTestTarget.Scale` methods
@@ -116,3 +125,26 @@ Re-run this checklist after changes to:
 | G | 100% | 60Hz | ✅ | — | Forced-off | PASS (manual) |
 
 **AOT mode verification (2026-05-13):** Runtime real-time switching of display scale and refresh rate in AOT mode — text, buttons, hit-test, scroll, resize all correct after scale/refresh change. No rendering artifacts or stale content.
+
+## Scroll Text Overlay Sync Verification (2026-05-13)
+
+**Problem:** At 60Hz, button text visibly lags behind rectangles during scrolling. At 120Hz the lag is mild; at 240Hz nearly invisible. Text catches up when scrolling stops. Root cause: D3D12 rect pass and D3D11on12/D2D text overlay not synchronized before Present.
+
+**Fix:** `D3D12Renderer.WaitForQueueIdle()` — GPU fence wait after D2D text overlay, before Present. Default: `SyncTextOverlay=true`.
+
+| Test | Sync | Refresh | Scroll | Result |
+|------|------|---------|--------|--------|
+| H | Default-on (`SyncTextOverlay=true`) | 60Hz | Continuous wheel scroll | PASS — text/rect stay synchronized, no visible lag |
+| I | Default-on | 120Hz | Continuous wheel scroll | PASS — no lag |
+| J | Default-on | 240Hz | Continuous wheel scroll | PASS — no lag |
+| K | Disabled (`--no-sync-text-overlay`) | 60Hz | Continuous wheel scroll | EXPECTED FAIL — text lags rect (confirms sync is required) |
+| L | Default-on | 60Hz | Rapid click + 20 times | PASS — all text updates render correctly |
+| M | Default-on | 60Hz | Scroll stop + resume | PASS — text catches up on stop, stays sync on resume |
+
+**Sync overhead:** Measurable via `--diagnose-sync` (frame serial diagnostics). Target: <2ms/frame avg at 60Hz.
+
+**Regression coverage:** 4 scroll text-sync tests in `ScrollTextSyncTests.cs`:
+- `Continuous_scroll_rect_and_text_same_frame_batch` — rect/text in same Execute call
+- `Continuous_scroll_text_positions_track_rect_positions` — Y positions match
+- `Rapid_scroll_no_frame_skips_text` — 200 rapid frames, no rect-without-text
+- `Scroll_stop_resume_text_stays_synchronized` — pause/resume consistency
