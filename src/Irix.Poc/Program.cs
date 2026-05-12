@@ -47,11 +47,15 @@ internal static class Program
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, clipMode);
         _backendClipMode = d3d12Backend.ClipMode;
         var showDiagnostics = args.Contains("--debug-ui");
+        var enablePartialApply = args.Contains("--partial-apply");
 
         Action<double>? maxScrollYCallback = null;
         Action<CounterLayoutDiagnostics>? layoutDiagnosticsCallback = null;
         var manualLayoutDiagnosticsRefresh = false;
         WindowDrawCommandTranslator? drawCommandTranslator = null;
+        var ownerOptions = enablePartialApply
+            ? RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled
+            : RenderPipelineProductionOwnerOptions.Disabled;
         drawCommandTranslator = new WindowDrawCommandTranslator(
             window,
             () => _ = d3d12Renderer.ApplyPendingResize(),
@@ -67,12 +71,19 @@ internal static class Program
                 {
                     layoutDiagnosticsCallback?.Invoke(CreateLayoutDiagnostics(drawCommandTranslator));
                 }
-            });
-        using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend);
+            },
+            ownerOptions: ownerOptions);
+        var handoffOptions = enablePartialApply
+            ? DrawingBackendCompositorHandoffOptions.Enabled
+            : DrawingBackendCompositorHandoffOptions.Disabled;
+        using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend, handoffOptions);
         var compositor = args.Contains("--console")
             ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
             : (ICompositor)d3d12Compositor;
-        await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor);
+        Func<RetainedRenderFrameSegmentOwnership?>? ownershipProvider = enablePartialApply
+            ? () => drawCommandTranslator?.SegmentOwnership
+            : null;
+        await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor, ownershipProvider);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator), CounterLayoutDiagnostics.Empty), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
         _scrollFramePump = scrollFramePump;
@@ -126,6 +137,7 @@ internal static class Program
         Console.WriteLine($"Detected screens: {platformHost.Screens.Count}");
         Console.WriteLine("Rendering: D3D12 (clear color from FillRect)");
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
+        Console.WriteLine($"Partial apply: {(enablePartialApply ? "ENABLED (segmented render-source path)" : "disabled (default)")}");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 
         await runtime.StartAsync();

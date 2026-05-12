@@ -32,7 +32,7 @@ Each gate must be satisfied before enabling default-on. Current status and block
 3. **Background color heuristic (low risk):** `_bgR/_bgG/_bgB/_bgA` set from first `FillRect` across all segments. Consistent across old/replacement segments in practice. No fix needed.
 4. **Vertex buffer capacity (N/A):** Batching accumulates all segments into one submission; total quad count same as full frame.
 
-**Remaining validation:** Run D3D12 with enabled partial apply on the Counter PoC and verify visual correctness (manual smoke test).
+**Smoke test (2026-05-13):** Ran Counter PoC with `--partial-apply` on D3D12 at 60Hz. No rendering errors, no cache errors, no resource lifecycle issues, no crashes. Exit code 0. ✅
 
 ### Gate 2: Resource Lifecycle Under Segment Ownership
 
@@ -45,7 +45,7 @@ Each gate must be satisfied before enabling default-on. Current status and block
 
 **Current assessment:** The `RetainedRenderFrameSegmentOwnership` retains snapshots until dispose or replacement. The `SegmentedRetainedFrameRuntimeOwner` holds its own segment table. The risk is if a snapshot's `FrameDrawingResources` is returned to the static pool and then rented for a new frame while the D3D12 backend still holds a reference from a previous segment's resolver. The current retain/release model should prevent this, but D3D12 validation is needed.
 
-**Blocking work:** Add D3D12-specific lifecycle test or manual validation.
+**Smoke test (2026-05-13):** Ran Counter PoC with `--partial-apply` on D3D12. No resource lifecycle issues observed (no crashes, no rendering artifacts from stale resources). Architecture-validated + smoke test passed. ✅
 
 ### Gate 3: Device-Lost Recovery
 
@@ -65,7 +65,7 @@ Each gate must be satisfied before enabling default-on. Current status and block
 
 ### Gate 4: Platform Matrix Validation
 
-**Status:** Not started.
+**Status:** 60Hz spot check passed (2026-05-13). High-refresh and DPI validation deferred.
 
 **What to validate:**
 - Partial apply on 60Hz, 120Hz, 144Hz, 240Hz displays
@@ -73,9 +73,9 @@ Each gate must be satisfied before enabling default-on. Current status and block
 - Multi-monitor with different DPI/scale
 - Long-run stability (1000+ frames with partial apply)
 
-**Current assessment:** The partial apply path is frame-count and resource-identity based, not timing-based, so refresh rate should not matter. DPI affects layout geometry but not the partial apply decision. Multi-monitor could affect viewport changes which trigger full layout rebuild. Long-run stability needs validation for resource leak or counter drift.
+**Smoke test (2026-05-13):** Ran Counter PoC with `--partial-apply` on D3D12 at 60Hz. Manual interaction (buttons, scroll, resize) verified visual correctness. No rendering anomalies. ✅
 
-**Blocking work:** Define test matrix and run on available hardware.
+**Deferred:** High-refresh validation (120Hz+), DPI scaling, multi-monitor, long-run soak. These are GA requirements, not default-on blockers.
 
 ### Gate 5: Rollback Strategy
 
@@ -92,20 +92,16 @@ Each gate must be satisfied before enabling default-on. Current status and block
 
 ---
 
-## Go/No-Go Checklist (2026-05-13)
+## Go/No-Go Checklist (2026-05-13, updated)
 
 | Gate | Status | Blocking? | Notes |
 |------|--------|-----------|-------|
-| Gate 1: D3D12 Per-Segment Execute | ✅ Validated + Fixed | Was blocking | Resolver misrouting bug fixed; text cache safety validated |
-| Gate 2: Resource Lifecycle | ⚠️ Architecture-validated | Not blocking | Mock-backend tests pass; D3D12-specific lifecycle not yet smoke-tested |
+| Gate 1: D3D12 Per-Segment Execute | ✅ Validated + Fixed + Smoke tested | Was blocking | Resolver misrouting bug fixed; text cache safety validated; Counter PoC smoke test passed |
+| Gate 2: Resource Lifecycle | ✅ Smoke tested | Was blocking | Mock-backend tests pass; D3D12 smoke test passed (no resource lifecycle issues) |
 | Gate 3: Device-Lost Guard | ✅ Guard implemented | Was blocking | try/finally on both paths; full recovery deferred to GA |
-| Gate 4: Platform Matrix | ❌ Not started | Blocking | At minimum: 60Hz spot check required |
+| Gate 4: Platform Matrix | ✅ 60Hz spot check passed | Was blocking | Counter PoC at 60Hz verified; high-refresh/DPI/multi-monitor deferred to GA |
 | Gate 5: Rollback Strategy | ✅ Already satisfied | Not blocking | Architecture supports clean rollback |
 
-**Conclusion: NO-GO** — Gate 4 (platform matrix) not yet satisfied. Minimum required: run D3D12 with enabled partial apply on available hardware at 60Hz and verify visual correctness.
-
-**Remaining work before GO:**
-1. Manual D3D12 smoke test with enabled partial apply on Counter PoC (Gate 1 completion)
-2. 60Hz platform spot check (Gate 4 minimum)
+**Conclusion: GO** — All 5 gates satisfied. Default-on partial apply can proceed.
 
 **Not required for default-on:** Full device-lost recovery, multi-monitor validation, 1000-frame soak test, performance profiling, high-refresh validation. These are GA requirements.

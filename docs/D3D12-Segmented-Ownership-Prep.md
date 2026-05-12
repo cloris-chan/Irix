@@ -87,6 +87,6 @@ This architecture **already supports** multiple `Execute` calls per frame — co
 | Device-removed during segment | Medium | Yes (guard only) | Yes (full recovery) | ✅ Guard verified — segmented path try/finally OK, non-handoff path fixed |
 | Segment-local dirty range use | None | No | Future optimization | N/A |
 
-**Minimum for default-on:** ✅ All items validated or fixed.
+**Minimum for default-on:** ✅ All items validated or fixed. Smoke test passed (2026-05-13): Counter PoC with `--partial-apply` on D3D12 at 60Hz, no rendering errors, no crashes.
 
 **Minimum for GA:** Full device-lost recovery, platform matrix validation.

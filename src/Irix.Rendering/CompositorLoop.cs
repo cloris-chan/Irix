@@ -6,6 +6,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
 {
     private readonly ICompositor _compositor;
     private readonly IPatchBatchTranslator _translator;
+    private readonly Func<RetainedRenderFrameSegmentOwnership?>? _ownershipProvider;
     private readonly Channel<CompositorWorkItem> _channel;
     private readonly Lock _renderRequestGate = new();
     private readonly Task _processingTask;
@@ -13,9 +14,15 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
     private RenderCompletionWaitGroup? _queuedRenderRequestWaitGroup;
 
     public CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor)
+        : this(translator, compositor, ownershipProvider: null)
+    {
+    }
+
+    internal CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor, Func<RetainedRenderFrameSegmentOwnership?>? ownershipProvider)
     {
         _translator = translator;
         _compositor = compositor;
+        _ownershipProvider = ownershipProvider;
         _channel = Channel.CreateUnbounded<CompositorWorkItem>(new UnboundedChannelOptions
         {
             SingleReader = true,
@@ -126,7 +133,15 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
                 using (patchBatch)
                 {
                     using var renderFrameBatch = _translator.Translate(patchBatch);
-                    await _compositor.RenderAsync(renderFrameBatch);
+                    if (_ownershipProvider?.Invoke() is { } ownership
+                        && _compositor is DrawingBackendCompositor drawingBackendCompositor)
+                    {
+                        await drawingBackendCompositor.RenderAsync(renderFrameBatch, ownership, default);
+                    }
+                    else
+                    {
+                        await _compositor.RenderAsync(renderFrameBatch);
+                    }
                 }
             }
             catch (Exception ex)

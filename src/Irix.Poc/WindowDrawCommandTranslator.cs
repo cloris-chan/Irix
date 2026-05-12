@@ -3,18 +3,32 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed class WindowDrawCommandTranslator(
-    INativeWindow window,
-    Action? prepareFrame,
-    Func<PixelRectangle>? viewportProvider,
-    Action<double>? postFrameCallback,
-    TranslatorRenderPipelineFactory? renderPipelineFactory = null) : IPatchBatchTranslator
+internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 {
-    private readonly INativeWindow _window = window;
-    private readonly Action? _prepareFrame = prepareFrame;
-    private readonly Func<PixelRectangle>? _viewportProvider = viewportProvider;
-    private readonly Action<double>? _postFrameCallback = postFrameCallback;
-    private readonly RenderPipeline _renderPipeline = (renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create();
+    private readonly INativeWindow _window;
+    private readonly Action? _prepareFrame;
+    private readonly Func<PixelRectangle>? _viewportProvider;
+    private readonly Action<double>? _postFrameCallback;
+    private readonly RenderPipeline _renderPipeline;
+    private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
+
+    public WindowDrawCommandTranslator(
+        INativeWindow window,
+        Action? prepareFrame,
+        Func<PixelRectangle>? viewportProvider,
+        Action<double>? postFrameCallback,
+        TranslatorRenderPipelineFactory? renderPipelineFactory = null,
+        RenderPipelineProductionOwnerOptions ownerOptions = default)
+    {
+        _window = window;
+        _prepareFrame = prepareFrame;
+        _viewportProvider = viewportProvider;
+        _postFrameCallback = postFrameCallback;
+        _renderPipeline = (renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create();
+        _ownerFeed = ownerOptions.EnableSegmentedRetainedFrameRuntimeOwner
+            ? new SegmentedRetainedFrameProductionOwnerFeed(_renderPipeline, ownerOptions)
+            : null;
+    }
 
     private readonly RetainedTree _retainedTree = new(default);
 
@@ -32,6 +46,8 @@ internal sealed class WindowDrawCommandTranslator(
     public LayoutRebuildReason LastLayoutRebuildReason => _renderPipeline.LastLayoutRebuildReason;
 
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications => _renderPipeline.LastDirtyClassifications;
+
+    internal RetainedRenderFrameSegmentOwnership? SegmentOwnership => _ownerFeed?.SegmentOwnership;
 
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null, renderPipelineFactory: null)
@@ -59,7 +75,9 @@ internal sealed class WindowDrawCommandTranslator(
         _prepareFrame?.Invoke();
         var viewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
         LastViewport = viewport;
-        var batch = _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
+        var batch = _ownerFeed is not null
+            ? _ownerFeed.Build(_retainedTree.Tree.Root, viewport, dirty)
+            : _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
         LastScrollFeedback = BuildScrollFeedback(_renderPipeline.LastLayoutResult);
         _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
         return batch;
