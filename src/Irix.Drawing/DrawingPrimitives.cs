@@ -115,11 +115,21 @@ public readonly record struct TextSlice(int BufferId, int Start, int Length)
     public bool IsValid => BufferId > 0 && Start >= 0 && Length >= 0;
 }
 
+public readonly record struct DisplayScale(float ScaleX, float ScaleY)
+{
+    public static DisplayScale Identity => new(1f, 1f);
+    public bool IsIdentity => (ScaleX == 1f || ScaleX == 0f) && (ScaleY == 1f || ScaleY == 0f);
+}
+
 public readonly record struct FrameContext(
     int Width,
     int Height,
-    float DpiScale = 1,
-    long Timestamp = 0);
+    DisplayScale Scale = default,
+    long Timestamp = 0)
+{
+    public int LogicalWidth => Scale.IsIdentity ? Width : (int)(Width / Scale.ScaleX);
+    public int LogicalHeight => Scale.IsIdentity ? Height : (int)(Height / Scale.ScaleY);
+}
 
 public readonly record struct DrawCommand(
     DrawCommandKind Kind,
@@ -130,4 +140,23 @@ public readonly record struct DrawCommand(
     DrawRect ClipBounds = default,
     float StrokeWidth = 1,
     Matrix3x2 Transform = default,
-    int ZIndex = 0);
+    int ZIndex = 0)
+{
+    public DrawCommand Scale(DisplayScale scale)
+    {
+        if (scale.IsIdentity) return this;
+        return this with
+        {
+            Rect = new DrawRect(
+                Rect.X * scale.ScaleX,
+                Rect.Y * scale.ScaleY,
+                Rect.Width * scale.ScaleX,
+                Rect.Height * scale.ScaleY),
+            ClipBounds = new DrawRect(
+                ClipBounds.X * scale.ScaleX,
+                ClipBounds.Y * scale.ScaleY,
+                ClipBounds.Width * scale.ScaleX,
+                ClipBounds.Height * scale.ScaleY)
+        };
+    }
+}

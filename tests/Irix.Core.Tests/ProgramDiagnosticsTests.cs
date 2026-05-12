@@ -483,6 +483,8 @@ public sealed class ProgramDiagnosticsTests
             "scaleMode=PhysicalPixelsV0",
             "screenScale=1.25",
             "dpiAwareness=ProcessDefault",
+            "scale=0x0",
+            "logicalViewport=0x0",
             "coordinateSpace=PhysicalPixels logicalCoordinates=False",
             "=== Resize diagnostic mode complete ===",
             string.Empty

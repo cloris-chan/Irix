@@ -586,10 +586,19 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 以下为 `Irix.Poc --diagnose`、`Irix.Poc --diagnose-resize`、`Irix.Poc --diagnose-scroll` 与 `Irix.Poc --diagnose-input` 的输出基线，供后续对比。
 
-### Viewport / resize physical v0
+### Viewport / resize / display scale
 
-physical viewport v0 已阶段完成，不引入 per-monitor DPI 切换、fractional logical layout 或多窗口 scale 策略。当前 `scaleMode=PhysicalPixelsV0`，layout、hit-test、D3D12 viewport/scissor 都使用 physical pixel 尺寸；`IScreenInfo.DpiScale` 只作为诊断字段输出，不参与布局缩放。DPI-aware logical coordinate/layout 尚未开始。`--debug-ui` 显示 `Viewport: renderer=... layout=... scaleMode=PhysicalPixelsV0` 与 `LayoutDirty: layoutRebuildCount=... LastLayoutRebuildReason=... LastDirtyClassifications=...`，用于手测 resize 时直接观察 renderer/layout viewport 是否同步以及 layout rebuild reason。
+平台中性 display scale 模型已完成（2026-05-13）。Compositor 是 scale boundary：接收 physical viewport + `DisplayScale`，转换为 logical viewport 供 layout 使用，再将 draw commands 缩放回 physical 坐标给 backend。Layout、hit-test 在 logical units 工作；D3D12 backend 接收 physical pixels。
 
+`DisplayScale`（`Irix.Drawing`）是平台中性类型，只有 `ScaleX`/`ScaleY` 两个 float，不包含 Windows DPI 概念。`IScreenInfo.Scale` 从 `GetDpiForMonitor` 计算得出，在平台层转为 `DisplayScale`，不传出 Windows DPI 原值。`FrameContext.Scale` 替代原来的 `DpiScale`（dead code），携带 scale 信息给 backend。
+
+```text
+Platform → [PhysicalViewport + DisplayScale] → Compositor
+Compositor → [LogicalViewport] → LayoutPipeline → [DrawCommands in logical units]
+Compositor → [DrawCommands × Scale] → Backend → [Physical pixels]
+```
+
+Pipeline:
 ```text
 WM_SIZE / GetClientRect physical client size
   -> WindowsNativeWindow.Region.PhysicalBounds = latest window physical client size
@@ -598,12 +607,15 @@ WM_SIZE / GetClientRect physical client size
   -> CompositorLoop.RequestRenderAsync()
   -> WindowDrawCommandTranslator.Translate()
        -> prepareFrame: D3D12Renderer.ApplyPendingResize()
-       -> viewportProvider: PixelRectangle(window.Region.PhysicalBounds.X/Y, d3d12Renderer.Width/Height)
-  -> RenderPipeline.Build(root, viewport)
-  -> LayoutTreeBuilder.BuildLayoutTree(root, viewport)
+       -> viewportProvider: PixelRectangle(physical bounds)
+       -> physical→logical viewport conversion (÷ DisplayScale)
+       -> RenderPipeline.Build(root, logicalViewport)
+       -> draw commands scaled back to physical (× DisplayScale)
+  -> DrawingBackendCompositor.RenderAsync()
+       -> backend receives physical coordinates via FrameContext
 ```
 
-Resize 后 renderer 已应用的 swapchain size 是 layout viewport size 的 source of truth；`window.Region.PhysicalBounds` 提供最新物理窗口尺寸与窗口位置，diagnostic 会同时输出 window physical size、renderer swapchain size、translator viewport size、layout viewport size、最后一次 applied pending resize、render count 与 layout rebuild count。`viewportMatchesRenderer=True` 表示 translator viewport size 等于 renderer size；`layoutUsesRendererSize=True` 表示 layout viewport size 等于 renderer size。重复相同 size 的 render request 不应增加 `layoutRebuildCount`，不同 size 才应使 retained layout 因 viewport invalidation 重建。
+Resize 后 renderer 已应用的 swapchain size 是 physical viewport 的 source of truth；`window.Region.PhysicalBounds` 提供最新物理窗口尺寸与窗口位置，diagnostic 会同时输出 window physical size、renderer swapchain size、translator viewport size、layout viewport size、scale、logicalViewport、最后一次 applied pending resize、render count 与 layout rebuild count。`viewportMatchesRenderer=True` 表示 translator viewport size 等于 renderer size；`layoutUsesRendererSize=True` 表示 layout viewport size 等于 renderer size。重复相同 size 的 render request 不应增加 `layoutRebuildCount`，不同 size 才应使 retained layout 因 viewport invalidation 重建。
 
 ### Root ScrollContainer clip semantics v0
 
@@ -665,6 +677,8 @@ root clip semantics v0 已阶段完成：`Depth == 0` 的 root `ScrollContainer`
 | scaleMode | PhysicalPixelsV0 |
 | screenScale | 1 |
 | dpiAwareness | ProcessDefault |
+| scale | 1x1 |
+| logicalViewport | (matches physical at 100% DPI) |
 | coordinateSpace | PhysicalPixels, logicalCoordinates=False |
 | 退出码 | 0 |
 

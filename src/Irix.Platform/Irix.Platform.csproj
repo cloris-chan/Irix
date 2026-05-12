@@ -3,4 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Irix.Drawing\Irix.Drawing.csproj" />
+  </ItemGroup>
 </Project>

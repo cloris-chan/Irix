@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
+using Irix.Drawing;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
@@ -33,6 +34,7 @@ internal static class WindowsScreenEnumerator
             {
                 Id = 0,
                 DpiScale = 1.0f,
+                Scale = DisplayScale.Identity,
                 RefreshRateHz = 60,
                 ColorSpace = ColorSpace.Srgb,
                 PhysicalBounds = new PixelRectangle(0, 0, 1920, 1080)
@@ -69,6 +71,7 @@ internal static class WindowsScreenEnumerator
         {
             Id = screens.Count,
             DpiScale = dpiScale,
+            Scale = new DisplayScale(dpiScale, dpiScale),
             RefreshRateHz = 60,
             ColorSpace = ColorSpace.Srgb,
             PhysicalBounds = new PixelRectangle(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)

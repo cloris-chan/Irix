@@ -48,6 +48,7 @@ internal static class Program
         _backendClipMode = d3d12Backend.ClipMode;
         var showDiagnostics = args.Contains("--debug-ui");
         var enablePartialApply = !args.Contains("--no-partial-apply");
+        var displayScale = platformHost.Screens[0].Scale;
 
         Action<double>? maxScrollYCallback = null;
         Action<CounterLayoutDiagnostics>? layoutDiagnosticsCallback = null;
@@ -72,11 +73,13 @@ internal static class Program
                     layoutDiagnosticsCallback?.Invoke(CreateLayoutDiagnostics(drawCommandTranslator));
                 }
             },
-            ownerOptions: ownerOptions);
+            ownerOptions: ownerOptions,
+            displayScale: displayScale);
         var handoffOptions = enablePartialApply
             ? DrawingBackendCompositorHandoffOptions.Enabled
             : DrawingBackendCompositorHandoffOptions.Disabled;
         using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend, handoffOptions);
+        d3d12Compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
         var compositor = args.Contains("--console")
             ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
             : (ICompositor)d3d12Compositor;
@@ -84,7 +87,7 @@ internal static class Program
             ? () => drawCommandTranslator?.SegmentOwnership
             : null;
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor, ownershipProvider);
-        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator), CounterLayoutDiagnostics.Empty), compositorLoop);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator, displayScale), CounterLayoutDiagnostics.Empty), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
         _scrollFramePump = scrollFramePump;
         var inputOwnershipState = new InputOwnershipState();
@@ -121,6 +124,7 @@ internal static class Program
         window.SizeChanged += (w, h) =>
         {
             d3d12Renderer.Resize(w, h);
+            d3d12Compositor.SetViewport(new PixelRectangle(0, 0, w, h), displayScale);
             if (showDiagnostics)
             {
                 _ = RequestResizeRenderAndRefreshDiagnosticsAsync();
@@ -138,6 +142,7 @@ internal static class Program
         Console.WriteLine("Rendering: D3D12 (clear color from FillRect)");
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
         Console.WriteLine($"Partial apply: {(enablePartialApply ? "ENABLED (default)" : "DISABLED (--no-partial-apply)")}");
+        Console.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 
         await runtime.StartAsync();
@@ -186,7 +191,7 @@ internal static class Program
                 manualLayoutDiagnosticsRefresh = true;
                 await compositorLoop.RequestRenderAndWaitAsync();
                 manualLayoutDiagnosticsRefresh = false;
-                DispatchDebugDiagnostics(CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator), CreateLayoutDiagnostics(drawCommandTranslator));
+                DispatchDebugDiagnostics(CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator, displayScale), CreateLayoutDiagnostics(drawCommandTranslator));
             }
             catch (ObjectDisposedException)
             {
@@ -224,7 +229,7 @@ internal static class Program
         platformHost.TopologyChanged -= OnTopologyChanged;
     }
 
-    private static CounterViewportDiagnostics CreateViewportDiagnostics(INativeWindow window, D3D12Renderer renderer, WindowDrawCommandTranslator? translator)
+    private static CounterViewportDiagnostics CreateViewportDiagnostics(INativeWindow window, D3D12Renderer renderer, WindowDrawCommandTranslator? translator, DisplayScale displayScale = default)
     {
         var bounds = window.Region.PhysicalBounds;
         var rendererViewport = new PixelRectangle(bounds.X, bounds.Y, renderer.Width, renderer.Height);
@@ -234,7 +239,11 @@ internal static class Program
             layoutViewport = rendererViewport;
         }
 
-        return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ScaleModePhysicalPixelsV0);
+        var logicalViewport = displayScale.IsIdentity
+            ? rendererViewport
+            : new PixelRectangle(0, 0, (int)(rendererViewport.Width / displayScale.ScaleX), (int)(rendererViewport.Height / displayScale.ScaleY));
+
+        return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ScaleModePhysicalPixelsV0, displayScale, logicalViewport);
     }
 
     private static CounterLayoutDiagnostics CreateLayoutDiagnostics(WindowDrawCommandTranslator translator)

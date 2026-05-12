@@ -1,4 +1,5 @@
 using Irix;
+using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
 using Irix.Rendering;
@@ -13,11 +14,13 @@ internal static class ResizeDiagnosticRunner
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
+        var displayScale = screen.Scale;
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
         using var compositor = new DrawingBackendCompositor(d3d12Backend);
+        compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
         var lastAppliedPendingResize = window.Region.PhysicalBounds;
         var translator = new WindowDrawCommandTranslator(
             window,
@@ -34,7 +37,8 @@ internal static class ResizeDiagnosticRunner
                 var bounds = window.Region.PhysicalBounds;
                 return new PixelRectangle(bounds.X, bounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
             },
-            postFrameCallback: null);
+            postFrameCallback: null,
+            displayScale: displayScale);
 
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
@@ -77,6 +81,9 @@ internal static class ResizeDiagnosticRunner
 
         var windowBounds = window.Region.PhysicalBounds;
         var rendererBounds = new PixelRectangle(windowBounds.X, windowBounds.Y, d3d12Renderer.Width, d3d12Renderer.Height);
+        var logicalViewport = displayScale.IsIdentity
+            ? rendererBounds
+            : new PixelRectangle(0, 0, (int)(rendererBounds.Width / displayScale.ScaleX), (int)(rendererBounds.Height / displayScale.ScaleY));
         var snapshot = new ViewportDiagnosticsSnapshot(
             windowBounds,
             rendererBounds,
@@ -88,7 +95,9 @@ internal static class ResizeDiagnosticRunner
             translator.LastLayoutRebuildReason.ToString(),
             screen.DpiScale,
             "ProcessDefault",
-            ScaleModePhysicalPixelsV0);
+            ScaleModePhysicalPixelsV0,
+            displayScale,
+            logicalViewport);
 
         WriteReport(output, d3d12Renderer.IsDeviceRemoved, d3d12Renderer.DeviceErrorReason, d3d12Renderer.Width, d3d12Renderer.Height, snapshot);
     }

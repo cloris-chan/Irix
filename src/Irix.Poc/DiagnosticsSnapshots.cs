@@ -66,7 +66,9 @@ internal readonly record struct ViewportDiagnosticsSnapshot(
     string LayoutRebuildReason,
     float ScreenScale,
     string DpiAwareness,
-    string ScaleMode)
+    string ScaleMode,
+    DisplayScale Scale = default,
+    PixelRectangle LogicalViewport = default)
 {
     public bool ViewportMatchesRenderer => TranslatorViewport.Width == RendererSwapchainBounds.Width && TranslatorViewport.Height == RendererSwapchainBounds.Height;
 

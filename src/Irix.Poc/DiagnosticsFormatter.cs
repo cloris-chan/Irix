@@ -101,6 +101,8 @@ internal static class DiagnosticsFormatter
             $"scaleMode={snapshot.ScaleMode}",
             $"screenScale={snapshot.ScreenScale:0.###}",
             $"dpiAwareness={snapshot.DpiAwareness}",
+            $"scale={snapshot.Scale.ScaleX:0.##}x{snapshot.Scale.ScaleY:0.##}",
+            $"logicalViewport={FormatSize(snapshot.LogicalViewport)}",
             "coordinateSpace=PhysicalPixels logicalCoordinates=False"
         ];
     }

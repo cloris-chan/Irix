@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Irix.Drawing;
 
 namespace Irix.Platform;
 
@@ -92,6 +93,8 @@ public interface IScreenInfo
 
     float DpiScale { get; }
 
+    DisplayScale Scale { get; }
+
     int RefreshRateHz { get; }
 
     ColorSpace ColorSpace { get; }
@@ -104,6 +107,8 @@ public sealed class ScreenInfo : IScreenInfo
     public required int Id { get; init; }
 
     public required float DpiScale { get; init; }
+
+    public DisplayScale Scale { get; init; } = DisplayScale.Identity;
 
     public required int RefreshRateHz { get; init; }
 

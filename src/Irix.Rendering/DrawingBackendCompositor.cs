@@ -1,5 +1,6 @@
 using System.Threading;
 using Irix.Drawing;
+using Irix.Platform;
 
 namespace Irix.Rendering;
 
@@ -22,6 +23,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private long _partialApplyCount;
     private long _fullApplyCount;
     private long _emptyFrameCount;
+    private DisplayScale _displayScale = DisplayScale.Identity;
+    private PixelRectangle _physicalViewport;
 
     /// <summary>
     /// The dirty command ranges from the last render, if any.
@@ -68,6 +71,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     {
         _handoffOptions = handoffOptions;
     }
+
+    public void SetViewport(PixelRectangle physicalViewport, DisplayScale scale)
+    {
+        _physicalViewport = physicalViewport;
+        _displayScale = scale;
+    }
+
+    public DisplayScale CurrentDisplayScale => _displayScale;
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
@@ -166,7 +177,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 dirtyAware.SetDirtyCommandRanges(LastDirtyCommandRanges);
             }
 
-            var backendFrameContext = new FrameContext(0, 0); // Viewport size not needed for PoC backend
+            var backendFrameContext = new FrameContext(_physicalViewport.Width, _physicalViewport.Height, _displayScale);
             _backend.BeginFrame(backendFrameContext);
             try
             {

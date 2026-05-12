@@ -1,9 +1,15 @@
+using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal readonly record struct CounterViewportDiagnostics(PixelRectangle RendererViewport, PixelRectangle LayoutViewport, string ScaleMode);
+internal readonly record struct CounterViewportDiagnostics(
+    PixelRectangle RendererViewport,
+    PixelRectangle LayoutViewport,
+    string ScaleMode,
+    DisplayScale Scale = default,
+    PixelRectangle LogicalViewport = default);
 
 internal readonly record struct CounterLayoutDiagnostics(long LayoutRebuildCount, LayoutRebuildReason LastLayoutRebuildReason, string LastDirtyClassifications)
 {

@@ -3,7 +3,26 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-public readonly record struct HitTestTarget(PixelRectangle Bounds, string ActionId, PixelRectangle ClipBounds = default);
+public readonly record struct HitTestTarget(PixelRectangle Bounds, string ActionId, PixelRectangle ClipBounds = default)
+{
+    public HitTestTarget Scale(DisplayScale scale)
+    {
+        if (scale.IsIdentity) return this;
+        return this with
+        {
+            Bounds = new PixelRectangle(
+                (int)(Bounds.X * scale.ScaleX),
+                (int)(Bounds.Y * scale.ScaleY),
+                (int)(Bounds.Width * scale.ScaleX),
+                (int)(Bounds.Height * scale.ScaleY)),
+            ClipBounds = new PixelRectangle(
+                (int)(ClipBounds.X * scale.ScaleX),
+                (int)(ClipBounds.Y * scale.ScaleY),
+                (int)(ClipBounds.Width * scale.ScaleX),
+                (int)(ClipBounds.Height * scale.ScaleY))
+        };
+    }
+}
 
 public readonly record struct RenderFrameBatch(
     DrawCommandBatch Commands,

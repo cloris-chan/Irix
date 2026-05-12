@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
 
@@ -11,6 +12,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     private readonly Action<double>? _postFrameCallback;
     private readonly RenderPipeline _renderPipeline;
     private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
+    private readonly DisplayScale _displayScale;
 
     public WindowDrawCommandTranslator(
         INativeWindow window,
@@ -18,7 +20,8 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         Func<PixelRectangle>? viewportProvider,
         Action<double>? postFrameCallback,
         TranslatorRenderPipelineFactory? renderPipelineFactory = null,
-        RenderPipelineProductionOwnerOptions ownerOptions = default)
+        RenderPipelineProductionOwnerOptions ownerOptions = default,
+        DisplayScale displayScale = default)
     {
         _window = window;
         _prepareFrame = prepareFrame;
@@ -28,6 +31,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         _ownerFeed = ownerOptions.EnableSegmentedRetainedFrameRuntimeOwner
             ? new SegmentedRetainedFrameProductionOwnerFeed(_renderPipeline, ownerOptions)
             : null;
+        _displayScale = displayScale;
     }
 
     private readonly RetainedTree _retainedTree = new(default);
@@ -73,13 +77,26 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         }
 
         _prepareFrame?.Invoke();
-        var viewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
-        LastViewport = viewport;
+        var physicalViewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
+        LastViewport = physicalViewport;
+        var viewport = _displayScale.IsIdentity
+            ? physicalViewport
+            : new PixelRectangle(
+                physicalViewport.X,
+                physicalViewport.Y,
+                (int)(physicalViewport.Width / _displayScale.ScaleX),
+                (int)(physicalViewport.Height / _displayScale.ScaleY));
         var batch = _ownerFeed is not null
             ? _ownerFeed.Build(_retainedTree.Tree.Root, viewport, dirty)
             : _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty);
         LastScrollFeedback = BuildScrollFeedback(_renderPipeline.LastLayoutResult);
         _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
+
+        if (!_displayScale.IsIdentity)
+        {
+            batch = ScaleBatch(batch, _displayScale);
+        }
+
         return batch;
     }
 
@@ -102,6 +119,27 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         }
 
         return new ScrollFeedback(containers);
+    }
+
+    private static RenderFrameBatch ScaleBatch(RenderFrameBatch batch, DisplayScale scale)
+    {
+        var span = batch.Commands.Memory.Span;
+        for (var i = 0; i < batch.Commands.Count; i++)
+        {
+            span[i] = span[i].Scale(scale);
+        }
+
+        var scaledTargets = new HitTestTarget[batch.HitTargets.Count];
+        for (var i = 0; i < batch.HitTargets.Count; i++)
+        {
+            scaledTargets[i] = batch.HitTargets[i].Scale(scale);
+        }
+
+        return new RenderFrameBatch(
+            batch.Commands,
+            scaledTargets,
+            batch.Resources,
+            batch.DirtyCommandRanges);
     }
 }
 
