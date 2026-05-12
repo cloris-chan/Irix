@@ -134,6 +134,15 @@ internal static class Program
                 _ = compositorLoop.RequestRenderAsync();
             }
         };
+
+        window.DpiChanged += newScale =>
+        {
+            displayScale = newScale;
+            drawCommandTranslator.SetDisplayScale(newScale);
+            d3d12Compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), newScale);
+            Console.WriteLine($"DPI changed: scale={newScale.ScaleX:0.##}x{newScale.ScaleY:0.##}");
+        };
+
         using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
 
         platformHost.TopologyChanged += OnTopologyChanged;

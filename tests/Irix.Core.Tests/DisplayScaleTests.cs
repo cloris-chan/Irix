@@ -145,4 +145,78 @@ public class DisplayScaleTests
         Assert.Equal(physicalW, (int)scaled.Rect.Width);
         Assert.Equal(physicalH, (int)scaled.Rect.Height);
     }
+
+    [Theory]
+    [InlineData(1.25f, 20f)]
+    [InlineData(1.5f, 24f)]
+    [InlineData(2.0f, 32f)]
+    public void FrameDrawingResources_ScaleTextStyles_scales_font_size(float scaleValue, float expectedFontSize)
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var handle = resources.AddTextStyle(style);
+
+        resources.ScaleTextStyles(new DisplayScale(scaleValue, scaleValue));
+        var resolved = resources.ResolveTextStyle(handle);
+
+        Assert.Equal(expectedFontSize, resolved.FontSize);
+    }
+
+    [Fact]
+    public void FrameDrawingResources_ScaleTextStyles_identity_is_noop()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var handle = resources.AddTextStyle(style);
+
+        resources.ScaleTextStyles(DisplayScale.Identity);
+        var resolved = resources.ResolveTextStyle(handle);
+
+        Assert.Equal(16f, resolved.FontSize);
+    }
+
+    [Fact]
+    public void FrameDrawingResources_ScaleTextStyles_preserves_non_font_fields()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var style = new TextStyle("Consolas", 14f, TextFontWeight.Bold, TextFontStyle.Italic, TextFontStretch.Normal, TextHorizontalAlignment.Center, TextVerticalAlignment.Top, TextWrapping.Wrap);
+        var handle = resources.AddTextStyle(style);
+
+        resources.ScaleTextStyles(new DisplayScale(1.5f, 1.5f));
+        var resolved = resources.ResolveTextStyle(handle);
+
+        Assert.Equal(21f, resolved.FontSize);
+        Assert.Equal("Consolas", resolved.FontFamily);
+        Assert.Equal(TextFontWeight.Bold, resolved.FontWeight);
+        Assert.Equal(TextFontStyle.Italic, resolved.FontStyle);
+        Assert.Equal(TextHorizontalAlignment.Center, resolved.HorizontalAlignment);
+    }
+
+    [Theory]
+    [InlineData(1.25f)]
+    [InlineData(1.5f)]
+    [InlineData(2.0f)]
+    public void DrawCommand_and_text_style_scale_consistently(float scaleValue)
+    {
+        var scale = new DisplayScale(scaleValue, scaleValue);
+
+        using var resources = FrameDrawingResources.Rent();
+        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var handle = resources.AddTextStyle(style);
+
+        var logicalCmd = new DrawCommand(
+            DrawCommandKind.DrawTextRun,
+            Rect: new DrawRect(10, 20, 200, 30),
+            Resource: handle);
+
+        var physicalCmd = logicalCmd.Scale(scale);
+        resources.ScaleTextStyles(scale);
+        var physicalStyle = resources.ResolveTextStyle(handle);
+
+        Assert.Equal(10 * scaleValue, physicalCmd.Rect.X);
+        Assert.Equal(20 * scaleValue, physicalCmd.Rect.Y);
+        Assert.Equal(200 * scaleValue, physicalCmd.Rect.Width);
+        Assert.Equal(30 * scaleValue, physicalCmd.Rect.Height);
+        Assert.Equal(16f * scaleValue, physicalStyle.FontSize);
+    }
 }

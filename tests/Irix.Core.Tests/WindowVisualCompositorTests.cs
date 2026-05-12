@@ -150,5 +150,6 @@ public sealed class WindowVisualCompositorTests
         }
 
         public event Action<int, int>? SizeChanged { add { } remove { } }
+        public event Action<DisplayScale>? DpiChanged { add { } remove { } }
     }
 }

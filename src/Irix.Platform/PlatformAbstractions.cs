@@ -85,6 +85,8 @@ public interface INativeWindow : IDisposable
     void RunMessageLoop();
 
     event Action<int, int>? SizeChanged;
+
+    event Action<DisplayScale>? DpiChanged;
 }
 
 public interface IScreenInfo

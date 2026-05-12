@@ -41,7 +41,8 @@ public sealed class WindowsPlatformHost : IPlatformHost
             region,
             PublishInput,
             () => closedTaskSource.TrySetResult(),
-            PublishTopologyChanged));
+            PublishTopologyChanged,
+            dpiChangedSink: null));
 
         WindowsPlatformWindow? platformWindow = null;
         platformWindow = new WindowsPlatformWindow(

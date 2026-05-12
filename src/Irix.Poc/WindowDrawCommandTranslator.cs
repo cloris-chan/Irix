@@ -12,7 +12,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     private readonly Action<double>? _postFrameCallback;
     private readonly RenderPipeline _renderPipeline;
     private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
-    private readonly DisplayScale _displayScale;
+    private DisplayScale _displayScale;
 
     public WindowDrawCommandTranslator(
         INativeWindow window,
@@ -56,6 +56,11 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null, renderPipelineFactory: null)
     {
+    }
+
+    public void SetDisplayScale(DisplayScale scale)
+    {
+        _displayScale = scale;
     }
 
     public RenderFrameBatch Translate(PatchBatch patchBatch)
@@ -133,6 +138,11 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         for (var i = 0; i < batch.HitTargets.Count; i++)
         {
             scaledTargets[i] = batch.HitTargets[i].Scale(scale);
+        }
+
+        if (batch.Resources is FrameDrawingResources frameResources)
+        {
+            frameResources.ScaleTextStyles(scale);
         }
 
         return new RenderFrameBatch(

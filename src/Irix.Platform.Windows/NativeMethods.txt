@@ -26,6 +26,7 @@ PostQuitMessage
 RegisterClassW
 SetBkMode
 SetTextColor
+SetWindowPos
 SetWindowLongPtrW
 ShowWindow
 TranslateMessage

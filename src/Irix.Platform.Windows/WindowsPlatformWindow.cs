@@ -1,3 +1,5 @@
+using Irix.Drawing;
+
 namespace Irix.Platform.Windows;
 
 internal sealed class WindowsPlatformWindow(
@@ -51,6 +53,12 @@ internal sealed class WindowsPlatformWindow(
     {
         add => _window.SizeChanged += value;
         remove => _window.SizeChanged -= value;
+    }
+
+    public event Action<DisplayScale>? DpiChanged
+    {
+        add => _window.DpiChanged += value;
+        remove => _window.DpiChanged -= value;
     }
 
     public void Dispose()

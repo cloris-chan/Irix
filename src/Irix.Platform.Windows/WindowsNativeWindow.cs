@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Irix.Drawing;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
@@ -17,6 +18,7 @@ internal sealed class WindowsNativeWindow : INativeWindow
     private readonly HINSTANCE _instanceHandle;
     private readonly Action? _closedSink;
     private readonly Action? _displayChangedSink;
+    private readonly Action<DisplayScale>? _dpiChangedSink;
     private readonly GCHandle _gcHandle;
     private readonly Action<RawInputEvent>? _rawInputEventSink;
     private readonly nint _titlePointer;
@@ -31,12 +33,14 @@ internal sealed class WindowsNativeWindow : INativeWindow
         ScreenRegion region,
         Action<RawInputEvent>? rawInputEventSink = null,
         Action? closedSink = null,
-        Action? displayChangedSink = null)
+        Action? displayChangedSink = null,
+        Action<DisplayScale>? dpiChangedSink = null)
     {
         Title = title;
         Region = region;
         _closedSink = closedSink;
         _displayChangedSink = displayChangedSink;
+        _dpiChangedSink = dpiChangedSink;
         _rawInputEventSink = rawInputEventSink;
         _ownerThreadId = Environment.CurrentManagedThreadId;
         var moduleHandle = PInvoke.GetModuleHandle((PCWSTR)null);
@@ -130,6 +134,8 @@ internal sealed class WindowsNativeWindow : INativeWindow
     }
 
     public event Action<int, int>? SizeChanged;
+
+    public event Action<DisplayScale>? DpiChanged;
 
     public void Dispose()
     {
@@ -225,6 +231,9 @@ internal sealed class WindowsNativeWindow : INativeWindow
                 return new LRESULT(0);
             case WindowMessages.DisplayChange:
                 _displayChangedSink?.Invoke();
+                return new LRESULT(0);
+            case WindowMessages.DpiChanged:
+                HandleDpiChanged(windowHandle, wParam, lParam);
                 return new LRESULT(0);
             case WindowMessages.Destroy:
                 _closedSink?.Invoke();
@@ -369,6 +378,26 @@ internal sealed class WindowsNativeWindow : INativeWindow
         }
 
         PInvoke.InvalidateRect(windowHandle, null, !window.ExternalRenderingEnabled);
+    }
+
+    private unsafe void HandleDpiChanged(HWND windowHandle, WPARAM wParam, LPARAM lParam)
+    {
+        var newDpi = (int)(wParam.Value & 0xFFFF);
+        var newScale = new DisplayScale(newDpi / 96f, newDpi / 96f);
+
+        _dpiChangedSink?.Invoke(newScale);
+        DpiChanged?.Invoke(newScale);
+
+        // Apply the suggested window rect — this triggers WM_SIZE → HandleSizeChanged
+        var suggestedRect = (RECT*)lParam.Value;
+        PInvoke.SetWindowPos(
+            windowHandle,
+            HWND.Null,
+            suggestedRect->left,
+            suggestedRect->top,
+            suggestedRect->right - suggestedRect->left,
+            suggestedRect->bottom - suggestedRect->top,
+            SET_WINDOW_POS_FLAGS.SWP_NOZORDER | SET_WINDOW_POS_FLAGS.SWP_NOACTIVATE);
     }
 
     private void PublishPointerEvent(RawInputEventKind kind, LPARAM lParam, PointerButton button = PointerButton.None)

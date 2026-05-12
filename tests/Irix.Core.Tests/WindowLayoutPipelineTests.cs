@@ -1388,6 +1388,7 @@ public sealed class WindowLayoutPipelineTests
         }
 
         public event Action<int, int>? SizeChanged { add { } remove { } }
+        public event Action<DisplayScale>? DpiChanged { add { } remove { } }
     }
 
     private sealed class TranslatingPatchSink(WindowDrawCommandTranslator translator) : IVirtualNodePatchSink

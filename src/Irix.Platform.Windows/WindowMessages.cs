@@ -5,6 +5,7 @@ internal static class WindowMessages
     public const uint FocusGained = 0x0007;
     public const uint FocusLost = 0x0008;
     public const uint DisplayChange = 0x007E;
+    public const uint DpiChanged = 0x02E0;
     public const uint Paint = 0x000F;
     public const uint Size = 0x0005;
     public const uint Character = 0x0102;

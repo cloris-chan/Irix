@@ -58,7 +58,7 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| CI test suite | 452 tests, all passing | Maintain green | — |
+| CI test suite | 460 tests, all passing | Maintain green | — |
 | D3D12-specific tests | None (PoC-only) | Add smoke tests for D3D12 backend integration | P1 |
 | Platform matrix CI | Single Windows runner | Add matrix for Windows versions | P2 |
 | Performance regression CI | None | Add frame time regression check | P2 |

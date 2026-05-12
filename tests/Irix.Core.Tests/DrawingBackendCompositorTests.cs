@@ -484,6 +484,7 @@ public sealed class DrawingBackendCompositorTests
         public void SetContentElements(IReadOnlyList<WindowContentElement> elements) => LastElements = elements;
         public void Show() { }
         public event Action<int, int>? SizeChanged { add { } remove { } }
+        public event Action<DisplayScale>? DpiChanged { add { } remove { } }
     }
 
     private sealed class DirtyRangeTrackingBackend : IDrawingBackend, IDirtyRangeAware
