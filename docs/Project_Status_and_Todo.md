@@ -38,6 +38,10 @@
 | [V1-Partial-Apply-Runtime-Integration-Checkpoint.md](V1-Partial-Apply-Runtime-Integration-Checkpoint.md) | v1 partial apply runtime checkpoint：gate evidence 分层、第一 runtime seam 决策、backend adapter 方向 |
 | [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) | diagnostics snapshot v0：snapshot 类型、provider 边界、CLI 文本冻结、最小实现候选 |
 | [RetainedElementTree-Design.md](RetainedElementTree-Design.md) | 真正 retained element tree / local patch apply 的草案 |
+| [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md) | Post-V1 / MVP 任务表：default-on、D3D12 segmented、GA hardening、translator/scroll/typed id |
+| [Default-On-Partial-Apply-Prep.md](Default-On-Partial-Apply-Prep.md) | default-on partial apply 前置设计：go/no-go gates、D3D12 验证、resource lifecycle、rollback |
+| [D3D12-Segmented-Ownership-Prep.md](D3D12-Segmented-Ownership-Prep.md) | D3D12 segmented ownership 盘点：per-segment execute、dirty ranges、text cache、device-lost |
+| [GA-Hardening-Plan.md](GA-Hardening-Plan.md) | GA 硬化清单：device lost recovery、display matrix、stability、performance、platform integration |
 | [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
 
 ### 当前冻结线
@@ -105,7 +109,7 @@ V1 core 的完成边界是：internal/default-off selected segmented render-sour
 | D3D12 | 未触及 | segmented ownership 仅在 test backend 验证 |
 | CLI diagnostics | 未改变 | handoff result 仅 internal，不出现在 `--diagnose` 输出 |
 
-**V1 core 完成 ≠ MVP/GA：** 以下仍需后续阶段完成（见 Post-V1 shortlist）。
+**V1 core 完成 ≠ MVP/GA：** 以下仍需后续阶段完成（见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[Default-On-Partial-Apply-Prep.md](Default-On-Partial-Apply-Prep.md)、[D3D12-Segmented-Ownership-Prep.md](D3D12-Segmented-Ownership-Prep.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)）。
 
 ---
 
