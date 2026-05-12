@@ -1370,18 +1370,18 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
-    public void RetainedRenderFrameHandoffCounterSemantics_keep_existing_counters_unchanged_until_render_source_promotion()
+    public void RetainedRenderFrameHandoffCounterSemantics_describe_selected_render_source_counters()
     {
         var semantics = RetainedRenderFrameHandoffCounterSemantics.All;
 
         Assert.Equal(6, semantics.Count);
         Assert.All(semantics, semantic => Assert.True(semantic.ExistingCounterBehaviorUnchanged));
         Assert.Contains(semantics, semantic => semantic.CounterName == "RenderCount" && semantic.HandoffRule.Contains("retained segments"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "FullApplyCount" && semantic.InternalOnlyCounterRule.Contains("internal-only fallback counter"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "PartialApplyCount" && semantic.InternalOnlyCounterRule.Contains("internal-only partial counter"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "FullApplyCount" && semantic.HandoffRule.Contains("selected segmented source"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "PartialApplyCount" && semantic.HandoffRule.Contains("selected render source"));
         Assert.Contains(semantics, semantic => semantic.CounterName == "EmptyFrameCount" && semantic.HandoffRule.Contains("empty input batches"));
         Assert.Contains(semantics, semantic => semantic.CounterName == "LastDirtyCommandRanges" && semantic.HandoffRule.Contains("segment-local dirty ranges"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "LastPartialApplySucceeded" && semantic.HandoffRule.Contains("approved production render source"));
+        Assert.Contains(semantics, semantic => semantic.CounterName == "LastPartialApplySucceeded" && semantic.HandoffRule.Contains("selected render source"));
     }
 
     [Fact]
@@ -1865,15 +1865,9 @@ public sealed class PartialApplyPreflightTests
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var feedFrame = feed.Build(root, viewport);
         var feedBackend = new DirtyRangeAwareCapturingBackend();
-        var candidateFactoryCallCount = 0;
         using var feedCompositor = new DrawingBackendCompositor(
             feedBackend,
-            DrawingBackendCompositorHandoffOptions.Disabled,
-            () =>
-            {
-                candidateFactoryCallCount++;
-                return new DirtyRangeAwareCapturingBackend();
-            });
+            DrawingBackendCompositorHandoffOptions.Disabled);
 
         await feedCompositor.RenderAsync(feedFrame, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var feedHit = feedCompositor.TryGetActionIdAt(hitX, hitY, out var feedActionId);
@@ -1882,7 +1876,6 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, feedCompositor.LastHandoffResult.Kind);
         Assert.False(feedCompositor.HasHandoffCandidateHarness);
-        Assert.Equal(0, candidateFactoryCallCount);
         Assert.False(candidateHit);
         Assert.Equal(string.Empty, candidateActionId);
         Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
@@ -1898,7 +1891,7 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
-    public async Task DrawingBackendCompositor_handoff_selector_enabled_executes_fresh_partial_candidate_without_changing_production_outputs()
+    public async Task DrawingBackendCompositor_handoff_selector_enabled_selects_fresh_partial_segments_without_changing_visible_outputs()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -1929,16 +1922,9 @@ public sealed class PartialApplyPreflightTests
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         var feedBackend = new DirtyRangeAwareCapturingBackend();
-        var candidateBackend = new DirtyRangeAwareCapturingBackend();
-        var candidateFactoryCallCount = 0;
         using var feedCompositor = new DrawingBackendCompositor(
             feedBackend,
-            DrawingBackendCompositorHandoffOptions.Enabled,
-            () =>
-            {
-                candidateFactoryCallCount++;
-                return candidateBackend;
-            });
+            DrawingBackendCompositorHandoffOptions.Enabled);
         using var feedFrame1 = feed.Build(retainedRoot, viewport);
         await feedCompositor.RenderAsync(feedFrame1, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var fullResult = feedCompositor.LastHandoffResult;
@@ -1950,7 +1936,6 @@ public sealed class PartialApplyPreflightTests
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.True(feedCompositor.HasHandoffCandidateHarness);
-        Assert.Equal(1, candidateFactoryCallCount);
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, fullResult.Kind);
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Executed, partialResult.Kind);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, fullResult.CandidateResult.Kind);
@@ -1961,19 +1946,33 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(0, partialResult.CandidateResult.Counters.FullApplyCount);
         Assert.Equal(1, partialResult.CandidateResult.Counters.PartialApplyCount);
         Assert.True(partialResult.CandidateResult.Counters.LastPartialApplySucceeded);
-        AssertHandoffBackendCallsMatchReads([partialResult.CandidateResult], candidateBackend);
-        AssertDirtyRangePlansMatchBackend([partialResult.CandidateResult], candidateBackend);
+        Assert.Equal(2, feedCompositor.RenderCount);
+        Assert.Equal(1, feedCompositor.FullApplyCount);
+        Assert.Equal(1, feedCompositor.PartialApplyCount);
+        Assert.True(feedCompositor.LastPartialApplySucceeded);
+        var expectedCalls = new List<string> { "BeginFrame", $"Execute:{feedFrame1.Commands.Count}", "EndFrame", "BeginFrame" };
+        foreach (var read in partialResult.CandidateResult.Reads)
+        {
+            expectedCalls.Add($"Execute:{read.Commands.Length}");
+        }
+
+        expectedCalls.Add("EndFrame");
+        Assert.Equal(expectedCalls, feedBackend.Calls);
+        Assert.Equal(1 + partialResult.CandidateResult.Reads.Count, feedBackend.ExecuteCalls.Count);
+        var selectedDirtyRanges = feedBackend.DirtyRanges.Skip(1).ToArray();
+        Assert.Equal(partialResult.CandidateResult.DirtyRangePlan.Count, selectedDirtyRanges.Length);
+        for (var i = 0; i < selectedDirtyRanges.Length; i++)
+        {
+            Assert.Equal(partialResult.CandidateResult.DirtyRangePlan[i].SegmentDirtyRanges, selectedDirtyRanges[i]);
+        }
+
         Assert.True(candidateHit);
         Assert.Equal("Increment.Secondary", candidateActionId);
         Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
         Assert.Equal(directPipeline.LastDirtyCommandRanges, feedPipeline.LastDirtyCommandRanges);
         Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
-        Assert.Equal(directCompositor.FullApplyCount, feedCompositor.FullApplyCount);
-        Assert.Equal(directCompositor.PartialApplyCount, feedCompositor.PartialApplyCount);
         Assert.Equal(directCompositor.EmptyFrameCount, feedCompositor.EmptyFrameCount);
         Assert.Equal(directCompositor.LastDirtyCommandRanges, feedCompositor.LastDirtyCommandRanges);
-        Assert.Equal(directBackend.DirtyRanges, feedBackend.DirtyRanges);
-        AssertExecuteCommandCountsEqual(directBackend.ExecuteCalls, feedBackend.ExecuteCalls);
         Assert.Equal(directHit, feedHit);
         Assert.Equal(directActionId, feedActionId);
         Assert.Equal(directActionId, candidateActionId);
@@ -1989,15 +1988,9 @@ public sealed class PartialApplyPreflightTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, viewport);
         var backend = new DirtyRangeAwareCapturingBackend();
-        var candidateFactoryCallCount = 0;
         using var compositor = new DrawingBackendCompositor(
             backend,
-            DrawingBackendCompositorHandoffOptions.Enabled,
-            () =>
-            {
-                candidateFactoryCallCount++;
-                return new DirtyRangeAwareCapturingBackend();
-            });
+            DrawingBackendCompositorHandoffOptions.Enabled);
 
         await compositor.RenderAsync(frame, null, new FrameContext(960, 540), cancellationToken);
         var result = compositor.LastHandoffResult;
@@ -2005,10 +1998,66 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.MissingOwner, result.Kind);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(0, candidateFactoryCallCount);
         Assert.False(hit);
         Assert.Equal(string.Empty, actionId);
         Assert.Equal(["BeginFrame", $"Execute:{frame.Commands.Count}", "EndFrame"], backend.Calls);
+    }
+
+    [Fact]
+    public async Task DrawingBackendCompositor_handoff_selector_selected_path_uses_owner_side_hit_test_and_fallback_restores_retained_hit_targets()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var viewport = new PixelRectangle(0, 0, 100, 100);
+        using var retainedFrame = new RetainedRenderFrame();
+        using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
+        using var selectedCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        using var selectedFrame = new RenderFrameBatch(
+            selectedCommands,
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Selected", new PixelRectangle(10, 10, 20, 20))],
+            new NamedResolver("selected"),
+            [(0, 1)]);
+        var selectedRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Selected", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Selected"))));
+        ownership.Update(null, selectedRoot, viewport, selectedFrame);
+        SetOwnershipLastResult(ownership, new SegmentedRetainedFrameProductionOwnerFeedResult(
+            new SegmentedRetainedFrameShadowResult(
+                SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial,
+                RetainedPartialApplyFallbackReason.None,
+                RetainedPartialApplyResultKind.AppliedPartial,
+                ownership.RuntimeOwner!.ReadSegments()),
+            true,
+            false,
+            true,
+            0,
+            selectedFrame.Commands.Count,
+            selectedFrame.Resources,
+            selectedFrame.Commands.Owner));
+        var backend = new DirtyRangeAwareCapturingBackend();
+        using var compositor = new DrawingBackendCompositor(backend, DrawingBackendCompositorHandoffOptions.Enabled);
+
+        await compositor.RenderAsync(selectedFrame, ownership, new FrameContext(100, 100), cancellationToken);
+        var inClipHit = compositor.TryGetActionIdAt(15, 15, out var inClipActionId);
+        var outsideClipHit = compositor.TryGetActionIdAt(5, 5, out var outsideClipActionId);
+
+        using var fallbackCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        using var fallbackFrame = new RenderFrameBatch(
+            fallbackCommands,
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Fallback")],
+            new NamedResolver("fallback"),
+            [(0, 1)]);
+        var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
+            VirtualNodeFactory.Button("Fallback", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Fallback"))));
+        ownership.Update(null, fallbackRoot, viewport, fallbackFrame);
+        await compositor.RenderAsync(fallbackFrame, ownership, new FrameContext(100, 100), cancellationToken);
+        var fallbackHit = compositor.TryGetActionIdAt(5, 5, out var fallbackActionId);
+
+        Assert.True(inClipHit);
+        Assert.Equal("Selected", inClipActionId);
+        Assert.False(outsideClipHit);
+        Assert.Equal(string.Empty, outsideClipActionId);
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, compositor.LastHandoffResult.Kind);
+        Assert.True(fallbackHit);
+        Assert.Equal("Fallback", fallbackActionId);
     }
 
     [Fact]
@@ -2031,22 +2080,15 @@ public sealed class PartialApplyPreflightTests
         using var ownerFrame = feed.Build(retainedRoot, viewport);
         using var staleFrame = feedPipeline.Build(partialRoot, viewport, [2]);
         var backend = new DirtyRangeAwareCapturingBackend();
-        var candidateFactoryCallCount = 0;
         using var compositor = new DrawingBackendCompositor(
             backend,
-            DrawingBackendCompositorHandoffOptions.Enabled,
-            () =>
-            {
-                candidateFactoryCallCount++;
-                return new DirtyRangeAwareCapturingBackend();
-            });
+            DrawingBackendCompositorHandoffOptions.Enabled);
 
         await compositor.RenderAsync(staleFrame, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Rejected, compositor.LastHandoffResult.Kind);
         Assert.Same(ownerFrame.Resources, compositor.LastHandoffResult.OwnerResult.BatchResources);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(0, candidateFactoryCallCount);
         Assert.Equal(["BeginFrame", $"Execute:{staleFrame.Commands.Count}", "EndFrame"], backend.Calls);
     }
 
@@ -2064,15 +2106,9 @@ public sealed class PartialApplyPreflightTests
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         var backend = new DirtyRangeAwareCapturingBackend();
-        var candidateFactoryCallCount = 0;
         using var compositor = new DrawingBackendCompositor(
             backend,
-            DrawingBackendCompositorHandoffOptions.Enabled,
-            () =>
-            {
-                candidateFactoryCallCount++;
-                return new DirtyRangeAwareCapturingBackend();
-            });
+            DrawingBackendCompositorHandoffOptions.Enabled);
         using var frame1 = feed.Build(retainedRoot, viewport);
         await compositor.RenderAsync(frame1, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var initialFullResult = compositor.LastHandoffResult;
@@ -2089,7 +2125,6 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, fallbackResult.CandidateResult.Kind);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, emptyResult.CandidateResult.Kind);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(0, candidateFactoryCallCount);
         Assert.Equal(1, compositor.EmptyFrameCount);
         Assert.Equal(2, backend.ExecuteCalls.Count);
     }
@@ -2124,15 +2159,9 @@ public sealed class PartialApplyPreflightTests
             frame.Commands.Owner);
         SetOwnershipLastResult(ownership, rejectedResult);
         var backend = new DirtyRangeAwareCapturingBackend();
-        var candidateFactoryCallCount = 0;
         using var compositor = new DrawingBackendCompositor(
             backend,
-            DrawingBackendCompositorHandoffOptions.Enabled,
-            () =>
-            {
-                candidateFactoryCallCount++;
-                return new DirtyRangeAwareCapturingBackend();
-            });
+            DrawingBackendCompositorHandoffOptions.Enabled);
 
         await compositor.RenderAsync(frame, ownership, new FrameContext(100, 100), cancellationToken);
 
@@ -2140,7 +2169,6 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowRejected, compositor.LastHandoffResult.OwnerResult.Kind);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, compositor.LastHandoffResult.CandidateResult.Kind);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(0, candidateFactoryCallCount);
         Assert.Equal(["BeginFrame", "Execute:1", "EndFrame"], backend.Calls);
     }
 
@@ -2162,23 +2190,19 @@ public sealed class PartialApplyPreflightTests
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport);
-        var productionBackend = new DirtyRangeAwareCapturingBackend();
-        var throwingBackend = new ThrowingBackend(throwOnExecuteCall: 2);
-        var candidateFactoryCallCount = 0;
+        var throwingBackend = new ThrowingBackend(throwOnExecuteCall: 3);
         using var compositor = new DrawingBackendCompositor(
-            productionBackend,
-            DrawingBackendCompositorHandoffOptions.Enabled,
-            () =>
-            {
-                candidateFactoryCallCount++;
-                return throwingBackend;
-            });
+            throwingBackend,
+            DrawingBackendCompositorHandoffOptions.Enabled);
 
         await compositor.RenderAsync(frame1, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
+        var firstHitTarget = Assert.Single(frame1.HitTargets);
+        var hitX = firstHitTarget.Bounds.X + 1;
+        var hitY = firstHitTarget.Bounds.Y + 1;
+        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionBeforeThrow));
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, compositor.LastHandoffResult.Kind);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(0, candidateFactoryCallCount);
 
         using var frame2 = feed.Build(partialRoot, viewport, [2]);
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderAsync(frame2, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken));
@@ -2187,8 +2211,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Executed, compositor.LastHandoffResult.Kind);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Executed, compositor.LastHandoffResult.CandidateResult.Kind);
         Assert.True(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(1, candidateFactoryCallCount);
-        var expectedCalls = new List<string> { "BeginFrame" };
+        var expectedCalls = new List<string> { "BeginFrame", $"Execute:{frame1.Commands.Count}", "EndFrame", "BeginFrame" };
         foreach (var read in compositor.LastHandoffResult.CandidateResult.Reads)
         {
             expectedCalls.Add($"Execute:{read.Commands.Length}");
@@ -2196,13 +2219,15 @@ public sealed class PartialApplyPreflightTests
 
         expectedCalls.Add("EndFrame");
         Assert.Equal(expectedCalls, throwingBackend.Calls);
-        Assert.Equal(1, throwingBackend.BeginFrameCount);
-        Assert.Equal(1, throwingBackend.EndFrameCount);
-        Assert.Equal(2, compositor.RenderCount);
-        Assert.Equal(2, compositor.FullApplyCount);
+        Assert.Equal(2, throwingBackend.BeginFrameCount);
+        Assert.Equal(2, throwingBackend.EndFrameCount);
+        Assert.Equal(1, compositor.RenderCount);
+        Assert.Equal(1, compositor.FullApplyCount);
         Assert.Equal(0, compositor.PartialApplyCount);
+        Assert.False(compositor.LastPartialApplySucceeded);
         Assert.Equal(feedPipeline.LastDirtyCommandRanges, compositor.LastDirtyCommandRanges);
-        Assert.Equal(2, productionBackend.ExecuteCalls.Count);
+        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionAfterThrow));
+        Assert.Equal(actionBeforeThrow, actionAfterThrow);
     }
 
     [Fact]
@@ -3278,7 +3303,15 @@ public sealed class PartialApplyPreflightTests
             Assert.False(string.IsNullOrWhiteSpace(status.ProductionRuntimeEvidence));
             Assert.False(string.IsNullOrWhiteSpace(status.NoChangeRegressionEvidence));
             Assert.False(string.IsNullOrWhiteSpace(status.RuntimePromotionCondition));
-            Assert.Contains("None", status.ProductionRuntimeEvidence);
+            if (status.Gate is PartialApplyIntegrationGate.ResourceResolverOwnership or PartialApplyIntegrationGate.CompositorOwnership)
+            {
+                Assert.DoesNotContain("None", status.ProductionRuntimeEvidence);
+            }
+            else
+            {
+                Assert.Contains("None", status.ProductionRuntimeEvidence);
+            }
+
             Assert.Contains("Promote only after", status.RuntimePromotionCondition);
         }
     }
@@ -3303,11 +3336,11 @@ public sealed class PartialApplyPreflightTests
     {
         var gates = PartialApplyIntegrationGateChecklist.RequiredGates;
 
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.ShadowRuntimeEvidence.Contains("DrawingBackendCompositorShadowProbe") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.ShadowRuntimeEvidence.Contains("DrawingBackendCompositorShadowProbe") && gate.ProductionRuntimeEvidence.Contains("selected render-source path"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.ShadowRuntimeEvidence.Contains("SegmentedRetainedFrameRuntimeOwner") && gate.ShadowRuntimeEvidence.Contains("rebuild") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CommandRangeStability && gate.ShadowRuntimeEvidence.Contains("ShadowRejected") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.FallbackReporting && gate.ShadowRuntimeEvidence.Contains("Disabled") && gate.ShadowRuntimeEvidence.Contains("ShadowAppliedPartial") && gate.ShadowRuntimeEvidence.Contains("ShadowFallbackFull") && gate.ShadowRuntimeEvidence.Contains("ShadowRejected") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ShadowRuntimeEvidence.Contains("hit-test no-change") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ShadowRuntimeEvidence.Contains("hit-test no-change") && gate.ProductionRuntimeEvidence.Contains("selected render source"));
         Assert.False(PartialApplyIntegrationGateChecklist.CanHookUpPartialApply);
     }
 
@@ -3316,12 +3349,12 @@ public sealed class PartialApplyPreflightTests
     {
         var gates = PartialApplyIntegrationGateChecklist.RequiredGates;
 
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.ProductionOffRuntimeEvidence.Contains("DrawingBackendCompositor's internal handoff selector") && gate.ProductionOffRuntimeEvidence.Contains("fresh accepted partial owner") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.ProductionOffRuntimeEvidence.Contains("DrawingBackendCompositor's internal handoff selector") && gate.ProductionOffRuntimeEvidence.Contains("fresh accepted partial owner") && gate.ProductionRuntimeEvidence.Contains("real backend"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.ProductionOffRuntimeEvidence.Contains("multiple FrameDrawingResources") && gate.ProductionOffRuntimeEvidence.Contains("throw path") && gate.ProductionOffRuntimeEvidence.Contains("repeated replacement") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CommandRangeStability && gate.ProductionOffRuntimeEvidence.Contains("commands, resources, retained root, and hit targets") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.HitTargetMetadataProjection && gate.ProductionOffRuntimeEvidence.Contains("handoff harness uses owner-side hit targets") && gate.ProductionOffRuntimeEvidence.Contains("projection-failure fallback") && gate.ProductionRuntimeEvidence.Contains("None"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.FallbackReporting && gate.ProductionOffRuntimeEvidence.Contains("DrawingBackendCompositor.LastHandoffResult") && gate.ProductionOffRuntimeEvidence.Contains("MissingOwner") && gate.ProductionOffRuntimeEvidence.Contains("Rejected") && gate.ProductionRuntimeEvidence.Contains("None"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ProductionOffRuntimeEvidence.Contains("Production-adjacent no-change") && gate.ProductionOffRuntimeEvidence.Contains("default-off selector") && gate.ProductionOffRuntimeEvidence.Contains("segment-local dirty ranges") && gate.ProductionRuntimeEvidence.Contains("None"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.CompositorOwnership && gate.ProductionOffRuntimeEvidence.Contains("Production-adjacent no-change") && gate.ProductionOffRuntimeEvidence.Contains("default-off selector") && gate.ProductionOffRuntimeEvidence.Contains("segment-local dirty ranges") && gate.ProductionRuntimeEvidence.Contains("owner-side hit targets"));
         Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RegressionCoverage && gate.ProductionOffRuntimeEvidence.Contains("main-compositor selector default-off lazy allocation") && gate.ProductionOffRuntimeEvidence.Contains("same-frame freshness guard") && gate.ProductionOffRuntimeEvidence.Contains("internal result reporting") && gate.ProductionOffRuntimeEvidence.Contains("dirty-range mismatch routing") && gate.ProductionOffRuntimeEvidence.Contains("clipped/no-hit hit-test") && gate.ProductionRuntimeEvidence.Contains("None"));
         foreach (var gate in gates)
         {

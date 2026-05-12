@@ -13,7 +13,6 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
-    private readonly Func<IDrawingBackend>? _handoffCandidateBackendFactory;
     private readonly Lock _hitTargetsLock = new();
     private readonly RetainedRenderFrame _retainedFrame = new();
     private RetainedRenderFrameHandoffHarness? _handoffCandidateHarness;
@@ -64,12 +63,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     internal DrawingBackendCompositor(
         IDrawingBackend backend,
-        DrawingBackendCompositorHandoffOptions handoffOptions,
-        Func<IDrawingBackend>? handoffCandidateBackendFactory)
+        DrawingBackendCompositorHandoffOptions handoffOptions)
         : this(backend)
     {
         _handoffOptions = handoffOptions;
-        _handoffCandidateBackendFactory = handoffCandidateBackendFactory;
     }
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
@@ -96,7 +93,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _lastAppliedFrameId = 0;
             LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
             LastPartialApplySucceeded = false;
-            LastHandoffResult = ExecuteHandoffCandidate(renderFrameBatch, ownership, frameContext);
+            LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
             return ValueTask.CompletedTask;
         }
 
@@ -107,32 +104,58 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         var batchFrameId = renderFrameBatch.Resources is FrameDrawingResources fdr ? fdr.FrameId : 0ul;
         var isSameFrameScope = batchFrameId != 0 && batchFrameId == _lastAppliedFrameId;
 
+        var retainedPartialApplySucceeded = false;
         if (isSameFrameScope && renderFrameBatch.DirtyCommandRanges.Count > 0)
         {
-            LastPartialApplySucceeded = _retainedFrame.TryApplyPartial(renderFrameBatch);
-        }
-        else
-        {
-            LastPartialApplySucceeded = false;
+            retainedPartialApplySucceeded = _retainedFrame.TryApplyPartial(renderFrameBatch);
         }
 
-        if (!LastPartialApplySucceeded)
+        if (!retainedPartialApplySucceeded)
         {
             // Release old retained resources before taking new ones
             _retainedFrame.ReleaseResources();
             _retainedFrame.ApplyFull(renderFrameBatch);
             // Take ownership: prevent batch.Dispose() from returning resources to pool
             _retainedFrame.RetainResources();
-            Interlocked.Increment(ref _fullApplyCount);
         }
-        else
+
+        _lastAppliedFrameId = batchFrameId;
+        LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
+
+        var handoffSelection = ResolveHandoffSelection(renderFrameBatch, ownership);
+        if (handoffSelection.Selected)
+        {
+            LastHandoffResult = ExecuteSelectedHandoffFrame(ownership!, handoffSelection.OwnerResult, frameContext);
+            LastPartialApplySucceeded = LastHandoffResult.CandidateResult.Counters.LastPartialApplySucceeded;
+            Interlocked.Increment(ref _renderCount);
+            if (LastPartialApplySucceeded)
+            {
+                Interlocked.Increment(ref _partialApplyCount);
+            }
+            else
+            {
+                Interlocked.Increment(ref _fullApplyCount);
+            }
+
+            lock (_hitTargetsLock)
+            {
+                _hitTargets = ownership!.RuntimeOwner!.HitTargets.ToArray();
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        LastHandoffResult = handoffSelection.Result;
+        LastPartialApplySucceeded = retainedPartialApplySucceeded;
+        Interlocked.Increment(ref _renderCount);
+        if (LastPartialApplySucceeded)
         {
             Interlocked.Increment(ref _partialApplyCount);
         }
-
-        Interlocked.Increment(ref _renderCount);
-        _lastAppliedFrameId = batchFrameId;
-        LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
+        else
+        {
+            Interlocked.Increment(ref _fullApplyCount);
+        }
 
         // Execute backend from the retained frame (zero-alloc: no ToBatch copy).
         if (_retainedFrame.TryReadFrame(out var commands, out var resources))
@@ -155,8 +178,6 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             _hitTargets = [.. _retainedFrame.HitTargets];
         }
-
-        LastHandoffResult = ExecuteHandoffCandidate(renderFrameBatch, ownership, frameContext);
         return ValueTask.CompletedTask;
     }
 
@@ -171,45 +192,52 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return _handoffCandidateHarness.TryGetActionIdAt(x, y, out actionId);
     }
 
-    private DrawingBackendCompositorHandoffResult ExecuteHandoffCandidate(
+    private HandoffSelection ResolveHandoffSelection(
         RenderFrameBatch renderFrameBatch,
-        RetainedRenderFrameSegmentOwnership? ownership,
-        in FrameContext frameContext)
+        RetainedRenderFrameSegmentOwnership? ownership)
     {
         if (!_handoffOptions.EnableSegmentedRenderSourceCandidate)
         {
-            return DrawingBackendCompositorHandoffResult.Disabled;
+            return HandoffSelection.Fallback(SegmentedRetainedFrameProductionOwnerFeedResult.Disabled, DrawingBackendCompositorHandoffResult.Disabled);
         }
 
         var ownerResult = ownership?.LastResult ?? SegmentedRetainedFrameProductionOwnerFeedResult.Disabled;
         if (ownership?.RuntimeOwner is null)
         {
-            return DrawingBackendCompositorHandoffResult.MissingOwner(ownerResult);
+            return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.MissingOwner(ownerResult));
         }
 
         if (!IsOwnerResultFresh(ownerResult, renderFrameBatch)
             || ownerResult.Kind == SegmentedRetainedFrameShadowResultKind.ShadowRejected
             || ownerResult.ShadowResult.PlanKind == RetainedPartialApplyResultKind.Rejected)
         {
-            return DrawingBackendCompositorHandoffResult.Rejected(ownerResult);
+            return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.Rejected(ownerResult));
         }
 
         if (ownerResult.Kind == SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull)
         {
-            return DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult);
+            return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult));
         }
 
         if (ownerResult.Kind != SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial)
         {
-            return DrawingBackendCompositorHandoffResult.Rejected(ownerResult);
+            return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.Rejected(ownerResult));
         }
 
         if (ownerResult.ShadowResult.Reads.Count == 0)
         {
-            return DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult);
+            return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult));
         }
 
-        var harness = _handoffCandidateHarness ??= new RetainedRenderFrameHandoffHarness(_handoffCandidateBackendFactory!(), RetainedRenderFrameHandoffHarnessOptions.Enabled);
+        return HandoffSelection.SelectedCandidate(ownerResult);
+    }
+
+    private DrawingBackendCompositorHandoffResult ExecuteSelectedHandoffFrame(
+        RetainedRenderFrameSegmentOwnership ownership,
+        SegmentedRetainedFrameProductionOwnerFeedResult ownerResult,
+        in FrameContext frameContext)
+    {
+        var harness = _handoffCandidateHarness ??= new RetainedRenderFrameHandoffHarness(new NonDisposingBackend(_backend), RetainedRenderFrameHandoffHarnessOptions.Enabled);
         try
         {
             return MapCandidateResult(ownerResult, harness.ExecuteCandidateFrame(ownership, frameContext, LastDirtyCommandRanges));
@@ -218,6 +246,54 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             LastHandoffResult = MapCandidateResult(ownerResult, harness.LastResult);
             throw;
+        }
+    }
+
+    private readonly record struct HandoffSelection(
+        bool Selected,
+        SegmentedRetainedFrameProductionOwnerFeedResult OwnerResult,
+        DrawingBackendCompositorHandoffResult Result)
+    {
+        public static HandoffSelection SelectedCandidate(SegmentedRetainedFrameProductionOwnerFeedResult ownerResult)
+        {
+            return new HandoffSelection(true, ownerResult, DrawingBackendCompositorHandoffResult.Disabled);
+        }
+
+        public static HandoffSelection Fallback(
+            SegmentedRetainedFrameProductionOwnerFeedResult ownerResult,
+            DrawingBackendCompositorHandoffResult result)
+        {
+            return new HandoffSelection(false, ownerResult, result);
+        }
+    }
+
+    private sealed class NonDisposingBackend(IDrawingBackend inner) : IDrawingBackend, IDirtyRangeAware
+    {
+        public void BeginFrame(in FrameContext frameContext)
+        {
+            inner.BeginFrame(frameContext);
+        }
+
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+            inner.Execute(commands, resources);
+        }
+
+        public void EndFrame()
+        {
+            inner.EndFrame();
+        }
+
+        public void SetDirtyCommandRanges(IReadOnlyList<(int Start, int Count)> ranges)
+        {
+            if (inner is IDirtyRangeAware dirtyRangeAware)
+            {
+                dirtyRangeAware.SetDirtyCommandRanges(ranges);
+            }
+        }
+
+        public void Dispose()
+        {
         }
     }
 
