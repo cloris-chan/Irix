@@ -153,7 +153,8 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
     public bool TryAcceptPartial(IReadOnlyList<(int Start, int Count)> dirtyCommandRanges, RetainedResourceSnapshot replacementSnapshot)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_segments.Length == 0 || !TryMergeValidRanges(dirtyCommandRanges, out var ranges) || !RangesFitCurrentFrame(ranges))
+        var commandCount = _segments.Length == 0 ? 0 : _segments[^1].CommandEnd;
+        if (_segments.Length == 0 || !RangeUtils.TryNormalizeStrict(dirtyCommandRanges, commandCount, out var ranges))
         {
             return false;
         }
@@ -205,40 +206,6 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
 
         Invalidate();
         _disposed = true;
-    }
-
-    private static bool TryMergeValidRanges(IReadOnlyList<(int Start, int Count)> dirtyCommandRanges, out IReadOnlyList<(int Start, int Count)> ranges)
-    {
-        ranges = [];
-        if (dirtyCommandRanges.Count == 0)
-        {
-            return false;
-        }
-
-        foreach (var (start, count) in dirtyCommandRanges)
-        {
-            if (start < 0 || count <= 0)
-            {
-                return false;
-            }
-        }
-
-        ranges = RangeUtils.Merge(dirtyCommandRanges);
-        return ranges.Count > 0;
-    }
-
-    private bool RangesFitCurrentFrame(IReadOnlyList<(int Start, int Count)> ranges)
-    {
-        var commandCount = _segments.Length == 0 ? 0 : _segments[^1].CommandEnd;
-        foreach (var (start, count) in ranges)
-        {
-            if (start > commandCount - count)
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static void AddSurvivingPieces(RetainedResourceSegment segment, IReadOnlyList<(int Start, int Count)> ranges, List<RetainedResourceSegment> output)

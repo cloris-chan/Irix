@@ -41,6 +41,54 @@ internal static class RangeUtils
         return merged;
     }
 
+    public static bool TryNormalizeStrict(
+        IReadOnlyList<(int Start, int Count)> ranges,
+        int maxCount,
+        out IReadOnlyList<(int Start, int Count)> normalized)
+    {
+        normalized = [];
+        if (maxCount < 0 || ranges.Count == 0)
+        {
+            return false;
+        }
+
+        var sorted = new List<(int Start, int Count)>(ranges.Count);
+        foreach (var (start, count) in ranges)
+        {
+            if (start < 0 || count <= 0 || start > maxCount - count)
+            {
+                return false;
+            }
+
+            sorted.Add((start, count));
+        }
+
+        sorted.Sort((left, right) => left.Start.CompareTo(right.Start));
+        var merged = new List<(int Start, int Count)>(sorted.Count) { sorted[0] };
+        for (var i = 1; i < sorted.Count; i++)
+        {
+            var last = merged[^1];
+            var current = sorted[i];
+            var lastEnd = last.Start + last.Count;
+            if (current.Start < lastEnd)
+            {
+                return false;
+            }
+
+            if (current.Start == lastEnd)
+            {
+                merged[^1] = (last.Start, last.Count + current.Count);
+            }
+            else
+            {
+                merged.Add(current);
+            }
+        }
+
+        normalized = merged;
+        return normalized.Count > 0;
+    }
+
     /// <summary>
     /// Map element ranges to command ranges using an element→command mapping, then merge.
     /// </summary>

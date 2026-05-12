@@ -1,7 +1,7 @@
 # Irix 项目进度与待办
 
 > 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。
-> 📅 **最后验证日期：** 2026-05-12。本文档描述的代码状态以此日期为准。
+> 📅 **最后验证日期：** 2026-05-13。本文档描述的代码状态以此日期为准。
 >
 > 📐 **架构设计详见：** [Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)。本文档不重复设计细节，仅记录实现状态与待办。
 ---
@@ -54,7 +54,7 @@
 | Scroll feedback vocabulary v0 | ✅ 第一小步完成：`ScrollFeedback` / `ScrollContainerMetrics` side-channel 由 translator 生成；旧 `Action<double>` max-scroll callback 仍保留；不移动 controller/state/pump |
 | Translator feedback contract prep | ✅ internal seam 完成 / no behavior change：`TranslatorRenderPipelineFactory` 可替换 pipeline creation；默认仍走 `CounterStylePreset.Default`；translator 仍留在 `Irix.Poc` |
 | Scroll settings provider design | ✅ decision recorded：runtime 继续 postponed；若重开，先做 fallback-only internal provider；不读 Win32、不接 controller |
-| Retained / partial apply prep | ✅ preflight scaffold 完成：每个 local reason 有 regression test；segmented reader edge guards、resource segment / lifecycle model、`SegmentedRetainedFrameOwner` shadow owner + opt-in diagnostic harness、`SegmentedRetainedFrameRuntimeOwner` seam draft、default-off `RetainedRenderFrameSegmentOwnership`、default-off `RetainedRenderFrameHandoffHarness`（含 missing-owner / clipped no-hit / dirty-range mismatch hardening）、default-off `DrawingBackendCompositor` handoff selector（lazy allocation / same-frame freshness guard / selected render-source path / internal result reporting）、multi-`FrameDrawingResources` exact-once lifecycle、owner-side hit-test lookup rehearsal、handoff counter semantics、segment-local dirty-range handoff planner、owner-side hit target metadata snapshot、default-off `SegmentedRetainedFrameProductionOwnerFeed`、`DrawingBackendCompositorShadowProbe` hardening、local shadow result vocabulary、accepted partial rehearsal、explicit full fallback rehearsal、四件套 atomicity、disabled/default-off/enabled-secondary no-change sentinel、empty batch、malformed dirty range fallback、hit target projection fallback、per-gate pre-promotion review、per-segment backend adapter prototype、hit target projector、retained root metadata patcher、pipeline dry-run、runtime-shadow / production-off / production-adjacent / production-hookup evidence split 均为 internal/test-only 或 default-off state；gate satisfaction 仍 blocked |
+| Retained / partial apply prep | ✅ V1 core gate-driven complete：每个 local reason 有 regression test；segmented reader edge guards、resource segment / lifecycle model、`SegmentedRetainedFrameOwner` shadow owner + opt-in diagnostic harness、`SegmentedRetainedFrameRuntimeOwner`、default-off `RetainedRenderFrameSegmentOwnership`、default-off `RetainedRenderFrameHandoffHarness`、default-off `DrawingBackendCompositor` selected render-source path、strict freshness/range/segment guards、multi-`FrameDrawingResources` exact-once lifecycle、owner-side hit-test ownership、handoff counter semantics、segment-local dirty-range routing、default-off `SegmentedRetainedFrameProductionOwnerFeed`、`DrawingBackendCompositorShadowProbe`、fallback reporting reasons、accepted partial four-piece atomicity、failed partial owner-state preservation、style-only default-off pre-switch、production runtime evidence 与 no-change coverage 已落地；`PartialApplyIntegrationGateChecklist.CanHookUpPartialApply=true`，但仍不默认启用、不改 public API / `IDrawingBackend.Execute` / D3D12 / CLI diagnostics |
 
 ### 下一步候选
 
@@ -63,8 +63,8 @@
 - 已实现：`ControlVisualState projection helper`、`Control action attribute helper`、`Button attribute bundle helper` 仍为 PoC-owned internal code；PoC source raw `ActionId` 构造已清；target/action 继续用 string，不引入 typed id wrappers。
 - 已实现：`ScrollFeedback` / `ScrollContainerMetrics` vocabulary v0 作为 translator side-channel；旧 `Action<double>` callback 继续驱动 runtime 行为。
 - 已记录：[Scroll settings provider design](V1-Scroll-Settings-Provider-Prep.md) 决策为 runtime 继续 postponed；若重开，先做 fallback-only internal provider，不读 Win32、不接线到 controller。
-- 已记录：[Retained / partial apply prep](V1-Retained-Partial-Apply-Prep.md)、[Partial apply preflight design](V1-Partial-Apply-Preflight-Design.md) 与 [runtime integration checkpoint](V1-Partial-Apply-Runtime-Integration-Checkpoint.md)：retained-input snapshot seam、data-only local planner、planner-only reason coverage、segmented reader edge guards、resource segment / lifecycle model、`SegmentedRetainedFrameOwner` shadow owner + opt-in diagnostic harness、`SegmentedRetainedFrameRuntimeOwner` seam draft、default-off `RetainedRenderFrameSegmentOwnership`、default-off `RetainedRenderFrameHandoffHarness` missing-owner / clipped no-hit / dirty-range mismatch hardening、default-off `DrawingBackendCompositor` handoff selector lazy allocation / same-frame freshness guard / selected render-source path / internal result reporting、multi-`FrameDrawingResources` exact-once lifecycle、owner-side hit-test lookup rehearsal、handoff counter semantics、segment-local dirty-range handoff planner、owner-side hit target metadata snapshot、default-off `SegmentedRetainedFrameProductionOwnerFeed`、`DrawingBackendCompositorShadowProbe` hardening、local shadow result vocabulary、accepted partial rehearsal、explicit full fallback rehearsal、四件套 atomicity、default-off / enabled-secondary no-change sentinel、empty batch、malformed dirty range fallback、hit target projection fallback、per-gate pre-promotion review、per-segment backend adapter prototype、hit target metadata projector、retained root metadata patcher、pipeline dry-run、runtime-shadow / production-off / production-adjacent / production-hookup evidence split、minimal production render-source handoff design cut 已落地/记录；ResourceResolverOwnership / CompositorOwnership 仅有第一批 production runtime evidence，gates 仍未 satisfied。
-- 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion、`StyleOnly fast-path implementation`；StyleOnly 仍停在 [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md#future-fast-path-insertion-point) 的 future insertion point，不接入 `RenderPipeline.Build`，不启用新行为。
+- 已记录：[Retained / partial apply prep](V1-Retained-Partial-Apply-Prep.md)、[Partial apply preflight design](V1-Partial-Apply-Preflight-Design.md) 与 [runtime integration checkpoint](V1-Partial-Apply-Runtime-Integration-Checkpoint.md)：default-off selected segmented render-source path 已从可执行推进到 gate-driven core complete；所有 partial apply integration gates 已 satisfied，`CanHookUpPartialApply=true`；default-off 行为与现有 production path 等价；enabled internal path 覆盖 selected execution、fallback、stale/missing/rejected owner、malformed guard、backend throw、hit-test ownership、counter semantics、dirty-range routing、resource lifecycle、retained root update 与 diagnostics no-change。
+- 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion、default-on partial apply、D3D12 segmented ownership、unified diagnostics channel、GA hardening；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 
 ### IRIX-V1 收口任务表
@@ -80,10 +80,10 @@
 | IRIX-V1-007 | P2 | Typed identity wrappers | Postponed | 保留设计词汇；不新增 public API，string id 行为不变。 |
 | IRIX-V1-008 | P2 | Scroll extraction | Postponed | 不抽 `ScrollController` / `ScrollState` / `ScrollFramePump`。 |
 | IRIX-V1-009 | P2 | `WindowDrawCommandTranslator` promotion | Postponed / seam only | Translator 留在 `Irix.Poc`；style/pipeline creation 只是 internal seam，viewport/retained-tree/typed feedback 仍未 promotion。 |
-| IRIX-V1-013 | P2 | Retained planner-only hardening / partial apply preflight | Internal scaffold 完成 | [V1-Retained-Partial-Apply-Prep.md](V1-Retained-Partial-Apply-Prep.md)、[V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) 与 [V1-Partial-Apply-Runtime-Integration-Checkpoint.md](V1-Partial-Apply-Runtime-Integration-Checkpoint.md) 已记录 reason coverage、segmented reader edge guards、resource segment / lifecycle model、`SegmentedRetainedFrameOwner` shadow owner + opt-in diagnostic harness、`SegmentedRetainedFrameRuntimeOwner` seam draft、default-off `RetainedRenderFrameSegmentOwnership`、default-off `RetainedRenderFrameHandoffHarness` missing-owner / clipped no-hit / dirty-range mismatch hardening、default-off `DrawingBackendCompositor` handoff selector lazy allocation / same-frame freshness guard / selected render-source path / internal result reporting、multi-`FrameDrawingResources` exact-once lifecycle、owner-side hit-test lookup rehearsal、handoff counter semantics、segment-local dirty-range handoff planner、owner-side hit target metadata snapshot、default-off `SegmentedRetainedFrameProductionOwnerFeed`、`DrawingBackendCompositorShadowProbe` hardening、local shadow result vocabulary、accepted partial rehearsal、explicit full fallback rehearsal、四件套 atomicity、default-off / enabled-secondary no-change sentinel、empty batch、malformed dirty range fallback、hit target projection fallback、per-gate pre-promotion review、per-segment backend adapter prototype、hit target metadata projector、retained root metadata patcher、pipeline dry-run、runtime-shadow / production-off / production-adjacent / production-hookup evidence split、minimal production render-source handoff design cut；不启用 StyleOnly fast-path。 |
-| IRIX-V1-010 | P3 | StyleOnly fast-path | Postponed | 不接入 `RenderPipeline.Build`，只修 diagnostics/planning regression。 |
+| IRIX-V1-013 | P2 | Retained planner / partial apply V1 core | Architecture-complete / default-off | Default-off selected segmented render-source path、all integration gates satisfied、`CanHookUpPartialApply=true`；仍不默认启用、不改 public API / `IDrawingBackend.Execute` / D3D12 / CLI diagnostics。 |
+| IRIX-V1-010 | P3 | StyleOnly fast-path | Default-off pre-switch only | `StyleOnlyFastPathOptions` 已作为 internal/default-off pre-switch；不跳过 layout，不接入 `RenderPipeline.Build`，不启用新行为。 |
 | IRIX-V1-011 | P3 | Unified diagnostics channel / event bus / registry | Postponed | 不新增全局 diagnostics abstraction。 |
-| IRIX-V1-012 | P0 | 当前进度判断 | Tracking | v1 约 86%～88%；下一轮聚焦 contract hardening，不代表 GA readiness。 |
+| IRIX-V1-012 | P0 | 当前进度判断 | Tracking | PoC v1 core architecture-complete；PoC v1 核心闭环约 98%～99%，v1 architecture 收口约 98%～99%；MVP/GA 仍未完成。 |
 
 ---
 
@@ -798,10 +798,10 @@ Style 分层已收敛并标记阶段完成：`LayoutStyle` 只描述布局几何
 
 如果按当前节奏推进，最自然的一次提交应围绕下面这个主题展开：
 
-`Add DirectWrite text rendering to the D3D12 backend`
+`Seal V1 partial apply core behind default-off selected render-source gates`
 
 对应改动范围建议：
 
-- `Irix.Platform.Windows`
-- `Irix.Poc`
+- `Irix.Rendering`
+- `tests/Irix.Core.Tests`
 - `docs`

@@ -72,7 +72,7 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
         var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewportBounds, batch.Resources, batch.Resources);
         if (plan.Kind != RetainedPartialApplyResultKind.AppliedPartial)
         {
-            return ApplyFallback(owner, batch, root, plan.Reason, plan.Kind, ownerStatePreserved: true);
+            return ReportFallback(owner, plan.Reason, plan.Kind, ownerStatePreserved: true);
         }
 
         var dirtyDfsIndices = new int[snapshot.DirtyClassifications.Count];
@@ -84,13 +84,13 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
         var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(owner.RetainedRoot, root, dirtyDfsIndices, owner.HitTargets);
         if (!hitTargetProjection.Succeeded)
         {
-            return ApplyFallback(owner, batch, root, hitTargetProjection.FallbackReason, plan.Kind, ownerStatePreserved: true);
+            return ReportFallback(owner, hitTargetProjection.FallbackReason, plan.Kind, ownerStatePreserved: true);
         }
 
         var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(owner.RetainedRoot, root, snapshot.DirtyClassifications);
         if (!rootPatch.Succeeded)
         {
-            return ApplyFallback(owner, batch, root, rootPatch.FallbackReason, plan.Kind, ownerStatePreserved: true);
+            return ReportFallback(owner, rootPatch.FallbackReason, plan.Kind, ownerStatePreserved: true);
         }
 
         var beforeRoot = owner.RetainedRoot;
@@ -114,22 +114,23 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             && SegmentsEqual(beforeSegments, owner.ResourceSegments)
             && HitTargetsEqual(beforeHitTargets, owner.HitTargets)
             && ReadsEqual(beforeReads, owner.ReadSegments());
-        return ApplyFallback(owner, batch, root, RetainedPartialApplyFallbackReason.UnstableCommandRange, plan.Kind, statePreserved);
+        return ReportFallback(owner, RetainedPartialApplyFallbackReason.UnstableCommandRange, plan.Kind, statePreserved);
     }
 
-    private static SegmentedRetainedFrameProductionOwnerFeedResult ApplyFallback(
+    private static SegmentedRetainedFrameProductionOwnerFeedResult ReportFallback(
         SegmentedRetainedFrameRuntimeOwner owner,
-        RenderFrameBatch batch,
-        VirtualNode root,
         RetainedPartialApplyFallbackReason reason,
         RetainedPartialApplyResultKind planKind,
         bool ownerStatePreserved)
     {
-        var result = owner.ApplyFallbackFull(batch, root, reason);
         return new SegmentedRetainedFrameProductionOwnerFeedResult(
-            result with { PlanKind = planKind },
+            new SegmentedRetainedFrameShadowResult(
+                SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull,
+                reason,
+                planKind,
+                owner.ReadSegments()),
             true,
-            true,
+            false,
             ownerStatePreserved);
     }
 

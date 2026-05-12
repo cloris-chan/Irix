@@ -116,10 +116,15 @@ internal sealed class RetainedRenderFrame : IDisposable
             return false;
         }
 
-        _commandBuffer.ApplyPartial(batch.Commands, batch.DirtyCommandRanges);
+        if (!RangeUtils.TryNormalizeStrict(batch.DirtyCommandRanges, _commandBuffer.Count, out var dirtyCommandRanges))
+        {
+            return false;
+        }
+
+        _commandBuffer.ApplyPartial(batch.Commands, dirtyCommandRanges);
         // Hit targets are NOT updated on partial apply — only dirty commands change.
         // This avoids an unnecessary array allocation on the hot path.
-        _dirtyCommandRanges = batch.DirtyCommandRanges;
+        _dirtyCommandRanges = dirtyCommandRanges;
         return true;
     }
 

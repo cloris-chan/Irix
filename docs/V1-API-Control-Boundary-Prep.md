@@ -14,7 +14,7 @@ Current status:
 - Program diagnostics runner split is complete and regression-only.
 - Diagnostics snapshot v0 and debug UI bridge v0 remain regression-only.
 - Unified diagnostics channel / event bus / registry remains postponed.
-- StyleOnly fast-path implementation remains postponed; `StyleOnlyPatchPlanBuilder` is still diagnostic/planning support only.
+- StyleOnly layout skipping remains postponed; `StyleOnlyFastPathOptions` is only an internal/default-off pre-switch over the guarded selected render-source path.
 
 This line only records ownership and naming boundaries for three areas:
 
@@ -308,7 +308,7 @@ Design inventory is complete. The next work should be a small implementation lin
 | P2 postponed | Typed identity wrappers | Future role-specific wrappers for `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId`. | Do not implement yet. Keep current string ids until the control helper boundary is explicitly promoted. |
 | P3 first step complete | Scroll feedback vocabulary | PoC-owned `ScrollFeedback` / `ScrollContainerMetrics` records name scroll container id, viewport extent, content extent, and max scroll. | Complete as translator side-channel only. Do not extract scroll yet; settings provider, pure controller, state ownership, and pump/scheduler work remain postponed. |
 | P3 design draft active | Translator options / feedback records | Future contract records for style source, viewport source, retained-tree ownership, render-pipeline creation, post-frame feedback, and local diagnostics. | Draft is tracked in [V1-Translator-Feedback-Contract-Prep.md](V1-Translator-Feedback-Contract-Prep.md). Do not promote `WindowDrawCommandTranslator` yet. Use the promotion checklist as the migration gate. |
-| P3 parked | `StyleOnly fast-path implementation` | Future render pipeline optimization. | Remains postponed; no `RenderPipeline.Build` behavior change in this line. |
+| P3 parked | `StyleOnly fast-path implementation` | Future render pipeline optimization. | Internal/default-off pre-switch exists; actual layout skip/default enablement remains postponed, with no `RenderPipeline.Build` behavior change in this line. |
 
 Implemented helper line:
 

@@ -16,17 +16,17 @@
 | StyleOnly plan diagnostics | Already available | Planning remains post-layout diagnostics only; not a fast path. |
 | Retained-input snapshot seam | Implemented locally | `RenderPipeline.LastRetainedInputSnapshot` collects retained layout result, element command ranges, hit targets, retained root, viewport, dirty classifications, dirty ranges, and rebuild reason. |
 | Retained data-only local planner | Implemented locally | `RetainedPartialApplyPlanner` consumes the snapshot and returns `AppliedPartial`, `FallbackFull`, or `Rejected` planning data without changing render behavior. Planner-only boundary tests cover every local reason. |
-| Partial apply preflight scaffold | Implemented locally / not wired | [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) selects resource snapshot / composite resolver, defines internal resource segment, segmented reader with malformed-coverage guards, `SegmentedRetainedFrameOwner` shadow owner with opt-in `SegmentedRetainedFrameDiagnosticHarness`, `SegmentedRetainedFrameRuntimeOwner` seam draft with owner-side hit target metadata, default-off `RetainedRenderFrameSegmentOwnership`, default-off `RetainedRenderFrameHandoffHarness` with missing-owner / clipped no-hit / dirty-range mismatch hardening, default-off `DrawingBackendCompositor` handoff selector with lazy allocation, same-frame freshness guard, selected render-source path, and internal result reporting, multi-`FrameDrawingResources` exact-once lifecycle, owner-side hit-test lookup rehearsal, handoff counter semantics, segment-local dirty-range handoff planner, default-off `SegmentedRetainedFrameProductionOwnerFeed`, hardened `DrawingBackendCompositorShadowProbe`, local shadow result vocabulary, default-off / enabled-secondary no-change sentinels, empty batch, malformed dirty range fallback tests, hit target projection fallback tests, per-gate pre-promotion review, per-segment backend adapter prototype, hit target metadata projector, retained root metadata patcher, dry-run flow, minimal production render-source handoff design cut, and layered preflight / shadow / production-off / production-adjacent / production integration gate evidence. Runtime checkpoint: [V1-Partial-Apply-Runtime-Integration-Checkpoint.md](V1-Partial-Apply-Runtime-Integration-Checkpoint.md). |
+| Partial apply V1 core | Gate-driven complete / default-off | [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) now records the internal/default-off selected segmented render-source path, strict freshness/range/segment guards, exact-once multi-snapshot lifecycle, owner-side hit-test commit after selected success, segment-local dirty-range routing, retained root metadata update, fallback reporting reasons, style-only pre-switch, and all `PartialApplyIntegrationGateChecklist` gates satisfied. Runtime checkpoint: [V1-Partial-Apply-Runtime-Integration-Checkpoint.md](V1-Partial-Apply-Runtime-Integration-Checkpoint.md). |
 
 ## 2. Blocked Decisions
 
 | Blocker | Why it blocks implementation |
 |---------|------------------------------|
-| Cross-frame resource strategy | Text slices and style resources are frame-resource scoped; true cross-frame partial apply needs stable handles, resource snapshots, or another ownership model. |
+| Default-on resource strategy | Text slices and style resources remain frame-resource scoped; default-on / D3D12-facing partial apply still needs broader ownership and GA hardening. |
 | Fast-path input shape | Current style-only planner consumes next layout output, so it cannot be the actual layout-skipping input boundary. |
 | Retained layout ownership | `RenderPipeline` owns retained layout state today; promotion of partial apply needs explicit owner/lifetime rules. |
 | Hit target metadata patching | Bounds/clip can be retained, but metadata updates need a stable projection from next `VirtualNode` without layout. |
-| Fallback reporting | Local vocabulary exists, but it is not wired to runtime/compositor or diagnostics formatter. |
+| Fallback reporting | Local vocabulary is wired to internal runtime/compositor results; diagnostics formatter remains unchanged. |
 
 ## 3. Retained-Input Snapshot Seam
 
@@ -47,7 +47,7 @@ Regression scope:
 
 ## 4. Cross-Frame Resource Blockers
 
-True cross-frame partial apply is still blocked by frame-scoped resource ownership. Text content and style resources are resolved through `FrameDrawingResources`; `TextSlice` values are valid only while their owning frame resources are retained.
+Internal/default-off selected segmented rendering now supports mixed retained resource snapshots through `SegmentedRetainedFrameRuntimeOwner`. Default-on partial apply is still blocked by broader resource ownership and platform hardening. Text content and style resources are resolved through `FrameDrawingResources`; `TextSlice` values are valid only while their owning frame resources are retained.
 
 | Direction | Benefit | Cost / risk | Current decision |
 |-----------|---------|-------------|------------------|
@@ -104,15 +104,15 @@ The safest next implementation line is not a full partial-rendering feature. Aft
 2. Keep every local planner result reason covered by planner-only regression tests.
 3. Keep `RenderPipeline.Build` on the existing full layout path.
 4. Do not apply replacement commands across frames until resource ownership is solved.
-5. Require every gate in [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) before any runtime hookup.
+5. Keep every gate in [V1-Partial-Apply-Preflight-Design.md](V1-Partial-Apply-Preflight-Design.md) satisfied before any public/default-on runtime hookup.
 
 Checkpoint decision: the first runtime seam should be retained frame segment ownership, not compositor segmented execution. The compositor cannot safely execute segments until a retained frame owner can expose correct command-range resolver ownership.
 
-The current preflight dry-run is only a decision-flow proof. It does not replace production command ranges, mutate `RetainedRenderFrame`, or touch compositor/backend behavior. A separate opt-in diagnostic harness can consume real `RenderPipeline.Build` output in tests to prove segmented-frame ownership shape, accepted partial rehearsal, explicit full fallback, local `Disabled` / `ShadowAppliedPartial` / `ShadowFallbackFull` / `ShadowRejected` results, disabled-mode no-change behavior, long-lived runtime-owner lifecycle, and compositor-external segmented execution, but it remains outside production `RenderPipeline.Build`.
+The original preflight dry-run remains a decision-flow proof. The current V1 core runtime path adds an internal/default-off compositor selector that may execute fresh accepted segmented reads as the selected source, but it still does not replace `RetainedRenderFrame.TryReadFrame`, does not alter default compositor/backend behavior, and does not connect to D3D12-specific segmented ownership.
 
 ## 8. Guardrails
 
-- Do not enable StyleOnly fast-path.
+- Do not enable StyleOnly fast-path by default.
 - Do not skip layout rebuilds for style-only changes yet.
 - Do not broaden diagnostics formatter/channel scope.
 - Do not move retained tree or translator ownership.

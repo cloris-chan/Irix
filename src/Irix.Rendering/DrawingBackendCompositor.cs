@@ -207,8 +207,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.MissingOwner(ownerResult));
         }
 
-        if (!IsOwnerResultFresh(ownerResult, renderFrameBatch)
-            || ownerResult.Kind == SegmentedRetainedFrameShadowResultKind.ShadowRejected
+        if (!IsOwnerResultFresh(ownerResult, renderFrameBatch))
+        {
+            return HandoffSelection.Fallback(
+                ownerResult,
+                DrawingBackendCompositorHandoffResult.Rejected(ownerResult, DrawingBackendCompositorHandoffReason.StaleOwner));
+        }
+
+        if (ownerResult.Kind == SegmentedRetainedFrameShadowResultKind.ShadowRejected
             || ownerResult.ShadowResult.PlanKind == RetainedPartialApplyResultKind.Rejected)
         {
             return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.Rejected(ownerResult));
@@ -224,9 +230,18 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.Rejected(ownerResult));
         }
 
-        if (ownerResult.ShadowResult.Reads.Count == 0)
+        if (!RangeUtils.TryNormalizeStrict(LastDirtyCommandRanges, renderFrameBatch.Commands.Count, out _))
         {
-            return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult));
+            return HandoffSelection.Fallback(
+                ownerResult,
+                DrawingBackendCompositorHandoffResult.Rejected(ownerResult, DrawingBackendCompositorHandoffReason.DirtyRangeMismatch));
+        }
+
+        if (!TryValidateSelectedRuntimeOwner(ownership.RuntimeOwner, ownerResult, renderFrameBatch, out var reason))
+        {
+            return reason == DrawingBackendCompositorHandoffReason.EmptySegmentRead
+                ? HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult, reason))
+                : HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.Rejected(ownerResult, reason));
         }
 
         return HandoffSelection.SelectedCandidate(ownerResult);
@@ -244,7 +259,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
         catch
         {
-            LastHandoffResult = MapCandidateResult(ownerResult, harness.LastResult);
+            LastHandoffResult = DrawingBackendCompositorHandoffResult.Executed(
+                ownerResult,
+                harness.LastResult,
+                DrawingBackendCompositorHandoffReason.BackendThrewBeforeCommit);
             throw;
         }
     }
@@ -305,7 +323,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             RetainedRenderFrameHandoffHarnessResultKind.Disabled => DrawingBackendCompositorHandoffResult.Disabled,
             RetainedRenderFrameHandoffHarnessResultKind.MissingSegmentedOwner => DrawingBackendCompositorHandoffResult.MissingOwner(ownerResult),
-            RetainedRenderFrameHandoffHarnessResultKind.EmptyFrame => DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult),
+            RetainedRenderFrameHandoffHarnessResultKind.EmptyFrame => DrawingBackendCompositorHandoffResult.FallbackFull(ownerResult, DrawingBackendCompositorHandoffReason.EmptySegmentRead),
             _ => DrawingBackendCompositorHandoffResult.Executed(ownerResult, candidateResult)
         };
     }
@@ -322,6 +340,102 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private static ulong GetBatchFrameId(RenderFrameBatch renderFrameBatch)
     {
         return renderFrameBatch.Resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0;
+    }
+
+    private static bool TryValidateSelectedRuntimeOwner(
+        SegmentedRetainedFrameRuntimeOwner runtimeOwner,
+        SegmentedRetainedFrameProductionOwnerFeedResult ownerResult,
+        RenderFrameBatch renderFrameBatch,
+        out DrawingBackendCompositorHandoffReason reason)
+    {
+        reason = DrawingBackendCompositorHandoffReason.None;
+        IReadOnlyList<SegmentedFrameRead> runtimeReads;
+        try
+        {
+            runtimeReads = runtimeOwner.ReadSegments();
+        }
+        catch (InvalidOperationException)
+        {
+            reason = DrawingBackendCompositorHandoffReason.MalformedSegmentCoverage;
+            return false;
+        }
+
+        if (runtimeReads.Count == 0 || ownerResult.ShadowResult.Reads.Count == 0)
+        {
+            reason = DrawingBackendCompositorHandoffReason.EmptySegmentRead;
+            return false;
+        }
+
+        if (!ReadsEqual(ownerResult.ShadowResult.Reads, runtimeReads)
+            || !TryValidateSegmentCoverage(runtimeReads, runtimeOwner.ResourceSegments, renderFrameBatch.Commands.Count))
+        {
+            reason = DrawingBackendCompositorHandoffReason.MalformedSegmentCoverage;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryValidateSegmentCoverage(
+        IReadOnlyList<SegmentedFrameRead> reads,
+        IReadOnlyList<RetainedResourceSegment> resourceSegments,
+        int commandCount)
+    {
+        if (reads.Count == 0 || reads.Count != resourceSegments.Count)
+        {
+            return false;
+        }
+
+        var cursor = 0;
+        for (var i = 0; i < reads.Count; i++)
+        {
+            var read = reads[i];
+            var segment = resourceSegments[i];
+            if (read.CommandStart != cursor
+                || segment.CommandStart != cursor
+                || read.Commands.Length <= 0
+                || segment.CommandCount != read.Commands.Length
+                || !ReferenceEquals(segment.Snapshot.Resolver, read.Resolver))
+            {
+                return false;
+            }
+
+            cursor += read.Commands.Length;
+            if (cursor > commandCount)
+            {
+                return false;
+            }
+        }
+
+        return cursor == commandCount;
+    }
+
+    private static bool ReadsEqual(IReadOnlyList<SegmentedFrameRead> left, IReadOnlyList<SegmentedFrameRead> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i].CommandStart != right[i].CommandStart
+                || !ReferenceEquals(left[i].Resolver, right[i].Resolver)
+                || left[i].Commands.Length != right[i].Commands.Length)
+            {
+                return false;
+            }
+
+            for (var commandIndex = 0; commandIndex < left[i].Commands.Length; commandIndex++)
+            {
+                if (left[i].Commands[commandIndex] != right[i].Commands[commandIndex])
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     public bool TryGetActionIdAt(int x, int y, out string actionId)

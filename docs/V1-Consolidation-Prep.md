@@ -127,5 +127,5 @@ Rules for this split:
 | 测试分组盘点 | 已按 scroll/input/clip/viewport/layout dirty/style-only plan/retained frame 分组。 |
 | 标记不移动清单 | 已明确 scroll/input/clip/render pipeline 核心代码暂不移动。 |
 | Program diagnostics runner split | 已完成并封版为 regression-only：`Program.Main` 只分发 diagnostics runners，后续不在此线继续拆 block。 |
-| 下一条线 | [translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md) 和 [scroll settings provider prep](V1-Scroll-Settings-Provider-Prep.md) 已作为 design-only contract prep 收口；暂不做 StyleOnly fast-path implementation，也暂不做 unified diagnostics channel。 |
+| 下一条线 | [partial apply runtime checkpoint](V1-Partial-Apply-Runtime-Integration-Checkpoint.md) 已收口为 internal/default-off V1 core complete；StyleOnly 仅有 pre-switch，不跳过 layout；unified diagnostics channel 仍暂不做。 |
 | consolidation prep 文档 | 本文即输出；当前阶段不改运行行为。 |

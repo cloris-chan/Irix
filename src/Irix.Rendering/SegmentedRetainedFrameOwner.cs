@@ -53,12 +53,13 @@ internal sealed class SegmentedRetainedFrameOwner : IDisposable
             return false;
         }
 
-        if (!_resourceSegments.TryAcceptPartial(batch.DirtyCommandRanges, replacementSnapshot))
+        if (!RangeUtils.TryNormalizeStrict(batch.DirtyCommandRanges, _commandBuffer.Count, out var dirtyCommandRanges)
+            || !_resourceSegments.TryAcceptPartial(dirtyCommandRanges, replacementSnapshot))
         {
             return false;
         }
 
-        _commandBuffer.ApplyPartial(batch.Commands, batch.DirtyCommandRanges);
+        _commandBuffer.ApplyPartial(batch.Commands, dirtyCommandRanges);
         _retainedRoot = rootPatch.Root;
         _hitTargets = hitTargets.ToArray();
         return true;
