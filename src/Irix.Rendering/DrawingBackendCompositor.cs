@@ -183,10 +183,18 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             {
                 _backend.Execute(commands, resources);
             }
-            finally
+            catch (Exception ex)
             {
-                _backend.EndFrame();
+                // Device-lost: attempt recovery, skip frame if successful.
+                if (TryHandleDeviceLost(ex))
+                {
+                    return ValueTask.CompletedTask;
+                }
+
+                throw;
             }
+
+            _backend.EndFrame();
         }
 
         lock (_hitTargetsLock)
@@ -271,6 +279,13 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         try
         {
             return MapCandidateResult(ownerResult, harness.ExecuteCandidateFrame(ownership, frameContext, LastDirtyCommandRanges));
+        }
+        catch (Exception ex) when (TryHandleDeviceLost(ex))
+        {
+            return DrawingBackendCompositorHandoffResult.Executed(
+                ownerResult,
+                harness.LastResult,
+                DrawingBackendCompositorHandoffReason.BackendThrewBeforeCommit);
         }
         catch
         {
@@ -486,6 +501,28 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
 
         actionId = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Exception filter: returns true if the backend is device-removed and recovery succeeds.
+    /// When true, the exception is swallowed and the frame is skipped.
+    /// </summary>
+    private bool TryHandleDeviceLost(Exception ex)
+    {
+        if (_backend is not IDeviceRecovery recovery || !recovery.IsDeviceRemoved)
+        {
+            return false;
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[DrawingBackendCompositor] Device-lost detected: {ex.Message}. Attempting recovery...");
+        if (recovery.TryRecover())
+        {
+            System.Diagnostics.Debug.WriteLine("[DrawingBackendCompositor] Recovery succeeded. Skipping frame.");
+            return true;
+        }
+
+        System.Diagnostics.Debug.WriteLine("[DrawingBackendCompositor] Recovery failed. Propagating exception.");
         return false;
     }
 

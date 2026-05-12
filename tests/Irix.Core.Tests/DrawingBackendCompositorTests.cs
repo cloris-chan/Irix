@@ -515,4 +515,142 @@ public sealed class DrawingBackendCompositorTests
         public void EndFrame() { }
         public void Dispose() { }
     }
+
+    [Fact]
+    public async Task RenderAsync_recovers_from_device_lost_mid_frame()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new DeviceLostBackend();
+        var compositor = new DrawingBackendCompositor(backend);
+
+        // Frame 1: normal render
+        var resources = FrameDrawingResources.Rent();
+        var hello = resources.AddText("Hello");
+        resources.Seal();
+
+        using var frame1 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 50), Color: DrawColor.Opaque(255, 0, 0)),
+            ]), 1),
+            [],
+            resources);
+
+        await compositor.RenderAsync(frame1, cancellationToken);
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.False(backend.IsDeviceRemoved);
+
+        // Frame 2: backend throws during Execute (simulating device-lost)
+        var resources2 = FrameDrawingResources.Rent();
+        resources2.AddText("World");
+        resources2.Seal();
+
+        using var frame2 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 50), Color: DrawColor.Opaque(0, 255, 0)),
+            ]), 1),
+            [],
+            resources2);
+
+        // Should not throw — compositor catches and recovers
+        await compositor.RenderAsync(frame2, cancellationToken);
+
+        Assert.True(backend.RecoveryAttempted);
+        Assert.True(backend.RecoverySucceeded);
+        Assert.False(backend.IsDeviceRemoved);
+        Assert.Equal(2, backend.ExecuteCount); // Execute was called
+
+        // Frame 3: after recovery, next frame should render normally
+        var resources3 = FrameDrawingResources.Rent();
+        resources3.AddText("After");
+        resources3.Seal();
+
+        using var frame3 = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 50), Color: DrawColor.Opaque(0, 0, 255)),
+            ]), 1),
+            [],
+            resources3);
+
+        await compositor.RenderAsync(frame3, cancellationToken);
+        Assert.Equal(3, backend.ExecuteCount);
+        Assert.False(backend.IsDeviceRemoved);
+    }
+
+    [Fact]
+    public async Task RenderAsync_propagates_when_recovery_fails()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new DeviceLostBackend { RecoveryShouldSucceed = false, ThrowOnNextExecute = true };
+        var compositor = new DrawingBackendCompositor(backend);
+
+        var resources = FrameDrawingResources.Rent();
+        resources.AddText("Hello");
+        resources.Seal();
+
+        using var frame = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 50), Color: DrawColor.Opaque(255, 0, 0)),
+            ]), 1),
+            [],
+            resources);
+
+        // Backend throws, recovery fails → exception propagates
+        bool threw = false;
+        try
+        {
+            await compositor.RenderAsync(frame, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+            threw = true;
+        }
+
+        Assert.True(backend.RecoveryAttempted, $"Expected RecoveryAttempted=true but got false (ExecuteCount={backend.ExecuteCount}, IsDeviceRemoved={backend.IsDeviceRemoved})");
+        Assert.False(backend.RecoverySucceeded);
+        Assert.True(threw, "Expected InvalidOperationException to propagate when recovery fails");
+    }
+
+    private sealed class DeviceLostBackend : IDrawingBackend, IDeviceRecovery
+    {
+        private bool _deviceRemoved;
+
+        public int ExecuteCount { get; private set; }
+        public bool IsDeviceRemoved => _deviceRemoved;
+        public bool RecoveryAttempted { get; private set; }
+        public bool RecoverySucceeded { get; private set; }
+        public bool RecoveryShouldSucceed { get; set; } = true;
+        public bool ThrowOnNextExecute { get; set; }
+
+        public void BeginFrame(in FrameContext frameContext) { }
+
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+            ExecuteCount++;
+            if (ThrowOnNextExecute || ExecuteCount == 2)
+            {
+                _deviceRemoved = true;
+                ThrowOnNextExecute = true;
+                throw new InvalidOperationException("Device removed (simulated)");
+            }
+        }
+
+        public void EndFrame() { }
+
+        public bool TryRecover()
+        {
+            RecoveryAttempted = true;
+            if (!RecoveryShouldSucceed) return false;
+
+            _deviceRemoved = false;
+            ThrowOnNextExecute = false;
+            RecoverySucceeded = true;
+            return true;
+        }
+
+        public void Dispose() { }
+    }
 }

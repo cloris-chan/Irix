@@ -8,9 +8,9 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| Device-lost detection | `_deviceRemoved` flag + `DeviceErrorReason` string | Already done | — |
-| Device-lost recovery | Fail-fast only; no reconstruction | Must reconstruct device, swapchain, all GPU resources | P0 |
-| Device-removed during segmented frame | Exception path preserves compositor state | Confirm guard works; add explicit test | P0 |
+| Device-lost detection | `_deviceRemoved` flag + `DeviceErrorReason` string + `DeviceLost` event | Already done | — |
+| Device-lost recovery | `D3D12Renderer.TryRecover()` reconstructs all GPU resources; compositor catches backend exceptions, checks `IDeviceRecovery`, attempts recovery; 2 tests (recovery succeeds/fails) | Already done | — |
+| Device-removed during segmented frame | Compositor catches exceptions in both standard and handoff paths; recovery attempted via `IDeviceRecovery`; test-verified | Already done | — |
 | GPU memory pressure | No tracking | Monitor and handle `E_OUTOFMEMORY` gracefully | P1 |
 | Command allocator reset failure | Not handled | Add retry or device-lost escalation | P2 |
 
@@ -58,7 +58,7 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| CI test suite | 476 tests, all passing | Maintain green | — |
+| CI test suite | 478 tests, all passing | Maintain green | — |
 | D3D12-specific tests | None (PoC-only) | Add smoke tests for D3D12 backend integration | P1 |
 | Platform matrix CI | Single Windows runner | Add matrix for Windows versions | P2 |
 | Performance regression CI | None | Add frame time regression check | P2 |
@@ -67,10 +67,10 @@
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. Display scale pipeline complete and hand-tested (100%/150%/200%). GA hardening first batch planned (2026-05-13).
+**Current state:** PoC V1 core architecture-complete. Display scale pipeline complete and hand-tested (100%/150%/200%). Device-lost recovery implemented (2026-05-13). GA hardening first batch in progress.
 
 **Minimum for GA:**
-1. Device-lost recovery (P0)
+1. ~~Device-lost recovery (P0)~~ — Done
 2. 1000-frame soak test (P1)
 3. Resize stress test (P1)
 4. Frame time profiling (P1)
@@ -82,25 +82,18 @@
 
 ## First Batch Implementation Plan (2026-05-13)
 
-### Item 1: Device-Lost Recovery (P0)
+### Item 1: Device-Lost Recovery (P0) — DONE
 
-**Entry point:** `src/Irix.Platform.Windows/D3D12Renderer.cs`, `src/Irix.Poc/D3D12DrawingBackend.cs`
+**Entry point:** `src/Irix.Platform.Windows/D3D12Renderer.cs`, `src/Irix.Poc/D3D12DrawingBackend.cs`, `src/Irix.Rendering/DrawingBackendCompositor.cs`
 
-**Current state:** D3D12Renderer detects device-removed via `HRESULT` checks and sets `_deviceRemoved` flag. D3D12DrawingBackend checks flag in BeginFrame/Execute/EndFrame and returns no-ops. Compositor catches exceptions and preserves state. No reconstruction.
-
-**Implementation steps:**
-1. Add `DeviceLost` event to `D3D12Renderer` (fires on first device-removed detection)
-2. Add `IDeviceRecovery` interface with `TryRecover()` method
-3. Implement `D3D12DeviceRecovery` that reconstructs device, command queue, swapchain
-4. Implement resource reconstruction: `D3D12Renderer2D` vertex buffers, `D3D12TextRenderer` D3D11on12 resources
-5. Wire recovery into compositor: on device-lost, attempt recovery, fall back to fail-fast if recovery fails
-6. Add test: mock backend that simulates device-lost mid-frame, verify compositor state preserved
-
-**Acceptance criteria:**
-- Device-lost during `EndFrame` triggers recovery attempt
-- After recovery, next frame renders correctly
-- If recovery fails, fail-fast behavior preserved (no silent corruption)
-- Compositor state (counters, hit targets) consistent after recovery
+**Implementation (2026-05-13):**
+1. `D3D12Renderer.DeviceLost` event fires on first device-removed detection (in `HandleDeviceError`, `SucceededOrMarkDeviceRemoved`, text renderer failure)
+2. `D3D12Renderer.TryRecover()` releases all GPU resources and reinitializes from scratch (device, queue, swapchain, RTV heap, render targets, allocators, command list, fence, renderer2D, textRenderer)
+3. `IDeviceRecovery` internal interface in `Irix.Rendering` (`IsDeviceRemoved`, `TryRecover()`)
+4. `D3D12DrawingBackend` implements `IDeviceRecovery`, delegates to `D3D12Renderer`
+5. `DrawingBackendCompositor` catches backend exceptions, checks `IDeviceRecovery`, attempts recovery; skips frame on success, re-throws on failure
+6. Handoff path also covered: `ExecuteSelectedHandoffFrame` catches and attempts recovery
+7. 2 tests: recovery succeeds (frame skipped, next frame renders), recovery fails (exception propagates)
 
 **Prohibited scope:** No multi-GPU support. No adapter enumeration. No DXGI debug layer integration.
 

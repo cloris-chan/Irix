@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform.Windows;
+using Irix.Rendering;
 
 namespace Irix.Poc;
 
@@ -15,7 +16,7 @@ internal readonly record struct D3D12TextClipDiagnostics(int TextClipSkippedCoun
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
 /// </summary>
-internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Diagnostic) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability
+internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Diagnostic) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability, IDeviceRecovery
 {
     private readonly D3D12Renderer _renderer = renderer;
     private float _bgR, _bgG, _bgB, _bgA = 1.0f;
@@ -253,6 +254,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             _renderer.ClearAndPresent(_bgR, _bgG, _bgB, _bgA);
         }
     }
+
+    public bool IsDeviceRemoved => _renderer.IsDeviceRemoved;
+
+    public bool TryRecover() => _renderer.TryRecover();
 
     public void Dispose()
     {

@@ -32,6 +32,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
     private D3D12TextRenderer? _textRenderer;
+    private readonly nint _hwnd;
     private readonly Lock _resizeLock = new();
     private int _width;
     private int _height;
@@ -44,6 +45,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public D3D12Renderer(nint hwnd, int width, int height)
     {
+        _hwnd = hwnd;
         _width = width;
         _height = height;
 
@@ -150,6 +152,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false);
 
     public string? DeviceErrorReason => _deviceErrorReason ?? _textRenderer?.DeviceErrorReason;
+
+    public event Action? DeviceLost;
 
     public D3D12TextRenderer.TextRendererDiagnostics? GetTextDiagnostics()
     {
@@ -391,8 +395,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             if (!textRenderer!.Render(_frameIndex, textRuns, resources))
             {
-                _deviceRemoved = true;
-                _deviceErrorReason = textRenderer.DeviceErrorReason ?? "TextRenderer render failed";
+                if (!_deviceRemoved)
+                {
+                    _deviceRemoved = true;
+                    _deviceErrorReason = textRenderer.DeviceErrorReason ?? "TextRenderer render failed";
+                    System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+                    DeviceLost?.Invoke();
+                }
                 return;
             }
         }
@@ -440,9 +449,11 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     private void HandleDeviceError(COMException ex, string context = "Unknown")
     {
+        if (_deviceRemoved) return;
         _deviceRemoved = true;
         _deviceErrorReason = $"{context}: COMException 0x{ex.ErrorCode:X8}";
         System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+        DeviceLost?.Invoke();
     }
 
     /// <summary>
@@ -452,9 +463,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     internal bool SucceededOrMarkDeviceRemoved(HRESULT hr, string context)
     {
         if (hr.Succeeded) return true;
-        _deviceRemoved = true;
-        _deviceErrorReason = $"{context}: HRESULT 0x{unchecked((uint)hr.Value):X8}";
-        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+        if (!_deviceRemoved)
+        {
+            _deviceRemoved = true;
+            _deviceErrorReason = $"{context}: HRESULT 0x{unchecked((uint)hr.Value):X8}";
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+            DeviceLost?.Invoke();
+        }
         return false;
     }
 
@@ -472,6 +487,158 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         catch (COMException ex)
         {
             HandleDeviceError(ex, "WaitForGpu");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Attempt to recover from device-lost by releasing all GPU resources
+    /// and reinitializing from scratch. Returns true if recovery succeeds.
+    /// </summary>
+    public bool TryRecover()
+    {
+        if (!_deviceRemoved) return true;
+
+        System.Diagnostics.Debug.WriteLine("[D3D12Renderer] Attempting device-lost recovery...");
+
+        // Phase 1: Release all GPU resources (same order as Dispose, but don't set _disposed)
+        try
+        {
+            _textRenderer?.Dispose();
+            _textRenderer = null;
+            _renderer2D?.Dispose();
+            _renderer2D = null;
+
+            for (var i = 0; i < FrameCount; i++)
+            {
+                if (_renderTargets[i] != null)
+                {
+                    _renderTargets[i]->Release();
+                    _renderTargets[i] = null;
+                }
+                if (_allocators[i] != null)
+                {
+                    _allocators[i]->Release();
+                    _allocators[i] = null;
+                }
+            }
+
+            if (_list != null) { _list->Release(); _list = null; }
+            if (_rtvHeap != null) { _rtvHeap->Release(); _rtvHeap = null; }
+            if (_fence != null) { _fence->Release(); _fence = null; }
+            _fenceEventOwner?.Dispose();
+            _fenceEventOwner = null;
+            _fenceEvent = default;
+            if (_swapChain != null) { _swapChain->Release(); _swapChain = null; }
+            if (_queue != null) { _queue->Release(); _queue = null; }
+            if (_device != null) { _device->Release(); _device = null; }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Recovery release failed: {ex.Message}");
+            return false;
+        }
+
+        // Phase 2: Reinitialize all resources
+        try
+        {
+            var width = Volatile.Read(ref _width);
+            var height = Volatile.Read(ref _height);
+
+            // DXGI factory
+            PInvoke.CreateDXGIFactory1(typeof(IDXGIFactory4).GUID, out var factoryObj);
+            var factory = (IDXGIFactory4*)factoryObj;
+
+            // D3D12 device
+            PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj);
+            _device = (ID3D12Device*)deviceObj;
+
+            // Command queue
+            var qd = new D3D12_COMMAND_QUEUE_DESC { Type = D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT };
+            _device->CreateCommandQueue(qd, typeof(ID3D12CommandQueue).GUID, out var queueObj);
+            _queue = (ID3D12CommandQueue*)queueObj;
+
+            // Swap chain
+            var sd = new DXGI_SWAP_CHAIN_DESC1
+            {
+                Width = (uint)width,
+                Height = (uint)height,
+                Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
+                SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
+                BufferUsage = DXGI_USAGE.DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                BufferCount = FrameCount,
+                Scaling = DXGI_SCALING.DXGI_SCALING_NONE,
+                SwapEffect = DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD
+            };
+            IDXGISwapChain1* sc1;
+            factory->CreateSwapChainForHwnd((global::Windows.Win32.System.Com.IUnknown*)_queue, new HWND(_hwnd), &sd, null, null, &sc1);
+            sc1->QueryInterface(typeof(IDXGISwapChain3).GUID, out var sc3Obj);
+            _swapChain = (IDXGISwapChain3*)sc3Obj;
+            sc1->Release();
+            factory->Release();
+
+            // RTV heap
+            var hd = new D3D12_DESCRIPTOR_HEAP_DESC
+            {
+                NumDescriptors = FrameCount,
+                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
+            };
+            _device->CreateDescriptorHeap(hd, typeof(ID3D12DescriptorHeap).GUID, out var heapObj);
+            _rtvHeap = (ID3D12DescriptorHeap*)heapObj;
+            _rtvSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+            // Render targets
+            _renderTargets = new ID3D12Resource*[FrameCount];
+            var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
+            for (var i = 0; i < FrameCount; i++)
+            {
+                _swapChain->GetBuffer((uint)i, typeof(ID3D12Resource).GUID, out var resObj);
+                _renderTargets[i] = (ID3D12Resource*)resObj;
+                _device->CreateRenderTargetView(_renderTargets[i], null, rtv);
+                rtv.ptr += _rtvSize;
+            }
+
+            // Command allocators
+            _allocators = new ID3D12CommandAllocator*[FrameCount];
+            for (var i = 0; i < FrameCount; i++)
+            {
+                _device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, typeof(ID3D12CommandAllocator).GUID, out var allocObj);
+                _allocators[i] = (ID3D12CommandAllocator*)allocObj;
+            }
+
+            // Command list
+            _device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, _allocators[0], null, typeof(ID3D12GraphicsCommandList).GUID, out var listObj);
+            _list = (ID3D12GraphicsCommandList*)listObj;
+            _list->Close();
+
+            // Fence
+            _device->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, typeof(ID3D12Fence).GUID, out var fenceObj);
+            _fence = (ID3D12Fence*)fenceObj;
+            _fenceValues = new ulong[FrameCount];
+            _fenceEventOwner = PInvoke.CreateEvent(null, false, false, null);
+            if (_fenceEventOwner.IsInvalid)
+            {
+                throw new InvalidOperationException("Failed to create the D3D12 fence event during recovery.");
+            }
+            _fenceEvent = new HANDLE(_fenceEventOwner.DangerousGetHandle());
+
+            _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+            _renderer2D = new D3D12Renderer2D(_device);
+            _textRenderer = new D3D12TextRenderer(_device, _queue, _renderTargets);
+
+            // Reset device-lost state
+            _deviceRemoved = false;
+            _deviceErrorReason = null;
+            _pendingResize = false;
+
+            System.Diagnostics.Debug.WriteLine("[D3D12Renderer] Device-lost recovery succeeded.");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _deviceRemoved = true;
+            _deviceErrorReason = $"Recovery reinitialize failed: {ex.Message}";
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
             return false;
         }
     }

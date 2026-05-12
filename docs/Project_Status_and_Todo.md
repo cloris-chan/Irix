@@ -50,8 +50,9 @@
 |--------|----------|
 | Diagnostics consolidation | ✅ 完成 / regression-only：Program diagnostics runner split、snapshot v0、debug UI bridge v0、formatter contracts 已封版；不新增 diagnostics channel / event bus / registry |
 | Clip / scissor / text clip v0 | 只修 bug / regression；不扩 nested clip stack、默认启用策略、text batching、theme/control scope |
-| Viewport / resize physical v0 | 只修 source-of-truth / resize regression；不引入 per-monitor DPI 切换、logical layout、multi-window scale 策略 |
-| Layout dirty diagnostics v1 | 只修现有输出或分类 regression；不扩诊断面，不做 partial layout，不跳过 `StyleOnly` layout |
+| Viewport / resize physical v0 | ✅ 完成 / regression-only：只修 source-of-truth / resize / scale regression；不引入 per-monitor DPI 切换、multi-window scale 策略、scale 邏輯下沉到 app/control |
+| Display scale pipeline | ✅ 完成 / regression-only：`DisplayScale` 类型、compositor-owned scale boundary、logical viewport layout、draw command/hit-target/text-style scaling、`WM_DPICHANGED` runtime handling 已封版；只修 scale 回归（文字/矩形/hit-test/clip/scroll/resize/partial apply）；不新增 scale 逻辑、不改 `IDrawingBackend.Execute`、不把 scale 下沉到 app/control |
+| Layout dirty diagnostics v1 | ✅ 完成 / regression-only：只修现有输出或分类 regression；`scale` / `logicalViewport` / `physicalViewport` / `swapchainSize` 已固化为 resize diagnostic regression output；不扩诊断面，不做 partial layout，不跳过 `StyleOnly` layout |
 | StyleOnly plan diagnostics | 只修 formatter/smoke regression；不继续扩 formatter，不接入 `RenderPipeline.Build`，不替换 retained frame apply |
 | V1 API/control boundary prep | design inventory complete / regression-only；`ControlVisualState projection helper` 已实现且仍为 PoC-owned |
 | ControlVisualState / action attribute helpers | ✅ 完成 / regression-only：internal PoC projection helper、ActionId attribute helper、button attribute bundle helper；PoC source raw `ActionId` 构造已清；target/action 继续用 string；不改 renderer / VirtualNode wire contract |
@@ -72,7 +73,8 @@
 - **已验证（2026-05-13）：** D3D12 text cache safety — cache keys 使用 `TextStyle` value equality（非 `ResourceHandle`），跨 resolver 安全。Default-on go/no-go checklist — **GO**：Gate 1-5 全部满足，Counter PoC D3D12 smoke test 通过（多刷新率，无渲染错误，无 crash）。HiDPI 下功能正常但因缺 app.manifest 被系统拉伸略模糊（非阻塞 visual quality issue）。详见 [Default-On-Partial-Apply-Prep.md](Default-On-Partial-Apply-Prep.md)。
 - **已翻转（2026-05-13）：** Default-on partial apply — `Program.cs` 预设启用 partial apply（`--no-partial-apply` 可显式关闭）。所有 435 tests 通过。
 - **已实现（2026-05-13）：** Platform-neutral display scale pipeline — `DisplayScale` 类型（`Irix.Drawing`），compositor 持有 scale boundary，layout 在 logical units 工作，draw commands/hit targets/text styles 缩放回 physical pixels。`WM_DPICHANGED` 运行时处理：窗口移动到不同 DPI 屏幕或系统缩放变化时，compositor/translator 自动更新 scale 并触发 relayout。`TextStyle.FontSize` 按 `DisplayScale` 缩放，确保文字与矩形视觉比例一致。所有 460 tests 通过。
-- **手测通过（2026-05-13）：** Display scale pipeline — 100% / 150% / 200% DPI 下文字、按钮、hit-test、scroll、resize、partial apply 均正常；运行时改系统缩放后下一幀 relayout 正确，文字/矩形/hit-test 不错位。39 DisplayScale regression tests 覆盖 command rect、clip bounds、hit target、text font size、logical viewport（1.0/1.25/1.5/2.0）。所有 476 tests 通过。
+- **手测通过（2026-05-13）：** Display scale pipeline — 100% / 150% / 200% DPI 下文字、按钮、hit-test、scroll、resize、partial apply 均正常；运行时改系统缩放后下一幀 relayout 正确，文字/矩形/hit-test 不错位。39 DisplayScale regression tests 覆盖 command rect、clip bounds、hit target、text font size、logical viewport（1.0/1.25/1.5/2.0）。所有 478 tests 通过。
+- **Device-lost recovery（2026-05-13）：** `D3D12Renderer.TryRecover()` 重建全部 GPU 资源；compositor 在 backend 异常时检查 `IDeviceRecovery` 并尝试恢复；2 个测试覆盖恢复成功/失败路径。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 - **下一步：** Default-on partial apply go/no-go 已达 GO 结论；下一步可执行 default-on 翻转（单选项变更）。Post-V1 backlog 已拆为 4 batch，GA hardening first batch 已规划 5 项实现步骤。详见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
@@ -617,6 +619,8 @@ WM_SIZE / GetClientRect physical client size
   -> DrawingBackendCompositor.RenderAsync()
        -> backend receives physical coordinates via FrameContext
 ```
+
+**Multi-compositor 架构准备：** PoC 目前为单 compositor，但 `DisplayScale` ownership 按每 screen/compositor 设计。`DrawingBackendCompositor.SetViewport(physicalViewport, displayScale)` 是 per-compositor API，每个 compositor 独立持有自己的 `_displayScale` 和 `_physicalViewport`。未来多屏时，每个 screen 对应一个 compositor 实例，各自持有独立的 scale/viewport/swapchain metrics，不需要全局 singleton scale 或跨 compositor 状态共享。
 
 Resize 后 renderer 已应用的 swapchain size 是 physical viewport 的 source of truth；`window.Region.PhysicalBounds` 提供最新物理窗口尺寸与窗口位置，diagnostic 会同时输出 window physical size、renderer swapchain size、translator viewport size、layout viewport size、scale、logicalViewport、最后一次 applied pending resize、render count 与 layout rebuild count。`viewportMatchesRenderer=True` 表示 translator viewport size 等于 renderer size；`layoutUsesRendererSize=True` 表示 layout viewport size 等于 renderer size。重复相同 size 的 render request 不应增加 `layoutRebuildCount`，不同 size 才应使 retained layout 因 viewport invalidation 重建。
 
