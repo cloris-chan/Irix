@@ -83,7 +83,49 @@
 | IRIX-V1-013 | P2 | Retained planner / partial apply V1 core | Architecture-complete / default-off | Default-off selected segmented render-source path、all integration gates satisfied、`CanHookUpPartialApply=true`；仍不默认启用、不改 public API / `IDrawingBackend.Execute` / D3D12 / CLI diagnostics。 |
 | IRIX-V1-010 | P3 | StyleOnly fast-path | Default-off pre-switch only | `StyleOnlyFastPathOptions` 已作为 internal/default-off pre-switch；不跳过 layout，不接入 `RenderPipeline.Build`，不启用新行为。 |
 | IRIX-V1-011 | P3 | Unified diagnostics channel / event bus / registry | Postponed | 不新增全局 diagnostics abstraction。 |
-| IRIX-V1-012 | P0 | 当前进度判断 | Tracking | PoC v1 core architecture-complete；PoC v1 核心闭环约 98%～99%，v1 architecture 收口约 98%～99%；MVP/GA 仍未完成。 |
+| IRIX-V1-012 | P0 | 当前进度判断 | V1 core complete | PoC v1 core architecture-complete / default-off；所有 V1 core gate satisfied，`CanHookUpPartialApply=true`；MVP/GA 仍未完成。 |
+
+---
+
+### V1 Core Completion Report（2026-05-13）
+
+**结论：PoC V1 core 架构闭环已完成（default-off），不等价于 MVP/GA。**
+
+V1 core 的完成边界是：internal/default-off selected segmented render-source path 能在所有 integration gate 满足时执行，且不改变任何现有 public API、backend contract、CLI 输出或默认行为。
+
+| 维度 | 状态 | 说明 |
+|------|------|------|
+| `CanHookUpPartialApply` | `true` | 8/8 gate satisfied，hardcoded，无 runtime mutation |
+| Default-off 行为等价 | 已验证 | disabled feed/compositor 与 direct pipeline 完全等价（435 tests pass） |
+| Selected path | internal/default-off | 仅 `StyleOnlyFastPathOptions.Enabled` 或 `DrawingBackendCompositorHandoffOptions.Enabled` 激活 |
+| Gate evidence 一致性 | 已验证 | 4 个 gate checklist tests 覆盖 satisfied/postponed/evidence 分层 |
+| `RenderPipeline.Build` | 未改变 | layout 仍全量 rebuild，StyleOnly 不跳过 layout |
+| `RetainedRenderFrame.TryReadFrame` | 未改变 | selected path 不写入 retained frame |
+| `IDrawingBackend.Execute` | 未改变 | per-segment execute 通过 adapter wrapper，不改 backend 签名 |
+| D3D12 | 未触及 | segmented ownership 仅在 test backend 验证 |
+| CLI diagnostics | 未改变 | handoff result 仅 internal，不出现在 `--diagnose` 输出 |
+
+**V1 core 完成 ≠ MVP/GA：** 以下仍需后续阶段完成（见 Post-V1 shortlist）。
+
+---
+
+### Post-V1 / MVP Shortlist
+
+下一阶段任务按优先级排列。所有任务均不在 V1 core 范围内。
+
+| 优先级 | 任务线 | 内容 | 前置条件 |
+|--------|--------|------|----------|
+| P0 | Default-on partial apply | 将 selected segmented render-source path 从 default-off 提升为 default-on；需要 GA 级别的 platform matrix 验证 | D3D12 segmented ownership、GA hardening |
+| P0 | D3D12 segmented ownership | 让 D3D12 backend 正确处理 per-segment execute + segment-local dirty ranges；验证 GPU resource lifecycle | D3D12 device-lost recovery |
+| P0 | GA hardening | 平台矩阵测试（240Hz/120Hz/60Hz、DPI scaling、multi-monitor）、device-lost recovery、性能 profiling | 上述两项 |
+| P1 | Translator promotion | 将 `WindowDrawCommandTranslator` 从 `Irix.Poc` 提升到 framework 层；typed feedback contract | Translator feedback contract prep |
+| P1 | Typed id wrappers | 将 string ActionId / target identity 替换为 typed wrappers | API control boundary prep |
+| P1 | Scroll extraction | 将 `ScrollController` / `ScrollState` / `ScrollFramePump` 从 PoC 抽取到 framework | Scroll settings provider design |
+| P1 | Settings provider | 读取 Windows `SPI_GETWHEELSCROLLLINES` 等系统设置；fallback-only internal provider | Scroll extraction |
+| P2 | Unified diagnostics channel | 替代 current per-component diagnostics；event bus / registry | Diagnostics consolidation freeze |
+| P2 | StyleOnly layout skip | 真正跳过 `StyleOnly` layout rebuild；在 dirty classify 后、layout rebuild 前 fast-path | Default-on partial apply |
+| P2 | Retained element tree | 真正的 retained element tree + local patch apply | RetainedElementTree-Design draft |
+| P3 | Resource cache / stable global handles | D3D12-specific 资源缓存与跨帧稳定 handle | D3D12 segmented ownership |
 
 ---
 
