@@ -73,13 +73,14 @@
 - **已验证（2026-05-13）：** D3D12 text cache safety — cache keys 使用 `TextStyle` value equality（非 `ResourceHandle`），跨 resolver 安全。Default-on go/no-go checklist — **GO**：Gate 1-5 全部满足，Counter PoC D3D12 smoke test 通过（多刷新率，无渲染错误，无 crash）。HiDPI 下功能正常但因缺 app.manifest 被系统拉伸略模糊（非阻塞 visual quality issue）。详见 [Default-On-Partial-Apply-Prep.md](Default-On-Partial-Apply-Prep.md)。
 - **已翻转（2026-05-13）：** Default-on partial apply — `Program.cs` 预设启用 partial apply（`--no-partial-apply` 可显式关闭）。所有 435 tests 通过。
 - **已实现（2026-05-13）：** Platform-neutral display scale pipeline — `DisplayScale` 类型（`Irix.Drawing`），compositor 持有 scale boundary，layout 在 logical units 工作，draw commands/hit targets/text styles 缩放回 physical pixels。`WM_DPICHANGED` 运行时处理：窗口移动到不同 DPI 屏幕或系统缩放变化时，compositor/translator 自动更新 scale 并触发 relayout。`TextStyle.FontSize` 按 `DisplayScale` 缩放，确保文字与矩形视觉比例一致。所有 460 tests 通过。
-- **手测通过（2026-05-13）：** Display scale pipeline — 100% / 150% / 200% DPI 下文字、按钮、hit-test、scroll、resize、partial apply 均正常；运行时改系统缩放后下一幀 relayout 正确，文字/矩形/hit-test 不错位。39 DisplayScale regression tests 覆盖 command rect、clip bounds、hit target、text font size、logical viewport（1.0/1.25/1.5/2.0）。所有 493 tests 通过。
+- **手测通过（2026-05-13）：** Display scale pipeline — 100% / 150% / 200% DPI 下文字、按钮、hit-test、scroll、resize、partial apply 均正常；运行时改系统缩放后下一幀 relayout 正确，文字/矩形/hit-test 不错位。39 DisplayScale regression tests 覆盖 command rect、clip bounds、hit target、text font size、logical viewport（1.0/1.25/1.5/2.0）。所有 497 tests 通过。
 - **AOT 模式验证通过（2026-05-13）：** 运行时实时切换缩放比例/刷新率 — 文字、按钮、hit-test、scroll、resize 均正常，无渲染错误。
 - **Device-lost recovery（2026-05-13）：** `D3D12Renderer.TryRecover()` 重建全部 GPU 资源；compositor 在 backend 异常时检查 `IDeviceRecovery` 并尝试恢复；2 个测试覆盖恢复成功/失败路径。
 - **GA hardening first batch 完成（2026-05-13）：** D3D12 smoke tests（7 个 headless 测试）、1000-frame soak（3 个测试）、resize stress（4 个测试）、frame time profiling（compositor-level Stopwatch）。详见 [GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
+- **D2D text overlay sync 修复（2026-05-13）：** 滚动时按钮文字滞后矩形 — 根因：D3D12 rect pass 与 D3D11on12/D2D text overlay 未同步。修复：`WaitForQueueIdle()` fence wait 插入在 D2D text overlay 之后、Present 之前。默认开启（`SyncTextOverlay=true`），`--no-sync-text-overlay` 可关闭。4 个 scroll text-sync regression tests。Frame serial diagnostics 可追踪 sync wait count/时间。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
-- **下一步：** GA hardening first batch 已完成（device-lost recovery、D3D12 smoke、soak、resize stress、frame time profiling）。剩余 P1：concurrent input+render validation、D3D12 smoke CI runner integration。详见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
+- **下一步：** GA hardening first batch 已完成（device-lost recovery、D3D12 smoke、soak、resize stress、frame time profiling）。D2D text overlay sync 已修复并有 regression tests。剩余 P1：concurrent input+render validation、D3D12 smoke CI runner integration、sync wait overhead 验证（<2ms/frame at 60Hz）。详见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
 
 ### IRIX-V1 收口任务表
 

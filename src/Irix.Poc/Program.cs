@@ -48,7 +48,7 @@ internal static class Program
         _backendClipMode = d3d12Backend.ClipMode;
         var showDiagnostics = args.Contains("--debug-ui");
         var enablePartialApply = !args.Contains("--no-partial-apply");
-        var syncTextOverlay = args.Contains("--sync-text-overlay");
+        var syncTextOverlay = !args.Contains("--no-sync-text-overlay");
         d3d12Renderer.SyncTextOverlay = syncTextOverlay;
         var displayScale = platformHost.Screens[0].Scale;
 
@@ -153,7 +153,7 @@ internal static class Program
         Console.WriteLine("Rendering: D3D12 (clear color from FillRect)");
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
         Console.WriteLine($"Partial apply: {(enablePartialApply ? "ENABLED (default)" : "DISABLED (--no-partial-apply)")}");
-        Console.WriteLine($"Sync text overlay: {(syncTextOverlay ? "ENABLED (--sync-text-overlay)" : "DISABLED (default)")}");
+        Console.WriteLine($"Sync text overlay: {(syncTextOverlay ? "ENABLED (default)" : "DISABLED (--no-sync-text-overlay)")}");
         Console.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 

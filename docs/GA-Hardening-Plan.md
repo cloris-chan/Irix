@@ -34,6 +34,7 @@
 | Resize stress test | 4 tests: scale consistency (1x/1.5x/2x), extreme sizes, runtime scale change, 1000 rapid resizes | Already done | — |
 | Concurrent input + render | Works in PoC | Validate no deadlocks or race conditions | P1 |
 | Exception recovery | Compositor catches backend exceptions; `IDeviceRecovery` interface; 2 tests (recovery succeeds/fails) | Already done | — |
+| D2D text overlay sync under scroll | GPU fence wait after D2D text overlay, before Present; default-on with `--no-sync-text-overlay` escape hatch; 4 scroll text-sync regression tests | Already done | — |
 
 ## Performance
 
@@ -43,6 +44,7 @@
 | Partial apply overhead measurement | Frame time profiling can compare partial vs. full path; measure via `PartialApplyCount` / `FullApplyCount` | Already done | — |
 | Text cache hit rate in steady state | Diagnostic only | Validate >90% hit rate after warmup | P2 |
 | DrawCommand recording allocation | `stackalloc` + `ArrayPool` | Confirm zero GC allocation in steady state | P2 |
+| Sync wait overhead | Measurable via `FrameSerialDiagnostics.SyncWaitCount` / `SyncWaitMs` in `--diagnose` output | Validate <2ms per frame at 60Hz | P1 |
 
 ## Platform Integration
 
@@ -58,7 +60,7 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| CI test suite | 493 tests, all passing | Maintain green | — |
+| CI test suite | 497 tests, all passing | Maintain green | — |
 | D3D12-specific tests | 7 headless smoke tests (device, allocator, command list, descriptor heap, upload buffer, queue, fence) | Already done | — |
 | Platform matrix CI | Single Windows runner | Add matrix for Windows versions | P2 |
 | Performance regression CI | None | Add frame time regression check | P2 |
@@ -67,7 +69,7 @@
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. GA hardening first batch complete (2026-05-13).
+**Current state:** PoC V1 core architecture-complete. Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. GA hardening first batch complete (2026-05-13). D2D text overlay synchronization complete (2026-05-13).
 
 **Minimum for GA:**
 1. ~~Device-lost recovery (P0)~~ — Done
@@ -75,6 +77,7 @@
 3. ~~Resize stress test (P1)~~ — Done (4 tests: scale consistency, extreme sizes, runtime scale change, 1000 resizes)
 4. ~~Frame time profiling (P1)~~ — Done (compositor-level: LastFrameTimeUs, AverageFrameTimeUs, MaxFrameTimeUs)
 5. ~~D3D12 smoke tests in CI (P1)~~ — Done (7 headless tests, 1s total)
+6. ~~D2D text overlay sync (P0)~~ — Done (GPU fence wait, default-on, 4 regression tests)
 
 **Estimated scope:** 5-10 focused work items, primarily in `Irix.Platform.Windows` and `Irix.Poc`.
 
@@ -178,6 +181,23 @@
 - CLI output shows min/max/avg/p95 frame times
 
 **Prohibited scope:** No GPU timing queries (D3D12 timestamp queries). No per-draw-call profiling. No visual timeline.
+
+### Item 6: D2D Text Overlay Synchronization (P0) — DONE
+
+**Entry point:** `src/Irix.Platform.Windows/D3D12Renderer.cs`, `tests/Irix.Core.Tests/ScrollTextSyncTests.cs`
+
+**Problem (2026-05-13):** At 60Hz, button text visibly lags behind rectangles during scrolling. At 120Hz the lag is mild; at 240Hz nearly invisible. Text catches up when scrolling stops. Root cause: D3D12 rect rendering and D3D11on12/D2D text overlay share the same command queue but were not synchronized before Present, causing the text overlay to render one frame behind the rects.
+
+**Implementation (2026-05-13):**
+1. `D3D12Renderer.SyncTextOverlay` property (default: `true`) controls GPU fence wait
+2. `D3D12Renderer.WaitForQueueIdle()` signals fence on D3D12 queue, waits for completion via `SetEventOnCompletion` + `WaitForSingleObject`
+3. Fence inserted in `RenderFrame` after D2D text overlay, before `Present()`
+4. CLI escape hatch: `--no-sync-text-overlay` disables the fence for performance comparison
+5. 4 scroll text-sync regression tests: rect/text same-frame batch, position tracking, rapid scroll, stop/resume
+
+**Verification:** Manual testing confirmed text-lag eliminated at 60Hz/120Hz/240Hz with sync enabled. Lag returns when sync disabled via `--no-sync-text-overlay`.
+
+**Prohibited scope:** No per-draw-call GPU timing. No D3D12 timestamp queries. No visual regression.
 
 ---
 

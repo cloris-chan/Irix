@@ -49,6 +49,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public DrawingBackendClipMode ClipMode { get; private set; } = clipMode;
 
+    /// <summary>Frame serial diagnostics from the D3D12 renderer (sync wait count, timing, etc.).</summary>
+    internal D3D12Renderer.FrameSerialDiagnostics FrameSerialDiagnostics => _renderer.GetFrameSerialDiagnostics();
+
     public void SetClipMode(DrawingBackendClipMode clipMode)
     {
         ClipMode = clipMode;

@@ -43,13 +43,19 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private int _pendingHeight;
     private bool _pendingResize;
 
+    // Frame serial diagnostics
+    private long _frameSerial;
+    private long _presentSerial;
+    private long _syncWaitCount;
+    private long _syncWaitTicks;
+
     /// <summary>
     /// When true, inserts a GPU fence wait after D2D text overlay rendering
     /// and before Present. Forces all queued GPU work (D3D12 rects + D3D11/D2D text)
-    /// to complete before the swap chain presents. Diagnostic only — confirms whether
-    /// text-lag during scroll is caused by missing D3D12/D2D synchronization.
+    /// to complete before the swap chain presents. Default: true.
+    /// Disable with --no-sync-text-overlay for performance comparison.
     /// </summary>
-    public bool SyncTextOverlay { get; set; }
+    public bool SyncTextOverlay { get; set; } = true;
 
     public D3D12Renderer(nint hwnd, int width, int height)
     {
@@ -171,6 +177,27 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public void ResetTextDiagnostics()
     {
         _textRenderer?.ResetDiagnostics();
+    }
+
+    /// <summary>Snapshot of frame serial counters for diagnostics.</summary>
+    internal readonly record struct FrameSerialDiagnostics(
+        long FrameSerial,
+        long PresentSerial,
+        long SyncWaitCount,
+        long SyncWaitTicks,
+        uint BackBufferIndex)
+    {
+        public double SyncWaitMs => SyncWaitTicks / (double)System.Diagnostics.Stopwatch.Frequency * 1000;
+    }
+
+    internal FrameSerialDiagnostics GetFrameSerialDiagnostics()
+    {
+        return new FrameSerialDiagnostics(
+            Volatile.Read(ref _frameSerial),
+            Volatile.Read(ref _presentSerial),
+            Volatile.Read(ref _syncWaitCount),
+            Volatile.Read(ref _syncWaitTicks),
+            _frameIndex);
     }
 
     public bool HasPendingResize
@@ -398,6 +425,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         var pList = (ID3D12CommandList*)_list;
         _queue->ExecuteCommandLists(1, &pList);
+        Interlocked.Increment(ref _frameSerial);
 
         if (hasText)
         {
@@ -430,6 +458,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         try
         {
             _swapChain->Present(1, 0);
+            Interlocked.Increment(ref _presentSerial);
             return true;
         }
         catch (COMException ex)
@@ -514,11 +543,15 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         try
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var fenceValue = _fenceValues[_frameIndex] + 1;
             _queue->Signal(_fence, fenceValue);
             _fence->SetEventOnCompletion(fenceValue, _fenceEvent);
             PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
             _fenceValues[_frameIndex] = fenceValue + 1;
+            sw.Stop();
+            Interlocked.Increment(ref _syncWaitCount);
+            Interlocked.Add(ref _syncWaitTicks, sw.ElapsedTicks);
             return true;
         }
         catch (COMException ex)
@@ -667,6 +700,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             _deviceRemoved = false;
             _deviceErrorReason = null;
             _pendingResize = false;
+            _frameSerial = 0;
+            _presentSerial = 0;
+            _syncWaitCount = 0;
+            _syncWaitTicks = 0;
 
             System.Diagnostics.Debug.WriteLine("[D3D12Renderer] Device-lost recovery succeeded.");
             return true;
