@@ -3598,6 +3598,118 @@ public sealed class PartialApplyPreflightTests
         Assert.True(PartialApplyIntegrationGateChecklist.CanHookUpPartialApply);
     }
 
+    [Fact]
+    public async Task Rollback_enabled_to_disabled_compositor_falls_back_to_full_path()
+    {
+        var cancellationToken = CancellationToken.None;
+        var retainedRoot = CreateActionButtonRoot("increment");
+        var partialRoot = CreateActionButtonRoot("decrement");
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Phase 1: Enabled compositor with ownership (handoff path)
+        var enabledPipeline = new RenderPipeline();
+        using var feed = new SegmentedRetainedFrameProductionOwnerFeed(
+            enabledPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
+        var enabledBackend = new DirtyRangeAwareCapturingBackend();
+        using var enabledCompositor = new DrawingBackendCompositor(
+            enabledBackend, DrawingBackendCompositorHandoffOptions.Enabled);
+
+        using (var frame1 = feed.Build(retainedRoot, viewport))
+        {
+            await enabledCompositor.RenderAsync(frame1, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
+        }
+
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, enabledCompositor.LastHandoffResult.Kind);
+        Assert.Equal(1, enabledCompositor.RenderCount);
+        Assert.Equal(1, enabledCompositor.FullApplyCount);
+
+        using (var frame2 = feed.Build(partialRoot, viewport, [2]))
+        {
+            await enabledCompositor.RenderAsync(frame2, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
+        }
+
+        Assert.Equal(2, enabledCompositor.RenderCount);
+        enabledCompositor.Dispose();
+
+        // Phase 2: Disabled compositor (production path, no ownership)
+        var disabledPipeline = new RenderPipeline();
+        var disabledBackend = new DirtyRangeAwareCapturingBackend();
+        using var disabledCompositor = new DrawingBackendCompositor(
+            disabledBackend, DrawingBackendCompositorHandoffOptions.Disabled);
+
+        using (var frame1 = disabledPipeline.Build(retainedRoot, viewport))
+        {
+            await disabledCompositor.RenderAsync(frame1, cancellationToken);
+        }
+
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, disabledCompositor.LastHandoffResult.Kind);
+        Assert.Equal(DrawingBackendCompositorHandoffReason.Disabled, disabledCompositor.LastHandoffResult.Reason);
+        Assert.Equal(1, disabledCompositor.RenderCount);
+        Assert.Equal(1, disabledCompositor.FullApplyCount);
+        Assert.Equal(0, disabledCompositor.PartialApplyCount);
+        Assert.False(disabledCompositor.LastPartialApplySucceeded);
+
+        using (var frame2 = disabledPipeline.Build(partialRoot, viewport, [2]))
+        {
+            await disabledCompositor.RenderAsync(frame2, cancellationToken);
+        }
+
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, disabledCompositor.LastHandoffResult.Kind);
+        Assert.Equal(2, disabledCompositor.RenderCount);
+        Assert.Equal(2, disabledCompositor.FullApplyCount);
+        Assert.Equal(0, disabledCompositor.PartialApplyCount);
+
+        // Verify backend received commands in both phases
+        Assert.NotEmpty(enabledBackend.ExecuteCalls);
+        Assert.NotEmpty(disabledBackend.ExecuteCalls);
+    }
+
+    [Fact]
+    public async Task Rollback_default_on_to_forced_off_preserves_retained_frame_state()
+    {
+        var cancellationToken = CancellationToken.None;
+        var retainedRoot = CreateActionButtonRoot("increment");
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        // Phase 1: Default-on (enabled handoff) renders a frame
+        var enabledPipeline = new RenderPipeline();
+        using var feed = new SegmentedRetainedFrameProductionOwnerFeed(
+            enabledPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
+        var enabledBackend = new DirtyRangeAwareCapturingBackend();
+        using var enabledCompositor = new DrawingBackendCompositor(
+            enabledBackend, DrawingBackendCompositorHandoffOptions.Enabled);
+
+        using (var frame = feed.Build(retainedRoot, viewport))
+        {
+            await enabledCompositor.RenderAsync(frame, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
+        }
+
+        Assert.Equal(1, enabledCompositor.RenderCount);
+        enabledCompositor.Dispose();
+
+        // Phase 2: Forced-off (disabled handoff) renders the same root
+        var disabledPipeline = new RenderPipeline();
+        var disabledBackend = new DirtyRangeAwareCapturingBackend();
+        using var disabledCompositor = new DrawingBackendCompositor(
+            disabledBackend, DrawingBackendCompositorHandoffOptions.Disabled);
+
+        using (var frame = disabledPipeline.Build(retainedRoot, viewport))
+        {
+            await disabledCompositor.RenderAsync(frame, cancellationToken);
+        }
+
+        // Verify: disabled compositor has clean state (no leftover from enabled path)
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, disabledCompositor.LastHandoffResult.Kind);
+        Assert.False(disabledCompositor.HasHandoffCandidateHarness);
+        Assert.Equal(1, disabledCompositor.RenderCount);
+        Assert.Equal(1, disabledCompositor.FullApplyCount);
+        Assert.Equal(0, disabledCompositor.PartialApplyCount);
+        Assert.False(disabledCompositor.LastPartialApplySucceeded);
+
+        // Verify: backend received commands (retained frame works)
+        Assert.NotEmpty(disabledBackend.ExecuteCalls);
+    }
+
     private static void AssertTextAttribute(VirtualNode node, string name, string expected)
     {
         var attribute = GetSingleAttribute(node, name);

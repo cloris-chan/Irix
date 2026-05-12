@@ -5,6 +5,7 @@
     <OutputType>WinExe</OutputType>
     <PlatformTarget>x64</PlatformTarget>
     <PublishAot>true</PublishAot>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>

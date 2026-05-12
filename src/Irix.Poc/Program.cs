@@ -47,7 +47,7 @@ internal static class Program
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, clipMode);
         _backendClipMode = d3d12Backend.ClipMode;
         var showDiagnostics = args.Contains("--debug-ui");
-        var enablePartialApply = args.Contains("--partial-apply");
+        var enablePartialApply = !args.Contains("--no-partial-apply");
 
         Action<double>? maxScrollYCallback = null;
         Action<CounterLayoutDiagnostics>? layoutDiagnosticsCallback = null;
@@ -137,7 +137,7 @@ internal static class Program
         Console.WriteLine($"Detected screens: {platformHost.Screens.Count}");
         Console.WriteLine("Rendering: D3D12 (clear color from FillRect)");
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
-        Console.WriteLine($"Partial apply: {(enablePartialApply ? "ENABLED (segmented render-source path)" : "disabled (default)")}");
+        Console.WriteLine($"Partial apply: {(enablePartialApply ? "ENABLED (default)" : "DISABLED (--no-partial-apply)")}");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 
         await runtime.StartAsync();

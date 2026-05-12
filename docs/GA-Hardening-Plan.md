@@ -20,7 +20,7 @@
 |------|--------------|----------------|----------|
 | 60Hz refresh | Works (default PoC) | Already done | — |
 | 120Hz / 144Hz / 240Hz | Not validated | Validate animation timing and fence behavior | P1 |
-| DPI scaling (100%-200%) | Physical pixels only; no logical DPI | Validate physical pixel rendering at each DPI | P1 |
+| DPI scaling (100%-200%) | Physical pixels only; app.manifest added for PerMonitorV2 (2026-05-13) | Validate no bitmap stretch at each DPI; physical pixel rendering correct | P1 |
 | Multi-monitor | Single monitor only | Validate viewport change on monitor switch | P2 |
 | Fractional DPI (125%, 150%) | Not validated | Validate no rounding artifacts in layout/clip | P2 |
 | HDR / wide color gamut | Not applicable | Not required for v1.0 GA | P3 |
@@ -58,7 +58,7 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| CI test suite | 435 tests, all passing | Maintain green | — |
+| CI test suite | 437 tests, all passing | Maintain green | — |
 | D3D12-specific tests | None (PoC-only) | Add smoke tests for D3D12 backend integration | P1 |
 | Platform matrix CI | Single Windows runner | Add matrix for Windows versions | P2 |
 | Performance regression CI | None | Add frame time regression check | P2 |
