@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading;
 using Irix.Drawing;
 using Irix.Platform;
@@ -25,6 +26,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private long _emptyFrameCount;
     private DisplayScale _displayScale = DisplayScale.Identity;
     private PixelRectangle _physicalViewport;
+    private long _lastFrameTimeTicks;
+    private long _totalFrameTimeTicks;
+    private long _frameTimeSampleCount;
+    private long _maxFrameTimeTicks;
 
     /// <summary>
     /// The dirty command ranges from the last render, if any.
@@ -80,6 +85,22 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     public DisplayScale CurrentDisplayScale => _displayScale;
 
+    /// <summary>Elapsed time of the last non-empty render in microseconds.</summary>
+    public long LastFrameTimeUs => Volatile.Read(ref _lastFrameTimeTicks) * 1_000_000 / Stopwatch.Frequency;
+
+    /// <summary>Average elapsed time per non-empty render in microseconds.</summary>
+    public long AverageFrameTimeUs
+    {
+        get
+        {
+            var count = Volatile.Read(ref _frameTimeSampleCount);
+            return count > 0 ? Volatile.Read(ref _totalFrameTimeTicks) * 1_000_000 / Stopwatch.Frequency / count : 0;
+        }
+    }
+
+    /// <summary>Maximum elapsed time of any non-empty render in microseconds.</summary>
+    public long MaxFrameTimeUs => Volatile.Read(ref _maxFrameTimeTicks) * 1_000_000 / Stopwatch.Frequency;
+
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
         return RenderAsync(renderFrameBatch, null, new FrameContext(0, 0), cancellationToken);
@@ -107,6 +128,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
             return ValueTask.CompletedTask;
         }
+
+        var sw = Stopwatch.StartNew();
 
         // Cross-frame partial apply guard: only allow partial apply when the batch's
         // resources are the same FrameDrawingResources instance AND same rental cycle
@@ -147,6 +170,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             {
                 Interlocked.Increment(ref _fullApplyCount);
             }
+
+            RecordFrameTime(sw);
 
             lock (_hitTargetsLock)
             {
@@ -196,6 +221,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
             _backend.EndFrame();
         }
+
+        RecordFrameTime(sw);
 
         lock (_hitTargetsLock)
         {
@@ -502,6 +529,22 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         actionId = string.Empty;
         return false;
+    }
+
+    private void RecordFrameTime(Stopwatch sw)
+    {
+        sw.Stop();
+        var ticks = sw.ElapsedTicks;
+        Volatile.Write(ref _lastFrameTimeTicks, ticks);
+        Interlocked.Add(ref _totalFrameTimeTicks, ticks);
+        Interlocked.Increment(ref _frameTimeSampleCount);
+
+        // Update max (non-atomic but acceptable for diagnostics)
+        var currentMax = Volatile.Read(ref _maxFrameTimeTicks);
+        if (ticks > currentMax)
+        {
+            Volatile.Write(ref _maxFrameTimeTicks, ticks);
+        }
     }
 
     /// <summary>

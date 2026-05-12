@@ -112,5 +112,7 @@ Re-run this checklist after changes to:
 | C | 150% | 60Hz | ✅ | — | Default-on | PASS |
 | D | 200% | 60Hz | ✅ | — | Default-on | PASS |
 | E | 100% | 120Hz+ | — | — | Default-on | Not tested |
-| F | 150% | 60Hz | ✅ | ✅ | Default-on | PASS |
+| F | 150% | 60Hz | ✅ | ✅ | Default-on | PASS (AOT mode verified) |
 | G | 100% | 60Hz | ✅ | — | Forced-off | PASS (manual) |
+
+**AOT mode verification (2026-05-13):** Runtime real-time switching of display scale and refresh rate in AOT mode — text, buttons, hit-test, scroll, resize all correct after scale/refresh change. No rendering artifacts or stale content.
