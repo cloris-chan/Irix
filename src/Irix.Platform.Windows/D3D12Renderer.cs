@@ -57,6 +57,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     /// </summary>
     public bool SyncTextOverlay { get; set; } = true;
 
+    internal TextOverlaySyncStrategy TextOverlaySyncStrategy { get; set; } = TextOverlaySyncStrategy.D3D12FenceAfterOverlay;
+
     public D3D12Renderer(nint hwnd, int width, int height)
     {
         _hwnd = hwnd;
@@ -185,7 +187,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         long PresentSerial,
         long SyncWaitCount,
         long SyncWaitTicks,
-        uint BackBufferIndex)
+        uint BackBufferIndex,
+        TextOverlaySyncStrategy SyncStrategy)
     {
         public double SyncWaitMs => SyncWaitTicks / (double)System.Diagnostics.Stopwatch.Frequency * 1000;
     }
@@ -197,7 +200,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             Volatile.Read(ref _presentSerial),
             Volatile.Read(ref _syncWaitCount),
             Volatile.Read(ref _syncWaitTicks),
-            _frameIndex);
+            _frameIndex,
+            TextOverlaySyncStrategy);
     }
 
     public bool HasPendingResize
@@ -445,7 +449,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             // to complete before presenting. Confirms whether text-lag is a sync issue.
             if (SyncTextOverlay)
             {
-                if (!WaitForQueueIdle()) return;
+                if (!WaitForTextOverlaySync(textRenderer)) return;
             }
         }
 
@@ -550,8 +554,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
             _fenceValues[_frameIndex] = fenceValue + 1;
             sw.Stop();
-            Interlocked.Increment(ref _syncWaitCount);
-            Interlocked.Add(ref _syncWaitTicks, sw.ElapsedTicks);
+            RecordSyncWait(sw.ElapsedTicks);
             return true;
         }
         catch (COMException ex)
@@ -559,6 +562,43 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             HandleDeviceError(ex, "WaitForQueueIdle");
             return false;
         }
+    }
+
+    private bool WaitForTextOverlaySync(D3D12TextRenderer textRenderer)
+    {
+        return TextOverlaySyncStrategy switch
+        {
+            TextOverlaySyncStrategy.D3D11Query => WaitForD3D11OverlayQuery(textRenderer),
+            _ => WaitForQueueIdle()
+        };
+    }
+
+    private bool WaitForD3D11OverlayQuery(D3D12TextRenderer textRenderer)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var completed = textRenderer.WaitForOverlayCompletionQuery();
+        sw.Stop();
+        RecordSyncWait(sw.ElapsedTicks);
+        if (completed)
+        {
+            return true;
+        }
+
+        if (!_deviceRemoved)
+        {
+            _deviceRemoved = true;
+            _deviceErrorReason = textRenderer.DeviceErrorReason ?? "D3D11 overlay completion query failed";
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+            DeviceLost?.Invoke();
+        }
+
+        return false;
+    }
+
+    private void RecordSyncWait(long elapsedTicks)
+    {
+        Interlocked.Increment(ref _syncWaitCount);
+        Interlocked.Add(ref _syncWaitTicks, elapsedTicks);
     }
 
     /// <summary>

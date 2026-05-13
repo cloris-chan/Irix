@@ -12,7 +12,7 @@ namespace Irix.Poc;
 /// </summary>
 internal static class SyncDiagnosticRunner
 {
-    internal static void Run(TextWriter output, int frameCount = 300, int sampleCount = 1)
+    internal static void Run(TextWriter output, int frameCount = 300, int sampleCount = 1, TextOverlaySyncStrategy syncStrategy = TextOverlaySyncStrategy.D3D12FenceAfterOverlay)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
@@ -20,6 +20,7 @@ internal static class SyncDiagnosticRunner
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+    d3d12Renderer.TextOverlaySyncStrategy = syncStrategy;
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
         using var compositor = new DrawingBackendCompositor(d3d12Backend);
         compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
@@ -41,6 +42,7 @@ internal static class SyncDiagnosticRunner
         output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         output.WriteLine($"SyncTextOverlay: {d3d12Renderer.SyncTextOverlay}");
+        output.WriteLine($"Text overlay sync strategy: {d3d12Renderer.TextOverlaySyncStrategy}");
         output.WriteLine();
 
         var sampleSummaries = new List<SyncSampleSummary>(sampleCount);

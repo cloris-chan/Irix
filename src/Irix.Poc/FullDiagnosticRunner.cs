@@ -87,6 +87,7 @@ internal static class FullDiagnosticRunner
 
         var frameSerial = d3d12Backend.FrameSerialDiagnostics;
         output.WriteLine($"Frame serial: rects={frameSerial.FrameSerial}, presents={frameSerial.PresentSerial}");
+        output.WriteLine($"Text overlay sync strategy: {frameSerial.SyncStrategy}");
         output.WriteLine($"Sync wait: count={frameSerial.SyncWaitCount}, total={frameSerial.SyncWaitMs:F2}ms, avg={(frameSerial.SyncWaitCount > 0 ? frameSerial.SyncWaitMs / frameSerial.SyncWaitCount : 0):F2}ms");
         output.WriteLine($"Back buffer index: {frameSerial.BackBufferIndex}");
         output.WriteLine($"Compositor frame time: last={compositor.LastFrameTimeUs}us, avg={compositor.AverageFrameTimeUs}us, max={compositor.MaxFrameTimeUs}us");

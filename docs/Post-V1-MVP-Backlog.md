@@ -25,7 +25,7 @@ These default-on gates are complete. Remaining work belongs to GA CI/matrix/perf
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-013 | Sync wait overhead validation | 60Hz / 120Hz / 240Hz measured via `scripts/ga-baseline.ps1 -Mode Sync` at 150% scale for non-AOT and AOT; non-AOT averages exceed the provisional 2ms target, while 60Hz/120Hz manual smokes show no text lag with default sync enabled | Correctness-first decision documented: keep default sync/full queue idle for now; track renderer-level optimization or accepted budget follow-up without disabling default sync |
+| POST-013 | Sync wait overhead validation | 60Hz / 120Hz / 240Hz measured via `scripts/ga-baseline.ps1 -Mode Sync` at 150% scale for non-AOT and AOT; `D3D11Query` spike is correctness-clean in manual smoke and improves 60Hz / 240Hz, but regresses 120Hz and still misses 2ms at 60Hz | Correctness-first decision documented: keep default sync/full queue idle for now; retain query as diagnostic-only and track renderer-level optimization or accepted budget follow-up without disabling default sync |
 | POST-014 | Windows SDK 26100 CI check | Done | CI fails early if .NET 10 or Windows SDK 26100 is absent |
 | POST-015 | Platform matrix CI | Minimal matrix added | Windows 2025 lanes cover tests, headless D3D12, performance baseline, AOT publish |
 | POST-016 | Performance regression CI | Mock backend frame-time baseline + warm `FrameDrawingResources` allocation baseline added; `scripts/ga-baseline.ps1` provides semi-auto sync/text-cache/smoke reports | CI catches obvious frame-time/allocation regressions; sync wait remains semi-auto because hosted runners do not provide stable refresh/scale/GPU timing |
@@ -129,6 +129,6 @@ Batch 3 (P1 scroll) ──> POST-008 (settings)        [independent of Batch 1]
 
 - Not changing `IDrawingBackend.Execute` signature
 - Not adding public API for partial apply
-- Not changing CLI diagnostics output
+- Not changing public rendering/backend API for diagnostics; CLI diagnostics may include strategy fields for GA baselines
 - Not enabling layout skip
 - Not extracting unified diagnostics channel

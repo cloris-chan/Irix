@@ -30,6 +30,9 @@ param(
 
     [switch]$SeparateSamples,
 
+    [ValidateSet("D3D12FenceAfterOverlay", "D3D11Query")]
+    [string]$SyncStrategy = "D3D12FenceAfterOverlay",
+
     [ValidateSet("Default", "NoPartialApply")]
     [string]$PartialMode = "Default"
 )
@@ -133,12 +136,13 @@ function Invoke-CapturedDiagnostic([string]$Name, [string[]]$Arguments, [string[
 }
 
 function Invoke-SeparateSyncSamples {
-    $combinedName = "diagnose-sync-$refresh-$scale-$runtime-separate.summary.txt"
+    $combinedName = "diagnose-sync-$refresh-$scale-$runtime-$strategyLabel-separate.summary.txt"
     $combinedPath = Join-Path $resultsDir $combinedName
     $combinedLines = @(
         "RefreshLabel: $RefreshLabel",
         "ScaleLabel: $scale",
         "Runtime: $runtime",
+        "SyncStrategy: $SyncStrategy",
         "FramesPerSample: $Frames",
         "ProcessSamples: $Samples"
     )
@@ -146,9 +150,9 @@ function Invoke-SeparateSyncSamples {
     for ($i = 1; $i -le $Samples; $i++) {
         $sampleLabel = "{0:d2}" -f $i
         $lines = Invoke-CapturedDiagnostic `
-            "diagnose-sync-$refresh-$scale-$runtime-sample$sampleLabel.txt" `
-            @("--diagnose-sync", "$Frames", "1") `
-            @("Display refresh", "Display scale", "--- Sample", "Sync wait:", "Waits >2ms", "Frame time:", "Verdict:", "Final:")
+            "diagnose-sync-$refresh-$scale-$runtime-$strategyLabel-sample$sampleLabel.txt" `
+            @("--diagnose-sync", "$Frames", "1", "--text-overlay-sync-strategy", $syncStrategyArg) `
+            @("Display refresh", "Display scale", "Text overlay sync strategy", "--- Sample", "Sync wait:", "Waits >2ms", "Frame time:", "Verdict:", "Final:")
 
         $combinedLines += "--- Process sample $i/$Samples ---"
         $combinedLines += $lines
@@ -165,6 +169,8 @@ function Invoke-SmokeRun {
         $args += "--no-partial-apply"
     }
 
+    $args += @("--text-overlay-sync-strategy", $syncStrategyArg)
+
     Write-Host "=== Starting manual smoke run ===" -ForegroundColor Cyan
     Write-Host "Runtime: $(if ($Aot) { 'AOT' } else { 'non-AOT' })"
     Write-Host "Partial mode: $PartialMode"
@@ -178,8 +184,10 @@ function Invoke-SmokeRun {
 $refresh = ConvertTo-Label $RefreshLabel
 $scale = if ($ScalePercent -gt 0) { "$ScalePercent`pct" } else { "current-scale" }
 $runtime = if ($Aot) { "aot" } else { "non-aot" }
+$strategyLabel = ConvertTo-Label $SyncStrategy
+$syncStrategyArg = if ($SyncStrategy -eq "D3D11Query") { "d3d11-query" } else { "d3d12-fence-after-overlay" }
 
-Write-Host "GA baseline context: refresh=$RefreshLabel, scale=$scale, runtime=$runtime, partial=$PartialMode"
+Write-Host "GA baseline context: refresh=$RefreshLabel, scale=$scale, runtime=$runtime, partial=$PartialMode, syncStrategy=$SyncStrategy"
 Write-Host ""
 
 if ($Mode -eq "Sync" -or $Mode -eq "All") {
@@ -187,9 +195,9 @@ if ($Mode -eq "Sync" -or $Mode -eq "All") {
         Invoke-SeparateSyncSamples
     } else {
         Invoke-CapturedDiagnostic `
-            "diagnose-sync-$refresh-$scale-$runtime.txt" `
-            @("--diagnose-sync", "$Frames", "$Samples") `
-            @("Display refresh", "Display scale", "--- Sample", "Sync wait:", "Waits >2ms", "Frame time:", "Verdict:", "Avg sync wait range", "P95 sync wait range", "Max sync wait range", "Final:") | Out-Null
+            "diagnose-sync-$refresh-$scale-$runtime-$strategyLabel.txt" `
+            @("--diagnose-sync", "$Frames", "$Samples", "--text-overlay-sync-strategy", $syncStrategyArg) `
+            @("Display refresh", "Display scale", "Text overlay sync strategy", "--- Sample", "Sync wait:", "Waits >2ms", "Frame time:", "Verdict:", "Avg sync wait range", "P95 sync wait range", "Max sync wait range", "Final:") | Out-Null
     }
 }
 

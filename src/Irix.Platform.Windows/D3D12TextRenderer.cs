@@ -32,6 +32,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private readonly Dictionary<TextLayoutCacheKey, List<CachedTextLayout>> _textLayouts = [];
     private readonly Queue<CachedTextLayout> _textLayoutOrder = [];
     private ID2D1SolidColorBrush* _textBrush;
+    private ID3D11Query* _overlayCompletionQuery;
     private ID3D11Resource*[] _wrappedBackBuffers = [];
     private ID2D1Bitmap1*[] _renderTargets = [];
     private bool _disposed;
@@ -105,6 +106,11 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         ID2D1SolidColorBrush* textBrush;
         _d2dContext->CreateSolidColorBrush(&initialBrushColor, null, &textBrush);
         _textBrush = textBrush;
+
+        var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
+        ID3D11Query* overlayCompletionQuery;
+        _d3d11Device->CreateQuery(&queryDesc, &overlayCompletionQuery);
+        _overlayCompletionQuery = overlayCompletionQuery;
 
         RecreateFrameResources(backBuffers);
     }
@@ -251,6 +257,47 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         }
 
         return true;
+    }
+
+    public bool WaitForOverlayCompletionQuery()
+    {
+        if (_deviceRemoved)
+        {
+            return false;
+        }
+
+        if (_overlayCompletionQuery == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            var async = (ID3D11Asynchronous*)_overlayCompletionQuery;
+            _d3d11Context->End(async);
+            _d3d11Context->Flush();
+
+            while (true)
+            {
+                var result = _d3d11Context->GetDataResult(async, null, 0, 0);
+                if (result.Value == 0)
+                {
+                    return true;
+                }
+
+                if (result.Value < 0)
+                {
+                    return SucceededOrMarkDeviceRemoved(result, "D3D11 overlay completion query");
+                }
+
+                Thread.Yield();
+            }
+        }
+        catch (COMException ex)
+        {
+            MarkDeviceRemoved($"D3D11 overlay completion query COMException: 0x{ex.ErrorCode:X8}");
+            return false;
+        }
     }
 
     private bool SucceededOrMarkDeviceRemoved(HRESULT hr, string context)
@@ -536,6 +583,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
         ReleaseFrameResources();
         if (_textBrush != null) _textBrush->Release();
+        if (_overlayCompletionQuery != null) _overlayCompletionQuery->Release();
         ReleaseTextResources();
         if (_dwriteFactory != null) _dwriteFactory->Release();
         if (_d2dContext != null) _d2dContext->Release();

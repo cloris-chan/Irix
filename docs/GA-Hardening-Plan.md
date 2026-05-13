@@ -47,7 +47,7 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Performance regression CI | Mock backend frame timing baseline and warm `FrameDrawingResources` allocation baseline in `Category=Performance`; CI lane runs them separately; ordinary CI also includes soak and resize stress tests | Already done | — |
 | Text cache hit rate in steady state | `scripts/ga-baseline.ps1 -Mode TextCache` validates static, scroll, and scale-change phases; 100% / 150% / 200% local runs keep layout cache hit-rate above 99% with no evictions | Already done for current machine; broaden only when new hardware is available | P2 |
 | DrawCommand recording allocation | `stackalloc` + `ArrayPool`; warm `FrameDrawingResources` allocation baseline in CI; current text-cache diagnostics show text-resource allocation stable after pool warmup | Keep performance lane green and rerun semi-auto baseline before GA cut | P2 |
-| Sync wait overhead | `scripts/ga-baseline.ps1 -Mode Sync` measured 60Hz / 120Hz / 240Hz at 150% scale for non-AOT and AOT. All non-AOT averages exceed the provisional 2ms target; AOT has high process-to-process variance. Default sync remains enabled; 60Hz and 120Hz manual scroll smokes found no text lag. | Correctness accepted, performance budget not accepted; keep current full queue idle for now and track renderer-level optimization follow-up | P1 |
+| Sync wait overhead | `scripts/ga-baseline.ps1 -Mode Sync` measured 60Hz / 120Hz / 240Hz at 150% scale for non-AOT and AOT. The current full-queue-idle control is correctness-preserving but can exceed the provisional 2ms target. A D3D11 event-query spike is correctness-clean in manual smoke, improves 60Hz / 240Hz, but regresses 120Hz. | Correctness accepted, performance budget not accepted; keep default sync enabled and keep D3D11 query as diagnostic-only pending a more robust renderer-level primitive | P1 |
 
 ### Sync Wait Evidence (2026-05-13)
 
@@ -55,8 +55,12 @@ Canonical local runner:
 
 ```powershell
 .\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150
-.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150 -Aot -SeparateSamples
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150 -SyncStrategy D3D12FenceAfterOverlay
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150 -Aot -SeparateSamples -SyncStrategy D3D12FenceAfterOverlay
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150 -SyncStrategy D3D11Query
 ```
+
+The table below preserves the full-queue-idle control baseline captured before the strategy spike. Strategy-labeled reruns used for the D3D11 query decision are listed in the next section.
 
 | Refresh | Scale | Runtime | Frames / sample | Samples | Avg sync wait | P95 sync wait | Max sync wait | Waits >2ms | Correctness evidence | Evidence |
 |---------|-------|---------|-----------------|---------|---------------|---------------|---------------|------------|----------------------|----------|
@@ -70,13 +74,42 @@ Canonical local runner:
 
 Interpretation: sync wait is not acceptable against the provisional `<2ms average` performance target on this machine. The issue is also not isolated to 240Hz: 60Hz and 120Hz non-AOT runs exceed the target, while AOT has high process-to-process variance. Correctness is acceptable for the manually smoked paths because text no longer lags at 60Hz or 120Hz with default `SyncTextOverlay=true`; the high wait cost is therefore an optimization follow-up, not a reason to disable synchronization.
 
+### Text Overlay Sync Correctness Invariant
+
+The 60Hz text-lag regression must not return. `D3D12Renderer.SyncTextOverlay` remains `true` by default, and `--no-sync-text-overlay` is only an A/B diagnostic escape hatch. Irix must not disable default synchronization to hit a performance number; any optimization must still guarantee that the D2D overlay has completed against the presentable back buffer before `Present`.
+
 ### Sync Strategy Review (2026-05-13)
 
-Decision: **keep the current full queue idle wait for this GA hardening batch and document a renderer-level optimization follow-up.**
+Decision: **keep `D3D12FenceAfterOverlay` as the default sync strategy. Do not adopt `D3D11Query` as the default yet.**
 
-Current `D3D12Renderer.RenderFrame` already waits only on frames that contain text. Rect-only frames transition to present and skip the sync wait. Text frames render the D3D12 rect pass, run the D3D11On12/D2D overlay, call D3D11 `Flush`, then signal the shared D3D12 direct queue and wait before `Present`.
+Current `D3D12Renderer.RenderFrame` already waits only on frames that contain text. Rect-only frames transition to present and skip the sync wait. Text frames render the D3D12 rect pass, run the D3D11On12/D2D overlay, call D3D11 `Flush`, then synchronize before `Present`. The selected sync strategy is internal diagnostic state, not a public backend contract.
 
-Within the current backend contract this is the narrowest correctness-preserving fence available: D3D11On12 text work is submitted to the same D3D12 queue, and the renderer does not expose a separate D2D-only completion primitive. Waiting only after `Flush` but before `Present` avoids presenting a back buffer whose text overlay is still pending. Avoiding the wait or moving it past `Present` is not accepted for GA because the known 60Hz text-lag bug returns. Further reduction would require a renderer-level redesign that exposes a more granular overlay completion fence; that is intentionally outside this GA hardening batch. The go/no-go is therefore: **no change to default synchronization now; open an optimization follow-up for reducing queue idle scope without changing the text renderer or backend contract.**
+Primitive inventory:
+
+| Candidate | Guarantees D2D overlay completion? | Guarantees presentable back buffer before `Present`? | Decision |
+|-----------|-------------------------------------|------------------------------------------------------|----------|
+| D3D11 event query after `ReleaseWrappedResources` + `Flush` | Yes for D3D11 immediate-context work queued before the query; manual 60Hz / 120Hz / 240Hz smokes showed no stale text | Yes in the observed D3D11On12 path because the query is waited before `Present` | Correctness-pass, performance-mixed; keep diagnostic-only |
+| D3D11 fence | Not adopted; not currently confirmed as a generated/available primitive in this code path | Not proven | Reject for this batch |
+| D3D12 fence after overlay (`D3D12FenceAfterOverlay`) | Yes for all work submitted to the shared D3D12 queue after D3D11On12 flush | Yes; this is the current correctness control | Keep default |
+| Flush-only | No. `Flush` submits D3D11 work but does not wait for completion | No | Reject |
+| Wait after `Present` | Too late; stale overlay can already have been presented | No | Reject |
+| Present before overlay wait | No; this reopens the 60Hz text-lag bug | No | Reject |
+
+Strategy spike evidence, non-AOT unless noted:
+
+| Refresh | Scale | Runtime | Strategy | Avg sync wait | P95 sync wait | Max sync wait | Waits >2ms | Manual smoke |
+|---------|-------|---------|----------|---------------|---------------|---------------|------------|--------------|
+| 60Hz | 150% | non-AOT | `D3D12FenceAfterOverlay` | 13.725-15.207ms | 14.304-15.702ms | 14.804-15.925ms | 298-300 / 300 | Prior default correctness smoke: no lag |
+| 60Hz | 150% | non-AOT | `D3D11Query` | 4.541-5.956ms | 4.996-6.403ms | 5.080-6.656ms | 297-299 / 300 | Default and `--no-partial-apply`: no lag |
+| 120Hz | 150% | non-AOT | `D3D12FenceAfterOverlay` | 1.435-1.951ms | 1.730-2.213ms | 1.917-2.316ms | 0-159 / 300 | Prior default correctness smoke: no lag |
+| 120Hz | 150% | non-AOT | `D3D11Query` | 3.867-4.405ms | 4.198-4.708ms | 4.628-5.068ms | 297-299 / 300 | Default: no lag |
+| 240Hz | 150% | non-AOT | `D3D12FenceAfterOverlay` | 2.150-2.388ms | 2.403-2.596ms | 2.653-2.811ms | 85.0%-94.3% | Prior default correctness smoke: no lag |
+| 240Hz | 150% | non-AOT | `D3D11Query` | 1.215-1.468ms | 1.407-1.635ms | 1.688-1.890ms | 0 / 300 | Default: no lag |
+| 240Hz | 150% | AOT | `D3D12FenceAfterOverlay` | 1.938-2.153ms | 2.219-2.365ms | 2.508-2.782ms | 118-266 / 300 | Numeric only |
+| 240Hz | 150% | AOT | `D3D11Query` | 0.878-1.072ms | 1.038-1.265ms | 1.489-1.786ms | 0 / 300 | Numeric only |
+| 240Hz | 150% | AOT, process-isolated | `D3D11Query` | 0.711-3.895ms | 0.935-4.124ms | 1.228-4.568ms | 0-295 / 300 | Numeric variance check |
+
+Interpretation: `D3D11Query` is a useful spike and proves the overlay can be waited from the D3D11 side without a public contract change, but it is not stable enough to become the default because it regresses 120Hz on the current machine and still misses the 2ms target at 60Hz. Candidate B does not produce a distinct implementation: the current D3D12 fence is already placed immediately after overlay flush and before `Present`; moving it later violates correctness, and moving it earlier cannot cover the overlay. The follow-up remains a renderer-level sync primitive or an explicit accepted budget, not disabling default sync.
 
 ### Text Cache / Allocation Evidence (2026-05-13)
 
@@ -104,10 +137,10 @@ This matrix is evidence tracking, not a claim of complete multi-GPU or multi-dis
 |---------|-------|---------|--------------------|------------------|--------|
 | 60Hz | 150% | non-AOT | default / `--no-partial-apply` | Numeric sync wait captured; both partial modes manually smoked with no text lag | Covered for current display |
 | 60Hz | 150% | AOT | default diagnostic path | Process-isolated numeric sync wait captured | Numeric-only |
-| 120Hz | 150% | non-AOT | default | Numeric sync wait captured; manual smoke found no text lag | Covered for current display |
+| 120Hz | 150% | non-AOT | default / D3D11Query A/B | Numeric sync wait captured; manual smokes found no text lag | Covered for current display |
 | 120Hz | 150% | AOT | default diagnostic path | Process-isolated numeric sync wait captured | Numeric-only |
 | 144Hz | 150% | non-AOT / AOT | default / `--no-partial-apply` | Current display reports no 144Hz mode | Unavailable locally |
-| 240Hz | 150% | non-AOT | default diagnostic path | Numeric sync wait captured; prior manual smoke found no text lag | Covered for current display |
+| 240Hz | 150% | non-AOT | default / D3D11Query A/B | Numeric sync wait captured; manual smokes found no text lag | Covered for current display |
 | 240Hz | 150% | AOT | default diagnostic path | Process-isolated numeric sync wait captured | Numeric-only |
 | 120Hz | 100% | non-AOT | default | Text cache/allocation diagnostic captured; manual visual/hit-test/scroll smoke normal | Covered for current display |
 | 120Hz | 200% | non-AOT | default | Text cache/allocation diagnostic captured; manual visual/hit-test/scroll smoke normal | Covered for current display |
@@ -141,7 +174,7 @@ Version boundary regression note: the Windows PoC runtime minimum is 10.0.15063.
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized (Target SDK 26100, runtime minimum 15063). Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. Device-lost recovery complete. GA hardening first batch complete (2026-05-13). D2D text overlay synchronization complete and default-on (2026-05-13). Minimal CI matrix covers normal tests, headless D3D12, performance baseline, and AOT publish. Current-machine text cache/allocation diagnostics are healthy at 100% / 150% / 200%; sync wait exceeds the provisional 2ms performance target at 60Hz / 120Hz / 240Hz, but manual correctness smokes show no text lag with default synchronization enabled.
+**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized (Target SDK 26100, runtime minimum 15063). Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. Device-lost recovery complete. GA hardening first batch complete (2026-05-13). D2D text overlay synchronization complete and default-on (2026-05-13). Minimal CI matrix covers normal tests, headless D3D12, performance baseline, and AOT publish. Current-machine text cache/allocation diagnostics are healthy at 100% / 150% / 200%; sync wait still needs an accepted budget or a more robust renderer-level optimization. The D3D11 query spike is correctness-clean in manual smoke but not adopted as default because performance is refresh-rate dependent.
 
 **Minimum for GA:**
 1. ~~Device-lost recovery (P0)~~ — Done
