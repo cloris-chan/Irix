@@ -21,7 +21,7 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
 | 60Hz refresh | Works (default PoC) | Already done | — |
-| 120Hz / 144Hz / 240Hz | 240Hz current-machine numeric sync wait captured; 120Hz manual no-lag smoke only; 144Hz not yet covered | Validate animation timing and fence behavior | P1 |
+| 120Hz / 144Hz / 240Hz | 60Hz / 120Hz / 240Hz numeric sync wait captured at 150% scale for non-AOT and AOT; 144Hz unavailable on the current display | Validate animation timing and fence behavior | P1 |
 | DPI scaling (100%-200%) | Platform-neutral `DisplayScale` model; compositor owns scale boundary; layout in logical units, backend in physical pixels; text/font scaled consistently; `WM_DPICHANGED` runtime handling; app.manifest PerMonitorV2; runtime minimum 10.0.15063.0; hand-tested 100%/150%/200% (2026-05-13) | Validate no bitmap stretch at each DPI; logical→physical conversion correct | P1 |
 | Multi-monitor | Single monitor only | Validate viewport change on monitor switch | P2 |
 | Fractional DPI (125%, 150%) | Not validated | Validate no rounding artifacts in layout/clip | P2 |
@@ -44,51 +44,57 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 |------|--------------|----------------|----------|
 | Frame time profiling | Compositor-level: `LastFrameTimeUs`, `AverageFrameTimeUs`, `MaxFrameTimeUs` via `Stopwatch` | Already done | — |
 | Partial apply overhead measurement | Frame time profiling can compare partial vs. full path; measure via `PartialApplyCount` / `FullApplyCount` | Already done | — |
-| Performance regression CI | Mock backend frame timing baseline and warm `FrameDrawingResources` allocation baseline in `Category=Performance`; CI lane runs them separately | Already done | — |
-| Text cache hit rate in steady state | `--diagnose-text-cache 180` validates static, scroll, and scale-change phases; current 240Hz / 150% run keeps layout cache hit-rate above 99% with no evictions | Already done for current machine; broaden with platform matrix | P2 |
-| DrawCommand recording allocation | `stackalloc` + `ArrayPool`; warm `FrameDrawingResources` allocation baseline in CI; current diagnostic shows text-resource allocation stable after pool warmup | Keep performance lane green and broaden numeric matrix | P2 |
-| Sync wait overhead | `--diagnose-sync 300 3` measured on local 240Hz / 150% scale display. Latest 3 samples: avg 3.372-3.584ms, p95 4.033-4.265ms, max 4.277-4.465ms, 274-296/300 waits >2ms. Default sync remains enabled; prior manual smoke found no text lag at 60Hz/120Hz/240Hz. | Collect numeric 60Hz / 120Hz runs after manually switching display modes; decide whether to accept hardware-specific budget or defer a deeper renderer-level optimization | P1 |
+| Performance regression CI | Mock backend frame timing baseline and warm `FrameDrawingResources` allocation baseline in `Category=Performance`; CI lane runs them separately; ordinary CI also includes soak and resize stress tests | Already done | — |
+| Text cache hit rate in steady state | `scripts/ga-baseline.ps1 -Mode TextCache` validates static, scroll, and scale-change phases; 100% / 150% / 200% local runs keep layout cache hit-rate above 99% with no evictions | Already done for current machine; broaden only when new hardware is available | P2 |
+| DrawCommand recording allocation | `stackalloc` + `ArrayPool`; warm `FrameDrawingResources` allocation baseline in CI; current text-cache diagnostics show text-resource allocation stable after pool warmup | Keep performance lane green and rerun semi-auto baseline before GA cut | P2 |
+| Sync wait overhead | `scripts/ga-baseline.ps1 -Mode Sync` measured 60Hz / 120Hz / 240Hz at 150% scale for non-AOT and AOT. All non-AOT averages exceed the provisional 2ms target; AOT has high process-to-process variance. Default sync remains enabled; 60Hz and 120Hz manual scroll smokes found no text lag. | Correctness accepted, performance budget not accepted; keep current full queue idle for now and track renderer-level optimization follow-up | P1 |
 
 ### Sync Wait Evidence (2026-05-13)
 
-Command shape for repeatable local runs:
+Canonical local runner:
 
 ```powershell
-dotnet run --project src/Irix.Poc/Irix.Poc.csproj -c Release -- --diagnose-sync 300 3 *> TestResults\diagnose-sync-<refresh>hz-<scale>pct.txt
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150 -Aot -SeparateSamples
 ```
 
-| Refresh | Scale | Frames / sample | Samples | Avg sync wait | P95 sync wait | Max sync wait | Waits >2ms | Evidence |
-|---------|-------|-----------------|---------|---------------|---------------|---------------|------------|----------|
-| 60Hz | Pending numeric | 300 | Pending | Pending | Pending | Pending | Pending | Requires manually switching display mode; default sync must remain enabled and no text lag is required |
-| 120Hz | Pending numeric | 300 | Pending | Pending | Pending | Pending | Pending | Requires manually switching display mode; previous manual smoke found no text lag |
-| 144Hz | Pending numeric | 300 | Pending | Pending | Pending | Pending | Pending | Not yet covered |
-| 240Hz | 150% | 300 | 3 | 3.372-3.584ms | 4.033-4.265ms | 4.277-4.465ms | 274-296 / 300 | `TestResults/diagnose-sync-240hz-150pct-multisample.txt` |
+| Refresh | Scale | Runtime | Frames / sample | Samples | Avg sync wait | P95 sync wait | Max sync wait | Waits >2ms | Correctness evidence | Evidence |
+|---------|-------|---------|-----------------|---------|---------------|---------------|---------------|------------|----------------------|----------|
+| 60Hz | 150% | non-AOT | 300 | 3 | 9.136-10.937ms | 10.183-11.410ms | 12.368-13.873ms | 297-300 / 300 | Default partial apply and `--no-partial-apply` manual scroll smokes: no text lag | `TestResults/diagnose-sync-60hz-150pct-non-aot.summary.txt` |
+| 60Hz | 150% | AOT | 300 | 3 process-isolated | 7.140-15.262ms | 15.415-16.596ms | 16.185-19.021ms | 137-298 / 300 | Numeric only | `TestResults/diagnose-sync-60hz-150pct-aot-separate.summary.txt` |
+| 120Hz | 150% | non-AOT | 300 | 3 | 3.934-4.685ms | 5.735-6.780ms | 7.046-8.122ms | 296-299 / 300 | Default partial apply manual scroll smoke: no text lag | `TestResults/diagnose-sync-120hz-150pct-non-aot.summary.txt` |
+| 120Hz | 150% | AOT | 300 | 3 process-isolated | 0.952-4.105ms | 1.819-5.003ms | 1.990-6.063ms | 0-297 / 300 | Numeric only | `TestResults/diagnose-sync-120hz-150pct-aot-separate.summary.txt` |
+| 144Hz | 150% | non-AOT / AOT | 300 | Not run | Not run | Not run | Not run | Not run | Current display has no 144Hz mode | Not applicable |
+| 240Hz | 150% | non-AOT | 300 | 3 | 3.319-3.589ms | 3.896-4.208ms | 4.326-4.406ms | 292-299 / 300 | Prior manual scroll smoke: no text lag | `TestResults/diagnose-sync-240hz-150pct-non-aot.summary.txt` |
+| 240Hz | 150% | AOT | 300 | 3 process-isolated | 1.197-3.223ms | 1.810-3.960ms | 2.279-4.251ms | 2-297 / 300 | Numeric only | `TestResults/diagnose-sync-240hz-150pct-aot-separate.summary.txt` |
 
-Interpretation: the current 240Hz variance is no longer classified as a single occasional spike. The latest three-sample run is consistently above the 2ms target, so the remaining question is whether this machine/environment has unusually high D3D11On12/D2D queue completion cost or whether the default sync strategy needs a deeper redesign. Because disabling the wait reintroduces text lag, this is a correctness-first follow-up, not a reason to change the default.
+Interpretation: sync wait is not acceptable against the provisional `<2ms average` performance target on this machine. The issue is also not isolated to 240Hz: 60Hz and 120Hz non-AOT runs exceed the target, while AOT has high process-to-process variance. Correctness is acceptable for the manually smoked paths because text no longer lags at 60Hz or 120Hz with default `SyncTextOverlay=true`; the high wait cost is therefore an optimization follow-up, not a reason to disable synchronization.
 
 ### Sync Strategy Review (2026-05-13)
 
+Decision: **keep the current full queue idle wait for this GA hardening batch and document a renderer-level optimization follow-up.**
+
 Current `D3D12Renderer.RenderFrame` already waits only on frames that contain text. Rect-only frames transition to present and skip the sync wait. Text frames render the D3D12 rect pass, run the D3D11On12/D2D overlay, call D3D11 `Flush`, then signal the shared D3D12 direct queue and wait before `Present`.
 
-Within the current backend contract this is the narrowest correctness-preserving fence available: D3D11On12 text work is submitted to the same D3D12 queue, and the renderer does not expose a separate D2D-only completion primitive. Waiting only after `Flush` but before `Present` avoids presenting a back buffer whose text overlay is still pending. Avoiding the wait or moving it past `Present` is not accepted for GA because the known 60Hz text-lag bug returns. Further reduction would require a renderer-level redesign that exposes a more granular overlay completion fence; that is intentionally outside this GA hardening batch.
+Within the current backend contract this is the narrowest correctness-preserving fence available: D3D11On12 text work is submitted to the same D3D12 queue, and the renderer does not expose a separate D2D-only completion primitive. Waiting only after `Flush` but before `Present` avoids presenting a back buffer whose text overlay is still pending. Avoiding the wait or moving it past `Present` is not accepted for GA because the known 60Hz text-lag bug returns. Further reduction would require a renderer-level redesign that exposes a more granular overlay completion fence; that is intentionally outside this GA hardening batch. The go/no-go is therefore: **no change to default synchronization now; open an optimization follow-up for reducing queue idle scope without changing the text renderer or backend contract.**
 
 ### Text Cache / Allocation Evidence (2026-05-13)
 
 Command shape:
 
 ```powershell
-dotnet run --project src/Irix.Poc/Irix.Poc.csproj -c Release -- --diagnose-text-cache 180 *> TestResults\diagnose-text-cache-<refresh>hz-<scale>pct.txt
+.\scripts\ga-baseline.ps1 -Mode TextCache -TextCacheFrames 180 -RefreshLabel current -ScalePercent 200
 ```
 
-Current local run: 240Hz / 150% scale, 180 frames per scenario.
+Local runs use 180 frames per scenario.
 
-| Scenario | Format cache | Layout cache | Allocation | FrameDrawingResources pool | Evidence |
-|----------|--------------|--------------|------------|----------------------------|----------|
-| Static | 2 hits / 1 miss, 66.7%, cached 1, evictions 0 | 537 hits / 3 misses, 99.4%, cached 3, evictions 0 | 586,504 bytes total, 3,258 bytes/frame | 180 rents, 178 reused, 2 created, 0 overflow disposals | `TestResults/diagnose-text-cache-240hz-150pct.txt` |
-| Scroll | 1 hit / 0 misses, 100.0%, cached 1, evictions 0 | 539 hits / 1 miss, 99.8%, cached 4, evictions 0 | 1,247,208 bytes total, 6,928 bytes/frame | 180 rents, 180 reused, 0 created, 0 overflow disposals | `TestResults/diagnose-text-cache-240hz-150pct.txt` |
-| Scale change | 3 hits / 1 miss, 75.0%, cached 2, evictions 0 | 536 hits / 4 misses, 99.3%, cached 8, evictions 0 | 571,264 bytes total, 3,173 bytes/frame | 180 rents, 180 reused, 0 created, 0 overflow disposals | `TestResults/diagnose-text-cache-240hz-150pct.txt` |
+| Scale | Actual refresh | Static layout / allocation | Scroll layout / allocation | Scale-change layout / allocation | Pool behavior | Evidence |
+|-------|----------------|----------------------------|----------------------------|----------------------------------|---------------|----------|
+| 100% | 120Hz | 99.4%, 3,154 bytes/frame | 99.8%, 6,824 bytes/frame | 99.3%, 3,121 bytes/frame | Warm pool reuses all frames after initial creation; 0 overflow disposals | `TestResults/diagnose-text-cache-current-100pct-non-aot.summary.txt` |
+| 150% | 120Hz | 99.4%, 3,258 bytes/frame | 99.8%, 6,928 bytes/frame | 99.3%, 3,173 bytes/frame | Warm pool reuses all frames after initial creation; 0 overflow disposals | `TestResults/diagnose-text-cache-120hz-150pct-non-aot.summary.txt` |
+| 200% | 120Hz | 99.4%, 3,257 bytes/frame | 99.8%, 6,928 bytes/frame | 99.3%, 3,121 bytes/frame | Warm pool reuses all frames after initial creation; 0 overflow disposals | `TestResults/diagnose-text-cache-current-200pct-non-aot.summary.txt` |
 
-Interpretation: layout caching is stable in the steady-state scenarios and after an internal scale change; cache evictions remain zero. Format hit-rate has a small denominator in these scenarios, so layout hit-rate and eviction count are the better regression signal. The resource pool is warm after the first scenario and reuses every frame afterward.
+Interpretation: layout caching is stable in steady-state, scroll, and scale-change scenarios at 100% / 150% / 200%. Cache evictions remain zero. Format hit-rate has a small denominator in these scenarios, so layout hit-rate and eviction count are the better regression signal. The resource pool is warm after the first scenario and reuses every frame afterward.
 
 ### Platform Matrix Evidence
 
@@ -96,12 +102,15 @@ This matrix is evidence tracking, not a claim of complete multi-GPU or multi-dis
 
 | Refresh | Scale | Runtime | Partial apply mode | Current evidence | Status |
 |---------|-------|---------|--------------------|------------------|--------|
-| 60Hz | 100% / 150% / 200% | non-AOT | default / `--no-partial-apply` | Manual no-lag smoke only; numeric sync wait pending | Open |
-| 120Hz | 100% / 150% / 200% | non-AOT | default / `--no-partial-apply` | Manual no-lag smoke only; numeric sync wait pending | Open |
-| 144Hz | 100% / 150% / 200% | non-AOT | default / `--no-partial-apply` | No local evidence yet | Open |
-| 240Hz | 150% | non-AOT | diagnostic path | Numeric sync wait + text cache/allocation diagnostics captured | Partial |
-| 240Hz | 100% / 200% | non-AOT | default / `--no-partial-apply` | Scale pipeline hand-tested; fresh numeric sync/cache evidence pending | Open |
-| Current display | Current scale | AOT | default | AOT publish and runtime scale/refresh verification completed earlier; fresh sync wait numeric pending | Partial |
+| 60Hz | 150% | non-AOT | default / `--no-partial-apply` | Numeric sync wait captured; both partial modes manually smoked with no text lag | Covered for current display |
+| 60Hz | 150% | AOT | default diagnostic path | Process-isolated numeric sync wait captured | Numeric-only |
+| 120Hz | 150% | non-AOT | default | Numeric sync wait captured; manual smoke found no text lag | Covered for current display |
+| 120Hz | 150% | AOT | default diagnostic path | Process-isolated numeric sync wait captured | Numeric-only |
+| 144Hz | 150% | non-AOT / AOT | default / `--no-partial-apply` | Current display reports no 144Hz mode | Unavailable locally |
+| 240Hz | 150% | non-AOT | default diagnostic path | Numeric sync wait captured; prior manual smoke found no text lag | Covered for current display |
+| 240Hz | 150% | AOT | default diagnostic path | Process-isolated numeric sync wait captured | Numeric-only |
+| 120Hz | 100% | non-AOT | default | Text cache/allocation diagnostic captured; manual visual/hit-test/scroll smoke normal | Covered for current display |
+| 120Hz | 200% | non-AOT | default | Text cache/allocation diagnostic captured; manual visual/hit-test/scroll smoke normal | Covered for current display |
 
 ## Platform Integration
 
@@ -124,14 +133,15 @@ Version boundary regression note: the Windows PoC runtime minimum is 10.0.15063.
 | D3D12-specific tests | Headless D3D12 smoke matrix lane runs `Category=D3D12` with graceful skip when D3D12 unavailable | Already done | — |
 | Platform matrix CI | Minimal Windows 2025 / SDK 26100 lanes for tests, headless D3D12, performance baseline, and AOT publish | Already done | — |
 | Performance regression CI | `Category=Performance` mock backend frame-time baseline + warm `FrameDrawingResources` allocation baseline | Already done | — |
-| Sync wait regression baseline | Semi-automatic local diagnostic via `--diagnose-sync <frames> <samples>`; not a hard CI gate because hosted runners do not provide stable refresh/scale/GPU timing | Keep latest local baselines in `TestResults/` and GA plan | P1 |
-| Text cache/allocation baseline | Semi-automatic local diagnostic via `--diagnose-text-cache <frames>`; CI guards pool allocation with a hardware-independent performance test | Already done for current machine; broaden matrix | P2 |
+| Sync wait regression baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode Sync`; not a hard CI gate because hosted runners do not provide stable refresh/scale/GPU timing | Keep latest local baselines in `TestResults/` and GA plan; optimization follow-up tracks the >2ms budget miss | P1 |
+| Text cache/allocation baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode TextCache`; CI guards pool allocation with a hardware-independent performance test | Already done for 100% / 150% / 200% on current machine | P2 |
+| Manual smoke baseline | Semi-automatic local runner via `scripts/ga-baseline.ps1 -Mode Smoke`; user verifies scroll/text sync, hit-test, and scale behavior after switching refresh/scale | Latest 60Hz / 120Hz / 100% / 200% smokes passed on current display | P2 |
 
 ---
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized (Target SDK 26100, runtime minimum 15063). Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. Device-lost recovery complete. GA hardening first batch complete (2026-05-13). D2D text overlay synchronization complete and default-on (2026-05-13). Minimal CI matrix covers normal tests, headless D3D12, performance baseline, and AOT publish. Current-machine text cache/allocation diagnostics are healthy; 240Hz sync wait remains above the provisional 2ms target.
+**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized (Target SDK 26100, runtime minimum 15063). Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. Device-lost recovery complete. GA hardening first batch complete (2026-05-13). D2D text overlay synchronization complete and default-on (2026-05-13). Minimal CI matrix covers normal tests, headless D3D12, performance baseline, and AOT publish. Current-machine text cache/allocation diagnostics are healthy at 100% / 150% / 200%; sync wait exceeds the provisional 2ms performance target at 60Hz / 120Hz / 240Hz, but manual correctness smokes show no text lag with default synchronization enabled.
 
 **Minimum for GA:**
 1. ~~Device-lost recovery (P0)~~ — Done
@@ -144,7 +154,7 @@ Version boundary regression note: the Windows PoC runtime minimum is 10.0.15063.
 8. ~~Windows SDK 26100 CI check (P0)~~ — Done
 9. ~~Performance regression CI baseline (P1)~~ — Done (mock backend frame timing + warm resource-pool allocation)
 
-**Remaining before GA:** numeric sync wait follow-up for 60Hz / 120Hz modes, 144Hz coverage, broader Windows/platform matrix evidence across scale/runtime/partial-apply modes, a decision on the consistently high 240Hz sync wait budget, and selected platform integration checks. Irix is not GA-ready yet.
+**Remaining before GA:** renderer-level sync wait optimization follow-up or an explicit accepted budget, validation on hardware that actually exposes 144Hz, broader hardware coverage beyond this single display/GPU, and selected platform integration checks. Irix is not GA-ready yet.
 
 **Estimated scope:** 5-10 focused work items, primarily in `Irix.Platform.Windows` and `Irix.Poc`.
 

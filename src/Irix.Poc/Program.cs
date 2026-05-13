@@ -14,25 +14,29 @@ internal static class Program
     {
         if (args.Contains("--diagnose"))
         {
-            FullDiagnosticRunner.Run(Console.Out);
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            FullDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
             return;
         }
 
         if (args.Contains("--diagnose-resize"))
         {
-            ResizeDiagnosticRunner.Run(Console.Out);
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            ResizeDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
             return;
         }
 
         if (args.Contains("--diagnose-scroll"))
         {
-            await ScrollDiagnosticRunner.RunAsync(Console.Out, Path.Combine("TestResults", "diagnose-scroll.txt"));
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            await ScrollDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out, Path.Combine("TestResults", "diagnose-scroll.txt"));
             return;
         }
 
         if (args.Contains("--diagnose-input"))
         {
-            await InputDiagnosticRunner.RunAsync(Console.Out, Path.Combine("TestResults", "diagnose-input.txt"));
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            await InputDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out, Path.Combine("TestResults", "diagnose-input.txt"));
             return;
         }
 
@@ -44,7 +48,8 @@ internal static class Program
             var syncSampleCount = 1;
             var syncSampleArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(2).FirstOrDefault();
             if (int.TryParse(syncSampleArg, out var sampleCount) && sampleCount > 0) syncSampleCount = sampleCount;
-            SyncDiagnosticRunner.Run(Console.Out, syncFrameCount, syncSampleCount);
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            SyncDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, syncFrameCount, syncSampleCount);
             return;
         }
 
@@ -53,7 +58,8 @@ internal static class Program
             var frameCount = 180;
             var frameArg = args.SkipWhile(a => a != "--diagnose-text-cache").Skip(1).FirstOrDefault();
             if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
-            TextCacheAllocationDiagnosticRunner.Run(Console.Out, frameCount);
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            TextCacheAllocationDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, frameCount);
             return;
         }
 
@@ -292,6 +298,24 @@ internal static class Program
         var x = bounds.X + Math.Max((bounds.Width - windowWidth) / 2, 0);
         var y = bounds.Y + Math.Max((bounds.Height - windowHeight) / 2, 0);
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
+    }
+
+    private static StreamWriter? TryCreateDiagnosticOutput(string[] args)
+    {
+        var outputPath = args.SkipWhile(a => a != "--diagnostic-output").Skip(1).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            return null;
+        }
+
+        var fullPath = Path.GetFullPath(outputPath);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        return new StreamWriter(fullPath, false) { AutoFlush = true };
     }
 
     private sealed class PlatformInputObserver(Action<RawInputEvent> onNext) : IObserver<RawInputEvent>

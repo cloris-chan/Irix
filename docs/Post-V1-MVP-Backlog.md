@@ -25,10 +25,10 @@ These default-on gates are complete. Remaining work belongs to GA CI/matrix/perf
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-013 | Sync wait overhead validation | 240Hz measured via `--diagnose-sync 300`: avg range 1.891ms-3.227ms on current machine; prior manual smoke found no lag at 60Hz/120Hz/240Hz; default sync remains on | Numeric 60Hz / 120Hz values and 240Hz variance still need follow-up; optimize or document acceptable budget without disabling default sync |
+| POST-013 | Sync wait overhead validation | 60Hz / 120Hz / 240Hz measured via `scripts/ga-baseline.ps1 -Mode Sync` at 150% scale for non-AOT and AOT; non-AOT averages exceed the provisional 2ms target, while 60Hz/120Hz manual smokes show no text lag with default sync enabled | Correctness-first decision documented: keep default sync/full queue idle for now; track renderer-level optimization or accepted budget follow-up without disabling default sync |
 | POST-014 | Windows SDK 26100 CI check | Done | CI fails early if .NET 10 or Windows SDK 26100 is absent |
 | POST-015 | Platform matrix CI | Minimal matrix added | Windows 2025 lanes cover tests, headless D3D12, performance baseline, AOT publish |
-| POST-016 | Performance regression CI | Mock backend baseline added | `Category=Performance` catches obvious frame-time regression |
+| POST-016 | Performance regression CI | Mock backend frame-time baseline + warm `FrameDrawingResources` allocation baseline added; `scripts/ga-baseline.ps1` provides semi-auto sync/text-cache/smoke reports | CI catches obvious frame-time/allocation regressions; sync wait remains semi-auto because hosted runners do not provide stable refresh/scale/GPU timing |
 
 ### P1 — Framework Promotion
 
