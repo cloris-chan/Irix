@@ -1,6 +1,6 @@
 # V1 MVP/GA Candidate Summary
 
-Date: 2026-05-13
+Date: 2026-05-14
 
 ## Decision
 
@@ -17,7 +17,8 @@ V1 core is complete, default-on, and frozen for the MVP/GA candidate. No new V1 
 | GPU resource failure handling | Done for V1 scope; runtime resize/recovery failures produce explicit device error reasons, including `E_OUTOFMEMORY` |
 | Command allocator reset guard | Done; reset retries once after `WaitForGpu`, then escalates to device-lost/recovery |
 | Windows version boundary | Done; target SDK 10.0.26100.0, runtime minimum 10.0.15063.0 |
-| CI / Release baseline | Done; Release build, test lanes, D3D12 smoke, performance lane, and AOT publish pass |
+| CI / Release baseline | Done; Release build 0 warnings, 506 tests pass, D3D12 smoke CI-integrated with graceful skip, AOT publish pass |
+| Concurrent input + render | Done; 5 tests: sequential scroll render, ScrollFramePump dispatch, rapid coalescing, thread-safe AddPendingPixels, multi-cycle |
 | Platform integration smoke | Done for current machine: minimize/restore, occlusion/restore, resize, scroll, click, 100% / 150% / 200%, runtime scale switch |
 | Glyph atlas | Post-GA design only; no current-GA implementation |
 
@@ -35,16 +36,9 @@ V1 core is complete, default-on, and frozen for the MVP/GA candidate. No new V1 
 
 | Command | Result |
 |---------|--------|
-| `dotnet build -c Release` | Passed; only two pre-existing xUnit analyzer warnings |
-| `dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance"` | Passed 496/496 |
-| `dotnet test --no-build -c Release --filter "Category=D3D12"` | Passed 6/6 |
-| `dotnet test --no-build -c Release --filter "Category=Performance"` | Passed 2/2 |
-| `dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained` | Passed |
-
-Pre-existing warnings:
-
-- `ConcurrentInputRenderTests.cs`: xUnit1031 blocking task operation warning.
-- `ConcurrentInputRenderTests.cs`: xUnit1051 missing `TestContext.Current.CancellationToken` warning.
+| `dotnet build -c Release` | Passed; 0 warnings |
+| `dotnet test --no-build -c Release` | Passed 506/506 |
+| `dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained` | Passed (requires `vswhere.exe` in PATH or VS installed) |
 
 ## Platform Smoke Evidence
 

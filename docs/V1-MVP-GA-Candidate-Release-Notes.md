@@ -1,7 +1,7 @@
 # V1 MVP/GA Candidate Release Notes
 
 Candidate: `v1-mvp-ga-candidate.1`
-Date: 2026-05-13
+Date: 2026-05-14
 
 ## Scope
 
@@ -16,15 +16,16 @@ This candidate freezes V1 core. It does not add new public APIs, rewrite the ren
 - Runtime resize/resource recreation failures now report explicit device error reasons instead of continuing with undefined pointers.
 - Command allocator/list reset failures retry once after `WaitForGpu`, then escalate to device-lost/recovery.
 - Sync diagnostics can compare internal strategies with `--text-overlay-sync-strategy`, but `D3D12FenceAfterOverlay` remains default.
+- `--diagnose-sync` measures per-frame and aggregate sync wait overhead (min/max/avg/p95).
+- Frame serial diagnostics (`FrameSerialDiagnostics`) track frame serial, present serial, sync wait count/ticks, back buffer index.
 - `scripts/ga-baseline.ps1` supports sync/text-cache/smoke baselines and strategy-labeled sync outputs.
 
 ## Validation
 
-- Release build passed.
-- Ordinary tests passed: 496/496.
-- D3D12 smoke tests passed: 6/6.
-- Performance lane passed: 2/2.
+- Release build passed with 0 warnings.
+- All tests passed: 506/506 (includes 6 D3D12 smoke, 5 concurrent input/render, 4 scroll text-sync).
 - AOT publish passed for `Irix.Poc` win-x64 self-contained.
+- D3D12 smoke tests CI-integrated with graceful skip when D3D12 unavailable.
 - Platform integration smokes passed on the current machine:
   - minimize/restore
   - full occlusion/restore

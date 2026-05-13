@@ -59,6 +59,16 @@ dotnet run --project src/Irix.Poc --no-build -- --no-partial-apply
 
 Expected: across 30-50 launches per mode, no black/green startup flash, no partial-window random background rectangle, and no startup crash.
 
+### 4b. Text overlay sync (scroll)
+
+| Step | Action | Expected |
+|------|--------|----------|
+| 4b.1 | Launch default mode | Console shows `Sync text overlay: ENABLED (default)` |
+| 4b.2 | Mouse wheel scroll continuously for 10+ seconds | Button text stays synchronized with rectangles, no visible lag |
+| 4b.3 | Stop scrolling, then resume | Text catches up on stop, stays sync on resume |
+| 4b.4 | Launch with `--no-sync-text-overlay` | Console shows `Sync text overlay: DISABLED (--no-sync-text-overlay)` |
+| 4b.5 | Scroll at 60Hz | Text visibly lags behind rectangles (confirms sync is required) |
+
 ### 5. Console compositor
 
 | Step | Action | Expected |
@@ -92,6 +102,7 @@ Re-run this checklist after changes to:
 - `DrawingBackendCompositor` (compositor logic)
 - `SegmentedBackendExecutionAdapter` (per-segment execute)
 - `D3D12DrawingBackend` (backend accumulate/submit)
+- `D3D12Renderer` (sync fence, `WaitForQueueIdle`, `SyncTextOverlay`, present)
 - `D3D12TextRenderer` (text cache, style resolution)
 - `SegmentedRetainedFrameProductionOwnerFeed` (ownership feed)
 - `RetainedRenderFrameSegmentOwnership` (segment ownership)

@@ -115,8 +115,9 @@ public sealed class ConcurrentInputRenderTests
     }
 
     [Fact]
-    public void Concurrent_scroll_input_add_pending_pixels_is_thread_safe()
+    public async Task Concurrent_scroll_input_add_pending_pixels_is_thread_safe()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         // Verify that AddPendingPixels is safe to call from multiple threads.
         // In the real app, scroll events arrive on the input thread while
         // the pump loop runs on another thread.
@@ -131,10 +132,10 @@ public sealed class ConcurrentInputRenderTests
                 {
                     pump.AddPendingPixels(1.0);
                 }
-            }));
+            }, cancellationToken));
         }
 
-        Task.WaitAll(tasks.ToArray(), TimeSpan.FromSeconds(10));
+        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
 
         // Total pending should be 1000 (10 threads × 100 × 1.0px)
         Assert.Equal(1000, pump.PendingPixels, 0.01);
