@@ -37,6 +37,32 @@ public sealed class PerformanceRegressionTests
         Assert.True(compositor.AverageFrameTimeUs < 20_000, $"Mock backend average frame time {compositor.AverageFrameTimeUs}us exceeded 20,000us baseline");
     }
 
+    [Fact]
+    public void FrameDrawingResources_warm_pool_allocation_stays_under_baseline()
+    {
+        for (var i = 0; i < 8; i++)
+        {
+            var resources = FrameDrawingResources.Rent();
+            resources.AddText("Warm text cache allocation baseline");
+            resources.Seal();
+            FrameDrawingResources.Return(resources);
+        }
+
+        const int frameCount = 1_000;
+        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var i = 0; i < frameCount; i++)
+        {
+            var resources = FrameDrawingResources.Rent();
+            resources.AddText("Stable text cache allocation baseline");
+            resources.Seal();
+            FrameDrawingResources.Return(resources);
+        }
+
+        var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Assert.True(allocatedBytes < 2_000_000, $"FrameDrawingResources warm pool allocated {allocatedBytes:N0} bytes over {frameCount} frames");
+    }
+
     private sealed class CountingBackend : IDrawingBackend
     {
         public int BeginFrameCount { get; private set; }

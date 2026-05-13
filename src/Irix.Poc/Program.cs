@@ -41,7 +41,19 @@ internal static class Program
             var syncFrameCount = 300;
             var syncFrameArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(1).FirstOrDefault();
             if (int.TryParse(syncFrameArg, out var n) && n > 0) syncFrameCount = n;
-            SyncDiagnosticRunner.Run(Console.Out, syncFrameCount);
+            var syncSampleCount = 1;
+            var syncSampleArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(2).FirstOrDefault();
+            if (int.TryParse(syncSampleArg, out var sampleCount) && sampleCount > 0) syncSampleCount = sampleCount;
+            SyncDiagnosticRunner.Run(Console.Out, syncFrameCount, syncSampleCount);
+            return;
+        }
+
+        if (args.Contains("--diagnose-text-cache"))
+        {
+            var frameCount = 180;
+            var frameArg = args.SkipWhile(a => a != "--diagnose-text-cache").Skip(1).FirstOrDefault();
+            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
+            TextCacheAllocationDiagnosticRunner.Run(Console.Out, frameCount);
             return;
         }
 

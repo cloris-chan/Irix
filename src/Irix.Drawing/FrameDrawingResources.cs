@@ -15,6 +15,14 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
 
     private static readonly object PoolLock = new();
     private static readonly Queue<FrameDrawingResources> Pool = new();
+    private static long _rentCount;
+    private static long _createdCount;
+    private static long _reusedCount;
+    private static long _returnCallCount;
+    private static long _returnedToPoolCount;
+    private static long _retainedReturnSkipCount;
+    private static long _duplicateReturnSkipCount;
+    private static long _disposedOverflowCount;
 
     private readonly FrameTextArena _textArena = new();
     private readonly List<TextStyle> _textStyles = [];
@@ -32,12 +40,31 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     /// </summary>
     internal ulong FrameId => _frameId;
 
+    internal static FrameDrawingResourcesPoolDiagnostics GetPoolDiagnostics()
+    {
+        lock (PoolLock)
+        {
+            return new FrameDrawingResourcesPoolDiagnostics(
+                System.Threading.Interlocked.Read(ref _rentCount),
+                System.Threading.Interlocked.Read(ref _createdCount),
+                System.Threading.Interlocked.Read(ref _reusedCount),
+                System.Threading.Interlocked.Read(ref _returnCallCount),
+                System.Threading.Interlocked.Read(ref _returnedToPoolCount),
+                System.Threading.Interlocked.Read(ref _retainedReturnSkipCount),
+                System.Threading.Interlocked.Read(ref _duplicateReturnSkipCount),
+                System.Threading.Interlocked.Read(ref _disposedOverflowCount),
+                Pool.Count);
+        }
+    }
+
     public static FrameDrawingResources Rent()
     {
+        System.Threading.Interlocked.Increment(ref _rentCount);
         lock (PoolLock)
         {
             if (Pool.Count > 0)
             {
+                System.Threading.Interlocked.Increment(ref _reusedCount);
                 var instance = Pool.Dequeue();
                 instance._returned = false;
                 instance._sealed = false;
@@ -50,13 +77,16 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
             }
         }
 
+        System.Threading.Interlocked.Increment(ref _createdCount);
         return new FrameDrawingResources { _frameId = 1 };
     }
 
     public static void Return(FrameDrawingResources resources)
     {
+        System.Threading.Interlocked.Increment(ref _returnCallCount);
         if (resources._returned)
         {
+            System.Threading.Interlocked.Increment(ref _duplicateReturnSkipCount);
             return;
         }
 
@@ -64,6 +94,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         // The retained frame will Release() when done.
         if (resources._retained)
         {
+            System.Threading.Interlocked.Increment(ref _retainedReturnSkipCount);
             return;
         }
 
@@ -78,10 +109,12 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
             if (Pool.Count < MaxPoolSize)
             {
                 Pool.Enqueue(resources);
+                System.Threading.Interlocked.Increment(ref _returnedToPoolCount);
             }
             else
             {
                 resources._textArena.Dispose();
+                System.Threading.Interlocked.Increment(ref _disposedOverflowCount);
             }
         }
     }
@@ -234,5 +267,28 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         public ReadOnlySpan<char> Resolve(TextSlice slice) => default;
 
         public TextStyle ResolveTextStyle(ResourceHandle handle) => TextStyle.Default;
+    }
+
+    internal readonly record struct FrameDrawingResourcesPoolDiagnostics(
+        long RentCount,
+        long CreatedCount,
+        long ReusedCount,
+        long ReturnCallCount,
+        long ReturnedToPoolCount,
+        long RetainedReturnSkipCount,
+        long DuplicateReturnSkipCount,
+        long DisposedOverflowCount,
+        int PoolCount)
+    {
+        public FrameDrawingResourcesPoolDiagnostics Delta(FrameDrawingResourcesPoolDiagnostics before) => new(
+            RentCount - before.RentCount,
+            CreatedCount - before.CreatedCount,
+            ReusedCount - before.ReusedCount,
+            ReturnCallCount - before.ReturnCallCount,
+            ReturnedToPoolCount - before.ReturnedToPoolCount,
+            RetainedReturnSkipCount - before.RetainedReturnSkipCount,
+            DuplicateReturnSkipCount - before.DuplicateReturnSkipCount,
+            DisposedOverflowCount - before.DisposedOverflowCount,
+            PoolCount);
     }
 }

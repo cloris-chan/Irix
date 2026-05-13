@@ -12,7 +12,7 @@ namespace Irix.Poc;
 /// </summary>
 internal static class SyncDiagnosticRunner
 {
-    internal static void Run(TextWriter output, int frameCount = 300)
+    internal static void Run(TextWriter output, int frameCount = 300, int sampleCount = 1)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
@@ -37,11 +37,43 @@ internal static class SyncDiagnosticRunner
 
         output.WriteLine("=== D3D12 Sync Diagnostic ===");
         output.WriteLine($"Frames: {frameCount}");
+        output.WriteLine($"Samples: {sampleCount}");
         output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         output.WriteLine($"SyncTextOverlay: {d3d12Renderer.SyncTextOverlay}");
         output.WriteLine();
 
+        var sampleSummaries = new List<SyncSampleSummary>(sampleCount);
+
+        for (var sample = 0; sample < sampleCount; sample++)
+        {
+            output.WriteLine($"--- Sample {sample + 1}/{sampleCount} ---");
+            sampleSummaries.Add(RunSample(output, frameCount, translator, compositor, d3d12Backend, d3d12Renderer));
+            output.WriteLine();
+        }
+
+        if (sampleSummaries.Count > 1)
+        {
+            output.WriteLine("--- Sample Summary ---");
+            output.WriteLine($"Avg sync wait range: min={sampleSummaries.Min(s => s.AvgWaitMs):F3}ms, max={sampleSummaries.Max(s => s.AvgWaitMs):F3}ms");
+            output.WriteLine($"P95 sync wait range: min={sampleSummaries.Min(s => s.P95WaitMs):F3}ms, max={sampleSummaries.Max(s => s.P95WaitMs):F3}ms");
+            output.WriteLine($"Max sync wait range: min={sampleSummaries.Min(s => s.MaxWaitMs):F3}ms, max={sampleSummaries.Max(s => s.MaxWaitMs):F3}ms");
+            output.WriteLine();
+        }
+
+        var finalDiag = d3d12Backend.FrameSerialDiagnostics;
+        output.WriteLine($"Final: frameSerial={finalDiag.FrameSerial}, presentSerial={finalDiag.PresentSerial}, syncWaits={finalDiag.SyncWaitCount}");
+        output.WriteLine("=== Sync diagnostic complete ===");
+    }
+
+    private static SyncSampleSummary RunSample(
+        TextWriter output,
+        int frameCount,
+        WindowDrawCommandTranslator translator,
+        DrawingBackendCompositor compositor,
+        D3D12DrawingBackend d3d12Backend,
+        D3D12Renderer d3d12Renderer)
+    {
         var syncWaits = new List<double>(frameCount);
         var frameTimes = new List<long>(frameCount);
         var previousRoot = default(VirtualNode);
@@ -129,10 +161,13 @@ internal static class SyncDiagnosticRunner
         }
 
         output.WriteLine();
-        var finalDiag = d3d12Backend.FrameSerialDiagnostics;
-        output.WriteLine($"Final: frameSerial={finalDiag.FrameSerial}, presentSerial={finalDiag.PresentSerial}, syncWaits={finalDiag.SyncWaitCount}");
-        output.WriteLine("=== Sync diagnostic complete ===");
+
+        return syncWaits.Count > 0
+            ? new SyncSampleSummary(syncWaits.Average(), syncWaits.OrderBy(x => x).ElementAt(Math.Min(syncWaits.Count - 1, (int)(syncWaits.Count * 0.95))), syncWaits.Max())
+            : default;
     }
+
+    private readonly record struct SyncSampleSummary(double AvgWaitMs, double P95WaitMs, double MaxWaitMs);
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
     {
