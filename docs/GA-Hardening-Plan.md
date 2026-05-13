@@ -57,6 +57,7 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Concurrent input + render | Sequential scroll render, ScrollFramePump dispatch, rapid coalescing, thread-safe AddPendingPixels, multi-cycle render | Already done | — |
 | Exception recovery | Compositor catches backend exceptions; `IDeviceRecovery` interface; recovery success/fail tests | Already done | — |
 | D2D text overlay sync under scroll | Default-on sync after D2D text overlay and before `Present`; `--no-sync-text-overlay` remains diagnostic only | Already done | — |
+| Startup / resize background flicker | Fixed 2026-05-14: `DrawCommandBatch.Memory` now exposes only logical `Count`, preventing pooled backing-buffer tail data from being retained as random `FillRect` commands | Already done | — |
 
 ---
 

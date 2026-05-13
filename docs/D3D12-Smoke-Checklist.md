@@ -17,11 +17,12 @@
 | Step | Action | Expected |
 |------|--------|----------|
 | 1.1 | Launch Counter PoC (no flags) | Console shows `Partial apply: ENABLED (default)` |
-| 1.2 | Verify buttons render | Text visible, no rendering artifacts |
-| 1.3 | Click + button 5 times | Counter increments to 5, text updates correctly |
-| 1.4 | Click - button | Counter decrements |
-| 1.5 | Press R | Counter resets to 0 |
-| 1.6 | Mouse wheel scroll | Scroll responds, content moves |
+| 1.2 | Verify first visible frame | Background is the normal theme color; no black/green flash or oversized random rectangle |
+| 1.3 | Verify buttons render | Text visible, no rendering artifacts |
+| 1.4 | Click + button 5 times | Counter increments to 5, text updates correctly |
+| 1.5 | Click - button | Counter decrements |
+| 1.6 | Press R | Counter resets to 0 |
+| 1.7 | Mouse wheel scroll | Scroll responds, content moves |
 
 ### 2. Resize
 
@@ -44,7 +45,19 @@
 | Step | Action | Expected |
 |------|--------|----------|
 | 4.1 | Launch with `--no-partial-apply` | Console shows `Partial apply: DISABLED (--no-partial-apply)` |
-| 4.2 | Click buttons, scroll, resize | Same behavior as default-on |
+| 4.2 | Verify first visible frame | Background is the normal theme color; no black/green flash or oversized random rectangle |
+| 4.3 | Click buttons, scroll, resize | Same behavior as default-on |
+
+### 4a. Repeated startup flicker check
+
+Run both startup modes repeatedly on the same machine:
+
+```powershell
+dotnet run --project src/Irix.Poc --no-build
+dotnet run --project src/Irix.Poc --no-build -- --no-partial-apply
+```
+
+Expected: across 30-50 launches per mode, no black/green startup flash, no partial-window random background rectangle, and no startup crash.
 
 ### 5. Console compositor
 
@@ -71,7 +84,7 @@ The PoC includes `app.manifest` with PerMonitorV2 DPI awareness. Windows-targete
 
 - All steps produce expected results
 - No crashes, no exceptions in console
-- No rendering artifacts (flickering, stale content, wrong colors)
+- No rendering artifacts (flickering, stale content, wrong colors, random background rectangles)
 
 ## Regression Triggers
 

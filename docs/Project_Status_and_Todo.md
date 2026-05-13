@@ -1,7 +1,7 @@
 # Irix 项目进度与待办
 
 > 面向开发者、Copilot/Codex 等 AI 工具的当前状态说明。目标是帮助接手者快速判断“哪些已经落地、哪些只是设计、下一步应该从哪里开始”。
-> 📅 **最后验证日期：** 2026-05-13。本文档描述的代码状态以此日期为准。
+> 📅 **最后验证日期：** 2026-05-14。本文档描述的代码状态以此日期为准。
 >
 > 📐 **架构设计详见：** [Irix_Framework_Design.md](/d:/source/Irix/docs/Irix_Framework_Design.md)。本文档不重复设计细节，仅记录实现状态与待办。
 ---
@@ -81,6 +81,7 @@
 - **Device-lost recovery（2026-05-13）：** `D3D12Renderer.TryRecover()` 重建全部 GPU 资源；compositor 在 backend 异常时检查 `IDeviceRecovery` 并尝试恢复；2 个测试覆盖恢复成功/失败路径。
 - **GA hardening first batch 完成（2026-05-13）：** D3D12 smoke tests（7 个 headless 测试）、1000-frame soak（3 个测试）、resize stress（4 个测试）、frame time profiling（compositor-level Stopwatch）。详见 [GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
 - **D2D text overlay sync 修复（2026-05-13）：** 滚动时按钮文字滞后矩形 — 根因：D3D12 rect pass 与 D3D11on12/D2D text overlay 未同步。修复：默认 `D3D12FenceAfterOverlay` wait 插入在 D2D text overlay 之后、Present 之前。默认开启（`SyncTextOverlay=true`），`--no-sync-text-overlay` 仅用于 A/B diagnostics。4 个 scroll text-sync regression tests。Frame serial diagnostics 可追踪 sync wait count/时间与当前 strategy。
+- **启动 / resize 背景闪烁修复（2026-05-14）：** 低概率黑色或绿色背景闪烁的最终根因不是 D3D12 clear color，而是 `DrawCommandBatch.Memory` 暴露了 pooled backing buffer 的容量，导致 logical `Count` 之后的尾部垃圾被 `RetainedCommandBuffer.ApplyFull` 当作真实 `DrawCommand` 复制；由于 `FillRect == 0`，尾部垃圾可能表现为随机大矩形。修复：`DrawCommandBatch.Memory` 只暴露 `Count` 内的 logical memory，并新增 retained full-apply / batch memory 回归测试。`dotnet test .\Irix.slnx --no-restore` 通过 506/506。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 - **下一步：** V1 MVP/GA candidate scope 已冻结：不再开 V1 core 新功能，不重写 renderer，不改 public API，不重新调默认 sync strategy。GA hardening second batch 已完成（D2D text overlay sync、D3D12 smoke CI integration、concurrent input+render validation、sync overhead diagnostics、Windows SDK 26100 CI check、minimal platform/performance CI lanes）。Release build、ordinary tests、D3D12 smoke、performance lane、AOT publish 均通过；platform integration smoke 覆盖 minimize/restore、occlusion/restore、resize、scroll/click、default、`--no-partial-apply`、100% / 150% / 200% startup scale、runtime scale switch。sync wait 作为 V1 accepted risk；144Hz 与 glyph atlas 均为 post-GA follow-up。详见 [V1-MVP-GA-Candidate-Summary.md](V1-MVP-GA-Candidate-Summary.md)、[V1-MVP-GA-Candidate-Release-Notes.md](V1-MVP-GA-Candidate-Release-Notes.md)、[Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)、[Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md)。

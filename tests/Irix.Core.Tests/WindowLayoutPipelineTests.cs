@@ -2474,6 +2474,37 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void RetainedCommandBuffer_full_apply_uses_logical_batch_count()
+    {
+        var buffer = new RetainedCommandBuffer();
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32)),
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 640, 360), Color: new DrawColor(0, 0, 128, 63)),
+        ]);
+        var batch = new DrawCommandBatch(owner, 1);
+
+        buffer.ApplyFull(batch);
+
+        Assert.Equal(1, buffer.Count);
+        Assert.Equal(DrawCommandKind.DrawTextRun, buffer.Commands[0].Kind);
+    }
+
+    [Fact]
+    public void DrawCommandBatch_memory_exposes_only_logical_count()
+    {
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32)),
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 640, 360), Color: new DrawColor(0, 0, 128, 63)),
+        ]);
+        var batch = new DrawCommandBatch(owner, 1);
+
+        Assert.Equal(1, batch.Memory.Length);
+        Assert.Equal(DrawCommandKind.DrawTextRun, batch.Memory.Span[0].Kind);
+    }
+
+    [Fact]
     public void RetainedCommandBuffer_partial_apply_replaces_dirty_range()
     {
         var buffer = new RetainedCommandBuffer();

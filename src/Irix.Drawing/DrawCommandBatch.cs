@@ -6,7 +6,14 @@ public readonly record struct DrawCommandBatch(
     IMemoryOwner<DrawCommand> Owner,
     int Count) : IDisposable
 {
-    public Memory<DrawCommand> Memory => Owner.Memory;
+    public Memory<DrawCommand> Memory
+    {
+        get
+        {
+            var memory = Owner.Memory;
+            return memory.Length < Count ? memory : memory[..Count];
+        }
+    }
 
     public void Dispose()
     {
