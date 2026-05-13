@@ -82,7 +82,8 @@
 - **GA hardening first batch 完成（2026-05-13）：** D3D12 smoke tests（7 个 headless 测试）、1000-frame soak（3 个测试）、resize stress（4 个测试）、frame time profiling（compositor-level Stopwatch）。详见 [GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
 - **D2D text overlay sync 修复（2026-05-13）：** 滚动时按钮文字滞后矩形 — 根因：D3D12 rect pass 与 D3D11on12/D2D text overlay 未同步。修复：默认 `D3D12FenceAfterOverlay` wait 插入在 D2D text overlay 之后、Present 之前。默认开启（`SyncTextOverlay=true`），`--no-sync-text-overlay` 仅用于 A/B diagnostics。4 个 scroll text-sync regression tests。Frame serial diagnostics 可追踪 sync wait count/时间与当前 strategy。
 - **启动 / resize 背景闪烁修复（2026-05-14）：** 低概率黑色或绿色背景闪烁的最终根因不是 D3D12 clear color，而是 `DrawCommandBatch.Memory` 暴露了 pooled backing buffer 的容量，导致 logical `Count` 之后的尾部垃圾被 `RetainedCommandBuffer.ApplyFull` 当作真实 `DrawCommand` 复制；由于 `FillRect == 0`，尾部垃圾可能表现为随机大矩形。修复：`DrawCommandBatch.Memory` 只暴露 `Count` 内的 logical memory，并新增 retained full-apply / batch memory 回归测试。`dotnet test .\Irix.slnx --no-restore` 通过 506/506。
-- 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
+- **String inventory 完成（2026-05-14）：** 三层（Irix.Drawing / Irix.Rendering / Irix.Poc）string 使用盘点已完成。热路径 string 分配极少：唯一每帧分配为 `GetChangedAttributeNames`（RenderPipeline.cs:238）与 `TryGetChangedAttributeNames`（RetainedRootMetadataPatcher.cs:156）中的 `HashSet<string>` / `List<string>`。其余均为 interned string literal 比较（零分配）或 diagnostics-only。Attribute name 使用 6 个裸 string literal（`"ActionId"`, `"ScrollY"`, `"Height"`, `"Width"`, `"IsHovered"`/`"IsPressed"`/`"IsFocused"`），origin 与 consumption 端重复无共享常量。`HitTestTarget.ActionId` 为 `string?`，从 VirtualNodeAttribute 经 layout 到 compositor 到 input router 全链路为 string。下一步：引入 typed IDs（`ActionId`, `TargetId`, `ElementId`, `NodeKey`）与 typed attribute keys，消除 hot-path string 依赖。详见下方 IRIX-V1 收口任务表 Round 12。
+- 暂缓：scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 - **下一步：** V1 MVP/GA candidate scope 已冻结：不再开 V1 core 新功能，不重写 renderer，不改 public API，不重新调默认 sync strategy。GA hardening second batch 已完成（D2D text overlay sync、D3D12 smoke CI integration、concurrent input+render validation、sync overhead diagnostics、Windows SDK 26100 CI check、minimal platform/performance CI lanes）。Release build、ordinary tests、D3D12 smoke、performance lane、AOT publish 均通过；platform integration smoke 覆盖 minimize/restore、occlusion/restore、resize、scroll/click、default、`--no-partial-apply`、100% / 150% / 200% startup scale、runtime scale switch。sync wait 作为 V1 accepted risk；144Hz 与 glyph atlas 均为 post-GA follow-up。详见 [V1-MVP-GA-Candidate-Summary.md](V1-MVP-GA-Candidate-Summary.md)、[V1-MVP-GA-Candidate-Release-Notes.md](V1-MVP-GA-Candidate-Release-Notes.md)、[Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)、[Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md)。
 
@@ -104,6 +105,35 @@
 | IRIX-V1-010 | P3 | StyleOnly fast-path | Default-off pre-switch only | `StyleOnlyFastPathOptions` 已作为 internal/default-off pre-switch；不跳过 layout，不接入 `RenderPipeline.Build`，不启用新行为。 |
 | IRIX-V1-011 | P3 | Unified diagnostics channel / event bus / registry | Postponed | 不新增全局 diagnostics abstraction。 |
 | IRIX-V1-012 | P0 | 当前进度判断 | V1 core complete | PoC v1 core architecture-complete / default-off；所有 V1 core gate satisfied，`CanHookUpPartialApply=true`；MVP/GA 仍未完成。 |
+
+### IRIX-V1 收口任务表 Round 12：String 消除 / Typed IDs
+
+> V1 MVP/GA candidate 已冻结。以下任务为 post-GA 代码质量 / 性能预备工作，不改变 V1 行为。
+
+| 任务ID | 优先级 | 主题 | 状态 | 下一步 |
+|--------|--------|------|------|--------|
+| R12-0 | P0 | Freeze V1 MVP/GA candidate | POLICY | 不再开 V1 core 新功能 |
+| R12-1 | P0 | Define render-core no-string allocation invariant | Done (inventory complete) | 写入 invariant 文档 |
+| R12-2 | P0 | Inventory all string name/id | Done | 三层盘点报告已完成（Drawing/Rendering/Poc） |
+| R12-3 | P1 | Introduce typed IDs | Pending | `ActionId`, `TargetId`, `ElementId`, `NodeKey` 从 bare string 改为 `readonly struct` |
+| R12-4 | P1 | Introduce typed attribute keys | Pending | `"ActionId"` 等 6 个 attribute name 改为 shared constant 或 enum-backed key |
+| R12-5 | P1 | Dirty/diagnostic reason enum化 | Pending | `LayoutRebuildReason` 已为 byte enum；dirty classification string 改为 enum |
+| R12-6 | P1 | Allocation audit baseline | Pending | 建立热路径 string 分配 baseline CI test |
+| R12-7 | P2 | API boundary cleanup | Pending | 清理 API 边界裸 string |
+| R12-8 | P2 | Resource identity cleanup | Pending | 为 glyph atlas / resource cache 铺路 |
+| R12-9 | P2 | Glyph atlas design reopen | Pending | issue #2 post-GA 设计 |
+
+**String inventory 关键发现：**
+
+| 层 | 热路径 string 分配 | 非热路径 |
+|----|-------------------|----------|
+| Irix.Drawing | 零 | `TextStyle.FontFamily` 流过；text content 用 arena 零分配 |
+| Irix.Rendering | `HashSet<string>` + `List<string>` 在 dirty classification（2 处） | LayoutRebuildReason 已为 byte enum；diagnostics 文字 |
+| Irix.Poc | ActionId 裸 string literal 从 PoC → layout → compositor → input router | Exception messages, diagnostics output |
+
+**6 个 attribute name 裸 string：** `"ActionId"`, `"ScrollY"`, `"Height"`, `"Width"`, `"IsHovered"`, `"IsPressed"`, `"IsFocused"` — origin 与 consumption 端重复，无共享常量。
+
+**ActionId 数据流：** `VirtualNodeAttribute` → `LayoutTreeBuilder` string comparison → `LayoutElement.ActionId` → `HitTestTarget.ActionId` → compositor `TryGetActionIdAt` → `CounterInputRouter.MapActionId` (string switch)。
 
 ---
 
