@@ -62,7 +62,7 @@
 
 ## HiDPI Note
 
-Under HiDPI (150%, 200%), the app may appear slightly blurry due to OS bitmap scaling if the app.manifest DPI awareness is not recognized. This is a visual quality issue, not a correctness issue. Verify that:
+The PoC includes `app.manifest` with PerMonitorV2 DPI awareness. Windows-targeted projects target Windows SDK 26100 and declare Windows 10 1703 / 10.0.15063.0 as the runtime minimum so the display scale pipeline does not rely on older OS boundaries. Under HiDPI (150%, 200%), verify that:
 - Buttons are clickable (hit-test works)
 - Text renders correctly (not corrupted)
 - Resize works

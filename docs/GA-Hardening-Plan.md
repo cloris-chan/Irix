@@ -16,11 +16,13 @@
 
 ## Display Matrix
 
+Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 through `net10.0-windows10.0.26100.0`, while the runtime minimum remains Windows 10 1703 / 10.0.15063.0. This separation is required so the PerMonitorV2 manifest and display scale pipeline have a clear supported OS floor without tying runtime support to the target SDK.
+
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
 | 60Hz refresh | Works (default PoC) | Already done | — |
 | 120Hz / 144Hz / 240Hz | Not validated | Validate animation timing and fence behavior | P1 |
-| DPI scaling (100%-200%) | Platform-neutral `DisplayScale` model; compositor owns scale boundary; layout in logical units, backend in physical pixels; text/font scaled consistently; `WM_DPICHANGED` runtime handling; app.manifest PerMonitorV2; hand-tested 100%/150%/200% (2026-05-13) | Validate no bitmap stretch at each DPI; logical→physical conversion correct | P1 |
+| DPI scaling (100%-200%) | Platform-neutral `DisplayScale` model; compositor owns scale boundary; layout in logical units, backend in physical pixels; text/font scaled consistently; `WM_DPICHANGED` runtime handling; app.manifest PerMonitorV2; runtime minimum 10.0.15063.0; hand-tested 100%/150%/200% (2026-05-13) | Validate no bitmap stretch at each DPI; logical→physical conversion correct | P1 |
 | Multi-monitor | Single monitor only | Validate viewport change on monitor switch | P2 |
 | Fractional DPI (125%, 150%) | Not validated | Validate no rounding artifacts in layout/clip | P2 |
 | HDR / wide color gamut | Not applicable | Not required for v1.0 GA | P3 |
@@ -47,6 +49,8 @@
 | Sync wait overhead | Measurable via `FrameSerialDiagnostics.SyncWaitCount` / `SyncWaitMs` in `--diagnose` output | Validate <2ms per frame at 60Hz | P1 |
 
 ## Platform Integration
+
+Version boundary regression note: the Windows PoC runtime minimum is 10.0.15063.0, while the framework target SDK is 10.0.26100.0. The CI SDK check guards the target SDK side; GA platform matrix work should validate the runtime side separately.
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|

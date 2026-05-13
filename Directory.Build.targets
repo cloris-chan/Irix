@@ -1,4 +1,9 @@
 <Project>
+  <Target Name="ValidateIrixWindowsTargetSettings" BeforeTargets="PrepareForBuild" Condition="'$(TargetFramework)' != '' and $([System.String]::Copy('$(TargetFramework)').Contains('-windows'))">
+    <Error Condition="'$(TargetFramework)' != '$(IrixWindowsTargetFramework)'" Text="Windows-targeted projects must use TargetFramework=$(IrixWindowsTargetFramework) from Directory.Build.props. Project $(MSBuildProjectName) has TargetFramework=$(TargetFramework)." />
+    <Error Condition="'$(SupportedOSPlatformVersion)' != '$(IrixWindowsSupportedOSPlatformVersion)'" Text="Windows-targeted projects must use SupportedOSPlatformVersion=$(IrixWindowsSupportedOSPlatformVersion) from Directory.Build.props. Project $(MSBuildProjectName) has SupportedOSPlatformVersion=$(SupportedOSPlatformVersion)." />
+  </Target>
+
   <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
     <Compile Include="$(MSBuildThisFileDirectory)RepositoryInternalsVisibleTo.cs"
              Link="Generated\RepositoryInternalsVisibleTo.g.cs" />

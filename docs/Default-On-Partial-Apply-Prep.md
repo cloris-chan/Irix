@@ -65,7 +65,7 @@ Each gate must be satisfied before enabling default-on. Current status and block
 
 ### Gate 4: Platform Matrix Validation
 
-**Status:** Multi-refresh-rate manual smoke passed (2026-05-13). HiDPI noted as non-blocking visual quality issue.
+**Status:** Multi-refresh-rate manual smoke passed (2026-05-13). HiDPI / PerMonitorV2 manifest / display scale pipeline are aligned with the Windows 10 1703 / 10.0.15063.0 runtime minimum.
 
 **What to validate:**
 - Partial apply on 60Hz, 120Hz, 144Hz, 240Hz displays
@@ -75,7 +75,7 @@ Each gate must be satisfied before enabling default-on. Current status and block
 
 **Smoke test (2026-05-13):** Ran Counter PoC with partial apply on D3D12 across multiple refresh rates. Manual interaction (buttons, scroll, resize, text rendering) verified visual correctness. No rendering anomalies. ✅
 
-**HiDPI note:** Under HiDPI (e.g. 150%, 200%), the app renders correctly but appears slightly blurry because the PoC lacks an `app.manifest` declaring DPI awareness. The OS applies bitmap scaling as a fallback. This is a visual quality issue, not a correctness issue — partial apply path, hit-test, clip, and resize all work correctly. Fix: add `app.manifest` with `PerMonitorV2` DPI awareness. Not a default-on blocker.
+**HiDPI note:** The PoC now ships `app.manifest` with `PerMonitorV2` DPI awareness, and Windows-targeted projects use `TargetFramework=net10.0-windows10.0.26100.0` with `SupportedOSPlatformVersion=10.0.15063.0`. 15063 is the runtime minimum because it is the PerMonitorV2 / display scale pipeline floor; Target SDK 26100 remains a build-time SDK boundary.
 
 **Deferred:** Multi-monitor, long-run soak. These are GA requirements.
 
@@ -101,7 +101,7 @@ Each gate must be satisfied before enabling default-on. Current status and block
 | Gate 1: D3D12 Per-Segment Execute | ✅ Validated + Fixed + Smoke tested | Was blocking | Resolver misrouting bug fixed; text cache safety validated; Counter PoC smoke test passed |
 | Gate 2: Resource Lifecycle | ✅ Smoke tested | Was blocking | Mock-backend tests pass; D3D12 smoke test passed (no resource lifecycle issues) |
 | Gate 3: Device-Lost Guard | ✅ Guard implemented | Was blocking | try/finally on both paths; full recovery deferred to GA |
-| Gate 4: Platform Matrix | ✅ Multi-refresh-rate smoke passed | Was blocking | Counter PoC across refresh rates verified; HiDPI blurry (no manifest) is non-blocking visual quality issue |
+| Gate 4: Platform Matrix | ✅ Multi-refresh-rate smoke passed | Was blocking | Counter PoC across refresh rates verified; PerMonitorV2 manifest and 15063 runtime floor are documented |
 | Gate 5: Rollback Strategy | ✅ Already satisfied | Not blocking | Architecture supports clean rollback |
 
 **Conclusion: GO** — All 5 gates satisfied. Default-on partial apply can proceed.

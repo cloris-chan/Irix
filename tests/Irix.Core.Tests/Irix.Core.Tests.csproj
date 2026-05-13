@@ -2,8 +2,8 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
-    <SupportedOSPlatformVersion>10.0.15063.0</SupportedOSPlatformVersion>
+    <TargetFramework>$(IrixWindowsTargetFramework)</TargetFramework>
+    <SupportedOSPlatformVersion>$(IrixWindowsSupportedOSPlatformVersion)</SupportedOSPlatformVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 

@@ -4,6 +4,10 @@
 
 ---
 
+## Windows Version Boundary
+
+Irix v1 Windows PoC separates the framework target SDK from the runtime minimum. Windows-targeted projects inherit `IrixWindowsTargetFramework=net10.0-windows10.0.26100.0` and `IrixWindowsSupportedOSPlatformVersion=10.0.15063.0` from `Directory.Build.props`; CI checks for .NET 10 and Windows SDK 10.0.26100.0 before restore/build. The 10.0.15063.0 runtime floor is intentional for PerMonitorV2 DPI awareness and the display scale pipeline, so docs should not imply support below that runtime boundary.
+
 ## Priority Tiers
 
 ### P0 — Gate for Default-On
