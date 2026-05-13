@@ -18,7 +18,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var builder = new LayoutTreeBuilder();
 
         var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
@@ -35,7 +35,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(LayoutElementKind.Button, elements[2].Kind);
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), elements[2].Bounds);
         Assert.Equal("Increment", elements[2].Text);
-        Assert.Equal("Increment", elements[2].ActionId);
+        Assert.Equal(new ActionId(1), elements[2].ActionId);
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public sealed class WindowLayoutPipelineTests
                 LayoutElementKind.Button,
                 new PixelRectangle(16, 120, 140, 40),
                 Text: "Increment",
-                ActionId: "Increment")
+                ActionId: new ActionId(1))
         };
 
         var result = recorder.Record(elements);
@@ -78,7 +78,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Go",
                 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Go"))));
+                VirtualNodeAttribute.Action(new ActionId(100))));
         var builder = new LayoutTreeBuilder(new LayoutStyle(
             HorizontalPadding: 24,
             VerticalPadding: 20,
@@ -118,7 +118,7 @@ public sealed class WindowLayoutPipelineTests
                 LayoutElementKind.Button,
                 new PixelRectangle(16, 120, 140, 40),
                 Text: "Increment",
-                ActionId: "Increment")
+                ActionId: new ActionId(1))
         };
 
         var result = recorder.Record(elements);
@@ -179,10 +179,10 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)),
-                new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(true)),
-                new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsPressed, AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsFocused, AttributeValue.FromBoolean(true))));
         var builder = new LayoutTreeBuilder();
 
         var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
@@ -252,7 +252,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540));
 
@@ -263,7 +263,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(DrawCommandKind.DrawTextRun, frame.Commands.Memory.Span[2].Kind);
         Assert.Single(frame.HitTargets);
         Assert.Equal(new PixelRectangle(16, 60, 140, 40), frame.HitTargets[0].Bounds);
-        Assert.Equal("Increment", frame.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(1), frame.HitTargets[0].ActionId);
         Assert.Equal(new PixelRectangle(0, 0, 960, 540), frame.HitTargets[0].ClipBounds);
 
         Assert.Equal("Count: 0", frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString());
@@ -282,7 +282,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
         using var patchBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
         using var frame = translator.Translate(patchBatch);
@@ -293,7 +293,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(new DrawRect(16, 60, 140, 40), frame.Commands.Memory.Span[2].Rect);
         Assert.Single(frame.HitTargets);
         Assert.Equal(new PixelRectangle(16, 60, 140, 40), frame.HitTargets[0].Bounds);
-        Assert.Equal("Increment", frame.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(1), frame.HitTargets[0].ActionId);
         Assert.Equal(new PixelRectangle(0, 0, 960, 540), frame.HitTargets[0].ClipBounds);
     }
 
@@ -314,7 +314,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button(
                 "Increment",
                 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
         using var defaultBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
         using var explicitBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
@@ -403,7 +403,7 @@ public sealed class WindowLayoutPipelineTests
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(24))],
             children: [VirtualNodeFactory.Text("A", 2)]);
 
         using var frame1 = pipeline.Build(root1, viewport);
@@ -421,12 +421,12 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Click", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(100)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Click", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(100)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport, [1]);
@@ -479,22 +479,22 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(0))],
             children:
             [
                 VirtualNodeFactory.Button("Click", 2,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
-                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false)))
+                    VirtualNodeAttribute.Action(new ActionId(100)),
+                    new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false)))
             ]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(24))],
             children:
             [
                 VirtualNodeFactory.Button("Click", 2,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click")),
-                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)))
+                    VirtualNodeAttribute.Action(new ActionId(100)),
+                    new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true)))
             ]);
 
         using var frame1 = pipeline.Build(root1, viewport);
@@ -572,7 +572,7 @@ public sealed class WindowLayoutPipelineTests
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Count: 0", 2),
             VirtualNodeFactory.Button("Increment", 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
         using var frame = pipeline.Build(root, viewport);
         var snapshot = pipeline.LastRetainedInputSnapshot!;
@@ -601,25 +601,25 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(120))],
             children:
             [
                 VirtualNodeFactory.Text("Count: 0", 2),
                 VirtualNodeFactory.Button("Increment", 3,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                    VirtualNodeAttribute.Action(new ActionId(1)),
+                    new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))),
                 VirtualNodeFactory.Rectangle(220, 48, 4)
             ]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(120))],
             children:
             [
                 VirtualNodeFactory.Text("Count: 0", 2),
                 VirtualNodeFactory.Button("Increment", 3,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+                    VirtualNodeAttribute.Action(new ActionId(1)),
+                    new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))),
                 VirtualNodeFactory.Rectangle(220, 48, 4)
             ]);
 
@@ -658,10 +658,10 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+                VirtualNodeAttribute.Action(new ActionId(4))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport, [1]);
@@ -676,7 +676,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(pipeline.LastElementCommandRanges, snapshot.ElementCommandRanges);
         Assert.Equal(frame2.HitTargets, snapshot.HitTargets);
         Assert.Equal(frame2.DirtyCommandRanges, snapshot.DirtyCommandRanges);
-        Assert.Equal("Increment.Secondary", Assert.Single(snapshot.HitTargets).ActionId);
+        Assert.Equal(new ActionId(4), Assert.Single(snapshot.HitTargets).ActionId);
         Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
         Assert.Equal(2, pipeline.LayoutRebuildCount);
     }
@@ -688,12 +688,12 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         var initialRebuildCount = pipeline.LayoutRebuildCount;
@@ -721,13 +721,13 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
-            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(0))],
+            children: [VirtualNodeFactory.Button("Increment", 2, VirtualNodeAttribute.Action(new ActionId(1)))]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
-            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(24))],
+            children: [VirtualNodeFactory.Button("Increment", 2, VirtualNodeAttribute.Action(new ActionId(1)))]);
 
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport, [0]);
@@ -751,12 +751,12 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport, [1]);
@@ -794,12 +794,12 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport, [1]);
@@ -866,13 +866,13 @@ public sealed class WindowLayoutPipelineTests
                 LayoutElementKind.Button,
                 new PixelRectangle(32, 120, 140, 40),
                 Text: "Increment",
-                ActionId: "Increment.Secondary")
+                ActionId: new ActionId(4))
         };
         var layoutResult = new LayoutTreeResult(elements, [], [(0, 1)]);
         var snapshot = new RenderPipelineRetainedInputSnapshot(
             layoutResult,
             [new ElementCommandRange(0, 2)],
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))],
             VirtualNodeFactory.ScrollContainer(1),
             viewport,
             [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
@@ -897,12 +897,12 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         using var frame2 = pipeline.Build(root2, viewport, [1]);
@@ -940,25 +940,25 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(120))],
             children:
             [
                 VirtualNodeFactory.Text("Count: 0", 2),
                 VirtualNodeFactory.Button("Increment", 3,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                    VirtualNodeAttribute.Action(new ActionId(1)),
+                    new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))),
                 VirtualNodeFactory.Rectangle(220, 48, 4)
             ]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(120))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(120))],
             children:
             [
                 VirtualNodeFactory.Text("Count: 0", 2),
                 VirtualNodeFactory.Button("Increment", 3,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                    new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+                    VirtualNodeAttribute.Action(new ActionId(1)),
+                    new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))),
                 VirtualNodeFactory.Rectangle(220, 48, 4)
             ]);
 
@@ -992,10 +992,10 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+                VirtualNodeAttribute.Action(new ActionId(4))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         var initialLayout = pipeline.LastLayoutResult!;
@@ -1013,8 +1013,8 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(nextLayout.Elements));
         Assert.Equal(initialHitTarget.Bounds, nextHitTarget.Bounds);
         Assert.Equal(initialHitTarget.ClipBounds, nextHitTarget.ClipBounds);
-        Assert.Equal("Increment", initialHitTarget.ActionId);
-        Assert.Equal("Increment.Secondary", nextHitTarget.ActionId);
+        Assert.Equal(new ActionId(1), initialHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), nextHitTarget.ActionId);
         Assert.NotEqual(initialHitTarget.ActionId, nextHitTarget.ActionId);
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
@@ -1027,7 +1027,7 @@ public sealed class WindowLayoutPipelineTests
         var patchedHitTarget = Assert.Single(patchedHitTargets);
         Assert.Equal(initialHitTarget.Bounds, patchedHitTarget.Bounds);
         Assert.Equal(initialHitTarget.ClipBounds, patchedHitTarget.ClipBounds);
-        Assert.Equal("Increment.Secondary", patchedHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), patchedHitTarget.ActionId);
     }
 
     [Fact]
@@ -1037,12 +1037,12 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         var resources1 = Assert.IsType<FrameDrawingResources>(frame1.Resources);
@@ -1064,12 +1064,12 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         var retainedLayout = pipeline.LastLayoutResult;
@@ -1091,7 +1091,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal([(0, 1)], plan.DirtyElementRanges);
         Assert.Equal([(0, 2)], plan.DirtyCommandRanges);
         var patchedHitTarget = Assert.Single(plan.PatchedHitTargets);
-        Assert.Equal("Increment", patchedHitTarget.ActionId);
+        Assert.Equal(new ActionId(1), patchedHitTarget.ActionId);
         Assert.Equal(retainedHitTargets[0].Bounds, patchedHitTarget.Bounds);
         Assert.Equal(retainedHitTargets[0].ClipBounds, patchedHitTarget.ClipBounds);
         Assert.Equal(2, pipeline.LayoutRebuildCount);
@@ -1104,10 +1104,10 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+                VirtualNodeAttribute.Action(new ActionId(4))));
 
         using var frame1 = pipeline.Build(root1, viewport);
         var retainedLayout = pipeline.LastLayoutResult;
@@ -1127,7 +1127,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.True(plan.Eligible);
         Assert.Equal(StyleOnlyPatchFallbackReason.None, plan.FallbackReason);
         var patchedHitTarget = Assert.Single(plan.PatchedHitTargets);
-        Assert.Equal("Increment.Secondary", patchedHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), patchedHitTarget.ActionId);
         Assert.Equal(retainedHitTargets[0].Bounds, patchedHitTarget.Bounds);
         Assert.Equal(retainedHitTargets[0].ClipBounds, patchedHitTarget.ClipBounds);
     }
@@ -1140,13 +1140,13 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(0))],
-            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(0))],
+            children: [VirtualNodeFactory.Button("Increment", 2, VirtualNodeAttribute.Action(new ActionId(1)))]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(24))],
-            children: [VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")))]);
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(24))],
+            children: [VirtualNodeFactory.Button("Increment", 2, VirtualNodeAttribute.Action(new ActionId(1)))]);
 
         using var frame1 = pipeline.Build(root1, viewport);
         var retainedLayout = pipeline.LastLayoutResult;
@@ -1269,7 +1269,7 @@ public sealed class WindowLayoutPipelineTests
         PixelRectangle Bounds,
         PixelRectangle ClipBounds,
         string? Text,
-        string? ActionId);
+        ActionId ActionId);
 
     private readonly record struct LayoutTreeRangeInvariant(
         int DfsIndex,
@@ -1414,9 +1414,9 @@ public sealed class WindowLayoutPipelineTests
         }
     }
 
-    private static string? HitIncrementAtButton(int x, int y)
+    private static ActionId HitIncrementAtButton(int x, int y)
     {
-        return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
+        return x == 32 && y == 140 ? new ActionId(1) : ActionId.None;
     }
 
     private sealed class NoOpBackend : IDrawingBackend
@@ -1514,7 +1514,7 @@ public sealed class WindowLayoutPipelineTests
         // First build with no dirty
         using var frame1 = pipeline.Build(root, viewport);
 
-        // Second build with same root/viewport but dirty nodes → forces rebuild
+        // Second build with same root/viewport but dirty nodes �?forces rebuild
         using var frame2 = pipeline.Build(root, viewport, [0]);
 
         // Both frames should have identical layout (v0: full rebuild regardless)
@@ -1538,7 +1538,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root, viewport);
         var text1 = frame1.Resources.Resolve(frame1.Commands.Memory.Span[0].Text).ToString();
 
-        // Second build with empty dirty set → should reuse retained layout
+        // Second build with empty dirty set �?should reuse retained layout
         using var frame2 = pipeline.Build(root, viewport, []);
         var text2 = frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString();
 
@@ -1556,9 +1556,9 @@ public sealed class WindowLayoutPipelineTests
             1,
             VirtualNodeFactory.Text("Count: 0", 2),
             VirtualNodeFactory.Button("Increment", 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
-        // Initial frame via diff from default → root1
+        // Initial frame via diff from default �?root1
         using var batch1 = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root1));
         using var frame1 = translator.Translate(batch1);
         Assert.Equal(3, frame1.Commands.Count);
@@ -1567,9 +1567,9 @@ public sealed class WindowLayoutPipelineTests
             1,
             VirtualNodeFactory.Text("Count: 1", 2),
             VirtualNodeFactory.Button("Increment", 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
-        // Update frame via diff from root1 → root2
+        // Update frame via diff from root1 �?root2
         using var batch2 = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(root1), new VirtualNodeTree(root2));
         using var frame2 = translator.Translate(batch2);
 
@@ -1590,7 +1590,7 @@ public sealed class WindowLayoutPipelineTests
         var children = new VirtualNode[10];
         for (var index = 0; index < children.Length; index++)
         {
-            children[index] = VirtualNodeFactory.Text($"item {index}", (ulong)(index + 2));
+            children[index] = VirtualNodeFactory.Text($"item {index}", (uint)(index + 2));
         }
 
         var root = new VirtualNode(VirtualNodeKind.ScrollContainer, key: 1, children: children);
@@ -1619,7 +1619,7 @@ public sealed class WindowLayoutPipelineTests
         var children = new VirtualNode[10];
         for (var index = 0; index < children.Length; index++)
         {
-            children[index] = VirtualNodeFactory.Text($"item {index}", (ulong)(index + 2));
+            children[index] = VirtualNodeFactory.Text($"item {index}", (uint)(index + 2));
         }
 
         var root = new VirtualNode(VirtualNodeKind.ScrollContainer, key: 1, children: children);
@@ -1671,7 +1671,7 @@ public sealed class WindowLayoutPipelineTests
         var children = new VirtualNode[10];
         for (var childIndex = 0; childIndex < children.Length; childIndex++)
         {
-            children[childIndex] = VirtualNodeFactory.Text($"item {childIndex}", (ulong)(childIndex + 2));
+            children[childIndex] = VirtualNodeFactory.Text($"item {childIndex}", (uint)(childIndex + 2));
         }
 
         var root = new VirtualNode(VirtualNodeKind.ScrollContainer, key: 1, children: children);
@@ -1873,7 +1873,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Text("b", 3));
         var viewport = new PixelRectangle(0, 0, 960, 540);
 
-        // Dirty node 0 (root/parent) → its element range spans all children
+        // Dirty node 0 (root/parent) �?its element range spans all children
         var result = builder.BuildLayoutTree(root, viewport, [0]);
 
         Assert.Equal(2, result.Elements.Count);
@@ -1909,7 +1909,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Text("hello", 2));
         var viewport = new PixelRectangle(0, 0, 960, 540);
 
-        // No dirty nodes → empty dirty ranges
+        // No dirty nodes �?empty dirty ranges
         var result = builder.BuildLayoutTree(root, viewport);
 
         Assert.Single(result.Elements);
@@ -1931,7 +1931,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(result.TreeNodes);
         var rootNode = result.TreeNodes[0];
         Assert.Equal(0, rootNode.DfsIndex);
-        Assert.Equal(2, rootNode.ElementCount); // 2 children → 2 elements
+        Assert.Equal(2, rootNode.ElementCount); // 2 children �?2 elements
         Assert.Equal(2, rootNode.Children.Length);
 
         // Children should be the Text and Button
@@ -1953,7 +1953,7 @@ public sealed class WindowLayoutPipelineTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(-50))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(-50))],
             children: [
                 VirtualNodeFactory.Text("hello", 2)
             ]);
@@ -1979,12 +1979,12 @@ public sealed class WindowLayoutPipelineTests
         var children = new VirtualNode[10];
         for (var i = 0; i < 10; i++)
         {
-            children[i] = VirtualNodeFactory.Text($"item {i}", (ulong)(i + 2));
+            children[i] = VirtualNodeFactory.Text($"item {i}", (uint)(i + 2));
         }
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(9999))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(9999))],
             children: children);
         var viewport = new PixelRectangle(0, 0, 960, 100);
 
@@ -2007,7 +2007,7 @@ public sealed class WindowLayoutPipelineTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("Height", AttributeValue.FromNumber(60))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(60))],
             children: [
                 VirtualNodeFactory.Text("hello", 2),
                 VirtualNodeFactory.Text("world", 3),
@@ -2036,7 +2036,7 @@ public sealed class WindowLayoutPipelineTests
         var children = new VirtualNode[5];
         for (var i = 0; i < 5; i++)
         {
-            children[i] = VirtualNodeFactory.Text($"item {i}", (ulong)(i + 2));
+            children[i] = VirtualNodeFactory.Text($"item {i}", (uint)(i + 2));
         }
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
@@ -2089,7 +2089,7 @@ public sealed class WindowLayoutPipelineTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
 
         // Dirty node 0 (parent) and node 1 (child "a")
-        // Parent's range covers both children → child's range is subsumed
+        // Parent's range covers both children �?child's range is subsumed
         var result = builder.BuildLayoutTree(root, viewport, [0, 1]);
 
         Assert.Single(result.DirtyElementRanges);
@@ -2110,7 +2110,7 @@ public sealed class WindowLayoutPipelineTests
         var result = builder.BuildLayoutTree(root, viewport, [1, 2]);
 
         Assert.Single(result.DirtyElementRanges);
-        Assert.Equal((0, 2), result.DirtyElementRanges[0]); // adjacent → merged
+        Assert.Equal((0, 2), result.DirtyElementRanges[0]); // adjacent �?merged
     }
 
     [Fact]
@@ -2144,11 +2144,11 @@ public sealed class WindowLayoutPipelineTests
 
         var result = recorder.Record(elements);
 
-        // Text → 1 command (DrawTextRun)
+        // Text �?1 command (DrawTextRun)
         Assert.Equal(new ElementCommandRange(0, 1), result.ElementCommandRanges[0]);
-        // Rectangle → 1 command (FillRect)
+        // Rectangle �?1 command (FillRect)
         Assert.Equal(new ElementCommandRange(1, 1), result.ElementCommandRanges[1]);
-        // Button → 2 commands (FillRect + DrawTextRun)
+        // Button �?2 commands (FillRect + DrawTextRun)
         Assert.Equal(new ElementCommandRange(2, 2), result.ElementCommandRanges[2]);
     }
 
@@ -2182,7 +2182,7 @@ public sealed class WindowLayoutPipelineTests
             new(LayoutElementKind.Text, new PixelRectangle(0, 100, 100, 32), Text: "c"),
         };
 
-        // Dirty elements 0 and 1 → commands 0..2 (adjacent, should merge)
+        // Dirty elements 0 and 1 �?commands 0..2 (adjacent, should merge)
         var result = recorder.Record(elements, [(0, 2)]);
 
         Assert.Single(result.DirtyCommandRanges);
@@ -2218,7 +2218,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Empty(pipeline.LastDirtyElementRanges);
         Assert.Empty(pipeline.LastDirtyCommandRanges);
 
-        // Build with dirty node 1 (Text) → should produce dirty ranges
+        // Build with dirty node 1 (Text) �?should produce dirty ranges
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Count: 1", 2),
             VirtualNodeFactory.Button("Click", 3));
@@ -2227,7 +2227,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(pipeline.LastDirtyElementRanges);
         Assert.Equal((0, 1), pipeline.LastDirtyElementRanges[0]);
 
-        // Text → 1 draw command at index 0
+        // Text �?1 draw command at index 0
         Assert.Single(pipeline.LastDirtyCommandRanges);
         Assert.Equal((0, 1), pipeline.LastDirtyCommandRanges[0]);
     }
@@ -2244,9 +2244,9 @@ public sealed class WindowLayoutPipelineTests
         using var frame = pipeline.Build(root, viewport);
 
         Assert.Equal(2, pipeline.LastElementCommandRanges.Length);
-        // Text → 1 command
+        // Text �?1 command
         Assert.Equal(new ElementCommandRange(0, 1), pipeline.LastElementCommandRanges[0]);
-        // Button → 2 commands
+        // Button �?2 commands
         Assert.Equal(new ElementCommandRange(1, 2), pipeline.LastElementCommandRanges[1]);
     }
 
@@ -2257,7 +2257,7 @@ public sealed class WindowLayoutPipelineTests
         var merged = RangeUtils.Merge(ranges);
 
         Assert.Equal(2, merged.Count);
-        Assert.Equal((0, 3), merged[0]); // (0,1) + (1,2) → (0,3)
+        Assert.Equal((0, 3), merged[0]); // (0,1) + (1,2) �?(0,3)
         Assert.Equal((4, 2), merged[1]);
     }
 
@@ -2268,7 +2268,7 @@ public sealed class WindowLayoutPipelineTests
         var merged = RangeUtils.Merge(ranges);
 
         Assert.Single(merged);
-        Assert.Equal((0, 6), merged[0]); // overlap → merged
+        Assert.Equal((0, 6), merged[0]); // overlap �?merged
     }
 
     [Fact]
@@ -2305,9 +2305,9 @@ public sealed class WindowLayoutPipelineTests
     {
         var elementRanges = new ElementCommandRange[]
         {
-            new(0, 1),  // element 0 → command 0
-            new(1, 2),  // element 1 → commands 1-2
-            new(3, 1),  // element 2 → command 3
+            new(0, 1),  // element 0 �?command 0
+            new(1, 2),  // element 1 �?commands 1-2
+            new(3, 1),  // element 2 �?command 3
         };
         var dirtyElements = new List<(int, int)> { (0, 2) }; // elements 0-1
 
@@ -2376,7 +2376,7 @@ public sealed class WindowLayoutPipelineTests
     {
         var retainedHitTargets = new[]
         {
-            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Old", new PixelRectangle(0, 0, 960, 540))
+            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(200), new PixelRectangle(0, 0, 960, 540))
         };
         var nextElements = new[]
         {
@@ -2385,7 +2385,7 @@ public sealed class WindowLayoutPipelineTests
                 new PixelRectangle(16, 60, 140, 40),
                 ClipBounds: new PixelRectangle(0, 0, 960, 540),
                 Text: "Increment",
-                ActionId: "New")
+                ActionId: new ActionId(201))
         };
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
@@ -2398,7 +2398,7 @@ public sealed class WindowLayoutPipelineTests
         var patchedHitTarget = Assert.Single(patchedHitTargets);
         Assert.Equal(retainedHitTargets[0].Bounds, patchedHitTarget.Bounds);
         Assert.Equal(retainedHitTargets[0].ClipBounds, patchedHitTarget.ClipBounds);
-        Assert.Equal("New", patchedHitTarget.ActionId);
+        Assert.Equal(new ActionId(201), patchedHitTarget.ActionId);
     }
 
     [Fact]
@@ -2406,7 +2406,7 @@ public sealed class WindowLayoutPipelineTests
     {
         var retainedHitTargets = new[]
         {
-            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Old", new PixelRectangle(0, 0, 960, 540))
+            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(200), new PixelRectangle(0, 0, 960, 540))
         };
         var nextElements = new[]
         {
@@ -2415,7 +2415,7 @@ public sealed class WindowLayoutPipelineTests
                 new PixelRectangle(16, 60, 140, 40),
                 ClipBounds: new PixelRectangle(0, 0, 960, 540),
                 Text: "Increment",
-                ActionId: null)
+                ActionId: ActionId.None)
         };
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
@@ -2433,7 +2433,7 @@ public sealed class WindowLayoutPipelineTests
     {
         var retainedHitTargets = new[]
         {
-            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Old", new PixelRectangle(0, 0, 960, 540))
+            new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(200), new PixelRectangle(0, 0, 960, 540))
         };
         var nextElements = new[]
         {
@@ -2442,7 +2442,7 @@ public sealed class WindowLayoutPipelineTests
                 new PixelRectangle(16, 72, 140, 40),
                 ClipBounds: new PixelRectangle(0, 0, 960, 540),
                 Text: "Increment",
-                ActionId: "New")
+                ActionId: new ActionId(201))
         };
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
@@ -2545,7 +2545,7 @@ public sealed class WindowLayoutPipelineTests
         ]);
         buffer.ApplyFull(new DrawCommandBatch(initialOwner, 1));
 
-        // New batch has different count → falls back to full
+        // New batch has different count �?falls back to full
         var newOwner = new ArrayMemoryOwner<DrawCommand>(
         [
             new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 10, 80, 32)),
@@ -2592,7 +2592,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame2 = pipeline.Build(root2, viewport, [1]);
 
         Assert.Single(frame2.DirtyCommandRanges);
-        Assert.Equal((0, 1), frame2.DirtyCommandRanges[0]); // Text → 1 command at index 0
+        Assert.Equal((0, 1), frame2.DirtyCommandRanges[0]); // Text �?1 command at index 0
     }
 
     [Fact]
@@ -2611,7 +2611,7 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeFactory.Button("new", 3));
         using var frame2 = pipeline.Build(root2, viewport, [2]); // dirty button at DFS index 2
 
-        // Button → 2 commands (FillRect + DrawTextRun) at index 1-2
+        // Button �?2 commands (FillRect + DrawTextRun) at index 1-2
         Assert.Single(frame2.DirtyCommandRanges);
         Assert.Equal((1, 2), frame2.DirtyCommandRanges[0]);
     }
@@ -2645,7 +2645,7 @@ public sealed class WindowLayoutPipelineTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(30))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(30))],
             children:
             [
                 VirtualNodeFactory.Button("First", 2),
@@ -2667,9 +2667,9 @@ public sealed class WindowLayoutPipelineTests
         // Simulate a hit target with clip bounds
         var bounds = new PixelRectangle(16, 16, 200, 32);
         var clipBounds = new PixelRectangle(16, 16, 100, 32); // clip is narrower
-        var target = new HitTestTarget(bounds, "btn", clipBounds);
+        var target = new HitTestTarget(bounds, new ActionId(100), clipBounds);
 
-        // Click within bounds but outside clip → rejected
+        // Click within bounds but outside clip �?rejected
         // (x=150 is within bounds [16..216] but outside clip [16..116])
         var compositor = new DrawingBackendCompositor(new NoOpBackend());
 
@@ -2795,7 +2795,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Same(resources, frame.Resources);
         Assert.Empty(frame.DirtyCommandRanges);
 
-        // Retained frame owns resources — batch.Dispose() returns commands only.
+        // Retained frame owns resources �?batch.Dispose() returns commands only.
         // Resources are released back to pool when frame is disposed.
         batch.Dispose();
         frame.Dispose();
@@ -2861,7 +2861,7 @@ public sealed class WindowLayoutPipelineTests
         ]);
         var batch = new RenderFrameBatch(
             new DrawCommandBatch(owner, 1),
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 32), "btn")],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 32), new ActionId(100))],
             resources,
             [(0, 1)]);
 
@@ -2895,7 +2895,7 @@ public sealed class WindowLayoutPipelineTests
         ]);
         var batch = new RenderFrameBatch(
             new DrawCommandBatch(owner, 1),
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 32), "btn")],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 32), new ActionId(100))],
             resources,
             [(0, 1)]);
 
@@ -2910,7 +2910,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Single(snapshot.DirtyCommandRanges);
         Assert.Same(resources, snapshot.Resources);
 
-        // snapshot.Dispose() calls Return() but resources are retained — no-op.
+        // snapshot.Dispose() calls Return() but resources are retained �?no-op.
         // frame.Dispose() releases resources back to pool.
         snapshot.Dispose();
         frame.Dispose();
@@ -2937,7 +2937,7 @@ public sealed class WindowLayoutPipelineTests
         frame.ApplyFull(batch1);
         Assert.Same(resources1, frame.Resources);
 
-        // Different resources instance — partial must refuse without side effects
+        // Different resources instance �?partial must refuse without side effects
         var resources2 = FrameDrawingResources.Rent();
         var slice2 = resources2.AddText("new");
         resources2.Seal();
@@ -2955,7 +2955,7 @@ public sealed class WindowLayoutPipelineTests
         var result = frame.TryApplyPartial(batch2);
 
         Assert.False(result);
-        // Frame state is UNCHANGED — TryApplyPartial is pure on failure
+        // Frame state is UNCHANGED �?TryApplyPartial is pure on failure
         Assert.Same(resources1, frame.Resources);
         Assert.Equal(1, frame.CommandCount);
         Assert.Equal(slice1, frame.Commands[0].Text);
@@ -3034,7 +3034,7 @@ public sealed class WindowLayoutPipelineTests
         var result = frame.TryApplyPartial(batch2);
 
         Assert.False(result);
-        // Frame state is UNCHANGED — no pollution from count mismatch
+        // Frame state is UNCHANGED �?no pollution from count mismatch
         Assert.Equal(2, frame.CommandCount);
         Assert.Equal(slice1, frame.Commands[0].Text);
         Assert.Equal(slice2, frame.Commands[1].Text);
@@ -3102,7 +3102,7 @@ public sealed class WindowLayoutPipelineTests
         // With RetainResources, batch.Dispose() is a no-op for resources
         frame.RetainResources();
 
-        // Dispose batch — should NOT return resources to pool (retained by frame)
+        // Dispose batch �?should NOT return resources to pool (retained by frame)
         batch.Dispose();
 
         // TextSlice is still valid because resources are retained
@@ -3113,7 +3113,7 @@ public sealed class WindowLayoutPipelineTests
         frame.ReleaseResources();
         frame.Dispose();
 
-        // Now resources are returned — a fresh Rent() would get a recycled instance
+        // Now resources are returned �?a fresh Rent() would get a recycled instance
         var recycled = FrameDrawingResources.Rent();
         FrameDrawingResources.Return(recycled);
     }
@@ -3121,7 +3121,7 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void RetainedRenderFrame_generation_mismatch_falls_back_to_full()
     {
-        // Use fresh resources from pool — add ALL text before sealing
+        // Use fresh resources from pool �?add ALL text before sealing
         var resources1 = FrameDrawingResources.Rent();
         var slice1 = resources1.AddText("frame1");
         var slice1b = resources1.AddText("frame1b");
@@ -3140,7 +3140,7 @@ public sealed class WindowLayoutPipelineTests
         var frame = new RetainedRenderFrame();
         frame.ApplyFull(batch1);
 
-        // Same resources, same generation → partial should succeed
+        // Same resources, same generation �?partial should succeed
         var owner1b = new ArrayMemoryOwner<DrawCommand>(
         [
             new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(0, 0, 100, 32), Text: slice1b),
@@ -3153,7 +3153,7 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.True(frame.TryApplyPartial(batch1b));
 
-        // Different resources instance → partial must refuse
+        // Different resources instance �?partial must refuse
         var resources2 = FrameDrawingResources.Rent();
         var slice2 = resources2.AddText("frame2");
         resources2.Seal();

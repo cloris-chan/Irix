@@ -89,20 +89,20 @@ internal static class HitTargetMetadataProjector
         return true;
     }
 
-    private static bool TryGetActionId(VirtualNodeAttribute[] attributes, out string actionId)
+    private static bool TryGetActionId(VirtualNodeAttribute[] attributes, out ActionId actionId)
     {
         foreach (var attribute in attributes)
         {
-            if (attribute.Name == "ActionId" && attribute.Value.Kind == AttributeValueKind.Text && !string.IsNullOrWhiteSpace(attribute.Value.Text))
+            if (attribute.Key == VirtualAttributeKey.ActionId && attribute.Value.Kind == AttributeValueKind.ActionId && !attribute.Value.ActionIdValue.IsNone)
             {
-                actionId = attribute.Value.Text;
+                actionId = attribute.Value.ActionIdValue;
                 return true;
             }
         }
 
-        actionId = string.Empty;
+        actionId = ActionId.None;
         return false;
     }
 
-    private readonly record struct ActionNodeMetadata(int DfsIndex, string ActionId);
+    private readonly record struct ActionNodeMetadata(int DfsIndex, ActionId ActionId);
 }

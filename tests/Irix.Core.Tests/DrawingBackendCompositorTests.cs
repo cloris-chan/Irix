@@ -83,12 +83,12 @@ public sealed class DrawingBackendCompositorTests
             [
                 new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(16, 120, 140, 40))
             ]), 1),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Click")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(100))]);
 
         await compositor.RenderAsync(frame, cancellationToken);
 
         Assert.True(compositor.TryGetActionIdAt(16, 120, out var actionId));
-        Assert.Equal("Click", actionId);
+        Assert.Equal(new ActionId(100), actionId);
         Assert.False(compositor.TryGetActionIdAt(15, 120, out _));
     }
 
@@ -105,7 +105,7 @@ public sealed class DrawingBackendCompositorTests
             [
                 new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(16, 120, 140, 40))
             ]), 1),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Click")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(100))]);
 
         await compositor.RenderAsync(firstFrame, cancellationToken);
         Assert.True(compositor.TryGetActionIdAt(16, 120, out _));
@@ -155,7 +155,7 @@ public sealed class DrawingBackendCompositorTests
         Assert.False(compositor.LastPartialApplySucceeded); // no dirty ranges
         Assert.Same(resources, compositor.RetainedFrame.Resources);
 
-        // Second frame: same resources + dirty ranges â†’ partial apply
+        // Second frame: same resources + dirty ranges ï¿?partial apply
         using var frame2 = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
             [
@@ -198,7 +198,7 @@ public sealed class DrawingBackendCompositorTests
         await compositor.RenderAsync(frame1, cancellationToken);
         Assert.Same(resources1, compositor.RetainedFrame.Resources);
 
-        // Different resources instance + dirty ranges â†’ partial refused, full fallback
+        // Different resources instance + dirty ranges ï¿?partial refused, full fallback
         var resources2 = FrameDrawingResources.Rent();
         var world = resources2.AddText("World");
         resources2.Seal();
@@ -249,7 +249,7 @@ public sealed class DrawingBackendCompositorTests
         await compositor.RenderAsync(empty, cancellationToken);
 
         // Frame 2: even if same resources object is recycled (same ReferenceEquals),
-        // cross-frame guard resets _lastAppliedFrameId on invalidate â†’ full apply forced
+        // cross-frame guard resets _lastAppliedFrameId on invalidate ï¿?full apply forced
         var resources2 = FrameDrawingResources.Rent();
         var world = resources2.AddText("World");
         resources2.Seal();
@@ -299,7 +299,7 @@ public sealed class DrawingBackendCompositorTests
         Assert.Single(backend.ReceivedDirtyRanges);
         Assert.Empty(backend.ReceivedDirtyRanges[0]); // no dirty ranges on initial frame
 
-        // Frame 2: same resources + dirty ranges â†’ partial apply
+        // Frame 2: same resources + dirty ranges ï¿?partial apply
         using var frame2 = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
             [
@@ -355,7 +355,7 @@ public sealed class DrawingBackendCompositorTests
         // Point at (20, 52) is inside button (16..104, 16..56) but outside clip (0..120, 0..50)
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("ClickMe", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btn"))));
+                VirtualNodeAttribute.Action(new ActionId(100))));
         var viewport = new PixelRectangle(0, 0, 120, 50);
         var pipeline = new RenderPipeline();
         using var batch = pipeline.Build(root, viewport);
@@ -364,20 +364,20 @@ public sealed class DrawingBackendCompositorTests
 
         Assert.Single(batch.HitTargets);
         var target = batch.HitTargets[0];
-        Assert.Equal("btn", target.ActionId);
+        Assert.Equal(new ActionId(100), target.ActionId);
 
         Assert.Equal(new PixelRectangle(0, 0, 120, 50), target.ClipBounds);
         Assert.True(target.ClipBounds.Y + target.ClipBounds.Height < target.Bounds.Y + target.Bounds.Height);
 
-        // Inside both bounds and clip â†’ should hit
+        // Inside both bounds and clip ï¿?should hit
         Assert.True(compositor.TryGetActionIdAt(20, 20, out var actionId));
-        Assert.Equal("btn", actionId);
+        Assert.Equal(new ActionId(100), actionId);
 
         // Inside button bounds but OUTSIDE clip (y=52 > clip bottom=50)
-        // â†’ clip check should reject this
+        // ï¿?clip check should reject this
         Assert.False(compositor.TryGetActionIdAt(20, 52, out _));
 
-        // Outside button bounds entirely â†’ bounds check rejects
+        // Outside button bounds entirely ï¿?bounds check rejects
         Assert.False(compositor.TryGetActionIdAt(200, 20, out _));
     }
 
@@ -394,7 +394,7 @@ public sealed class DrawingBackendCompositorTests
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.ScrollContainer(2,
                 VirtualNodeFactory.Button("Inner", 3,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("inner")))));
+                    VirtualNodeAttribute.Action(new ActionId(100)))));
         var viewport = new PixelRectangle(0, 0, 300, 200);
         var pipeline = new RenderPipeline();
         using var batch = pipeline.Build(root, viewport);
@@ -427,12 +427,12 @@ public sealed class DrawingBackendCompositorTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(30))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(30))],
             children: [
                 VirtualNodeFactory.Button("First", 2,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("first"))),
+                    VirtualNodeAttribute.Action(new ActionId(100))),
                 VirtualNodeFactory.Button("Second", 3,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("second")))
+                    VirtualNodeAttribute.Action(new ActionId(101)))
             ]);
         var viewport = new PixelRectangle(0, 0, 200, 60);
         var pipeline = new RenderPipeline();
@@ -446,9 +446,9 @@ public sealed class DrawingBackendCompositorTests
         // Root clip = [0, 0, 200, 60], bottom = 60
         // Button 1: y = 16, bottom = 56. With ScrollY=30: y = -14, bottom = 26
         // Button 2: y = 68, bottom = 108. With ScrollY=30: y = 38, bottom = 78
-        // Button 2 extends beyond clip bottom (60) â†’ clip check rejects y=55
+        // Button 2 extends beyond clip bottom (60) ï¿?clip check rejects y=55
         var firstTarget = batch.HitTargets[0];
-        Assert.Equal("first", firstTarget.ActionId);
+        Assert.Equal(new ActionId(100), firstTarget.ActionId);
         Assert.Equal(new PixelRectangle(0, 0, 200, 60), firstTarget.ClipBounds);
 
         // Point inside first button bounds but outside clip (y=-1 < clip top=0)
@@ -456,12 +456,12 @@ public sealed class DrawingBackendCompositorTests
 
         // Point inside first button bounds AND inside viewport clip
         Assert.True(compositor.TryGetActionIdAt(20, 10, out var firstId));
-        Assert.Equal("first", firstId);
+        Assert.Equal(new ActionId(100), firstId);
 
         // Second button: y=38, bottom=78. Clip bottom=60.
         // Point at y=45 is inside button (38..78) and inside clip (0..60)
         Assert.True(compositor.TryGetActionIdAt(20, 45, out var secondId));
-        Assert.Equal("second", secondId);
+        Assert.Equal(new ActionId(101), secondId);
 
         // Point at y=65 is inside button (38..78) but outside clip (0..60)
         Assert.False(compositor.TryGetActionIdAt(20, 65, out _));
@@ -553,7 +553,7 @@ public sealed class DrawingBackendCompositorTests
             [],
             resources2);
 
-        // Should not throw â€” compositor catches and recovers
+        // Should not throw ï¿?compositor catches and recovers
         await compositor.RenderAsync(frame2, cancellationToken);
 
         Assert.True(backend.RecoveryAttempted);
@@ -598,7 +598,7 @@ public sealed class DrawingBackendCompositorTests
             [],
             resources);
 
-        // Backend throws, recovery fails â†’ exception propagates
+        // Backend throws, recovery fails ï¿?exception propagates
         bool threw = false;
         try
         {

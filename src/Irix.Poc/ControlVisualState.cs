@@ -7,7 +7,7 @@ internal readonly record struct ControlVisualState(
 
 internal static class ControlVisualStateProjection
 {
-    internal static ControlVisualState Project(OwnershipSnapshot ownership, string targetId) =>
+    internal static ControlVisualState Project(OwnershipSnapshot ownership, ActionId targetId) =>
         new(
             IsHovered: ownership.HoveredTarget == targetId,
             IsPressed: ownership.IsPointerPressed && ownership.PressedTarget == targetId,
@@ -18,21 +18,21 @@ internal static class ControlVisualStateAttributeAdapter
 {
     internal static VirtualNodeAttribute[] ToAttributes(ControlVisualState state) =>
         [
-            new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(state.IsHovered)),
-            new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(state.IsPressed)),
-            new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(state.IsFocused))
+            new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(state.IsHovered)),
+            new VirtualNodeAttribute(VirtualAttributeKey.IsPressed, AttributeValue.FromBoolean(state.IsPressed)),
+            new VirtualNodeAttribute(VirtualAttributeKey.IsFocused, AttributeValue.FromBoolean(state.IsFocused))
         ];
 }
 
 internal static class ControlActionAttributeAdapter
 {
-    internal static VirtualNodeAttribute ToAttribute(string actionId) =>
-        new("ActionId", AttributeValue.FromText(actionId));
+    internal static VirtualNodeAttribute ToAttribute(ActionId actionId) =>
+        VirtualNodeAttribute.Action(actionId);
 }
 
 internal static class ButtonAttributeBundle
 {
-    internal static VirtualNodeAttribute[] Create(string actionId, ControlVisualState visualState) =>
+    internal static VirtualNodeAttribute[] Create(ActionId actionId, ControlVisualState visualState) =>
         [
             ControlActionAttributeAdapter.ToAttribute(actionId),
             .. ControlVisualStateAttributeAdapter.ToAttributes(visualState)

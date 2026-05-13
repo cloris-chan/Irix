@@ -39,9 +39,9 @@ internal static class DebugDiagnosticsFormatter
         return $"LayoutDirty: layoutRebuildCount={layout.LayoutRebuildCount} LastLayoutRebuildReason={layout.LastLayoutRebuildReason} LastDirtyClassifications={layout.LastDirtyClassifications}";
     }
 
-    private static string FormatTarget(string? target)
+    private static string FormatTarget(ActionId target)
     {
-        return string.IsNullOrWhiteSpace(target) ? "-" : target;
+        return target.IsNone ? "-" : ActionIdRegistry.GetName(target);
     }
 
     private static string FormatSize(PixelRectangle rectangle)

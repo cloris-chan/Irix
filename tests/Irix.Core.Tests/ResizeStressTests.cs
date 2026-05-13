@@ -35,7 +35,7 @@ public sealed class ResizeStressTests
 
             var pipeline = new RenderPipeline();
             var root = VirtualNodeFactory.Button($"Btn{i}", 1,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btn")));
+                VirtualNodeAttribute.Action(new ActionId(100)));
             var logicalW = (int)(w / scale.ScaleX);
             var logicalH = (int)(h / scale.ScaleY);
             var viewport = new PixelRectangle(0, 0, logicalW, logicalH);
@@ -81,7 +81,7 @@ public sealed class ResizeStressTests
 
             var pipeline = new RenderPipeline();
             var root = VirtualNodeFactory.Button("Btn", 1,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btn")));
+                VirtualNodeAttribute.Action(new ActionId(100)));
             var viewport = new PixelRectangle(0, 0, w, h);
             using var batch = pipeline.Build(root, viewport);
 
@@ -104,7 +104,7 @@ public sealed class ResizeStressTests
 
         var pipeline = new RenderPipeline();
         var root = VirtualNodeFactory.Button("Click", 1,
-            new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btn")));
+            VirtualNodeAttribute.Action(new ActionId(100)));
         var viewport = new PixelRectangle(0, 0, 1000, 800);
         using var batch = pipeline.Build(root, viewport);
 
@@ -112,7 +112,7 @@ public sealed class ResizeStressTests
 
         // Hit-test at physical coordinates (100% scale = logical = physical)
         Assert.True(compositor.TryGetActionIdAt(50, 25, out var id1));
-        Assert.Equal("btn", id1);
+        Assert.Equal(new ActionId(100), id1);
 
         // Change to 150% scale
         scale = new DisplayScale(1.5f, 1.5f);
@@ -127,7 +127,7 @@ public sealed class ResizeStressTests
         // Hit-test at physical coordinates (150% scale)
         // Button at logical (16,16,68,32) → physical (24,24,102,48)
         Assert.True(compositor.TryGetActionIdAt(50, 30, out var id2));
-        Assert.Equal("btn", id2);
+        Assert.Equal(new ActionId(100), id2);
 
         // Point outside physical button bounds should miss
         Assert.False(compositor.TryGetActionIdAt(200, 200, out _));

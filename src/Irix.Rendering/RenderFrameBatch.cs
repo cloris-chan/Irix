@@ -3,7 +3,7 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-public readonly record struct HitTestTarget(PixelRectangle Bounds, string ActionId, PixelRectangle ClipBounds = default)
+public readonly record struct HitTestTarget(PixelRectangle Bounds, ActionId ActionId, PixelRectangle ClipBounds = default)
 {
     public HitTestTarget Scale(DisplayScale scale)
     {

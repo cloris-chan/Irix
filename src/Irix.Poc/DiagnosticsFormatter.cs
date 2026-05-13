@@ -228,9 +228,9 @@ internal static class DiagnosticsFormatter
         return string.Join(",", ranges.Select(range => $"{range.Start}:{range.Count}"));
     }
 
-    private static string FormatTarget(string? target)
+    private static string FormatTarget(ActionId target)
     {
-        return string.IsNullOrWhiteSpace(target) ? "-" : target;
+        return target.IsNone ? "-" : ActionIdRegistry.GetName(target);
     }
 
     private static string FormatButtonStatePriority(ButtonVisualState state)

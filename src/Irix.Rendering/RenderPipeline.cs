@@ -224,48 +224,49 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
     private static LayoutRebuildReason ClassifyAttributeChanges(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
     {
-        var reason = LayoutRebuildReason.None;
-        foreach (var attributeName in GetChangedAttributeNames(previousAttributes, nextAttributes))
-        {
-            reason = MaxReason(reason, ClassifyAttribute(attributeName));
-        }
-
-        return reason == LayoutRebuildReason.None ? LayoutRebuildReason.StyleOnly : reason;
+        var mask = GetChangedAttributeMask(previousAttributes, nextAttributes);
+        return mask.ClassifyMask();
     }
 
-    private static IEnumerable<string> GetChangedAttributeNames(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    private static ChangedAttributeMask GetChangedAttributeMask(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
     {
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        var mask = ChangedAttributeMask.None;
+
         foreach (var attribute in previousAttributes)
         {
-            names.Add(attribute.Name);
+            if (attribute.Key == VirtualAttributeKey.Unknown) continue;
+            if (!TryFindAttribute(nextAttributes, attribute.Key, out var nextAttribute)
+                || attribute.Value != nextAttribute.Value)
+            {
+                mask |= attribute.Key.ToMask();
+            }
         }
 
         foreach (var attribute in nextAttributes)
         {
-            names.Add(attribute.Name);
-        }
-
-        foreach (var name in names)
-        {
-            if (!TryGetAttribute(previousAttributes, name, out var previousAttribute)
-                || !TryGetAttribute(nextAttributes, name, out var nextAttribute)
-                || previousAttribute.Value != nextAttribute.Value)
+            if (attribute.Key == VirtualAttributeKey.Unknown) continue;
+            if (!TryFindAttribute(previousAttributes, attribute.Key, out _))
             {
-                yield return name;
+                mask |= attribute.Key.ToMask();
             }
         }
+
+        return mask;
     }
 
-    private static LayoutRebuildReason ClassifyAttribute(string attributeName)
+    private static bool TryFindAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key, out VirtualNodeAttribute attribute)
     {
-        return attributeName switch
+        foreach (var candidate in attributes)
         {
-            "IsHovered" or "IsPressed" or "IsFocused" or "ActionId" => LayoutRebuildReason.StyleOnly,
-            "Text" or "TextStyle" or "FontFamily" or "FontSize" or "FontWeight" or "Wrapping" => LayoutRebuildReason.TextSizeAffecting,
-            "ScrollY" or "Width" or "Height" or "HorizontalPadding" or "VerticalPadding" or "ItemSpacing" or "TextHeight" or "ButtonHeight" or "RectangleHeight" or "MinimumButtonWidth" or "ButtonTextWidthFactor" or "ButtonHorizontalPadding" => LayoutRebuildReason.LayoutAffecting,
-            _ => LayoutRebuildReason.LayoutAffecting
-        };
+            if (candidate.Key == key)
+            {
+                attribute = candidate;
+                return true;
+            }
+        }
+
+        attribute = default;
+        return false;
     }
 
     private static bool AttributesEqual(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
@@ -284,21 +285,6 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         }
 
         return true;
-    }
-
-    private static bool TryGetAttribute(VirtualNodeAttribute[] attributes, string name, out VirtualNodeAttribute attribute)
-    {
-        foreach (var candidate in attributes)
-        {
-            if (candidate.Name == name)
-            {
-                attribute = candidate;
-                return true;
-            }
-        }
-
-        attribute = default;
-        return false;
     }
 
     private static bool ChildrenShapeChanged(VirtualNode[] previousChildren, VirtualNode[] nextChildren)
@@ -374,7 +360,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         var hitTargetCount = 0;
         foreach (var element in layoutElements)
         {
-            if (!string.IsNullOrWhiteSpace(element.ActionId))
+            if (!element.ActionId.IsNone)
             {
                 hitTargetCount++;
             }
@@ -389,7 +375,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         var index = 0;
         foreach (var element in layoutElements)
         {
-            if (!string.IsNullOrWhiteSpace(element.ActionId))
+            if (!element.ActionId.IsNone)
             {
                 hitTargets[index++] = new HitTestTarget(element.Bounds, element.ActionId, element.ClipBounds);
             }

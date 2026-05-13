@@ -158,11 +158,11 @@ public sealed class RetainedTreeTests
         var prev = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Count: 0", 2),
             VirtualNodeFactory.Button("Increment", 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var next = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Count: 1", 2),
             VirtualNodeFactory.Button("Increment", 3,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev), new VirtualNodeTree(next));
         var tree = new RetainedTree(new VirtualNodeTree(prev));

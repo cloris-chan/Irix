@@ -33,16 +33,16 @@ public sealed class WindowVisualCompositorTests
                     Text: increment,
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))],
                     resources);
 
         await compositor.RenderAsync(frame, cancellationToken);
 
         Assert.Single(window.LastElements);
         Assert.True(compositor.TryGetActionIdAt(16, 120, out var actionId));
-        Assert.Equal("Increment", actionId);
+        Assert.Equal(new ActionId(1), actionId);
         Assert.True(compositor.TryGetActionIdAt(155, 159, out actionId));
-        Assert.Equal("Increment", actionId);
+        Assert.Equal(new ActionId(1), actionId);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public sealed class WindowVisualCompositorTests
                     Text: increment,
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))],
                     resources);
 
         await compositor.RenderAsync(frame, cancellationToken);
@@ -106,7 +106,7 @@ public sealed class WindowVisualCompositorTests
                     Text: increment,
                     Color: DrawColor.Opaque(255, 255, 255))
             ]), 2),
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")],
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))],
                     resources);
 
         await compositor.RenderAsync(firstFrame, cancellationToken);

@@ -101,21 +101,23 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         var inputOwnership = model.InputOwnership;
         var headerRows = _showDiagnostics
             ? BuildDiagnosticHeaderRows(model.Count, model.Scroll, inputOwnership, model.ViewportDiagnostics, model.LayoutDiagnostics)
-            : [
+            :
+            [
                 VirtualNodeFactory.Text($"Count: {model.Count}", 2),
                 VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4)
             ];
 
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
-            key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
-            children: [
+            key: new NodeKey(1),
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
+            children:
+            [
                 .. headerRows,
                 VirtualNodeFactory.Rectangle(220, 48, 5),
-                BuildButton("Increment", 6, nameof(CounterMessage.Increment), inputOwnership),
-                BuildButton("Decrement", 7, nameof(CounterMessage.Decrement), inputOwnership),
-                BuildButton("Reset", 8, nameof(CounterMessage.Reset), inputOwnership),
+                BuildButton("Increment", 6, ActionIdRegistry.Increment, inputOwnership),
+                BuildButton("Decrement", 7, ActionIdRegistry.Decrement, inputOwnership),
+                BuildButton("Reset", 8, ActionIdRegistry.Reset, inputOwnership),
                 .. BuildScrollProbeRows()
             ]);
 
@@ -142,13 +144,13 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         return diagnostics.LastDirtyClassifications is null ? CounterLayoutDiagnostics.Empty : diagnostics;
     }
 
-    internal static ButtonVisualState DeriveButtonState(OwnershipSnapshot ownership, string actionId)
+    internal static ButtonVisualState DeriveButtonState(OwnershipSnapshot ownership, ActionId actionId)
     {
         var state = ControlVisualStateProjection.Project(ownership, actionId);
         return new ButtonVisualState(state.IsHovered, state.IsPressed, state.IsFocused);
     }
 
-    private static VirtualNode BuildButton(string label, ulong key, string actionId, OwnershipSnapshot ownership)
+    private static VirtualNode BuildButton(string label, uint key, ActionId actionId, OwnershipSnapshot ownership)
     {
         var visualState = ControlVisualStateProjection.Project(ownership, actionId);
         return VirtualNodeFactory.Button(
@@ -162,7 +164,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         var rows = new VirtualNode[50];
         for (var index = 0; index < rows.Length; index++)
         {
-            rows[index] = VirtualNodeFactory.Text($"Scroll row {index + 1:00}", (ulong)(100 + index));
+            rows[index] = VirtualNodeFactory.Text($"Scroll row {index + 1:00}", (uint)(100 + index));
         }
 
         return rows;

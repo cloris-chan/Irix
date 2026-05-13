@@ -230,11 +230,11 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return ValueTask.CompletedTask;
     }
 
-    internal bool TryGetCandidateActionIdAt(int x, int y, out string actionId)
+    internal bool TryGetCandidateActionIdAt(int x, int y, out ActionId actionId)
     {
         if (_handoffCandidateHarness is null)
         {
-            actionId = string.Empty;
+            actionId = ActionId.None;
             return false;
         }
 
@@ -494,13 +494,12 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return true;
     }
 
-    public bool TryGetActionIdAt(int x, int y, out string actionId)
+    public bool TryGetActionIdAt(int x, int y, out ActionId actionId)
     {
         lock (_hitTargetsLock)
         {
             foreach (var hitTarget in _hitTargets)
             {
-                // Check bounds
                 if (x < hitTarget.Bounds.X
                     || y < hitTarget.Bounds.Y
                     || x >= hitTarget.Bounds.X + hitTarget.Bounds.Width
@@ -509,7 +508,6 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                     continue;
                 }
 
-                // Check clip bounds (if set): reject hits outside the clip region
                 if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
                 {
                     if (x < hitTarget.ClipBounds.X
@@ -526,7 +524,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             }
         }
 
-        actionId = string.Empty;
+        actionId = ActionId.None;
         return false;
     }
 

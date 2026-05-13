@@ -78,7 +78,7 @@ public class DisplayScaleTests
         var scale = new DisplayScale(scaleValue, scaleValue);
         var logical = new HitTestTarget(
             new PixelRectangle(100, 200, 300, 400),
-            "action1",
+            new ActionId(100),
             new PixelRectangle(0, 0, 800, 600));
 
         var physical = logical.Scale(scale);
@@ -98,7 +98,7 @@ public class DisplayScaleTests
     {
         var target = new HitTestTarget(
             new PixelRectangle(100, 200, 300, 400),
-            "action1");
+            new ActionId(100));
 
         var scaled = target.Scale(DisplayScale.Identity);
 
@@ -256,7 +256,7 @@ public class DisplayScaleTests
         var scale = new DisplayScale(scaleValue, scaleValue);
         var logical = new HitTestTarget(
             new PixelRectangle(100, 200, 300, 400),
-            "action1",
+            new ActionId(100),
             new PixelRectangle(50, 100, 250, 350));
 
         var physical = logical.Scale(scale);

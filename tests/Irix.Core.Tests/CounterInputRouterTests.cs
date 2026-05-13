@@ -21,7 +21,7 @@ public sealed class CounterInputRouterTests
 
         var mapped = CounterInputRouter.TryMapInput(
             inputEvent,
-            (x, y) => x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null,
+            (x, y) => x == 32 && y == 140 ? new ActionId(1) : ActionId.None,
             out var message);
 
         Assert.True(mapped);
@@ -38,7 +38,7 @@ public sealed class CounterInputRouterTests
             Y: 500,
             Button: PointerButton.Left);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => null, out _);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out _);
 
         Assert.False(mapped);
     }
@@ -55,9 +55,9 @@ public sealed class CounterInputRouterTests
             out _);
 
         Assert.False(mapped);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.HoveredTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.LastHoverEnteredTarget);
-        Assert.Null(ownershipState.LastHoverLeftTarget);
+        Assert.Equal(new ActionId(1), ownershipState.HoveredTarget);
+        Assert.Equal(new ActionId(1), ownershipState.LastHoverEnteredTarget);
+        Assert.True(ownershipState.LastHoverLeftTarget.IsNone);
         Assert.Equal(1, ownershipState.HoverChangeCount);
 
         mapped = CounterInputRouter.TryMapInput(
@@ -67,9 +67,9 @@ public sealed class CounterInputRouterTests
             out _);
 
         Assert.False(mapped);
-        Assert.Null(ownershipState.HoveredTarget);
-        Assert.Null(ownershipState.LastHoverEnteredTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.LastHoverLeftTarget);
+        Assert.True(ownershipState.HoveredTarget.IsNone);
+        Assert.True(ownershipState.LastHoverEnteredTarget.IsNone);
+        Assert.Equal(new ActionId(1), ownershipState.LastHoverLeftTarget);
         Assert.Equal(2, ownershipState.HoverChangeCount);
     }
 
@@ -90,9 +90,9 @@ public sealed class CounterInputRouterTests
             out _);
 
         Assert.False(mapped);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.PressedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.CapturedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.FocusedTarget);
+        Assert.Equal(new ActionId(1), ownershipState.PressedTarget);
+        Assert.Equal(new ActionId(1), ownershipState.CapturedTarget);
+        Assert.Equal(new ActionId(1), ownershipState.FocusedTarget);
 
         mapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -107,9 +107,9 @@ public sealed class CounterInputRouterTests
 
         Assert.True(mapped);
         Assert.IsType<CounterMessage.Increment>(message);
-        Assert.Null(ownershipState.PressedTarget);
-        Assert.Null(ownershipState.CapturedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.FocusedTarget);
+        Assert.True(ownershipState.PressedTarget.IsNone);
+        Assert.True(ownershipState.CapturedTarget.IsNone);
+        Assert.Equal(new ActionId(1), ownershipState.FocusedTarget);
     }
 
     [Fact]
@@ -135,10 +135,10 @@ public sealed class CounterInputRouterTests
             out _);
 
         var snapshot = ownershipState.Snapshot;
-        Assert.Equal(nameof(CounterMessage.Decrement), snapshot.HoveredTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), snapshot.PressedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), snapshot.CapturedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), snapshot.FocusedTarget);
+        Assert.Equal(new ActionId(2), snapshot.HoveredTarget);
+        Assert.Equal(new ActionId(1), snapshot.PressedTarget);
+        Assert.Equal(new ActionId(1), snapshot.CapturedTarget);
+        Assert.Equal(new ActionId(1), snapshot.FocusedTarget);
 
         var mapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -154,10 +154,10 @@ public sealed class CounterInputRouterTests
         snapshot = ownershipState.Snapshot;
         Assert.True(mapped);
         Assert.IsType<CounterMessage.Increment>(message);
-        Assert.Equal(nameof(CounterMessage.Decrement), snapshot.HoveredTarget);
-        Assert.Null(snapshot.PressedTarget);
-        Assert.Null(snapshot.CapturedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), snapshot.FocusedTarget);
+        Assert.Equal(new ActionId(2), snapshot.HoveredTarget);
+        Assert.True(snapshot.PressedTarget.IsNone);
+        Assert.True(snapshot.CapturedTarget.IsNone);
+        Assert.Equal(new ActionId(1), snapshot.FocusedTarget);
         Assert.False(snapshot.IsPointerPressed);
     }
 
@@ -197,27 +197,27 @@ public sealed class CounterInputRouterTests
             diagnosticEvent =>
             {
                 var hover = Assert.IsType<InputOwnershipEvent.HoverChanged>(diagnosticEvent);
-                Assert.Null(hover.PreviousTarget);
-                Assert.Equal(nameof(CounterMessage.Increment), hover.CurrentTarget);
+                Assert.True(hover.PreviousTarget.IsNone);
+                Assert.Equal(new ActionId(1), hover.CurrentTarget);
             },
             diagnosticEvent =>
             {
                 var focus = Assert.IsType<InputOwnershipEvent.FocusChanged>(diagnosticEvent);
-                Assert.Null(focus.PreviousTarget);
-                Assert.Equal(nameof(CounterMessage.Increment), focus.CurrentTarget);
+                Assert.True(focus.PreviousTarget.IsNone);
+                Assert.Equal(new ActionId(1), focus.CurrentTarget);
             },
             diagnosticEvent =>
             {
                 var pressed = Assert.IsType<InputOwnershipEvent.PressedChanged>(diagnosticEvent);
-                Assert.Null(pressed.PreviousPressedTarget);
-                Assert.Equal(nameof(CounterMessage.Increment), pressed.CurrentPressedTarget);
+                Assert.True(pressed.PreviousPressedTarget.IsNone);
+                Assert.Equal(new ActionId(1), pressed.CurrentPressedTarget);
                 Assert.True(pressed.IsPointerPressed);
             },
             diagnosticEvent =>
             {
                 var pressed = Assert.IsType<InputOwnershipEvent.PressedChanged>(diagnosticEvent);
-                Assert.Equal(nameof(CounterMessage.Increment), pressed.PreviousPressedTarget);
-                Assert.Null(pressed.CurrentPressedTarget);
+                Assert.Equal(new ActionId(1), pressed.PreviousPressedTarget);
+                Assert.True(pressed.CurrentPressedTarget.IsNone);
                 Assert.False(pressed.IsPointerPressed);
             });
     }
@@ -226,17 +226,17 @@ public sealed class CounterInputRouterTests
     public void CounterApplication_derives_button_state_from_ownership_snapshot()
     {
         var snapshot = new OwnershipSnapshot(
-            HoveredTarget: nameof(CounterMessage.Increment),
-            FocusedTarget: nameof(CounterMessage.Increment),
-            PressedTarget: nameof(CounterMessage.Increment),
-            CapturedTarget: nameof(CounterMessage.Increment),
-            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
-            LastHoverLeftTarget: null,
+            HoveredTarget: new ActionId(1),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: new ActionId(1),
+            CapturedTarget: new ActionId(1),
+            LastHoverEnteredTarget: new ActionId(1),
+            LastHoverLeftTarget: ActionId.None,
             HoverChangeCount: 1,
             IsPointerPressed: true);
 
-        var incrementState = CounterApplication.DeriveButtonState(snapshot, nameof(CounterMessage.Increment));
-        var decrementState = CounterApplication.DeriveButtonState(snapshot, nameof(CounterMessage.Decrement));
+        var incrementState = CounterApplication.DeriveButtonState(snapshot, new ActionId(1));
+        var decrementState = CounterApplication.DeriveButtonState(snapshot, new ActionId(2));
 
         Assert.True(incrementState.IsHovered);
         Assert.True(incrementState.IsPressed);
@@ -247,14 +247,14 @@ public sealed class CounterInputRouterTests
 
         var releasedState = CounterApplication.DeriveButtonState(
             snapshot with { IsPointerPressed = false },
-            nameof(CounterMessage.Increment));
+            new ActionId(1));
         Assert.False(releasedState.IsPressed);
     }
 
     [Fact]
     public void ControlVisualState_projection_and_adapter_preserve_existing_button_attributes()
     {
-        var targetId = nameof(CounterMessage.Increment);
+        var targetId = new ActionId(1);
         var cases = new[]
         {
             (
@@ -265,46 +265,46 @@ public sealed class CounterInputRouterTests
                 Name: "hovered",
                 Snapshot: new OwnershipSnapshot(
                     HoveredTarget: targetId,
-                    FocusedTarget: null,
-                    PressedTarget: null,
-                    CapturedTarget: null,
+                    FocusedTarget: ActionId.None,
+                    PressedTarget: ActionId.None,
+                    CapturedTarget: ActionId.None,
                     LastHoverEnteredTarget: targetId,
-                    LastHoverLeftTarget: null,
+                    LastHoverLeftTarget: ActionId.None,
                     HoverChangeCount: 1,
                     IsPointerPressed: false),
                 Expected: new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false)),
             (
                 Name: "pressed",
                 Snapshot: new OwnershipSnapshot(
-                    HoveredTarget: null,
+                    HoveredTarget: ActionId.None,
                     FocusedTarget: targetId,
                     PressedTarget: targetId,
                     CapturedTarget: targetId,
-                    LastHoverEnteredTarget: null,
-                    LastHoverLeftTarget: null,
+                    LastHoverEnteredTarget: ActionId.None,
+                    LastHoverLeftTarget: ActionId.None,
                     HoverChangeCount: 0,
                     IsPointerPressed: true),
                 Expected: new ControlVisualState(IsHovered: false, IsPressed: true, IsFocused: true)),
             (
                 Name: "focused",
                 Snapshot: new OwnershipSnapshot(
-                    HoveredTarget: null,
+                    HoveredTarget: ActionId.None,
                     FocusedTarget: targetId,
-                    PressedTarget: null,
-                    CapturedTarget: null,
-                    LastHoverEnteredTarget: null,
-                    LastHoverLeftTarget: null,
+                    PressedTarget: ActionId.None,
+                    CapturedTarget: ActionId.None,
+                    LastHoverEnteredTarget: ActionId.None,
+                    LastHoverLeftTarget: ActionId.None,
                     HoverChangeCount: 0,
                     IsPointerPressed: false),
                 Expected: new ControlVisualState(IsHovered: false, IsPressed: false, IsFocused: true)),
             (
                 Name: "focusLost",
                 Snapshot: new OwnershipSnapshot(
-                    HoveredTarget: null,
-                    FocusedTarget: null,
-                    PressedTarget: null,
-                    CapturedTarget: null,
-                    LastHoverEnteredTarget: null,
+                    HoveredTarget: ActionId.None,
+                    FocusedTarget: ActionId.None,
+                    PressedTarget: ActionId.None,
+                    CapturedTarget: ActionId.None,
+                    LastHoverEnteredTarget: ActionId.None,
                     LastHoverLeftTarget: targetId,
                     HoverChangeCount: 2,
                     IsPointerPressed: false),
@@ -317,9 +317,9 @@ public sealed class CounterInputRouterTests
             var attributes = ControlVisualStateAttributeAdapter.ToAttributes(state);
 
             Assert.Equal(caseItem.Expected, state);
-            Assert.Equal(caseItem.Expected.IsHovered, GetBooleanAttribute(attributes, "IsHovered"));
-            Assert.Equal(caseItem.Expected.IsPressed, GetBooleanAttribute(attributes, "IsPressed"));
-            Assert.Equal(caseItem.Expected.IsFocused, GetBooleanAttribute(attributes, "IsFocused"));
+            Assert.Equal(caseItem.Expected.IsHovered, GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
+            Assert.Equal(caseItem.Expected.IsPressed, GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
+            Assert.Equal(caseItem.Expected.IsFocused, GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
             Assert.DoesNotContain(attributes, attribute => attribute.Name == "IsEnabled");
         }
     }
@@ -327,16 +327,16 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void ButtonAttributeBundle_preserves_action_and_visual_state_wire_contract()
     {
-        var actionId = nameof(CounterMessage.Increment);
+        var actionId = new ActionId(1);
         var attributes = ButtonAttributeBundle.Create(
             actionId,
             new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: true));
 
         Assert.Equal(4, attributes.Length);
-        Assert.Equal(actionId, GetTextAttribute(attributes, "ActionId"));
-        Assert.True(GetBooleanAttribute(attributes, "IsHovered"));
-        Assert.False(GetBooleanAttribute(attributes, "IsPressed"));
-        Assert.True(GetBooleanAttribute(attributes, "IsFocused"));
+        Assert.Equal(actionId, GetActionId(attributes));
+        Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
+        Assert.False(GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
+        Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
         Assert.DoesNotContain(attributes, attribute => attribute.Name == "IsEnabled");
     }
 
@@ -344,43 +344,43 @@ public sealed class CounterInputRouterTests
     public void CounterApplication_button_attributes_match_derived_visual_state_for_each_input_state()
     {
         var app = new CounterApplication();
-        var targetId = nameof(CounterMessage.Increment);
+        var targetId = new ActionId(1);
         var cases = new[]
         {
             default,
             new OwnershipSnapshot(
                 HoveredTarget: targetId,
-                FocusedTarget: null,
-                PressedTarget: null,
-                CapturedTarget: null,
+                FocusedTarget: ActionId.None,
+                PressedTarget: ActionId.None,
+                CapturedTarget: ActionId.None,
                 LastHoverEnteredTarget: targetId,
-                LastHoverLeftTarget: null,
+                LastHoverLeftTarget: ActionId.None,
                 HoverChangeCount: 1,
                 IsPointerPressed: false),
             new OwnershipSnapshot(
-                HoveredTarget: null,
+                HoveredTarget: ActionId.None,
                 FocusedTarget: targetId,
                 PressedTarget: targetId,
                 CapturedTarget: targetId,
-                LastHoverEnteredTarget: null,
-                LastHoverLeftTarget: null,
+                LastHoverEnteredTarget: ActionId.None,
+                LastHoverLeftTarget: ActionId.None,
                 HoverChangeCount: 0,
                 IsPointerPressed: true),
             new OwnershipSnapshot(
-                HoveredTarget: null,
+                HoveredTarget: ActionId.None,
                 FocusedTarget: targetId,
-                PressedTarget: null,
-                CapturedTarget: null,
-                LastHoverEnteredTarget: null,
-                LastHoverLeftTarget: null,
+                PressedTarget: ActionId.None,
+                CapturedTarget: ActionId.None,
+                LastHoverEnteredTarget: ActionId.None,
+                LastHoverLeftTarget: ActionId.None,
                 HoverChangeCount: 0,
                 IsPointerPressed: false),
             new OwnershipSnapshot(
-                HoveredTarget: null,
-                FocusedTarget: null,
-                PressedTarget: null,
-                CapturedTarget: null,
-                LastHoverEnteredTarget: null,
+                HoveredTarget: ActionId.None,
+                FocusedTarget: ActionId.None,
+                PressedTarget: ActionId.None,
+                CapturedTarget: ActionId.None,
+                LastHoverEnteredTarget: ActionId.None,
                 LastHoverLeftTarget: targetId,
                 HoverChangeCount: 2,
                 IsPointerPressed: false)
@@ -392,9 +392,9 @@ public sealed class CounterInputRouterTests
             var expected = CounterApplication.DeriveButtonState(snapshot, targetId);
             var button = FindButton(app.BuildView(model).Root, targetId);
 
-            Assert.Equal(expected.IsHovered, GetBooleanAttribute(button, "IsHovered"));
-            Assert.Equal(expected.IsPressed, GetBooleanAttribute(button, "IsPressed"));
-            Assert.Equal(expected.IsFocused, GetBooleanAttribute(button, "IsFocused"));
+            Assert.Equal(expected.IsHovered, GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
+            Assert.Equal(expected.IsPressed, GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
+            Assert.Equal(expected.IsFocused, GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
         }
     }
 
@@ -402,7 +402,7 @@ public sealed class CounterInputRouterTests
     public void CounterApplication_build_view_button_includes_action_and_visual_state_bundle()
     {
         var app = new CounterApplication();
-        var targetId = nameof(CounterMessage.Increment);
+        var targetId = new ActionId(1);
         var model = app.Initialize() with
         {
             InputOwnership = new OwnershipSnapshot(
@@ -411,17 +411,17 @@ public sealed class CounterInputRouterTests
                 PressedTarget: targetId,
                 CapturedTarget: targetId,
                 LastHoverEnteredTarget: targetId,
-                LastHoverLeftTarget: null,
+                LastHoverLeftTarget: ActionId.None,
                 HoverChangeCount: 1,
                 IsPointerPressed: true)
         };
 
         var button = FindButton(app.BuildView(model).Root, targetId);
 
-        Assert.Equal(targetId, GetTextAttribute(button, "ActionId"));
-        Assert.True(GetBooleanAttribute(button, "IsHovered"));
-        Assert.True(GetBooleanAttribute(button, "IsPressed"));
-        Assert.True(GetBooleanAttribute(button, "IsFocused"));
+        Assert.Equal(targetId, GetActionId(button));
+        Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
+        Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
+        Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
         Assert.DoesNotContain(button.Attributes, attribute => attribute.Name == "IsEnabled");
     }
 
@@ -431,12 +431,12 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
         var snapshot = new OwnershipSnapshot(
-            HoveredTarget: nameof(CounterMessage.Increment),
-            FocusedTarget: null,
-            PressedTarget: null,
-            CapturedTarget: null,
-            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
-            LastHoverLeftTarget: null,
+            HoveredTarget: new ActionId(1),
+            FocusedTarget: ActionId.None,
+            PressedTarget: ActionId.None,
+            CapturedTarget: ActionId.None,
+            LastHoverEnteredTarget: new ActionId(1),
+            LastHoverLeftTarget: ActionId.None,
             HoverChangeCount: 1,
             IsPointerPressed: false);
 
@@ -452,12 +452,12 @@ public sealed class CounterInputRouterTests
     {
         var app = new CounterApplication();
         var snapshot = new OwnershipSnapshot(
-            HoveredTarget: nameof(CounterMessage.Decrement),
-            FocusedTarget: nameof(CounterMessage.Increment),
-            PressedTarget: null,
-            CapturedTarget: null,
-            LastHoverEnteredTarget: nameof(CounterMessage.Decrement),
-            LastHoverLeftTarget: nameof(CounterMessage.Increment),
+            HoveredTarget: new ActionId(2),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: ActionId.None,
+            CapturedTarget: ActionId.None,
+            LastHoverEnteredTarget: new ActionId(2),
+            LastHoverLeftTarget: new ActionId(1),
             HoverChangeCount: 2,
             IsPointerPressed: false);
 
@@ -481,7 +481,7 @@ public sealed class CounterInputRouterTests
         Assert.True(mapped);
         var refresh = Assert.IsType<CounterMessage.InputVisualStateChanged>(message);
         Assert.Equal(ownershipState.Snapshot, refresh.Snapshot);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.HoveredTarget);
+        Assert.Equal(new ActionId(1), ownershipState.HoveredTarget);
     }
 
     [Fact]
@@ -534,8 +534,8 @@ public sealed class CounterInputRouterTests
         var routed = Assert.IsType<CounterMessage.RoutedInput>(message);
         Assert.IsType<CounterMessage.Increment>(routed.Action);
         Assert.Equal(ownershipState.Snapshot, routed.Snapshot);
-        Assert.Null(ownershipState.PressedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), ownershipState.FocusedTarget);
+        Assert.True(ownershipState.PressedTarget.IsNone);
+        Assert.Equal(new ActionId(1), ownershipState.FocusedTarget);
     }
 
     [Fact]
@@ -550,7 +550,7 @@ public sealed class CounterInputRouterTests
             ownershipState,
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140));
 
-        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.HoveredTarget);
+        Assert.Equal(new ActionId(1), model.InputOwnership.HoveredTarget);
         AssertButtonState(app.BuildView(model), isHovered: true, isPressed: false, isFocused: false);
     }
 
@@ -579,9 +579,9 @@ public sealed class CounterInputRouterTests
                 Y: 140,
                 Button: PointerButton.Left));
 
-        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.PressedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.CapturedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.FocusedTarget);
+        Assert.Equal(new ActionId(1), model.InputOwnership.PressedTarget);
+        Assert.Equal(new ActionId(1), model.InputOwnership.CapturedTarget);
+        Assert.Equal(new ActionId(1), model.InputOwnership.FocusedTarget);
         AssertButtonState(app.BuildView(model), isHovered: false, isPressed: true, isFocused: true);
     }
 
@@ -613,9 +613,9 @@ public sealed class CounterInputRouterTests
                 Button: PointerButton.Left));
 
         Assert.Equal(1, model.Count);
-        Assert.Null(model.InputOwnership.PressedTarget);
-        Assert.Null(model.InputOwnership.CapturedTarget);
-        Assert.Equal(nameof(CounterMessage.Increment), model.InputOwnership.FocusedTarget);
+        Assert.True(model.InputOwnership.PressedTarget.IsNone);
+        Assert.True(model.InputOwnership.CapturedTarget.IsNone);
+        Assert.Equal(new ActionId(1), model.InputOwnership.FocusedTarget);
         AssertButtonState(app.BuildView(model), isHovered: false, isPressed: false, isFocused: true);
         AssertButtonFillColor(app.BuildView(model), DrawColor.Opaque(84, 160, 255));
     }
@@ -647,9 +647,9 @@ public sealed class CounterInputRouterTests
                 Y: 500,
                 Button: PointerButton.Left));
 
-        Assert.Null(model.InputOwnership.FocusedTarget);
-        Assert.Null(model.InputOwnership.PressedTarget);
-        Assert.Null(model.InputOwnership.CapturedTarget);
+        Assert.True(model.InputOwnership.FocusedTarget.IsNone);
+        Assert.True(model.InputOwnership.PressedTarget.IsNone);
+        Assert.True(model.InputOwnership.CapturedTarget.IsNone);
         Assert.True(model.InputOwnership.IsPointerPressed);
         AssertButtonState(app.BuildView(model), isHovered: false, isPressed: false, isFocused: false);
     }
@@ -681,10 +681,10 @@ public sealed class CounterInputRouterTests
             ownershipState,
             new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 3, X: 0, Y: 0));
 
-        Assert.Null(model.InputOwnership.HoveredTarget);
-        Assert.Null(model.InputOwnership.FocusedTarget);
-        Assert.Null(model.InputOwnership.PressedTarget);
-        Assert.Null(model.InputOwnership.CapturedTarget);
+        Assert.True(model.InputOwnership.HoveredTarget.IsNone);
+        Assert.True(model.InputOwnership.FocusedTarget.IsNone);
+        Assert.True(model.InputOwnership.PressedTarget.IsNone);
+        Assert.True(model.InputOwnership.CapturedTarget.IsNone);
         Assert.False(model.InputOwnership.IsPointerPressed);
         AssertButtonState(app.BuildView(model), isHovered: false, isPressed: false, isFocused: false);
     }
@@ -710,12 +710,12 @@ public sealed class CounterInputRouterTests
         {
             Scroll = new ScrollState { TargetPosition = 54, Position = 54 },
             InputOwnership = new OwnershipSnapshot(
-                HoveredTarget: nameof(CounterMessage.Increment),
-                FocusedTarget: nameof(CounterMessage.Increment),
-                PressedTarget: null,
-                CapturedTarget: null,
-                LastHoverEnteredTarget: nameof(CounterMessage.Increment),
-                LastHoverLeftTarget: null,
+                HoveredTarget: new ActionId(1),
+                FocusedTarget: new ActionId(1),
+                PressedTarget: ActionId.None,
+                CapturedTarget: ActionId.None,
+                LastHoverEnteredTarget: new ActionId(1),
+                LastHoverLeftTarget: ActionId.None,
                 HoverChangeCount: 1,
                 IsPointerPressed: false)
         };
@@ -753,9 +753,9 @@ public sealed class CounterInputRouterTests
             out _);
 
         Assert.False(mapped);
-        Assert.Null(ownershipState.FocusedTarget);
-        Assert.Null(ownershipState.PressedTarget);
-        Assert.Null(ownershipState.CapturedTarget);
+        Assert.True(ownershipState.FocusedTarget.IsNone);
+        Assert.True(ownershipState.PressedTarget.IsNone);
+        Assert.True(ownershipState.CapturedTarget.IsNone);
 
         mapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -869,10 +869,10 @@ public sealed class CounterInputRouterTests
             out _);
 
         Assert.False(mapped);
-        Assert.Null(ownershipState.HoveredTarget);
-        Assert.Null(ownershipState.FocusedTarget);
-        Assert.Null(ownershipState.PressedTarget);
-        Assert.Null(ownershipState.CapturedTarget);
+        Assert.True(ownershipState.HoveredTarget.IsNone);
+        Assert.True(ownershipState.FocusedTarget.IsNone);
+        Assert.True(ownershipState.PressedTarget.IsNone);
+        Assert.True(ownershipState.CapturedTarget.IsNone);
     }
 
     [Theory]
@@ -887,7 +887,7 @@ public sealed class CounterInputRouterTests
             Y: 0,
             KeyCode: keyCode);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => null, out var message);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out var message);
 
         Assert.True(mapped);
         Assert.IsType(expectedMessageType, message);
@@ -907,7 +907,7 @@ public sealed class CounterInputRouterTests
             Y: 0,
             Delta: delta);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => null, out var message);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out var message);
 
         Assert.True(mapped);
         var wheel = Assert.IsType<CounterMessage.WheelRaw>(message);
@@ -926,7 +926,7 @@ public sealed class CounterInputRouterTests
             Y: 0,
             Character: character);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => null, out var message);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out var message);
 
         var reset = Assert.IsType<CounterMessage.Reset>(message);
         Assert.True(mapped);
@@ -936,12 +936,12 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void MapActionId_throws_for_unsupported_action_id()
     {
-        Assert.Throws<NotSupportedException>(() => CounterInputRouter.MapActionId("Unsupported"));
+        Assert.Throws<NotSupportedException>(() => CounterInputRouter.MapActionId(new ActionId(999)));
     }
 
-    private static string? HitIncrementAtButton(int x, int y)
+    private static ActionId HitIncrementAtButton(int x, int y)
     {
-        return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
+        return x == 32 && y == 140 ? new ActionId(1) : ActionId.None;
     }
 
     private static CounterModel ApplyRuntimeInput(
@@ -957,17 +957,17 @@ public sealed class CounterInputRouterTests
 
     private static void AssertButtonState(VirtualNodeTree tree, bool isHovered, bool isPressed, bool isFocused)
     {
-        var button = FindButton(tree.Root, nameof(CounterMessage.Increment));
-        Assert.Equal(isHovered, GetBooleanAttribute(button, "IsHovered"));
-        Assert.Equal(isPressed, GetBooleanAttribute(button, "IsPressed"));
-        Assert.Equal(isFocused, GetBooleanAttribute(button, "IsFocused"));
+        var button = FindButton(tree.Root, new ActionId(1));
+        Assert.Equal(isHovered, GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
+        Assert.Equal(isPressed, GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
+        Assert.Equal(isFocused, GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
     }
 
     private static void AssertButtonFillColor(VirtualNodeTree tree, DrawColor expectedColor)
     {
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(tree.Root, new PixelRectangle(0, 0, 960, 540));
-        var hitTarget = Assert.Single(frame.HitTargets, target => target.ActionId == nameof(CounterMessage.Increment));
+        var hitTarget = Assert.Single(frame.HitTargets, target => target.ActionId == new ActionId(1));
         var commands = frame.Commands.Memory.Span;
 
         for (var i = 0; i < frame.Commands.Count; i++)
@@ -983,9 +983,9 @@ public sealed class CounterInputRouterTests
         Assert.Fail("Increment button fill command was not recorded.");
     }
 
-    private static VirtualNode FindButton(VirtualNode node, string actionId)
+    private static VirtualNode FindButton(VirtualNode node, ActionId actionId)
     {
-        if (node.Kind == VirtualNodeKind.Button && GetTextAttribute(node, "ActionId") == actionId)
+        if (node.Kind == VirtualNodeKind.Button && GetActionId(node) == actionId)
         {
             return node;
         }
@@ -1002,24 +1002,24 @@ public sealed class CounterInputRouterTests
         return default;
     }
 
-    private static string? GetTextAttribute(VirtualNode node, string name)
+    private static ActionId GetActionId(VirtualNode node)
     {
         foreach (var attribute in node.Attributes)
         {
-            if (attribute.Name == name)
+            if (attribute.Key == VirtualAttributeKey.ActionId)
             {
-                return attribute.Value.Text;
+                return attribute.Value.ActionIdValue;
             }
         }
 
-        return null;
+        return ActionId.None;
     }
 
-    private static bool GetBooleanAttribute(VirtualNode node, string name)
+    private static bool GetBooleanAttribute(VirtualNode node, VirtualAttributeKey key)
     {
         foreach (var attribute in node.Attributes)
         {
-            if (attribute.Name == name)
+            if (attribute.Key == key)
             {
                 return attribute.Value.Boolean;
             }
@@ -1028,11 +1028,11 @@ public sealed class CounterInputRouterTests
         return false;
     }
 
-    private static bool GetBooleanAttribute(VirtualNodeAttribute[] attributes, string name)
+    private static bool GetBooleanAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key)
     {
         foreach (var attribute in attributes)
         {
-            if (attribute.Name == name)
+            if (attribute.Key == key)
             {
                 return attribute.Value.Boolean;
             }
@@ -1041,17 +1041,17 @@ public sealed class CounterInputRouterTests
         return false;
     }
 
-    private static string? GetTextAttribute(VirtualNodeAttribute[] attributes, string name)
+    private static ActionId GetActionId(VirtualNodeAttribute[] attributes)
     {
         foreach (var attribute in attributes)
         {
-            if (attribute.Name == name)
+            if (attribute.Key == VirtualAttributeKey.ActionId)
             {
-                return attribute.Value.Text;
+                return attribute.Value.ActionIdValue;
             }
         }
 
-        return null;
+        return ActionId.None;
     }
 
     private static bool ContainsTextStartingWith(VirtualNode node, string prefix)
@@ -1072,13 +1072,13 @@ public sealed class CounterInputRouterTests
         return false;
     }
 
-    private static string? HitIncrementOrDecrement(int x, int y)
+    private static ActionId HitIncrementOrDecrement(int x, int y)
     {
         return (x, y) switch
         {
-            (32, 140) => nameof(CounterMessage.Increment),
-            (32, 200) => nameof(CounterMessage.Decrement),
-            _ => null
+            (32, 140) => new ActionId(1),
+            (32, 200) => new ActionId(2),
+            _ => ActionId.None
         };
     }
 
@@ -1088,7 +1088,7 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // One full downward notch: -120 units → 120/120 * 3 lines * 18px = 54px
+        // One full downward notch: -120 units �?120/120 * 3 lines * 18px = 54px
         var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120);
         var result = app.Update(model, new CounterMessage.ScrollFrame(delta, 0));
         Assert.Equal(54, result.NextModel.Scroll.TargetPosition);
@@ -1105,7 +1105,7 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // Scroll up when at 0 → target stays at 0
+        // Scroll up when at 0 �?target stays at 0
         var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, 120);
         var result = app.Update(model, new CounterMessage.ScrollFrame(delta, 0));
         Assert.Equal(0, result.NextModel.Scroll.TargetPosition);
@@ -1117,7 +1117,7 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var model = app.Initialize();
 
-        // 4 small downward deltas of -30 = -120 total → 54px (same as one notch)
+        // 4 small downward deltas of -30 = -120 total �?54px (same as one notch)
         for (var i = 0; i < 4; i++)
         {
             var delta = new ScrollDelta(ScrollDeltaUnit.WheelRaw, -30);
@@ -1282,7 +1282,7 @@ public sealed class CounterInputRouterTests
 
         // Target should be clamped to MaxScrollY = contentHeight - visibleHeight
         // But since we don't have visibleHeight in ScrollMetrics yet, the controller
-        // doesn't clamp — it's the layout builder's job. So target is just large.
+        // doesn't clamp �?it's the layout builder's job. So target is just large.
         Assert.True(state.TargetPosition > 0);
         Assert.True(state.IsAnimating);
     }
@@ -1407,7 +1407,7 @@ public sealed class CounterInputRouterTests
             new ScrollDelta(ScrollDeltaUnit.WheelRaw, -2400), 0)).NextModel;
         Assert.True(model.Scroll.TargetPosition > 100);
 
-        // Update MaxScrollY to 100 — should clamp target
+        // Update MaxScrollY to 100 �?should clamp target
         model = app.Update(model, new CounterMessage.UpdateMaxScrollY(100)).NextModel;
         Assert.Equal(100.0, model.Scroll.TargetPosition);
     }
@@ -1450,7 +1450,7 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void HasMaxScrollY_false_target_not_clamped()
     {
-        // Default ScrollState has HasMaxScrollY=false — target should grow freely
+        // Default ScrollState has HasMaxScrollY=false �?target should grow freely
         var app = new CounterApplication();
         var model = app.Initialize();
 
@@ -1494,7 +1494,7 @@ public sealed class CounterInputRouterTests
             new ScrollDelta(ScrollDeltaUnit.WheelRaw, -240), 0)).NextModel;
         Assert.True(model.Scroll.TargetPosition > 0);
 
-        // Set MaxScrollY=0 (content fits in viewport — no scrolling needed)
+        // Set MaxScrollY=0 (content fits in viewport �?no scrolling needed)
         model = app.Update(model, new CounterMessage.UpdateMaxScrollY(0)).NextModel;
 
         Assert.True(model.Scroll.HasMaxScrollY);
@@ -1528,7 +1528,7 @@ public sealed class CounterInputRouterTests
     public void Rapid_100_deltas_target_correct()
     {
         // Simulate rapid downward scrolling: 100 small deltas of -30 units each
-        // 100 × -30 = -3000 total → 3000/120 × 3 × 18 = 1350px
+        // 100 × -30 = -3000 total �?3000/120 × 3 × 18 = 1350px
         var app = new CounterApplication();
         var model = app.Initialize();
 
@@ -1593,7 +1593,7 @@ public sealed class CounterInputRouterTests
 
         // Target should be set
         Assert.Equal(54.0, model.Scroll.TargetPosition);
-        // Position should NOT have moved yet (dt=0 → Tick is a no-op since factor=0)
+        // Position should NOT have moved yet (dt=0 �?Tick is a no-op since factor=0)
         Assert.Equal(0.0, model.Scroll.Position);
         Assert.True(model.Scroll.IsAnimating);
     }

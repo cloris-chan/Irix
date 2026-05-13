@@ -20,7 +20,7 @@ internal readonly record struct LayoutElement(
     PixelRectangle Bounds,
     PixelRectangle ClipBounds = default,
     string? Text = null,
-    string? ActionId = null,
+    ActionId ActionId = default,
     ButtonVisualState ButtonState = default);
 
 internal enum LayoutRebuildReason : byte

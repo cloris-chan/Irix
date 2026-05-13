@@ -49,7 +49,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         var replacePatches = new Dictionary<int, VirtualNode>();
         var updatePatches = new Dictionary<int, VirtualNode>();
         var addPatches = new Dictionary<int, List<VirtualNode>>();
-        var removeKeySet = new HashSet<ulong>();
+        var removeKeySet = new HashSet<NodeKey>();
         var removeIndexSet = new HashSet<int>();
 
         for (var i = 0; i < memory.Length; i++)
@@ -65,7 +65,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
                     if (!addPatches.TryGetValue(patch.NodeIndex, out var addList)) { addList = []; addPatches[patch.NodeIndex] = addList; }
                     addList.Add(patch.Node); break;
                 case VirtualNodePatchOperation.Remove:
-                    if (patch.Node.Key != 0) removeKeySet.Add(patch.Node.Key);
+                    if (patch.Node.Key != NodeKey.None) removeKeySet.Add(patch.Node.Key);
                     else removeIndexSet.Add(patch.NodeIndex); break;
             }
         }
@@ -91,7 +91,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         VirtualNode node, int currentIndex,
         Dictionary<int, VirtualNode> updates,
         Dictionary<int, List<VirtualNode>> adds,
-        HashSet<ulong> removeKeySet, HashSet<int> removeIndexSet,
+        HashSet<NodeKey> removeKeySet, HashSet<int> removeIndexSet,
         List<int> dirty)
     {
         if (updates.Remove(currentIndex, out var replacement))
@@ -118,7 +118,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
                 dirty.Add(currentIndex);
             }
 
-            var shouldRemove = (child.Key != 0 && removeKeySet.Remove(child.Key))
+            var shouldRemove = (child.Key != NodeKey.None && removeKeySet.Remove(child.Key))
                              || removeIndexSet.Remove(offset);
             if (shouldRemove)
             {

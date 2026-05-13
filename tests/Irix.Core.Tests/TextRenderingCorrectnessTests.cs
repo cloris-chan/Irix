@@ -94,7 +94,7 @@ public sealed class TextRenderingCorrectnessTests
     {
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Click Me", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click"))));
+                VirtualNodeAttribute.Action(new ActionId(100))));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540));
 

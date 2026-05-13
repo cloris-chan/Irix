@@ -43,7 +43,7 @@ public static class VirtualNodeDiffer
     private static bool IsDefaultTree(VirtualNodeTree tree)
     {
         var root = tree.Root;
-        return root.Kind == default && root.Key == 0 && root.Content == default
+        return root.Kind == default && root.Key == NodeKey.None && root.Content == default
             && (root.Attributes == null || root.Attributes.Length == 0)
             && (root.Children == null || root.Children.Length == 0);
     }
@@ -79,7 +79,7 @@ public static class VirtualNodeDiffer
         var hasKeys = false;
         for (var i = 0; i < newChildren.Length; i++)
         {
-            if (newChildren[i].Key != 0)
+            if (newChildren[i].Key != NodeKey.None)
             {
                 hasKeys = true;
                 break;
@@ -128,10 +128,10 @@ public static class VirtualNodeDiffer
     private static void DiffChildrenByKeyed(VirtualNode[] oldChildren, VirtualNode[] newChildren, int parentIndex, List<VirtualNodePatch> patches)
     {
         // Build key → index map for old children
-        var oldKeyMap = new Dictionary<ulong, int>(oldChildren.Length);
+        var oldKeyMap = new Dictionary<NodeKey, int>(oldChildren.Length);
         for (var i = 0; i < oldChildren.Length; i++)
         {
-            if (oldChildren[i].Key != 0)
+            if (oldChildren[i].Key != NodeKey.None)
             {
                 oldKeyMap[oldChildren[i].Key] = i;
             }
@@ -143,7 +143,7 @@ public static class VirtualNodeDiffer
             var newChild = newChildren[i];
             var childIndex = parentIndex + 1 + childOffset;
 
-            if (newChild.Key != 0 && oldKeyMap.TryGetValue(newChild.Key, out var oldIdx))
+            if (newChild.Key != NodeKey.None && oldKeyMap.TryGetValue(newChild.Key, out var oldIdx))
             {
                 // Same key → diff recursively
                 DiffNode(oldChildren[oldIdx], newChild, childIndex, patches);
@@ -158,15 +158,15 @@ public static class VirtualNodeDiffer
         }
 
         // Remove old children whose keys are not in new
-        var newKeySet = new HashSet<ulong>();
+        var newKeySet = new HashSet<NodeKey>();
         for (var i = 0; i < newChildren.Length; i++)
         {
-            if (newChildren[i].Key != 0) newKeySet.Add(newChildren[i].Key);
+            if (newChildren[i].Key != NodeKey.None) newKeySet.Add(newChildren[i].Key);
         }
 
         for (var i = 0; i < oldChildren.Length; i++)
         {
-            if (oldChildren[i].Key != 0 && !newKeySet.Contains(oldChildren[i].Key))
+            if (oldChildren[i].Key != NodeKey.None && !newKeySet.Contains(oldChildren[i].Key))
             {
                 patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Remove, parentIndex + 1 + childOffset, oldChildren[i]));
                 childOffset += CountNodes(oldChildren[i]);

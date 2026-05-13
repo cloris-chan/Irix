@@ -136,10 +136,10 @@ public sealed class ProgramDiagnosticsTests
     {
         var snapshot = InputDiagnosticRunner.BuildInputDiagnosticsSnapshot();
 
-        Assert.Null(snapshot.Ownership.HoveredTarget);
-        Assert.Null(snapshot.Ownership.FocusedTarget);
-        Assert.Null(snapshot.Ownership.PressedTarget);
-        Assert.Null(snapshot.Ownership.CapturedTarget);
+        Assert.True(snapshot.Ownership.HoveredTarget.IsNone);
+        Assert.True(snapshot.Ownership.FocusedTarget.IsNone);
+        Assert.True(snapshot.Ownership.PressedTarget.IsNone);
+        Assert.True(snapshot.Ownership.CapturedTarget.IsNone);
         Assert.Equal(3, snapshot.Ownership.HoverChangeCount);
         Assert.False(snapshot.Ownership.IsPointerPressed);
         Assert.Contains("afterMove hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False", snapshot.OwnershipLines);
@@ -195,7 +195,7 @@ public sealed class ProgramDiagnosticsTests
         var plan = StyleOnlyPatchPlan.CreateEligible(
             [(0, 1)],
             [(0, 2)],
-            [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment", new PixelRectangle(0, 0, 960, 540))]);
+            [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(1), new PixelRectangle(0, 0, 960, 540))]);
 
         var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", plan);
 
@@ -213,7 +213,7 @@ public sealed class ProgramDiagnosticsTests
         var plan = StyleOnlyPatchPlan.CreateEligible(
             [(0, 1)],
             [(0, 2)],
-            [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "Increment", new PixelRectangle(0, 0, 960, 540))]);
+            [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(1), new PixelRectangle(0, 0, 960, 540))]);
         var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", plan);
 
         var line = DiagnosticsFormatter.BuildStyleOnlyPatchPlanDiagnosticLine(snapshot);
@@ -335,7 +335,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(0, snapshot.EmptyFrameCount);
         Assert.Equal(66.7, Math.Round(snapshot.PartialHitRate, 1));
         Assert.Single(snapshot.HitTargets);
-        Assert.Equal("LayoutBtn", snapshot.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(100), snapshot.HitTargets[0].ActionId);
         Assert.Single(snapshot.ScrollContainerDiagnostics);
         Assert.Equal(540, snapshot.ScrollContainerDiagnostics[0].VisibleHeight);
     }
@@ -372,7 +372,7 @@ public sealed class ProgramDiagnosticsTests
             "Layout rebuild reason: TreeStructure",
             "Layout dirty classifications: 4:StyleOnly",
             "Layout hit targets: 1",
-            "  Hit target: LayoutBtn bounds=(16,60,140,40) clip=(0,0,960,540)",
+            "  Hit target: 100 bounds=(16,60,140,40) clip=(0,0,960,540)",
             "  ScrollContainer[0]: visible=540 content=96 scrollY=0 maxScrollY=0 elements=2/2 visible"
         ]), output);
     }
@@ -504,12 +504,12 @@ public sealed class ProgramDiagnosticsTests
             "PhysicalPixelsV0");
         var layout = new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly");
         var input = new OwnershipSnapshot(
-            HoveredTarget: nameof(CounterMessage.Increment),
-            FocusedTarget: nameof(CounterMessage.Increment),
-            PressedTarget: null,
-            CapturedTarget: null,
-            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
-            LastHoverLeftTarget: null,
+            HoveredTarget: new ActionId(1),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: ActionId.None,
+            CapturedTarget: ActionId.None,
+            LastHoverEnteredTarget: new ActionId(1),
+            LastHoverLeftTarget: ActionId.None,
             HoverChangeCount: 5,
             IsPointerPressed: false);
         var scroll = ScrollState.Default with
@@ -570,12 +570,12 @@ public sealed class ProgramDiagnosticsTests
                 Accumulator: 0.375,
                 IsAnimating: true),
             new OwnershipSnapshot(
-                HoveredTarget: nameof(CounterMessage.Increment),
-                FocusedTarget: nameof(CounterMessage.Increment),
-                PressedTarget: null,
-                CapturedTarget: null,
-                LastHoverEnteredTarget: nameof(CounterMessage.Increment),
-                LastHoverLeftTarget: null,
+                HoveredTarget: new ActionId(1),
+                FocusedTarget: new ActionId(1),
+                PressedTarget: ActionId.None,
+                CapturedTarget: ActionId.None,
+                LastHoverEnteredTarget: new ActionId(1),
+                LastHoverLeftTarget: ActionId.None,
                 HoverChangeCount: 5,
                 IsPointerPressed: false),
             DrawingBackendClipMode.Diagnostic);
@@ -615,12 +615,12 @@ public sealed class ProgramDiagnosticsTests
                 "PhysicalPixelsV0"),
             new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"));
         var input = new OwnershipSnapshot(
-            HoveredTarget: nameof(CounterMessage.Increment),
-            FocusedTarget: nameof(CounterMessage.Increment),
-            PressedTarget: null,
-            CapturedTarget: null,
-            LastHoverEnteredTarget: nameof(CounterMessage.Increment),
-            LastHoverLeftTarget: null,
+            HoveredTarget: new ActionId(1),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: ActionId.None,
+            CapturedTarget: ActionId.None,
+            LastHoverEnteredTarget: new ActionId(1),
+            LastHoverLeftTarget: ActionId.None,
             HoverChangeCount: 5,
             IsPointerPressed: false);
         var model = app.Initialize() with { InputOwnership = input };
@@ -685,7 +685,7 @@ public sealed class ProgramDiagnosticsTests
             LayoutRebuildCount: 1,
             LayoutRebuildReason: LayoutRebuildReason.TreeStructure,
             LayoutDirtyClassifications: [new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)],
-            HitTargets: [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), "LayoutBtn", new PixelRectangle(0, 0, 960, 540))],
+            HitTargets: [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(100), new PixelRectangle(0, 0, 960, 540))],
             ScrollContainerDiagnostics: [new ScrollContainerDiag(0, 540, 96, 0, 0, 2, 0)]);
     }
 

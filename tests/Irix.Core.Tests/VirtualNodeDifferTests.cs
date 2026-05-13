@@ -21,7 +21,7 @@ public sealed class VirtualNodeDifferTests
         var root = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeFactory.Text("Count: 0", 2),
-            VirtualNodeFactory.Button("Click", 3, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Click"))));
+            VirtualNodeFactory.Button("Click", 3, VirtualNodeAttribute.Action(new ActionId(100))));
         var tree = new VirtualNodeTree(root);
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
@@ -137,12 +137,12 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeFactory.Text("Count: 42", 2),
             VirtualNodeFactory.Rectangle(200, 48, 3),
-            VirtualNodeFactory.Button("Reset", 4, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Reset"))));
+            VirtualNodeFactory.Button("Reset", 4, VirtualNodeAttribute.Action(new ActionId(100))));
         var b = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeFactory.Text("Count: 42", 2),
             VirtualNodeFactory.Rectangle(200, 48, 3),
-            VirtualNodeFactory.Button("Reset", 4, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Reset"))));
+            VirtualNodeFactory.Button("Reset", 4, VirtualNodeAttribute.Action(new ActionId(100))));
 
         Assert.True(VirtualNodeDiffer.NodesEqual(a, b));
     }

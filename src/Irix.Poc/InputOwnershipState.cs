@@ -6,12 +6,12 @@ namespace Irix.Poc;
 /// Immutable read model for the PoC input ownership state.
 /// </summary>
 internal readonly record struct OwnershipSnapshot(
-    string? HoveredTarget,
-    string? FocusedTarget,
-    string? PressedTarget,
-    string? CapturedTarget,
-    string? LastHoverEnteredTarget,
-    string? LastHoverLeftTarget,
+    ActionId HoveredTarget,
+    ActionId FocusedTarget,
+    ActionId PressedTarget,
+    ActionId CapturedTarget,
+    ActionId LastHoverEnteredTarget,
+    ActionId LastHoverLeftTarget,
     long HoverChangeCount,
     bool IsPointerPressed);
 
@@ -22,15 +22,15 @@ internal readonly record struct OwnershipSnapshot(
 /// </summary>
 internal abstract record InputOwnershipEvent
 {
-    public sealed record HoverChanged(string? PreviousTarget, string? CurrentTarget) : InputOwnershipEvent;
+    public sealed record HoverChanged(ActionId PreviousTarget, ActionId CurrentTarget) : InputOwnershipEvent;
 
-    public sealed record FocusChanged(string? PreviousTarget, string? CurrentTarget) : InputOwnershipEvent;
+    public sealed record FocusChanged(ActionId PreviousTarget, ActionId CurrentTarget) : InputOwnershipEvent;
 
     public sealed record PressedChanged(
-        string? PreviousPressedTarget,
-        string? CurrentPressedTarget,
-        string? PreviousCapturedTarget,
-        string? CurrentCapturedTarget,
+        ActionId PreviousPressedTarget,
+        ActionId CurrentPressedTarget,
+        ActionId PreviousCapturedTarget,
+        ActionId CurrentCapturedTarget,
         bool IsPointerPressed) : InputOwnershipEvent;
 }
 
@@ -46,22 +46,22 @@ internal sealed class InputOwnershipState
     private bool _isPointerPressed;
 
     /// <summary>The current hit-test target under the pointer, updated by pointer move.</summary>
-    public string? HoveredTarget { get; private set; }
+    public ActionId HoveredTarget { get; private set; }
 
     /// <summary>The target that receives focused keyboard activation.</summary>
-    public string? FocusedTarget { get; private set; }
+    public ActionId FocusedTarget { get; private set; }
 
     /// <summary>The target that received the current left-button press, if any.</summary>
-    public string? PressedTarget { get; private set; }
+    public ActionId PressedTarget { get; private set; }
 
     /// <summary>The target that owns pointer release until the current press ends.</summary>
-    public string? CapturedTarget { get; private set; }
+    public ActionId CapturedTarget { get; private set; }
 
     /// <summary>The last target entered by hover diagnostics.</summary>
-    public string? LastHoverEnteredTarget { get; private set; }
+    public ActionId LastHoverEnteredTarget { get; private set; }
 
     /// <summary>The last target left by hover diagnostics.</summary>
-    public string? LastHoverLeftTarget { get; private set; }
+    public ActionId LastHoverLeftTarget { get; private set; }
 
     /// <summary>The number of hover target changes observed.</summary>
     public long HoverChangeCount { get; private set; }
@@ -83,10 +83,10 @@ internal sealed class InputOwnershipState
         _isPointerPressed);
 
     /// <summary>Updates hover diagnostics from the latest pointer location.</summary>
-    public void UpdateHover(RawInputEvent inputEvent, Func<int, int, string?> tryGetActionIdAt)
+    public void UpdateHover(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAt)
     {
         var previousTarget = HoveredTarget;
-        var nextTarget = NormalizeTarget(tryGetActionIdAt(inputEvent.X, inputEvent.Y));
+        var nextTarget = tryGetActionIdAt(inputEvent.X, inputEvent.Y);
         if (previousTarget == nextTarget)
         {
             return;
@@ -103,9 +103,9 @@ internal sealed class InputOwnershipState
     /// Starts left-button ownership. A hit target becomes pressed, captured, and focused;
     /// an empty press clears focus and prevents the matching release from activating a target.
     /// </summary>
-    public void PressPointer(RawInputEvent inputEvent, Func<int, int, string?> tryGetActionIdAt)
+    public void PressPointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAt)
     {
-        var target = NormalizeTarget(tryGetActionIdAt(inputEvent.X, inputEvent.Y));
+        var target = tryGetActionIdAt(inputEvent.X, inputEvent.Y);
         var previousFocus = FocusedTarget;
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
@@ -136,25 +136,25 @@ internal sealed class InputOwnershipState
     /// a release without a prior stateful press falls back to release-point hit testing for
     /// compatibility with the legacy stateless router overload.
     /// </summary>
-    public string? ReleasePointer(RawInputEvent inputEvent, Func<int, int, string?> tryGetActionIdAt)
+    public ActionId ReleasePointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAt)
     {
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
         var wasPointerPressed = _isPointerPressed;
         var target = _isPointerPressed
             ? CapturedTarget
-            : NormalizeTarget(tryGetActionIdAt(inputEvent.X, inputEvent.Y));
+            : tryGetActionIdAt(inputEvent.X, inputEvent.Y);
         _isPointerPressed = false;
-        PressedTarget = null;
-        CapturedTarget = null;
+        PressedTarget = ActionId.None;
+        CapturedTarget = ActionId.None;
 
-        if (wasPointerPressed || previousPressed is not null || previousCaptured is not null)
+        if (wasPointerPressed || !previousPressed.IsNone || !previousCaptured.IsNone)
         {
             _diagnosticEvents.Add(new InputOwnershipEvent.PressedChanged(
                 previousPressed,
-                null,
+                ActionId.None,
                 previousCaptured,
-                null,
+                ActionId.None,
                 IsPointerPressed: false));
         }
 
@@ -162,43 +162,38 @@ internal sealed class InputOwnershipState
     }
 
     /// <summary>Returns the target that should receive focused keyboard activation.</summary>
-    public string? GetKeyboardTarget() => FocusedTarget;
+    public ActionId GetKeyboardTarget() => FocusedTarget;
 
     /// <summary>Clears all ownership state, used when the native window loses focus.</summary>
     public void Clear()
     {
-        if (HoveredTarget is not null)
+        if (!HoveredTarget.IsNone)
         {
-            _diagnosticEvents.Add(new InputOwnershipEvent.HoverChanged(HoveredTarget, null));
+            _diagnosticEvents.Add(new InputOwnershipEvent.HoverChanged(HoveredTarget, ActionId.None));
             LastHoverLeftTarget = HoveredTarget;
-            LastHoverEnteredTarget = null;
+            LastHoverEnteredTarget = ActionId.None;
             HoverChangeCount++;
         }
 
-        if (FocusedTarget is not null)
+        if (!FocusedTarget.IsNone)
         {
-            _diagnosticEvents.Add(new InputOwnershipEvent.FocusChanged(FocusedTarget, null));
+            _diagnosticEvents.Add(new InputOwnershipEvent.FocusChanged(FocusedTarget, ActionId.None));
         }
 
-        if (_isPointerPressed || PressedTarget is not null || CapturedTarget is not null)
+        if (_isPointerPressed || !PressedTarget.IsNone || !CapturedTarget.IsNone)
         {
             _diagnosticEvents.Add(new InputOwnershipEvent.PressedChanged(
                 PressedTarget,
-                null,
+                ActionId.None,
                 CapturedTarget,
-                null,
+                ActionId.None,
                 IsPointerPressed: false));
         }
 
         _isPointerPressed = false;
-        HoveredTarget = null;
-        FocusedTarget = null;
-        PressedTarget = null;
-        CapturedTarget = null;
-    }
-
-    private static string? NormalizeTarget(string? target)
-    {
-        return string.IsNullOrWhiteSpace(target) ? null : target;
+        HoveredTarget = ActionId.None;
+        FocusedTarget = ActionId.None;
+        PressedTarget = ActionId.None;
+        CapturedTarget = ActionId.None;
     }
 }

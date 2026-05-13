@@ -47,7 +47,7 @@ internal static class ResizeDiagnosticRunner
             [
                 VirtualNodeFactory.Text("Resize Diagnostic: renderer/layout viewport", 1201),
                 VirtualNodeFactory.Rectangle(300, 44, 1202),
-                VirtualNodeFactory.Button("ResizeBtn", 1203, ControlActionAttributeAdapter.ToAttribute("ResizeBtn"))
+                VirtualNodeFactory.Button("ResizeBtn", 1203, VirtualNodeAttribute.Action(new ActionId(400)))
             ]);
 
         GC.Collect();

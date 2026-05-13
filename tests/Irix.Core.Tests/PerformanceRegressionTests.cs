@@ -25,7 +25,7 @@ public sealed class PerformanceRegressionTests
                     new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 960, 540), Color: DrawColor.Opaque(24, 32, 40)),
                     new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(24 + i % 12, 24, 180, 48), Color: DrawColor.Opaque(72, 120, 180))
                 ]), 2),
-                [new HitTestTarget(new PixelRectangle(24, 24, 180, 48), "PerfButton")]);
+                [new HitTestTarget(new PixelRectangle(24, 24, 180, 48), new ActionId(100))]);
 
             await compositor.RenderAsync(frame, cancellationToken);
         }

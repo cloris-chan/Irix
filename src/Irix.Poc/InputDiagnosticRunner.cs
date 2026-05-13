@@ -50,7 +50,7 @@ internal static class InputDiagnosticRunner
             HitInputDiagnosticTarget,
             out _);
         AddOwnershipLine($"afterMove {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState afterMove Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+        AddButtonVisualStateLine($"buttonState afterMove Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -63,7 +63,7 @@ internal static class InputDiagnosticRunner
             HitInputDiagnosticTarget,
             out _);
         AddOwnershipLine($"afterPress {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState afterPress Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+        AddButtonVisualStateLine($"buttonState afterPress Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 3, X: 32, Y: 200),
@@ -71,7 +71,7 @@ internal static class InputDiagnosticRunner
             HitInputDiagnosticTarget,
             out _);
         AddOwnershipLine($"duringCaptureMove {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState duringCaptureMove Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+        AddButtonVisualStateLine($"buttonState duringCaptureMove Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
 
         var releaseMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -84,7 +84,7 @@ internal static class InputDiagnosticRunner
             HitInputDiagnosticTarget,
             out var releaseMessage);
         AddOwnershipLine($"releaseOutside mapped={releaseMapped} message={DiagnosticsFormatter.FormatMessage(releaseMessage)} {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState releaseOutside Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+        AddButtonVisualStateLine($"buttonState releaseOutside Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
 
         var enterMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 5, X: 0, Y: 0, KeyCode: 0x0D),
@@ -130,7 +130,7 @@ internal static class InputDiagnosticRunner
             HitInputDiagnosticTarget,
             out _);
         AddOwnershipLine($"focusLost {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState focusLost Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, nameof(CounterMessage.Increment)))}");
+        AddButtonVisualStateLine($"buttonState focusLost Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
         lines.Add("events:");
         var eventLines = new List<string>();
         foreach (var diagnosticEvent in ownershipState.DiagnosticEvents)
@@ -213,19 +213,19 @@ internal static class InputDiagnosticRunner
             currentTree = nextTree;
         }
 
-        static string? HitDiagnosticTarget(int x, int y)
+        static ActionId HitDiagnosticTarget(int x, int y)
         {
-            return x == 32 && y == 140 ? nameof(CounterMessage.Increment) : null;
+            return x == 32 && y == 140 ? ActionIdRegistry.Increment : default;
         }
     }
 
-    private static string? HitInputDiagnosticTarget(int x, int y)
+    private static ActionId HitInputDiagnosticTarget(int x, int y)
     {
         return (x, y) switch
         {
-            (32, 140) => nameof(CounterMessage.Increment),
-            (32, 200) => nameof(CounterMessage.Decrement),
-            _ => null
+            (32, 140) => ActionIdRegistry.Increment,
+            (32, 200) => ActionIdRegistry.Decrement,
+            _ => default
         };
     }
 }

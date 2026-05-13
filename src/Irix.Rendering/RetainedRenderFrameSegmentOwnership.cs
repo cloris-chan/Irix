@@ -205,11 +205,11 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
         _runtimeOwner?.Invalidate();
     }
 
-    public bool TryGetSegmentedOwnerActionIdAt(int x, int y, out string actionId)
+    public bool TryGetSegmentedOwnerActionIdAt(int x, int y, out ActionId actionId)
     {
         if (_runtimeOwner is null)
         {
-            actionId = string.Empty;
+            actionId = ActionId.None;
             return false;
         }
 
@@ -238,7 +238,7 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             return true;
         }
 
-        actionId = string.Empty;
+        actionId = ActionId.None;
         return false;
     }
 

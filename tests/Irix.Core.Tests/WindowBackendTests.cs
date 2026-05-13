@@ -41,7 +41,7 @@ public sealed class WindowBackendTests
         };
         var hitTargets = new[]
         {
-            new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")
+            new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))
         };
         var result = backend.Build(commands, hitTargets, resources);
 
@@ -65,6 +65,6 @@ public sealed class WindowBackendTests
 
         Assert.Single(result.HitTargets);
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), result.HitTargets[0].Bounds);
-        Assert.Equal("Increment", result.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(1), result.HitTargets[0].ActionId);
     }
 }

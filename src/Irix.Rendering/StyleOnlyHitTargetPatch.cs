@@ -21,7 +21,7 @@ internal static class StyleOnlyHitTargetPatch
         for (var elementIndex = 0; elementIndex < nextLayoutElements.Count; elementIndex++)
         {
             var element = nextLayoutElements[elementIndex];
-            if (string.IsNullOrWhiteSpace(element.ActionId))
+            if (element.ActionId.IsNone)
             {
                 continue;
             }

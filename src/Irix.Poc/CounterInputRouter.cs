@@ -12,7 +12,7 @@ internal static class CounterInputRouter
     /// </summary>
     public static bool TryMapInput(
         RawInputEvent inputEvent,
-        Func<int, int, string?> tryGetActionIdAt,
+        Func<int, int, ActionId> tryGetActionIdAt,
         out CounterMessage message)
     {
         return TryMapInput(inputEvent, new InputOwnershipState(), tryGetActionIdAt, out message);
@@ -25,7 +25,7 @@ internal static class CounterInputRouter
     public static bool TryMapInput(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
-        Func<int, int, string?> tryGetActionIdAt,
+        Func<int, int, ActionId> tryGetActionIdAt,
         out CounterMessage message)
     {
         switch (inputEvent.Kind)
@@ -40,7 +40,7 @@ internal static class CounterInputRouter
             case RawInputEventKind.PointerReleased
                 when inputEvent.Button == PointerButton.Left:
                 var actionId = ownershipState.ReleasePointer(inputEvent, tryGetActionIdAt);
-                if (!string.IsNullOrWhiteSpace(actionId))
+                if (!actionId.IsNone)
                 {
                     message = MapActionId(actionId);
                     return true;
@@ -50,7 +50,7 @@ internal static class CounterInputRouter
             case RawInputEventKind.KeyPressed
                 when inputEvent.KeyCode is 0x0D or 0x20:
                 var focusedActionId = ownershipState.GetKeyboardTarget();
-                if (!string.IsNullOrWhiteSpace(focusedActionId))
+                if (!focusedActionId.IsNone)
                 {
                     message = MapActionId(focusedActionId);
                     return true;
@@ -64,7 +64,6 @@ internal static class CounterInputRouter
                 message = new CounterMessage.Decrement();
                 return true;
             case RawInputEventKind.PointerWheel when inputEvent.Delta != 0:
-                // Send raw delta — HandleInput accumulates for coalescing
                 message = new CounterMessage.WheelRaw(inputEvent.Delta);
                 return true;
             case RawInputEventKind.CharacterInput when inputEvent.Character is 'r' or 'R':
@@ -79,13 +78,13 @@ internal static class CounterInputRouter
         return false;
     }
 
-    internal static CounterMessage MapActionId(string actionId)
+    internal static CounterMessage MapActionId(ActionId actionId)
     {
-        return actionId switch
+        return actionId.Value switch
         {
-            nameof(CounterMessage.Increment) => new CounterMessage.Increment(),
-            nameof(CounterMessage.Decrement) => new CounterMessage.Decrement(),
-            nameof(CounterMessage.Reset) => new CounterMessage.Reset(0),
+            1 => new CounterMessage.Increment(),
+            2 => new CounterMessage.Decrement(),
+            3 => new CounterMessage.Reset(0),
             _ => throw new NotSupportedException($"Unsupported action id: {actionId}")
         };
     }

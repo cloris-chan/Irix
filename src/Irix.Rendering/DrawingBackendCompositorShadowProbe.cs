@@ -9,9 +9,9 @@ internal readonly record struct DrawingBackendCompositorShadowProbeExecution(
 
 internal readonly record struct DrawingBackendCompositorShadowProbeHitTest(
     bool BeforeHit,
-    string BeforeActionId,
+    ActionId BeforeActionId,
     bool AfterHit,
-    string AfterActionId)
+    ActionId AfterActionId)
 {
     public bool Unchanged => BeforeHit == AfterHit && BeforeActionId == AfterActionId;
 }

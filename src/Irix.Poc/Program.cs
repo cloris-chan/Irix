@@ -215,9 +215,9 @@ internal static class Program
             }
         }
 
-        string? TryGetActionIdAt(int x, int y)
+        ActionId TryGetActionIdAt(int x, int y)
         {
-            return d3d12Compositor.TryGetActionIdAt(x, y, out var actionId) ? actionId : null;
+            return d3d12Compositor.TryGetActionIdAt(x, y, out var actionId) ? actionId : ActionId.None;
         }
 
         void OnTopologyChanged(object? sender, ScreenTopologyChangedEventArgs args)
@@ -366,7 +366,7 @@ internal static class Program
     internal static bool TryMapInputForRuntime(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
-        Func<int, int, string?> tryGetActionIdAt,
+        Func<int, int, ActionId> tryGetActionIdAt,
         out CounterMessage? message)
     {
         var before = ownershipState.Snapshot;

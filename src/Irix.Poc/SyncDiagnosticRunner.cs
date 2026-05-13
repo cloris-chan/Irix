@@ -87,14 +87,14 @@ internal static class SyncDiagnosticRunner
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
+                attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
                     VirtualNodeFactory.Button("SyncTest", 2,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("syncBtn"))),
+                        VirtualNodeAttribute.Action(new ActionId(300))),
                     VirtualNodeFactory.Text($"Frame {i} — sync overhead measurement", 3),
                     VirtualNodeFactory.Button("Another", 4,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("another"))),
+                        VirtualNodeAttribute.Action(new ActionId(301))),
                 ]);
 
             using var patch = hasPreviousRoot

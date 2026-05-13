@@ -101,7 +101,7 @@ internal static class FullDiagnosticRunner
         var layoutRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Layout Pipeline Test", 2),
             VirtualNodeFactory.Button("LayoutBtn", 3,
-                ControlActionAttributeAdapter.ToAttribute("LayoutBtn")));
+                VirtualNodeAttribute.Action(new ActionId(100))));
         var layoutViewport = new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
         using var layoutBatch = layoutPipeline.Build(layoutRoot, layoutViewport);
 

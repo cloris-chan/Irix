@@ -123,21 +123,21 @@ internal static class RetainedRootMetadataPatcher
         out RetainedPartialApplyFallbackReason reason)
     {
         reason = RetainedPartialApplyFallbackReason.None;
-        if (!TryGetChangedAttributeNames(retainedAttributes, nextAttributes, out var changedNames))
+        if (!TryGetChangedAttributeKeys(retainedAttributes, nextAttributes, out var changedKeys))
         {
             reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
             return false;
         }
 
-        foreach (var name in changedNames)
+        foreach (var key in changedKeys)
         {
-            if (!IsControlMetadataAttribute(name))
+            if (!key.IsControlMetadataKey())
             {
                 reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
                 return false;
             }
 
-            if (!TryValidateNextMetadataAttribute(nextAttributes, name))
+            if (!TryValidateNextMetadataAttribute(nextAttributes, key))
             {
                 reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
                 return false;
@@ -147,69 +147,70 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool TryGetChangedAttributeNames(
+    private static bool TryGetChangedAttributeKeys(
         VirtualNodeAttribute[] retainedAttributes,
         VirtualNodeAttribute[] nextAttributes,
-        out string[] changedNames)
+        out VirtualAttributeKey[] changedKeys)
     {
-        changedNames = [];
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        changedKeys = [];
+        var keys = new HashSet<VirtualAttributeKey>();
         foreach (var attribute in retainedAttributes)
         {
-            names.Add(attribute.Name);
+            keys.Add(attribute.Key);
         }
 
         foreach (var attribute in nextAttributes)
         {
-            names.Add(attribute.Name);
+            keys.Add(attribute.Key);
         }
 
-        var changed = new List<string>();
-        foreach (var name in names)
+        var changed = new List<VirtualAttributeKey>();
+        foreach (var key in keys)
         {
-            if (!TryGetUniqueAttribute(retainedAttributes, name, out var retainedFound, out var retainedAttribute)
-                || !TryGetUniqueAttribute(nextAttributes, name, out var nextFound, out var nextAttribute))
+            if (key == VirtualAttributeKey.Unknown) continue;
+            if (!TryGetUniqueAttribute(retainedAttributes, key, out var retainedFound, out var retainedAttribute)
+                || !TryGetUniqueAttribute(nextAttributes, key, out var nextFound, out var nextAttribute))
             {
                 return false;
             }
 
             if (retainedFound != nextFound || retainedAttribute.Value != nextAttribute.Value)
             {
-                changed.Add(name);
+                changed.Add(key);
             }
         }
 
-        changedNames = [.. changed];
+        changedKeys = [.. changed];
         return true;
     }
 
-    private static bool TryValidateNextMetadataAttribute(VirtualNodeAttribute[] attributes, string name)
+    private static bool TryValidateNextMetadataAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key)
     {
-        if (!TryGetUniqueAttribute(attributes, name, out var found, out var attribute))
+        if (!TryGetUniqueAttribute(attributes, key, out var found, out var attribute))
         {
             return false;
         }
 
         if (!found)
         {
-            return name != "ActionId";
+            return key != VirtualAttributeKey.ActionId;
         }
 
-        return name switch
+        return key switch
         {
-            "ActionId" => attribute.Value.Kind == AttributeValueKind.Text && !string.IsNullOrWhiteSpace(attribute.Value.Text),
-            "IsHovered" or "IsPressed" or "IsFocused" => attribute.Value.Kind == AttributeValueKind.Boolean,
+            VirtualAttributeKey.ActionId => attribute.Value.Kind == AttributeValueKind.ActionId && !attribute.Value.ActionIdValue.IsNone,
+            VirtualAttributeKey.IsHovered or VirtualAttributeKey.IsPressed or VirtualAttributeKey.IsFocused => attribute.Value.Kind == AttributeValueKind.Boolean,
             _ => false
         };
     }
 
-    private static bool TryGetUniqueAttribute(VirtualNodeAttribute[] attributes, string name, out bool found, out VirtualNodeAttribute attribute)
+    private static bool TryGetUniqueAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key, out bool found, out VirtualNodeAttribute attribute)
     {
         found = false;
         attribute = default;
         foreach (var candidate in attributes)
         {
-            if (candidate.Name != name)
+            if (candidate.Key != key)
             {
                 continue;
             }
@@ -244,8 +245,8 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool IsControlMetadataAttribute(string name)
+    private static bool IsControlMetadataAttribute(VirtualAttributeKey key)
     {
-        return name is "ActionId" or "IsHovered" or "IsPressed" or "IsFocused";
+        return key.IsControlMetadataKey();
     }
 }

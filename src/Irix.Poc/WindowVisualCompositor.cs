@@ -38,7 +38,7 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
         return ValueTask.CompletedTask;
     }
 
-    public bool TryGetActionIdAt(int x, int y, out string actionId)
+    public bool TryGetActionIdAt(int x, int y, out ActionId actionId)
     {
         lock (_hitTargetsLock)
         {
@@ -52,7 +52,7 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
             }
         }
 
-        actionId = string.Empty;
+        actionId = ActionId.None;
         return false;
     }
 

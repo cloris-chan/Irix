@@ -97,7 +97,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var containerClipWidth = isRootContainer ? ctx.AvailableWidth + (ctx.Style.HorizontalPadding * 2) : ctx.AvailableWidth;
 
                 var implicitVisibleHeight = ctx.ResolveImplicitVisibleHeight(contentTop);
-                var explicitHeight = GetDimension(node, "Height", 0);
+                var explicitHeight = GetDimension(node, VirtualAttributeKey.Height, 0);
                 var containerVisibleHeight = explicitHeight > 0
                     ? Math.Min(explicitHeight, implicitVisibleHeight)
                     : implicitVisibleHeight;
@@ -124,7 +124,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var contentHeight = Math.Max(cursorY - contentTop, 0);
 
                 var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
-                var scrollY = Math.Clamp(GetDimension(node, "ScrollY", 0), 0, maxScrollY);
+                var scrollY = Math.Clamp(GetDimension(node, VirtualAttributeKey.ScrollY, 0), 0, maxScrollY);
 
                 if (scrollY > 0)
                 {
@@ -195,8 +195,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var rectangleBounds = new PixelRectangle(
                     ctx.Style.HorizontalPadding,
                     cursorY,
-                    GetDimension(node, "Width", Math.Min(ctx.AvailableWidth, 160)),
-                    GetDimension(node, "Height", ctx.Style.RectangleHeight));
+                    GetDimension(node, VirtualAttributeKey.Width, Math.Min(ctx.AvailableWidth, 160)),
+                    GetDimension(node, VirtualAttributeKey.Height, ctx.Style.RectangleHeight));
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: ctx.ClipBounds));
                 cursorY += rectangleBounds.Height + ctx.Style.ItemSpacing;
@@ -210,11 +210,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     ctx.Style.MinimumButtonWidth,
                     label.Length * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
                 var bounds = new PixelRectangle(ctx.Style.HorizontalPadding, cursorY, width, ctx.Style.ButtonHeight);
-                var actionId = GetTextAttribute(node, "ActionId");
+                var actionId = GetActionId(node);
                 var buttonState = new ButtonVisualState(
-                    IsHovered: GetBooleanAttribute(node, "IsHovered"),
-                    IsPressed: GetBooleanAttribute(node, "IsPressed"),
-                    IsFocused: GetBooleanAttribute(node, "IsFocused"));
+                    IsHovered: GetBooleanAttribute(node, VirtualAttributeKey.IsHovered),
+                    IsPressed: GetBooleanAttribute(node, VirtualAttributeKey.IsPressed),
+                    IsFocused: GetBooleanAttribute(node, VirtualAttributeKey.IsFocused));
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
@@ -271,11 +271,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return count;
     }
 
-    private static int GetDimension(VirtualNode node, string attributeName, int defaultValue)
+    private static int GetDimension(VirtualNode node, VirtualAttributeKey key, int defaultValue)
     {
         foreach (var attribute in node.Attributes)
         {
-            if (attribute.Name == attributeName && attribute.Value.Kind == AttributeValueKind.Number)
+            if (attribute.Key == key && attribute.Value.Kind == AttributeValueKind.Number)
             {
                 return (int)attribute.Value.Number;
             }
@@ -298,24 +298,24 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return "Button";
     }
 
-    private static string? GetTextAttribute(VirtualNode node, string attributeName)
+    private static ActionId GetActionId(VirtualNode node)
     {
         foreach (var attribute in node.Attributes)
         {
-            if (attribute.Name == attributeName && attribute.Value.Kind == AttributeValueKind.Text)
+            if (attribute.Key == VirtualAttributeKey.ActionId && attribute.Value.Kind == AttributeValueKind.ActionId)
             {
-                return attribute.Value.Text;
+                return attribute.Value.ActionIdValue;
             }
         }
 
-        return null;
+        return ActionId.None;
     }
 
-    private static bool GetBooleanAttribute(VirtualNode node, string attributeName)
+    private static bool GetBooleanAttribute(VirtualNode node, VirtualAttributeKey key)
     {
         foreach (var attribute in node.Attributes)
         {
-            if (attribute.Name == attributeName && attribute.Value.Kind == AttributeValueKind.Boolean)
+            if (attribute.Key == key && attribute.Value.Kind == AttributeValueKind.Boolean)
             {
                 return attribute.Value.Boolean;
             }

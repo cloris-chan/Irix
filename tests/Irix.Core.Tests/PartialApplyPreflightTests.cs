@@ -408,9 +408,9 @@ public sealed class PartialApplyPreflightTests
             new DrawCommand(DrawCommandKind.FillRect),
             new DrawCommand(DrawCommandKind.DrawTextRun));
         var oldRoot = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+            VirtualNodeFactory.Button("Increment", 2, VirtualNodeAttribute.Action(new ActionId(1))));
         var replacementRoot = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+            VirtualNodeFactory.Button("Increment", 2, VirtualNodeAttribute.Action(new ActionId(4))));
         var oldSnapshot = oldTracker.CreateSnapshot();
         var replacementSnapshot = replacementTracker.CreateSnapshot();
 
@@ -437,7 +437,7 @@ public sealed class PartialApplyPreflightTests
         using var frame = new SegmentedRetainedFrameOwner();
         using var batch = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         var root = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Increment", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+            VirtualNodeFactory.Button("Increment", 2, VirtualNodeAttribute.Action(new ActionId(1))));
 
         frame.ApplyFull(batch, tracker.CreateSnapshot(), root);
         frame.Invalidate();
@@ -534,7 +534,7 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         using var batch = pipeline.Build(root, viewport);
         var retainedCommandCount = pipeline.RetainedFrame.CommandCount;
         var retainedResources = pipeline.RetainedFrame.Resources;
@@ -567,13 +567,13 @@ public sealed class PartialApplyPreflightTests
         var buttonBounds = new PixelRectangle(16, 120, 140, 40);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
-        var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, "Increment") };
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
+        var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, new ActionId(1)) };
         var snapshot = CreateStyleOnlySnapshot(viewport, buttonBounds, retainedRoot, retainedHitTargets);
         var oldTracker = new SnapshotTracker("old");
         var replacementTracker = new SnapshotTracker("replacement");
@@ -596,15 +596,15 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, plan.Kind);
         Assert.True(hitTargetProjection.Succeeded);
-        Assert.Equal("Increment.Secondary", hitTargetProjection.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(4), hitTargetProjection.HitTargets[0].ActionId);
         Assert.True(rootPatch.Succeeded);
         Assert.True(accepted);
         Assert.Equal(1, oldTracker.RetainCount);
         Assert.Equal(0, oldTracker.ReleaseCount);
         Assert.Equal(1, replacementTracker.RetainCount);
         Assert.Equal(0, replacementTracker.ReleaseCount);
-        AssertTextAttribute(frame.RetainedRoot.Children[0], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(frame.RetainedRoot.Children[0], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(frame.RetainedRoot.Children[0], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(frame.RetainedRoot.Children[0], VirtualAttributeKey.IsHovered, true);
         Assert.Collection(frame.ResourceSegments,
             segment => AssertSegment(segment, 0, 1, oldTracker.Snapshot),
             segment => AssertSegment(segment, 1, 1, replacementTracker.Snapshot));
@@ -639,12 +639,12 @@ public sealed class PartialApplyPreflightTests
         using var replacementBatch = new RenderFrameBatch(replacementCommands, [], replacementResolver, [(1, 1)]);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment v2", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         frame.ApplyFull(oldBatch, oldTracker.CreateSnapshot(), retainedRoot);
         var beforeSegments = frame.ResourceSegments.ToArray();
@@ -678,13 +678,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var shadow = new SegmentedRetainedFrameShadowHarness();
         using var frame1 = pipeline.Build(retainedRoot, viewport);
@@ -704,8 +704,8 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, result.PlanKind);
         Assert.Equal(RetainedPartialApplyFallbackReason.None, result.Reason);
         Assert.Equal(3, shadow.Owner.CommandCount);
-        AssertTextAttribute(shadow.Owner.RetainedRoot.Children[1], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(shadow.Owner.RetainedRoot.Children[1], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(shadow.Owner.RetainedRoot.Children[1], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(shadow.Owner.RetainedRoot.Children[1], VirtualAttributeKey.IsHovered, true);
         Assert.Equal(2, result.Reads.Count);
         var replacementRead = Assert.Single(result.Reads, segment => ReferenceEquals(frame2.Resources, segment.Resolver));
         var retainedRead = Assert.Single(result.Reads, segment => ReferenceEquals(frame1.Resources, segment.Resolver));
@@ -727,12 +727,12 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment v2", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var shadow = new SegmentedRetainedFrameShadowHarness();
         using var frame1 = pipeline.Build(retainedRoot, viewport);
@@ -767,13 +767,13 @@ public sealed class PartialApplyPreflightTests
         var buttonBounds = new PixelRectangle(16, 120, 140, 40);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
-        var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, "Increment") };
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
+        var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, new ActionId(1)) };
         var snapshot = CreateStyleOnlySnapshot(viewport, buttonBounds, retainedRoot, retainedHitTargets);
         using var shadow = new SegmentedRetainedFrameShadowHarness();
         using var oldBatch = new RenderFrameBatch(
@@ -806,7 +806,7 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
         var directPipeline = new RenderPipeline();
         using var directBatch = directPipeline.Build(root, viewport);
@@ -850,13 +850,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = diagnosticHarness.Build(retainedRoot, viewport);
         var fullResult = diagnosticHarness.LastShadowResult;
@@ -899,7 +899,7 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
@@ -950,13 +950,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
@@ -1001,7 +1001,7 @@ public sealed class PartialApplyPreflightTests
         Assert.True(directHit);
         Assert.Equal(directHit, feedHit);
         Assert.Equal(directActionId, feedActionId);
-        Assert.Equal("Increment.Secondary", feedActionId);
+        Assert.Equal(new ActionId(4), feedActionId);
         Assert.Equal(diagnosticsBefore, diagnosticsAfter);
         if (enabled)
         {
@@ -1025,12 +1025,12 @@ public sealed class PartialApplyPreflightTests
     {
         var root = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var resources = new NamedResolver("frame");
         using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.DrawTextRun));
         using var batch = new RenderFrameBatch(
             commands,
-            [new HitTestTarget(new PixelRectangle(16, 16, 140, 40), "Increment")],
+            [new HitTestTarget(new PixelRectangle(16, 16, 140, 40), new ActionId(1))],
             resources,
             [(0, 1)]);
         using var retainedFrame = new RetainedRenderFrame();
@@ -1064,18 +1064,18 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment fallback", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Fallback")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(5)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         using var ownership = new RetainedRenderFrameSegmentOwnership(pipeline.RetainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
 
         using var frame1 = pipeline.Build(retainedRoot, viewport);
@@ -1093,9 +1093,9 @@ public sealed class PartialApplyPreflightTests
         Assert.Collection(ownership.RuntimeOwner!.ResourceSegments,
             segment => Assert.Same(frame1.Resources, segment.Snapshot.Resolver),
             segment => Assert.Same(frame2.Resources, segment.Snapshot.Resolver));
-        AssertTextAttribute(ownership.RuntimeOwner.RetainedRoot.Children[1], "ActionId", "Increment.Secondary");
+        Assert.Equal(new ActionId(4), GetSingleAttribute(ownership.RuntimeOwner.RetainedRoot.Children[1], VirtualAttributeKey.ActionId).Value.ActionIdValue);
         var partialHitTarget = Assert.Single(ownership.RuntimeOwner.HitTargets);
-        Assert.Equal("Increment.Secondary", partialHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), partialHitTarget.ActionId);
         Assert.True(pipeline.RetainedFrame.TryReadFrame(out var retainedCommands, out var retainedResources));
         Assert.Equal(frame2.Commands.Count, retainedCommands.Length);
         Assert.Same(frame2.Resources, retainedResources);
@@ -1111,7 +1111,7 @@ public sealed class PartialApplyPreflightTests
             segment => Assert.Same(frame1.Resources, segment.Snapshot.Resolver),
             segment => Assert.Same(frame2.Resources, segment.Snapshot.Resolver));
         var preservedHitTarget = Assert.Single(ownership.RuntimeOwner.HitTargets);
-        Assert.Equal("Increment.Secondary", preservedHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), preservedHitTarget.ActionId);
         Assert.True(pipeline.RetainedFrame.TryReadFrame(out var fallbackCommands, out var fallbackResources));
         Assert.Equal(frame3.Commands.Count, fallbackCommands.Length);
         Assert.Same(frame3.Resources, fallbackResources);
@@ -1143,15 +1143,15 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var changedViewport = new PixelRectangle(0, 0, 640, 480);
         var buttonBounds = new PixelRectangle(16, 16, 140, 40);
-        var root1 = CreateActionButtonRoot("Action.One");
-        var root2 = CreateActionButtonRoot("Action.Two");
-        var root3 = CreateActionButtonRoot("Action.Three");
-        var root4 = CreateActionButtonRoot("Action.Four");
-        var root6 = CreateActionButtonRoot("Action.Six");
-        var root7 = CreateActionButtonRoot("Action.Seven");
+        var root1 = CreateActionButtonRoot(new ActionId(101));
+        var root2 = CreateActionButtonRoot(new ActionId(102));
+        var root3 = CreateActionButtonRoot(new ActionId(103));
+        var root4 = CreateActionButtonRoot(new ActionId(104));
+        var root6 = CreateActionButtonRoot(new ActionId(106));
+        var root7 = CreateActionButtonRoot(new ActionId(107));
         var emptyRoot = VirtualNodeFactory.ScrollContainer(1);
 
-        using var frame1 = CreateFrameResourceTextBatch("one", [new HitTestTarget(buttonBounds, "Action.One")], [], commandCount: 2);
+        using var frame1 = CreateFrameResourceTextBatch("one", [new HitTestTarget(buttonBounds, new ActionId(101))], [], commandCount: 2);
         var fullResult = ownership.Update(null, root1, viewport, frame1);
         frame1.Dispose();
 
@@ -1159,7 +1159,7 @@ public sealed class PartialApplyPreflightTests
         AssertFrameResourceCapture(tracker.Captures[0], frame1.Resources, retainCount: 1, releaseCount: 0);
         Assert.Equal("one", ResolveSegmentText(Assert.Single(ownership.RuntimeOwner!.ReadSegments())));
 
-        using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, "Action.Two")], [(1, 1)], commandCount: 2);
+        using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, new ActionId(102))], [(1, 1)], commandCount: 2);
         var snapshot1 = CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
         var partialResult = ownership.Update(snapshot1, root2, viewport, frame2);
         frame2.Dispose();
@@ -1171,7 +1171,7 @@ public sealed class PartialApplyPreflightTests
             segment => Assert.Equal("one", ResolveSegmentText(segment)),
             segment => Assert.Equal("two", ResolveSegmentText(segment)));
 
-        using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, "Action.Three")], [(2, 1)], commandCount: 2);
+        using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, new ActionId(103))], [(2, 1)], commandCount: 2);
         var snapshot2 = CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
         var rejectedFallbackResult = ownership.Update(snapshot2, root3, viewport, frame3);
         frame3.Dispose();
@@ -1188,7 +1188,7 @@ public sealed class PartialApplyPreflightTests
             segment => Assert.Equal("one", ResolveSegmentText(segment)),
             segment => Assert.Equal("two", ResolveSegmentText(segment)));
 
-        using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, "Action.Four")], [(1, 1)], commandCount: 2);
+        using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, new ActionId(104))], [(1, 1)], commandCount: 2);
         var snapshot3 = CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
         var fallbackResult = ownership.Update(snapshot3, root4, changedViewport, frame4);
         frame4.Dispose();
@@ -1214,7 +1214,7 @@ public sealed class PartialApplyPreflightTests
         AssertFrameResourceCapture(tracker.Captures[1], frame2.Resources, retainCount: 1, releaseCount: 1);
         AssertFrameResourceCapture(tracker.Captures[3], emptyFrame.Resources, retainCount: 0, releaseCount: 0);
 
-        using var frame6 = CreateFrameResourceTextBatch("six", [new HitTestTarget(buttonBounds, "Action.Six")], [], commandCount: 1);
+        using var frame6 = CreateFrameResourceTextBatch("six", [new HitTestTarget(buttonBounds, new ActionId(106))], [], commandCount: 1);
         ownership.Update(null, root6, viewport, frame6);
         frame6.Dispose();
         AssertFrameResourceCapture(tracker.Captures[4], frame6.Resources, retainCount: 1, releaseCount: 0);
@@ -1225,7 +1225,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Empty(ownership.RuntimeOwner.ResourceSegments);
         AssertFrameResourceCapture(tracker.Captures[4], frame6.Resources, retainCount: 1, releaseCount: 1);
 
-        using var frame7 = CreateFrameResourceTextBatch("seven", [new HitTestTarget(buttonBounds, "Action.Seven")], [], commandCount: 1);
+        using var frame7 = CreateFrameResourceTextBatch("seven", [new HitTestTarget(buttonBounds, new ActionId(107))], [], commandCount: 1);
         ownership.Update(null, root7, viewport, frame7);
         frame7.Dispose();
         ownership.Dispose();
@@ -1256,21 +1256,21 @@ public sealed class PartialApplyPreflightTests
         using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, options);
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var buttonBounds = new PixelRectangle(16, 16, 140, 40);
-        var root1 = CreateActionButtonRoot("Action.One");
-        var root2 = CreateActionButtonRoot("Action.Two");
-        var root3 = CreateActionButtonRoot("Action.Three");
-        var root4 = CreateActionButtonRoot("Action.Four");
+        var root1 = CreateActionButtonRoot(new ActionId(101));
+        var root2 = CreateActionButtonRoot(new ActionId(102));
+        var root3 = CreateActionButtonRoot(new ActionId(103));
+        var root4 = CreateActionButtonRoot(new ActionId(104));
 
-        using var frame1 = CreateFrameResourceTextBatch("one", [new HitTestTarget(buttonBounds, "Action.One")], [], commandCount: 2);
+        using var frame1 = CreateFrameResourceTextBatch("one", [new HitTestTarget(buttonBounds, new ActionId(101))], [], commandCount: 2);
         ownership.Update(null, root1, viewport, frame1);
         frame1.Dispose();
-        using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, "Action.Two")], [(1, 1)], commandCount: 2);
+        using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, new ActionId(102))], [(1, 1)], commandCount: 2);
         ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner!.HitTargets, LayoutRebuildReason.StyleOnly), root2, viewport, frame2);
         frame2.Dispose();
-        using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, "Action.Three")], [(1, 1)], commandCount: 2);
+        using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, new ActionId(103))], [(1, 1)], commandCount: 2);
         ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly), root3, viewport, frame3);
         frame3.Dispose();
-        using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, "Action.Four")], [(0, 1)], commandCount: 2);
+        using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, new ActionId(104))], [(0, 1)], commandCount: 2);
         ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly), root4, viewport, frame4);
         frame4.Dispose();
 
@@ -1298,17 +1298,17 @@ public sealed class PartialApplyPreflightTests
         using var retainedFrame = new RetainedRenderFrame();
         using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
         using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
-        var hitTarget = new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Action.Clip", new PixelRectangle(10, 10, 20, 20));
+        var hitTarget = new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(109), new PixelRectangle(10, 10, 20, 20));
         using var batch = new RenderFrameBatch(commands, [hitTarget], new NamedResolver("frame"), [(0, 1)]);
-        var root = CreateActionButtonRoot("Action.Clip");
+        var root = CreateActionButtonRoot(new ActionId(109));
         using var compositor = new DrawingBackendCompositor(new CapturingBackend());
 
         ownership.Update(null, root, new PixelRectangle(0, 0, 100, 100), batch);
         await compositor.RenderAsync(batch, cancellationToken);
 
-        AssertOwnerAndProductionHit(ownership, compositor, 11, 11, expectedHit: true, "Action.Clip");
-        AssertOwnerAndProductionHit(ownership, compositor, 5, 5, expectedHit: false, string.Empty);
-        AssertOwnerAndProductionHit(ownership, compositor, 120, 120, expectedHit: false, string.Empty);
+        AssertOwnerAndProductionHit(ownership, compositor, 11, 11, expectedHit: true, new ActionId(109));
+        AssertOwnerAndProductionHit(ownership, compositor, 5, 5, expectedHit: false, ActionId.None);
+        AssertOwnerAndProductionHit(ownership, compositor, 120, 120, expectedHit: false, ActionId.None);
     }
 
     [Fact]
@@ -1319,8 +1319,8 @@ public sealed class PartialApplyPreflightTests
         using var ownership = new RetainedRenderFrameSegmentOwnership(pipeline.RetainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
         using var compositor = new DrawingBackendCompositor(new CapturingBackend());
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var retainedRoot = CreateActionButtonRoot("Increment");
-        var nextRoot = CreateActionButtonRoot("Increment.Secondary");
+        var retainedRoot = CreateActionButtonRoot(new ActionId(1));
+        var nextRoot = CreateActionButtonRoot(new ActionId(4));
 
         using var frame1 = pipeline.Build(retainedRoot, viewport);
         ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
@@ -1333,7 +1333,7 @@ public sealed class PartialApplyPreflightTests
         var hitY = hitTarget.Bounds.Y + 1;
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, result.Kind);
-        AssertOwnerAndProductionHit(ownership, compositor, hitX, hitY, expectedHit: true, "Increment.Secondary");
+        AssertOwnerAndProductionHit(ownership, compositor, hitX, hitY, expectedHit: true, new ActionId(4));
     }
 
     [Fact]
@@ -1346,18 +1346,18 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Primary", 10,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Primary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                VirtualNodeAttribute.Action(new ActionId(200)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))),
             VirtualNodeFactory.Button("Secondary", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(201)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Primary", 10,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Primary.Changed")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                VirtualNodeAttribute.Action(new ActionId(202)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))),
             VirtualNodeFactory.Button("Secondary", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(201)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = pipeline.Build(retainedRoot, viewport);
         ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
@@ -1374,8 +1374,8 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, result.ShadowResult.Reason);
         Assert.True(ownership.TryGetSegmentedOwnerActionIdAt(hitX, hitY, out var ownerActionId));
         Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var productionActionId));
-        Assert.Equal("Primary", ownerActionId);
-        Assert.Equal("Primary.Changed", productionActionId);
+        Assert.Equal(new ActionId(200), ownerActionId);
+        Assert.Equal(new ActionId(202), productionActionId);
     }
 
     [Fact]
@@ -1438,7 +1438,7 @@ public sealed class PartialApplyPreflightTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var root = CreateActionButtonRoot("Increment");
+        var root = CreateActionButtonRoot(new ActionId(1));
         var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
@@ -1514,7 +1514,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Empty(backend.ExecuteCalls);
         Assert.Equal(0, backend.SetDirtyCommandRangeCount);
         Assert.False(hit);
-        Assert.Equal(string.Empty, actionId);
+        Assert.True(actionId.IsNone);
     }
 
     [Fact]
@@ -1525,13 +1525,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
@@ -1580,7 +1580,7 @@ public sealed class PartialApplyPreflightTests
         AssertHandoffBackendCallsMatchReads([fullResult, partialResult], harnessBackend);
         AssertDirtyRangePlansMatchBackend([fullResult, partialResult], harnessBackend);
         Assert.True(harnessHit);
-        Assert.Equal("Increment.Secondary", harnessActionId);
+        Assert.Equal(new ActionId(4), harnessActionId);
         Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
         Assert.Equal(directPipeline.LastDirtyCommandRanges, feedPipeline.LastDirtyCommandRanges);
         Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
@@ -1603,11 +1603,11 @@ public sealed class PartialApplyPreflightTests
         using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var batch = new RenderFrameBatch(
             commands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Clipped", new PixelRectangle(10, 10, 20, 20))],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(203), new PixelRectangle(10, 10, 20, 20))],
             new NamedResolver("clipped"),
             [(0, 1)]);
         var root = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Clipped", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Clipped"))));
+            VirtualNodeFactory.Button("Clipped", 2, VirtualNodeAttribute.Action(new ActionId(203))));
         ownership.Update(null, root, new PixelRectangle(0, 0, 100, 100), batch);
         var backend = new DirtyRangeAwareCapturingBackend();
         using var harness = new RetainedRenderFrameHandoffHarness(backend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
@@ -1624,11 +1624,11 @@ public sealed class PartialApplyPreflightTests
         Assert.Single(backend.DirtyRanges);
         Assert.Equal([(0, 1)], backend.DirtyRanges[0]);
         Assert.True(inClipHit);
-        Assert.Equal("Clipped", inClipActionId);
+        Assert.Equal(new ActionId(203), inClipActionId);
         Assert.False(outsideClipHit);
-        Assert.Equal(string.Empty, outsideClipActionId);
+        Assert.True(outsideClipActionId.IsNone);
         Assert.False(outsideBoundsHit);
-        Assert.Equal(string.Empty, outsideBoundsActionId);
+        Assert.True(outsideBoundsActionId.IsNone);
     }
 
     [Fact]
@@ -1639,13 +1639,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport);
@@ -1690,7 +1690,7 @@ public sealed class PartialApplyPreflightTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var retainedRoot = CreateActionButtonRoot("Increment");
+        var retainedRoot = CreateActionButtonRoot(new ActionId(1));
         var emptyRoot = VirtualNodeFactory.ScrollContainer(1);
 
         var directPipeline = new RenderPipeline();
@@ -1727,7 +1727,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Empty(harnessBackend.ExecuteCalls);
         Assert.Equal(0, harnessBackend.SetDirtyCommandRangeCount);
         Assert.False(harnessHit);
-        Assert.Equal(string.Empty, harnessActionId);
+        Assert.True(harnessActionId.IsNone);
         Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
         Assert.Equal(directCompositor.EmptyFrameCount, feedCompositor.EmptyFrameCount);
         Assert.Equal(directCompositor.FullApplyCount, feedCompositor.FullApplyCount);
@@ -1744,13 +1744,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var pipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(pipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport);
@@ -1798,11 +1798,11 @@ public sealed class PartialApplyPreflightTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var retainedRoot = CreateActionButtonRoot("Increment");
+        var retainedRoot = CreateActionButtonRoot(new ActionId(1));
         var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment fallback", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Fallback")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(5)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var pipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(pipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport);
@@ -1833,8 +1833,8 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(1, harnessBackend.SetDirtyCommandRangeCount);
         Assert.True(harnessHit);
         Assert.True(productionHit);
-        Assert.Equal("Increment", harnessActionId);
-        Assert.Equal("Increment.Fallback", productionActionId);
+        Assert.Equal(new ActionId(1), harnessActionId);
+        Assert.Equal(new ActionId(5), productionActionId);
     }
 
     [Fact]
@@ -1857,7 +1857,7 @@ public sealed class PartialApplyPreflightTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var root = CreateActionButtonRoot("Increment");
+        var root = CreateActionButtonRoot(new ActionId(1));
         var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
@@ -1887,7 +1887,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffReason.Disabled, feedCompositor.LastHandoffResult.Reason);
         Assert.False(feedCompositor.HasHandoffCandidateHarness);
         Assert.False(candidateHit);
-        Assert.Equal(string.Empty, candidateActionId);
+        Assert.True(candidateActionId.IsNone);
         Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
         Assert.Equal(directCompositor.FullApplyCount, feedCompositor.FullApplyCount);
         Assert.Equal(directCompositor.PartialApplyCount, feedCompositor.PartialApplyCount);
@@ -1908,13 +1908,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
@@ -1979,7 +1979,7 @@ public sealed class PartialApplyPreflightTests
         }
 
         Assert.True(candidateHit);
-        Assert.Equal("Increment.Secondary", candidateActionId);
+        Assert.Equal(new ActionId(4), candidateActionId);
         Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
         Assert.Equal(directPipeline.LastDirtyCommandRanges, feedPipeline.LastDirtyCommandRanges);
         Assert.Equal(directCompositor.RenderCount, feedCompositor.RenderCount);
@@ -1999,13 +1999,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var disabledFeed = new SegmentedRetainedFrameProductionOwnerFeed(new RenderPipeline(), StyleOnlyFastPathOptions.Disabled.ProductionOwnerOptions);
         using var disabledFrame = disabledFeed.Build(retainedRoot, viewport);
@@ -2034,7 +2034,7 @@ public sealed class PartialApplyPreflightTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var root = CreateActionButtonRoot("Increment");
+        var root = CreateActionButtonRoot(new ActionId(1));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, viewport);
         var backend = new DirtyRangeAwareCapturingBackend();
@@ -2050,7 +2050,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffReason.MissingOwner, result.Reason);
         Assert.False(compositor.HasHandoffCandidateHarness);
         Assert.False(hit);
-        Assert.Equal(string.Empty, actionId);
+        Assert.True(actionId.IsNone);
         Assert.Equal(["BeginFrame", $"Execute:{frame.Commands.Count}", "EndFrame"], backend.Calls);
     }
 
@@ -2064,11 +2064,11 @@ public sealed class PartialApplyPreflightTests
         using var selectedCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var selectedFrame = new RenderFrameBatch(
             selectedCommands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Selected", new PixelRectangle(10, 10, 20, 20))],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(204), new PixelRectangle(10, 10, 20, 20))],
             new NamedResolver("selected"),
             [(0, 1)]);
         var selectedRoot = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Selected", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Selected"))));
+            VirtualNodeFactory.Button("Selected", 2, VirtualNodeAttribute.Action(new ActionId(204))));
         ownership.Update(null, selectedRoot, viewport, selectedFrame);
         SetOwnershipLastResult(ownership, new SegmentedRetainedFrameProductionOwnerFeedResult(
             new SegmentedRetainedFrameShadowResult(
@@ -2093,23 +2093,23 @@ public sealed class PartialApplyPreflightTests
         using var fallbackCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var fallbackFrame = new RenderFrameBatch(
             fallbackCommands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Fallback")],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(205))],
             new NamedResolver("fallback"),
             [(0, 1)]);
         var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Fallback", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Fallback"))));
+            VirtualNodeFactory.Button("Fallback", 2, VirtualNodeAttribute.Action(new ActionId(205))));
         ownership.Update(null, fallbackRoot, viewport, fallbackFrame);
         await compositor.RenderAsync(fallbackFrame, ownership, new FrameContext(100, 100), cancellationToken);
         var fallbackHit = compositor.TryGetActionIdAt(5, 5, out var fallbackActionId);
 
         Assert.True(inClipHit);
-        Assert.Equal("Selected", inClipActionId);
+        Assert.Equal(new ActionId(204), inClipActionId);
         Assert.False(outsideClipHit);
-        Assert.Equal(string.Empty, outsideClipActionId);
+        Assert.True(outsideClipActionId.IsNone);
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, compositor.LastHandoffResult.Kind);
         Assert.Equal(DrawingBackendCompositorHandoffReason.OwnerFallbackFull, compositor.LastHandoffResult.Reason);
         Assert.True(fallbackHit);
-        Assert.Equal("Fallback", fallbackActionId);
+        Assert.Equal(new ActionId(205), fallbackActionId);
     }
 
     [Fact]
@@ -2124,11 +2124,11 @@ public sealed class PartialApplyPreflightTests
             new DrawCommand(DrawCommandKind.FillRect));
         using var frame = new RenderFrameBatch(
             commands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Selected")],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(204))],
             new NamedResolver("selected"),
             [(0, 1)]);
         var root = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Selected", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Selected"))));
+            VirtualNodeFactory.Button("Selected", 2, VirtualNodeAttribute.Action(new ActionId(204))));
         ownership.Update(null, root, viewport, frame);
         var freshAcceptedResult = new SegmentedRetainedFrameProductionOwnerFeedResult(
             new SegmentedRetainedFrameShadowResult(
@@ -2168,11 +2168,11 @@ public sealed class PartialApplyPreflightTests
         using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var frame = new RenderFrameBatch(
             commands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Selected")],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(204))],
             new NamedResolver("selected"),
             [(0, 1), (0, 1)]);
         var root = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Selected", 2, new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Selected"))));
+            VirtualNodeFactory.Button("Selected", 2, VirtualNodeAttribute.Action(new ActionId(204))));
         ownership.Update(null, root, viewport, frame);
         SetOwnershipLastResult(ownership, new SegmentedRetainedFrameProductionOwnerFeedResult(
             new SegmentedRetainedFrameShadowResult(
@@ -2206,13 +2206,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var ownerFrame = feed.Build(retainedRoot, viewport);
@@ -2236,11 +2236,11 @@ public sealed class PartialApplyPreflightTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var retainedRoot = CreateActionButtonRoot("Increment");
+        var retainedRoot = CreateActionButtonRoot(new ActionId(1));
         var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment fallback", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Fallback")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(5)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var emptyRoot = VirtualNodeFactory.ScrollContainer(1);
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
@@ -2277,13 +2277,13 @@ public sealed class PartialApplyPreflightTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 100, 100);
-        var root = CreateActionButtonRoot("Rejected");
+        var root = CreateActionButtonRoot(new ActionId(300));
         using var retainedFrame = new RetainedRenderFrame();
         using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
         using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var frame = new RenderFrameBatch(
             commands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Rejected")],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(300))],
             new NamedResolver("rejected"),
             [(0, 1)]);
         ownership.Update(null, root, viewport, frame);
@@ -2324,13 +2324,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport);
@@ -2384,13 +2384,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var pipeline = new RenderPipeline();
         using var ownership = new RetainedRenderFrameSegmentOwnership(
             pipeline.RetainedFrame,
@@ -2442,18 +2442,18 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment fallback", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Fallback")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(5)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
 
         using var frame1 = feed.Build(retainedRoot, viewport);
         var fullResult = feed.LastResult;
@@ -2477,10 +2477,10 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, partialResult.Kind);
         Assert.False(partialResult.FallbackApplied);
         Assert.True(partialResult.OwnerStatePreservedBeforeFallback);
-        AssertTextAttribute(partialRootSnapshot.Children[1], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(partialRootSnapshot.Children[1], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(partialRootSnapshot.Children[1], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(partialRootSnapshot.Children[1], VirtualAttributeKey.IsHovered, true);
         var partialHitTarget = Assert.Single(partialHitTargets);
-        Assert.Equal("Increment.Secondary", partialHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), partialHitTarget.ActionId);
         Assert.Equal(frame1.HitTargets[0].Bounds, partialHitTarget.Bounds);
         Assert.Equal(frame1.HitTargets[0].ClipBounds, partialHitTarget.ClipBounds);
         Assert.Collection(partialSegments,
@@ -2508,10 +2508,10 @@ public sealed class PartialApplyPreflightTests
         Assert.False(fallbackResult.FallbackApplied);
         Assert.True(fallbackResult.OwnerStatePreservedBeforeFallback);
         Assert.Equal(RetainedPartialApplyFallbackReason.NotStyleOnly, fallbackResult.ShadowResult.Reason);
-        AssertTextAttribute(feed.RuntimeOwner!.RetainedRoot.Children[1], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(feed.RuntimeOwner!.RetainedRoot.Children[1], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], VirtualAttributeKey.IsHovered, true);
         var preservedHitTarget = Assert.Single(feed.RuntimeOwner.HitTargets);
-        Assert.Equal("Increment.Secondary", preservedHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), preservedHitTarget.ActionId);
         Assert.Collection(feed.RuntimeOwner.ResourceSegments,
             segment => Assert.Same(frame1.Resources, segment.Snapshot.Resolver),
             segment => Assert.Same(frame2.Resources, segment.Snapshot.Resolver));
@@ -2522,7 +2522,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, rebuildResult.Kind);
         Assert.False(rebuildResult.FallbackApplied);
         var rebuildHitTarget = Assert.Single(feed.RuntimeOwner.HitTargets);
-        Assert.Equal("Increment.Fallback", rebuildHitTarget.ActionId);
+        Assert.Equal(new ActionId(5), rebuildHitTarget.ActionId);
         var rebuildSegment = Assert.Single(feed.RuntimeOwner.ResourceSegments);
         Assert.Same(frame4.Resources, rebuildSegment.Snapshot.Resolver);
     }
@@ -2536,18 +2536,18 @@ public sealed class PartialApplyPreflightTests
         var root1 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var root2 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var root3 = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Third")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(6)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
 
         using var frame1 = feed.Build(root1, viewport);
         using var frame2 = feed.Build(root2, viewport, [2]);
@@ -2557,10 +2557,10 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, secondResult.Kind);
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, thirdResult.Kind);
-        AssertTextAttribute(feed.RuntimeOwner!.RetainedRoot.Children[1], "ActionId", "Increment.Third");
-        AssertBooleanAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], "IsHovered", false);
+        Assert.Equal(new ActionId(6), GetSingleAttribute(feed.RuntimeOwner!.RetainedRoot.Children[1], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], VirtualAttributeKey.IsHovered, false);
         var hitTarget = Assert.Single(feed.RuntimeOwner.HitTargets);
-        Assert.Equal("Increment.Third", hitTarget.ActionId);
+        Assert.Equal(new ActionId(6), hitTarget.ActionId);
     }
 
     [Fact]
@@ -2570,12 +2570,12 @@ public sealed class PartialApplyPreflightTests
         var replacementResolver = new NamedResolver("replacement");
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         using var owner = new SegmentedRetainedFrameRuntimeOwner();
         using var oldCommands = CreateCommandBatch(
             new DrawCommand(DrawCommandKind.FillRect),
@@ -2585,11 +2585,11 @@ public sealed class PartialApplyPreflightTests
             new DrawCommand(DrawCommandKind.DrawTextRun));
         using var oldBatch = new RenderFrameBatch(
             oldCommands,
-            [new HitTestTarget(new PixelRectangle(16, 16, 140, 40), "Increment")],
+            [new HitTestTarget(new PixelRectangle(16, 16, 140, 40), new ActionId(1))],
             oldResolver);
         using var malformedBatch = new RenderFrameBatch(
             replacementCommands,
-            [new HitTestTarget(new PixelRectangle(16, 16, 140, 40), "Increment.Secondary")],
+            [new HitTestTarget(new PixelRectangle(16, 16, 140, 40), new ActionId(4))],
             replacementResolver,
             [(2, 1)]);
         var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(
@@ -2617,7 +2617,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Same(replacementResolver, fallbackRead.Resolver);
         Assert.Equal(partialRoot, owner.RetainedRoot);
         var fallbackHitTarget = Assert.Single(owner.HitTargets);
-        Assert.Equal("Increment.Secondary", fallbackHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), fallbackHitTarget.ActionId);
     }
 
     [Fact]
@@ -2628,18 +2628,18 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Primary", 10,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Primary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                VirtualNodeAttribute.Action(new ActionId(200)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))),
             VirtualNodeFactory.Button("Secondary", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(201)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Primary", 10,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Primary.Changed")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                VirtualNodeAttribute.Action(new ActionId(202)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))),
             VirtualNodeFactory.Button("Secondary", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(201)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = feed.Build(retainedRoot, viewport);
         var beforeReads = feed.RuntimeOwner!.ReadSegments();
@@ -2657,8 +2657,8 @@ public sealed class PartialApplyPreflightTests
         AssertSegmentedReadsEqual(beforeReads, [new SegmentedFrameRead(0, frame1.Commands.Memory[..frame1.Commands.Count].ToArray(), frame1.Resources)]);
         Assert.Single(beforeSegments);
         Assert.Equal(retainedRoot, beforeRoot);
-        Assert.Equal(["Primary", "Secondary"], beforeHitTargets.Select(target => target.ActionId).ToArray());
-        Assert.Equal(["Primary", "Secondary"], feed.RuntimeOwner.HitTargets.Select(target => target.ActionId).ToArray());
+        Assert.Equal([new ActionId(200), new ActionId(201)], beforeHitTargets.Select(target => target.ActionId).ToArray());
+        Assert.Equal([new ActionId(200), new ActionId(201)], feed.RuntimeOwner.HitTargets.Select(target => target.ActionId).ToArray());
         Assert.Equal(retainedRoot, feed.RuntimeOwner.RetainedRoot);
         var preservedSegment = Assert.Single(feed.RuntimeOwner.ResourceSegments);
         Assert.Same(frame1.Resources, preservedSegment.Snapshot.Resolver);
@@ -2671,7 +2671,7 @@ public sealed class PartialApplyPreflightTests
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var emptyRoot = VirtualNodeFactory.ScrollContainer(1);
 
         var directPipeline = new RenderPipeline();
@@ -2727,13 +2727,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = feed.Build(retainedRoot, viewport);
         using var frame2 = feed.Build(partialRoot, viewport, [2]);
@@ -2756,10 +2756,10 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, acceptedResult.Kind);
         Assert.Equal(VirtualNodeKind.ScrollContainer, beforeRoot.Kind);
         Assert.Equal(2, beforeRoot.Children.Length);
-        AssertTextAttribute(beforeRoot.Children[1], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(beforeRoot.Children[1], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(beforeRoot.Children[1], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(beforeRoot.Children[1], VirtualAttributeKey.IsHovered, true);
         var beforeHitTarget = Assert.Single(beforeHitTargets);
-        Assert.Equal("Increment.Secondary", beforeHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), beforeHitTarget.ActionId);
         Assert.Collection(beforeReads,
             segment => Assert.Same(frame1.Resources, segment.Resolver),
             segment => Assert.Same(frame2.Resources, segment.Resolver));
@@ -2771,10 +2771,10 @@ public sealed class PartialApplyPreflightTests
         Assert.True(fallbackResult.OwnerStatePreservedBeforeFallback);
         Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, fallbackResult.ShadowResult.PlanKind);
         Assert.Equal(RetainedPartialApplyFallbackReason.UnstableCommandRange, fallbackResult.ShadowResult.Reason);
-        AssertTextAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(feed.RuntimeOwner.RetainedRoot.Children[1], VirtualAttributeKey.IsHovered, true);
         var fallbackHitTarget = Assert.Single(feed.RuntimeOwner.HitTargets);
-        Assert.Equal("Increment.Secondary", fallbackHitTarget.ActionId);
+        Assert.Equal(new ActionId(4), fallbackHitTarget.ActionId);
         Assert.Collection(feed.RuntimeOwner.ResourceSegments,
             segment => Assert.Same(frame1.Resources, segment.Snapshot.Resolver),
             segment => Assert.Same(frame2.Resources, segment.Snapshot.Resolver));
@@ -2791,13 +2791,13 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Text("Static", 10),
             VirtualNodeFactory.Button("Increment", 20,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = diagnosticHarness.Build(retainedRoot, viewport);
         using var frame2 = diagnosticHarness.Build(nextRoot, viewport, [2]);
@@ -2821,7 +2821,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, shadowResult.Kind);
         Assert.True(probeResult.HitTestUnchanged);
         Assert.True(probeResult.HitTest.BeforeHit);
-        Assert.Equal("Increment.Secondary", probeResult.HitTest.BeforeActionId);
+        Assert.Equal(new ActionId(4), probeResult.HitTest.BeforeActionId);
         Assert.Equal(probeResult.HitTest.BeforeHit, hitBeforeProbe);
         Assert.Equal(probeResult.HitTest.BeforeActionId, actionBeforeProbe);
         Assert.Equal(["BeginFrame", "Execute:1", "Execute:2", "EndFrame"], probeResult.Calls);
@@ -2854,7 +2854,7 @@ public sealed class PartialApplyPreflightTests
         using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var frame = new RenderFrameBatch(
             commands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Clipped", new PixelRectangle(10, 10, 20, 20))],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(203), new PixelRectangle(10, 10, 20, 20))],
             new NamedResolver("frame"),
             [(0, 1)]);
         using var compositor = new DrawingBackendCompositor(new CapturingBackend());
@@ -2880,7 +2880,7 @@ public sealed class PartialApplyPreflightTests
         using var commands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var frame = new RenderFrameBatch(
             commands,
-            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), "Increment")],
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(1))],
             new NamedResolver("frame"));
         using var compositor = new DrawingBackendCompositor(new CapturingBackend());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -2919,18 +2919,18 @@ public sealed class PartialApplyPreflightTests
         var rebuildResolver = new NamedResolver("rebuild");
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var partialRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         var fallbackRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment fallback", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Fallback"))));
+                VirtualNodeAttribute.Action(new ActionId(5))));
         var rebuildRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment rebuild", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Rebuild"))));
+                VirtualNodeAttribute.Action(new ActionId(7))));
         using var runtimeOwner = new SegmentedRetainedFrameRuntimeOwner();
         using var oldCommands = CreateCommandBatch(
             new DrawCommand(DrawCommandKind.DrawTextRun),
@@ -2951,8 +2951,8 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fullResult.Kind);
         Assert.True(accepted);
-        AssertTextAttribute(runtimeOwner.RetainedRoot.Children[0], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(runtimeOwner.RetainedRoot.Children[0], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(runtimeOwner.RetainedRoot.Children[0], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(runtimeOwner.RetainedRoot.Children[0], VirtualAttributeKey.IsHovered, true);
         Assert.Collection(runtimeOwner.ResourceSegments,
             segment =>
             {
@@ -3116,13 +3116,13 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+                VirtualNodeAttribute.Action(new ActionId(4))));
         var retainedHitTargets = new[]
         {
-            new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment", new PixelRectangle(0, 0, 960, 540))
+            new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1), new PixelRectangle(0, 0, 960, 540))
         };
 
         var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], retainedHitTargets);
@@ -3132,7 +3132,7 @@ public sealed class PartialApplyPreflightTests
         var target = Assert.Single(projection.HitTargets);
         Assert.Equal(retainedHitTargets[0].Bounds, target.Bounds);
         Assert.Equal(retainedHitTargets[0].ClipBounds, target.ClipBounds);
-        Assert.Equal("Increment.Secondary", target.ActionId);
+        Assert.Equal(new ActionId(4), target.ActionId);
     }
 
     [Fact]
@@ -3140,18 +3140,18 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))),
+                VirtualNodeAttribute.Action(new ActionId(1))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement"))));
+                VirtualNodeAttribute.Action(new ActionId(2))));
 
         var projection = HitTargetMetadataProjector.ProjectActionIds(
             retainedRoot,
             nextRoot,
             [1],
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))]);
 
         Assert.False(projection.Succeeded);
         Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, projection.FallbackReason);
@@ -3163,7 +3163,7 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2));
 
@@ -3171,7 +3171,7 @@ public sealed class PartialApplyPreflightTests
             retainedRoot,
             nextRoot,
             [1],
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))]);
 
         Assert.False(projection.Succeeded);
         Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, projection.FallbackReason);
@@ -3183,16 +3183,16 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
 
         var projection = HitTargetMetadataProjector.ProjectActionIds(
             retainedRoot,
             nextRoot,
             [0],
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))]);
 
         Assert.False(projection.Succeeded);
         Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, projection.FallbackReason);
@@ -3204,22 +3204,22 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))),
+                VirtualNodeAttribute.Action(new ActionId(1))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement"))));
+                VirtualNodeAttribute.Action(new ActionId(2))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))),
+                VirtualNodeAttribute.Action(new ActionId(4))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement.Secondary"))));
+                VirtualNodeAttribute.Action(new ActionId(206))));
 
         var projection = HitTargetMetadataProjector.ProjectActionIds(
             retainedRoot,
             nextRoot,
             [1],
             [
-                new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment"),
-                new HitTestTarget(new PixelRectangle(16, 172, 140, 40), "Decrement")
+                new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1)),
+                new HitTestTarget(new PixelRectangle(16, 172, 140, 40), new ActionId(2))
             ]);
 
         Assert.False(projection.Succeeded);
@@ -3232,16 +3232,16 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))));
+                VirtualNodeAttribute.Action(new ActionId(1))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 99,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))));
+                VirtualNodeAttribute.Action(new ActionId(4))));
 
         var projection = HitTargetMetadataProjector.ProjectActionIds(
             retainedRoot,
             nextRoot,
             [1],
-            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment")]);
+            [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1))]);
 
         Assert.False(projection.Succeeded);
         Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, projection.FallbackReason);
@@ -3253,25 +3253,25 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment"))),
+                VirtualNodeAttribute.Action(new ActionId(1))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement"))));
+                VirtualNodeAttribute.Action(new ActionId(2))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary"))),
+                VirtualNodeAttribute.Action(new ActionId(4))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement.Secondary"))));
+                VirtualNodeAttribute.Action(new ActionId(206))));
         var retainedHitTargets = new[]
         {
-            new HitTestTarget(new PixelRectangle(16, 120, 140, 40), "Increment"),
-            new HitTestTarget(new PixelRectangle(16, 172, 140, 40), "Decrement")
+            new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1)),
+            new HitTestTarget(new PixelRectangle(16, 172, 140, 40), new ActionId(2))
         };
 
         var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1, 3], retainedHitTargets);
 
         Assert.True(projection.Succeeded);
-        Assert.Equal("Increment.Secondary", projection.HitTargets[0].ActionId);
-        Assert.Equal("Decrement.Secondary", projection.HitTargets[1].ActionId);
+        Assert.Equal(new ActionId(4), projection.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(206), projection.HitTargets[1].ActionId);
         Assert.Equal(retainedHitTargets[0].Bounds, projection.HitTargets[0].Bounds);
         Assert.Equal(retainedHitTargets[1].Bounds, projection.HitTargets[1].Bounds);
     }
@@ -3282,21 +3282,21 @@ public sealed class PartialApplyPreflightTests
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.ScrollContainer(10,
                 VirtualNodeFactory.Button("Inner", 2,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Inner")))));
+                    VirtualNodeAttribute.Action(new ActionId(207)))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.ScrollContainer(10,
                 VirtualNodeFactory.Button("Inner", 2,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Inner.Secondary")))));
+                    VirtualNodeAttribute.Action(new ActionId(208)))));
         var retainedHitTargets = new[]
         {
-            new HitTestTarget(new PixelRectangle(32, 136, 140, 40), "Inner", new PixelRectangle(16, 16, 928, 508))
+            new HitTestTarget(new PixelRectangle(32, 136, 140, 40), new ActionId(207), new PixelRectangle(16, 16, 928, 508))
         };
 
         var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [2], retainedHitTargets);
 
         Assert.True(projection.Succeeded);
         var target = Assert.Single(projection.HitTargets);
-        Assert.Equal("Inner.Secondary", target.ActionId);
+        Assert.Equal(new ActionId(208), target.ActionId);
         Assert.Equal(retainedHitTargets[0].Bounds, target.Bounds);
         Assert.Equal(retainedHitTargets[0].ClipBounds, target.ClipBounds);
     }
@@ -3306,28 +3306,28 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false)),
-                new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(false)),
-                new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsPressed, AttributeValue.FromBoolean(false)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsFocused, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)),
-                new VirtualNodeAttribute("IsPressed", AttributeValue.FromBoolean(true)),
-                new VirtualNodeAttribute("IsFocused", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsPressed, AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsFocused, AttributeValue.FromBoolean(true))));
 
         var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
 
         Assert.True(patch.Succeeded);
         Assert.Equal(RetainedPartialApplyFallbackReason.None, patch.FallbackReason);
         var patchedButton = patch.Root.Children[0];
-        AssertTextAttribute(patchedButton, "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(patchedButton, "IsHovered", true);
-        AssertBooleanAttribute(patchedButton, "IsPressed", true);
-        AssertBooleanAttribute(patchedButton, "IsFocused", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(patchedButton, VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(patchedButton, VirtualAttributeKey.IsHovered, true);
+        AssertBooleanAttribute(patchedButton, VirtualAttributeKey.IsPressed, true);
+        AssertBooleanAttribute(patchedButton, VirtualAttributeKey.IsFocused, true);
         Assert.Equal(retainedRoot.Children[0].Children[0], patchedButton.Children[0]);
-        AssertTextAttribute(retainedRoot.Children[0], "ActionId", "Increment");
+        Assert.Equal(new ActionId(1), GetSingleAttribute(retainedRoot.Children[0], VirtualAttributeKey.ActionId).Value.ActionIdValue);
     }
 
     [Fact]
@@ -3335,18 +3335,18 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))),
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(2)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(2)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
 
@@ -3359,12 +3359,12 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 99,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
 
@@ -3377,12 +3377,12 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment v2", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
 
@@ -3395,13 +3395,13 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true)),
-                new VirtualNodeAttribute("ButtonHeight", AttributeValue.FromNumber(52))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true)),
+                new VirtualNodeAttribute(VirtualAttributeKey.ButtonHeight, AttributeValue.FromNumber(52))));
 
         var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
 
@@ -3414,14 +3414,14 @@ public sealed class PartialApplyPreflightTests
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))),
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))),
             VirtualNodeFactory.Button("Decrement", 4,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Decrement"))));
+                VirtualNodeAttribute.Action(new ActionId(2))));
 
         var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)]);
 
@@ -3436,17 +3436,17 @@ public sealed class PartialApplyPreflightTests
         var buttonBounds = new PixelRectangle(16, 120, 140, 40);
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
-        var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, "Increment") };
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
+        var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, new ActionId(1)) };
         var layoutResult = new LayoutTreeResult(
             [
                 new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24), Text: "Static"),
-                new LayoutElement(LayoutElementKind.Button, buttonBounds, Text: "Increment", ActionId: "Increment.Secondary", ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
+                new LayoutElement(LayoutElementKind.Button, buttonBounds, Text: "Increment", ActionId: new ActionId(4), ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
             ],
             [],
             [(1, 1)]);
@@ -3489,10 +3489,10 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, plan.Kind);
         Assert.Equal([(1, 1)], plan.DirtyCommandRanges);
         Assert.True(hitTargetProjection.Succeeded);
-        Assert.Equal("Increment.Secondary", hitTargetProjection.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(4), hitTargetProjection.HitTargets[0].ActionId);
         Assert.True(rootPatch.Succeeded);
-        AssertTextAttribute(rootPatch.Root.Children[0], "ActionId", "Increment.Secondary");
-        AssertBooleanAttribute(rootPatch.Root.Children[0], "IsHovered", true);
+        Assert.Equal(new ActionId(4), GetSingleAttribute(rootPatch.Root.Children[0], VirtualAttributeKey.ActionId).Value.ActionIdValue);
+        AssertBooleanAttribute(rootPatch.Root.Children[0], VirtualAttributeKey.IsHovered, true);
 
         using var commandBuffer = new RetainedCommandBuffer();
         using var table = new RetainedResourceSegmentTable();
@@ -3602,8 +3602,8 @@ public sealed class PartialApplyPreflightTests
     public async Task Rollback_enabled_to_disabled_compositor_falls_back_to_full_path()
     {
         var cancellationToken = CancellationToken.None;
-        var retainedRoot = CreateActionButtonRoot("increment");
-        var partialRoot = CreateActionButtonRoot("decrement");
+        var retainedRoot = CreateActionButtonRoot(new ActionId(1));
+        var partialRoot = CreateActionButtonRoot(new ActionId(2));
         var viewport = new PixelRectangle(0, 0, 960, 540);
 
         // Phase 1: Enabled compositor with ownership (handoff path)
@@ -3668,7 +3668,7 @@ public sealed class PartialApplyPreflightTests
     public async Task Rollback_default_on_to_forced_off_preserves_retained_frame_state()
     {
         var cancellationToken = CancellationToken.None;
-        var retainedRoot = CreateActionButtonRoot("increment");
+        var retainedRoot = CreateActionButtonRoot(new ActionId(1));
         var viewport = new PixelRectangle(0, 0, 960, 540);
 
         // Phase 1: Default-on (enabled handoff) renders a frame
@@ -3710,27 +3710,27 @@ public sealed class PartialApplyPreflightTests
         Assert.NotEmpty(disabledBackend.ExecuteCalls);
     }
 
-    private static void AssertTextAttribute(VirtualNode node, string name, string expected)
+    private static void AssertTextAttribute(VirtualNode node, VirtualAttributeKey key, string expected)
     {
-        var attribute = GetSingleAttribute(node, name);
+        var attribute = GetSingleAttribute(node, key);
         Assert.Equal(AttributeValueKind.Text, attribute.Value.Kind);
         Assert.Equal(expected, attribute.Value.Text);
     }
 
-    private static void AssertBooleanAttribute(VirtualNode node, string name, bool expected)
+    private static void AssertBooleanAttribute(VirtualNode node, VirtualAttributeKey key, bool expected)
     {
-        var attribute = GetSingleAttribute(node, name);
+        var attribute = GetSingleAttribute(node, key);
         Assert.Equal(AttributeValueKind.Boolean, attribute.Value.Kind);
         Assert.Equal(expected, attribute.Value.Boolean);
     }
 
-    private static VirtualNodeAttribute GetSingleAttribute(VirtualNode node, string name)
+    private static VirtualNodeAttribute GetSingleAttribute(VirtualNode node, VirtualAttributeKey key)
     {
         var matchCount = 0;
         var match = default(VirtualNodeAttribute);
         foreach (var attribute in node.Attributes)
         {
-            if (attribute.Name != name)
+            if (attribute.Key != key)
             {
                 continue;
             }
@@ -3781,7 +3781,7 @@ public sealed class PartialApplyPreflightTests
         var layoutResult = new LayoutTreeResult(
             [
                 new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24), Text: "Static"),
-                new LayoutElement(LayoutElementKind.Button, buttonBounds, Text: "Increment", ActionId: "Increment.Secondary", ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
+                new LayoutElement(LayoutElementKind.Button, buttonBounds, Text: "Increment", ActionId: new ActionId(4), ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
             ],
             [],
             [(1, 1)]);
@@ -3797,12 +3797,12 @@ public sealed class PartialApplyPreflightTests
             reason);
     }
 
-    private static VirtualNode CreateActionButtonRoot(string actionId)
+    private static VirtualNode CreateActionButtonRoot(ActionId actionId)
     {
         return VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText(actionId)),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(actionId),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
     }
 
     private static RenderFrameBatch CreateFrameResourceTextBatch(
@@ -3831,7 +3831,7 @@ public sealed class PartialApplyPreflightTests
         int x,
         int y,
         bool expectedHit,
-        string expectedActionId)
+        ActionId expectedActionId)
     {
         var ownerHit = ownership.TryGetSegmentedOwnerActionIdAt(x, y, out var ownerActionId);
         var productionHit = compositor.TryGetActionIdAt(x, y, out var productionActionId);
@@ -3860,12 +3860,12 @@ public sealed class PartialApplyPreflightTests
         replacementResolver = new NamedResolver("replacement");
         var retainedRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(false))));
+                VirtualNodeAttribute.Action(new ActionId(1)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
         var nextRoot = VirtualNodeFactory.ScrollContainer(1,
             VirtualNodeFactory.Button("Increment", 2,
-                new VirtualNodeAttribute("ActionId", AttributeValue.FromText("Increment.Secondary")),
-                new VirtualNodeAttribute("IsHovered", AttributeValue.FromBoolean(true))));
+                VirtualNodeAttribute.Action(new ActionId(4)),
+                new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
         using var oldBatch = CreateCommandBatch(
             new DrawCommand(DrawCommandKind.DrawTextRun),
             new DrawCommand(DrawCommandKind.DrawTextRun));

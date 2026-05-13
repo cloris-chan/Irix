@@ -26,15 +26,15 @@ public sealed class ScrollTextSyncTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
+                attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
                     VirtualNodeFactory.Button("Button A", 2,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btnA"))),
+                        VirtualNodeAttribute.Action(new ActionId(100))),
                     VirtualNodeFactory.Button("Button B", 3,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btnB"))),
+                        VirtualNodeAttribute.Action(new ActionId(101))),
                     VirtualNodeFactory.Button("Button C", 4,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btnC"))),
+                        VirtualNodeAttribute.Action(new ActionId(102))),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -73,11 +73,11 @@ public sealed class ScrollTextSyncTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
+                attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
                     VirtualNodeFactory.Button("ScrollBtn", 2,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("scrollBtn"))),
+                        VirtualNodeAttribute.Action(new ActionId(100))),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -116,13 +116,13 @@ public sealed class ScrollTextSyncTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
+                attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
                     VirtualNodeFactory.Button("Fast", 2,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("fast"))),
+                        VirtualNodeAttribute.Action(new ActionId(100))),
                     VirtualNodeFactory.Button("Scroll", 3,
-                        new VirtualNodeAttribute("ActionId", AttributeValue.FromText("scroll"))),
+                        VirtualNodeAttribute.Action(new ActionId(101))),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -210,11 +210,11 @@ public sealed class ScrollTextSyncTests
         return new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute("ScrollY", AttributeValue.FromNumber(scrollY))],
+            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
             children:
             [
                 VirtualNodeFactory.Button("Btn", 2,
-                    new VirtualNodeAttribute("ActionId", AttributeValue.FromText("btn"))),
+                    VirtualNodeAttribute.Action(new ActionId(100))),
             ]);
     }
 

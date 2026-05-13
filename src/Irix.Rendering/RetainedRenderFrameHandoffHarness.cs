@@ -125,7 +125,7 @@ internal sealed class RetainedRenderFrameHandoffHarness(IDrawingBackend backend,
         return LastResult;
     }
 
-    public bool TryGetActionIdAt(int x, int y, out string actionId)
+    public bool TryGetActionIdAt(int x, int y, out ActionId actionId)
     {
         foreach (var hitTarget in _hitTargets)
         {
@@ -152,7 +152,7 @@ internal sealed class RetainedRenderFrameHandoffHarness(IDrawingBackend backend,
             return true;
         }
 
-        actionId = string.Empty;
+        actionId = ActionId.None;
         return false;
     }
 

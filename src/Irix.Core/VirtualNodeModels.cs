@@ -22,7 +22,8 @@ public enum AttributeValueKind
     None,
     Text,
     Number,
-    Boolean
+    Boolean,
+    ActionId
 }
 
 public enum NodeContentKind
@@ -39,7 +40,7 @@ public readonly record struct VirtualNode
 {
     public VirtualNode(
         VirtualNodeKind kind,
-        ulong key = 0,
+        NodeKey key = default,
         NodeContent content = default,
         VirtualNodeAttribute[]? attributes = null,
         VirtualNode[]? children = null)
@@ -53,7 +54,7 @@ public readonly record struct VirtualNode
 
     public VirtualNodeKind Kind { get; }
 
-    public ulong Key { get; }
+    public NodeKey Key { get; }
 
     public NodeContent Content { get; }
 
@@ -62,7 +63,13 @@ public readonly record struct VirtualNode
     public VirtualNode[] Children { get; }
 }
 
-public readonly record struct VirtualNodeAttribute(string Name, AttributeValue Value);
+public readonly record struct VirtualNodeAttribute(VirtualAttributeKey Key, AttributeValue Value)
+{
+    public string Name => Key.ToString();
+
+    public static VirtualNodeAttribute Action(ActionId actionId) =>
+        new(VirtualAttributeKey.ActionId, AttributeValue.FromActionId(actionId));
+}
 
 public readonly record struct NodeContent(
     NodeContentKind Kind,
@@ -83,7 +90,8 @@ public readonly record struct AttributeValue(
     AttributeValueKind Kind,
     string? Text = null,
     double Number = 0,
-    bool Boolean = false)
+    bool Boolean = false,
+    ActionId ActionIdValue = default)
 {
     public static AttributeValue None => default;
 
@@ -92,6 +100,8 @@ public readonly record struct AttributeValue(
     public static AttributeValue FromNumber(double value) => new(AttributeValueKind.Number, Number: value);
 
     public static AttributeValue FromBoolean(bool value) => new(AttributeValueKind.Boolean, Boolean: value);
+
+    public static AttributeValue FromActionId(ActionId value) => new(AttributeValueKind.ActionId, ActionIdValue: value);
 }
 
 public readonly record struct VirtualNodePatch(
@@ -102,27 +112,27 @@ public readonly record struct VirtualNodePatch(
 
 public static class VirtualNodeFactory
 {
-    public static VirtualNode Text(string content, ulong key = 0, params VirtualNodeAttribute[] attributes) =>
-        new(VirtualNodeKind.Text, key, NodeContent.FromText(content), attributes);
+    public static VirtualNode Text(string content, uint key = 0, params VirtualNodeAttribute[] attributes) =>
+        new(VirtualNodeKind.Text, new NodeKey(key), NodeContent.FromText(content), attributes);
 
-    public static VirtualNode Rectangle(double width, double height, ulong key = 0, params VirtualNodeAttribute[] attributes) =>
+    public static VirtualNode Rectangle(double width, double height, uint key = 0, params VirtualNodeAttribute[] attributes) =>
         new(
             VirtualNodeKind.Rectangle,
-            key,
+            new NodeKey(key),
             attributes:
             [
                 .. attributes,
-                new VirtualNodeAttribute("Width", AttributeValue.FromNumber(width)),
-                new VirtualNodeAttribute("Height", AttributeValue.FromNumber(height))
+                new VirtualNodeAttribute(VirtualAttributeKey.Width, AttributeValue.FromNumber(width)),
+                new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(height))
             ]);
 
-    public static VirtualNode Button(string label, ulong key = 0, params VirtualNodeAttribute[] attributes) =>
+    public static VirtualNode Button(string label, uint key = 0, params VirtualNodeAttribute[] attributes) =>
         new(
             VirtualNodeKind.Button,
-            key,
+            new NodeKey(key),
             attributes: attributes,
             children: [Text(label, key + 1)]);
 
-    public static VirtualNode ScrollContainer(ulong key = 0, params VirtualNode[] children) =>
-        new(VirtualNodeKind.ScrollContainer, key, children: children);
+    public static VirtualNode ScrollContainer(uint key = 0, params VirtualNode[] children) =>
+        new(VirtualNodeKind.ScrollContainer, new NodeKey(key), children: children);
 }
