@@ -25,8 +25,8 @@
 | Device-lost detection | `_deviceRemoved` flag + `DeviceErrorReason` string + `DeviceLost` event | Already done | — |
 | Device-lost recovery | `D3D12Renderer.TryRecover()` reconstructs all GPU resources; compositor catches backend exceptions, checks `IDeviceRecovery`, attempts recovery; tests cover recovery succeeds/fails | Already done | — |
 | Device-removed during segmented frame | Compositor catches exceptions in standard and handoff paths; recovery attempted through `IDeviceRecovery` | Already done | — |
-| GPU memory pressure | No dedicated tracking | Monitor and handle `E_OUTOFMEMORY` gracefully | P1 |
-| Command allocator reset failure | Not handled | Add retry or device-lost escalation | P2 |
+| GPU memory pressure | Runtime resize/recovery resource recreation failures surface explicit device error reasons, including `E_OUTOFMEMORY` | Accepted for current GA/MVP; no silent fail or undefined pointer continuation | — |
+| Command allocator reset failure | `BeginFrame` command allocator/list reset retries once after `WaitForGpu`; persistent failure escalates through device-lost/recovery | Already done | — |
 
 ---
 
@@ -142,9 +142,9 @@ Non-goals for this GA batch:
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| Window minimize/restore | Not validated | Validate D3D12 handles minimize without device-lost | P1 |
-| Window occlusion | Not validated | Validate behavior when window is fully occluded | P2 |
-| System DPI change (live) | Basic runtime handling exists; selected combined checks remain | Validate resize + relayout on DPI change | P2 |
+| Window minimize/restore | Manual smoke passed on current machine (2026-05-13): minimize, restore, resize, scroll, click | Already done for current display | — |
+| Window occlusion | Manual smoke passed on current machine (2026-05-13): full occlusion, restore, continued scroll/click, no stale frame | Already done for current display | — |
+| System DPI change (live) | Manual smoke passed on current machine (2026-05-13): startup at 100% / 150% / 200%, runtime switch 200% -> 100% -> 150%, resize + scroll | Already done for current display | — |
 | High-contrast mode | Not validated | Validate text readability | P3 |
 | Screen reader accessibility | Not applicable | Not required for v1.0 GA | P3 |
 
@@ -161,13 +161,13 @@ Non-goals for this GA batch:
 | Performance regression CI | `Category=Performance` mock backend frame-time baseline + warm `FrameDrawingResources` allocation baseline | Already done | — |
 | Sync wait regression baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode Sync`; not a hard CI gate because hosted runners do not provide stable refresh/scale/GPU timing | Keep as local evidence; accepted budget documented above | — |
 | Text cache/allocation baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode TextCache`; CI guards pool allocation with a hardware-independent performance test | Already done for 100% / 150% / 200% on current machine | — |
-| Manual smoke baseline | Semi-automatic local runner via `scripts/ga-baseline.ps1 -Mode Smoke`; user verifies scroll/text sync, hit-test, and scale behavior | Latest 60Hz / 120Hz / 100% / 200% smokes passed on current display | — |
+| Manual smoke baseline | Semi-automatic local runner via `scripts/ga-baseline.ps1 -Mode Smoke`; user verifies scroll/text sync, hit-test, resize, occlusion, minimize/restore, and scale behavior | Latest default, rollback, 100% / 150% / 200%, and runtime scale-switch smokes passed on current display | — |
 
 ---
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, and D2D text overlay synchronization are complete. Sync wait cost is accepted temporarily as a correctness-first tradeoff; the long-term performance fix is a D3D12-only glyph atlas text renderer.
+**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, D2D text overlay synchronization, platform integration smokes, GPU resource failure handling, and command allocator reset guards are complete. Sync wait cost is accepted temporarily as a correctness-first tradeoff; the long-term performance fix is a D3D12-only glyph atlas text renderer.
 
 **Minimum GA checklist:**
 
@@ -181,8 +181,11 @@ Non-goals for this GA batch:
 8. ~~Windows SDK 26100 CI check~~ — Done
 9. ~~Performance regression CI baseline~~ — Done
 10. ~~Sync wait budget decision~~ — Done: accepted temporarily; future D3D12-only glyph atlas renderer planned
+11. ~~Platform integration smokes~~ — Done: minimize/restore, occlusion, resize, scroll/click, rollback, startup scale, runtime scale switch
+12. ~~GPU memory pressure graceful path~~ — Done for V1 scope: explicit resource creation failure reasons, including `E_OUTOFMEMORY`
+13. ~~Command allocator reset failure guard~~ — Done: retry once after GPU wait, then device-lost escalation
 
-**Remaining before GA:** selected platform integration checks and broader hardware coverage when available. 144Hz hardware validation is not a GA blocker and has been removed from current scope.
+**Remaining before GA tag:** review and commit the candidate snapshot, then create the candidate tag. 144Hz hardware validation and glyph atlas implementation are post-GA follow-ups, not blockers for this candidate.
 
 ---
 

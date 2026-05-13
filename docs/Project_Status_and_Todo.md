@@ -42,6 +42,9 @@
 | [Default-On-Partial-Apply-Prep.md](Default-On-Partial-Apply-Prep.md) | default-on partial apply 前置设计：go/no-go gates、D3D12 验证、resource lifecycle、rollback |
 | [D3D12-Segmented-Ownership-Prep.md](D3D12-Segmented-Ownership-Prep.md) | D3D12 segmented ownership 盘点：per-segment execute、dirty ranges、text cache、device-lost |
 | [GA-Hardening-Plan.md](GA-Hardening-Plan.md) | GA 硬化清单：device lost recovery、display matrix、stability、performance、platform integration |
+| [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md) | issue #2 显式 glyph atlas/cache 的 post-GA 设计；当前 GA 不实现 |
+| [V1-MVP-GA-Candidate-Summary.md](V1-MVP-GA-Candidate-Summary.md) | V1 MVP/GA candidate 一页状态：Done / accepted risks / post-GA follow-up |
+| [V1-MVP-GA-Candidate-Release-Notes.md](V1-MVP-GA-Candidate-Release-Notes.md) | candidate release notes 与 known limitations |
 | [Project_Status_and_Todo.md](Project_Status_and_Todo.md) | 当前实现状态、阶段冻结线、短期候选任务 |
 
 ### 当前冻结线
@@ -80,7 +83,7 @@
 - **D2D text overlay sync 修复（2026-05-13）：** 滚动时按钮文字滞后矩形 — 根因：D3D12 rect pass 与 D3D11on12/D2D text overlay 未同步。修复：默认 `D3D12FenceAfterOverlay` wait 插入在 D2D text overlay 之后、Present 之前。默认开启（`SyncTextOverlay=true`），`--no-sync-text-overlay` 仅用于 A/B diagnostics。4 个 scroll text-sync regression tests。Frame serial diagnostics 可追踪 sync wait count/时间与当前 strategy。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
-- **下一步：** GA hardening second batch 已完成（D2D text overlay sync、D3D12 smoke CI integration、concurrent input+render validation、sync overhead diagnostics、Windows SDK 26100 CI check、minimal platform/performance CI lanes）。`scripts/ga-baseline.ps1` 已补本机 60Hz / 120Hz / 240Hz、150% scale、non-AOT/AOT sync wait baseline；100% / 150% / 200% text cache/allocation baseline；60Hz/120Hz/100%/200% manual smoke 均无文字滞后或 scale/hit-test 错位。`D3D11Query` sync spike correctness smoke 通过（60Hz default / no-partial、120Hz、240Hz），但性能对刷新率敏感：60Hz/240Hz 改善、120Hz 回退，因此不作为默认。默认同步保持开启以保证 correctness；剩余为 renderer-level sync wait optimization / accepted-budget follow-up、144Hz-capable hardware validation、selected platform integration checks。详见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
+- **下一步：** V1 MVP/GA candidate scope 已冻结：不再开 V1 core 新功能，不重写 renderer，不改 public API，不重新调默认 sync strategy。GA hardening second batch 已完成（D2D text overlay sync、D3D12 smoke CI integration、concurrent input+render validation、sync overhead diagnostics、Windows SDK 26100 CI check、minimal platform/performance CI lanes）。Release build、ordinary tests、D3D12 smoke、performance lane、AOT publish 均通过；platform integration smoke 覆盖 minimize/restore、occlusion/restore、resize、scroll/click、default、`--no-partial-apply`、100% / 150% / 200% startup scale、runtime scale switch。sync wait 作为 V1 accepted risk；144Hz 与 glyph atlas 均为 post-GA follow-up。详见 [V1-MVP-GA-Candidate-Summary.md](V1-MVP-GA-Candidate-Summary.md)、[V1-MVP-GA-Candidate-Release-Notes.md](V1-MVP-GA-Candidate-Release-Notes.md)、[Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)、[Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md)。
 
 ### IRIX-V1 收口任务表
 
@@ -105,23 +108,23 @@
 
 ### V1 Core Completion Report（2026-05-13）
 
-**结论：PoC V1 core 架构闭环已完成（default-off），不等价于 MVP/GA。**
+**结论：PoC V1 core 架构闭环已完成并冻结；partial apply 已 default-on。当前工作只做 GA candidate validation、accepted risk 记录与 post-GA follow-up，不再打开 V1 core 新功能。**
 
-V1 core 的完成边界是：internal/default-off selected segmented render-source path 能在所有 integration gate 满足时执行，且不改变任何现有 public API、backend contract、CLI 输出或默认行为。
+V1 core 的完成边界是：selected segmented render-source path 已通过所有 integration gate 并成为默认路径；rollback 通过 `--no-partial-apply` 保留；不改变任何现有 public API 或 backend contract。
 
 | 维度 | 状态 | 说明 |
 |------|------|------|
 | `CanHookUpPartialApply` | `true` | 8/8 gate satisfied，hardcoded，无 runtime mutation |
-| Default-off 行为等价 | 已验证 | disabled feed/compositor 与 direct pipeline 完全等价（435 tests pass） |
-| Selected path | internal/default-off | 仅 `StyleOnlyFastPathOptions.Enabled` 或 `DrawingBackendCompositorHandoffOptions.Enabled` 激活 |
+| Rollback 行为等价 | 已验证 | `--no-partial-apply` 路径保留并用于 smoke 对照 |
+| Selected path | default-on | production owner feed + segmented retained frame runtime owner 默认启用 |
 | Gate evidence 一致性 | 已验证 | 4 个 gate checklist tests 覆盖 satisfied/postponed/evidence 分层 |
 | `RenderPipeline.Build` | 未改变 | layout 仍全量 rebuild，StyleOnly 不跳过 layout |
 | `RetainedRenderFrame.TryReadFrame` | 未改变 | selected path 不写入 retained frame |
 | `IDrawingBackend.Execute` | 未改变 | per-segment execute 通过 adapter wrapper，不改 backend 签名 |
-| D3D12 | 未触及 | segmented ownership 仅在 test backend 验证 |
-| CLI diagnostics | 未改变 | handoff result 仅 internal，不出现在 `--diagnose` 输出 |
+| D3D12 | 已接入 | per-text-run resolver/style ownership、device-lost guard、text overlay sync 均已验证 |
+| CLI diagnostics | 已扩展 | sync diagnostics 输出 strategy；不改变 public backend contract |
 
-**V1 core 完成 ≠ MVP/GA：** 以下仍需后续阶段完成（见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[Default-On-Partial-Apply-Prep.md](Default-On-Partial-Apply-Prep.md)、[D3D12-Segmented-Ownership-Prep.md](D3D12-Segmented-Ownership-Prep.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)）。
+**V1 core 完成 ≠ post-GA renderer work：** sync wait optimization、144Hz-capable hardware coverage、glyph atlas/cache、translator promotion、typed ids、scroll extraction 等均保持 post-GA/backlog，不混入当前 candidate。
 
 ---
 
@@ -131,9 +134,9 @@ V1 core 的完成边界是：internal/default-off selected segmented render-sour
 
 | 优先级 | 任务线 | 内容 | 前置条件 |
 |--------|--------|------|----------|
-| P0 | Default-on partial apply | 将 selected segmented render-source path 从 default-off 提升为 default-on；需要 GA 级别的 platform matrix 验证 | D3D12 segmented ownership、GA hardening |
-| P0 | D3D12 segmented ownership | 让 D3D12 backend 正确处理 per-segment execute + segment-local dirty ranges；验证 GPU resource lifecycle | D3D12 device-lost recovery |
-| P0 | GA hardening | 平台矩阵测试（240Hz/120Hz/60Hz、DPI scaling、multi-monitor）、device-lost recovery、性能 profiling | 上述两项 |
+| Accepted risk | Sync wait overhead | 默认同步保持开启；当前 sync wait 作为 V1 candidate known limitation 接受 | post-GA renderer-level optimization |
+| Post-GA | 144Hz hardware coverage | 当前显示无 144Hz mode，已从 current GA scope 移除 | 具备 144Hz 硬件时再验证 |
+| Post-GA | Glyph atlas/cache | issue #2 design 已记录；当前 Windows 文本路径继续 DirectWrite / Direct2D | [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md) |
 | P1 | Translator promotion | 将 `WindowDrawCommandTranslator` 从 `Irix.Poc` 提升到 framework 层；typed feedback contract | Translator feedback contract prep |
 | P1 | Typed id wrappers | 将 string ActionId / target identity 替换为 typed wrappers | API control boundary prep |
 | P1 | Scroll extraction | 将 `ScrollController` / `ScrollState` / `ScrollFramePump` 从 PoC 抽取到 framework | Scroll settings provider design |
@@ -160,9 +163,9 @@ Irix 当前是一个**早期原型期**的原生 .NET UI 框架项目。
 
 | Phase | 版本 | 当前状态 |
 |-------|------|---------|
-| Phase 1 | v1.0 基础 | 🚧 进行中（核心闭环已打通） |
-| Phase 2 | v1.0 MVP | 🚧 部分能力提前验证（局部 diff、D3D12 矩形/文本、CI） |
-| Phase 3 | v1.0 GA | ❌ 未开始（产品化硬化尚未开始） |
+| Phase 1 | v1.0 基础 | ✅ V1 core complete / frozen |
+| Phase 2 | v1.0 MVP | ✅ candidate-ready；partial apply default-on，rollback 保留 |
+| Phase 3 | v1.0 GA | ✅ candidate validation complete；剩余为 review/commit/tag 与 post-GA follow-up |
 | Phase 4 | v1.x | ❌ 未开始 |
 | Phase 5 | v2.0 | ❌ 未开始 |
 

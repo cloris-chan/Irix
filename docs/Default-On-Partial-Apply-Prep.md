@@ -68,7 +68,7 @@ Each gate must be satisfied before enabling default-on. Current status and block
 **Status:** Multi-refresh-rate manual smoke passed (2026-05-13). HiDPI / PerMonitorV2 manifest / display scale pipeline are aligned with the Windows 10 1703 / 10.0.15063.0 runtime minimum.
 
 **What to validate:**
-- Partial apply on 60Hz, 120Hz, 144Hz, 240Hz displays
+- Partial apply on 60Hz, 120Hz, and 240Hz displays. 144Hz is post-GA hardware coverage because the current display does not expose that mode.
 - DPI scaling (100%, 125%, 150%, 200%)
 - Multi-monitor with different DPI/scale
 - Long-run stability (1000+ frames with partial apply)

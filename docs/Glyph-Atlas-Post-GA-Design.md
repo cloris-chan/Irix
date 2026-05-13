@@ -1,0 +1,131 @@
+# Glyph Atlas Post-GA Design
+
+> Design note for issue #2. This is not part of the V1 MVP/GA candidate. The V1 Windows text path remains DirectWrite / Direct2D over D3D11On12.
+
+## Goal
+
+Introduce an explicit glyph atlas/cache after V1 GA only if profiling shows DirectWrite / Direct2D text rendering is the limiting cost or if a future backend needs portable glyph resources. The design must not change the current `IDrawingBackend` public contract until a separate API review accepts it.
+
+## Non-Goals
+
+- No implementation before the current GA candidate.
+- No renderer rewrite.
+- No public API change in the current V1 branch.
+- No replacement of DirectWrite shaping in the first spike.
+- No promise that glyph atlas replaces the Direct2D fallback for all scripts or effects.
+
+## Glyph Key
+
+A glyph cache key should be value-based and independent of frame-local text arenas.
+
+Candidate fields:
+
+| Field | Purpose |
+|-------|---------|
+| Font family / face identity | Separates typefaces and fallback faces |
+| Font weight / style / stretch | Matches `TextStyle` shaping inputs |
+| Em size in physical pixels | Keeps DPI-specific raster output explicit |
+| Glyph index | Identifies the shaped glyph inside the face |
+| Subpixel mode / pixel snapping mode | Prevents mixing incompatible raster outputs |
+| Render mode / antialias mode | Separates grayscale, ClearType, and future SDF modes |
+| Locale / script fallback face | Required when DirectWrite selects a fallback font |
+| Color glyph layer identity | Required for emoji and color-font paths |
+
+The key should not include source string content. Text shaping produces positioned glyph runs; the atlas stores glyph bitmaps or masks.
+
+## Atlas Page Model
+
+Use fixed-size pages with stable page handles.
+
+Initial candidate:
+
+| Property | Candidate |
+|----------|-----------|
+| Format | `R8_UNORM` for alpha masks; future `BGRA8` for color glyph layers |
+| Page size | 1024x1024 or 2048x2048, selected after upload/profile data |
+| Packing | Skyline or shelf allocator for simple predictable behavior |
+| Padding | 1-2 physical pixels to prevent bilinear bleeding |
+| Coordinates | Normalized UVs plus physical-pixel bounds |
+| Lifetime | Page survives across frames until cache pressure evicts it |
+
+Each cached glyph maps to `GlyphAtlasEntry { PageId, PixelRect, UvRect, Bearing, Advance, Version }`.
+
+## Eviction
+
+Use bounded memory with LRU at page or entry level.
+
+Rules:
+
+- Prefer page-level eviction for simplicity if fragmentation is acceptable.
+- Never evict entries referenced by the frame currently being recorded or submitted.
+- Maintain a generation/version number so stale retained commands cannot sample recycled atlas regions.
+- Evict cold pages first; pin fallback/system UI glyph pages only if profiling proves churn.
+- Emit diagnostics: page count, used pixels, fragmentation estimate, upload bytes/frame, evictions/frame, misses/frame.
+
+## DPI And Scale
+
+Glyph raster output is DPI-specific. A scale change invalidates or partitions glyph entries by physical em size.
+
+Rules:
+
+- Keep logical text measurement in the existing layout pipeline.
+- Rasterize glyphs at physical pixel size after `DisplayScale` is applied.
+- Do not reuse a 100% glyph bitmap at 150% or 200% by stretching.
+- Runtime DPI changes may keep old pages alive briefly for in-flight frames, but new frames must request entries from the new scale partition.
+
+## Upload Path
+
+The first spike should avoid per-glyph GPU synchronization.
+
+Candidate upload flow:
+
+1. Shape text using DirectWrite into glyph runs.
+2. Rasterize missing glyphs into CPU staging memory or a DirectWrite-compatible bitmap path.
+3. Pack missing glyphs into atlas pages.
+4. Batch page updates into one upload list per frame.
+5. Draw glyph quads after rectangle pass, using scissor/clip state compatible with current text clipping.
+6. Keep Direct2D overlay as fallback while atlas path is incomplete.
+
+Upload diagnostics must include bytes uploaded per frame and number of new glyph entries.
+
+## Clip And Layout Interaction
+
+Clipping remains per draw/run, not baked into glyph entries.
+
+Rules:
+
+- Glyph atlas entries contain glyph images only.
+- Draw-time quads apply the current effective clip/scissor.
+- Text layout still computes line breaks, glyph positions, and run bounds before draw recording.
+- Existing `DrawTextRun` clip semantics must remain observable in diagnostics.
+
+## Fallback Strategy
+
+Direct2D / DirectWrite remains the authoritative fallback.
+
+Fallback cases:
+
+- Complex color glyphs not supported by the first atlas format.
+- Scripts or shaping features not yet covered by the glyph-run conversion.
+- Atlas full and eviction cannot safely free space for the current frame.
+- Device lost or upload failure.
+- Debug flag forces Direct2D text for A/B comparison.
+
+Fallback must preserve text/rect synchronization and clip behavior.
+
+## Open Questions
+
+- Should first implementation be alpha-mask atlas or signed-distance-field atlas?
+- Should glyph rasterization use DirectWrite glyph run analysis or a separate rasterizer?
+- What memory budget should be used per monitor/adapter?
+- How should retained frames reference atlas entries across page eviction?
+- Should color glyphs use separate BGRA pages or always fallback to Direct2D initially?
+
+## Acceptance Criteria For A Future Spike
+
+- No public API change without a design review.
+- Text cache diagnostics show reduced overlay cost on the target workload.
+- 100% / 150% / 200% scale smokes show no stretched text and correct hit-test/clip behavior.
+- Scroll text remains synchronized at 60Hz with default sync enabled.
+- Atlas eviction cannot produce stale glyphs in retained or partial frames.
+- Direct2D fallback remains available and tested.

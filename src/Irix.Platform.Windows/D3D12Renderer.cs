@@ -16,6 +16,7 @@ namespace Irix.Platform.Windows;
 internal sealed unsafe class D3D12Renderer : IDisposable
 {
     private const int FrameCount = 2;
+    private const int EOutOfMemory = unchecked((int)0x8007000E);
 
     private ID3D12Device* _device;
     private ID3D12CommandQueue* _queue;
@@ -304,40 +305,43 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         try
         {
             _swapChain->ResizeBuffers(FrameCount, (uint)newWidth, (uint)newHeight, DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM, 0);
+
+            var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
+            for (var i = 0; i < FrameCount; i++)
+            {
+                _swapChain->GetBuffer((uint)i, typeof(ID3D12Resource).GUID, out var resObj);
+                _renderTargets[i] = (ID3D12Resource*)resObj;
+                _device->CreateRenderTargetView(_renderTargets[i], null, rtv);
+                rtv.ptr += _rtvSize;
+            }
+
+            Volatile.Write(ref _width, newWidth);
+            Volatile.Write(ref _height, newHeight);
+            _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+            _textRenderer?.RecreateFrameResources(_renderTargets);
+            return true;
         }
-        catch (COMException ex)
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
         {
-            HandleDeviceError(ex, "ResizeBuffers");
+            HandleDeviceError(ex, "Resize resource recreation");
             return false;
         }
-
-        var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
-        for (var i = 0; i < FrameCount; i++)
-        {
-            _swapChain->GetBuffer((uint)i, typeof(ID3D12Resource).GUID, out var resObj);
-            _renderTargets[i] = (ID3D12Resource*)resObj;
-            _device->CreateRenderTargetView(_renderTargets[i], null, rtv);
-            rtv.ptr += _rtvSize;
-        }
-
-        Volatile.Write(ref _width, newWidth);
-        Volatile.Write(ref _height, newHeight);
-        _frameIndex = _swapChain->GetCurrentBackBufferIndex();
-        _textRenderer?.RecreateFrameResources(_renderTargets);
-        return true;
     }
 
-    public void BeginFrame()
+    public bool BeginFrame()
     {
-        if (_deviceRemoved) return;
-        _allocators[_frameIndex]->Reset();
-        _list->Reset(_allocators[_frameIndex], null);
+        if (_deviceRemoved) return false;
+        if (TryResetFrameCommands(out var firstResetError)) return true;
+        if (!WaitForGpu()) return false;
+        if (TryResetFrameCommands(out var retryResetError)) return true;
+
+        HandleDeviceError(retryResetError ?? firstResetError, "BeginFrame command reset");
+        return false;
     }
 
     public void ClearAndPresent(float r, float g, float b, float a = 1.0f)
     {
         if (_deviceRemoved) return;
-        // Transition to render target
         var barrier = new D3D12_RESOURCE_BARRIER();
         barrier.Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
         barrier.Anonymous.Transition.pResource = _renderTargets[_frameIndex];
@@ -346,13 +350,11 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         barrier.Anonymous.Transition.Subresource = 0xFFFFFFFF;
         _list->ResourceBarrier(1, &barrier);
 
-        // Clear
         var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
         rtv.ptr += _frameIndex * _rtvSize;
         var color = stackalloc float[] { r, g, b, a };
         _list->ClearRenderTargetView(rtv, new ReadOnlySpan<float>(color, 4));
 
-        // Transition to present
         barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
         barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
         _list->ResourceBarrier(1, &barrier);
@@ -495,13 +497,40 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
     }
 
-    private void HandleDeviceError(COMException ex, string context = "Unknown")
+    private void HandleDeviceError(Exception? ex, string context = "Unknown")
     {
         if (_deviceRemoved) return;
         _deviceRemoved = true;
-        _deviceErrorReason = $"{context}: COMException 0x{ex.ErrorCode:X8}";
+        _deviceErrorReason = FormatDeviceError(ex, context);
         System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
         DeviceLost?.Invoke();
+    }
+
+    private static string FormatDeviceError(Exception? ex, string context)
+    {
+        return ex switch
+        {
+            COMException { ErrorCode: EOutOfMemory } comException => $"{context}: E_OUTOFMEMORY (0x{comException.ErrorCode:X8})",
+            COMException comException => $"{context}: COMException 0x{comException.ErrorCode:X8}",
+            null => $"{context}: unknown device error",
+            _ => $"{context}: {ex.GetType().Name}: {ex.Message}"
+        };
+    }
+
+    private bool TryResetFrameCommands(out COMException? error)
+    {
+        try
+        {
+            _allocators[_frameIndex]->Reset();
+            _list->Reset(_allocators[_frameIndex], null);
+            error = null;
+            return true;
+        }
+        catch (COMException ex)
+        {
+            error = ex;
+            return false;
+        }
     }
 
     /// <summary>
@@ -751,7 +780,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         catch (Exception ex)
         {
             _deviceRemoved = true;
-            _deviceErrorReason = $"Recovery reinitialize failed: {ex.Message}";
+            _deviceErrorReason = FormatDeviceError(ex, "Recovery reinitialize");
             System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
             return false;
         }

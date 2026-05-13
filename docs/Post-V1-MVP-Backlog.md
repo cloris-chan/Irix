@@ -29,15 +29,15 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-018 | Platform integration checks | Remaining | Validate minimize/restore, occlusion, live DPI change plus resize/scroll/text sync combinations on available hardware |
-| POST-019 | GPU memory pressure handling | Not started | Handle `E_OUTOFMEMORY` and memory-pressure failures gracefully where feasible |
-| POST-020 | Command allocator reset failure handling | Not started | Retry or escalate to device-lost path |
+| POST-018 | Platform integration checks | Done for current hardware | Minimize/restore, occlusion, live DPI change, resize, scroll, click, default, and rollback smokes passed |
+| POST-019 | GPU memory pressure handling | Done for V1 scope | Runtime resource recreation failures surface explicit device error reasons, including `E_OUTOFMEMORY`; no full GPU memory manager |
+| POST-020 | Command allocator reset failure handling | Done | Retry once after `WaitForGpu`, then escalate to device-lost/recovery |
 
 ### P1/P2 — Post-GA Renderer Architecture
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Planned | Replace current D3D12 + D3D11On12 + D2D/DirectWrite overlay composition with D3D12-only atlas text pass; removes the sync wait class of problem |
+| POST-017 | D3D12-only glyph atlas text renderer | Design only for issue #2 | Post-GA; design captured in `Glyph-Atlas-Post-GA-Design.md`; implementation is not part of current GA/MVP |
 | POST-011 | Resource cache / stable global handles | Not started | D3D12-specific; can align with glyph atlas/resource cache work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -57,8 +57,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 ## Dependency Graph
 
 ```text
-POST-001..004, POST-013..016 complete ──> GA/MVP hardening remainder
-                                             └─ POST-018 platform integration
+POST-001..004, POST-013..020 complete ──> GA/MVP candidate tag
 
 Current D3D11On12/D2D overlay accepted temporarily ──> POST-017 D3D12-only glyph atlas text renderer
                                                     └─ POST-011 D3D12 resource cache / stable handles
@@ -108,14 +107,16 @@ Non-goals:
 |------|------------|---------------------|--------|
 | Accept sync wait budget | `GA-Hardening-Plan.md` | `D3D12FenceAfterOverlay` accepted temporarily; `<2ms avg` removed as GA blocker | ✅ Done |
 | Remove 144Hz blocker | `GA-Hardening-Plan.md` | 144Hz validation not listed as current GA blocker | ✅ Done |
-| Platform integration checks | `Irix.Poc`, manual smoke | Minimize/restore, occlusion, live DPI, resize + scroll + text sync pass on available hardware | Remaining |
+| Platform integration checks | `Irix.Poc`, manual smoke | Minimize/restore, occlusion, live DPI, resize + scroll + text sync pass on available hardware | ✅ Done |
+| GPU memory pressure handling | `D3D12Renderer.cs` | Resource creation failures produce explicit device error reasons; no undefined pointer continuation | ✅ Done |
+| Command allocator reset failure handling | `D3D12Renderer.cs` | Reset retry or device-lost escalation | ✅ Done |
 | Keep CI green | GitHub Actions | Tests, D3D12 smoke, performance lane, AOT publish stay green | Ongoing |
 
 ### Batch B: Post-GA text renderer replacement
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
-| Glyph atlas design doc | New doc TBD | Atlas architecture and migration plan accepted | Planned |
+| Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
 | D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | Planned |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
 

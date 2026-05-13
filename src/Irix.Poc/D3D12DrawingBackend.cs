@@ -164,7 +164,11 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public void BeginFrame(in FrameContext frameContext)
     {
-        _renderer.BeginFrame();
+        if (!_renderer.BeginFrame())
+        {
+            throw new InvalidOperationException($"D3D12 begin frame failed: {_renderer.DeviceErrorReason ?? "unknown device error"}");
+        }
+
         _rects.Reset();
         _texts.Reset();
     }

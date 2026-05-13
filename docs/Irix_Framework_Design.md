@@ -511,7 +511,7 @@ VirtualNode
 
 **已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已支持合并式显式重绘请求。Button visual state v0 已通过 `OwnershipSnapshot` 派生 `IsHovered` / `IsPressed` / `IsFocused`，并在 layout/recording 层用现有 `DrawCommand.Color` 选择 style token，不扩展 backend 接口。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + DirectWrite 文本）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013），并通过 `CsWin32RunAsBuildTask=true` 生成实体 `obj` 编译输入，同时排除 CsWin32 analyzer/source-generator 资产，避免编辑器依赖易失效的 Roslyn 虚拟生成文档。
 
-**下一步：** 补齐裁剪、透明度、热路径池化/arena 化、显式 glyph atlas/cache（若后续脱离 DirectWrite 或需要跨 backend glyph 资源复用）与 GPU device-lost recovery；随后让 `LayoutTreeBuilder` 脱离 PoC 硬编码常量，引入增量布局。
+**下一步：** V1 MVP/GA candidate 不再新增 renderer 功能。显式 glyph atlas/cache 仅作为 post-GA 设计项推进（若后续脱离 DirectWrite 或需要跨 backend glyph 资源复用）；当前 Windows 文本路径继续委托 DirectWrite / Direct2D。
 
 #### 5.2.9 文本、路径与图片的资源策略
 
@@ -519,7 +519,7 @@ VirtualNode
 
 - 文本 shaping 与 glyph rasterization：Windows PoC 暂时委托给 DirectWrite / Direct2D。
 - 文本格式资源：`TextStyle` 通过 `ResourceHandle` 引用，Windows backend 缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`。当前 layout cache 以文本 hash、长度、样式与布局尺寸为 key，并保存文本副本用于 hash collision 验证；动画尺寸频繁变化时可能产生 layout churn，但缓存上限控制了资源风险。
-- 显式 glyph cache：当前尚未实现跨 backend glyph atlas/cache，Windows PoC 继续委托 DirectWrite 内部 glyph rasterization/cache。
+- 显式 glyph cache：当前尚未实现跨 backend glyph atlas/cache，Windows PoC 继续委托 DirectWrite 内部 glyph rasterization/cache；post-GA 设计见 `Glyph-Atlas-Post-GA-Design.md`。
 - 复杂路径栅格化：后续可委托给 `Skia` backend adapter 或自研路径模块，当前不急于实现。
 - 图片解码与上传：使用独立资源接口封装，避免与 backend 紧耦合。
 

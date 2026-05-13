@@ -202,11 +202,12 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 dirtyAware.SetDirtyCommandRanges(LastDirtyCommandRanges);
             }
 
-            var backendFrameContext = new FrameContext(_physicalViewport.Width, _physicalViewport.Height, _displayScale);
-            _backend.BeginFrame(backendFrameContext);
             try
             {
+                var backendFrameContext = new FrameContext(_physicalViewport.Width, _physicalViewport.Height, _displayScale);
+                _backend.BeginFrame(backendFrameContext);
                 _backend.Execute(commands, resources);
+                _backend.EndFrame();
             }
             catch (Exception ex)
             {
@@ -218,8 +219,6 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
                 throw;
             }
-
-            _backend.EndFrame();
         }
 
         RecordFrameTime(sw);
