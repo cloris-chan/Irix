@@ -80,7 +80,7 @@
 - **D2D text overlay sync 修复（2026-05-13）：** 滚动时按钮文字滞后矩形 — 根因：D3D12 rect pass 与 D3D11on12/D2D text overlay 未同步。修复：`WaitForQueueIdle()` fence wait 插入在 D2D text overlay 之后、Present 之前。默认开启（`SyncTextOverlay=true`），`--no-sync-text-overlay` 可关闭。4 个 scroll text-sync regression tests。Frame serial diagnostics 可追踪 sync wait count/时间。
 - 暂缓：typed id wrappers、scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
-- **下一步：** GA hardening second batch 已完成（D2D text overlay sync、D3D12 smoke CI integration、concurrent input+render validation、sync overhead diagnostics）。剩余：sync wait overhead 实测验证（`--diagnose-sync`）、platform matrix CI、performance regression CI。详见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
+- **下一步：** GA hardening second batch 已完成（D2D text overlay sync、D3D12 smoke CI integration、concurrent input+render validation、sync overhead diagnostics、Windows SDK 26100 CI check、minimal platform/performance CI lanes）。`--diagnose-sync 300` 已在本机 240Hz / 150% scale 下测得 avg sync wait 1.891ms-3.227ms，最新样本超过 2ms/frame 平均目标；默认同步保持开启以保证无文字滞后。剩余：60Hz / 120Hz numeric sync wait、240Hz variance follow-up、broader platform matrix evidence、text cache hit-rate 与 allocation validation。详见 [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
 
 ### IRIX-V1 收口任务表
 

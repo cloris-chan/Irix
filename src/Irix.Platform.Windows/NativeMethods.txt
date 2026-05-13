@@ -1,4 +1,5 @@
 EnumDisplayMonitors
+EnumDisplaySettingsW
 BeginPaint
 EndPaint
 FillRect
@@ -13,6 +14,7 @@ DrawTextW
 FrameRect
 GetCurrentThreadId
 GetClientRect
+GetDeviceCaps
 GetDpiForMonitor
 GetMessageW
 GetModuleHandleW

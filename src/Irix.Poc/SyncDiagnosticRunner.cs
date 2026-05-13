@@ -37,16 +37,18 @@ internal static class SyncDiagnosticRunner
 
         output.WriteLine("=== D3D12 Sync Diagnostic ===");
         output.WriteLine($"Frames: {frameCount}");
+        output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         output.WriteLine($"SyncTextOverlay: {d3d12Renderer.SyncTextOverlay}");
         output.WriteLine();
 
         var syncWaits = new List<double>(frameCount);
         var frameTimes = new List<long>(frameCount);
+        var previousRoot = default(VirtualNode);
+        var hasPreviousRoot = false;
 
         for (var i = 0; i < frameCount; i++)
         {
-            // Simulate scrolling: each frame shifts content
             var scrollY = i * 2;
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
@@ -61,11 +63,12 @@ internal static class SyncDiagnosticRunner
                         new VirtualNodeAttribute("ActionId", AttributeValue.FromText("another"))),
                 ]);
 
-            var viewport = new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
-            using var batch = translator.Translate(
-                i == 0
-                    ? VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root))
-                    : PatchBatch.CreateRenderRequest());
+            using var patch = hasPreviousRoot
+                ? VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(previousRoot), new VirtualNodeTree(root))
+                : VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+            using var batch = translator.Translate(patch);
+            previousRoot = root;
+            hasPreviousRoot = true;
 
             var diagBefore = d3d12Backend.FrameSerialDiagnostics;
             compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
@@ -122,7 +125,7 @@ internal static class SyncDiagnosticRunner
             output.WriteLine($"Frame time: min={minFrame}us, max={maxFrame}us, avg={avgFrame:F0}us");
 
             var verdict = avgWait < 2.0 ? "ACCEPTABLE" : "EXCEEDS TARGET (2ms)";
-            output.WriteLine($"Verdict: {verdict} (target: <2ms/frame avg sync wait at 60Hz)");
+            output.WriteLine($"Verdict: {verdict} (target: <2ms/frame avg sync wait)");
         }
 
         output.WriteLine();

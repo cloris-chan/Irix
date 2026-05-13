@@ -67,12 +67,13 @@ internal static class WindowsScreenEnumerator
         }
 
         var bounds = monitorInfo.rcMonitor;
+        var refreshRateHz = GetCurrentDisplayRefreshRate(deviceContext);
         screens.Add(new ScreenInfo
         {
             Id = screens.Count,
             DpiScale = dpiScale,
             Scale = new DisplayScale(dpiScale, dpiScale),
-            RefreshRateHz = 60,
+            RefreshRateHz = refreshRateHz > 1 ? refreshRateHz : 60,
             ColorSpace = ColorSpace.Srgb,
             PhysicalBounds = new PixelRectangle(bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top)
         });
@@ -82,4 +83,22 @@ internal static class WindowsScreenEnumerator
 
     [SupportedOSPlatformGuard("windows8.1")]
     private static bool IsPerMonitorDpiAvailable() => OperatingSystem.IsWindowsVersionAtLeast(6, 3);
+
+    private static unsafe int GetCurrentDisplayRefreshRate(HDC deviceContext)
+    {
+        var mode = new DEVMODEW
+        {
+            dmSize = (ushort)sizeof(DEVMODEW)
+        };
+
+        if (PInvoke.EnumDisplaySettings(null!, ENUM_DISPLAY_SETTINGS_MODE.ENUM_CURRENT_SETTINGS, ref mode)
+            && mode.dmDisplayFrequency > 1
+            && mode.dmDisplayFrequency <= int.MaxValue)
+        {
+            return (int)mode.dmDisplayFrequency;
+        }
+
+        var refreshRateHz = PInvoke.GetDeviceCaps(deviceContext, GET_DEVICE_CAPS_INDEX.VREFRESH);
+        return refreshRateHz > 1 ? refreshRateHz : 60;
+    }
 }

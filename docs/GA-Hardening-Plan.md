@@ -44,9 +44,10 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 |------|--------------|----------------|----------|
 | Frame time profiling | Compositor-level: `LastFrameTimeUs`, `AverageFrameTimeUs`, `MaxFrameTimeUs` via `Stopwatch` | Already done | — |
 | Partial apply overhead measurement | Frame time profiling can compare partial vs. full path; measure via `PartialApplyCount` / `FullApplyCount` | Already done | — |
+| Performance regression CI | Mock backend frame timing baseline in `Category=Performance`; CI lane runs it separately | Already done | — |
 | Text cache hit rate in steady state | Diagnostic only | Validate >90% hit rate after warmup | P2 |
 | DrawCommand recording allocation | `stackalloc` + `ArrayPool` | Confirm zero GC allocation in steady state | P2 |
-| Sync wait overhead | Measurable via `FrameSerialDiagnostics.SyncWaitCount` / `SyncWaitMs` in `--diagnose` output | Validate <2ms per frame at 60Hz | P1 |
+| Sync wait overhead | `--diagnose-sync 300` measured on local 240Hz / 150% scale display. Samples ranged from avg 1.891ms to 3.227ms; latest run: avg 3.227ms, p95 4.210ms, max 4.530ms, 263/300 waits >2ms. Default sync remains enabled; prior manual smoke found no text lag at 60Hz/120Hz/240Hz. | Collect numeric 60Hz / 120Hz runs and decide whether to optimize or accept the hardware-specific budget; do not disable default sync for performance | P1 |
 
 ## Platform Integration
 
@@ -64,16 +65,17 @@ Version boundary regression note: the Windows PoC runtime minimum is 10.0.15063.
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| CI test suite | 502 tests, all passing | Maintain green | — |
-| D3D12-specific tests | 7 headless smoke tests (device, allocator, command list, descriptor heap, upload buffer, queue, fence); CI-integrated with graceful skip when D3D12 unavailable | Already done | — |
-| Platform matrix CI | Single Windows runner | Add matrix for Windows versions | P2 |
-| Performance regression CI | None | Add frame time regression check | P2 |
+| Windows SDK 26100 CI check | CI verifies .NET 10 SDK and Windows SDK 10.0.26100.0 before restore/build | Already done | — |
+| CI test suite | Windows 2025 / SDK 26100 matrix lane runs normal tests | Maintain green | — |
+| D3D12-specific tests | Headless D3D12 smoke matrix lane runs `Category=D3D12` with graceful skip when D3D12 unavailable | Already done | — |
+| Platform matrix CI | Minimal Windows 2025 / SDK 26100 lanes for tests, headless D3D12, performance baseline, and AOT publish | Already done | — |
+| Performance regression CI | `Category=Performance` mock backend frame-time baseline | Already done | — |
 
 ---
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. GA hardening first batch complete (2026-05-13). D2D text overlay synchronization complete (2026-05-13).
+**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized (Target SDK 26100, runtime minimum 15063). Display scale pipeline complete and hand-tested (100%/150%/200%). AOT mode runtime scale/refresh switching verified. Device-lost recovery complete. GA hardening first batch complete (2026-05-13). D2D text overlay synchronization complete and default-on (2026-05-13). Minimal CI matrix covers normal tests, headless D3D12, performance baseline, and AOT publish.
 
 **Minimum for GA:**
 1. ~~Device-lost recovery (P0)~~ — Done
@@ -83,6 +85,10 @@ Version boundary regression note: the Windows PoC runtime minimum is 10.0.15063.
 5. ~~D3D12 smoke tests in CI (P1)~~ — Done (7 headless tests, 1s total)
 6. ~~D2D text overlay sync (P0)~~ — Done (GPU fence wait, default-on, 4 regression tests)
 7. ~~Concurrent input + render (P1)~~ — Done (5 tests: sequential scroll, pump dispatch, coalescing, thread safety, multi-cycle)
+8. ~~Windows SDK 26100 CI check (P0)~~ — Done
+9. ~~Performance regression CI baseline (P1)~~ — Done (mock backend frame timing)
+
+**Remaining before GA:** sync wait overhead follow-up for 60Hz / 120Hz modes and the observed 240Hz variance, broader Windows/platform matrix evidence, text cache hit-rate validation, allocation validation, and selected platform integration checks. Irix is not GA-ready yet.
 
 **Estimated scope:** 5-10 focused work items, primarily in `Irix.Platform.Windows` and `Irix.Poc`.
 

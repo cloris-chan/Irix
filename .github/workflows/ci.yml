@@ -11,7 +11,24 @@ permissions:
 
 jobs:
   verify:
-    runs-on: windows-latest
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows 2025 / SDK 26100 / test suite
+            os: windows-2025
+            suite: tests
+          - name: Windows 2025 / SDK 26100 / headless D3D12
+            os: windows-2025
+            suite: d3d12
+          - name: Windows 2025 / SDK 26100 / performance baseline
+            os: windows-2025
+            suite: performance
+          - name: Windows 2025 / SDK 26100 / AOT publish
+            os: windows-2025
+            suite: aot
     steps:
       - uses: actions/checkout@v6
 
@@ -44,10 +61,17 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        run: dotnet test --no-build -c Release --verbosity normal
+        if: matrix.suite == 'tests'
+        run: dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance" --verbosity normal
 
       - name: D3D12 smoke tests
+        if: matrix.suite == 'd3d12'
         run: dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
 
+      - name: Performance regression baseline
+        if: matrix.suite == 'performance'
+        run: dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal
+
       - name: Publish (Poc only)
+        if: matrix.suite == 'aot'
         run: dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained

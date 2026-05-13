@@ -10,16 +10,25 @@ Irix v1 Windows PoC separates the framework target SDK from the runtime minimum.
 
 ## Priority Tiers
 
-### P0 — Gate for Default-On
+### P0 — Completed Default-On Gates
 
-These must complete before partial apply can be enabled by default.
+These default-on gates are complete. Remaining work belongs to GA CI/matrix/performance hardening, not partial-apply default-on enablement.
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-001 | Default-on partial apply | Prep only | Requires POST-002, POST-003, POST-004 |
-| POST-002 | D3D12 segmented ownership | Prep only | Requires D3D12 backend to handle per-segment Execute with real GPU resources |
-| POST-003 | Device-lost recovery | Not started | D3D12Renderer currently fail-fast; must reconstruct device/swapchain/resources |
-| POST-004 | Platform matrix validation | Not started | 240Hz/120Hz/60Hz, DPI scaling, multi-monitor, long-run stability |
+| POST-001 | Default-on partial apply | Done (2026-05-13) | No longer blocking; `--no-partial-apply` remains rollback |
+| POST-002 | D3D12 segmented ownership | Done for v1 default-on path | Resolver ownership, per-segment execute adapter, and D3D12 smoke validated |
+| POST-003 | Device-lost recovery | Done | `D3D12Renderer.TryRecover()` and compositor `IDeviceRecovery` path test-covered |
+| POST-004 | Platform matrix validation | Minimum done; GA matrix remains | Display scale, PerMonitorV2, multi-refresh manual smoke done; broader CI matrix below |
+
+### P0/P1 — GA Hardening Remainder
+
+| ID | Task | Current status | Blocking condition |
+|----|------|---------------|-------------------|
+| POST-013 | Sync wait overhead validation | 240Hz measured via `--diagnose-sync 300`: avg range 1.891ms-3.227ms on current machine; prior manual smoke found no lag at 60Hz/120Hz/240Hz; default sync remains on | Numeric 60Hz / 120Hz values and 240Hz variance still need follow-up; optimize or document acceptable budget without disabling default sync |
+| POST-014 | Windows SDK 26100 CI check | Done | CI fails early if .NET 10 or Windows SDK 26100 is absent |
+| POST-015 | Platform matrix CI | Minimal matrix added | Windows 2025 lanes cover tests, headless D3D12, performance baseline, AOT publish |
+| POST-016 | Performance regression CI | Mock backend baseline added | `Category=Performance` catches obvious frame-time regression |
 
 ### P1 — Framework Promotion
 
@@ -48,10 +57,12 @@ These are post-MVP or require significant new design work.
 ## Dependency Graph
 
 ```
-POST-002 (D3D12 segmented) ──┐
-POST-003 (device-lost)    ───┼──> POST-001 (default-on) ──> POST-009 (layout skip)
-POST-004 (platform matrix) ──┘
-                              ──> POST-011 (resource cache)
+POST-001..004 (default-on gates complete) ──> POST-009 (layout skip)
+                                           ──> POST-011 (resource cache)
+
+POST-013 (sync wait measurements) ──┐
+POST-015 (platform matrix CI)    ───┼──> GA readiness evidence
+POST-016 (performance CI)       ────┘
 
 POST-005 (translator) ──> POST-006 (typed ids)
 POST-007 (scroll) ──> POST-008 (settings provider)
@@ -61,16 +72,16 @@ POST-007 (scroll) ──> POST-008 (settings provider)
 
 ## Execution Plan (2026-05-13)
 
-### Batch 1: Default-On Readiness (P0) — In Progress
+### Batch 1: Default-On Readiness (P0) — Done
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|-----------|---------------------|--------|
-| POST-002: D3D12 segmented ownership | `D3D12-Segmented-Ownership-Prep.md` | Resolver misrouting fixed; text cache validated; device-removed guard verified | ✅ Code fixes done, manual smoke test pending |
+| POST-002: D3D12 segmented ownership | `D3D12-Segmented-Ownership-Prep.md` | Resolver misrouting fixed; text cache validated; device-removed guard verified | ✅ Done |
 | POST-003: Device-lost guard | `DrawingBackendCompositor.cs` | try/finally on both handoff and non-handoff paths | ✅ Done |
-| POST-004: Platform matrix (minimum) | Manual test | 60Hz spot check with enabled partial apply on Counter PoC | ❌ Not started |
-| POST-001: Default-on flip | `StyleOnlyFastPathOptions.cs` | All 5 go/no-go gates satisfied; single option change | ❌ Blocked by POST-004 minimum |
+| POST-004: Platform matrix (minimum) | Manual test | Multi-refresh + HiDPI/display scale spot check with default partial apply | ✅ Done |
+| POST-001: Default-on flip | `Program.cs` | All 5 go/no-go gates satisfied; rollback via `--no-partial-apply` | ✅ Done |
 
-**Batch 1 exit criteria:** Manual D3D12 smoke test passes at 60Hz with enabled partial apply. Go/no-go checklist reaches GO.
+**Batch 1 exit criteria:** Met. Default-on partial apply is no longer a blocker, but GA readiness still requires CI/matrix/perf evidence.
 
 ### Batch 2: Translator & Typed IDs (P1) — Not Started
 
