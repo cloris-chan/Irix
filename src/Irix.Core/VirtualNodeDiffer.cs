@@ -249,8 +249,8 @@ public static class VirtualNodeDiffer
         if (a.TryGetText(out var aText) && b.TryGetText(out var bText))
         {
             if (prevSnapshot is not { } ps || nextSnapshot is not { } ns) return false;
-            var aSpan = ps.Resolve(aText);
-            var bSpan = ns.Resolve(bText);
+            var aSpan = ps.ResolveRequired(aText);
+            var bSpan = ns.ResolveRequired(bText);
             if (aSpan.IsEmpty || bSpan.IsEmpty) return false;
             return aSpan.SequenceEqual(bSpan);
         }

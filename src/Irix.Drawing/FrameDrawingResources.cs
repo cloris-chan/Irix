@@ -117,6 +117,16 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         }
     }
 
+    internal static void Return(FrameDrawingResources resources, ulong expectedFrameId)
+    {
+        if (expectedFrameId != 0 && resources._frameId != expectedFrameId)
+        {
+            return;
+        }
+
+        Return(resources);
+    }
+
     /// <summary>
     /// Mark this instance as retained by a <see cref="Irix.Rendering.RetainedRenderFrame"/>.
     /// While retained, <see cref="Return"/> is a no-op, preventing the pool from recycling

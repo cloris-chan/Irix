@@ -30,35 +30,36 @@ public sealed class VirtualTextArena
         return new TextNodeContent(CurrentBufferId, new TextRange(start, text.Length));
     }
 
-    public ReadOnlySpan<char> Resolve(TextNodeContent content)
+    public ReadOnlySpan<char> ResolveRequired(TextNodeContent content)
     {
-        if (content.IsNone || content.BufferId != CurrentBufferId)
+        if (content.IsNone)
             return [];
+
+        if (content.BufferId != CurrentBufferId)
+        {
+            throw new InvalidOperationException(
+                $"Text content buffer id {content.BufferId.Value} does not match current text buffer id {CurrentBufferId.Value}.");
+        }
 
         var start = content.Range.Start;
         var length = content.Range.Length;
-        if (start < 0 || length <= 0 || start + length > _buffer.Count)
-            return [];
+        if ((uint)start > (uint)_buffer.Count || (uint)length > (uint)(_buffer.Count - start))
+        {
+            throw new InvalidOperationException(
+                $"Text content range [{start}..{start + length}) is outside the current text buffer length {_buffer.Count}.");
+        }
 
         return CollectionsMarshal.AsSpan(_buffer).Slice(start, length);
     }
 
-    [Obsolete("Use Resolve() with ReadOnlySpan<char> instead. Intended for diagnostics only.")]
-    public string ResolveString(TextNodeContent content)
-    {
-        var span = Resolve(content);
-        return span.IsEmpty ? "" : new string(span);
-    }
-
     public TextBufferSnapshot Snapshot()
     {
-        return new TextBufferSnapshot(CurrentBufferId, [.. _buffer]);
+        return GetOrCreateSnapshot();
     }
 
     /// <summary>
     /// Returns a cached snapshot of the current buffer, creating one if needed.
-    /// The cache is invalidated when text is added. Use this instead of <see cref="Snapshot"/>
-    /// when the snapshot will not be mutated and may be called multiple times per frame.
+    /// The cache is invalidated when text is added.
     /// </summary>
     public TextBufferSnapshot GetOrCreateSnapshot()
     {
@@ -92,30 +93,36 @@ public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) 
     public TextBufferId BufferId { get; } = bufferId;
     public char[] Buffer { get; } = buffer;
 
-    /// <summary>
-    /// True when this snapshot was created from a live arena (BufferId is set and Buffer is non-null).
-    /// A default-constructed snapshot is not valid.
-    /// </summary>
-    public bool IsValid => !BufferId.IsNone && Buffer is not null;
-
-    public ReadOnlySpan<char> Resolve(TextNodeContent content)
+    public ReadOnlySpan<char> ResolveRequired(TextNodeContent content)
     {
-        if (content.IsNone || content.BufferId != BufferId || Buffer is null)
+        if (content.IsNone)
             return [];
+
+        if (Buffer is null)
+        {
+            throw new InvalidOperationException("Text content requires a text buffer snapshot, but the snapshot is default.");
+        }
+
+        if (BufferId.IsNone)
+        {
+            throw new InvalidOperationException("Text content requires a text buffer snapshot with a buffer id.");
+        }
+
+        if (content.BufferId != BufferId)
+        {
+            throw new InvalidOperationException(
+                $"Text content buffer id {content.BufferId.Value} does not match snapshot buffer id {BufferId.Value}.");
+        }
 
         var start = content.Range.Start;
         var length = content.Range.Length;
-        if (start < 0 || length <= 0 || start + length > Buffer.Length)
-            return [];
+        if ((uint)start > (uint)Buffer.Length || (uint)length > (uint)(Buffer.Length - start))
+        {
+            throw new InvalidOperationException(
+                $"Text content range [{start}..{start + length}) is outside snapshot buffer length {Buffer.Length}.");
+        }
 
         return Buffer.AsSpan(start, length);
-    }
-
-    [Obsolete("Use Resolve() with ReadOnlySpan<char> instead. Intended for diagnostics only.")]
-    public string ResolveString(TextNodeContent content)
-    {
-        var span = Resolve(content);
-        return span.IsEmpty ? "" : new string(span);
     }
 
     public bool Equals(TextBufferSnapshot other) => BufferId == other.BufferId && ReferenceEquals(Buffer, other.Buffer);

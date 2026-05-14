@@ -86,7 +86,11 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             return new ApplyResult([0], prevRoot, prevSnapshot);
         }
 
-        _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty), batch.TextSnapshot);
+        var appliedRoot = ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty);
+        var nextRoot = batch.TextSnapshot.Buffer is not null && batch.Root.Kind != default
+            ? batch.Root
+            : appliedRoot;
+        _tree = new VirtualNodeTree(nextRoot, batch.TextSnapshot);
         dirty.Sort();
         var deduped = new List<int>(dirty.Count);
         var last = -1;

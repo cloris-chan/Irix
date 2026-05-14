@@ -85,7 +85,7 @@ internal static class CounterInputRouter
             1 => new CounterMessage.Increment(),
             2 => new CounterMessage.Decrement(),
             3 => new CounterMessage.Reset(0),
-            _ => throw new NotSupportedException($"Unsupported action id: {actionId}")
+            _ => throw new NotSupportedException($"Unsupported action id: {actionId.Value}")
         };
     }
 }

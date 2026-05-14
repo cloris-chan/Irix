@@ -33,7 +33,7 @@ public sealed class PatchDiffEquivalenceTests
         // Layout from new tree root should produce "World"
         var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Single(layout);
-        Assert.Equal("World", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
+        Assert.Equal("World", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
 
         batch.Dispose();
     }
@@ -59,8 +59,8 @@ public sealed class PatchDiffEquivalenceTests
 
         var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Equal(2, layout.Count);
-        Assert.Equal("Hello", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
-        Assert.Equal("World", batch.TextSnapshot.Resolve(layout[1].Text).ToString());
+        Assert.Equal("Hello", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
+        Assert.Equal("World", batch.TextSnapshot.ResolveRequired(layout[1].Text).ToString());
 
         batch.Dispose();
     }
@@ -86,7 +86,7 @@ public sealed class PatchDiffEquivalenceTests
 
         var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Single(layout);
-        Assert.Equal("Hello", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
+        Assert.Equal("Hello", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
 
         batch.Dispose();
     }
@@ -120,9 +120,9 @@ public sealed class PatchDiffEquivalenceTests
         // Layout from PatchBatch.Root should have all 3 children with "B-modified"
         var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Equal(3, layout.Count);
-        Assert.Equal("A", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
-        Assert.Equal("B-modified", batch.TextSnapshot.Resolve(layout[1].Text).ToString());
-        Assert.Equal("C", batch.TextSnapshot.Resolve(layout[2].Text).ToString());
+        Assert.Equal("A", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
+        Assert.Equal("B-modified", batch.TextSnapshot.ResolveRequired(layout[1].Text).ToString());
+        Assert.Equal("C", batch.TextSnapshot.ResolveRequired(layout[2].Text).ToString());
 
         batch.Dispose();
     }
@@ -148,7 +148,7 @@ public sealed class PatchDiffEquivalenceTests
         var hasClickText = false;
         foreach (var el in layout)
         {
-            if (batch.TextSnapshot.Resolve(el.Text).ToString() == "Click") { hasClickText = true; break; }
+            if (batch.TextSnapshot.ResolveRequired(el.Text).ToString() == "Click") { hasClickText = true; break; }
         }
         Assert.True(hasClickText, "Expected 'Click' text in layout elements");
 
@@ -169,5 +169,5 @@ public sealed class PatchDiffEquivalenceTests
     }
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
-        content.TryGetText(out var tc) ? arena.ResolveString(tc) : "";
+        content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
 }

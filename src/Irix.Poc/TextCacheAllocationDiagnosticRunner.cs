@@ -37,9 +37,21 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine();
 
         var arena = new VirtualTextArena();
-        RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) => BuildRoot(arena, "Static cache baseline", scrollY: 0));
-        RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) => BuildRoot(arena, "Scrolling cache baseline", scrollY: i * 2));
-        RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, scale) => BuildRoot(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0), scaleChangeAtHalf: true);
+        RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) =>
+        {
+            var root = BuildRoot(arena, "Static cache baseline", scrollY: 0);
+            return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
+        });
+        RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) =>
+        {
+            var root = BuildRoot(arena, "Scrolling cache baseline", scrollY: i * 2);
+            return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
+        });
+        RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, scale) =>
+        {
+            var root = BuildRoot(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0);
+            return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
+        }, scaleChangeAtHalf: true);
 
         output.WriteLine("=== Text cache / allocation diagnostic complete ===");
     }
@@ -53,7 +65,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         DrawingBackendCompositor compositor,
         WindowDrawCommandTranslator translator,
         DisplayScale displayScale,
-        Func<int, DisplayScale, VirtualNode> rootFactory,
+        Func<int, DisplayScale, VirtualNodeTree> treeFactory,
         bool scaleChangeAtHalf = false)
     {
         renderer.ResetTextDiagnostics();
@@ -63,8 +75,8 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var poolBefore = FrameDrawingResources.GetPoolDiagnostics();
         var allocatedBefore = GC.GetTotalAllocatedBytes(true);
-        var previousRoot = default(VirtualNode);
-        var hasPreviousRoot = false;
+        var previousTree = default(VirtualNodeTree);
+        var hasPreviousTree = false;
         var activeScale = displayScale;
 
         for (var i = 0; i < frameCount; i++)
@@ -78,13 +90,13 @@ internal static class TextCacheAllocationDiagnosticRunner
                 compositor.SetViewport(new PixelRectangle(0, 0, renderer.Width, renderer.Height), activeScale);
             }
 
-            var root = rootFactory(i, activeScale);
-            using var patch = hasPreviousRoot
-                ? VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(previousRoot), new VirtualNodeTree(root))
-                : VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+            var nextTree = treeFactory(i, activeScale);
+            using var patch = hasPreviousTree
+                ? VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree)
+                : VirtualNodeDiffer.CreatePatchBatch(default, nextTree);
             using var batch = translator.Translate(patch);
-            previousRoot = root;
-            hasPreviousRoot = true;
+            previousTree = nextTree;
+            hasPreviousTree = true;
 
             compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
             if (renderer.IsDeviceRemoved)

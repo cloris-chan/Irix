@@ -76,7 +76,7 @@ internal static class DiagnosticsFormatter
         };
         foreach (var hitTarget in snapshot.HitTargets)
         {
-            lines.Add($"  Hit target: {hitTarget.ActionId} bounds=({hitTarget.Bounds.X},{hitTarget.Bounds.Y},{hitTarget.Bounds.Width},{hitTarget.Bounds.Height}) clip=({hitTarget.ClipBounds.X},{hitTarget.ClipBounds.Y},{hitTarget.ClipBounds.Width},{hitTarget.ClipBounds.Height})");
+            lines.Add($"  Hit target: {hitTarget.ActionId.Value} bounds=({hitTarget.Bounds.X},{hitTarget.Bounds.Y},{hitTarget.Bounds.Width},{hitTarget.Bounds.Height}) clip=({hitTarget.ClipBounds.X},{hitTarget.ClipBounds.Y},{hitTarget.ClipBounds.Width},{hitTarget.ClipBounds.Height})");
         }
         foreach (var scrollDiagnostics in snapshot.ScrollContainerDiagnostics)
         {

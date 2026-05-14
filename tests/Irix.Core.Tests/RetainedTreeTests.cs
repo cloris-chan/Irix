@@ -165,12 +165,13 @@ public sealed class RetainedTreeTests
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
                 VirtualNodeAttribute.Action(new ActionId(1))));
 
-        using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev), new VirtualNodeTree(next));
-        var tree = new RetainedTree(new VirtualNodeTree(prev));
+        var snapshot = _arena.Snapshot();
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev, snapshot), new VirtualNodeTree(next, snapshot));
+        var tree = new RetainedTree(new VirtualNodeTree(prev, snapshot));
 
         tree.Apply(batch);
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(next, tree.Tree.Root, null, null));
+        Assert.True(VirtualNodeDiffer.NodesEqual(next, tree.Tree.Root, snapshot, tree.Tree.TextSnapshot));
     }
 
     [Fact]
@@ -186,8 +187,9 @@ public sealed class RetainedTreeTests
             VirtualNodeBuilder.Text(_arena, "c", new NodeKey(30)),
             VirtualNodeBuilder.Text(_arena, "d", new NodeKey(40)));
 
-        using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev), new VirtualNodeTree(next));
-        var tree = new RetainedTree(new VirtualNodeTree(prev));
+        var snapshot = _arena.Snapshot();
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev, snapshot), new VirtualNodeTree(next, snapshot));
+        var tree = new RetainedTree(new VirtualNodeTree(prev, snapshot));
 
         tree.Apply(batch);
 
@@ -289,5 +291,5 @@ public sealed class RetainedTreeTests
     }
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
-        content.TryGetText(out var tc) ? arena.ResolveString(tc) : "";
+        content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
 }

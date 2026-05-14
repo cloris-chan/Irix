@@ -17,8 +17,6 @@ public readonly struct ActionId(uint value) : IEquatable<ActionId>
     public static bool operator ==(ActionId left, ActionId right) => left.Value == right.Value;
 
     public static bool operator !=(ActionId left, ActionId right) => left.Value != right.Value;
-
-    public override string ToString() => Value.ToString();
 }
 
 public readonly struct NodeKey(uint value) : IEquatable<NodeKey>

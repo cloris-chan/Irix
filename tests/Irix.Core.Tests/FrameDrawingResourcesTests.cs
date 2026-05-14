@@ -1,4 +1,5 @@
 using Irix.Drawing;
+using Irix.Rendering;
 using Xunit;
 
 namespace Irix.Core.Tests;
@@ -197,5 +198,27 @@ public sealed class FrameDrawingResourcesTests
         }
 
         FrameDrawingResources.Return(r2);
+    }
+
+    [Fact]
+    public void Stale_render_frame_batch_dispose_does_not_return_reused_resources()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var staleBatch = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0),
+            [],
+            resources);
+        staleBatch.Dispose();
+
+        var active = FrameDrawingResources.Rent();
+        Assert.Same(resources, active);
+
+        var text = active.AddText("active");
+        active.Seal();
+
+        staleBatch.Dispose();
+
+        Assert.Equal("active", active.Resolve(text).ToString());
+        FrameDrawingResources.Return(active);
     }
 }

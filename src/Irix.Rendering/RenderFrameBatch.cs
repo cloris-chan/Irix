@@ -30,6 +30,8 @@ public readonly record struct RenderFrameBatch(
     IFrameResourceResolver Resources,
     IReadOnlyList<(int Start, int Count)> DirtyCommandRanges) : IDisposable
 {
+    private readonly ulong _resourceFrameId = Resources is FrameDrawingResources resources ? resources.FrameId : 0;
+
     public RenderFrameBatch(DrawCommandBatch Commands, IReadOnlyList<HitTestTarget> HitTargets)
         : this(Commands, HitTargets, FrameDrawingResources.Empty, [])
     {
@@ -45,7 +47,7 @@ public readonly record struct RenderFrameBatch(
         Commands.Dispose();
         if (Resources is FrameDrawingResources resources)
         {
-            FrameDrawingResources.Return(resources);
+            FrameDrawingResources.Return(resources, _resourceFrameId);
         }
     }
 }

@@ -61,7 +61,7 @@ internal static class ResizeDiagnosticRunner
             d3d12Renderer.Resize(width, height);
 
             using var patch = i == 0
-                ? VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root))
+                ? VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root, arena.GetOrCreateSnapshot()))
                 : PatchBatch.CreateRenderRequest();
             using var frame = translator.Translate(patch);
             compositor.RenderAsync(frame).AsTask().GetAwaiter().GetResult();

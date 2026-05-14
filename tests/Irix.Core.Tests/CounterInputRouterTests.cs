@@ -1628,5 +1628,5 @@ public sealed class CounterInputRouterTests
     }
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
-        content.TryGetText(out var tc) ? arena.ResolveString(tc) : "";
+        content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
 }

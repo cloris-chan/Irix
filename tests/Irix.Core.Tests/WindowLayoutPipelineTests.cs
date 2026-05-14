@@ -27,14 +27,14 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.Equal(LayoutElementKind.Text, elements[0].Kind);
         Assert.Equal(new PixelRectangle(16, 16, 928, 32), elements[0].Bounds);
-        Assert.Equal("Count: 0", snapshot.Resolve(elements[0].Text).ToString());
+        Assert.Equal("Count: 0", snapshot.ResolveRequired(elements[0].Text).ToString());
 
         Assert.Equal(LayoutElementKind.Rectangle, elements[1].Kind);
         Assert.Equal(new PixelRectangle(16, 60, 220, 48), elements[1].Bounds);
 
         Assert.Equal(LayoutElementKind.Button, elements[2].Kind);
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), elements[2].Bounds);
-        Assert.Equal("Increment", snapshot.Resolve(elements[2].Text).ToString());
+        Assert.Equal("Increment", snapshot.ResolveRequired(elements[2].Text).ToString());
         Assert.Equal(new ActionId(1), elements[2].ActionId);
     }
 

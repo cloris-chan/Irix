@@ -48,18 +48,30 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
 
         var maximumCommandCount = elements.Count * 2;
         var resources = FrameDrawingResources.Rent();
-        var textStyle = resources.AddTextStyle(_style.TextStyle);
-        var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
+        var success = false;
+        try
+        {
+            var textStyle = resources.AddTextStyle(_style.TextStyle);
+            var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
 
-        var (batch, resolver, elementRanges) = maximumCommandCount <= StackCommandThreshold
-            ? RecordSmallBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount, textSnapshot)
-            : RecordLargeBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount, textSnapshot);
+            var (batch, resolver, elementRanges) = maximumCommandCount <= StackCommandThreshold
+                ? RecordSmallBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount, textSnapshot)
+                : RecordLargeBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount, textSnapshot);
 
-        var dirtyCommandRanges = dirtyElementRanges is { Count: > 0 }
-            ? RangeUtils.MapAndMerge(elementRanges, dirtyElementRanges)
-            : (IReadOnlyList<(int Start, int Count)>)[];
+            var dirtyCommandRanges = dirtyElementRanges is { Count: > 0 }
+                ? RangeUtils.MapAndMerge(elementRanges, dirtyElementRanges)
+                : (IReadOnlyList<(int Start, int Count)>)[];
 
-        return new DrawCommandRecordResult(batch, resolver, elementRanges, dirtyCommandRanges);
+            success = true;
+            return new DrawCommandRecordResult(batch, resolver, elementRanges, dirtyCommandRanges);
+        }
+        finally
+        {
+            if (!success)
+            {
+                FrameDrawingResources.Return(resources);
+            }
+        }
     }
 
     private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRange[]) RecordSmallBatch(
@@ -176,10 +188,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
 
     private static ReadOnlySpan<char> ResolveText(TextNodeContent content, TextBufferSnapshot snapshot)
     {
-        if (content.IsNone) return default;
-        if (!snapshot.IsValid)
-            throw new InvalidOperationException("TextLayoutElement has text content but the TextBufferSnapshot is invalid (default or missing buffer).");
-        return snapshot.Resolve(content);
+        return snapshot.ResolveRequired(content);
     }
 
     private static DrawRect ToDrawRect(PixelRectangle bounds)

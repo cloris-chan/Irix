@@ -79,8 +79,8 @@ internal static class SyncDiagnosticRunner
     {
         var syncWaits = new List<double>(frameCount);
         var frameTimes = new List<long>(frameCount);
-        var previousRoot = default(VirtualNode);
-        var hasPreviousRoot = false;
+        var previousTree = default(VirtualNodeTree);
+        var hasPreviousTree = false;
 
         for (var i = 0; i < frameCount; i++)
         {
@@ -98,12 +98,13 @@ internal static class SyncDiagnosticRunner
                         VirtualNodeAttribute.Action(new ActionId(301))),
                 ]);
 
-            using var patch = hasPreviousRoot
-                ? VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(previousRoot), new VirtualNodeTree(root))
-                : VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root));
+            var nextTree = new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
+            using var patch = hasPreviousTree
+                ? VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree)
+                : VirtualNodeDiffer.CreatePatchBatch(default, nextTree);
             using var batch = translator.Translate(patch);
-            previousRoot = root;
-            hasPreviousRoot = true;
+            previousTree = nextTree;
+            hasPreviousTree = true;
 
             var diagBefore = d3d12Backend.FrameSerialDiagnostics;
             compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();

@@ -170,6 +170,14 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void ActionId_does_not_define_primitive_ToString_formatter()
+    {
+        var toString = typeof(ActionId).GetMethod(nameof(ToString), Type.EmptyTypes);
+
+        Assert.NotEqual(typeof(ActionId), toString?.DeclaringType);
+    }
+
+    [Fact]
     public void NodeContent_Number_roundtrip()
     {
         var nc = NodeContent.FromNumber(3.14);
@@ -240,6 +248,21 @@ public class TypedIdAllocationGuardTests
             var content = File.ReadAllText(file);
             Assert.DoesNotContain("FromText(string", content);
             Assert.DoesNotContain("string? Text", content);
+        }
+    }
+
+    [Fact]
+    public void Irix_Core_has_no_ResolveString_text_api()
+    {
+        var sourceFiles = Directory.GetFiles(
+            Path.Combine(FindRepoRoot(), "src", "Irix.Core"),
+            "*.cs",
+            SearchOption.AllDirectories);
+
+        foreach (var file in sourceFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.DoesNotContain("ResolveString", content);
         }
     }
 
