@@ -10,10 +10,16 @@ public enum AttributeDomain : byte
     Style = 6,
 }
 
-public readonly struct VirtualAttributeKey(AttributeDomain domain, ushort code) : IEquatable<VirtualAttributeKey>
+public readonly struct VirtualAttributeKey : IEquatable<VirtualAttributeKey>
 {
-    public AttributeDomain Domain { get; } = domain;
-    public ushort Code { get; } = code;
+    internal VirtualAttributeKey(AttributeDomain domain, ushort code)
+    {
+        Domain = domain;
+        Code = code;
+    }
+
+    public AttributeDomain Domain { get; }
+    public ushort Code { get; }
 
     public bool Equals(VirtualAttributeKey other) => Domain == other.Domain && Code == other.Code;
 
@@ -84,6 +90,7 @@ public readonly struct AttributeChangeSet(ulong layoutMask = 0, ulong styleMask 
 
     public static AttributeChangeSet AddKey(AttributeChangeSet set, VirtualAttributeKey key)
     {
+        if (key.Code is 0 or > 64) return set;
         var bit = 1ul << (key.Code - 1);
         return key.Domain switch
         {

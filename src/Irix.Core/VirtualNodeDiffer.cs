@@ -12,7 +12,7 @@ public static class VirtualNodeDiffer
         var prevRoot = previousTree.Root;
         if (prevEmpty && nextEmpty)
         {
-            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, prevTextSnapshot: prevSnapshot, previousRoot: prevRoot);
+            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot);
         }
 
         // Empty → something or something → empty: ReplaceRoot
@@ -20,10 +20,10 @@ public static class VirtualNodeDiffer
         {
             if (NodesEqual(prevRoot, nextTree.Root, prevSnapshot, nextSnapshot))
             {
-                return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, prevTextSnapshot: prevSnapshot, previousRoot: prevRoot);
+                return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot);
             }
             return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>(
-                [new VirtualNodePatch(VirtualNodePatchOperation.ReplaceRoot, 0, nextTree.Root, screenId)]), 1, screenId, textSnapshot: nextSnapshot, prevTextSnapshot: prevSnapshot, previousRoot: prevRoot);
+                [new VirtualNodePatch(VirtualNodePatchOperation.ReplaceRoot, 0, nextTree.Root, screenId)]), 1, screenId, textSnapshot: nextSnapshot);
         }
 
         // Both non-empty: local diff
@@ -32,7 +32,7 @@ public static class VirtualNodeDiffer
 
         if (patches.Count == 0)
         {
-            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, prevTextSnapshot: prevSnapshot, previousRoot: prevRoot);
+            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot);
         }
 
         for (var i = 0; i < patches.Count; i++)
@@ -40,7 +40,7 @@ public static class VirtualNodeDiffer
             patches[i] = patches[i] with { ScreenId = screenId };
         }
 
-        return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([.. patches]), patches.Count, screenId, textSnapshot: nextSnapshot, prevTextSnapshot: prevSnapshot, previousRoot: prevRoot);
+        return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([.. patches]), patches.Count, screenId, textSnapshot: nextSnapshot);
     }
 
     private static bool IsDefaultTree(VirtualNodeTree tree)
@@ -248,8 +248,10 @@ public static class VirtualNodeDiffer
         if (a == b) return true;
         if (a.TryGetText(out var aText) && b.TryGetText(out var bText))
         {
-            var aSpan = prevSnapshot is { } ps ? ps.Resolve(aText) : default;
-            var bSpan = nextSnapshot is { } ns ? ns.Resolve(bText) : default;
+            if (prevSnapshot is not { } ps || nextSnapshot is not { } ns) return false;
+            var aSpan = ps.Resolve(aText);
+            var bSpan = ns.Resolve(bText);
+            if (aSpan.IsEmpty || bSpan.IsEmpty) return false;
             return aSpan.SequenceEqual(bSpan);
         }
         return false;

@@ -19,10 +19,19 @@ public readonly struct TextBufferId(uint value) : IEquatable<TextBufferId>
     public static bool operator !=(TextBufferId left, TextBufferId right) => left.Value != right.Value;
 }
 
-public readonly struct TextRange(int start, int length) : IEquatable<TextRange>
+public readonly struct TextRange : IEquatable<TextRange>
 {
-    public int Start { get; } = start;
-    public int Length { get; } = length;
+    public TextRange(int start, int length)
+    {
+        if (start < 0) throw new ArgumentOutOfRangeException(nameof(start));
+        if (length < 0) throw new ArgumentOutOfRangeException(nameof(length));
+        if (start > int.MaxValue - length) throw new ArgumentOutOfRangeException(nameof(length), "start + length overflows");
+        Start = start;
+        Length = length;
+    }
+
+    public int Start { get; }
+    public int Length { get; }
 
     public int End => Start + Length;
 

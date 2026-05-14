@@ -1,6 +1,15 @@
 namespace Irix;
 
 /// <summary>
+/// Result of <see cref="RetainedTree.Apply"/>, containing the dirty node set
+/// and the previous tree state for dirty classification.
+/// </summary>
+public readonly record struct ApplyResult(
+    IReadOnlyList<int> Dirty,
+    VirtualNode PreviousRoot,
+    TextBufferSnapshot PreviousTextSnapshot);
+
+/// <summary>
 /// Applies <see cref="PatchBatch"/> patches to a <see cref="VirtualNode"/> tree,
 /// producing a new immutable tree. Uses a single DFS pass to avoid index drift
 /// from sequential patch application.
@@ -27,30 +36,22 @@ namespace Irix;
 public sealed class RetainedTree(VirtualNodeTree tree)
 {
     private VirtualNodeTree _tree = tree;
-    private VirtualNode _previousRoot;
-    private TextBufferSnapshot? _previousTextSnapshot;
 
     /// <summary>The current retained tree.</summary>
     public VirtualNodeTree Tree => _tree;
 
-    /// <summary>The root from before the most recent <see cref="Apply"/> call.</summary>
-    public VirtualNode PreviousRoot => _previousRoot;
-
-    /// <summary>The text snapshot that can resolve <see cref="PreviousRoot"/>'s content.</summary>
-    public TextBufferSnapshot? PreviousTextSnapshot => _previousTextSnapshot;
-
     /// <summary>
     /// Apply all patches in the batch in a single DFS pass.
-    /// Returns sorted, deduplicated DFS node indices that were affected.
+    /// Returns the dirty set and previous tree state for classification.
     /// </summary>
-    public IReadOnlyList<int> Apply(PatchBatch batch)
+    public ApplyResult Apply(PatchBatch batch)
     {
-        _previousRoot = _tree.Root;
-        _previousTextSnapshot = _tree.TextSnapshot;
+        var prevRoot = _tree.Root;
+        var prevSnapshot = _tree.TextSnapshot;
         if (batch.Count == 0)
         {
-            if (batch.Root.Kind != default) _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot, batch.PrevTextSnapshot);
-            return [];
+            if (batch.Root.Kind != default) _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
+            return new ApplyResult([], prevRoot, prevSnapshot);
         }
 
         var dirty = new List<int>();
@@ -81,11 +82,11 @@ public sealed class RetainedTree(VirtualNodeTree tree)
 
         if (replacePatches.TryGetValue(0, out VirtualNode value))
         {
-            _tree = new VirtualNodeTree(value, batch.TextSnapshot, batch.PrevTextSnapshot);
-            return [0];
+            _tree = new VirtualNodeTree(value, batch.TextSnapshot);
+            return new ApplyResult([0], prevRoot, prevSnapshot);
         }
 
-        _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty), batch.TextSnapshot, batch.PrevTextSnapshot);
+        _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty), batch.TextSnapshot);
         dirty.Sort();
         var deduped = new List<int>(dirty.Count);
         var last = -1;
@@ -93,7 +94,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         {
             if (d != last) { deduped.Add(d); last = d; }
         }
-        return deduped;
+        return new ApplyResult(deduped, prevRoot, prevSnapshot);
     }
 
     private static VirtualNode ApplyRecursive(

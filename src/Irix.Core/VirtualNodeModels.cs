@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Irix;
@@ -61,34 +60,28 @@ public readonly struct NodeContent : IEquatable<NodeContent>
     [FieldOffset(8)] private readonly ulong _data0;
     [FieldOffset(16)] private readonly ulong _data1;
 
+    private NodeContent(NodeContentKind kind, ulong data0, ulong data1)
+    {
+        _kind = kind;
+        _padding0 = 0;
+        _padding1 = 0;
+        _padding2 = 0;
+        _data0 = data0;
+        _data1 = data1;
+    }
+
     public NodeContentKind Kind => _kind;
 
     public static NodeContent None => default;
 
-    public static NodeContent FromText(TextNodeContent textContent)
-    {
-        var nc = default(NodeContent);
-        Unsafe.AsRef(in nc._kind) = NodeContentKind.Text;
-        Unsafe.AsRef(in nc._data0) = textContent.BufferId.Value;
-        Unsafe.AsRef(in nc._data1) = (ulong)(uint)textContent.Range.Start | ((ulong)(uint)textContent.Range.Length << 32);
-        return nc;
-    }
+    public static NodeContent FromText(TextNodeContent textContent) =>
+        new(NodeContentKind.Text, textContent.BufferId.Value, (ulong)(uint)textContent.Range.Start | ((ulong)(uint)textContent.Range.Length << 32));
 
-    public static NodeContent FromNumber(double value)
-    {
-        var nc = default(NodeContent);
-        Unsafe.AsRef(in nc._kind) = NodeContentKind.Number;
-        Unsafe.AsRef(in nc._data0) = BitConverter.DoubleToUInt64Bits(value);
-        return nc;
-    }
+    public static NodeContent FromNumber(double value) =>
+        new(NodeContentKind.Number, BitConverter.DoubleToUInt64Bits(value), 0);
 
-    public static NodeContent FromBoolean(bool value)
-    {
-        var nc = default(NodeContent);
-        Unsafe.AsRef(in nc._kind) = NodeContentKind.Boolean;
-        Unsafe.AsRef(in nc._data0) = value ? 1ul : 0ul;
-        return nc;
-    }
+    public static NodeContent FromBoolean(bool value) =>
+        new(NodeContentKind.Boolean, value ? 1ul : 0ul, 0);
 
     public bool TryGetText(out TextNodeContent textContent)
     {
@@ -133,33 +126,27 @@ public readonly struct AttributeValue : IEquatable<AttributeValue>
     [FieldOffset(4)] private readonly uint _uintValue;
     [FieldOffset(8)] private readonly ulong _data0;
 
+    private AttributeValue(AttributeValueKind kind, uint uintValue, ulong data0)
+    {
+        _kind = kind;
+        _padding0 = 0;
+        _padding1 = 0;
+        _uintValue = uintValue;
+        _data0 = data0;
+    }
+
     public AttributeValueKind Kind => _kind;
 
     public static AttributeValue None => default;
 
-    public static AttributeValue FromNumber(double value)
-    {
-        var av = default(AttributeValue);
-        Unsafe.AsRef(in av._kind) = AttributeValueKind.Number;
-        Unsafe.AsRef(in av._data0) = BitConverter.DoubleToUInt64Bits(value);
-        return av;
-    }
+    public static AttributeValue FromNumber(double value) =>
+        new(AttributeValueKind.Number, 0, BitConverter.DoubleToUInt64Bits(value));
 
-    public static AttributeValue FromBoolean(bool value)
-    {
-        var av = default(AttributeValue);
-        Unsafe.AsRef(in av._kind) = AttributeValueKind.Boolean;
-        Unsafe.AsRef(in av._uintValue) = value ? 1u : 0u;
-        return av;
-    }
+    public static AttributeValue FromBoolean(bool value) =>
+        new(AttributeValueKind.Boolean, value ? 1u : 0u, 0);
 
-    public static AttributeValue FromActionId(ActionId value)
-    {
-        var av = default(AttributeValue);
-        Unsafe.AsRef(in av._kind) = AttributeValueKind.ActionId;
-        Unsafe.AsRef(in av._uintValue) = value.Value;
-        return av;
-    }
+    public static AttributeValue FromActionId(ActionId value) =>
+        new(AttributeValueKind.ActionId, value.Value, 0);
 
     public bool TryGetNumber(out double value)
     {
@@ -199,7 +186,7 @@ public readonly struct AttributeValue : IEquatable<AttributeValue>
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key → NodeKey) ─
 
-public readonly record struct VirtualNodeTree(VirtualNode Root, TextBufferSnapshot TextSnapshot = default, TextBufferSnapshot PreviousTextSnapshot = default);
+public readonly record struct VirtualNodeTree(VirtualNode Root, TextBufferSnapshot TextSnapshot = default);
 
 public readonly record struct VirtualNode
 {
@@ -226,8 +213,17 @@ public readonly record struct VirtualNode
 
 // ── VirtualNodeAttribute (R13-9: domain-scoped key, R13-18: helpers) ─
 
-public readonly record struct VirtualNodeAttribute(VirtualAttributeKey Key, AttributeValue Value)
+public readonly record struct VirtualNodeAttribute
 {
+    internal VirtualNodeAttribute(VirtualAttributeKey Key, AttributeValue Value)
+    {
+        this.Key = Key;
+        this.Value = Value;
+    }
+
+    public VirtualAttributeKey Key { get; }
+    public AttributeValue Value { get; }
+
     public static VirtualNodeAttribute Action(ActionId actionId) =>
         new(VirtualAttributeKey.ActionId, AttributeValue.FromActionId(actionId));
 

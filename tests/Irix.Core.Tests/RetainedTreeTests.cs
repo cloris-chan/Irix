@@ -14,7 +14,7 @@ public sealed class RetainedTreeTests
             [new VirtualNodePatch(VirtualNodePatchOperation.ReplaceRoot, 0, newRoot)]), 1);
         var tree = new RetainedTree(oldTree);
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.Equal(ResolveNodeText(_arena, newRoot.Content), ResolveNodeText(_arena, tree.Tree.Root.Content));
         Assert.Contains(0, dirty);
@@ -31,7 +31,7 @@ public sealed class RetainedTreeTests
             [new VirtualNodePatch(VirtualNodePatchOperation.Update, 1, updated)]), 1);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.Equal("after", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
         Assert.Equal(VirtualNodeKind.Button, tree.Tree.Root.Children[1].Kind);
@@ -64,7 +64,7 @@ public sealed class RetainedTreeTests
         // Text("a"): index 1, size 1
         // Add target: index 2 = root's childEnd
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         var rootResult = tree.Tree.Root;
         Assert.True(rootResult.Children.Length >= 2,
@@ -84,7 +84,7 @@ public sealed class RetainedTreeTests
             [new VirtualNodePatch(VirtualNodePatchOperation.Remove, 2, default)]), 1);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.Single(tree.Tree.Root.Children);
         Assert.Equal("keep", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
@@ -104,7 +104,7 @@ public sealed class RetainedTreeTests
             [new VirtualNodePatch(VirtualNodePatchOperation.Update, 2, updated)]), 1);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.Equal("unchanged", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
         // Button's content is default (text lives in child Text node); children preserved from old tree
@@ -130,7 +130,7 @@ public sealed class RetainedTreeTests
         ]), 2);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.True(tree.Tree.Root.Children.Length == 3,
             $"Expected 3 children, got {tree.Tree.Root.Children.Length}. dirty=[{string.Join(",", dirty)}]");
@@ -146,7 +146,7 @@ public sealed class RetainedTreeTests
         var batch = new PatchBatch(root, new PatchMemoryOwner<VirtualNodePatch>([]), 0);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.Equal("stable", ResolveNodeText(_arena, tree.Tree.Root.Content));
         Assert.Empty(dirty);
@@ -220,7 +220,7 @@ public sealed class RetainedTreeTests
         ]), 2);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         // Should be sorted ascending
         Assert.Equal(2, dirty.Count);
@@ -243,7 +243,7 @@ public sealed class RetainedTreeTests
         ]), 2);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         // Parent (root, index 0) should appear only once even though two children were added
         Assert.Contains(0, dirty);
@@ -262,7 +262,7 @@ public sealed class RetainedTreeTests
             [new VirtualNodePatch(VirtualNodePatchOperation.Update, 1, updated)]), 1);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.Contains(1, dirty);   // the updated node
         Assert.DoesNotContain(0, dirty); // parent not dirty (children unchanged)
@@ -283,7 +283,7 @@ public sealed class RetainedTreeTests
         ]), 2);
         var tree = new RetainedTree(new VirtualNodeTree(root));
 
-        var dirty = tree.Apply(batch);
+        var dirty = tree.Apply(batch).Dirty;
 
         Assert.Contains(0, dirty); // parent dirty
     }

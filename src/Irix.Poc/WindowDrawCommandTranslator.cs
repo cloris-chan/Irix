@@ -66,6 +66,8 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     public RenderFrameBatch Translate(PatchBatch patchBatch)
     {
         IReadOnlyList<int>? dirty = null;
+        VirtualNode previousRoot = default;
+        TextBufferSnapshot? prevTextSnapshot = null;
         if (patchBatch.Kind == PatchBatchKind.RenderRequest)
         {
             // Render request: reuse retained tree, no dirty nodes
@@ -73,7 +75,13 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         else if (patchBatch.Count > 0)
         {
             // Diff batch: apply patches to retained tree, get dirty set
-            dirty = _retainedTree.Apply(patchBatch);
+            var result = _retainedTree.Apply(patchBatch);
+            dirty = result.Dirty;
+            if (dirty.Count > 0)
+            {
+                previousRoot = result.PreviousRoot;
+                prevTextSnapshot = result.PreviousTextSnapshot;
+            }
         }
         else
         {
@@ -92,8 +100,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
                 (int)(physicalViewport.Width / _displayScale.ScaleX),
                 (int)(physicalViewport.Height / _displayScale.ScaleY));
         var textSnapshot = _retainedTree.Tree.TextSnapshot;
-        var prevTextSnapshot = _retainedTree.PreviousTextSnapshot;
-        var previousRoot = _retainedTree.PreviousRoot;
         var batch = _ownerFeed is not null
             ? _ownerFeed.Build(_retainedTree.Tree.Root, viewport, dirty, textSnapshot, prevTextSnapshot, previousRoot)
             : _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty, textSnapshot, prevTextSnapshot, previousRoot);

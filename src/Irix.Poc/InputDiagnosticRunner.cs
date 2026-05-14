@@ -168,11 +168,9 @@ internal static class InputDiagnosticRunner
         var viewport = new PixelRectangle(0, 0, 960, 540);
         using (var initialPatch = VirtualNodeDiffer.CreatePatchBatch(default, currentTree))
         {
-            var initialDirty = retainedTree.Apply(initialPatch);
+            var initialResult = retainedTree.Apply(initialPatch);
             var initialSnapshot = retainedTree.Tree.TextSnapshot;
-            var initialPrevSnapshot = retainedTree.PreviousTextSnapshot;
-            var initialPrevRoot = retainedTree.PreviousRoot;
-            using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialDirty, initialSnapshot, initialPrevSnapshot, initialPrevRoot);
+            using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialResult.Dirty, initialSnapshot);
             pipeline.RetainedFrame.Invalidate();
         }
 
@@ -208,11 +206,11 @@ internal static class InputDiagnosticRunner
             model = app.Update(model, message).NextModel;
             var nextTree = app.BuildView(model);
             using var patch = VirtualNodeDiffer.CreatePatchBatch(currentTree, nextTree);
-            var dirty = retainedTree.Apply(patch);
+            var result = retainedTree.Apply(patch);
             var textSnapshot = retainedTree.Tree.TextSnapshot;
-            var prevTextSnapshot = retainedTree.PreviousTextSnapshot;
-            var previousRoot = retainedTree.PreviousRoot;
-            using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, dirty, textSnapshot, prevTextSnapshot, previousRoot);
+            var prevTextSnapshot = result.Dirty.Count > 0 ? (TextBufferSnapshot?)result.PreviousTextSnapshot : null;
+            var previousRoot = result.Dirty.Count > 0 ? result.PreviousRoot : default;
+            using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, result.Dirty, textSnapshot, prevTextSnapshot, previousRoot);
             pipeline.RetainedFrame.Invalidate();
             lines.Add($"dirtyReason {name} reason={pipeline.LastLayoutRebuildReason} classifications={DiagnosticsFormatter.FormatLayoutDirtyClassifications(pipeline.LastDirtyClassifications)}");
             currentTree = nextTree;
