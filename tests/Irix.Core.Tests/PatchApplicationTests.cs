@@ -31,9 +31,9 @@ public sealed class PatchDiffEquivalenceTests
         Assert.Equal("World", ResolveNodeText(_arena, patch.Node.Content));
 
         // Layout from new tree root should produce "World"
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Single(layout);
-        Assert.Equal("World", layout[0].Text);
+        Assert.Equal("World", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
 
         batch.Dispose();
     }
@@ -57,10 +57,10 @@ public sealed class PatchDiffEquivalenceTests
         }
         Assert.True(hasAdd, "Expected an Add patch");
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Equal(2, layout.Count);
-        Assert.Equal("Hello", layout[0].Text);
-        Assert.Equal("World", layout[1].Text);
+        Assert.Equal("Hello", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
+        Assert.Equal("World", batch.TextSnapshot.Resolve(layout[1].Text).ToString());
 
         batch.Dispose();
     }
@@ -84,9 +84,9 @@ public sealed class PatchDiffEquivalenceTests
         }
         Assert.True(hasRemove, "Expected a Remove patch");
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Single(layout);
-        Assert.Equal("Hello", layout[0].Text);
+        Assert.Equal("Hello", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
 
         batch.Dispose();
     }
@@ -118,11 +118,11 @@ public sealed class PatchDiffEquivalenceTests
         Assert.Equal("B-modified", ResolveNodeText(_arena, updatePatches[0].Node.Content));
 
         // Layout from PatchBatch.Root should have all 3 children with "B-modified"
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Equal(3, layout.Count);
-        Assert.Equal("A", layout[0].Text);
-        Assert.Equal("B-modified", layout[1].Text);
-        Assert.Equal("C", layout[2].Text);
+        Assert.Equal("A", batch.TextSnapshot.Resolve(layout[0].Text).ToString());
+        Assert.Equal("B-modified", batch.TextSnapshot.Resolve(layout[1].Text).ToString());
+        Assert.Equal("C", batch.TextSnapshot.Resolve(layout[2].Text).ToString());
 
         batch.Dispose();
     }
@@ -142,13 +142,13 @@ public sealed class PatchDiffEquivalenceTests
         var patch = batch.Memory.Span[0];
         Assert.Equal(VirtualNodePatchOperation.ReplaceRoot, patch.Operation);
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
         // Button produces at least one layout element with text
         Assert.True(layout.Count >= 1, $"Expected at least 1 layout element, got {layout.Count}");
         var hasClickText = false;
         foreach (var el in layout)
         {
-            if (el.Text == "Click") { hasClickText = true; break; }
+            if (batch.TextSnapshot.Resolve(el.Text).ToString() == "Click") { hasClickText = true; break; }
         }
         Assert.True(hasClickText, "Expected 'Click' text in layout elements");
 

@@ -260,6 +260,23 @@ public class TypedIdAllocationGuardTests
         }
     }
 
+    [Fact]
+    public void Irix_Rendering_has_no_text_string_materialization()
+    {
+        var sourceFiles = Directory.GetFiles(
+            Path.Combine(FindRepoRoot(), "src", "Irix.Rendering"),
+            "*.cs",
+            SearchOption.AllDirectories);
+
+        foreach (var file in sourceFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.DoesNotContain("ResolveString", content);
+            Assert.DoesNotContain("string? Text", content);
+            Assert.DoesNotContain("string Text", content);
+        }
+    }
+
     private static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;

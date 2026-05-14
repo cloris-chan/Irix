@@ -19,7 +19,7 @@ internal readonly record struct LayoutElement(
     LayoutElementKind Kind,
     PixelRectangle Bounds,
     PixelRectangle ClipBounds = default,
-    string? Text = null,
+    TextNodeContent Text = default,
     ActionId ActionId = default,
     ButtonVisualState ButtonState = default);
 

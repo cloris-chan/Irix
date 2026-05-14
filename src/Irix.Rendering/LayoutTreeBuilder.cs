@@ -14,7 +14,6 @@ internal struct LayoutContext
     public PixelRectangle ClipBounds;
     public LayoutStyle Style;
     public List<ScrollContainerDiag> ScrollDiags;
-    public TextBufferSnapshot? TextSnapshot;
 
     /// <summary>
     /// Implicit visible height for a container without a usable explicit Height.
@@ -45,7 +44,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     /// When <paramref name="dirtyNodes"/> is non-null, computes which layout element
     /// ranges correspond to the dirty VirtualNode DFS indices.
     /// </summary>
-    public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null)
+    public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         var elements = new List<LayoutElement>();
         var scrollDiags = new List<ScrollContainerDiag>();
@@ -59,7 +58,6 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             ClipBounds = default,
             Style = style,
             ScrollDiags = scrollDiags,
-            TextSnapshot = textSnapshot,
         };
 
         var treeNodes = LayoutNode(root, 0, ref cursorY, elements, ref ctx);
@@ -74,9 +72,9 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     /// <summary>
     /// Backward-compatible overload returning flat elements only.
     /// </summary>
-    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null)
+    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
-        return BuildLayoutTree(root, viewportBounds, dirtyNodes, textSnapshot).Elements;
+        return BuildLayoutTree(root, viewportBounds, dirtyNodes).Elements;
     }
 
     private LayoutTreeNode[] LayoutNode(
@@ -176,8 +174,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
             case VirtualNodeKind.Text:
             {
-                var content = GetTextContent(node, ctx.TextSnapshot);
-                if (!string.IsNullOrWhiteSpace(content))
+                var content = GetTextContent(node);
+                if (!content.IsNone)
                 {
                     var elementIndex = elements.Count;
                     elements.Add(new LayoutElement(
@@ -207,10 +205,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
             case VirtualNodeKind.Button:
             {
-                var label = GetButtonLabel(node, ctx.TextSnapshot);
+                var label = GetButtonLabel(node);
+                var labelLength = label.IsNone ? 6 : label.Range.Length; // 6 = "Button".Length
                 var width = Math.Min(ctx.AvailableWidth, Math.Max(
                     ctx.Style.MinimumButtonWidth,
-                    label.Length * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
+                    labelLength * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
                 var bounds = new PixelRectangle(ctx.Style.HorizontalPadding, cursorY, width, ctx.Style.ButtonHeight);
                 var actionId = GetActionId(node);
                 var buttonState = new ButtonVisualState(
@@ -286,18 +285,21 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return defaultValue;
     }
 
-    private static string GetButtonLabel(VirtualNode node, TextBufferSnapshot? snapshot)
+    private static TextNodeContent GetButtonLabel(VirtualNode node)
     {
         foreach (var child in node.Children)
         {
-            var content = GetTextContent(child, snapshot);
-            if (child.Kind == VirtualNodeKind.Text && !string.IsNullOrWhiteSpace(content))
+            if (child.Kind == VirtualNodeKind.Text)
             {
-                return content;
+                var content = GetTextContent(child);
+                if (!content.IsNone)
+                {
+                    return content;
+                }
             }
         }
 
-        return "Button";
+        return default;
     }
 
     private static ActionId GetActionId(VirtualNode node)
@@ -326,11 +328,9 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return false;
     }
 
-    private static string? GetTextContent(VirtualNode node, TextBufferSnapshot? snapshot)
+    private static TextNodeContent GetTextContent(VirtualNode node)
     {
-        if (node.Content.TryGetText(out var textContent) && snapshot is { } snap)
-            return snap.ResolveString(textContent);
-        return null;
+        return node.Content.TryGetText(out var textContent) ? textContent : default;
     }
 
     private static PixelRectangle IntersectRect(PixelRectangle a, PixelRectangle b)

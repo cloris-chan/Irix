@@ -1193,7 +1193,7 @@ public sealed class CounterInputRouterTests
 
         var builder = new LayoutTreeBuilder();
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var result = builder.BuildLayoutTree(tree.Root, viewport, textSnapshot: tree.TextSnapshot);
+        var result = builder.BuildLayoutTree(tree.Root, viewport);
 
         var diag = Assert.Single(result.ScrollDiagnostics);
         Assert.True(diag.ContentHeight > diag.VisibleHeight);
@@ -1209,7 +1209,7 @@ public sealed class CounterInputRouterTests
 
         var builder = new LayoutTreeBuilder();
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var diag = Assert.Single(builder.BuildLayoutTree(tree.Root, viewport, textSnapshot: tree.TextSnapshot).ScrollDiagnostics);
+        var diag = Assert.Single(builder.BuildLayoutTree(tree.Root, viewport).ScrollDiagnostics);
 
         model = app.Update(model, new CounterMessage.UpdateMaxScrollY(diag.MaxScrollY)).NextModel;
         model = app.Update(model, new CounterMessage.ScrollFrame(

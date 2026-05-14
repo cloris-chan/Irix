@@ -100,7 +100,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         if (treeChanged || viewportChanged || hasDirty)
         {
             LayoutRebuildCount++;
-            _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes, textSnapshot);
+            _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
             _retainedLayout = _retainedLayoutResult.Elements;
             _retainedRoot = root;
             _retainedTextSnapshot = textSnapshot;
@@ -119,7 +119,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
         LastDirtyElementRanges = dirtyElementRanges ?? [];
 
-        var result = _drawCommandRecorder.Record(layout, dirtyElementRanges);
+        var result = _drawCommandRecorder.Record(layout, dirtyElementRanges, _retainedTextSnapshot);
         LastDirtyCommandRanges = result.DirtyCommandRanges;
         LastElementCommandRanges = result.ElementCommandRanges;
 

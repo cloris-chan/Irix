@@ -3447,8 +3447,8 @@ public sealed class PartialApplyPreflightTests
         var retainedHitTargets = new[] { new HitTestTarget(buttonBounds, new ActionId(1)) };
         var layoutResult = new LayoutTreeResult(
             [
-                new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24), Text: "Static"),
-                new LayoutElement(LayoutElementKind.Button, buttonBounds, Text: "Increment", ActionId: new ActionId(4), ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
+                new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24)),
+                new LayoutElement(LayoutElementKind.Button, buttonBounds, ActionId: new ActionId(4), ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
             ],
             [],
             [(1, 1)]);
@@ -3784,8 +3784,8 @@ public sealed class PartialApplyPreflightTests
     {
         var layoutResult = new LayoutTreeResult(
             [
-                new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24), Text: "Static"),
-                new LayoutElement(LayoutElementKind.Button, buttonBounds, Text: "Increment", ActionId: new ActionId(4), ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
+                new LayoutElement(LayoutElementKind.Text, new PixelRectangle(16, 80, 120, 24)),
+                new LayoutElement(LayoutElementKind.Button, buttonBounds, ActionId: new ActionId(4), ButtonState: new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: false))
             ],
             [],
             [(1, 1)]);
