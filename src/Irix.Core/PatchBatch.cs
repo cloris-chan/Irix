@@ -16,12 +16,12 @@ public sealed class PatchBatch : IDisposable
 {
     private readonly IMemoryOwner<VirtualNodePatch> _owner;
 
-    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0)
-        : this(root, owner, count, screenId, PatchBatchKind.Diff)
+    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0, TextBufferSnapshot textSnapshot = default)
+        : this(root, owner, count, screenId, PatchBatchKind.Diff, textSnapshot)
     {
     }
 
-    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId, PatchBatchKind kind)
+    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId, PatchBatchKind kind, TextBufferSnapshot textSnapshot = default)
     {
         ArgumentNullException.ThrowIfNull(owner);
 
@@ -35,6 +35,7 @@ public sealed class PatchBatch : IDisposable
         Count = count;
         ScreenId = screenId;
         Kind = kind;
+        TextSnapshot = textSnapshot;
     }
 
     public PatchBatch(IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0)
@@ -54,6 +55,8 @@ public sealed class PatchBatch : IDisposable
     public int ScreenId { get; }
 
     public PatchBatchKind Kind { get; }
+
+    public TextBufferSnapshot TextSnapshot { get; }
 
     public Memory<VirtualNodePatch> Memory => _owner.Memory[..Count];
 

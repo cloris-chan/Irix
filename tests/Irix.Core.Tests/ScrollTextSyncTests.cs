@@ -13,6 +13,7 @@ namespace Irix.Core.Tests;
 /// </summary>
 public sealed class ScrollTextSyncTests
 {
+    private readonly VirtualTextArena _arena = new();
     [Fact]
     public async Task Continuous_scroll_rect_and_text_same_frame_batch()
     {
@@ -29,17 +30,17 @@ public sealed class ScrollTextSyncTests
                 attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
-                    VirtualNodeFactory.Button("Button A", 2,
+                    VirtualNodeBuilder.Button(_arena, "Button A", new NodeKey(2),
                         VirtualNodeAttribute.Action(new ActionId(100))),
-                    VirtualNodeFactory.Button("Button B", 3,
+                    VirtualNodeBuilder.Button(_arena, "Button B", new NodeKey(3),
                         VirtualNodeAttribute.Action(new ActionId(101))),
-                    VirtualNodeFactory.Button("Button C", 4,
+                    VirtualNodeBuilder.Button(_arena, "Button C", new NodeKey(4),
                         VirtualNodeAttribute.Action(new ActionId(102))),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
@@ -47,7 +48,7 @@ public sealed class ScrollTextSyncTests
 
         // Every frame that had rects must also have had text in the same Execute call.
         // A frame with rects but no text would indicate the D3D12 rect pass and D2D text
-        // pass are split across frames — the exact condition that causes text-lag.
+        // pass are split across frames �?the exact condition that causes text-lag.
         Assert.NotEmpty(backend.FrameSnapshots);
         foreach (var snapshot in backend.FrameSnapshots)
         {
@@ -76,13 +77,13 @@ public sealed class ScrollTextSyncTests
                 attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
-                    VirtualNodeFactory.Button("ScrollBtn", 2,
+                    VirtualNodeBuilder.Button(_arena, "ScrollBtn", new NodeKey(2),
                         VirtualNodeAttribute.Action(new ActionId(100))),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
@@ -119,15 +120,15 @@ public sealed class ScrollTextSyncTests
                 attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
-                    VirtualNodeFactory.Button("Fast", 2,
+                    VirtualNodeBuilder.Button(_arena, "Fast", new NodeKey(2),
                         VirtualNodeAttribute.Action(new ActionId(100))),
-                    VirtualNodeFactory.Button("Scroll", 3,
+                    VirtualNodeBuilder.Button(_arena, "Scroll", new NodeKey(3),
                         VirtualNodeAttribute.Action(new ActionId(101))),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
@@ -156,7 +157,7 @@ public sealed class ScrollTextSyncTests
             var root = CreateScrollFrame(scrollY);
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
         }
@@ -167,7 +168,7 @@ public sealed class ScrollTextSyncTests
             var root = CreateScrollFrame(100);
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
         }
@@ -178,7 +179,7 @@ public sealed class ScrollTextSyncTests
             var root = CreateScrollFrame(scrollY);
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
         }
@@ -205,7 +206,7 @@ public sealed class ScrollTextSyncTests
         }
     }
 
-    private static VirtualNode CreateScrollFrame(double scrollY)
+    private VirtualNode CreateScrollFrame(double scrollY)
     {
         return new VirtualNode(
             VirtualNodeKind.ScrollContainer,
@@ -213,7 +214,7 @@ public sealed class ScrollTextSyncTests
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
             children:
             [
-                VirtualNodeFactory.Button("Btn", 2,
+                VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(2),
                     VirtualNodeAttribute.Action(new ActionId(100))),
             ]);
     }

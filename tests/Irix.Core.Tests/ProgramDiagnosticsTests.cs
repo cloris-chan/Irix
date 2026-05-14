@@ -629,19 +629,19 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && node.Content.Text == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0");
+            && ResolveNodeText(app._arena, node.Content) == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0");
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && node.Content.Text == "ScrollY: applied=0 target=0.0 pos=0.00 max=unknown acc=0.000 anim=False pendingPx=0 drained=0 frames=0 waitMs=0.0 dt=0.000 frameQueued=False tickLoop=False");
+            && ResolveNodeText(app._arena, node.Content) == "ScrollY: applied=0 target=0.0 pos=0.00 max=unknown acc=0.000 anim=False pendingPx=0 drained=0 frames=0 waitMs=0.0 dt=0.000 frameQueued=False tickLoop=False");
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && node.Content.Text == "ClipMode: Diagnostic");
+            && ResolveNodeText(app._arena, node.Content) == "ClipMode: Diagnostic");
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && node.Content.Text == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
+            && ResolveNodeText(app._arena, node.Content) == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
         Assert.Contains(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && node.Content.Text == "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=5");
+            && ResolveNodeText(app._arena, node.Content) == "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=5");
     }
 
     #endregion
@@ -690,4 +690,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     #endregion
+
+    private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
+        content.TryGetText(out var tc) ? arena.ResolveString(tc) : "";
 }

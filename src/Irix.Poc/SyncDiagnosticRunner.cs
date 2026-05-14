@@ -46,11 +46,12 @@ internal static class SyncDiagnosticRunner
         output.WriteLine();
 
         var sampleSummaries = new List<SyncSampleSummary>(sampleCount);
+        var arena = new VirtualTextArena();
 
         for (var sample = 0; sample < sampleCount; sample++)
         {
             output.WriteLine($"--- Sample {sample + 1}/{sampleCount} ---");
-            sampleSummaries.Add(RunSample(output, frameCount, translator, compositor, d3d12Backend, d3d12Renderer));
+            sampleSummaries.Add(RunSample(arena, output, frameCount, translator, compositor, d3d12Backend, d3d12Renderer));
             output.WriteLine();
         }
 
@@ -69,6 +70,7 @@ internal static class SyncDiagnosticRunner
     }
 
     private static SyncSampleSummary RunSample(
+        VirtualTextArena arena,
         TextWriter output,
         int frameCount,
         WindowDrawCommandTranslator translator,
@@ -90,10 +92,10 @@ internal static class SyncDiagnosticRunner
                 attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
-                    VirtualNodeFactory.Button("SyncTest", 2,
+                    VirtualNodeBuilder.Button(arena, "SyncTest", new NodeKey(2),
                         VirtualNodeAttribute.Action(new ActionId(300))),
-                    VirtualNodeFactory.Text($"Frame {i} — sync overhead measurement", 3),
-                    VirtualNodeFactory.Button("Another", 4,
+                    VirtualNodeBuilder.Text(arena, $"Frame {i} �?sync overhead measurement", new NodeKey(3)),
+                    VirtualNodeBuilder.Button(arena, "Another", new NodeKey(4),
                         VirtualNodeAttribute.Action(new ActionId(301))),
                 ]);
 

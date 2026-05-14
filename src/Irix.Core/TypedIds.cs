@@ -1,37 +1,87 @@
 namespace Irix;
 
-public readonly record struct ActionId(uint Value)
+public readonly struct ActionId : IEquatable<ActionId>
 {
     public static readonly ActionId None = default;
 
+    public uint Value { get; }
+
+    public ActionId(uint value) => Value = value;
+
     public bool IsNone => Value == 0;
 
-    public override string ToString() => Value == 0 ? "None" : Value.ToString();
+    public bool Equals(ActionId other) => Value == other.Value;
+
+    public override bool Equals(object? obj) => obj is ActionId other && Equals(other);
+
+    public override int GetHashCode() => Value.GetHashCode();
+
+    public static bool operator ==(ActionId left, ActionId right) => left.Value == right.Value;
+
+    public static bool operator !=(ActionId left, ActionId right) => left.Value != right.Value;
+
+    public override string ToString() => Value.ToString();
 }
 
-public readonly record struct NodeKey(uint Value)
+public readonly struct NodeKey : IEquatable<NodeKey>
 {
     public static readonly NodeKey None = default;
 
+    public uint Value { get; }
+
+    public NodeKey(uint value) => Value = value;
+
     public static implicit operator NodeKey(uint value) => new(value);
 
-    public override string ToString() => Value == 0 ? "None" : Value.ToString();
+    public bool Equals(NodeKey other) => Value == other.Value;
+
+    public override bool Equals(object? obj) => obj is NodeKey other && Equals(other);
+
+    public override int GetHashCode() => Value.GetHashCode();
+
+    public static bool operator ==(NodeKey left, NodeKey right) => left.Value == right.Value;
+
+    public static bool operator !=(NodeKey left, NodeKey right) => left.Value != right.Value;
 }
 
-public readonly record struct ElementId(uint Value)
+public readonly struct ElementId : IEquatable<ElementId>
 {
     public static readonly ElementId None = default;
 
+    public uint Value { get; }
+
+    public ElementId(uint value) => Value = value;
+
     public bool IsNone => Value == 0;
 
-    public override string ToString() => Value == 0 ? "None" : Value.ToString();
+    public bool Equals(ElementId other) => Value == other.Value;
+
+    public override bool Equals(object? obj) => obj is ElementId other && Equals(other);
+
+    public override int GetHashCode() => Value.GetHashCode();
+
+    public static bool operator ==(ElementId left, ElementId right) => left.Value == right.Value;
+
+    public static bool operator !=(ElementId left, ElementId right) => left.Value != right.Value;
 }
 
-public readonly record struct TargetId(uint Value)
+public readonly struct TargetId : IEquatable<TargetId>
 {
     public static readonly TargetId None = default;
 
+    public uint Value { get; }
+
+    public TargetId(uint value) => Value = value;
+
     public bool IsNone => Value == 0;
 
-    public override string ToString() => Value == 0 ? "None" : Value.ToString();
+    public bool Equals(TargetId other) => Value == other.Value;
+
+    public override bool Equals(object? obj) => obj is TargetId other && Equals(other);
+
+    public override int GetHashCode() => Value.GetHashCode();
+
+    public static bool operator ==(TargetId left, TargetId right) => left.Value == right.Value;
+
+    public static bool operator !=(TargetId left, TargetId right) => left.Value != right.Value;
 }

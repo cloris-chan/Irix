@@ -94,13 +94,14 @@ internal static class FullDiagnosticRunner
         var dirty = compositor.LastDirtyCommandRanges;
         var backendDirty = d3d12Backend.LastDirtyCommandRanges;
         var backendClippedCommandCount = d3d12Backend.ClippedCommandCount;
+        var arena = new VirtualTextArena();
 
-        // Layout-driven frame: render through VirtualNode → Layout → Pipeline → Compositor
+        // Layout-driven frame: render through VirtualNode \u2192 Layout \u2192 Pipeline \u2192 Compositor
         // to verify the clip chain produces clipped commands
         var layoutPipeline = new RenderPipeline();
-        var layoutRoot = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Layout Pipeline Test", 2),
-            VirtualNodeFactory.Button("LayoutBtn", 3,
+        var layoutRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(arena, "Layout Pipeline Test", new NodeKey(2)),
+            VirtualNodeBuilder.Button(arena, "LayoutBtn", new NodeKey(3),
                 VirtualNodeAttribute.Action(new ActionId(100))));
         var layoutViewport = new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
         using var layoutBatch = layoutPipeline.Build(layoutRoot, layoutViewport);

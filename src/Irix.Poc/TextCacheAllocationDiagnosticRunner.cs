@@ -36,9 +36,10 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         output.WriteLine();
 
-        RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, static (i, _) => BuildRoot("Static cache baseline", scrollY: 0));
-        RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, static (i, _) => BuildRoot("Scrolling cache baseline", scrollY: i * 2));
-        RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, static (i, scale) => BuildRoot($"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0), scaleChangeAtHalf: true);
+        var arena = new VirtualTextArena();
+        RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) => BuildRoot(arena, "Static cache baseline", scrollY: 0));
+        RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) => BuildRoot(arena, "Scrolling cache baseline", scrollY: i * 2));
+        RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, scale) => BuildRoot(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0), scaleChangeAtHalf: true);
 
         output.WriteLine("=== Text cache / allocation diagnostic complete ===");
     }
@@ -116,7 +117,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine();
     }
 
-    private static VirtualNode BuildRoot(string text, int scrollY)
+    private static VirtualNode BuildRoot(VirtualTextArena arena, string text, int scrollY)
     {
         return new VirtualNode(
             VirtualNodeKind.ScrollContainer,
@@ -124,9 +125,9 @@ internal static class TextCacheAllocationDiagnosticRunner
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
             children:
             [
-                VirtualNodeFactory.Button("Cache A", 2, VirtualNodeAttribute.Action(new ActionId(200))),
-                VirtualNodeFactory.Text(text, 4),
-                VirtualNodeFactory.Button("Cache B", 5, VirtualNodeAttribute.Action(new ActionId(201))),
+                VirtualNodeBuilder.Button(arena, "Cache A", new NodeKey(2), VirtualNodeAttribute.Action(new ActionId(200))),
+                VirtualNodeBuilder.Text(arena, text, new NodeKey(4)),
+                VirtualNodeBuilder.Button(arena, "Cache B", new NodeKey(5), VirtualNodeAttribute.Action(new ActionId(201))),
             ]);
     }
 

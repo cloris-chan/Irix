@@ -13,13 +13,14 @@ namespace Irix.Core.Tests;
 /// </summary>
 public sealed class PatchDiffEquivalenceTests
 {
+    private readonly VirtualTextArena _arena = new();
     [Fact]
     public void Update_patch_content_change_produces_correct_layout()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Hello", 2)));
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("World", 2)));
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(2))), _arena.Snapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -27,10 +28,10 @@ public sealed class PatchDiffEquivalenceTests
         Assert.Equal(1, batch.Count);
         var patch = batch.Memory.Span[0];
         Assert.Equal(VirtualNodePatchOperation.Update, patch.Operation);
-        Assert.Equal("World", patch.Node.Content.Text);
+        Assert.Equal("World", ResolveNodeText(_arena, patch.Node.Content));
 
         // Layout from new tree root should produce "World"
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
         Assert.Single(layout);
         Assert.Equal("World", layout[0].Text);
 
@@ -40,11 +41,11 @@ public sealed class PatchDiffEquivalenceTests
     [Fact]
     public void Add_child_patch_produces_correct_layout()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Hello", 2)));
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Hello", 2),
-            VirtualNodeFactory.Text("World", 3)));
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2)),
+            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(3))), _arena.Snapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -56,7 +57,7 @@ public sealed class PatchDiffEquivalenceTests
         }
         Assert.True(hasAdd, "Expected an Add patch");
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
         Assert.Equal(2, layout.Count);
         Assert.Equal("Hello", layout[0].Text);
         Assert.Equal("World", layout[1].Text);
@@ -67,11 +68,11 @@ public sealed class PatchDiffEquivalenceTests
     [Fact]
     public void Remove_child_patch_produces_correct_layout()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Hello", 2),
-            VirtualNodeFactory.Text("World", 3)));
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Hello", 2)));
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2)),
+            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(3))), _arena.Snapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -83,7 +84,7 @@ public sealed class PatchDiffEquivalenceTests
         }
         Assert.True(hasRemove, "Expected a Remove patch");
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
         Assert.Single(layout);
         Assert.Equal("Hello", layout[0].Text);
 
@@ -93,14 +94,14 @@ public sealed class PatchDiffEquivalenceTests
     [Fact]
     public void Keyed_reconciliation_update_preserves_correct_child()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("A", 10),
-            VirtualNodeFactory.Text("B", 20),
-            VirtualNodeFactory.Text("C", 30)));
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("A", 10),
-            VirtualNodeFactory.Text("B-modified", 20),
-            VirtualNodeFactory.Text("C", 30)));
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)),
+            VirtualNodeBuilder.Text(_arena, "B", new NodeKey(20)),
+            VirtualNodeBuilder.Text(_arena, "C", new NodeKey(30))), _arena.Snapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)),
+            VirtualNodeBuilder.Text(_arena, "B-modified", new NodeKey(20)),
+            VirtualNodeBuilder.Text(_arena, "C", new NodeKey(30))), _arena.Snapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -114,10 +115,10 @@ public sealed class PatchDiffEquivalenceTests
         }
         updatePatches = updateList.ToArray();
         Assert.Single(updatePatches);
-        Assert.Equal("B-modified", updatePatches[0].Node.Content.Text);
+        Assert.Equal("B-modified", ResolveNodeText(_arena, updatePatches[0].Node.Content));
 
         // Layout from PatchBatch.Root should have all 3 children with "B-modified"
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
         Assert.Equal(3, layout.Count);
         Assert.Equal("A", layout[0].Text);
         Assert.Equal("B-modified", layout[1].Text);
@@ -129,10 +130,10 @@ public sealed class PatchDiffEquivalenceTests
     [Fact]
     public void Kind_change_produces_ReplaceRoot_with_correct_layout()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Hello", 2)));
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Click", 2)));
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(2))), _arena.Snapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -141,7 +142,7 @@ public sealed class PatchDiffEquivalenceTests
         var patch = batch.Memory.Span[0];
         Assert.Equal(VirtualNodePatchOperation.ReplaceRoot, patch.Operation);
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: batch.TextSnapshot);
         // Button produces at least one layout element with text
         Assert.True(layout.Count >= 1, $"Expected at least 1 layout element, got {layout.Count}");
         var hasClickText = false;
@@ -157,8 +158,8 @@ public sealed class PatchDiffEquivalenceTests
     [Fact]
     public void No_change_produces_empty_patch_batch()
     {
-        var tree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Text("Hello", 2)));
+        var tree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
 
@@ -166,4 +167,7 @@ public sealed class PatchDiffEquivalenceTests
 
         batch.Dispose();
     }
+
+    private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
+        content.TryGetText(out var tc) ? arena.ResolveString(tc) : "";
 }

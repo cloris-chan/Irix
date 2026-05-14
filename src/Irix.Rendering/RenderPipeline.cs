@@ -81,15 +81,15 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     /// and dirty element/command ranges are computed. When null (render request),
     /// reuses the retained layout if tree and viewport match.
     /// </summary>
-    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
+    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null)
     {
         LastViewport = viewportBounds;
         var hadRetainedLayout = _retainedLayout is not null;
-        var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(_retainedRoot, root);
+        var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(_retainedRoot, root, textSnapshot);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
         var dirtyClassifications = hasDirty && hadRetainedLayout
-            ? ClassifyDirtyNodes(_retainedRoot, root, dirtyNodes!)
+            ? ClassifyDirtyNodes(_retainedRoot, root, dirtyNodes!, textSnapshot)
             : [];
         LastDirtyClassifications = dirtyClassifications;
         LastLayoutRebuildReason = ResolveLayoutRebuildReason(hadRetainedLayout, treeChanged, viewportChanged, hasDirty, dirtyClassifications);
@@ -97,7 +97,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         if (treeChanged || viewportChanged || hasDirty)
         {
             LayoutRebuildCount++;
-            _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
+            _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes, textSnapshot);
             _retainedLayout = _retainedLayoutResult.Elements;
             _retainedRoot = root;
             _retainedViewport = viewportBounds;
@@ -130,7 +130,8 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             [.. LastDirtyClassifications],
             [.. LastDirtyElementRanges],
             [.. LastDirtyCommandRanges],
-            LastLayoutRebuildReason);
+            LastLayoutRebuildReason,
+            textSnapshot);
 
         // Update retained render frame: try partial apply when dirty ranges exist,
         // which only succeeds when resources are the same instance (same frame scope).
@@ -174,7 +175,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return treeChanged ? LayoutRebuildReason.TreeStructure : LayoutRebuildReason.None;
     }
 
-    private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes)
+    private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? snapshot)
     {
         var classifications = new List<LayoutDirtyClassification>(dirtyNodes.Count);
         var seen = new HashSet<int>();
@@ -186,7 +187,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             }
 
             var reason = TryFindNode(previousRoot, dirtyNode, out var previousNode) && TryFindNode(nextRoot, dirtyNode, out var nextNode)
-                ? ClassifyNodeChange(previousNode, nextNode)
+                ? ClassifyNodeChange(previousNode, nextNode, snapshot)
                 : LayoutRebuildReason.TreeStructure;
             classifications.Add(new LayoutDirtyClassification(dirtyNode, reason));
         }
@@ -194,7 +195,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return classifications;
     }
 
-    private static LayoutRebuildReason ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode)
+    private static LayoutRebuildReason ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? snapshot)
     {
         if (previousNode.Kind != nextNode.Kind || previousNode.Key != nextNode.Key || ChildrenShapeChanged(previousNode.Children, nextNode.Children))
         {
@@ -202,7 +203,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         }
 
         var reason = LayoutRebuildReason.None;
-        if (previousNode.Content != nextNode.Content)
+        if (!VirtualNodeDiffer.ContentEqual(previousNode.Content, nextNode.Content, snapshot))
         {
             reason = MaxReason(reason, ClassifyContentChange(previousNode.Content, nextNode.Content));
         }
@@ -224,34 +225,32 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
     private static LayoutRebuildReason ClassifyAttributeChanges(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
     {
-        var mask = GetChangedAttributeMask(previousAttributes, nextAttributes);
-        return mask.ClassifyMask();
+        var changeSet = GetChangedAttributeSet(previousAttributes, nextAttributes);
+        return changeSet.ClassifyMask();
     }
 
-    private static ChangedAttributeMask GetChangedAttributeMask(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    private static AttributeChangeSet GetChangedAttributeSet(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
     {
-        var mask = ChangedAttributeMask.None;
+        var changeSet = default(AttributeChangeSet);
 
         foreach (var attribute in previousAttributes)
         {
-            if (attribute.Key == VirtualAttributeKey.Unknown) continue;
             if (!TryFindAttribute(nextAttributes, attribute.Key, out var nextAttribute)
                 || attribute.Value != nextAttribute.Value)
             {
-                mask |= attribute.Key.ToMask();
+                changeSet = AttributeChangeSet.AddKey(changeSet, attribute.Key);
             }
         }
 
         foreach (var attribute in nextAttributes)
         {
-            if (attribute.Key == VirtualAttributeKey.Unknown) continue;
             if (!TryFindAttribute(previousAttributes, attribute.Key, out _))
             {
-                mask |= attribute.Key.ToMask();
+                changeSet = AttributeChangeSet.AddKey(changeSet, attribute.Key);
             }
         }
 
-        return mask;
+        return changeSet;
     }
 
     private static bool TryFindAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key, out VirtualNodeAttribute attribute)
@@ -394,4 +393,5 @@ internal sealed record RenderPipelineRetainedInputSnapshot(
     IReadOnlyList<LayoutDirtyClassification> DirtyClassifications,
     IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
     IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
-    LayoutRebuildReason LayoutRebuildReason);
+    LayoutRebuildReason LayoutRebuildReason,
+    TextBufferSnapshot? TextSnapshot = null);

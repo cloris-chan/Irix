@@ -9,13 +9,12 @@ namespace Irix.Poc;
 internal static class BackendClipTextSmokeDiagnostics
 {
     internal static void RunPipelineScissorSmokeDiagnostic(DrawingBackendCompositor compositor, D3D12DrawingBackend backend, D3D12Renderer renderer)
-    {
-        var pipeline = new RenderPipeline();
+    {        var arena = new VirtualTextArena();        var pipeline = new RenderPipeline();
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1000,
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(40))],
-            children: [VirtualNodeFactory.Rectangle(160, 80, 1001)]);
+            children: [VirtualNodeFactory.Rectangle(160, 80, new NodeKey(1001))]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
         using var batch = pipeline.Build(root, viewport);
 
@@ -25,6 +24,7 @@ internal static class BackendClipTextSmokeDiagnostics
 
     internal static void RunPipelineTextClipSmokeDiagnostic(DrawingBackendCompositor compositor, D3D12DrawingBackend backend, D3D12Renderer renderer)
     {
+        var arena = new VirtualTextArena();
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
@@ -32,7 +32,7 @@ internal static class BackendClipTextSmokeDiagnostics
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(20))],
             children:
             [
-                VirtualNodeFactory.Button("PipelineClip", 1101, VirtualNodeAttribute.Action(new ActionId(100)))
+                VirtualNodeBuilder.Button(arena, "PipelineClip", new NodeKey(1101), VirtualNodeAttribute.Action(new ActionId(100)))
             ]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
         using var batch = pipeline.Build(root, viewport);

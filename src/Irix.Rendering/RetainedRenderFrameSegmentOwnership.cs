@@ -87,7 +87,7 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             return ReportFallback(owner, hitTargetProjection.FallbackReason, plan.Kind, ownerStatePreserved: true);
         }
 
-        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(owner.RetainedRoot, root, snapshot.DirtyClassifications);
+        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(owner.RetainedRoot, root, snapshot.DirtyClassifications, snapshot.TextSnapshot);
         if (!rootPatch.Succeeded)
         {
             return ReportFallback(owner, rootPatch.FallbackReason, plan.Kind, ownerStatePreserved: true);

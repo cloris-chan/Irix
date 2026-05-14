@@ -11,6 +11,7 @@ namespace Irix.Core.Tests;
 /// </summary>
 public sealed class ResizeStressTests
 {
+    private readonly VirtualTextArena _arena = new();
     [Theory]
     [InlineData(1.0f)]
     [InlineData(1.5f)]
@@ -34,12 +35,12 @@ public sealed class ResizeStressTests
             resources.Seal();
 
             var pipeline = new RenderPipeline();
-            var root = VirtualNodeFactory.Button($"Btn{i}", 1,
+            var root = VirtualNodeBuilder.Button(_arena, $"Btn{i}", new NodeKey(1),
                 VirtualNodeAttribute.Action(new ActionId(100)));
             var logicalW = (int)(w / scale.ScaleX);
             var logicalH = (int)(h / scale.ScaleY);
             var viewport = new PixelRectangle(0, 0, logicalW, logicalH);
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
         }
@@ -80,10 +81,10 @@ public sealed class ResizeStressTests
             resources.Seal();
 
             var pipeline = new RenderPipeline();
-            var root = VirtualNodeFactory.Button("Btn", 1,
+            var root = VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(1),
                 VirtualNodeAttribute.Action(new ActionId(100)));
             var viewport = new PixelRectangle(0, 0, w, h);
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
         }
@@ -103,10 +104,10 @@ public sealed class ResizeStressTests
         compositor.SetViewport(new PixelRectangle(0, 0, 1000, 800), scale);
 
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.Button("Click", 1,
+        var root = VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(1),
             VirtualNodeAttribute.Action(new ActionId(100)));
         var viewport = new PixelRectangle(0, 0, 1000, 800);
-        using var batch = pipeline.Build(root, viewport);
+        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
         await compositor.RenderAsync(batch, cancellationToken);
 
@@ -120,12 +121,12 @@ public sealed class ResizeStressTests
 
         // Layout in logical units (1000x800)
         var viewport2 = new PixelRectangle(0, 0, 1000, 800);
-        using var batch2 = pipeline.Build(root, viewport2);
+        using var batch2 = pipeline.Build(root, viewport2, textSnapshot: _arena.Snapshot());
 
         await compositor.RenderAsync(batch2, cancellationToken);
 
         // Hit-test at physical coordinates (150% scale)
-        // Button at logical (16,16,68,32) â†’ physical (24,24,102,48)
+        // Button at logical (16,16,68,32) ï¿?physical (24,24,102,48)
         Assert.True(compositor.TryGetActionIdAt(50, 30, out var id2));
         Assert.Equal(new ActionId(100), id2);
 

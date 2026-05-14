@@ -14,6 +14,7 @@ namespace Irix.Core.Tests;
 /// </summary>
 public sealed class ConcurrentInputRenderTests
 {
+    private readonly VirtualTextArena _arena = new();
     [Fact]
     public async Task Sequential_scroll_frames_render_without_deadlock()
     {
@@ -32,14 +33,14 @@ public sealed class ConcurrentInputRenderTests
                 attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
-                    VirtualNodeFactory.Button("Btn", 2,
+                    VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(2),
                         VirtualNodeAttribute.Action(new ActionId(100))),
-                    VirtualNodeFactory.Text($"Frame {i}", 3),
+                    VirtualNodeBuilder.Text(_arena, $"Frame {i}", new NodeKey(3)),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
             await compositor.RenderAsync(batch, cancellationToken);
         }
 
@@ -144,7 +145,7 @@ public sealed class ConcurrentInputRenderTests
     [Fact]
     public async Task Multiple_render_cycles_with_scroll_no_frame_loss()
     {
-        // Simulates the full cycle: scroll input â†’ render â†’ scroll input â†’ render
+        // Simulates the full cycle: scroll input â†?render â†?scroll input â†?render
         // repeated many times. Each cycle should produce a frame.
         var cancellationToken = TestContext.Current.CancellationToken;
         var backend = new ConcurrentTrackingBackend();
@@ -159,13 +160,13 @@ public sealed class ConcurrentInputRenderTests
                 attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
                 children:
                 [
-                    VirtualNodeFactory.Button("CycleBtn", 2,
+                    VirtualNodeBuilder.Button(_arena, "CycleBtn", new NodeKey(2),
                         VirtualNodeAttribute.Action(new ActionId(100))),
                 ]);
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport);
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
             await compositor.RenderAsync(batch, cancellationToken);
         }
 

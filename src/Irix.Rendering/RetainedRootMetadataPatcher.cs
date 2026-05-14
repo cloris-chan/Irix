@@ -21,7 +21,8 @@ internal static class RetainedRootMetadataPatcher
     public static RetainedRootMetadataPatch ProjectControlMetadata(
         VirtualNode retainedRoot,
         VirtualNode nextRoot,
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications)
+        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        TextBufferSnapshot? snapshot = null)
     {
         var dirtySet = new HashSet<int>();
         foreach (var classification in dirtyClassifications)
@@ -41,7 +42,7 @@ internal static class RetainedRootMetadataPatcher
 
         var dfsIndex = 0;
         var patchedDirtyCount = 0;
-        return TryProject(retainedRoot, nextRoot, dirtySet, ref dfsIndex, ref patchedDirtyCount, out var root, out var reason)
+        return TryProject(retainedRoot, nextRoot, dirtySet, ref dfsIndex, ref patchedDirtyCount, out var root, out var reason, snapshot)
             && patchedDirtyCount == dirtySet.Count
             ? RetainedRootMetadataPatch.CreateSucceeded(root)
             : RetainedRootMetadataPatch.CreateFallback(reason);
@@ -54,7 +55,8 @@ internal static class RetainedRootMetadataPatcher
         ref int dfsIndex,
         ref int patchedDirtyCount,
         out VirtualNode patchedNode,
-        out RetainedPartialApplyFallbackReason reason)
+        out RetainedPartialApplyFallbackReason reason,
+        TextBufferSnapshot? snapshot)
     {
         var currentIndex = dfsIndex;
         var isDirty = dirtySet.Contains(currentIndex);
@@ -66,7 +68,7 @@ internal static class RetainedRootMetadataPatcher
             return false;
         }
 
-        if (retainedNode.Content != nextNode.Content)
+        if (!VirtualNodeDiffer.ContentEqual(retainedNode.Content, nextNode.Content, snapshot))
         {
             reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
             return false;
@@ -88,7 +90,7 @@ internal static class RetainedRootMetadataPatcher
         var patchedChildren = retainedNode.Children;
         for (var i = 0; i < retainedNode.Children.Length; i++)
         {
-            if (!TryProject(retainedNode.Children[i], nextNode.Children[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason))
+            if (!TryProject(retainedNode.Children[i], nextNode.Children[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason, snapshot))
             {
                 return false;
             }
@@ -131,7 +133,7 @@ internal static class RetainedRootMetadataPatcher
 
         foreach (var key in changedKeys)
         {
-            if (!key.IsControlMetadataKey())
+            if (!AttributeChangeSetClassification.IsControlMetadataKey(key))
             {
                 reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
                 return false;
@@ -167,7 +169,7 @@ internal static class RetainedRootMetadataPatcher
         var changed = new List<VirtualAttributeKey>();
         foreach (var key in keys)
         {
-            if (key == VirtualAttributeKey.Unknown) continue;
+            if (key == default(VirtualAttributeKey)) continue;
             if (!TryGetUniqueAttribute(retainedAttributes, key, out var retainedFound, out var retainedAttribute)
                 || !TryGetUniqueAttribute(nextAttributes, key, out var nextFound, out var nextAttribute))
             {
@@ -196,12 +198,11 @@ internal static class RetainedRootMetadataPatcher
             return key != VirtualAttributeKey.ActionId;
         }
 
-        return key switch
-        {
-            VirtualAttributeKey.ActionId => attribute.Value.Kind == AttributeValueKind.ActionId && !attribute.Value.ActionIdValue.IsNone,
-            VirtualAttributeKey.IsHovered or VirtualAttributeKey.IsPressed or VirtualAttributeKey.IsFocused => attribute.Value.Kind == AttributeValueKind.Boolean,
-            _ => false
-        };
+        if (key == VirtualAttributeKey.ActionId)
+            return attribute.Value.Kind == AttributeValueKind.ActionId && !attribute.Value.ActionIdValue.IsNone;
+        if (key == VirtualAttributeKey.IsHovered || key == VirtualAttributeKey.IsPressed || key == VirtualAttributeKey.IsFocused)
+            return attribute.Value.Kind == AttributeValueKind.Boolean;
+        return false;
     }
 
     private static bool TryGetUniqueAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key, out bool found, out VirtualNodeAttribute attribute)
@@ -247,6 +248,6 @@ internal static class RetainedRootMetadataPatcher
 
     private static bool IsControlMetadataAttribute(VirtualAttributeKey key)
     {
-        return key.IsControlMetadataKey();
+        return AttributeChangeSetClassification.IsControlMetadataKey(key);
     }
 }

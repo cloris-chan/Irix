@@ -9,6 +9,8 @@ namespace Irix.Core.Tests;
 
 public sealed class CounterInputRouterTests
 {
+    private readonly VirtualTextArena _arena = new();
+
     [Fact]
     public void TryMapInput_maps_left_click_to_button_action()
     {
@@ -320,7 +322,7 @@ public sealed class CounterInputRouterTests
             Assert.Equal(caseItem.Expected.IsHovered, GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
             Assert.Equal(caseItem.Expected.IsPressed, GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
             Assert.Equal(caseItem.Expected.IsFocused, GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
-            Assert.DoesNotContain(attributes, attribute => attribute.Name == "IsEnabled");
+            Assert.DoesNotContain(attributes, attribute => attribute.Key.ToString() == "IsEnabled");
         }
     }
 
@@ -337,7 +339,7 @@ public sealed class CounterInputRouterTests
         Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
         Assert.False(GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
         Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
-        Assert.DoesNotContain(attributes, attribute => attribute.Name == "IsEnabled");
+        Assert.DoesNotContain(attributes, attribute => attribute.Key.ToString() == "IsEnabled");
     }
 
     [Fact]
@@ -422,7 +424,7 @@ public sealed class CounterInputRouterTests
         Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
         Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
         Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
-        Assert.DoesNotContain(button.Attributes, attribute => attribute.Name == "IsEnabled");
+        Assert.DoesNotContain(button.Attributes, attribute => attribute.Key.ToString() == "IsEnabled");
     }
 
     [Fact]
@@ -695,11 +697,11 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication();
         var tree = app.BuildView(app.Initialize());
 
-        Assert.True(ContainsTextStartingWith(tree.Root, "Count: 0"));
-        Assert.True(ContainsTextStartingWith(tree.Root, "Click a button"));
-        Assert.False(ContainsTextStartingWith(tree.Root, "ScrollY:"));
-        Assert.False(ContainsTextStartingWith(tree.Root, "Input:"));
-        Assert.False(ContainsTextStartingWith(tree.Root, "ClipMode:"));
+        Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "Count: 0"));
+        Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "Click a button"));
+        Assert.False(ContainsTextStartingWith(app._arena, tree.Root, "ScrollY:"));
+        Assert.False(ContainsTextStartingWith(app._arena, tree.Root, "Input:"));
+        Assert.False(ContainsTextStartingWith(app._arena, tree.Root, "ClipMode:"));
     }
 
     [Fact]
@@ -721,9 +723,9 @@ public sealed class CounterInputRouterTests
         };
         var tree = app.BuildView(model);
 
-        Assert.True(ContainsTextStartingWith(tree.Root, "ScrollY: applied=54"));
-        Assert.True(ContainsTextStartingWith(tree.Root, "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=1"));
-        Assert.True(ContainsTextStartingWith(tree.Root, "ClipMode: Diagnostic"));
+        Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "ScrollY: applied=54"));
+        Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=1"));
+        Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "ClipMode: Diagnostic"));
     }
 
     [Fact]
@@ -966,7 +968,7 @@ public sealed class CounterInputRouterTests
     private static void AssertButtonFillColor(VirtualNodeTree tree, DrawColor expectedColor)
     {
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(tree.Root, new PixelRectangle(0, 0, 960, 540));
+        using var frame = pipeline.Build(tree.Root, new PixelRectangle(0, 0, 960, 540), textSnapshot: tree.TextSnapshot);
         var hitTarget = Assert.Single(frame.HitTargets, target => target.ActionId == new ActionId(1));
         var commands = frame.Commands.Memory.Span;
 
@@ -1054,16 +1056,16 @@ public sealed class CounterInputRouterTests
         return ActionId.None;
     }
 
-    private static bool ContainsTextStartingWith(VirtualNode node, string prefix)
+    private static bool ContainsTextStartingWith(VirtualTextArena arena, VirtualNode node, string prefix)
     {
-        if (node.Kind == VirtualNodeKind.Text && node.Content.Text?.StartsWith(prefix, StringComparison.Ordinal) == true)
+        if (node.Kind == VirtualNodeKind.Text && ResolveNodeText(arena, node.Content)?.StartsWith(prefix, StringComparison.Ordinal) == true)
         {
             return true;
         }
 
         foreach (var child in node.Children)
         {
-            if (ContainsTextStartingWith(child, prefix))
+            if (ContainsTextStartingWith(arena, child, prefix))
             {
                 return true;
             }
@@ -1155,13 +1157,13 @@ public sealed class CounterInputRouterTests
         var scrollYAttr = default(VirtualNodeAttribute);
         foreach (var attr in tree.Root.Attributes)
         {
-            if (attr.Name == "ScrollY")
+            if (attr.Key == VirtualAttributeKey.ScrollY)
             {
                 scrollYAttr = attr;
                 break;
             }
         }
-        Assert.Equal("ScrollY", scrollYAttr.Name);
+        Assert.Equal(VirtualAttributeKey.ScrollY, scrollYAttr.Key);
         Assert.Equal(80.0, scrollYAttr.Value.Number);
     }
 
@@ -1191,7 +1193,7 @@ public sealed class CounterInputRouterTests
 
         var builder = new LayoutTreeBuilder();
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var result = builder.BuildLayoutTree(tree.Root, viewport);
+        var result = builder.BuildLayoutTree(tree.Root, viewport, textSnapshot: tree.TextSnapshot);
 
         var diag = Assert.Single(result.ScrollDiagnostics);
         Assert.True(diag.ContentHeight > diag.VisibleHeight);
@@ -1207,7 +1209,7 @@ public sealed class CounterInputRouterTests
 
         var builder = new LayoutTreeBuilder();
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var diag = Assert.Single(builder.BuildLayoutTree(tree.Root, viewport).ScrollDiagnostics);
+        var diag = Assert.Single(builder.BuildLayoutTree(tree.Root, viewport, textSnapshot: tree.TextSnapshot).ScrollDiagnostics);
 
         model = app.Update(model, new CounterMessage.UpdateMaxScrollY(diag.MaxScrollY)).NextModel;
         model = app.Update(model, new CounterMessage.ScrollFrame(
@@ -1423,7 +1425,7 @@ public sealed class CounterInputRouterTests
         var tree = app.BuildView(model);
 
         // The second text child should contain the debug display
-        var debugText = tree.Root.Children[1].Content.Text;
+        var debugText = ResolveNodeText(app._arena, tree.Root.Children[1].Content);
         Assert.Contains("applied=", debugText);
         Assert.Contains("target=", debugText);
         Assert.Contains("pos=", debugText);
@@ -1436,11 +1438,11 @@ public sealed class CounterInputRouterTests
         var app = new CounterApplication(showDiagnostics: true);
         var model = app.Initialize();
 
-        var debugText = app.BuildView(model).Root.Children[1].Content.Text;
+        var debugText = ResolveNodeText(app._arena, app.BuildView(model).Root.Children[1].Content);
         Assert.Contains("max=unknown", debugText);
 
         model = app.Update(model, new CounterMessage.UpdateMaxScrollY(0)).NextModel;
-        debugText = app.BuildView(model).Root.Children[1].Content.Text;
+        debugText = ResolveNodeText(app._arena, app.BuildView(model).Root.Children[1].Content);
 
         Assert.Contains("max=0(known-zero)", debugText);
     }
@@ -1624,4 +1626,7 @@ public sealed class CounterInputRouterTests
         Assert.False(model.Scroll.IsAnimating);
         Assert.Equal(target, Math.Round(model.Scroll.Position));
     }
+
+    private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
+        content.TryGetText(out var tc) ? arena.ResolveString(tc) : "";
 }

@@ -40,14 +40,15 @@ internal static class ResizeDiagnosticRunner
             postFrameCallback: null,
             displayScale: displayScale);
 
+        var arena = new VirtualTextArena();
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1200,
             children:
             [
-                VirtualNodeFactory.Text("Resize Diagnostic: renderer/layout viewport", 1201),
-                VirtualNodeFactory.Rectangle(300, 44, 1202),
-                VirtualNodeFactory.Button("ResizeBtn", 1203, VirtualNodeAttribute.Action(new ActionId(400)))
+                VirtualNodeBuilder.Text(arena, "Resize Diagnostic: renderer/layout viewport", new NodeKey(1201)),
+                VirtualNodeFactory.Rectangle(300, 44, new NodeKey(1202)),
+                VirtualNodeBuilder.Button(arena, "ResizeBtn", new NodeKey(1203), VirtualNodeAttribute.Action(new ActionId(400)))
             ]);
 
         GC.Collect();

@@ -21,9 +21,9 @@ internal sealed class SegmentedRetainedFrameDiagnosticHarness(RenderPipeline pip
 
     public SegmentedRetainedFrameOwner? SegmentedRetainedFrameOwner => _segmentedRetainedFrame?.Owner;
 
-    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
+    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null)
     {
-        var batch = pipeline.Build(root, viewportBounds, dirtyNodes);
+        var batch = pipeline.Build(root, viewportBounds, dirtyNodes, textSnapshot);
         LastShadowResult = UpdateSegmentedRetainedFrame(root, viewportBounds, batch);
         return batch;
     }

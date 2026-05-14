@@ -20,13 +20,14 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
 
     private static StyleOnlyPatchPlan BuildHoverOnlyStyleOnlyPatchPlan()
     {
+        var arena = new VirtualTextArena();
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var root1 = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Increment", 2,
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2),
                 ButtonAttributeBundle.Create(ActionIdRegistry.Increment, new ControlVisualState(IsHovered: false, IsPressed: false, IsFocused: false))));
-        var root2 = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("Increment", 2,
+        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2),
                 ButtonAttributeBundle.Create(ActionIdRegistry.Increment, new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false))));
 
         using var frame1 = pipeline.Build(root1, viewport);
@@ -47,18 +48,19 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
 
     private static StyleOnlyPatchPlan BuildLayoutAffectingStyleOnlyPatchPlan()
     {
+        var arena = new VirtualTextArena();
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(0))],
-            children: [VirtualNodeFactory.Button("Increment", 2, ControlActionAttributeAdapter.ToAttribute(ActionIdRegistry.Increment))]);
+            children: [VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionAttributeAdapter.ToAttribute(ActionIdRegistry.Increment))]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(24))],
-            children: [VirtualNodeFactory.Button("Increment", 2, ControlActionAttributeAdapter.ToAttribute(ActionIdRegistry.Increment))]);
+            children: [VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionAttributeAdapter.ToAttribute(ActionIdRegistry.Increment))]);
 
         using var frame1 = pipeline.Build(root1, viewport);
         var retainedLayout = pipeline.LastLayoutResult;

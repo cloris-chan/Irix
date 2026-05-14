@@ -32,7 +32,7 @@ internal abstract record CounterMessage
     /// <summary>Update MaxScrollY from the layout pass.</summary>
     public sealed record UpdateMaxScrollY(double MaxScrollY) : CounterMessage;
 
-    /// <summary>Raw wheel delta from input. Never reaches Update — coalesced by HandleInput.</summary>
+    /// <summary>Raw wheel delta from input. Never reaches Update �?coalesced by HandleInput.</summary>
     public sealed record WheelRaw(int RawDelta) : CounterMessage;
 
     public sealed record InputVisualStateChanged(OwnershipSnapshot Snapshot) : CounterMessage;
@@ -51,6 +51,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
     private readonly bool _showDiagnostics = showDiagnostics;
     private readonly CounterViewportDiagnostics _initialViewportDiagnostics = initialViewportDiagnostics;
     private readonly CounterLayoutDiagnostics _initialLayoutDiagnostics = NormalizeLayoutDiagnostics(initialLayoutDiagnostics);
+    internal readonly VirtualTextArena _arena = new();
 
     public CounterModel Initialize() => new(0, ScrollState.Default, default, _initialViewportDiagnostics, _initialLayoutDiagnostics);
 
@@ -100,11 +101,11 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         var scrollY = ScrollController.GetScrollY(model.Scroll);
         var inputOwnership = model.InputOwnership;
         var headerRows = _showDiagnostics
-            ? BuildDiagnosticHeaderRows(model.Count, model.Scroll, inputOwnership, model.ViewportDiagnostics, model.LayoutDiagnostics)
+            ? BuildDiagnosticHeaderRows(_arena, model.Count, model.Scroll, inputOwnership, model.ViewportDiagnostics, model.LayoutDiagnostics)
             :
             [
-                VirtualNodeFactory.Text($"Count: {model.Count}", 2),
-                VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4)
+                VirtualNodeBuilder.Text(_arena, $"Count: {model.Count}", new NodeKey(2)),
+                VirtualNodeBuilder.Text(_arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4))
             ];
 
         var root = new VirtualNode(
@@ -114,28 +115,28 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
             children:
             [
                 .. headerRows,
-                VirtualNodeFactory.Rectangle(220, 48, 5),
-                BuildButton("Increment", 6, ActionIdRegistry.Increment, inputOwnership),
-                BuildButton("Decrement", 7, ActionIdRegistry.Decrement, inputOwnership),
-                BuildButton("Reset", 8, ActionIdRegistry.Reset, inputOwnership),
-                .. BuildScrollProbeRows()
+                VirtualNodeFactory.Rectangle(220, 48, new NodeKey(5)),
+                BuildButton(_arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership),
+                BuildButton(_arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership),
+                BuildButton(_arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership),
+                .. BuildScrollProbeRows(_arena)
             ]);
 
-        return new VirtualNodeTree(root);
+        return new VirtualNodeTree(root, _arena.Snapshot());
     }
 
-    private static VirtualNode[] BuildDiagnosticHeaderRows(int count, ScrollState scroll, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
+    private static VirtualNode[] BuildDiagnosticHeaderRows(VirtualTextArena arena, int count, ScrollState scroll, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
     {
         var debugDiagnostics = new DefaultDebugDiagnosticsSnapshotBridge(viewportDiagnostics, layoutDiagnostics, scroll, inputOwnership).Capture();
 
         return [
-            VirtualNodeFactory.Text($"Count: {count}", 2),
-            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatScrollDiagnosticRow(debugDiagnostics), 3),
-            VirtualNodeFactory.Text("Click a button or use Up/Down, mouse wheel, and R.", 4),
-            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatInputDiagnosticRow(debugDiagnostics), 9),
-            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatClipModeDiagnosticRow(debugDiagnostics), 10),
-            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatViewportDiagnosticRow(debugDiagnostics), 11),
-            VirtualNodeFactory.Text(DebugDiagnosticsFormatter.FormatLayoutDirtyDiagnosticRow(debugDiagnostics), 12)
+            VirtualNodeBuilder.Text(arena, $"Count: {count}", new NodeKey(2)),
+            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatScrollDiagnosticRow(debugDiagnostics), new NodeKey(3)),
+            VirtualNodeBuilder.Text(arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4)),
+            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatInputDiagnosticRow(debugDiagnostics), new NodeKey(9)),
+            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatClipModeDiagnosticRow(debugDiagnostics), new NodeKey(10)),
+            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatViewportDiagnosticRow(debugDiagnostics), new NodeKey(11)),
+            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatLayoutDirtyDiagnosticRow(debugDiagnostics), new NodeKey(12))
         ];
     }
 
@@ -150,21 +151,22 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         return new ButtonVisualState(state.IsHovered, state.IsPressed, state.IsFocused);
     }
 
-    private static VirtualNode BuildButton(string label, uint key, ActionId actionId, OwnershipSnapshot ownership)
+    private static VirtualNode BuildButton(VirtualTextArena arena, string label, uint key, ActionId actionId, OwnershipSnapshot ownership)
     {
         var visualState = ControlVisualStateProjection.Project(ownership, actionId);
-        return VirtualNodeFactory.Button(
+        return VirtualNodeBuilder.Button(
+            arena,
             label,
-            key,
+            new NodeKey(key),
             ButtonAttributeBundle.Create(actionId, visualState));
     }
 
-    private static VirtualNode[] BuildScrollProbeRows()
+    private static VirtualNode[] BuildScrollProbeRows(VirtualTextArena arena)
     {
         var rows = new VirtualNode[50];
         for (var index = 0; index < rows.Length; index++)
         {
-            rows[index] = VirtualNodeFactory.Text($"Scroll row {index + 1:00}", (uint)(100 + index));
+            rows[index] = VirtualNodeBuilder.Text(arena, $"Scroll row {index + 1:00}", new NodeKey((uint)(100 + index)));
         }
 
         return rows;

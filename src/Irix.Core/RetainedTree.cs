@@ -40,7 +40,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
     {
         if (batch.Count == 0)
         {
-            if (batch.Root.Kind != default) _tree = new VirtualNodeTree(batch.Root);
+            if (batch.Root.Kind != default) _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
             return [];
         }
 
@@ -72,11 +72,11 @@ public sealed class RetainedTree(VirtualNodeTree tree)
 
         if (replacePatches.ContainsKey(0))
         {
-            _tree = new VirtualNodeTree(replacePatches[0]);
+            _tree = new VirtualNodeTree(replacePatches[0], batch.TextSnapshot);
             return [0];
         }
 
-        _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty));
+        _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty), batch.TextSnapshot);
         dirty.Sort();
         var deduped = new List<int>(dirty.Count);
         var last = -1;

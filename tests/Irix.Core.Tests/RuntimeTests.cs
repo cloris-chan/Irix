@@ -4,6 +4,7 @@ namespace Irix.Core.Tests;
 
 public sealed class RuntimeTests
 {
+    private readonly VirtualTextArena _arena = new();
     [Fact]
     public async Task StartAsync_and_Dispatch_publish_virtual_node_patches()
     {
@@ -49,6 +50,8 @@ public sealed class RuntimeTests
 
     private sealed class TestApplication : IApplication<TestModel, TestMessage>
     {
+        private readonly VirtualTextArena _arena = new();
+
         public TestModel Initialize() => new(0);
 
         public UpdateResult<TestModel, TestMessage> Update(TestModel model, TestMessage message) =>
@@ -60,7 +63,7 @@ public sealed class RuntimeTests
 
         public VirtualNodeTree BuildView(TestModel model)
         {
-            return new VirtualNodeTree(VirtualNodeFactory.Text($"Count: {model.Count}", 1));
+            return new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, $"Count: {model.Count}", new NodeKey(1)), _arena.Snapshot());
         }
     }
 

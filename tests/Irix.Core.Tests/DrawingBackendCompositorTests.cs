@@ -8,6 +8,7 @@ namespace Irix.Core.Tests;
 
 public sealed class DrawingBackendCompositorTests
 {
+    private readonly VirtualTextArena _arena = new();
     [Fact]
     public async Task RenderAsync_pushes_elements_to_backend()
     {
@@ -353,12 +354,12 @@ public sealed class DrawingBackendCompositorTests
         // Clip: (0, 0, 120, 50), clip bottom = 50.
         // Button bottom = 16+40 = 56, which extends beyond clip bottom (50)
         // Point at (20, 52) is inside button (16..104, 16..56) but outside clip (0..120, 0..50)
-        var root = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.Button("ClickMe", 2,
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "ClickMe", new NodeKey(2),
                 VirtualNodeAttribute.Action(new ActionId(100))));
         var viewport = new PixelRectangle(0, 0, 120, 50);
         var pipeline = new RenderPipeline();
-        using var batch = pipeline.Build(root, viewport);
+        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
         await compositor.RenderAsync(batch, cancellationToken);
 
@@ -391,13 +392,13 @@ public sealed class DrawingBackendCompositorTests
 
         // Root uses viewport clip; nested containers keep the padded container clip.
         // Inner: [16, 16, 268, 184] intersected with root [0, 0, 300, 200].
-        var root = VirtualNodeFactory.ScrollContainer(1,
-            VirtualNodeFactory.ScrollContainer(2,
-                VirtualNodeFactory.Button("Inner", 3,
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.ScrollContainer(new NodeKey(2),
+                VirtualNodeBuilder.Button(_arena, "Inner", new NodeKey(3),
                     VirtualNodeAttribute.Action(new ActionId(100)))));
         var viewport = new PixelRectangle(0, 0, 300, 200);
         var pipeline = new RenderPipeline();
-        using var batch = pipeline.Build(root, viewport);
+        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
         await compositor.RenderAsync(batch, cancellationToken);
 
@@ -429,14 +430,14 @@ public sealed class DrawingBackendCompositorTests
             key: 1,
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(30))],
             children: [
-                VirtualNodeFactory.Button("First", 2,
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2),
                     VirtualNodeAttribute.Action(new ActionId(100))),
-                VirtualNodeFactory.Button("Second", 3,
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3),
                     VirtualNodeAttribute.Action(new ActionId(101)))
             ]);
         var viewport = new PixelRectangle(0, 0, 200, 60);
         var pipeline = new RenderPipeline();
-        using var batch = pipeline.Build(root, viewport);
+        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
 
         await compositor.RenderAsync(batch, cancellationToken);
 
