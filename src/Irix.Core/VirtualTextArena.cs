@@ -6,6 +6,7 @@ public sealed class VirtualTextArena
 {
     private readonly List<char> _buffer = [];
     private uint _nextBufferId = 1;
+    private TextBufferSnapshot? _cachedSnapshot;
 
     public TextBufferId CurrentBufferId { get; private set; }
 
@@ -25,6 +26,7 @@ public sealed class VirtualTextArena
 
         var start = _buffer.Count;
         _buffer.AddRange(text);
+        _cachedSnapshot = null;
         return new TextNodeContent(CurrentBufferId, new TextRange(start, text.Length));
     }
 
@@ -41,6 +43,7 @@ public sealed class VirtualTextArena
         return CollectionsMarshal.AsSpan(_buffer).Slice(start, length);
     }
 
+    [Obsolete("Use Resolve() with ReadOnlySpan<char> instead. Intended for diagnostics only.")]
     public string ResolveString(TextNodeContent content)
     {
         var span = Resolve(content);
@@ -53,14 +56,25 @@ public sealed class VirtualTextArena
     }
 
     /// <summary>
+    /// Returns a cached snapshot of the current buffer, creating one if needed.
+    /// The cache is invalidated when text is added. Use this instead of <see cref="Snapshot"/>
+    /// when the snapshot will not be mutated and may be called multiple times per frame.
+    /// </summary>
+    public TextBufferSnapshot GetOrCreateSnapshot()
+    {
+        return _cachedSnapshot ??= new TextBufferSnapshot(CurrentBufferId, [.. _buffer]);
+    }
+
+    /// <summary>
     /// Begins a new frame: captures the current buffer as <see cref="PreviousSnapshot"/>,
     /// then clears the buffer for fresh text. Call this before <c>BuildView</c>.
     /// </summary>
     public void BeginFrame()
     {
-        PreviousSnapshot = _buffer.Count > 0 ? Snapshot() : null;
+        PreviousSnapshot = _buffer.Count > 0 ? GetOrCreateSnapshot() : null;
         _buffer.Clear();
         CurrentBufferId = default;
+        _cachedSnapshot = null;
     }
 
     public void Clear()
@@ -68,6 +82,7 @@ public sealed class VirtualTextArena
         _buffer.Clear();
         _nextBufferId = 1;
         CurrentBufferId = default;
+        _cachedSnapshot = null;
         PreviousSnapshot = null;
     }
 }
@@ -90,6 +105,7 @@ public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) 
         return Buffer.AsSpan(start, length);
     }
 
+    [Obsolete("Use Resolve() with ReadOnlySpan<char> instead. Intended for diagnostics only.")]
     public string ResolveString(TextNodeContent content)
     {
         var span = Resolve(content);

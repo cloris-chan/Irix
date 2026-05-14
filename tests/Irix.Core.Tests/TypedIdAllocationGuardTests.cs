@@ -27,9 +27,9 @@ public class TypedIdAllocationGuardTests
                 .. Enumerable.Range(0, 20).Select(i => VirtualNodeBuilder.Text(_arena, $"Row {i}", new NodeKey((uint)(10 + i))))
             ]);
 
-        pipeline.Build(root, viewport);
+        pipeline.Build(root, viewport, _arena.Snapshot());
 
-        var snapshot1 = pipeline.Build(root, viewport);
+        var snapshot1 = pipeline.Build(root, viewport, _arena.Snapshot());
 
         Assert.NotEmpty(snapshot1.HitTargets);
         Assert.Equal(new ActionId(1), snapshot1.HitTargets[0].ActionId);
@@ -275,6 +275,47 @@ public class TypedIdAllocationGuardTests
             Assert.DoesNotContain("string? Text", content);
             Assert.DoesNotContain("string Text", content);
         }
+    }
+
+    // ── Allocation baseline: layout + record hot path ────────────
+
+    [Fact]
+    public void Render_pipeline_steady_state_allocation_baseline()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            children:
+            [
+                VirtualNodeBuilder.Text(_arena, "Header", new NodeKey(2)),
+                VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3), VirtualNodeAttribute.Action(new ActionId(1))),
+                .. Enumerable.Range(0, 10).Select(i => VirtualNodeBuilder.Text(_arena, $"Row {i}", new NodeKey((uint)(100 + i))))
+            ]);
+
+        // Warmup: let the pipeline retain state and pools stabilize
+        var snapshot = _arena.Snapshot();
+        for (var i = 0; i < 3; i++)
+        {
+            pipeline.Build(root, viewport, snapshot);
+        }
+
+        // Measure steady-state allocation for a single Build call
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        pipeline.Build(root, viewport, snapshot);
+
+        var after = GC.GetAllocatedBytesForCurrentThread();
+        var allocated = after - before;
+
+        // Baseline: expect ~4-8 KB for lists, arrays, and retained snapshot.
+        // Set generous ceiling to avoid flaky tests; tighten as allocations improve.
+        Assert.True(allocated < 16_384,
+            $"Steady-state Build allocated {allocated} bytes, expected < 16384");
     }
 
     private static string FindRepoRoot()

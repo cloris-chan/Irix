@@ -24,7 +24,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
     /// Record draw commands for all layout elements.
     /// Returns the full command batch plus element→command range mapping.
     /// </summary>
-    public DrawCommandRecordResult Record(IReadOnlyList<LayoutElement> elements, TextBufferSnapshot? textSnapshot = null)
+    public DrawCommandRecordResult Record(IReadOnlyList<LayoutElement> elements, TextBufferSnapshot textSnapshot)
     {
         return Record(elements, dirtyElementRanges: null, textSnapshot: textSnapshot);
     }
@@ -37,7 +37,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
     public DrawCommandRecordResult Record(
         IReadOnlyList<LayoutElement> elements,
         IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
-        TextBufferSnapshot? textSnapshot = null)
+        TextBufferSnapshot textSnapshot)
     {
         if (elements.Count == 0)
         {
@@ -68,7 +68,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
         ResourceHandle textStyle,
         ResourceHandle buttonTextStyle,
         int maximumCommandCount,
-        TextBufferSnapshot? textSnapshot)
+        TextBufferSnapshot textSnapshot)
     {
         Span<DrawCommand> stackCommands = stackalloc DrawCommand[maximumCommandCount];
         Span<ElementCommandRange> stackRanges = stackalloc ElementCommandRange[elements.Count];
@@ -87,7 +87,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
         ResourceHandle textStyle,
         ResourceHandle buttonTextStyle,
         int maximumCommandCount,
-        TextBufferSnapshot? textSnapshot)
+        TextBufferSnapshot textSnapshot)
     {
         var pooledOwner = PooledArrayMemoryOwner<DrawCommand>.Rent(maximumCommandCount);
         var elementRanges = new ElementCommandRange[elements.Count];
@@ -115,7 +115,7 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
         ControlVisualStateResolver visualStateResolver,
         ResourceHandle textStyle,
         ResourceHandle buttonTextStyle,
-        TextBufferSnapshot? textSnapshot,
+        TextBufferSnapshot textSnapshot,
         Span<DrawCommand> commands,
         Span<ElementCommandRange> elementRanges)
     {
@@ -171,11 +171,10 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
         return commandCount;
     }
 
-    private static ReadOnlySpan<char> ResolveText(TextNodeContent content, TextBufferSnapshot? snapshot)
+    private static ReadOnlySpan<char> ResolveText(TextNodeContent content, TextBufferSnapshot snapshot)
     {
         if (content.IsNone) return default;
-        if (snapshot is { } s) return s.Resolve(content);
-        return default;
+        return snapshot.Resolve(content);
     }
 
     private static DrawRect ToDrawRect(PixelRectangle bounds)

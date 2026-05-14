@@ -170,7 +170,7 @@ internal static class InputDiagnosticRunner
         {
             var initialResult = retainedTree.Apply(initialPatch);
             var initialSnapshot = retainedTree.Tree.TextSnapshot;
-            using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialResult.Dirty, initialSnapshot);
+            using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialSnapshot, initialResult.Dirty);
             pipeline.RetainedFrame.Invalidate();
         }
 
@@ -210,7 +210,7 @@ internal static class InputDiagnosticRunner
             var textSnapshot = retainedTree.Tree.TextSnapshot;
             var prevTextSnapshot = result.Dirty.Count > 0 ? (TextBufferSnapshot?)result.PreviousTextSnapshot : null;
             var previousRoot = result.Dirty.Count > 0 ? result.PreviousRoot : default;
-            using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, result.Dirty, textSnapshot, prevTextSnapshot, previousRoot);
+            using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, textSnapshot, result.Dirty, prevTextSnapshot, previousRoot);
             pipeline.RetainedFrame.Invalidate();
             lines.Add($"dirtyReason {name} reason={pipeline.LastLayoutRebuildReason} classifications={DiagnosticsFormatter.FormatLayoutDirtyClassifications(pipeline.LastDirtyClassifications)}");
             currentTree = nextTree;

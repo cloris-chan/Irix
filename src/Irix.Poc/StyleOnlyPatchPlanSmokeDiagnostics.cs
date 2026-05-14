@@ -29,12 +29,13 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
             VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2),
                 ButtonAttributeBundle.Create(ActionIdRegistry.Increment, new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false))));
 
-        using var frame1 = pipeline.Build(root1, viewport);
+        var snapshot = arena.GetOrCreateSnapshot();
+        using var frame1 = pipeline.Build(root1, viewport, snapshot);
         var retainedLayout = pipeline.LastLayoutResult;
         ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
         HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
 
-        using var frame2 = pipeline.Build(root2, viewport, [1]);
+        using var frame2 = pipeline.Build(root2, viewport, snapshot, [1]);
         return StyleOnlyPatchPlanBuilder.Build(
             pipeline.LastDirtyClassifications,
             viewportChanged: false,
@@ -61,12 +62,13 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(24))],
             children: [VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionAttributeAdapter.ToAttribute(ActionIdRegistry.Increment))]);
 
-        using var frame1 = pipeline.Build(root1, viewport);
+        var snapshot = arena.GetOrCreateSnapshot();
+        using var frame1 = pipeline.Build(root1, viewport, snapshot);
         var retainedLayout = pipeline.LastLayoutResult;
         ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
         HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
 
-        using var frame2 = pipeline.Build(root2, viewport, [0]);
+        using var frame2 = pipeline.Build(root2, viewport, snapshot, [0]);
         return StyleOnlyPatchPlanBuilder.Build(
             pipeline.LastDirtyClassifications,
             viewportChanged: false,

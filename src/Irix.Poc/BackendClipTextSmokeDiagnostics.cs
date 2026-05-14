@@ -16,7 +16,7 @@ internal static class BackendClipTextSmokeDiagnostics
             attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(40))],
             children: [VirtualNodeFactory.Rectangle(160, 80, new NodeKey(1001))]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
-        using var batch = pipeline.Build(root, viewport);
+        using var batch = pipeline.Build(root, viewport, default);
 
         backend.SetClipMode(DrawingBackendClipMode.Scissor);
         compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
@@ -35,7 +35,7 @@ internal static class BackendClipTextSmokeDiagnostics
                 VirtualNodeBuilder.Button(arena, "PipelineClip", new NodeKey(1101), VirtualNodeAttribute.Action(new ActionId(100)))
             ]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
-        using var batch = pipeline.Build(root, viewport);
+        using var batch = pipeline.Build(root, viewport, default);
 
         backend.SetClipMode(DrawingBackendClipMode.Scissor);
         compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();

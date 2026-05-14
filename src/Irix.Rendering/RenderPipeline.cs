@@ -24,7 +24,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     }
 
     private VirtualNode _retainedRoot;
-    private TextBufferSnapshot? _retainedTextSnapshot;
+    private TextBufferSnapshot _retainedTextSnapshot;
     private LayoutTreeResult? _retainedLayoutResult;
     private IReadOnlyList<LayoutElement>? _retainedLayout;
     private PixelRectangle _retainedViewport;
@@ -82,7 +82,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     /// and dirty element/command ranges are computed. When null (render request),
     /// reuses the retained layout if tree and viewport match.
     /// </summary>
-    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null, TextBufferSnapshot? prevTextSnapshot = null, VirtualNode previousRoot = default)
+    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, TextBufferSnapshot textSnapshot, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? prevTextSnapshot = null, VirtualNode previousRoot = default)
     {
         LastViewport = viewportBounds;
         var hadRetainedLayout = _retainedLayout is not null;

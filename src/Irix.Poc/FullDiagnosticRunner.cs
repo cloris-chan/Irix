@@ -103,7 +103,7 @@ internal static class FullDiagnosticRunner
             VirtualNodeBuilder.Button(arena, "LayoutBtn", new NodeKey(3),
                 VirtualNodeAttribute.Action(new ActionId(100))));
         var layoutViewport = new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
-        using var layoutBatch = layoutPipeline.Build(layoutRoot, layoutViewport);
+        using var layoutBatch = layoutPipeline.Build(layoutRoot, layoutViewport, arena.GetOrCreateSnapshot());
 
         // Render the layout-driven frame through the compositor
         compositor.RenderAsync(layoutBatch).AsTask().GetAwaiter().GetResult();

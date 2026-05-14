@@ -690,7 +690,7 @@ public sealed class PartialApplyPreflightTests
         using var shadow = new SegmentedRetainedFrameShadowHarness();
         using var frame1 = pipeline.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
         shadow.ApplyFull(frame1, retainedRoot);
-        using var frame2 = pipeline.Build(nextRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = pipeline.Build(nextRoot, viewport, _arena.Snapshot(), [2]);
         var snapshot = pipeline.LastRetainedInputSnapshot!;
         var retainedFrameCommandCount = pipeline.RetainedFrame.CommandCount;
         var retainedFrameResources = pipeline.RetainedFrame.Resources;
@@ -740,7 +740,7 @@ public sealed class PartialApplyPreflightTests
         shadow.ApplyFull(frame1, retainedRoot);
         var beforeRoot = shadow.Owner.RetainedRoot;
         var beforeSegments = shadow.Owner.ResourceSegments.ToArray();
-        using var frame2 = pipeline.Build(nextRoot, viewport, [1], _arena.Snapshot());
+        using var frame2 = pipeline.Build(nextRoot, viewport, _arena.Snapshot(), [1]);
         var snapshot = pipeline.LastRetainedInputSnapshot!;
 
         var result = shadow.TryAcceptPartial(snapshot, viewport, frame2, nextRoot);
@@ -861,7 +861,7 @@ public sealed class PartialApplyPreflightTests
 
         using var frame1 = diagnosticHarness.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
         var fullResult = diagnosticHarness.LastShadowResult;
-        using var frame2 = diagnosticHarness.Build(nextRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = diagnosticHarness.Build(nextRoot, viewport, _arena.Snapshot(), [2]);
         var partialResult = diagnosticHarness.LastShadowResult;
         var retainedFrameCommandCount = pipeline.RetainedFrame.CommandCount;
         var retainedFrameResources = pipeline.RetainedFrame.Resources;
@@ -962,7 +962,7 @@ public sealed class PartialApplyPreflightTests
 
         var directPipeline = new RenderPipeline();
         using var directFrame1 = directPipeline.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var directFrame2 = directPipeline.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var directFrame2 = directPipeline.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var hitTarget = Assert.Single(directFrame2.HitTargets);
         var hitTestX = hitTarget.Bounds.X + 1;
         var hitTestY = hitTarget.Bounds.Y + 1;
@@ -978,7 +978,7 @@ public sealed class PartialApplyPreflightTests
             : RenderPipelineProductionOwnerOptions.Disabled;
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, options);
         using var feedFrame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var feedFrame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var feedFrame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var feedBackend = new DirtyRangeAwareCapturingBackend();
         using var feedCompositor = new DrawingBackendCompositor(feedBackend);
         await feedCompositor.RenderAsync(feedFrame1, cancellationToken);
@@ -1081,7 +1081,7 @@ public sealed class PartialApplyPreflightTests
 
         using var frame1 = pipeline.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
         var fullResult = ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
-        using var frame2 = pipeline.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = pipeline.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var partialResult = ownership.Update(pipeline.LastRetainedInputSnapshot, partialRoot, viewport, frame2);
 
         Assert.Same(pipeline.RetainedFrame, ownership.RetainedFrame);
@@ -1101,7 +1101,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(frame2.Commands.Count, retainedCommands.Length);
         Assert.Same(frame2.Resources, retainedResources);
 
-        using var frame3 = pipeline.Build(fallbackRoot, viewport, [2], _arena.Snapshot());
+        using var frame3 = pipeline.Build(fallbackRoot, viewport, _arena.Snapshot(), [2]);
         var fallbackResult = ownership.Update(pipeline.LastRetainedInputSnapshot, fallbackRoot, viewport, frame3);
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fallbackResult.Kind);
@@ -1327,7 +1327,7 @@ public sealed class PartialApplyPreflightTests
         ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
         await compositor.RenderAsync(frame1, cancellationToken);
         var hitTarget = Assert.Single(frame1.HitTargets);
-        using var frame2 = pipeline.Build(nextRoot, viewport, [1], _arena.Snapshot());
+        using var frame2 = pipeline.Build(nextRoot, viewport, _arena.Snapshot(), [1]);
         var result = ownership.Update(pipeline.LastRetainedInputSnapshot, nextRoot, viewport, frame2);
         await compositor.RenderAsync(frame2, cancellationToken);
         var hitX = hitTarget.Bounds.X + 1;
@@ -1364,7 +1364,7 @@ public sealed class PartialApplyPreflightTests
         ownership.Update(pipeline.LastRetainedInputSnapshot, retainedRoot, viewport, frame1);
         await compositor.RenderAsync(frame1, cancellationToken);
         var primaryHitTarget = frame1.HitTargets[0];
-        using var frame2 = pipeline.Build(nextRoot, viewport, [3], _arena.Snapshot());
+        using var frame2 = pipeline.Build(nextRoot, viewport, _arena.Snapshot(), [3]);
         var result = ownership.Update(pipeline.LastRetainedInputSnapshot, nextRoot, viewport, frame2);
         await compositor.RenderAsync(frame2, cancellationToken);
         var hitX = primaryHitTarget.Bounds.X + 1;
@@ -1537,7 +1537,7 @@ public sealed class PartialApplyPreflightTests
 
         var directPipeline = new RenderPipeline();
         using var directFrame1 = directPipeline.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var directFrame2 = directPipeline.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var directFrame2 = directPipeline.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var directBackend = new DirtyRangeAwareCapturingBackend();
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directFrame1, cancellationToken);
@@ -1557,7 +1557,7 @@ public sealed class PartialApplyPreflightTests
         await feedCompositor.RenderAsync(feedFrame1, cancellationToken);
         var productionRenderCountAfterFrame1 = feedCompositor.RenderCount;
         var fullResult = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), feedPipeline.LastDirtyCommandRanges);
-        using var feedFrame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var feedFrame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         await feedCompositor.RenderAsync(feedFrame2, cancellationToken);
         var productionRenderCountAfterFrame2 = feedCompositor.RenderCount;
         var partialResult = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), feedPipeline.LastDirtyCommandRanges);
@@ -1650,7 +1650,7 @@ public sealed class PartialApplyPreflightTests
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var frame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var productionBackend = new DirtyRangeAwareCapturingBackend();
         using var compositor = new DrawingBackendCompositor(productionBackend);
         await compositor.RenderAsync(frame1, cancellationToken);
@@ -1755,7 +1755,7 @@ public sealed class PartialApplyPreflightTests
         var pipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(pipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var frame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var backend = new CapturingBackend();
         using var compositor = new DrawingBackendCompositor(backend);
         await compositor.RenderAsync(frame1, cancellationToken);
@@ -1807,7 +1807,7 @@ public sealed class PartialApplyPreflightTests
         var pipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(pipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var frame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var frame2 = feed.Build(fallbackRoot, viewport, [1], _arena.Snapshot());
+        using var frame2 = feed.Build(fallbackRoot, viewport, _arena.Snapshot(), [1]);
         var productionBackend = new DirtyRangeAwareCapturingBackend();
         using var compositor = new DrawingBackendCompositor(productionBackend);
         await compositor.RenderAsync(frame1, cancellationToken);
@@ -1920,7 +1920,7 @@ public sealed class PartialApplyPreflightTests
 
         var directPipeline = new RenderPipeline();
         using var directFrame1 = directPipeline.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var directFrame2 = directPipeline.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var directFrame2 = directPipeline.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var directBackend = new DirtyRangeAwareCapturingBackend();
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directFrame1, cancellationToken);
@@ -1939,7 +1939,7 @@ public sealed class PartialApplyPreflightTests
         using var feedFrame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
         await feedCompositor.RenderAsync(feedFrame1, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var fullResult = feedCompositor.LastHandoffResult;
-        using var feedFrame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var feedFrame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         await feedCompositor.RenderAsync(feedFrame2, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var partialResult = feedCompositor.LastHandoffResult;
         var feedHit = feedCompositor.TryGetActionIdAt(hitX, hitY, out var feedActionId);
@@ -2020,7 +2020,7 @@ public sealed class PartialApplyPreflightTests
         using var enabledCompositor = new DrawingBackendCompositor(enabledBackend, StyleOnlyFastPathOptions.Enabled.HandoffOptions);
         using var enabledFrame1 = enabledFeed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
         await enabledCompositor.RenderAsync(enabledFrame1, enabledFeed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
-        using var enabledFrame2 = enabledFeed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var enabledFrame2 = enabledFeed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         await enabledCompositor.RenderAsync(enabledFrame2, enabledFeed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, disabledCompositor.LastHandoffResult.Kind);
@@ -2217,7 +2217,7 @@ public sealed class PartialApplyPreflightTests
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
         using var ownerFrame = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var staleFrame = feedPipeline.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var staleFrame = feedPipeline.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var backend = new DirtyRangeAwareCapturingBackend();
         using var compositor = new DrawingBackendCompositor(
             backend,
@@ -2252,7 +2252,7 @@ public sealed class PartialApplyPreflightTests
         using var frame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
         await compositor.RenderAsync(frame1, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var initialFullResult = compositor.LastHandoffResult;
-        using var fallbackFrame = feed.Build(fallbackRoot, viewport, [1], _arena.Snapshot());
+        using var fallbackFrame = feed.Build(fallbackRoot, viewport, _arena.Snapshot(), [1]);
         await compositor.RenderAsync(fallbackFrame, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var fallbackResult = compositor.LastHandoffResult;
         using var emptyFrame = feed.Build(emptyRoot, viewport, textSnapshot: _arena.Snapshot());
@@ -2349,7 +2349,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, compositor.LastHandoffResult.Kind);
         Assert.False(compositor.HasHandoffCandidateHarness);
 
-        using var frame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderAsync(frame2, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken));
 
         Assert.Equal("execute failed", exception.Message);
@@ -2413,7 +2413,7 @@ public sealed class PartialApplyPreflightTests
         var hitY = firstHitTarget.Bounds.Y + 1;
         Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionBeforeThrow));
 
-        using var frame2 = pipeline.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = pipeline.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var partialResult = ownership.Update(pipeline.LastRetainedInputSnapshot, partialRoot, viewport, frame2);
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderAsync(frame2, ownership, new FrameContext(960, 540), cancellationToken));
 
@@ -2458,7 +2458,7 @@ public sealed class PartialApplyPreflightTests
 
         using var frame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
         var fullResult = feed.LastResult;
-        using var frame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var partialResult = feed.LastResult;
         var partialOwner = feed.RuntimeOwner!;
         var partialSegments = partialOwner.ResourceSegments.ToArray();
@@ -2502,7 +2502,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Same(retainedFrameResources, pipeline.RetainedFrame.Resources);
         Assert.Equal(retainedDirtyRanges, pipeline.RetainedFrame.DirtyCommandRanges);
 
-        using var frame3 = feed.Build(fallbackRoot, viewport, [2], _arena.Snapshot());
+        using var frame3 = feed.Build(fallbackRoot, viewport, _arena.Snapshot(), [2]);
         var fallbackResult = feed.LastResult;
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fallbackResult.Kind);
@@ -2551,9 +2551,9 @@ public sealed class PartialApplyPreflightTests
                 new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
 
         using var frame1 = feed.Build(root1, viewport, textSnapshot: _arena.Snapshot());
-        using var frame2 = feed.Build(root2, viewport, [2], _arena.Snapshot());
+        using var frame2 = feed.Build(root2, viewport, _arena.Snapshot(), [2]);
         var secondResult = feed.LastResult;
-        using var frame3 = feed.Build(root3, viewport, [2], _arena.Snapshot());
+        using var frame3 = feed.Build(root3, viewport, _arena.Snapshot(), [2]);
         var thirdResult = feed.LastResult;
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, secondResult.Kind);
@@ -2648,7 +2648,7 @@ public sealed class PartialApplyPreflightTests
         var beforeSegments = feed.RuntimeOwner.ResourceSegments.ToArray();
         var beforeRoot = feed.RuntimeOwner.RetainedRoot;
         var beforeHitTargets = feed.RuntimeOwner.HitTargets.ToArray();
-        using var frame2 = feed.Build(nextRoot, viewport, [3], _arena.Snapshot());
+        using var frame2 = feed.Build(nextRoot, viewport, _arena.Snapshot(), [3]);
         var fallbackResult = feed.LastResult;
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fallbackResult.Kind);
@@ -2738,7 +2738,7 @@ public sealed class PartialApplyPreflightTests
                 new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = feed.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var frame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]);
         var acceptedResult = feed.LastResult;
         var beforeRoot = feed.RuntimeOwner!.RetainedRoot;
         var beforeSegments = feed.RuntimeOwner.ResourceSegments.ToArray();
@@ -2802,7 +2802,7 @@ public sealed class PartialApplyPreflightTests
                 new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(true))));
 
         using var frame1 = diagnosticHarness.Build(retainedRoot, viewport, textSnapshot: _arena.Snapshot());
-        using var frame2 = diagnosticHarness.Build(nextRoot, viewport, [2], _arena.Snapshot());
+        using var frame2 = diagnosticHarness.Build(nextRoot, viewport, _arena.Snapshot(), [2]);
         var hitTarget = Assert.Single(frame2.HitTargets);
         var hitTestX = hitTarget.Bounds.X + 1;
         var hitTestY = hitTarget.Bounds.Y + 1;
@@ -3626,7 +3626,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(1, enabledCompositor.RenderCount);
         Assert.Equal(1, enabledCompositor.FullApplyCount);
 
-        using (var frame2 = feed.Build(partialRoot, viewport, [2], _arena.Snapshot()))
+        using (var frame2 = feed.Build(partialRoot, viewport, _arena.Snapshot(), [2]))
         {
             await enabledCompositor.RenderAsync(frame2, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         }
@@ -3652,7 +3652,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(0, disabledCompositor.PartialApplyCount);
         Assert.False(disabledCompositor.LastPartialApplySucceeded);
 
-        using (var frame2 = disabledPipeline.Build(partialRoot, viewport, [2], _arena.Snapshot()))
+        using (var frame2 = disabledPipeline.Build(partialRoot, viewport, _arena.Snapshot(), [2]))
         {
             await disabledCompositor.RenderAsync(frame2, cancellationToken);
         }
