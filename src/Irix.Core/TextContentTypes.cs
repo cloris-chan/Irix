@@ -1,12 +1,10 @@
 namespace Irix;
 
-public readonly struct TextBufferId : IEquatable<TextBufferId>
+public readonly struct TextBufferId(uint value) : IEquatable<TextBufferId>
 {
     public static readonly TextBufferId None = default;
 
-    public uint Value { get; }
-
-    public TextBufferId(uint value) => Value = value;
+    public uint Value { get; } = value;
 
     public bool IsNone => Value == 0;
 
@@ -21,16 +19,10 @@ public readonly struct TextBufferId : IEquatable<TextBufferId>
     public static bool operator !=(TextBufferId left, TextBufferId right) => left.Value != right.Value;
 }
 
-public readonly struct TextRange : IEquatable<TextRange>
+public readonly struct TextRange(int start, int length) : IEquatable<TextRange>
 {
-    public int Start { get; }
-    public int Length { get; }
-
-    public TextRange(int start, int length)
-    {
-        Start = start;
-        Length = length;
-    }
+    public int Start { get; } = start;
+    public int Length { get; } = length;
 
     public int End => Start + Length;
 
@@ -47,16 +39,10 @@ public readonly struct TextRange : IEquatable<TextRange>
     public static bool operator !=(TextRange left, TextRange right) => !left.Equals(right);
 }
 
-public readonly struct TextNodeContent : IEquatable<TextNodeContent>
+public readonly struct TextNodeContent(TextBufferId bufferId, TextRange range) : IEquatable<TextNodeContent>
 {
-    public TextBufferId BufferId { get; }
-    public TextRange Range { get; }
-
-    public TextNodeContent(TextBufferId bufferId, TextRange range)
-    {
-        BufferId = bufferId;
-        Range = range;
-    }
+    public TextBufferId BufferId { get; } = bufferId;
+    public TextRange Range { get; } = range;
 
     public bool IsNone => BufferId.IsNone;
 

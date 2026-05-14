@@ -1,5 +1,4 @@
 using Irix.Drawing;
-using Irix.Rendering;
 
 namespace Irix.Poc;
 

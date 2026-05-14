@@ -31,8 +31,8 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private readonly Queue<CachedTextFormat> _textFormatOrder = [];
     private readonly Dictionary<TextLayoutCacheKey, List<CachedTextLayout>> _textLayouts = [];
     private readonly Queue<CachedTextLayout> _textLayoutOrder = [];
-    private ID2D1SolidColorBrush* _textBrush;
-    private ID3D11Query* _overlayCompletionQuery;
+    private readonly ID2D1SolidColorBrush* _textBrush;
+    private readonly ID3D11Query* _overlayCompletionQuery;
     private ID3D11Resource*[] _wrappedBackBuffers = [];
     private ID2D1Bitmap1*[] _renderTargets = [];
     private bool _disposed;

@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Irix.Drawing;
 
 namespace Irix.Platform;

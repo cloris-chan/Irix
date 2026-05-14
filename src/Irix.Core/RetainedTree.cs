@@ -1,4 +1,4 @@
-﻿namespace Irix;
+namespace Irix;
 
 /// <summary>
 /// Applies <see cref="PatchBatch"/> patches to a <see cref="VirtualNode"/> tree,
@@ -70,9 +70,9 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             }
         }
 
-        if (replacePatches.ContainsKey(0))
+        if (replacePatches.TryGetValue(0, out VirtualNode value))
         {
-            _tree = new VirtualNodeTree(replacePatches[0], batch.TextSnapshot);
+            _tree = new VirtualNodeTree(value, batch.TextSnapshot);
             return [0];
         }
 
@@ -160,7 +160,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         }
 
         if (newChildren.Count != oldChildren.Length)
-            return new VirtualNode(node.Kind, node.Key, node.Content, node.Attributes, newChildren.ToArray());
+            return new VirtualNode(node.Kind, node.Key, node.Content, node.Attributes, [.. newChildren]);
 
         var changed = false;
         for (var i = 0; i < newChildren.Count; i++)
@@ -169,7 +169,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         }
 
         return changed
-            ? new VirtualNode(node.Kind, node.Key, node.Content, node.Attributes, newChildren.ToArray())
+            ? new VirtualNode(node.Kind, node.Key, node.Content, node.Attributes, [.. newChildren])
             : node;
     }
 

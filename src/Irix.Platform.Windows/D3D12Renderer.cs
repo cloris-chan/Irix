@@ -342,8 +342,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public void ClearAndPresent(float r, float g, float b, float a = 1.0f)
     {
         if (_deviceRemoved) return;
-        var barrier = new D3D12_RESOURCE_BARRIER();
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        var barrier = new D3D12_RESOURCE_BARRIER
+        {
+            Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION
+        };
         barrier.Anonymous.Transition.pResource = _renderTargets[_frameIndex];
         barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
         barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -390,8 +392,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         if (_deviceRemoved) return;
         // Transition to render target
-        var barrier = new D3D12_RESOURCE_BARRIER();
-        barrier.Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        var barrier = new D3D12_RESOURCE_BARRIER
+        {
+            Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION
+        };
         barrier.Anonymous.Transition.pResource = _renderTargets[_frameIndex];
         barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
         barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -790,8 +794,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         if (_disposed) return;
         _ = WaitForGpu();
-        if (_textRenderer != null) { _textRenderer.Dispose(); _textRenderer = null; }
-        if (_renderer2D != null) { _renderer2D.Dispose(); _renderer2D = null; }
+        _textRenderer?.Dispose();
+        _textRenderer = null;
+        _renderer2D?.Dispose();
+        _renderer2D = null;
         for (var i = 0; i < FrameCount; i++)
         {
             if (_renderTargets[i] != null)

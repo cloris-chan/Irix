@@ -1,4 +1,3 @@
-using Irix;
 using Irix.Platform;
 using Irix.Rendering;
 

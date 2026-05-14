@@ -10,16 +10,10 @@ public enum AttributeDomain : byte
     Style = 6,
 }
 
-public readonly struct VirtualAttributeKey : IEquatable<VirtualAttributeKey>
+public readonly struct VirtualAttributeKey(AttributeDomain domain, ushort code) : IEquatable<VirtualAttributeKey>
 {
-    public AttributeDomain Domain { get; }
-    public ushort Code { get; }
-
-    public VirtualAttributeKey(AttributeDomain domain, ushort code)
-    {
-        Domain = domain;
-        Code = code;
-    }
+    public AttributeDomain Domain { get; } = domain;
+    public ushort Code { get; } = code;
 
     public bool Equals(VirtualAttributeKey other) => Domain == other.Domain && Code == other.Code;
 
@@ -69,26 +63,14 @@ public readonly struct VirtualAttributeKey : IEquatable<VirtualAttributeKey>
 
 // ── AttributeChangeSet (R13-15): domain-separated masks ──────────
 
-public readonly struct AttributeChangeSet : IEquatable<AttributeChangeSet>
+public readonly struct AttributeChangeSet(ulong layoutMask = 0, ulong styleMask = 0, ulong visualMask = 0, ulong interactionMask = 0, ulong runtimeStateMask = 0, ulong compositeMask = 0) : IEquatable<AttributeChangeSet>
 {
-    public ulong LayoutMask { get; }
-    public ulong StyleMask { get; }
-    public ulong VisualMask { get; }
-    public ulong InteractionMask { get; }
-    public ulong RuntimeStateMask { get; }
-    public ulong CompositeMask { get; }
-
-    public AttributeChangeSet(
-        ulong layoutMask = 0, ulong styleMask = 0, ulong visualMask = 0,
-        ulong interactionMask = 0, ulong runtimeStateMask = 0, ulong compositeMask = 0)
-    {
-        LayoutMask = layoutMask;
-        StyleMask = styleMask;
-        VisualMask = visualMask;
-        InteractionMask = interactionMask;
-        RuntimeStateMask = runtimeStateMask;
-        CompositeMask = compositeMask;
-    }
+    public ulong LayoutMask { get; } = layoutMask;
+    public ulong StyleMask { get; } = styleMask;
+    public ulong VisualMask { get; } = visualMask;
+    public ulong InteractionMask { get; } = interactionMask;
+    public ulong RuntimeStateMask { get; } = runtimeStateMask;
+    public ulong CompositeMask { get; } = compositeMask;
 
     public bool IsEmpty => LayoutMask == 0 && StyleMask == 0 && VisualMask == 0
         && InteractionMask == 0 && RuntimeStateMask == 0 && CompositeMask == 0;

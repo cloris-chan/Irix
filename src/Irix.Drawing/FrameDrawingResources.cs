@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Irix.Drawing;
 
 public interface IFrameResourceResolver : ITextResolver
@@ -13,7 +11,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
 
     public static IFrameResourceResolver Empty { get; } = new EmptyFrameResourceResolver();
 
-    private static readonly object PoolLock = new();
+    private static readonly Lock PoolLock = new();
     private static readonly Queue<FrameDrawingResources> Pool = new();
     private static long _rentCount;
     private static long _createdCount;

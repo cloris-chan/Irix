@@ -43,7 +43,7 @@ public sealed class VirtualTextArena
 
     public TextBufferSnapshot Snapshot()
     {
-        return new TextBufferSnapshot(CurrentBufferId, _buffer.ToArray());
+        return new TextBufferSnapshot(CurrentBufferId, [.. _buffer]);
     }
 
     public void Clear()
@@ -54,16 +54,10 @@ public sealed class VirtualTextArena
     }
 }
 
-public readonly struct TextBufferSnapshot : IEquatable<TextBufferSnapshot>
+public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) : IEquatable<TextBufferSnapshot>
 {
-    public TextBufferId BufferId { get; }
-    public char[] Buffer { get; }
-
-    public TextBufferSnapshot(TextBufferId bufferId, char[] buffer)
-    {
-        BufferId = bufferId;
-        Buffer = buffer;
-    }
+    public TextBufferId BufferId { get; } = bufferId;
+    public char[] Buffer { get; } = buffer;
 
     public ReadOnlySpan<char> Resolve(TextNodeContent content)
     {
@@ -89,4 +83,14 @@ public readonly struct TextBufferSnapshot : IEquatable<TextBufferSnapshot>
     public override bool Equals(object? obj) => obj is TextBufferSnapshot other && Equals(other);
 
     public override int GetHashCode() => HashCode.Combine(BufferId, Buffer?.Length ?? 0);
+
+    public static bool operator ==(TextBufferSnapshot left, TextBufferSnapshot right)
+    {
+        return left.Equals(right);
+    }
+
+    public static bool operator !=(TextBufferSnapshot left, TextBufferSnapshot right)
+    {
+        return !(left == right);
+    }
 }

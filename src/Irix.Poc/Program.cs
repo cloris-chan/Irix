@@ -1,4 +1,3 @@
-using Irix;
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;

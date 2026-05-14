@@ -22,7 +22,7 @@ public sealed class FrameTextArena : ITextResolver, IDisposable
     public TextSlice Add(string? text)
     {
         return string.IsNullOrEmpty(text)
-            ? Add(ReadOnlySpan<char>.Empty)
+            ? Add([])
             : Add(text.AsSpan());
     }
 

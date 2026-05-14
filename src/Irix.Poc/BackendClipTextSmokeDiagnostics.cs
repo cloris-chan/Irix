@@ -1,4 +1,3 @@
-using Irix;
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -9,7 +8,8 @@ namespace Irix.Poc;
 internal static class BackendClipTextSmokeDiagnostics
 {
     internal static void RunPipelineScissorSmokeDiagnostic(DrawingBackendCompositor compositor, D3D12DrawingBackend backend, D3D12Renderer renderer)
-    {        var arena = new VirtualTextArena();        var pipeline = new RenderPipeline();
+    {
+        var pipeline = new RenderPipeline();
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1000,
