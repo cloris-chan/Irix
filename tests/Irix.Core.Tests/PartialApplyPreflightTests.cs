@@ -1161,7 +1161,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal("one", ResolveSegmentText(Assert.Single(ownership.RuntimeOwner!.ReadSegments())));
 
         using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, new ActionId(102))], [(1, 1)], commandCount: 2);
-        var snapshot1 = CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
+        var snapshot1 = CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly, _arena.GetOrCreateSnapshot());
         var partialResult = ownership.Update(snapshot1, root2, viewport, frame2);
         frame2.Dispose();
 
@@ -1173,7 +1173,7 @@ public sealed class PartialApplyPreflightTests
             segment => Assert.Equal("two", ResolveSegmentText(segment)));
 
         using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, new ActionId(103))], [(2, 1)], commandCount: 2);
-        var snapshot2 = CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
+        var snapshot2 = CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly, _arena.GetOrCreateSnapshot());
         var rejectedFallbackResult = ownership.Update(snapshot2, root3, viewport, frame3);
         frame3.Dispose();
 
@@ -1190,7 +1190,7 @@ public sealed class PartialApplyPreflightTests
             segment => Assert.Equal("two", ResolveSegmentText(segment)));
 
         using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, new ActionId(104))], [(1, 1)], commandCount: 2);
-        var snapshot3 = CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly);
+        var snapshot3 = CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly, _arena.GetOrCreateSnapshot());
         var fallbackResult = ownership.Update(snapshot3, root4, changedViewport, frame4);
         frame4.Dispose();
 
@@ -1266,13 +1266,13 @@ public sealed class PartialApplyPreflightTests
         ownership.Update(null, root1, viewport, frame1);
         frame1.Dispose();
         using var frame2 = CreateFrameResourceTextBatch("two", [new HitTestTarget(buttonBounds, new ActionId(102))], [(1, 1)], commandCount: 2);
-        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner!.HitTargets, LayoutRebuildReason.StyleOnly), root2, viewport, frame2);
+        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root1, ownership.RuntimeOwner!.HitTargets, LayoutRebuildReason.StyleOnly, _arena.GetOrCreateSnapshot()), root2, viewport, frame2);
         frame2.Dispose();
         using var frame3 = CreateFrameResourceTextBatch("three", [new HitTestTarget(buttonBounds, new ActionId(103))], [(1, 1)], commandCount: 2);
-        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly), root3, viewport, frame3);
+        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root2, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly, _arena.GetOrCreateSnapshot()), root3, viewport, frame3);
         frame3.Dispose();
         using var frame4 = CreateFrameResourceTextBatch("four", [new HitTestTarget(buttonBounds, new ActionId(104))], [(0, 1)], commandCount: 2);
-        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly), root4, viewport, frame4);
+        ownership.Update(CreateDirtySnapshot(viewport, buttonBounds, root3, ownership.RuntimeOwner.HitTargets, LayoutRebuildReason.StyleOnly, _arena.GetOrCreateSnapshot()), root4, viewport, frame4);
         frame4.Dispose();
 
         AssertFrameResourceCapture(tracker.Captures[0], frame1.Resources, retainCount: 1, releaseCount: 1);
@@ -3802,11 +3802,10 @@ public sealed class PartialApplyPreflightTests
             textSnapshot);
     }
 
-    private static VirtualNode CreateActionButtonRoot(ActionId actionId)
+    private VirtualNode CreateActionButtonRoot(ActionId actionId)
     {
-        var arena = new VirtualTextArena();
         return VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeAttribute.Action(actionId),
                 new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(false))));
     }

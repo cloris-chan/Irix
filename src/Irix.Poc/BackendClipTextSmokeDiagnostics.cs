@@ -35,7 +35,7 @@ internal static class BackendClipTextSmokeDiagnostics
                 VirtualNodeBuilder.Button(arena, "PipelineClip", new NodeKey(1101), VirtualNodeAttribute.Action(new ActionId(100)))
             ]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
-        using var batch = pipeline.Build(root, viewport, default);
+        using var batch = pipeline.Build(root, viewport, arena.GetOrCreateSnapshot());
 
         backend.SetClipMode(DrawingBackendClipMode.Scissor);
         compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();

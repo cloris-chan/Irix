@@ -92,6 +92,12 @@ public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) 
     public TextBufferId BufferId { get; } = bufferId;
     public char[] Buffer { get; } = buffer;
 
+    /// <summary>
+    /// True when this snapshot was created from a live arena (BufferId is set and Buffer is non-null).
+    /// A default-constructed snapshot is not valid.
+    /// </summary>
+    public bool IsValid => !BufferId.IsNone && Buffer is not null;
+
     public ReadOnlySpan<char> Resolve(TextNodeContent content)
     {
         if (content.IsNone || content.BufferId != BufferId || Buffer is null)

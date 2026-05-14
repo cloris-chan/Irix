@@ -154,14 +154,17 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
                         ClipBounds: clip,
                         Color: visualStateResolver.ResolveButtonFillColor(style, element.ButtonState));
                     var buttonSpan = ResolveText(element.Text, textSnapshot);
-                    var buttonText = resources.AddText(buttonSpan.IsEmpty ? "Button".AsSpan() : buttonSpan);
-                    commands[commandCount++] = new DrawCommand(
-                        DrawCommandKind.DrawTextRun,
-                        Rect: bounds,
-                        Resource: buttonTextStyle,
-                        Text: buttonText,
-                        ClipBounds: clip,
-                        Color: style.ButtonTextColor);
+                    if (!buttonSpan.IsEmpty)
+                    {
+                        var buttonText = resources.AddText(buttonSpan);
+                        commands[commandCount++] = new DrawCommand(
+                            DrawCommandKind.DrawTextRun,
+                            Rect: bounds,
+                            Resource: buttonTextStyle,
+                            Text: buttonText,
+                            ClipBounds: clip,
+                            Color: style.ButtonTextColor);
+                    }
                     break;
             }
 
@@ -174,6 +177,8 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
     private static ReadOnlySpan<char> ResolveText(TextNodeContent content, TextBufferSnapshot snapshot)
     {
         if (content.IsNone) return default;
+        if (!snapshot.IsValid)
+            throw new InvalidOperationException("TextLayoutElement has text content but the TextBufferSnapshot is invalid (default or missing buffer).");
         return snapshot.Resolve(content);
     }
 

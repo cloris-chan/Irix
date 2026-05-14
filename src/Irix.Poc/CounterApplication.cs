@@ -123,7 +123,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
                 .. BuildScrollProbeRows(_arena)
             ]);
 
-        return new VirtualNodeTree(root, _arena.Snapshot());
+        return new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
     }
 
     private static VirtualNode[] BuildDiagnosticHeaderRows(VirtualTextArena arena, int count, ScrollState scroll, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)

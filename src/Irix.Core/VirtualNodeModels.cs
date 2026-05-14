@@ -272,8 +272,8 @@ public static class VirtualNodeFactory
                 VirtualNodeAttribute.LayoutHeight(height)
             ]);
 
-    public static VirtualNode Button(NodeKey key = default, params VirtualNodeAttribute[] attributes) =>
-        new(VirtualNodeKind.Button, key, attributes: attributes);
+    public static VirtualNode Button(TextNodeContent label, NodeKey key = default, params VirtualNodeAttribute[] attributes) =>
+        new(VirtualNodeKind.Button, key, attributes: attributes, children: [Text(label)]);
 
     public static VirtualNode ScrollContainer(NodeKey key = default, params VirtualNode[] children) =>
         new(VirtualNodeKind.ScrollContainer, key, children: children);
@@ -292,10 +292,6 @@ public static class VirtualNodeBuilder
     public static VirtualNode Button(VirtualTextArena arena, string label, NodeKey key = default, params VirtualNodeAttribute[] attributes)
     {
         var labelContent = arena.AddText(label.AsSpan());
-        return new VirtualNode(
-            VirtualNodeKind.Button,
-            key,
-            attributes: attributes,
-            children: [VirtualNodeFactory.Text(labelContent)]);
+        return VirtualNodeFactory.Button(labelContent, key, attributes);
     }
 }
