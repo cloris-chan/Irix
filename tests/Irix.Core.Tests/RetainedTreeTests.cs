@@ -68,7 +68,7 @@ public sealed class RetainedTreeTests
 
         var rootResult = tree.Tree.Root;
         Assert.True(rootResult.Children.Length >= 2,
-            $"Expected â‰? children, got {rootResult.Children.Length}. dirty=[{string.Join(",", dirty)}]");
+            $"Expected ï¿½? children, got {rootResult.Children.Length}. dirty=[{string.Join(",", dirty)}]");
         Assert.Equal("a", ResolveNodeText(_arena, rootResult.Children[0].Content));
         Assert.Equal("b", ResolveNodeText(_arena, rootResult.Children[1].Content));
     }
@@ -155,7 +155,7 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_diff_batch_then_retained_tree_matches_next_tree()
     {
-        // Simulate the real flow: diff(prev, next) â†?apply patches to prev â†?result == next
+        // Simulate the real flow: diff(prev, next) ï¿½?apply patches to prev ï¿½?result == next
         var prev = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
@@ -170,13 +170,13 @@ public sealed class RetainedTreeTests
 
         tree.Apply(batch);
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(next, tree.Tree.Root));
+        Assert.True(VirtualNodeDiffer.NodesEqual(next, tree.Tree.Root, null, null));
     }
 
     [Fact]
     public void Apply_keyed_add_and_remove_matches_next_tree()
     {
-        // Test: remove "b", add "d" via differ â†?apply patches â†?verify result
+        // Test: remove "b", add "d" via differ ï¿½?apply patches ï¿½?verify result
         var prev = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "a", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "b", new NodeKey(20)),
@@ -206,7 +206,7 @@ public sealed class RetainedTreeTests
     public void Apply_dirty_is_sorted_ascending()
     {
         // Root(0) has 3 children: indices 1, 2, 3
-        // Update index 3 (last child) and index 1 (first child) â€?dirty should be [1, 3]
+        // Update index 3 (last child) and index 1 (first child) ï¿½?dirty should be [1, 3]
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "a", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "b", new NodeKey(3)),
@@ -231,7 +231,7 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_dirty_is_deduplicated_when_multiple_children_change()
     {
-        // Add two children at the same parent â†?parent dirty should appear only once
+        // Add two children at the same parent ï¿½?parent dirty should appear only once
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "a", new NodeKey(2)));
         var newB = VirtualNodeBuilder.Text(_arena, "b", new NodeKey(3));
@@ -253,7 +253,7 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_update_marks_updated_node_not_parent()
     {
-        // Update a child â†?dirty should contain the child's index, not the parent's
+        // Update a child ï¿½?dirty should contain the child's index, not the parent's
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "before", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "keep", new NodeKey(3)));
@@ -271,7 +271,7 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_add_and_remove_marks_parent_as_dirty()
     {
-        // Remove child at index 1, add new child at index 2 â†?parent (0) dirty
+        // Remove child at index 1, add new child at index 2 ï¿½?parent (0) dirty
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "old", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "keep", new NodeKey(3)));

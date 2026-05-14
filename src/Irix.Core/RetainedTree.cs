@@ -27,10 +27,17 @@ namespace Irix;
 public sealed class RetainedTree(VirtualNodeTree tree)
 {
     private VirtualNodeTree _tree = tree;
-
+    private VirtualNode _previousRoot;
+    private TextBufferSnapshot? _previousTextSnapshot;
 
     /// <summary>The current retained tree.</summary>
     public VirtualNodeTree Tree => _tree;
+
+    /// <summary>The root from before the most recent <see cref="Apply"/> call.</summary>
+    public VirtualNode PreviousRoot => _previousRoot;
+
+    /// <summary>The text snapshot that can resolve <see cref="PreviousRoot"/>'s content.</summary>
+    public TextBufferSnapshot? PreviousTextSnapshot => _previousTextSnapshot;
 
     /// <summary>
     /// Apply all patches in the batch in a single DFS pass.
@@ -38,9 +45,11 @@ public sealed class RetainedTree(VirtualNodeTree tree)
     /// </summary>
     public IReadOnlyList<int> Apply(PatchBatch batch)
     {
+        _previousRoot = _tree.Root;
+        _previousTextSnapshot = _tree.TextSnapshot;
         if (batch.Count == 0)
         {
-            if (batch.Root.Kind != default) _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
+            if (batch.Root.Kind != default) _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot, batch.PrevTextSnapshot);
             return [];
         }
 
@@ -72,11 +81,11 @@ public sealed class RetainedTree(VirtualNodeTree tree)
 
         if (replacePatches.TryGetValue(0, out VirtualNode value))
         {
-            _tree = new VirtualNodeTree(value, batch.TextSnapshot);
+            _tree = new VirtualNodeTree(value, batch.TextSnapshot, batch.PrevTextSnapshot);
             return [0];
         }
 
-        _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty), batch.TextSnapshot);
+        _tree = new VirtualNodeTree(ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty), batch.TextSnapshot, batch.PrevTextSnapshot);
         dirty.Sort();
         var deduped = new List<int>(dirty.Count);
         var last = -1;

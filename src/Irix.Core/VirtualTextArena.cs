@@ -9,6 +9,12 @@ public sealed class VirtualTextArena
 
     public TextBufferId CurrentBufferId { get; private set; }
 
+    /// <summary>
+    /// Snapshot of the previous frame's buffer, retained for diff comparison.
+    /// Null before the first <see cref="BeginFrame"/> call.
+    /// </summary>
+    public TextBufferSnapshot? PreviousSnapshot { get; private set; }
+
     public TextNodeContent AddText(ReadOnlySpan<char> text)
     {
         if (text.IsEmpty)
@@ -46,11 +52,23 @@ public sealed class VirtualTextArena
         return new TextBufferSnapshot(CurrentBufferId, [.. _buffer]);
     }
 
+    /// <summary>
+    /// Begins a new frame: captures the current buffer as <see cref="PreviousSnapshot"/>,
+    /// then clears the buffer for fresh text. Call this before <c>BuildView</c>.
+    /// </summary>
+    public void BeginFrame()
+    {
+        PreviousSnapshot = _buffer.Count > 0 ? Snapshot() : null;
+        _buffer.Clear();
+        CurrentBufferId = default;
+    }
+
     public void Clear()
     {
         _buffer.Clear();
         _nextBufferId = 1;
         CurrentBufferId = default;
+        PreviousSnapshot = null;
     }
 }
 

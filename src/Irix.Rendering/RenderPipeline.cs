@@ -24,6 +24,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     }
 
     private VirtualNode _retainedRoot;
+    private TextBufferSnapshot? _retainedTextSnapshot;
     private LayoutTreeResult? _retainedLayoutResult;
     private IReadOnlyList<LayoutElement>? _retainedLayout;
     private PixelRectangle _retainedViewport;
@@ -81,15 +82,17 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     /// and dirty element/command ranges are computed. When null (render request),
     /// reuses the retained layout if tree and viewport match.
     /// </summary>
-    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null)
+    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null, TextBufferSnapshot? prevTextSnapshot = null, VirtualNode previousRoot = default)
     {
         LastViewport = viewportBounds;
         var hadRetainedLayout = _retainedLayout is not null;
-        var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(_retainedRoot, root, textSnapshot);
+        var classifyOldRoot = hadRetainedLayout && previousRoot.Kind != default ? previousRoot : _retainedRoot;
+        var classifyOldSnapshot = hadRetainedLayout && previousRoot.Kind != default ? prevTextSnapshot : _retainedTextSnapshot;
+        var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(classifyOldRoot, root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
         var dirtyClassifications = hasDirty && hadRetainedLayout
-            ? ClassifyDirtyNodes(_retainedRoot, root, dirtyNodes!, textSnapshot)
+            ? ClassifyDirtyNodes(classifyOldRoot, root, dirtyNodes!, classifyOldSnapshot ?? textSnapshot, textSnapshot)
             : [];
         LastDirtyClassifications = dirtyClassifications;
         LastLayoutRebuildReason = ResolveLayoutRebuildReason(hadRetainedLayout, treeChanged, viewportChanged, hasDirty, dirtyClassifications);
@@ -100,6 +103,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes, textSnapshot);
             _retainedLayout = _retainedLayoutResult.Elements;
             _retainedRoot = root;
+            _retainedTextSnapshot = textSnapshot;
             _retainedViewport = viewportBounds;
 
             // Extract MaxScrollY from the first ScrollContainer's diagnostics
@@ -175,7 +179,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return treeChanged ? LayoutRebuildReason.TreeStructure : LayoutRebuildReason.None;
     }
 
-    private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? snapshot)
+    private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         var classifications = new List<LayoutDirtyClassification>(dirtyNodes.Count);
         var seen = new HashSet<int>();
@@ -187,7 +191,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             }
 
             var reason = TryFindNode(previousRoot, dirtyNode, out var previousNode) && TryFindNode(nextRoot, dirtyNode, out var nextNode)
-                ? ClassifyNodeChange(previousNode, nextNode, snapshot)
+                ? ClassifyNodeChange(previousNode, nextNode, prevSnapshot, nextSnapshot)
                 : LayoutRebuildReason.TreeStructure;
             classifications.Add(new LayoutDirtyClassification(dirtyNode, reason));
         }
@@ -195,7 +199,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return classifications;
     }
 
-    private static LayoutRebuildReason ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? snapshot)
+    private static LayoutRebuildReason ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         if (previousNode.Kind != nextNode.Kind || previousNode.Key != nextNode.Key || ChildrenShapeChanged(previousNode.Children, nextNode.Children))
         {
@@ -203,7 +207,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         }
 
         var reason = LayoutRebuildReason.None;
-        if (!VirtualNodeDiffer.ContentEqual(previousNode.Content, nextNode.Content, snapshot))
+        if (!VirtualNodeDiffer.ContentEqual(previousNode.Content, nextNode.Content, prevSnapshot, nextSnapshot))
         {
             reason = MaxReason(reason, ClassifyContentChange(previousNode.Content, nextNode.Content));
         }

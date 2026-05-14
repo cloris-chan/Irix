@@ -110,7 +110,7 @@ public sealed class VirtualNodeDifferTests
         var a = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
         var b = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot()));
+        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class VirtualNodeDifferTests
         var a = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
         var b = VirtualNodeBuilder.Text(_arena, "World", new NodeKey(1));
 
-        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot()));
+        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public sealed class VirtualNodeDifferTests
         var a = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
         var b = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2));
 
-        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot()));
+        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class VirtualNodeDifferTests
             VirtualNodeFactory.Rectangle(200, 48, new NodeKey(3)),
             VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeAttribute.Action(new ActionId(100))));
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot()));
+        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
     }
 
     [Fact]
@@ -158,7 +158,7 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)));
 
-        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot()));
+        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
     }
 
     [Fact]

@@ -45,9 +45,9 @@ internal sealed class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline p
 
     public RetainedRenderFrameSegmentOwnership? SegmentOwnership => _segmentOwnership;
 
-    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null)
+    public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? textSnapshot = null, TextBufferSnapshot? prevTextSnapshot = null, VirtualNode previousRoot = default)
     {
-        var batch = pipeline.Build(root, viewportBounds, dirtyNodes, textSnapshot);
+        var batch = pipeline.Build(root, viewportBounds, dirtyNodes, textSnapshot, prevTextSnapshot, previousRoot);
         LastResult = UpdateRuntimeOwner(root, viewportBounds, batch);
         return batch;
     }

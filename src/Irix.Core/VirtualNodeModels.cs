@@ -199,7 +199,7 @@ public readonly struct AttributeValue : IEquatable<AttributeValue>
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key → NodeKey) ─
 
-public readonly record struct VirtualNodeTree(VirtualNode Root, TextBufferSnapshot TextSnapshot = default);
+public readonly record struct VirtualNodeTree(VirtualNode Root, TextBufferSnapshot TextSnapshot = default, TextBufferSnapshot PreviousTextSnapshot = default);
 
 public readonly record struct VirtualNode
 {

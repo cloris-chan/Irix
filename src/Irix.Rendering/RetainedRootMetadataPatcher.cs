@@ -68,7 +68,7 @@ internal static class RetainedRootMetadataPatcher
             return false;
         }
 
-        if (!VirtualNodeDiffer.ContentEqual(retainedNode.Content, nextNode.Content, snapshot))
+        if (!VirtualNodeDiffer.ContentEqual(retainedNode.Content, nextNode.Content, snapshot, snapshot))
         {
             reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
             return false;

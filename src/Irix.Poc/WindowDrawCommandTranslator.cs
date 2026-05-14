@@ -92,9 +92,11 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
                 (int)(physicalViewport.Width / _displayScale.ScaleX),
                 (int)(physicalViewport.Height / _displayScale.ScaleY));
         var textSnapshot = _retainedTree.Tree.TextSnapshot;
+        var prevTextSnapshot = _retainedTree.PreviousTextSnapshot;
+        var previousRoot = _retainedTree.PreviousRoot;
         var batch = _ownerFeed is not null
-            ? _ownerFeed.Build(_retainedTree.Tree.Root, viewport, dirty, textSnapshot)
-            : _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty, textSnapshot);
+            ? _ownerFeed.Build(_retainedTree.Tree.Root, viewport, dirty, textSnapshot, prevTextSnapshot, previousRoot)
+            : _renderPipeline.Build(_retainedTree.Tree.Root, viewport, dirty, textSnapshot, prevTextSnapshot, previousRoot);
         LastScrollFeedback = BuildScrollFeedback(_renderPipeline.LastLayoutResult);
         _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
 

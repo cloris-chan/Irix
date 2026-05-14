@@ -169,7 +169,10 @@ internal static class InputDiagnosticRunner
         using (var initialPatch = VirtualNodeDiffer.CreatePatchBatch(default, currentTree))
         {
             var initialDirty = retainedTree.Apply(initialPatch);
-            using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialDirty);
+            var initialSnapshot = retainedTree.Tree.TextSnapshot;
+            var initialPrevSnapshot = retainedTree.PreviousTextSnapshot;
+            var initialPrevRoot = retainedTree.PreviousRoot;
+            using var initialFrame = pipeline.Build(retainedTree.Tree.Root, viewport, initialDirty, initialSnapshot, initialPrevSnapshot, initialPrevRoot);
             pipeline.RetainedFrame.Invalidate();
         }
 
@@ -206,7 +209,10 @@ internal static class InputDiagnosticRunner
             var nextTree = app.BuildView(model);
             using var patch = VirtualNodeDiffer.CreatePatchBatch(currentTree, nextTree);
             var dirty = retainedTree.Apply(patch);
-            using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, dirty);
+            var textSnapshot = retainedTree.Tree.TextSnapshot;
+            var prevTextSnapshot = retainedTree.PreviousTextSnapshot;
+            var previousRoot = retainedTree.PreviousRoot;
+            using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, dirty, textSnapshot, prevTextSnapshot, previousRoot);
             pipeline.RetainedFrame.Invalidate();
             lines.Add($"dirtyReason {name} reason={pipeline.LastLayoutRebuildReason} classifications={DiagnosticsFormatter.FormatLayoutDirtyClassifications(pipeline.LastDirtyClassifications)}");
             currentTree = nextTree;
