@@ -156,7 +156,7 @@ public sealed class DrawingBackendCompositorTests
         Assert.False(compositor.LastPartialApplySucceeded); // no dirty ranges
         Assert.Same(resources, compositor.RetainedFrame.Resources);
 
-        // Second frame: same resources + dirty ranges ï¿?partial apply
+        // Second frame: same resources + dirty ranges ï¿½?partial apply
         using var frame2 = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
             [
@@ -199,7 +199,7 @@ public sealed class DrawingBackendCompositorTests
         await compositor.RenderAsync(frame1, cancellationToken);
         Assert.Same(resources1, compositor.RetainedFrame.Resources);
 
-        // Different resources instance + dirty ranges ï¿?partial refused, full fallback
+        // Different resources instance + dirty ranges ï¿½?partial refused, full fallback
         var resources2 = FrameDrawingResources.Rent();
         var world = resources2.AddText("World");
         resources2.Seal();
@@ -250,7 +250,7 @@ public sealed class DrawingBackendCompositorTests
         await compositor.RenderAsync(empty, cancellationToken);
 
         // Frame 2: even if same resources object is recycled (same ReferenceEquals),
-        // cross-frame guard resets _lastAppliedFrameId on invalidate ï¿?full apply forced
+        // cross-frame guard resets _lastAppliedFrameId on invalidate ï¿½?full apply forced
         var resources2 = FrameDrawingResources.Rent();
         var world = resources2.AddText("World");
         resources2.Seal();
@@ -300,7 +300,7 @@ public sealed class DrawingBackendCompositorTests
         Assert.Single(backend.ReceivedDirtyRanges);
         Assert.Empty(backend.ReceivedDirtyRanges[0]); // no dirty ranges on initial frame
 
-        // Frame 2: same resources + dirty ranges ï¿?partial apply
+        // Frame 2: same resources + dirty ranges ï¿½?partial apply
         using var frame2 = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
             [
@@ -359,7 +359,7 @@ public sealed class DrawingBackendCompositorTests
                 VirtualNodeAttribute.Action(new ActionId(100))));
         var viewport = new PixelRectangle(0, 0, 120, 50);
         var pipeline = new RenderPipeline();
-        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
 
         await compositor.RenderAsync(batch, cancellationToken);
 
@@ -370,15 +370,15 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(new PixelRectangle(0, 0, 120, 50), target.ClipBounds);
         Assert.True(target.ClipBounds.Y + target.ClipBounds.Height < target.Bounds.Y + target.Bounds.Height);
 
-        // Inside both bounds and clip ï¿?should hit
+        // Inside both bounds and clip ï¿½?should hit
         Assert.True(compositor.TryGetActionIdAt(20, 20, out var actionId));
         Assert.Equal(new ActionId(100), actionId);
 
         // Inside button bounds but OUTSIDE clip (y=52 > clip bottom=50)
-        // ï¿?clip check should reject this
+        // ï¿½?clip check should reject this
         Assert.False(compositor.TryGetActionIdAt(20, 52, out _));
 
-        // Outside button bounds entirely ï¿?bounds check rejects
+        // Outside button bounds entirely ï¿½?bounds check rejects
         Assert.False(compositor.TryGetActionIdAt(200, 20, out _));
     }
 
@@ -398,7 +398,7 @@ public sealed class DrawingBackendCompositorTests
                     VirtualNodeAttribute.Action(new ActionId(100)))));
         var viewport = new PixelRectangle(0, 0, 300, 200);
         var pipeline = new RenderPipeline();
-        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
 
         await compositor.RenderAsync(batch, cancellationToken);
 
@@ -437,7 +437,7 @@ public sealed class DrawingBackendCompositorTests
             ]);
         var viewport = new PixelRectangle(0, 0, 200, 60);
         var pipeline = new RenderPipeline();
-        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+        using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
 
         await compositor.RenderAsync(batch, cancellationToken);
 
@@ -447,7 +447,7 @@ public sealed class DrawingBackendCompositorTests
         // Root clip = [0, 0, 200, 60], bottom = 60
         // Button 1: y = 16, bottom = 56. With ScrollY=30: y = -14, bottom = 26
         // Button 2: y = 68, bottom = 108. With ScrollY=30: y = 38, bottom = 78
-        // Button 2 extends beyond clip bottom (60) ï¿?clip check rejects y=55
+        // Button 2 extends beyond clip bottom (60) ï¿½?clip check rejects y=55
         var firstTarget = batch.HitTargets[0];
         Assert.Equal(new ActionId(100), firstTarget.ActionId);
         Assert.Equal(new PixelRectangle(0, 0, 200, 60), firstTarget.ClipBounds);
@@ -554,7 +554,7 @@ public sealed class DrawingBackendCompositorTests
             [],
             resources2);
 
-        // Should not throw ï¿?compositor catches and recovers
+        // Should not throw ï¿½?compositor catches and recovers
         await compositor.RenderAsync(frame2, cancellationToken);
 
         Assert.True(backend.RecoveryAttempted);
@@ -599,7 +599,7 @@ public sealed class DrawingBackendCompositorTests
             [],
             resources);
 
-        // Backend throws, recovery fails ï¿?exception propagates
+        // Backend throws, recovery fails ï¿½?exception propagates
         bool threw = false;
         try
         {

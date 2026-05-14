@@ -63,7 +63,7 @@ public sealed class RuntimeTests
 
         public VirtualNodeTree BuildView(TestModel model)
         {
-            return new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, $"Count: {model.Count}", new NodeKey(1)), _arena.Snapshot());
+            return new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, $"Count: {model.Count}", new NodeKey(1)), _arena.GetOrCreateSnapshot());
         }
     }
 

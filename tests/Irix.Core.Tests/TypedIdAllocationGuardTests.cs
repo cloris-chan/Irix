@@ -27,9 +27,9 @@ public class TypedIdAllocationGuardTests
                 .. Enumerable.Range(0, 20).Select(i => VirtualNodeBuilder.Text(_arena, $"Row {i}", new NodeKey((uint)(10 + i))))
             ]);
 
-        pipeline.Build(root, viewport, _arena.Snapshot());
+        pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
 
-        var snapshot1 = pipeline.Build(root, viewport, _arena.Snapshot());
+        var snapshot1 = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
 
         Assert.NotEmpty(snapshot1.HitTargets);
         Assert.Equal(new ActionId(1), snapshot1.HitTargets[0].ActionId);
@@ -318,7 +318,7 @@ public class TypedIdAllocationGuardTests
             ]);
 
         // Warmup: let the pipeline retain state and pools stabilize
-        var snapshot = _arena.Snapshot();
+        var snapshot = _arena.GetOrCreateSnapshot();
         for (var i = 0; i < 3; i++)
         {
             pipeline.Build(root, viewport, snapshot);

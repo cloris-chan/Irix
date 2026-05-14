@@ -203,6 +203,7 @@ public sealed class FrameDrawingResourcesTests
     [Fact]
     public void Stale_render_frame_batch_dispose_does_not_return_reused_resources()
     {
+        var before = FrameDrawingResources.GetPoolDiagnostics();
         var resources = FrameDrawingResources.Rent();
         var staleBatch = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0),
@@ -219,6 +220,8 @@ public sealed class FrameDrawingResourcesTests
         staleBatch.Dispose();
 
         Assert.Equal("active", active.Resolve(text).ToString());
+        var delta = FrameDrawingResources.GetPoolDiagnostics().Delta(before);
+        Assert.Equal(1, delta.StaleReturnSkipCount);
         FrameDrawingResources.Return(active);
     }
 }

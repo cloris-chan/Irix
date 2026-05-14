@@ -40,7 +40,7 @@ public sealed class ConcurrentInputRenderTests
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
             await compositor.RenderAsync(batch, cancellationToken);
         }
 
@@ -145,7 +145,7 @@ public sealed class ConcurrentInputRenderTests
     [Fact]
     public async Task Multiple_render_cycles_with_scroll_no_frame_loss()
     {
-        // Simulates the full cycle: scroll input â†?render â†?scroll input â†?render
+        // Simulates the full cycle: scroll input ï¿½?render ï¿½?scroll input ï¿½?render
         // repeated many times. Each cycle should produce a frame.
         var cancellationToken = TestContext.Current.CancellationToken;
         var backend = new ConcurrentTrackingBackend();
@@ -166,7 +166,7 @@ public sealed class ConcurrentInputRenderTests
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
             await compositor.RenderAsync(batch, cancellationToken);
         }
 

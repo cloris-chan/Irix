@@ -18,9 +18,9 @@ public sealed class PatchDiffEquivalenceTests
     public void Update_patch_content_change_produces_correct_layout()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(2))), _arena.GetOrCreateSnapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -42,10 +42,10 @@ public sealed class PatchDiffEquivalenceTests
     public void Add_child_patch_produces_correct_layout()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2)),
-            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(3))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(3))), _arena.GetOrCreateSnapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -70,9 +70,9 @@ public sealed class PatchDiffEquivalenceTests
     {
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2)),
-            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(3))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "World", new NodeKey(3))), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.GetOrCreateSnapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -97,11 +97,11 @@ public sealed class PatchDiffEquivalenceTests
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(20)),
-            VirtualNodeBuilder.Text(_arena, "C", new NodeKey(30))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "C", new NodeKey(30))), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "B-modified", new NodeKey(20)),
-            VirtualNodeBuilder.Text(_arena, "C", new NodeKey(30))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "C", new NodeKey(30))), _arena.GetOrCreateSnapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -131,9 +131,9 @@ public sealed class PatchDiffEquivalenceTests
     public void Kind_change_produces_ReplaceRoot_with_correct_layout()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(2))), _arena.GetOrCreateSnapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -159,7 +159,7 @@ public sealed class PatchDiffEquivalenceTests
     public void No_change_produces_empty_patch_batch()
     {
         var tree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2))), _arena.GetOrCreateSnapshot());
 
         var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
 

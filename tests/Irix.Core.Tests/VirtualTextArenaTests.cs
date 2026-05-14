@@ -7,19 +7,19 @@ namespace Irix.Core.Tests;
 public sealed class VirtualTextArenaTests
 {
     [Fact]
-    public void Snapshot_returns_cached_snapshot_until_text_changes()
+    public void GetOrCreateSnapshot_caches_until_text_changes()
     {
         var arena = new VirtualTextArena();
         arena.AddText("cached".AsSpan());
 
-        var first = arena.Snapshot();
+        var first = arena.GetOrCreateSnapshot();
         var second = arena.GetOrCreateSnapshot();
 
         Assert.Equal(first, second);
         Assert.Same(first.Buffer, second.Buffer);
 
         arena.AddText(" updated".AsSpan());
-        var third = arena.Snapshot();
+        var third = arena.GetOrCreateSnapshot();
 
         Assert.NotSame(first.Buffer, third.Buffer);
     }
@@ -29,7 +29,7 @@ public sealed class VirtualTextArenaTests
     {
         var arena = new VirtualTextArena();
         _ = arena.AddText("previous".AsSpan());
-        var previousSnapshot = arena.Snapshot();
+        var previousSnapshot = arena.GetOrCreateSnapshot();
 
         arena.BeginFrame();
         var nextContent = arena.AddText("next".AsSpan());
@@ -44,11 +44,11 @@ public sealed class VirtualTextArenaTests
     {
         var arena = new VirtualTextArena();
         var previous = VirtualNodeBuilder.Text(arena, "same", new NodeKey(1));
-        var previousSnapshot = arena.Snapshot();
+        var previousSnapshot = arena.GetOrCreateSnapshot();
 
         arena.BeginFrame();
         var next = VirtualNodeBuilder.Text(arena, "same", new NodeKey(1));
-        var nextSnapshot = arena.Snapshot();
+        var nextSnapshot = arena.GetOrCreateSnapshot();
 
         Assert.True(VirtualNodeDiffer.NodesEqual(previous, next, previousSnapshot, nextSnapshot));
 
@@ -65,7 +65,7 @@ public sealed class VirtualTextArenaTests
 
         arena.BeginFrame();
         _ = arena.AddText("current".AsSpan());
-        var currentSnapshot = arena.Snapshot();
+        var currentSnapshot = arena.GetOrCreateSnapshot();
 
         var recorder = new DrawCommandRecorder();
         var elements = new[]

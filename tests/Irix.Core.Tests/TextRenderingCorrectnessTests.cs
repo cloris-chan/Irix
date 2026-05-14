@@ -18,7 +18,7 @@ public sealed class TextRenderingCorrectnessTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Hello, World!", new NodeKey(2)));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         var text = frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString();
         Assert.Equal("Hello, World!", text);
@@ -30,7 +30,7 @@ public sealed class TextRenderingCorrectnessTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "你好世界", new NodeKey(2)));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         var text = frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString();
         Assert.Equal("你好世界", text);
@@ -42,7 +42,7 @@ public sealed class TextRenderingCorrectnessTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "🎯🔥🚀", new NodeKey(2)));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         var text = frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString();
         Assert.Equal("🎯🔥🚀", text);
@@ -54,7 +54,7 @@ public sealed class TextRenderingCorrectnessTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Hello你好🎯", new NodeKey(2)));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         var text = frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString();
         Assert.Equal("Hello你好🎯", text);
@@ -66,7 +66,7 @@ public sealed class TextRenderingCorrectnessTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "", new NodeKey(2)));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         // Empty text should still produce a DrawTextRun command (layout element exists),
         // but the TextSlice resolves to empty
@@ -84,7 +84,7 @@ public sealed class TextRenderingCorrectnessTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, longText, new NodeKey(2)));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         var text = frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString();
         Assert.Equal(longText, text);
@@ -97,7 +97,7 @@ public sealed class TextRenderingCorrectnessTests
             VirtualNodeBuilder.Button(_arena, "Click Me", new NodeKey(2),
                 VirtualNodeAttribute.Action(new ActionId(100))));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         // Button = FillRect + DrawTextRun, both with same bounds
         Assert.True(frame.Commands.Count >= 2);
@@ -140,8 +140,8 @@ public sealed class TextRenderingCorrectnessTests
             VirtualNodeBuilder.Text(_arena, "Scale Test", new NodeKey(2)));
         var pipeline = new RenderPipeline();
 
-        using var small = pipeline.Build(root, new PixelRectangle(0, 0, 480, 270), textSnapshot: _arena.Snapshot());
-        using var large = pipeline.Build(root, new PixelRectangle(0, 0, 1920, 1080), textSnapshot: _arena.Snapshot());
+        using var small = pipeline.Build(root, new PixelRectangle(0, 0, 480, 270), textSnapshot: _arena.GetOrCreateSnapshot());
+        using var large = pipeline.Build(root, new PixelRectangle(0, 0, 1920, 1080), textSnapshot: _arena.GetOrCreateSnapshot());
 
         // Layout width should be proportional to viewport width
         var smallWidth = small.Commands.Memory.Span[0].Rect.Width;
@@ -157,7 +157,7 @@ public sealed class TextRenderingCorrectnessTests
             VirtualNodeBuilder.Text(_arena, "First", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "Second", new NodeKey(3)));
         var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.Snapshot());
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 
         // Both text commands should reference the same TextStyle resource handle
         Assert.True(frame.Commands.Count >= 2);

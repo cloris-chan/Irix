@@ -153,6 +153,52 @@ public sealed class RetainedTreeTests
     }
 
     [Fact]
+    public void Apply_zero_patch_canonical_batch_advances_root_and_snapshot()
+    {
+        var prev = VirtualNodeBuilder.Text(_arena, "same", new NodeKey(1));
+        var prevSnapshot = _arena.GetOrCreateSnapshot();
+
+        _arena.BeginFrame();
+        var next = VirtualNodeBuilder.Text(_arena, "same", new NodeKey(1));
+        var nextSnapshot = _arena.GetOrCreateSnapshot();
+
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(
+            new VirtualNodeTree(prev, prevSnapshot),
+            new VirtualNodeTree(next, nextSnapshot));
+        var tree = new RetainedTree(new VirtualNodeTree(prev, prevSnapshot));
+
+        var result = tree.Apply(batch);
+
+        Assert.True(batch.HasCanonicalRoot);
+        Assert.Equal(0, batch.Count);
+        Assert.Empty(result.Dirty);
+        Assert.Equal(next, tree.Tree.Root);
+        Assert.Equal(nextSnapshot, tree.Tree.TextSnapshot);
+        Assert.Equal("same", tree.Tree.TextSnapshot.ResolveRequired(tree.Tree.Root.Content.TryGetText(out var text) ? text : default).ToString());
+    }
+
+    [Fact]
+    public void Apply_manual_patch_batch_does_not_treat_root_as_canonical()
+    {
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "before", new NodeKey(2)));
+        var updated = VirtualNodeBuilder.Text(_arena, "after", new NodeKey(2));
+        var misleadingRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(99),
+            VirtualNodeBuilder.Text(_arena, "wrong", new NodeKey(100)));
+        var snapshot = _arena.GetOrCreateSnapshot();
+        var batch = new PatchBatch(misleadingRoot, new PatchMemoryOwner<VirtualNodePatch>(
+            [new VirtualNodePatch(VirtualNodePatchOperation.Update, 1, updated)]), 1, textSnapshot: snapshot);
+        var tree = new RetainedTree(new VirtualNodeTree(root, snapshot));
+
+        tree.Apply(batch);
+
+        Assert.False(batch.HasCanonicalRoot);
+        Assert.Equal(new NodeKey(1), tree.Tree.Root.Key);
+        Assert.Single(tree.Tree.Root.Children);
+        Assert.Equal("after", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
+    }
+
+    [Fact]
     public void Apply_diff_batch_then_retained_tree_matches_next_tree()
     {
         // Simulate the real flow: diff(prev, next) �?apply patches to prev �?result == next
@@ -165,7 +211,7 @@ public sealed class RetainedTreeTests
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
                 VirtualNodeAttribute.Action(new ActionId(1))));
 
-        var snapshot = _arena.Snapshot();
+        var snapshot = _arena.GetOrCreateSnapshot();
         using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev, snapshot), new VirtualNodeTree(next, snapshot));
         var tree = new RetainedTree(new VirtualNodeTree(prev, snapshot));
 
@@ -187,7 +233,7 @@ public sealed class RetainedTreeTests
             VirtualNodeBuilder.Text(_arena, "c", new NodeKey(30)),
             VirtualNodeBuilder.Text(_arena, "d", new NodeKey(40)));
 
-        var snapshot = _arena.Snapshot();
+        var snapshot = _arena.GetOrCreateSnapshot();
         using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev, snapshot), new VirtualNodeTree(next, snapshot));
         var tree = new RetainedTree(new VirtualNodeTree(prev, snapshot));
 

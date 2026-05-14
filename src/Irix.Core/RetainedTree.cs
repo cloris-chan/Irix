@@ -16,6 +16,9 @@ public readonly record struct ApplyResult(
 ///
 /// <para><b>Patch semantics:</b></para>
 /// <list type="bullet">
+///   <item><b>Canonical root</b> — when <see cref="PatchBatch.HasCanonicalRoot"/> is true,
+///     <see cref="PatchBatch.Root"/> is the canonical next retained root and wins over the
+///     reconstructed patch result.</item>
 ///   <item><b>ReplaceRoot</b> — replaces the entire root node (and all children) with the patch node.</item>
 ///   <item><b>Update</b> — replaces the <em>content and attributes</em> of the target node, but
 ///     <em>preserves its existing children</em> from the old tree. The patch node's Children are ignored.</item>
@@ -50,7 +53,11 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         var prevSnapshot = _tree.TextSnapshot;
         if (batch.Count == 0)
         {
-            if (batch.Root.Kind != default) _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
+            if (batch.HasCanonicalRoot)
+            {
+                _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
+            }
+
             return new ApplyResult([], prevRoot, prevSnapshot);
         }
 
@@ -87,7 +94,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         }
 
         var appliedRoot = ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty);
-        var nextRoot = batch.TextSnapshot.Buffer is not null && batch.Root.Kind != default
+        var nextRoot = batch.HasCanonicalRoot
             ? batch.Root
             : appliedRoot;
         _tree = new VirtualNodeTree(nextRoot, batch.TextSnapshot);

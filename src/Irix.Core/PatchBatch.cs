@@ -16,12 +16,12 @@ public sealed class PatchBatch : IDisposable
 {
     private readonly IMemoryOwner<VirtualNodePatch> _owner;
 
-    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0, TextBufferSnapshot textSnapshot = default)
-        : this(root, owner, count, screenId, PatchBatchKind.Diff, textSnapshot)
+    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0, TextBufferSnapshot textSnapshot = default, bool hasCanonicalRoot = false)
+        : this(root, owner, count, screenId, PatchBatchKind.Diff, textSnapshot, hasCanonicalRoot)
     {
     }
 
-    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId, PatchBatchKind kind, TextBufferSnapshot textSnapshot = default)
+    public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId, PatchBatchKind kind, TextBufferSnapshot textSnapshot = default, bool hasCanonicalRoot = false)
     {
         ArgumentNullException.ThrowIfNull(owner);
 
@@ -36,6 +36,7 @@ public sealed class PatchBatch : IDisposable
         ScreenId = screenId;
         Kind = kind;
         TextSnapshot = textSnapshot;
+        HasCanonicalRoot = hasCanonicalRoot;
     }
 
     public PatchBatch(IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0)
@@ -57,6 +58,14 @@ public sealed class PatchBatch : IDisposable
     public PatchBatchKind Kind { get; }
 
     public TextBufferSnapshot TextSnapshot { get; }
+
+    /// <summary>
+    /// True when <see cref="Root"/> is the canonical next retained root for this batch.
+    /// Differ-created batches set this even when <see cref="Count"/> is zero so retained
+    /// metadata can advance to the next tree and text snapshot atomically.
+    /// Hand-authored patch batches default to false; their patch list defines the result.
+    /// </summary>
+    public bool HasCanonicalRoot { get; }
 
     public Memory<VirtualNodePatch> Memory => _owner.Memory[..Count];
 

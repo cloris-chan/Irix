@@ -5,8 +5,8 @@ namespace Irix.Rendering;
 
 internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle, ControlVisualStateResolver visualStateResolver)
 {
-    private readonly LayoutTreeBuilder _layoutTreeBuilder = new LayoutTreeBuilder(layoutStyle);
-    private readonly DrawCommandRecorder _drawCommandRecorder = new DrawCommandRecorder(drawingStyle, visualStateResolver);
+    private readonly LayoutTreeBuilder _layoutTreeBuilder = new(layoutStyle);
+    private readonly DrawCommandRecorder _drawCommandRecorder = new(drawingStyle, visualStateResolver);
 
     public RenderPipeline()
         : this(RenderStylePreset.Default)
@@ -135,7 +135,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             [.. LastDirtyElementRanges],
             [.. LastDirtyCommandRanges],
             LastLayoutRebuildReason,
-            textSnapshot);
+            _retainedTextSnapshot);
 
         // Update retained render frame: try partial apply when dirty ranges exist,
         // which only succeeds when resources are the same instance (same frame scope).

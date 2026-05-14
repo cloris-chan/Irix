@@ -40,7 +40,7 @@ public sealed class ScrollTextSyncTests
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
@@ -83,7 +83,7 @@ public sealed class ScrollTextSyncTests
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
@@ -128,7 +128,7 @@ public sealed class ScrollTextSyncTests
 
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
 
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
@@ -157,7 +157,7 @@ public sealed class ScrollTextSyncTests
             var root = CreateScrollFrame(scrollY);
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
         }
@@ -168,7 +168,7 @@ public sealed class ScrollTextSyncTests
             var root = CreateScrollFrame(100);
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
         }
@@ -179,7 +179,7 @@ public sealed class ScrollTextSyncTests
             var root = CreateScrollFrame(scrollY);
             var viewport = new PixelRectangle(0, 0, 960, 540);
             var pipeline = new RenderPipeline();
-            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.Snapshot());
+            using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
             await compositor.RenderAsync(batch, cancellationToken);
             batch.Dispose();
         }

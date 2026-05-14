@@ -8,7 +8,7 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_returns_empty_patches_when_trees_are_identical()
     {
-        var tree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1)), _arena.Snapshot());
+        var tree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1)), _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
 
@@ -23,7 +23,7 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
             VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3), VirtualNodeAttribute.Action(new ActionId(100))));
-        var tree = new VirtualNodeTree(root, _arena.Snapshot());
+        var tree = new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
 
@@ -33,8 +33,8 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_returns_update_when_content_differs()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1)), _arena.Snapshot());
-        var newTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "World", new NodeKey(1)), _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1)), _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "World", new NodeKey(1)), _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -46,7 +46,7 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_returns_replace_root_when_kind_differs()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(100, 50, new NodeKey(1)));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
@@ -60,11 +60,11 @@ public sealed class VirtualNodeDifferTests
     {
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(
             1,
-            VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2))), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)),
-            VirtualNodeBuilder.Text(_arena, "B", new NodeKey(3))), _arena.Snapshot());
+            VirtualNodeBuilder.Text(_arena, "B", new NodeKey(3))), _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -87,7 +87,7 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_returns_replace_root_from_default_to_initial_tree()
     {
-        var initialTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(1)), _arena.Snapshot());
+        var initialTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(1)), _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(default, initialTree);
 
@@ -110,7 +110,7 @@ public sealed class VirtualNodeDifferTests
         var a = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
         var b = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
+        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class VirtualNodeDifferTests
         var a = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
         var b = VirtualNodeBuilder.Text(_arena, "World", new NodeKey(1));
 
-        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
+        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public sealed class VirtualNodeDifferTests
         var a = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));
         var b = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(2));
 
-        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
+        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
     }
 
     [Fact]
@@ -145,7 +145,7 @@ public sealed class VirtualNodeDifferTests
             VirtualNodeFactory.Rectangle(200, 48, new NodeKey(3)),
             VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeAttribute.Action(new ActionId(100))));
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
+        Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
     }
 
     [Fact]
@@ -158,13 +158,13 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)));
 
-        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.Snapshot(), _arena.Snapshot()));
+        Assert.False(VirtualNodeDiffer.NodesEqual(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
     }
 
     [Fact]
     public void PatchBatch_Root_is_set_even_when_count_is_zero()
     {
-        var tree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Stable", new NodeKey(1)), _arena.Snapshot());
+        var tree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Stable", new NodeKey(1)), _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
 
@@ -175,8 +175,8 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void PatchBatch_Root_is_set_when_trees_differ()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Old", new NodeKey(1)), _arena.Snapshot());
-        var newTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "New", new NodeKey(1)), _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Old", new NodeKey(1)), _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "New", new NodeKey(1)), _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -197,8 +197,8 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)),
             VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -220,8 +220,8 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(3)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -241,8 +241,8 @@ public sealed class VirtualNodeDifferTests
         var newRoot = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -263,8 +263,8 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "Second", new NodeKey(20)),
             VirtualNodeBuilder.Text(_arena, "First", new NodeKey(10)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -283,8 +283,8 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "New", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "Stable", new NodeKey(20)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -302,8 +302,8 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(20)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -321,8 +321,8 @@ public sealed class VirtualNodeDifferTests
         var newRoot = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -333,7 +333,7 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_emits_replace_root_when_kind_changes()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(100, 50, new NodeKey(1)));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
@@ -356,8 +356,8 @@ public sealed class VirtualNodeDifferTests
             VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(20)),
             VirtualNodeFactory.Rectangle(200, 50, new NodeKey(30)),
             VirtualNodeBuilder.Text(_arena, "Added", new NodeKey(40)));
-        var oldTree = new VirtualNodeTree(oldRoot, _arena.Snapshot());
-        var newTree = new VirtualNodeTree(newRoot, _arena.Snapshot());
+        var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 

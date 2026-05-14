@@ -52,6 +52,7 @@ public sealed class VirtualTextArena
         return CollectionsMarshal.AsSpan(_buffer).Slice(start, length);
     }
 
+    [Obsolete("Use GetOrCreateSnapshot(). Snapshot() returns the cached snapshot for compatibility.")]
     public TextBufferSnapshot Snapshot()
     {
         return GetOrCreateSnapshot();

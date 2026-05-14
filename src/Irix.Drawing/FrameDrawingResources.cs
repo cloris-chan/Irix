@@ -20,6 +20,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     private static long _returnedToPoolCount;
     private static long _retainedReturnSkipCount;
     private static long _duplicateReturnSkipCount;
+    private static long _staleReturnSkipCount;
     private static long _disposedOverflowCount;
 
     private readonly FrameTextArena _textArena = new();
@@ -50,6 +51,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
                 System.Threading.Interlocked.Read(ref _returnedToPoolCount),
                 System.Threading.Interlocked.Read(ref _retainedReturnSkipCount),
                 System.Threading.Interlocked.Read(ref _duplicateReturnSkipCount),
+                System.Threading.Interlocked.Read(ref _staleReturnSkipCount),
                 System.Threading.Interlocked.Read(ref _disposedOverflowCount),
                 Pool.Count);
         }
@@ -121,6 +123,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     {
         if (expectedFrameId != 0 && resources._frameId != expectedFrameId)
         {
+            System.Threading.Interlocked.Increment(ref _staleReturnSkipCount);
             return;
         }
 
@@ -285,6 +288,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         long ReturnedToPoolCount,
         long RetainedReturnSkipCount,
         long DuplicateReturnSkipCount,
+        long StaleReturnSkipCount,
         long DisposedOverflowCount,
         int PoolCount)
     {
@@ -296,6 +300,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
             ReturnedToPoolCount - before.ReturnedToPoolCount,
             RetainedReturnSkipCount - before.RetainedReturnSkipCount,
             DuplicateReturnSkipCount - before.DuplicateReturnSkipCount,
+            StaleReturnSkipCount - before.StaleReturnSkipCount,
             DisposedOverflowCount - before.DisposedOverflowCount,
             PoolCount);
     }
