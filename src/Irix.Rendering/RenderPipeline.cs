@@ -192,45 +192,48 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
             var reason = TryFindNode(previousRoot, dirtyNode, out var previousNode) && TryFindNode(nextRoot, dirtyNode, out var nextNode)
                 ? ClassifyNodeChange(previousNode, nextNode, prevSnapshot, nextSnapshot)
-                : LayoutRebuildReason.TreeStructure;
-            classifications.Add(new LayoutDirtyClassification(dirtyNode, reason));
+                : new DirtyNodeClassification(LayoutRebuildReason.TreeStructure, InvalidationKind.TreeStructure);
+            classifications.Add(new LayoutDirtyClassification(dirtyNode, reason.Reason, reason.InvalidationKind));
         }
 
         return classifications;
     }
 
-    private static LayoutRebuildReason ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static DirtyNodeClassification ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         if (previousNode.Kind != nextNode.Kind || previousNode.Key != nextNode.Key || ChildrenShapeChanged(previousNode.Children, nextNode.Children))
         {
-            return LayoutRebuildReason.TreeStructure;
+            return new DirtyNodeClassification(LayoutRebuildReason.TreeStructure, InvalidationKind.TreeStructure);
         }
 
-        var reason = LayoutRebuildReason.None;
+        var classification = DirtyNodeClassification.None;
         if (!VirtualNodeDiffer.ContentEqual(previousNode.Content, nextNode.Content, prevSnapshot, nextSnapshot))
         {
-            reason = MaxReason(reason, ClassifyContentChange(previousNode.Content, nextNode.Content));
+            classification = DirtyNodeClassification.Max(classification, ClassifyContentChange(previousNode.Content, nextNode.Content));
         }
 
         if (!AttributesEqual(previousNode.Attributes, nextNode.Attributes))
         {
-            reason = MaxReason(reason, ClassifyAttributeChanges(previousNode.Attributes, nextNode.Attributes));
+            classification = DirtyNodeClassification.Max(classification, ClassifyAttributeChanges(previousNode.Attributes, nextNode.Attributes));
         }
 
-        return reason == LayoutRebuildReason.None ? LayoutRebuildReason.StyleOnly : reason;
+        return classification.Reason == LayoutRebuildReason.None
+            ? new DirtyNodeClassification(LayoutRebuildReason.StyleOnly, InvalidationKind.VisualOnly)
+            : classification;
     }
 
-    private static LayoutRebuildReason ClassifyContentChange(NodeContent previousContent, NodeContent nextContent)
+    private static DirtyNodeClassification ClassifyContentChange(NodeContent previousContent, NodeContent nextContent)
     {
         return previousContent.Kind == NodeContentKind.Text || nextContent.Kind == NodeContentKind.Text
-            ? LayoutRebuildReason.TextSizeAffecting
-            : LayoutRebuildReason.LayoutAffecting;
+            ? new DirtyNodeClassification(LayoutRebuildReason.TextSizeAffecting, InvalidationKind.TextMeasure)
+            : new DirtyNodeClassification(LayoutRebuildReason.LayoutAffecting, InvalidationKind.Layout);
     }
 
-    private static LayoutRebuildReason ClassifyAttributeChanges(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    private static DirtyNodeClassification ClassifyAttributeChanges(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
     {
         var changeSet = GetChangedAttributeSet(previousAttributes, nextAttributes);
-        return changeSet.ClassifyMask();
+        var invalidationKind = changeSet.ClassifySet();
+        return new DirtyNodeClassification(invalidationKind.ToLayoutRebuildReason(), invalidationKind);
     }
 
     private static AttributeChangeSet GetChangedAttributeSet(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
@@ -351,6 +354,16 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             LayoutRebuildReason.StyleOnly => 1,
             _ => 0
         };
+    }
+
+    private readonly record struct DirtyNodeClassification(LayoutRebuildReason Reason, InvalidationKind InvalidationKind)
+    {
+        public static DirtyNodeClassification None => default;
+
+        public static DirtyNodeClassification Max(DirtyNodeClassification left, DirtyNodeClassification right)
+        {
+            return ReasonPriority(left.Reason) >= ReasonPriority(right.Reason) ? left : right;
+        }
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)

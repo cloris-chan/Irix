@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Reflection;
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
@@ -72,6 +73,19 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(VirtualAttributeKey.ActionId, attr.Key);
         Assert.Equal(AttributeValueKind.ActionId, attr.Value.Kind);
         Assert.Equal(new ActionId(5), attr.Value.ActionIdValue);
+    }
+
+    [Fact]
+    public void VirtualNodeAttribute_helpers_use_unified_typed_properties()
+    {
+        Assert.Equal(VirtualAttributeKey.Width, VirtualNodeAttribute.Width(12).Key);
+        Assert.Equal(VirtualAttributeKey.Height, VirtualNodeAttribute.Height(12).Key);
+        Assert.Equal(VirtualAttributeKey.ScrollY, VirtualNodeAttribute.ScrollY(12).Key);
+        Assert.Equal(VirtualAttributeKey.ActionId, VirtualNodeAttribute.Action(new ActionId(1)).Key);
+        Assert.Equal(VirtualAttributeKey.IsHovered, VirtualNodeAttribute.Hovered(true).Key);
+        Assert.Equal(VirtualAttributeKey.IsPressed, VirtualNodeAttribute.Pressed(true).Key);
+        Assert.Equal(VirtualAttributeKey.IsFocused, VirtualNodeAttribute.Focused(true).Key);
+        Assert.Equal(VirtualAttributeKey.Opacity, VirtualNodeAttribute.Opacity(0.5).Key);
     }
 
     [Fact]
@@ -150,9 +164,101 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualAttributeKey_does_not_define_primitive_ToString_formatter()
+    {
+        var toString = typeof(VirtualAttributeKey).GetMethod(nameof(ToString), Type.EmptyTypes);
+
+        Assert.NotEqual(typeof(VirtualAttributeKey), toString?.DeclaringType);
+    }
+
+    [Fact]
+    public void VirtualAttributeKey_has_no_public_constructor()
+    {
+        var publicConstructors = typeof(VirtualAttributeKey).GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+
+        Assert.Empty(publicConstructors);
+    }
+
+    [Fact]
     public void AttributeChangeSet_has_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<AttributeChangeSet>());
+    }
+
+    [Fact]
+    public void Every_public_virtual_attribute_key_has_metadata()
+    {
+        foreach (var field in GetPublicVirtualAttributeKeyFields())
+        {
+            var key = (VirtualAttributeKey)field.GetValue(null)!;
+
+            Assert.True(VirtualAttributeMetadata.TryGet(key, out var metadata), $"Missing metadata for {field.Name}");
+            Assert.Equal(key, metadata.Key);
+            Assert.NotEqual(AttributeValueKind.None, metadata.ValueKind);
+            Assert.NotEqual(StyleEffect.None, metadata.Effects);
+            Assert.NotEqual(VirtualNodeKindFlags.None, metadata.SupportedNodeKinds);
+        }
+    }
+
+    [Fact]
+    public void Property_metadata_classifies_current_public_keys()
+    {
+        Assert.Equal(StyleEffect.Layout, VirtualAttributeMetadata.Get(VirtualAttributeKey.Width).Effects);
+        Assert.Equal(StyleEffect.Layout, VirtualAttributeMetadata.Get(VirtualAttributeKey.Height).Effects);
+        Assert.Equal(StyleEffect.Layout, VirtualAttributeMetadata.Get(VirtualAttributeKey.ScrollY).Effects);
+
+        var opacity = VirtualAttributeMetadata.Get(VirtualAttributeKey.Opacity);
+        Assert.Equal(AttributeValueKind.Number, opacity.ValueKind);
+        Assert.True((opacity.Effects & StyleEffect.Composite) != 0);
+        Assert.Equal(AnimationChannel.Composite, opacity.AnimationChannel);
+
+        var action = VirtualAttributeMetadata.Get(VirtualAttributeKey.ActionId);
+        Assert.Equal(AttributeValueKind.ActionId, action.ValueKind);
+        Assert.Equal(StyleEffect.Interaction, action.Effects);
+        Assert.Equal(AnimationChannel.None, action.AnimationChannel);
+
+        var hovered = VirtualAttributeMetadata.Get(VirtualAttributeKey.IsHovered);
+        Assert.Equal(AttributeValueKind.Boolean, hovered.ValueKind);
+        Assert.True((hovered.Effects & StyleEffect.Interaction) != 0);
+        Assert.True((hovered.Effects & StyleEffect.Visual) != 0);
+        Assert.Equal(AnimationChannel.Discrete, hovered.AnimationChannel);
+    }
+
+    [Fact]
+    public void Attribute_change_classification_uses_metadata_effects()
+    {
+        Assert.Equal(InvalidationKind.Layout, AttributeChangeSet.AddKey(default, VirtualAttributeKey.Width).ClassifySet());
+        Assert.Equal(InvalidationKind.Layout, AttributeChangeSet.AddKey(default, VirtualAttributeKey.ScrollY).ClassifySet());
+        Assert.Equal(InvalidationKind.CompositeOnly, AttributeChangeSet.AddKey(default, VirtualAttributeKey.Opacity).ClassifySet());
+        Assert.Equal(InvalidationKind.VisualOnly, AttributeChangeSet.AddKey(default, VirtualAttributeKey.ActionId).ClassifySet());
+        Assert.Equal(InvalidationKind.VisualOnly, AttributeChangeSet.AddKey(default, VirtualAttributeKey.IsHovered).ClassifySet());
+    }
+
+    [Fact]
+    public void VirtualNodeAttribute_constructor_rejects_key_value_mismatch()
+    {
+        Assert.Throws<ArgumentException>(() => new VirtualNodeAttribute(VirtualAttributeKey.ActionId, AttributeValue.FromNumber(1)));
+        Assert.Throws<ArgumentException>(() => new VirtualNodeAttribute(VirtualAttributeKey.Width, AttributeValue.FromBoolean(true)));
+        Assert.Throws<ArgumentException>(() => new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromActionId(new ActionId(1))));
+    }
+
+    [Fact]
+    public void VirtualNodePropertySupport_declares_control_support_sets()
+    {
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualAttributeKey.Width));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualAttributeKey.Height));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualAttributeKey.ActionId));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualAttributeKey.IsHovered));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualAttributeKey.IsPressed));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualAttributeKey.IsFocused));
+
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualAttributeKey.Width));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualAttributeKey.Height));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualAttributeKey.Opacity));
+        Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualAttributeKey.ActionId));
+
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.ScrollContainer, VirtualAttributeKey.ScrollY));
+        Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.Text, VirtualAttributeKey.ScrollY));
     }
 
     [Fact]
@@ -249,6 +355,48 @@ public class TypedIdAllocationGuardTests
             Assert.DoesNotContain("FromText(string", content);
             Assert.DoesNotContain("string? Text", content);
         }
+    }
+
+    [Fact]
+    public void Irix_Core_has_no_style_string_or_global_layout_attribute_keys()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualAttributeKey.cs"));
+
+        Assert.DoesNotContain("override string ToString", source);
+        Assert.DoesNotContain("AttributeValue.FromText", source);
+        Assert.DoesNotContain("FontFamily", source);
+        Assert.DoesNotContain("TextStyle", source);
+        Assert.DoesNotContain("FontSize", source);
+        Assert.DoesNotContain("FontWeight", source);
+        Assert.DoesNotContain("Wrapping", source);
+        Assert.DoesNotContain("FillColor", source);
+        Assert.DoesNotContain("TextColor", source);
+
+        Assert.DoesNotContain("ButtonHeight", source);
+        Assert.DoesNotContain("RectangleHeight", source);
+        Assert.DoesNotContain("MinimumButtonWidth", source);
+        Assert.DoesNotContain("ButtonTextWidthFactor", source);
+        Assert.DoesNotContain("ButtonHorizontalPadding", source);
+        Assert.DoesNotContain("HorizontalPadding", source);
+        Assert.DoesNotContain("VerticalPadding", source);
+        Assert.DoesNotContain("ItemSpacing", source);
+        Assert.DoesNotContain("TextHeight", source);
+    }
+
+    [Fact]
+    public void Public_attribute_authoring_api_is_not_split_by_processing_layer()
+    {
+        var methods = typeof(VirtualNodeAttribute)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Select(method => method.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("SetLayoutStyle", methods);
+        Assert.DoesNotContain("SetVisualStyle", methods);
+        Assert.DoesNotContain("SetCompositeStyle", methods);
+        Assert.DoesNotContain("LayoutStyle", methods);
+        Assert.DoesNotContain("VisualStyle", methods);
+        Assert.DoesNotContain("CompositeStyle", methods);
     }
 
     [Fact]
@@ -352,6 +500,10 @@ public class TypedIdAllocationGuardTests
         }
         throw new InvalidOperationException("Could not find repo root (Irix.slnx)");
     }
+
+    private static IEnumerable<FieldInfo> GetPublicVirtualAttributeKeyFields() =>
+        typeof(VirtualAttributeKey).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(field => field.FieldType == typeof(VirtualAttributeKey));
 
     private sealed class NullBackend : IDrawingBackend
     {

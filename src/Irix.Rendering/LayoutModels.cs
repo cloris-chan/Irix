@@ -33,7 +33,26 @@ internal enum LayoutRebuildReason : byte
     ViewportChanged
 }
 
-internal readonly record struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildReason Reason);
+internal readonly record struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildReason Reason, InvalidationKind InvalidationKind = InvalidationKind.None)
+{
+    public LayoutDirtyClassification(int dfsIndex, LayoutRebuildReason reason)
+        : this(dfsIndex, reason, InvalidationFromReason(reason))
+    {
+    }
+
+    private static InvalidationKind InvalidationFromReason(LayoutRebuildReason reason)
+    {
+        return reason switch
+        {
+            LayoutRebuildReason.StyleOnly => InvalidationKind.VisualOnly,
+            LayoutRebuildReason.TextSizeAffecting => InvalidationKind.TextMeasure,
+            LayoutRebuildReason.LayoutAffecting => InvalidationKind.Layout,
+            LayoutRebuildReason.TreeStructure => InvalidationKind.TreeStructure,
+            LayoutRebuildReason.ViewportChanged => InvalidationKind.ViewportChanged,
+            _ => InvalidationKind.None,
+        };
+    }
+}
 
 /// <summary>
 /// A node in the layout tree, mapping a VirtualNode's DFS index to its

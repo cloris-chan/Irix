@@ -217,6 +217,7 @@ public readonly record struct VirtualNodeAttribute
 {
     internal VirtualNodeAttribute(VirtualAttributeKey Key, AttributeValue Value)
     {
+        Validate(Key, Value);
         this.Key = Key;
         this.Value = Value;
     }
@@ -227,23 +228,64 @@ public readonly record struct VirtualNodeAttribute
     public static VirtualNodeAttribute Action(ActionId actionId) =>
         new(VirtualAttributeKey.ActionId, AttributeValue.FromActionId(actionId));
 
-    public static VirtualNodeAttribute LayoutWidth(double value) =>
+    public static VirtualNodeAttribute Width(double value) =>
         new(VirtualAttributeKey.Width, AttributeValue.FromNumber(value));
 
-    public static VirtualNodeAttribute LayoutHeight(double value) =>
+    public static VirtualNodeAttribute Height(double value) =>
         new(VirtualAttributeKey.Height, AttributeValue.FromNumber(value));
 
-    public static VirtualNodeAttribute StateHovered(bool value) =>
-        new(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(value));
+    public static VirtualNodeAttribute MinWidth(double value) =>
+        new(VirtualAttributeKey.MinWidth, AttributeValue.FromNumber(value));
 
-    public static VirtualNodeAttribute StatePressed(bool value) =>
-        new(VirtualAttributeKey.IsPressed, AttributeValue.FromBoolean(value));
+    public static VirtualNodeAttribute MaxWidth(double value) =>
+        new(VirtualAttributeKey.MaxWidth, AttributeValue.FromNumber(value));
 
-    public static VirtualNodeAttribute StateFocused(bool value) =>
-        new(VirtualAttributeKey.IsFocused, AttributeValue.FromBoolean(value));
+    public static VirtualNodeAttribute MinHeight(double value) =>
+        new(VirtualAttributeKey.MinHeight, AttributeValue.FromNumber(value));
+
+    public static VirtualNodeAttribute MaxHeight(double value) =>
+        new(VirtualAttributeKey.MaxHeight, AttributeValue.FromNumber(value));
 
     public static VirtualNodeAttribute ScrollY(double value) =>
         new(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(value));
+
+    public static VirtualNodeAttribute Opacity(double value) =>
+        new(VirtualAttributeKey.Opacity, AttributeValue.FromNumber(value));
+
+    public static VirtualNodeAttribute Hovered(bool value) =>
+        new(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(value));
+
+    public static VirtualNodeAttribute Pressed(bool value) =>
+        new(VirtualAttributeKey.IsPressed, AttributeValue.FromBoolean(value));
+
+    public static VirtualNodeAttribute Focused(bool value) =>
+        new(VirtualAttributeKey.IsFocused, AttributeValue.FromBoolean(value));
+
+    public static VirtualNodeAttribute LayoutWidth(double value) =>
+        Width(value);
+
+    public static VirtualNodeAttribute LayoutHeight(double value) =>
+        Height(value);
+
+    public static VirtualNodeAttribute StateHovered(bool value) =>
+        Hovered(value);
+
+    public static VirtualNodeAttribute StatePressed(bool value) =>
+        Pressed(value);
+
+    public static VirtualNodeAttribute StateFocused(bool value) =>
+        Focused(value);
+
+    private static void Validate(VirtualAttributeKey key, AttributeValue value)
+    {
+        var metadata = VirtualAttributeMetadata.Get(key);
+        if (value.Kind != metadata.ValueKind)
+        {
+            throw new ArgumentException(
+                $"Attribute {VirtualAttributeDiagnostics.Format(key)} expects {metadata.ValueKind} but got {value.Kind}.",
+                nameof(value));
+        }
+    }
 }
 
 // ── VirtualNodePatch ─────────────────────────────────────────────
@@ -268,8 +310,8 @@ public static class VirtualNodeFactory
             attributes:
             [
                 .. attributes,
-                VirtualNodeAttribute.LayoutWidth(width),
-                VirtualNodeAttribute.LayoutHeight(height)
+                VirtualNodeAttribute.Width(width),
+                VirtualNodeAttribute.Height(height)
             ]);
 
     public static VirtualNode Button(TextNodeContent label, NodeKey key = default, params VirtualNodeAttribute[] attributes) =>

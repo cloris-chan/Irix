@@ -202,7 +202,9 @@ internal static class RetainedRootMetadataPatcher
             return attribute.Value.Kind == AttributeValueKind.ActionId && !attribute.Value.ActionIdValue.IsNone;
         if (key == VirtualAttributeKey.IsHovered || key == VirtualAttributeKey.IsPressed || key == VirtualAttributeKey.IsFocused)
             return attribute.Value.Kind == AttributeValueKind.Boolean;
-        return false;
+        return VirtualAttributeMetadata.TryGet(key, out var metadata)
+            && (metadata.Effects & StyleEffect.Layout) == 0
+            && attribute.Value.Kind == metadata.ValueKind;
     }
 
     private static bool TryGetUniqueAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key, out bool found, out VirtualNodeAttribute attribute)
@@ -244,10 +246,5 @@ internal static class RetainedRootMetadataPatcher
         }
 
         return true;
-    }
-
-    private static bool IsControlMetadataAttribute(VirtualAttributeKey key)
-    {
-        return AttributeChangeSetClassification.IsControlMetadataKey(key);
     }
 }

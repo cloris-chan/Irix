@@ -210,7 +210,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var width = Math.Min(ctx.AvailableWidth, Math.Max(
                     ctx.Style.MinimumButtonWidth,
                     labelLength * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
-                var bounds = new PixelRectangle(ctx.Style.HorizontalPadding, cursorY, width, ctx.Style.ButtonHeight);
+                var bounds = new PixelRectangle(
+                    ctx.Style.HorizontalPadding,
+                    cursorY,
+                    GetDimension(node, VirtualAttributeKey.Width, width),
+                    GetDimension(node, VirtualAttributeKey.Height, ctx.Style.ButtonHeight));
                 var actionId = GetActionId(node);
                 var buttonState = new ButtonVisualState(
                     IsHovered: GetBooleanAttribute(node, VirtualAttributeKey.IsHovered),
@@ -224,7 +228,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     Text: label,
                     ActionId: actionId,
                     ButtonState: buttonState));
-                cursorY += ctx.Style.ButtonHeight + ctx.Style.ItemSpacing;
+                cursorY += bounds.Height + ctx.Style.ItemSpacing;
                 return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, [])];
             }
 

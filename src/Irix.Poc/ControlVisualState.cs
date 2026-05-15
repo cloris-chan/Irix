@@ -18,9 +18,9 @@ internal static class ControlVisualStateAttributeAdapter
 {
     internal static VirtualNodeAttribute[] ToAttributes(ControlVisualState state) =>
         [
-            new VirtualNodeAttribute(VirtualAttributeKey.IsHovered, AttributeValue.FromBoolean(state.IsHovered)),
-            new VirtualNodeAttribute(VirtualAttributeKey.IsPressed, AttributeValue.FromBoolean(state.IsPressed)),
-            new VirtualNodeAttribute(VirtualAttributeKey.IsFocused, AttributeValue.FromBoolean(state.IsFocused))
+            VirtualNodeAttribute.Hovered(state.IsHovered),
+            VirtualNodeAttribute.Pressed(state.IsPressed),
+            VirtualNodeAttribute.Focused(state.IsFocused)
         ];
 }
 

@@ -112,7 +112,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: new NodeKey(1),
-            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
+            attributes: [VirtualNodeAttribute.ScrollY(scrollY)],
             children:
             [
                 .. headerRows,

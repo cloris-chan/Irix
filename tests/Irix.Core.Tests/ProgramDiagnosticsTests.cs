@@ -126,9 +126,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("PressedChanged previousPressed=Increment currentPressed=-", output);
         Assert.Contains("FocusChanged previous=Increment current=-", output);
         Assert.Contains("dirtyReasons:", output);
-        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly", output);
-        Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly", output);
-        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly", output);
+        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly/VisualOnly", output);
+        Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly/VisualOnly", output);
+        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting/TextMeasure,4:StyleOnly/VisualOnly", output);
     }
 
     [Fact]
@@ -148,8 +148,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("buttonState focusLost Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", snapshot.ButtonVisualStateLines);
         Assert.Contains("  HoverChanged previous=- current=Increment", snapshot.EventLines);
         Assert.Contains("  FocusChanged previous=Increment current=-", snapshot.EventLines);
-        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly", snapshot.DirtyReasonLines);
-        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting,4:StyleOnly", snapshot.DirtyReasonLines);
+        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly/VisualOnly", snapshot.DirtyReasonLines);
+        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting/TextMeasure,4:StyleOnly/VisualOnly", snapshot.DirtyReasonLines);
     }
 
     [Fact]
@@ -162,7 +162,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("afterPress hover=Increment focus=Increment pressed=Increment capture=Increment", output);
         Assert.Contains("events:", output);
         Assert.Contains("dirtyReasons:", output);
-        Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly", output);
+        Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly/VisualOnly", output);
         Assert.Contains("=== Input diagnostic mode complete ===", output);
     }
 
@@ -321,7 +321,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(3, snapshot.LayoutClippedCommandCount);
         Assert.Equal(1, snapshot.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.TreeStructure, snapshot.LayoutRebuildReason);
-        Assert.Equal([new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)], snapshot.LayoutDirtyClassifications);
+        Assert.Equal(InvalidationKind.TreeStructure, snapshot.LayoutInvalidationKind);
+        Assert.Equal([new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly, InvalidationKind.VisualOnly)], snapshot.LayoutDirtyClassifications);
     }
 
     [Fact]
@@ -370,7 +371,8 @@ public sealed class ProgramDiagnosticsTests
             "Layout clipped commands: 3",
             "Layout rebuild count: 1",
             "Layout rebuild reason: TreeStructure",
-            "Layout dirty classifications: 4:StyleOnly",
+            "Layout invalidation kind: TreeStructure",
+            "Layout dirty classifications: 4:StyleOnly/VisualOnly",
             "Layout hit targets: 1",
             "  Hit target: 100 bounds=(16,60,140,40) clip=(0,0,960,540)",
             "  ScrollContainer[0]: visible=540 content=96 scrollY=0 maxScrollY=0 elements=2/2 visible"
@@ -684,7 +686,8 @@ public sealed class ProgramDiagnosticsTests
             LayoutClippedCommandCount: 3,
             LayoutRebuildCount: 1,
             LayoutRebuildReason: LayoutRebuildReason.TreeStructure,
-            LayoutDirtyClassifications: [new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly)],
+            LayoutInvalidationKind: InvalidationKind.TreeStructure,
+            LayoutDirtyClassifications: [new LayoutDirtyClassification(4, LayoutRebuildReason.StyleOnly, InvalidationKind.VisualOnly)],
             HitTargets: [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(100), new PixelRectangle(0, 0, 960, 540))],
             ScrollContainerDiagnostics: [new ScrollContainerDiag(0, 540, 96, 0, 0, 2, 0)]);
     }

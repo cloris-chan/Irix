@@ -30,10 +30,6 @@ public sealed class ResizeStressTests
             var h = 600 + (i % 30) * 10; // 600..890
             compositor.SetViewport(new PixelRectangle(0, 0, w, h), scale);
 
-            var resources = FrameDrawingResources.Rent();
-            var text = resources.AddText($"Resize {i}");
-            resources.Seal();
-
             var pipeline = new RenderPipeline();
             var root = VirtualNodeBuilder.Button(_arena, $"Btn{i}", new NodeKey(1),
                 VirtualNodeAttribute.Action(new ActionId(100)));
@@ -75,10 +71,6 @@ public sealed class ResizeStressTests
         foreach (var (w, h) in sizes)
         {
             compositor.SetViewport(new PixelRectangle(0, 0, w, h), DisplayScale.Identity);
-
-            var resources = FrameDrawingResources.Rent();
-            resources.AddText("test");
-            resources.Seal();
 
             var pipeline = new RenderPipeline();
             var root = VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(1),

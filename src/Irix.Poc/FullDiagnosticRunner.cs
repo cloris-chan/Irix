@@ -129,6 +129,7 @@ internal static class FullDiagnosticRunner
             layoutClipCount,
             layoutPipeline.LayoutRebuildCount,
             layoutPipeline.LastLayoutRebuildReason,
+            ResolveInvalidationKind(layoutPipeline.LastDirtyClassifications, layoutPipeline.LastLayoutRebuildReason),
             layoutPipeline.LastDirtyClassifications,
             layoutBatch.HitTargets,
             layoutPipeline.LastLayoutResult?.ScrollDiagnostics ?? []);
@@ -183,5 +184,50 @@ internal static class FullDiagnosticRunner
         var x = bounds.X + Math.Max((bounds.Width - windowWidth) / 2, 0);
         var y = bounds.Y + Math.Max((bounds.Height - windowHeight) / 2, 0);
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
+    }
+
+    private static InvalidationKind ResolveInvalidationKind(
+        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        LayoutRebuildReason rebuildReason)
+    {
+        if (dirtyClassifications.Count == 0)
+        {
+            return rebuildReason switch
+            {
+                LayoutRebuildReason.TreeStructure => InvalidationKind.TreeStructure,
+                LayoutRebuildReason.ViewportChanged => InvalidationKind.ViewportChanged,
+                LayoutRebuildReason.LayoutAffecting => InvalidationKind.Layout,
+                LayoutRebuildReason.TextSizeAffecting => InvalidationKind.TextMeasure,
+                LayoutRebuildReason.StyleOnly => InvalidationKind.VisualOnly,
+                _ => InvalidationKind.None,
+            };
+        }
+
+        var kind = InvalidationKind.None;
+        foreach (var classification in dirtyClassifications)
+        {
+            kind = MaxInvalidationKind(kind, classification.InvalidationKind);
+        }
+
+        return kind;
+    }
+
+    private static InvalidationKind MaxInvalidationKind(InvalidationKind left, InvalidationKind right)
+    {
+        return InvalidationPriority(left) >= InvalidationPriority(right) ? left : right;
+    }
+
+    private static int InvalidationPriority(InvalidationKind kind)
+    {
+        return kind switch
+        {
+            InvalidationKind.ViewportChanged => 6,
+            InvalidationKind.TreeStructure => 5,
+            InvalidationKind.Layout => 4,
+            InvalidationKind.TextMeasure => 3,
+            InvalidationKind.VisualOnly => 2,
+            InvalidationKind.CompositeOnly => 1,
+            _ => 0,
+        };
     }
 }

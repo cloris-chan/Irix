@@ -45,6 +45,7 @@ internal readonly record struct RenderingPipelineDiagnosticSnapshot(
     int LayoutClippedCommandCount,
     long LayoutRebuildCount,
     LayoutRebuildReason LayoutRebuildReason,
+    InvalidationKind LayoutInvalidationKind,
     IReadOnlyList<LayoutDirtyClassification> LayoutDirtyClassifications,
     IReadOnlyList<HitTestTarget> HitTargets,
     IReadOnlyList<ScrollContainerDiag> ScrollContainerDiagnostics)

@@ -47,7 +47,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
 | POST-005 | Translator promotion | Internal seam complete | Translator remains in Irix.Poc; promotion requires typed feedback contract |
-| POST-006 | Typed id wrappers | Design inventory only | String ActionId/target identity; no public API change yet |
+| POST-006 | Typed id wrappers / property metadata | Core complete through Round 14 | Typed IDs and typed property metadata are in core; framework promotion and public API shaping remain separate |
 | POST-007 | Scroll extraction | Design inventory only | ScrollController/State/Pump remain in Irix.Poc |
 | POST-008 | Settings provider | Decision recorded, postponed | Runtime wiring remains postponed; fallback-only internal provider |
 | POST-012 | Unified diagnostics channel | Postponed | Would replace per-component diagnostics; not MVP/GA-blocking |
@@ -62,7 +62,7 @@ POST-001..004, POST-013..020 complete ──> GA/MVP candidate tag
 Current D3D11On12/D2D overlay accepted temporarily ──> POST-017 D3D12-only glyph atlas text renderer
                                                     └─ POST-011 D3D12 resource cache / stable handles
 
-POST-005 translator ──> POST-006 typed ids
+POST-005 translator ──> POST-006 public API shaping on top of typed ids/property metadata
 POST-007 scroll ──────> POST-008 settings provider
 ```
 

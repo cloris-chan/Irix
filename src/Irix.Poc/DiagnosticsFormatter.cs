@@ -71,6 +71,7 @@ internal static class DiagnosticsFormatter
             $"Layout clipped commands: {snapshot.LayoutClippedCommandCount}",
             $"Layout rebuild count: {snapshot.LayoutRebuildCount}",
             $"Layout rebuild reason: {snapshot.LayoutRebuildReason}",
+            $"Layout invalidation kind: {snapshot.LayoutInvalidationKind}",
             $"Layout dirty classifications: {FormatLayoutDirtyClassifications(snapshot.LayoutDirtyClassifications)}",
             $"Layout hit targets: {snapshot.HitTargets.Count}"
         };
@@ -160,7 +161,7 @@ internal static class DiagnosticsFormatter
             return "(none)";
         }
 
-        return string.Join(",", classifications.Select(classification => $"{classification.DfsIndex}:{classification.Reason}"));
+        return string.Join(",", classifications.Select(classification => $"{classification.DfsIndex}:{classification.Reason}/{classification.InvalidationKind}"));
     }
 
     internal static string FormatOwnership(OwnershipSnapshot snapshot)

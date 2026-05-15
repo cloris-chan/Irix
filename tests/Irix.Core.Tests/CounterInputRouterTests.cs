@@ -322,7 +322,7 @@ public sealed class CounterInputRouterTests
             Assert.Equal(caseItem.Expected.IsHovered, GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
             Assert.Equal(caseItem.Expected.IsPressed, GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
             Assert.Equal(caseItem.Expected.IsFocused, GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
-            Assert.DoesNotContain(attributes, attribute => attribute.Key.ToString() == "IsEnabled");
+            Assert.DoesNotContain(attributes, attribute => VirtualAttributeDiagnostics.Format(attribute.Key) == "IsEnabled");
         }
     }
 
@@ -339,7 +339,7 @@ public sealed class CounterInputRouterTests
         Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
         Assert.False(GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
         Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
-        Assert.DoesNotContain(attributes, attribute => attribute.Key.ToString() == "IsEnabled");
+        Assert.DoesNotContain(attributes, attribute => VirtualAttributeDiagnostics.Format(attribute.Key) == "IsEnabled");
     }
 
     [Fact]
@@ -424,7 +424,7 @@ public sealed class CounterInputRouterTests
         Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
         Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
         Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
-        Assert.DoesNotContain(button.Attributes, attribute => attribute.Key.ToString() == "IsEnabled");
+        Assert.DoesNotContain(button.Attributes, attribute => VirtualAttributeDiagnostics.Format(attribute.Key) == "IsEnabled");
     }
 
     [Fact]

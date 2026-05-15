@@ -13,7 +13,7 @@ internal static class BackendClipTextSmokeDiagnostics
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1000,
-            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(40))],
+            attributes: [VirtualNodeAttribute.Height(40)],
             children: [VirtualNodeFactory.Rectangle(160, 80, new NodeKey(1001))]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
         using var batch = pipeline.Build(root, viewport, default);
@@ -29,7 +29,7 @@ internal static class BackendClipTextSmokeDiagnostics
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1100,
-            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.Height, AttributeValue.FromNumber(20))],
+            attributes: [VirtualNodeAttribute.Height(20)],
             children:
             [
                 VirtualNodeBuilder.Button(arena, "PipelineClip", new NodeKey(1101), VirtualNodeAttribute.Action(new ActionId(100)))

@@ -70,7 +70,7 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Performance regression CI | Mock backend frame timing baseline and warm `FrameDrawingResources` allocation baseline in `Category=Performance` | Already done | — |
 | Text cache hit rate in steady state | `scripts/ga-baseline.ps1 -Mode TextCache` validates static, scroll, and scale-change phases; current-machine 100% / 150% / 200% runs remain healthy | Already done for current machine | — |
 | DrawCommand recording allocation | `stackalloc` + `ArrayPool`; warm `FrameDrawingResources` allocation baseline in CI | Keep performance lane green | P2 |
-| Hot-path string allocation | Three-layer inventory complete (2026-05-14): only 2 per-frame `HashSet<string>`/`List<string>` in dirty classification (`GetChangedAttributeNames` at RenderPipeline.cs:238, `TryGetChangedAttributeNames` at RetainedRootMetadataPatcher.cs:156); everything else is interned string literal comparisons (zero allocation) or diagnostics-only. 6 attribute name bare strings (`"ActionId"`, `"ScrollY"`, `"Height"`, `"Width"`, `"IsHovered"`/`"IsPressed"`/`"IsFocused"`) duplicated at origin and consumption with no shared constant. `HitTestTarget.ActionId` is `string?` flowing through layout → compositor → input router. `Irix.Drawing` has zero hot-path string allocations; text content uses arena-based zero-allocation pattern (`TextSlice` over pooled char buffer). | Post-GA: introduce typed IDs (`ActionId`, `TargetId`, `ElementId`, `NodeKey`) and typed attribute keys to eliminate hot-path string dependency | P1 post-GA |
+| Hot-path string allocation | Round 13/14 complete (2026-05-16): text content uses `TextNodeContent` / `TextBufferSnapshot` plus frame-local `TextSlice`; `ActionId`, `TargetId`, `ElementId`, and `NodeKey` are typed value ids; style/property changes use `VirtualAttributeKey` and metadata effects instead of string attribute names. `VirtualAttributeKey` has no public constructor and no primitive `ToString()`. Diagnostics strings remain exempt. | Keep source guards green; next work is allocation baseline tightening, not string-key redesign | P2 |
 | Sync wait overhead | Current default `D3D12FenceAfterOverlay` is correctness-preserving but can exceed the old provisional `<2ms avg` target. `D3D11Query` was correctness-clean but refresh-rate dependent and therefore diagnostic-only. | Accepted temporarily for GA/MVP; long-term fix is D3D12-only glyph atlas text renderer | — |
 
 ### Sync Wait Evidence and Decision (2026-05-13)
@@ -107,21 +107,23 @@ Interpretation:
 
 The 60Hz text-lag regression must not return. `D3D12Renderer.SyncTextOverlay` remains `true` by default, and `--no-sync-text-overlay` is only an A/B diagnostic escape hatch. Irix must not disable default synchronization to hit a performance number.
 
-### Render-Core No-String Allocation Invariant (Post-GA Target)
+### Render-Core No-String Allocation Invariant
 
 The render hot path (`RenderPipeline.Build`, `DrawCommandRecorder`, `DrawingBackendCompositor.RenderAsync`, `LayoutTreeBuilder`) must not allocate `string` instances per frame. Current compliance:
 
 | Area | Status | Detail |
 |------|--------|--------|
 | DrawCommand text content | Compliant | `TextSlice` over frame-local pooled `char[]` arena; zero string allocation |
+| VirtualNode text content | Compliant | `TextNodeContent` indexes `VirtualTextArena`; layout/draw resolves through `TextBufferSnapshot.ResolveRequired` |
 | TextStyle.FontFamily | Compliant | String flows through but is not allocated per frame; set once at style creation |
 | Layout rebuild reason | Compliant | `LayoutRebuildReason` is already a `byte` enum |
-| Dirty classification | **Non-compliant** | `GetChangedAttributeNames` allocates `HashSet<string>` + `List<string>` per dirty node (2 call sites) |
-| Attribute name lookup | **Non-compliant** | 6 bare string literals (`"ActionId"`, `"ScrollY"`, etc.) compared at runtime with no shared constant or typed key |
-| HitTestTarget.ActionId | **Non-compliant** | `string?` flowing through layout → compositor → input router |
+| Dirty classification | Compliant | Attribute changes accumulate `AttributeChangeSet` and classify through `StyleEffect` / `InvalidationKind`; no string attribute-name set |
+| Attribute name lookup | Compliant | `VirtualAttributeKey` is a pure value key; public keys come from static readonly fields and metadata |
+| HitTestTarget.ActionId | Compliant | `ActionId` is a typed value id from VirtualNode attribute through layout and compositor hit-test |
+| Style/property string values | Compliant by exclusion | No public `FontFamily` string attribute, no `AttributeValue.Text`, no string hex color path |
 | Diagnostics output | Exempt | Diagnostic strings are not on the per-frame render path |
 
-Post-GA remediation: introduce typed IDs and typed attribute keys (see Round 12 task table in `Project_Status_and_Todo.md`).
+Source guards cover primitive `ActionId.ToString()`, primitive `VirtualAttributeKey.ToString()`, missing property metadata, key/value mismatches, global layout key reintroduction, and style string value factories. Future allocation work should measure and tighten baselines without reopening string style keys.
 
 ---
 

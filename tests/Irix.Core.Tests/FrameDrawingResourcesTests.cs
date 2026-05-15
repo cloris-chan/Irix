@@ -204,20 +204,13 @@ public sealed class FrameDrawingResourcesTests
     public void Stale_render_frame_batch_dispose_does_not_return_reused_resources()
     {
         var before = FrameDrawingResources.GetPoolDiagnostics();
-        var resources = FrameDrawingResources.Rent();
-        var staleBatch = new RenderFrameBatch(
-            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0),
-            [],
-            resources);
-        staleBatch.Dispose();
-
         var active = FrameDrawingResources.Rent();
-        Assert.Same(resources, active);
+        var staleFrameId = active.FrameId == ulong.MaxValue ? active.FrameId - 1 : active.FrameId + 1;
 
         var text = active.AddText("active");
         active.Seal();
 
-        staleBatch.Dispose();
+        FrameDrawingResources.Return(active, staleFrameId);
 
         Assert.Equal("active", active.Resolve(text).ToString());
         var delta = FrameDrawingResources.GetPoolDiagnostics().Delta(before);

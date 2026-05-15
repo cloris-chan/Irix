@@ -4,22 +4,24 @@ internal static class AttributeChangeSetClassification
 {
     public static InvalidationKind ClassifySet(this AttributeChangeSet changeSet)
     {
-        if (changeSet.IsEmpty)
+        return changeSet.Effects.ToInvalidationKind();
+    }
+
+    public static InvalidationKind ToInvalidationKind(this StyleEffect effects)
+    {
+        if (effects == StyleEffect.None)
             return InvalidationKind.None;
 
-        if (changeSet.HasLayout)
+        if ((effects & StyleEffect.Layout) != 0)
             return InvalidationKind.Layout;
 
-        if (changeSet.HasStyle)
+        if ((effects & StyleEffect.TextMeasure) != 0)
             return InvalidationKind.TextMeasure;
 
-        if (changeSet.HasComposite)
+        if ((effects & StyleEffect.Composite) != 0)
             return InvalidationKind.CompositeOnly;
 
-        if (changeSet.HasVisual)
-            return InvalidationKind.VisualOnly;
-
-        if (changeSet.HasInteraction || changeSet.HasRuntimeState)
+        if ((effects & (StyleEffect.Visual | StyleEffect.Interaction)) != 0)
             return InvalidationKind.VisualOnly;
 
         return InvalidationKind.None;
@@ -46,8 +48,8 @@ internal static class AttributeChangeSetClassification
     }
 
     public static bool IsControlMetadataKey(VirtualAttributeKey key) =>
-        key == VirtualAttributeKey.ActionId
-        || key == VirtualAttributeKey.IsHovered
-        || key == VirtualAttributeKey.IsPressed
-        || key == VirtualAttributeKey.IsFocused;
+        VirtualAttributeMetadata.TryGet(key, out var metadata)
+        && (metadata.Effects & StyleEffect.Layout) == 0
+        && (metadata.Effects & StyleEffect.TextMeasure) == 0
+        && (metadata.Effects & (StyleEffect.Visual | StyleEffect.Composite | StyleEffect.Interaction)) != 0;
 }
