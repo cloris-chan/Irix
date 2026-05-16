@@ -1,15 +1,51 @@
 namespace Irix.Drawing;
 
-public readonly record struct EffectiveScissor(DrawRect Bounds, bool IsEmpty)
+public readonly struct EffectiveScissor(DrawRect Bounds, bool IsEmpty) : IEquatable<EffectiveScissor>
 {
+
+    public DrawRect Bounds { get; } = Bounds;
+    public bool IsEmpty { get; } = IsEmpty;
+
     public static EffectiveScissor Empty => new(default, true);
+
+    public bool Equals(EffectiveScissor other) => Bounds == other.Bounds && IsEmpty == other.IsEmpty;
+
+    public override bool Equals(object? obj) => obj is EffectiveScissor other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Bounds, IsEmpty);
+
+    public static bool operator ==(EffectiveScissor left, EffectiveScissor right) => left.Equals(right);
+
+    public static bool operator !=(EffectiveScissor left, EffectiveScissor right) => !left.Equals(right);
 }
 
-public readonly record struct IntegerScissorRect(int Left, int Top, int Right, int Bottom)
+public readonly struct IntegerScissorRect(int Left, int Top, int Right, int Bottom) : IEquatable<IntegerScissorRect>
 {
+
+    public int Left { get; } = Left;
+    public int Top { get; } = Top;
+    public int Right { get; } = Right;
+    public int Bottom { get; } = Bottom;
+
     public static IntegerScissorRect Empty => default;
 
     public bool IsEmpty => Right <= Left || Bottom <= Top;
+
+    public bool Equals(IntegerScissorRect other)
+    {
+        return Left == other.Left
+            && Top == other.Top
+            && Right == other.Right
+            && Bottom == other.Bottom;
+    }
+
+    public override bool Equals(object? obj) => obj is IntegerScissorRect other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Left, Top, Right, Bottom);
+
+    public static bool operator ==(IntegerScissorRect left, IntegerScissorRect right) => left.Equals(right);
+
+    public static bool operator !=(IntegerScissorRect left, IntegerScissorRect right) => !left.Equals(right);
 }
 
 public static class DrawingScissor

@@ -10,18 +10,63 @@ internal enum LayoutElementKind : byte
     Button
 }
 
-internal readonly record struct ButtonVisualState(
-    bool IsHovered,
-    bool IsPressed,
-    bool IsFocused);
+internal readonly struct ButtonVisualState(bool IsHovered, bool IsPressed, bool IsFocused) : IEquatable<ButtonVisualState>
+{
 
-internal readonly record struct LayoutElement(
+    public bool IsHovered { get; } = IsHovered;
+    public bool IsPressed { get; } = IsPressed;
+    public bool IsFocused { get; } = IsFocused;
+
+    public bool Equals(ButtonVisualState other)
+    {
+        return IsHovered == other.IsHovered
+            && IsPressed == other.IsPressed
+            && IsFocused == other.IsFocused;
+    }
+
+    public override bool Equals(object? obj) => obj is ButtonVisualState other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(IsHovered, IsPressed, IsFocused);
+
+    public static bool operator ==(ButtonVisualState left, ButtonVisualState right) => left.Equals(right);
+
+    public static bool operator !=(ButtonVisualState left, ButtonVisualState right) => !left.Equals(right);
+}
+
+internal readonly struct LayoutElement(
     LayoutElementKind Kind,
     PixelRectangle Bounds,
     PixelRectangle ClipBounds = default,
     TextNodeContent Text = default,
     ActionId ActionId = default,
-    ButtonVisualState ButtonState = default);
+    ButtonVisualState ButtonState = default) : IEquatable<LayoutElement>
+{
+
+    public LayoutElementKind Kind { get; } = Kind;
+    public PixelRectangle Bounds { get; } = Bounds;
+    public PixelRectangle ClipBounds { get; } = ClipBounds;
+    public TextNodeContent Text { get; } = Text;
+    public ActionId ActionId { get; } = ActionId;
+    public ButtonVisualState ButtonState { get; } = ButtonState;
+
+    public bool Equals(LayoutElement other)
+    {
+        return Kind == other.Kind
+            && Bounds == other.Bounds
+            && ClipBounds == other.ClipBounds
+            && Text.Equals(other.Text)
+            && ActionId.Equals(other.ActionId)
+            && ButtonState == other.ButtonState;
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutElement other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, Bounds, ClipBounds, Text, ActionId, ButtonState);
+
+    public static bool operator ==(LayoutElement left, LayoutElement right) => left.Equals(right);
+
+    public static bool operator !=(LayoutElement left, LayoutElement right) => !left.Equals(right);
+}
 
 internal enum LayoutRebuildReason : byte
 {
@@ -33,12 +78,17 @@ internal enum LayoutRebuildReason : byte
     ViewportChanged
 }
 
-internal readonly record struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildReason Reason, InvalidationKind InvalidationKind = InvalidationKind.None)
+internal readonly struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildReason Reason, InvalidationKind InvalidationKind = InvalidationKind.None) : IEquatable<LayoutDirtyClassification>
 {
+
     public LayoutDirtyClassification(int dfsIndex, LayoutRebuildReason reason)
         : this(dfsIndex, reason, InvalidationFromReason(reason))
     {
     }
+
+    public int DfsIndex { get; } = DfsIndex;
+    public LayoutRebuildReason Reason { get; } = Reason;
+    public InvalidationKind InvalidationKind { get; } = InvalidationKind;
 
     private static InvalidationKind InvalidationFromReason(LayoutRebuildReason reason)
     {
@@ -52,25 +102,80 @@ internal readonly record struct LayoutDirtyClassification(int DfsIndex, LayoutRe
             _ => InvalidationKind.None,
         };
     }
+
+    public bool Equals(LayoutDirtyClassification other)
+    {
+        return DfsIndex == other.DfsIndex
+            && Reason == other.Reason
+            && InvalidationKind == other.InvalidationKind;
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutDirtyClassification other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(DfsIndex, Reason, InvalidationKind);
+
+    public static bool operator ==(LayoutDirtyClassification left, LayoutDirtyClassification right) => left.Equals(right);
+
+    public static bool operator !=(LayoutDirtyClassification left, LayoutDirtyClassification right) => !left.Equals(right);
 }
 
 /// <summary>
 /// A node in the layout tree, mapping a VirtualNode's DFS index to its
 /// layout element range in the flat <see cref="LayoutElement"/> array.
 /// </summary>
-internal readonly record struct LayoutTreeNode(
+internal readonly struct LayoutTreeNode(
     int DfsIndex,
     VirtualNodeKind Kind,
     int ElementStart,
     int ElementCount,
-    LayoutTreeNode[] Children);
+    LayoutTreeNode[] Children) : IEquatable<LayoutTreeNode>
+{
+
+    public int DfsIndex { get; } = DfsIndex;
+    public VirtualNodeKind Kind { get; } = Kind;
+    public int ElementStart { get; } = ElementStart;
+    public int ElementCount { get; } = ElementCount;
+    public LayoutTreeNode[] Children { get; } = Children;
+
+    public bool Equals(LayoutTreeNode other)
+    {
+        return DfsIndex == other.DfsIndex
+            && Kind == other.Kind
+            && ElementStart == other.ElementStart
+            && ElementCount == other.ElementCount
+            && EqualityComparer<LayoutTreeNode[]>.Default.Equals(Children, other.Children);
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutTreeNode other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(DfsIndex, Kind, ElementStart, ElementCount, Children);
+
+    public static bool operator ==(LayoutTreeNode left, LayoutTreeNode right) => left.Equals(right);
+
+    public static bool operator !=(LayoutTreeNode left, LayoutTreeNode right) => !left.Equals(right);
+}
 
 /// <summary>
 /// Maps a single <see cref="LayoutElement"/> index to the range of
 /// <see cref="DrawCommand"/>s it produces. Text/Rectangle → 1 command,
 /// Button → 2 commands (FillRect + DrawTextRun).
 /// </summary>
-internal readonly record struct ElementCommandRange(int CommandStart, int CommandCount);
+internal readonly struct ElementCommandRange(int CommandStart, int CommandCount) : IEquatable<ElementCommandRange>
+{
+
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+
+    public bool Equals(ElementCommandRange other) => CommandStart == other.CommandStart && CommandCount == other.CommandCount;
+
+    public override bool Equals(object? obj) => obj is ElementCommandRange other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(CommandStart, CommandCount);
+
+    public static bool operator ==(ElementCommandRange left, ElementCommandRange right) => left.Equals(right);
+
+    public static bool operator !=(ElementCommandRange left, ElementCommandRange right) => !left.Equals(right);
+}
 
 /// <summary>
 /// Result of building a layout tree: the flat element array, the tree structure
@@ -126,14 +231,43 @@ internal sealed class LayoutTreeResult(
 /// An element is clipped if its bottom edge is at or above the visible top,
 /// or its top edge is at or below the visible bottom.
 /// </param>
-internal readonly record struct ScrollContainerDiag(
+internal readonly struct ScrollContainerDiag(
     int DfsIndex,
     int VisibleHeight,
     int ContentHeight,
     int ScrollY,
     int MaxScrollY,
     int VisibleElementCount,
-    int ClippedElementCount);
+    int ClippedElementCount) : IEquatable<ScrollContainerDiag>
+{
+
+    public int DfsIndex { get; } = DfsIndex;
+    public int VisibleHeight { get; } = VisibleHeight;
+    public int ContentHeight { get; } = ContentHeight;
+    public int ScrollY { get; } = ScrollY;
+    public int MaxScrollY { get; } = MaxScrollY;
+    public int VisibleElementCount { get; } = VisibleElementCount;
+    public int ClippedElementCount { get; } = ClippedElementCount;
+
+    public bool Equals(ScrollContainerDiag other)
+    {
+        return DfsIndex == other.DfsIndex
+            && VisibleHeight == other.VisibleHeight
+            && ContentHeight == other.ContentHeight
+            && ScrollY == other.ScrollY
+            && MaxScrollY == other.MaxScrollY
+            && VisibleElementCount == other.VisibleElementCount
+            && ClippedElementCount == other.ClippedElementCount;
+    }
+
+    public override bool Equals(object? obj) => obj is ScrollContainerDiag other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(DfsIndex, VisibleHeight, ContentHeight, ScrollY, MaxScrollY, VisibleElementCount, ClippedElementCount);
+
+    public static bool operator ==(ScrollContainerDiag left, ScrollContainerDiag right) => left.Equals(right);
+
+    public static bool operator !=(ScrollContainerDiag left, ScrollContainerDiag right) => !left.Equals(right);
+}
 
 /// <summary>
 /// Result of recording draw commands: the command batch, resource resolver,

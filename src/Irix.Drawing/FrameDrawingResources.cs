@@ -282,7 +282,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         public TextStyle ResolveTextStyle(ResourceHandle handle) => TextStyle.Default;
     }
 
-    internal readonly record struct FrameDrawingResourcesPoolDiagnostics(
+    internal readonly struct FrameDrawingResourcesPoolDiagnostics(
         long RentCount,
         long CreatedCount,
         long ReusedCount,
@@ -292,8 +292,19 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         long DuplicateReturnSkipCount,
         long StaleReturnSkipCount,
         long DisposedOverflowCount,
-        int PoolCount)
+        int PoolCount) : IEquatable<FrameDrawingResourcesPoolDiagnostics>
     {
+        public long RentCount { get; } = RentCount;
+        public long CreatedCount { get; } = CreatedCount;
+        public long ReusedCount { get; } = ReusedCount;
+        public long ReturnCallCount { get; } = ReturnCallCount;
+        public long ReturnedToPoolCount { get; } = ReturnedToPoolCount;
+        public long RetainedReturnSkipCount { get; } = RetainedReturnSkipCount;
+        public long DuplicateReturnSkipCount { get; } = DuplicateReturnSkipCount;
+        public long StaleReturnSkipCount { get; } = StaleReturnSkipCount;
+        public long DisposedOverflowCount { get; } = DisposedOverflowCount;
+        public int PoolCount { get; } = PoolCount;
+
         public FrameDrawingResourcesPoolDiagnostics Delta(FrameDrawingResourcesPoolDiagnostics before) => new(
             RentCount - before.RentCount,
             CreatedCount - before.CreatedCount,
@@ -305,5 +316,41 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
             StaleReturnSkipCount - before.StaleReturnSkipCount,
             DisposedOverflowCount - before.DisposedOverflowCount,
             PoolCount);
+
+        public bool Equals(FrameDrawingResourcesPoolDiagnostics other)
+        {
+            return RentCount == other.RentCount
+                && CreatedCount == other.CreatedCount
+                && ReusedCount == other.ReusedCount
+                && ReturnCallCount == other.ReturnCallCount
+                && ReturnedToPoolCount == other.ReturnedToPoolCount
+                && RetainedReturnSkipCount == other.RetainedReturnSkipCount
+                && DuplicateReturnSkipCount == other.DuplicateReturnSkipCount
+                && StaleReturnSkipCount == other.StaleReturnSkipCount
+                && DisposedOverflowCount == other.DisposedOverflowCount
+                && PoolCount == other.PoolCount;
+        }
+
+        public override bool Equals(object? obj) => obj is FrameDrawingResourcesPoolDiagnostics other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(RentCount);
+            hash.Add(CreatedCount);
+            hash.Add(ReusedCount);
+            hash.Add(ReturnCallCount);
+            hash.Add(ReturnedToPoolCount);
+            hash.Add(RetainedReturnSkipCount);
+            hash.Add(DuplicateReturnSkipCount);
+            hash.Add(StaleReturnSkipCount);
+            hash.Add(DisposedOverflowCount);
+            hash.Add(PoolCount);
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(FrameDrawingResourcesPoolDiagnostics left, FrameDrawingResourcesPoolDiagnostics right) => left.Equals(right);
+
+        public static bool operator !=(FrameDrawingResourcesPoolDiagnostics left, FrameDrawingResourcesPoolDiagnostics right) => !left.Equals(right);
     }
 }

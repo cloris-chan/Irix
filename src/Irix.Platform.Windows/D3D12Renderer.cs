@@ -183,15 +183,40 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     }
 
     /// <summary>Snapshot of frame serial counters for diagnostics.</summary>
-    internal readonly record struct FrameSerialDiagnostics(
+    internal readonly struct FrameSerialDiagnostics(
         long FrameSerial,
         long PresentSerial,
         long SyncWaitCount,
         long SyncWaitTicks,
         uint BackBufferIndex,
-        TextOverlaySyncStrategy SyncStrategy)
+        TextOverlaySyncStrategy SyncStrategy) : IEquatable<FrameSerialDiagnostics>
     {
+        public long FrameSerial { get; } = FrameSerial;
+        public long PresentSerial { get; } = PresentSerial;
+        public long SyncWaitCount { get; } = SyncWaitCount;
+        public long SyncWaitTicks { get; } = SyncWaitTicks;
+        public uint BackBufferIndex { get; } = BackBufferIndex;
+        public TextOverlaySyncStrategy SyncStrategy { get; } = SyncStrategy;
+
         public double SyncWaitMs => SyncWaitTicks / (double)System.Diagnostics.Stopwatch.Frequency * 1000;
+
+        public bool Equals(FrameSerialDiagnostics other)
+        {
+            return FrameSerial == other.FrameSerial
+                && PresentSerial == other.PresentSerial
+                && SyncWaitCount == other.SyncWaitCount
+                && SyncWaitTicks == other.SyncWaitTicks
+                && BackBufferIndex == other.BackBufferIndex
+                && SyncStrategy == other.SyncStrategy;
+        }
+
+        public override bool Equals(object? obj) => obj is FrameSerialDiagnostics other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(FrameSerial, PresentSerial, SyncWaitCount, SyncWaitTicks, BackBufferIndex, SyncStrategy);
+
+        public static bool operator ==(FrameSerialDiagnostics left, FrameSerialDiagnostics right) => left.Equals(right);
+
+        public static bool operator !=(FrameSerialDiagnostics left, FrameSerialDiagnostics right) => !left.Equals(right);
     }
 
     internal FrameSerialDiagnostics GetFrameSerialDiagnostics()

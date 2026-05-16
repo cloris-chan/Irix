@@ -43,14 +43,21 @@ internal sealed record StyleOnlyPatchPlan(
     }
 }
 
-internal readonly record struct StyleOnlyPatchPlanDiagnosticSnapshot(
+internal readonly struct StyleOnlyPatchPlanDiagnosticSnapshot(
     string CaseName,
     bool Eligible,
     StyleOnlyPatchFallbackReason FallbackReason,
     IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
     IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
-    int HitTargetCount)
+    int HitTargetCount) : IEquatable<StyleOnlyPatchPlanDiagnosticSnapshot>
 {
+    public string CaseName { get; } = CaseName;
+    public bool Eligible { get; } = Eligible;
+    public StyleOnlyPatchFallbackReason FallbackReason { get; } = FallbackReason;
+    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = DirtyElementRanges;
+    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; } = DirtyCommandRanges;
+    public int HitTargetCount { get; } = HitTargetCount;
+
     public static StyleOnlyPatchPlanDiagnosticSnapshot FromPlan(string caseName, StyleOnlyPatchPlan plan)
     {
         return new StyleOnlyPatchPlanDiagnosticSnapshot(
@@ -61,6 +68,24 @@ internal readonly record struct StyleOnlyPatchPlanDiagnosticSnapshot(
             plan.DirtyCommandRanges.ToArray(),
             plan.PatchedHitTargets.Count);
     }
+
+    public bool Equals(StyleOnlyPatchPlanDiagnosticSnapshot other)
+    {
+        return CaseName == other.CaseName
+            && Eligible == other.Eligible
+            && FallbackReason == other.FallbackReason
+            && EqualityComparer<IReadOnlyList<(int Start, int Count)>>.Default.Equals(DirtyElementRanges, other.DirtyElementRanges)
+            && EqualityComparer<IReadOnlyList<(int Start, int Count)>>.Default.Equals(DirtyCommandRanges, other.DirtyCommandRanges)
+            && HitTargetCount == other.HitTargetCount;
+    }
+
+    public override bool Equals(object? obj) => obj is StyleOnlyPatchPlanDiagnosticSnapshot other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(CaseName, Eligible, FallbackReason, DirtyElementRanges, DirtyCommandRanges, HitTargetCount);
+
+    public static bool operator ==(StyleOnlyPatchPlanDiagnosticSnapshot left, StyleOnlyPatchPlanDiagnosticSnapshot right) => left.Equals(right);
+
+    public static bool operator !=(StyleOnlyPatchPlanDiagnosticSnapshot left, StyleOnlyPatchPlanDiagnosticSnapshot right) => !left.Equals(right);
 }
 
 internal static class StyleOnlyPatchPlanBuilder

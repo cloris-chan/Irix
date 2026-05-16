@@ -3,26 +3,45 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-public readonly record struct HitTestTarget(PixelRectangle Bounds, ActionId ActionId, PixelRectangle ClipBounds = default)
+public readonly struct HitTestTarget(PixelRectangle Bounds, ActionId ActionId, PixelRectangle ClipBounds = default) : IEquatable<HitTestTarget>
 {
+
+    public PixelRectangle Bounds { get; } = Bounds;
+    public ActionId ActionId { get; } = ActionId;
+    public PixelRectangle ClipBounds { get; } = ClipBounds;
+
     public HitTestTarget Scale(DisplayScale scale)
     {
         scale = scale.Normalize();
         if (scale.IsIdentity) return this;
-        return this with
-        {
-            Bounds = new PixelRectangle(
+        return new HitTestTarget(
+            new PixelRectangle(
                 (int)(Bounds.X * scale.ScaleX),
                 (int)(Bounds.Y * scale.ScaleY),
                 (int)(Bounds.Width * scale.ScaleX),
                 (int)(Bounds.Height * scale.ScaleY)),
-            ClipBounds = new PixelRectangle(
+            ActionId,
+            new PixelRectangle(
                 (int)(ClipBounds.X * scale.ScaleX),
                 (int)(ClipBounds.Y * scale.ScaleY),
                 (int)(ClipBounds.Width * scale.ScaleX),
-                (int)(ClipBounds.Height * scale.ScaleY))
-        };
+                (int)(ClipBounds.Height * scale.ScaleY)));
     }
+
+    public bool Equals(HitTestTarget other)
+    {
+        return Bounds == other.Bounds
+            && ActionId.Equals(other.ActionId)
+            && ClipBounds == other.ClipBounds;
+    }
+
+    public override bool Equals(object? obj) => obj is HitTestTarget other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Bounds, ActionId, ClipBounds);
+
+    public static bool operator ==(HitTestTarget left, HitTestTarget right) => left.Equals(right);
+
+    public static bool operator !=(HitTestTarget left, HitTestTarget right) => !left.Equals(right);
 }
 
 public struct RenderFrameBatch : IDisposable

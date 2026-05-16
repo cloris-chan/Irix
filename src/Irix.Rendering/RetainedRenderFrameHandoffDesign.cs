@@ -1,11 +1,35 @@
 namespace Irix.Rendering;
 
-internal readonly record struct RetainedRenderFrameHandoffCounterSemantic(
+internal readonly struct RetainedRenderFrameHandoffCounterSemantic(
     string CounterName,
     string CurrentMeaning,
     string HandoffRule,
     string InternalOnlyCounterRule,
-    bool ExistingCounterBehaviorUnchanged);
+    bool ExistingCounterBehaviorUnchanged) : IEquatable<RetainedRenderFrameHandoffCounterSemantic>
+{
+    public string CounterName { get; } = CounterName;
+    public string CurrentMeaning { get; } = CurrentMeaning;
+    public string HandoffRule { get; } = HandoffRule;
+    public string InternalOnlyCounterRule { get; } = InternalOnlyCounterRule;
+    public bool ExistingCounterBehaviorUnchanged { get; } = ExistingCounterBehaviorUnchanged;
+
+    public bool Equals(RetainedRenderFrameHandoffCounterSemantic other)
+    {
+        return CounterName == other.CounterName
+            && CurrentMeaning == other.CurrentMeaning
+            && HandoffRule == other.HandoffRule
+            && InternalOnlyCounterRule == other.InternalOnlyCounterRule
+            && ExistingCounterBehaviorUnchanged == other.ExistingCounterBehaviorUnchanged;
+    }
+
+    public override bool Equals(object? obj) => obj is RetainedRenderFrameHandoffCounterSemantic other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(CounterName, CurrentMeaning, HandoffRule, InternalOnlyCounterRule, ExistingCounterBehaviorUnchanged);
+
+    public static bool operator ==(RetainedRenderFrameHandoffCounterSemantic left, RetainedRenderFrameHandoffCounterSemantic right) => left.Equals(right);
+
+    public static bool operator !=(RetainedRenderFrameHandoffCounterSemantic left, RetainedRenderFrameHandoffCounterSemantic right) => !left.Equals(right);
+}
 
 internal static class RetainedRenderFrameHandoffCounterSemantics
 {
@@ -50,10 +74,30 @@ internal static class RetainedRenderFrameHandoffCounterSemantics
     ];
 }
 
-internal readonly record struct SegmentedBackendDirtyRangeHandoffSegment(
+internal readonly struct SegmentedBackendDirtyRangeHandoffSegment(
     int CommandStart,
     int CommandCount,
-    IReadOnlyList<(int Start, int Count)> SegmentDirtyRanges);
+    IReadOnlyList<(int Start, int Count)> SegmentDirtyRanges) : IEquatable<SegmentedBackendDirtyRangeHandoffSegment>
+{
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+    public IReadOnlyList<(int Start, int Count)> SegmentDirtyRanges { get; } = SegmentDirtyRanges;
+
+    public bool Equals(SegmentedBackendDirtyRangeHandoffSegment other)
+    {
+        return CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount
+            && EqualityComparer<IReadOnlyList<(int Start, int Count)>>.Default.Equals(SegmentDirtyRanges, other.SegmentDirtyRanges);
+    }
+
+    public override bool Equals(object? obj) => obj is SegmentedBackendDirtyRangeHandoffSegment other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(CommandStart, CommandCount, SegmentDirtyRanges);
+
+    public static bool operator ==(SegmentedBackendDirtyRangeHandoffSegment left, SegmentedBackendDirtyRangeHandoffSegment right) => left.Equals(right);
+
+    public static bool operator !=(SegmentedBackendDirtyRangeHandoffSegment left, SegmentedBackendDirtyRangeHandoffSegment right) => !left.Equals(right);
+}
 
 internal static class SegmentedBackendDirtyRangeHandoffPlanner
 {

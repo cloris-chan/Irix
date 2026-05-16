@@ -1,7 +1,7 @@
 # Irix Project Status
 
 > Current developer handoff note for the Irix Windows PoC.
-> Last verified: 2026-05-16.
+> Last verified: 2026-05-17.
 
 ---
 
@@ -33,6 +33,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
 | Ref struct boundary | Complete for Round 16. `ref struct` is limited to synchronous builders/readers/layout context; retained IR and batches stay ordinary storable types. |
+| Record struct boundary | Complete for Round 18. Framework/internal primitives, IR, render hot paths, platform types, and PoC backend/diagnostics do not use `record struct`. |
 | Docs | Trimmed to canonical docs only; obsolete prep/checkpoint docs deleted. |
 
 ---
@@ -96,6 +97,14 @@ Display/input coordinate rules:
 - Stored `DisplayScale` values are normalized at ingress; default/invalid scale is converted to `1x` before storage or backend frame use.
 - Non-uniform draw scale remains supported. Text font size uses the normalized Y-axis text scale, not an average of X/Y.
 
+No-record-struct boundary:
+
+- `Irix.Core`, `Irix.Drawing`, `Irix.Rendering`, `Irix.Platform`, and `Irix.Platform.Windows` must not introduce `record struct`.
+- Framework/internal primitives, retained IR, render-frame batches, layout/render diagnostics, handoff structs, platform input/viewport types, and backend hot-path structs are ordinary `readonly struct` types with explicit constructors and value equality.
+- `Irix.Poc` backend, diagnostics snapshots, and rendering/window helpers follow the same no-record-struct rule.
+- The only exception is UI authoring/MVU state and message shape in `Irix.Poc`, such as `CounterModel` / `CounterMessage`, scroll/input/control state, and feedback state. That exception is for authoring ergonomics only and must not leak into framework or backend hot paths.
+- Framework/internal hot paths also avoid record `with` syntax; any rebuild is explicit constructor reconstruction.
+
 ---
 
 ## Current Verification
@@ -108,7 +117,7 @@ dotnet test tests/Irix.Core.Tests/Irix.Core.Tests.csproj --no-restore
 dotnet test Irix.slnx --no-restore
 ```
 
-Result: 571 tests passed.
+Result: 589 tests passed.
 
 Round 16 allocation probes:
 
@@ -119,6 +128,16 @@ inline helper path vs builder/span path: within 128 KB parity guard
 5,000 authoring-only VirtualNode iterations
 inline helper path vs builder/span path: within 128 KB parity guard
 ```
+
+Round 18 allocation guard baseline:
+
+| Area | Current guard |
+|------|---------------|
+| BuildView authoring helpers | Builder/span path stays within 128 KB of inline helper path over 5,000 iterations. |
+| Diff -> layout -> record pipeline | Builder/span root path stays within 128 KB of inline helper path over 500 retained pipeline iterations. |
+| FrameDrawingResources warm pool | Warm rent/add/seal/return stays under 2 MB over 1,000 frames. |
+| D3D12 ExecuteCore scale path | 150% / 200% scale executes without allocating a scaled command array. |
+| Compositor render loop | Mock backend render loop stays under the 20 ms/frame average guard over 180 frames. |
 
 Source guards currently block:
 
@@ -133,6 +152,7 @@ Source guards currently block:
 - Silent `PropertyValue` getters.
 - Reference-equality `VirtualNode` semantics.
 - Ref struct leakage into batch/retained state sources.
+- Framework/backend `record struct` and framework record `with` syntax outside MVU authoring state exceptions.
 
 ---
 

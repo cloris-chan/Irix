@@ -618,7 +618,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         _diagnosticLayoutEvictions = 0;
     }
 
-    public readonly record struct TextRendererDiagnostics(
+    public readonly struct TextRendererDiagnostics(
         int FormatHits,
         int FormatMisses,
         int LayoutHits,
@@ -626,9 +626,39 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         int FormatEvictions,
         int LayoutEvictions,
         int CachedFormats,
-        int CachedLayouts);
+        int CachedLayouts) : IEquatable<TextRendererDiagnostics>
+    {
+        public int FormatHits { get; } = FormatHits;
+        public int FormatMisses { get; } = FormatMisses;
+        public int LayoutHits { get; } = LayoutHits;
+        public int LayoutMisses { get; } = LayoutMisses;
+        public int FormatEvictions { get; } = FormatEvictions;
+        public int LayoutEvictions { get; } = LayoutEvictions;
+        public int CachedFormats { get; } = CachedFormats;
+        public int CachedLayouts { get; } = CachedLayouts;
 
-    public readonly record struct TextData(
+        public bool Equals(TextRendererDiagnostics other)
+        {
+            return FormatHits == other.FormatHits
+                && FormatMisses == other.FormatMisses
+                && LayoutHits == other.LayoutHits
+                && LayoutMisses == other.LayoutMisses
+                && FormatEvictions == other.FormatEvictions
+                && LayoutEvictions == other.LayoutEvictions
+                && CachedFormats == other.CachedFormats
+                && CachedLayouts == other.CachedLayouts;
+        }
+
+        public override bool Equals(object? obj) => obj is TextRendererDiagnostics other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(FormatHits, FormatMisses, LayoutHits, LayoutMisses, FormatEvictions, LayoutEvictions, CachedFormats, CachedLayouts);
+
+        public static bool operator ==(TextRendererDiagnostics left, TextRendererDiagnostics right) => left.Equals(right);
+
+        public static bool operator !=(TextRendererDiagnostics left, TextRendererDiagnostics right) => !left.Equals(right);
+    }
+
+    public readonly struct TextData(
         float X,
         float Y,
         float Width,
@@ -642,7 +672,67 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         EffectiveScissor EffectiveClip,
         bool ClipEnabled,
         TextStyle ResolvedStyle = default,
-        IFrameResourceResolver? Resolver = null);
+        IFrameResourceResolver? Resolver = null) : IEquatable<TextData>
+    {
+        public float X { get; } = X;
+        public float Y { get; } = Y;
+        public float Width { get; } = Width;
+        public float Height { get; } = Height;
+        public float R { get; } = R;
+        public float G { get; } = G;
+        public float B { get; } = B;
+        public float A { get; } = A;
+        public TextSlice Text { get; } = Text;
+        public ResourceHandle Style { get; } = Style;
+        public EffectiveScissor EffectiveClip { get; } = EffectiveClip;
+        public bool ClipEnabled { get; } = ClipEnabled;
+        public TextStyle ResolvedStyle { get; } = ResolvedStyle;
+        public IFrameResourceResolver? Resolver { get; } = Resolver;
+
+        public bool Equals(TextData other)
+        {
+            return X.Equals(other.X)
+                && Y.Equals(other.Y)
+                && Width.Equals(other.Width)
+                && Height.Equals(other.Height)
+                && R.Equals(other.R)
+                && G.Equals(other.G)
+                && B.Equals(other.B)
+                && A.Equals(other.A)
+                && Text == other.Text
+                && Style == other.Style
+                && EffectiveClip == other.EffectiveClip
+                && ClipEnabled == other.ClipEnabled
+                && ResolvedStyle == other.ResolvedStyle
+                && EqualityComparer<IFrameResourceResolver?>.Default.Equals(Resolver, other.Resolver);
+        }
+
+        public override bool Equals(object? obj) => obj is TextData other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(X);
+            hash.Add(Y);
+            hash.Add(Width);
+            hash.Add(Height);
+            hash.Add(R);
+            hash.Add(G);
+            hash.Add(B);
+            hash.Add(A);
+            hash.Add(Text);
+            hash.Add(Style);
+            hash.Add(EffectiveClip);
+            hash.Add(ClipEnabled);
+            hash.Add(ResolvedStyle);
+            hash.Add(Resolver);
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(TextData left, TextData right) => left.Equals(right);
+
+        public static bool operator !=(TextData left, TextData right) => !left.Equals(right);
+    }
 
     private sealed class CachedTextFormat(TextStyle style, nint format)
     {
@@ -651,12 +741,36 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         public nint Format { get; } = format;
     }
 
-    private readonly record struct TextLayoutCacheKey(
+    private readonly struct TextLayoutCacheKey(
         ulong TextHash,
         int TextLength,
         TextStyle Style,
         float Width,
-        float Height);
+        float Height) : IEquatable<TextLayoutCacheKey>
+    {
+        public ulong TextHash { get; } = TextHash;
+        public int TextLength { get; } = TextLength;
+        public TextStyle Style { get; } = Style;
+        public float Width { get; } = Width;
+        public float Height { get; } = Height;
+
+        public bool Equals(TextLayoutCacheKey other)
+        {
+            return TextHash == other.TextHash
+                && TextLength == other.TextLength
+                && Style == other.Style
+                && Width.Equals(other.Width)
+                && Height.Equals(other.Height);
+        }
+
+        public override bool Equals(object? obj) => obj is TextLayoutCacheKey other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(TextHash, TextLength, Style, Width, Height);
+
+        public static bool operator ==(TextLayoutCacheKey left, TextLayoutCacheKey right) => left.Equals(right);
+
+        public static bool operator !=(TextLayoutCacheKey left, TextLayoutCacheKey right) => !left.Equals(right);
+    }
 
     private sealed class CachedTextLayout(TextLayoutCacheKey key, string text, nint layout)
     {

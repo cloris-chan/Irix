@@ -124,9 +124,25 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
         }
     }
 
-    private readonly record struct QueuedMessage(
-        TMessage Message,
-        TaskCompletionSource? Processed);
+    private readonly struct QueuedMessage(TMessage Message, TaskCompletionSource? Processed) : IEquatable<QueuedMessage>
+    {
+        public TMessage Message { get; } = Message;
+        public TaskCompletionSource? Processed { get; } = Processed;
+
+        public bool Equals(QueuedMessage other)
+        {
+            return EqualityComparer<TMessage>.Default.Equals(Message, other.Message)
+                && EqualityComparer<TaskCompletionSource?>.Default.Equals(Processed, other.Processed);
+        }
+
+        public override bool Equals(object? obj) => obj is QueuedMessage other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Message, Processed);
+
+        public static bool operator ==(QueuedMessage left, QueuedMessage right) => left.Equals(right);
+
+        public static bool operator !=(QueuedMessage left, QueuedMessage right) => !left.Equals(right);
+    }
 
     private async ValueTask ExecuteCommandAsync(Command<TMessage>? command, CancellationToken cancellationToken)
     {

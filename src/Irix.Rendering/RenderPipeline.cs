@@ -359,14 +359,32 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         };
     }
 
-    private readonly record struct DirtyNodeClassification(LayoutRebuildReason Reason, InvalidationKind InvalidationKind)
+    private readonly struct DirtyNodeClassification(LayoutRebuildReason Reason, InvalidationKind InvalidationKind) : IEquatable<DirtyNodeClassification>
     {
+
+        public LayoutRebuildReason Reason { get; } = Reason;
+        public InvalidationKind InvalidationKind { get; } = InvalidationKind;
+
         public static DirtyNodeClassification None => default;
 
         public static DirtyNodeClassification Max(DirtyNodeClassification left, DirtyNodeClassification right)
         {
             return ReasonPriority(left.Reason) >= ReasonPriority(right.Reason) ? left : right;
         }
+
+        public bool Equals(DirtyNodeClassification other)
+        {
+            return Reason == other.Reason
+                && InvalidationKind == other.InvalidationKind;
+        }
+
+        public override bool Equals(object? obj) => obj is DirtyNodeClassification other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Reason, InvalidationKind);
+
+        public static bool operator ==(DirtyNodeClassification left, DirtyNodeClassification right) => left.Equals(right);
+
+        public static bool operator !=(DirtyNodeClassification left, DirtyNodeClassification right) => !left.Equals(right);
     }
 
     private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)

@@ -72,7 +72,7 @@ internal interface IDebugDiagnosticsSnapshotBridge
 {
 }
 
-internal readonly record struct DebugUiDiagnosticsSnapshot(
+internal readonly struct DebugUiDiagnosticsSnapshot(
 	CounterViewportDiagnostics Viewport,
 	CounterLayoutDiagnostics Layout,
 	ScrollDiagnosticsSnapshot Scroll,

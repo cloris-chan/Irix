@@ -519,6 +519,71 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Framework_internal_hot_path_sources_do_not_use_record_structs()
+    {
+        var root = FindRepoRoot();
+        var sourceDirs = new[]
+        {
+            Path.Combine(root, "src", "Irix.Core"),
+            Path.Combine(root, "src", "Irix.Drawing"),
+            Path.Combine(root, "src", "Irix.Rendering"),
+            Path.Combine(root, "src", "Irix.Platform"),
+            Path.Combine(root, "src", "Irix.Platform.Windows")
+        };
+
+        foreach (var file in sourceDirs.SelectMany(dir => Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories)))
+        {
+            var content = File.ReadAllText(file);
+            Assert.DoesNotMatch(RecordStructPattern(), content);
+        }
+    }
+
+    [Fact]
+    public void Framework_internal_hot_path_sources_do_not_use_record_with_syntax()
+    {
+        var root = FindRepoRoot();
+        var sourceDirs = new[]
+        {
+            Path.Combine(root, "src", "Irix.Core"),
+            Path.Combine(root, "src", "Irix.Drawing"),
+            Path.Combine(root, "src", "Irix.Rendering"),
+            Path.Combine(root, "src", "Irix.Platform"),
+            Path.Combine(root, "src", "Irix.Platform.Windows")
+        };
+
+        foreach (var file in sourceDirs.SelectMany(dir => Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories)))
+        {
+            var content = File.ReadAllText(file);
+            Assert.DoesNotMatch(@"\bwith\s*\{", content);
+        }
+    }
+
+    [Fact]
+    public void Poc_record_structs_are_limited_to_mvu_authoring_state_files()
+    {
+        var pocDir = Path.Combine(FindRepoRoot(), "src", "Irix.Poc");
+        var allowedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "ControlVisualState.cs",
+            "CounterApplication.cs",
+            "InputOwnershipState.cs",
+            "ScrollController.cs",
+            "ScrollFeedback.cs"
+        };
+
+        foreach (var file in Directory.GetFiles(pocDir, "*.cs", SearchOption.AllDirectories))
+        {
+            if (allowedFiles.Contains(Path.GetFileName(file)))
+            {
+                continue;
+            }
+
+            var content = File.ReadAllText(file);
+            Assert.DoesNotMatch(RecordStructPattern(), content);
+        }
+    }
+
+    [Fact]
     public void Ref_struct_types_stay_limited_to_builder_reader_and_context_boundaries()
     {
         Assert.True(typeof(VirtualNodePropertyListBuilder).IsByRefLike);
@@ -801,6 +866,8 @@ public class TypedIdAllocationGuardTests
         Assert.True(allocated < 16_384,
             $"Steady-state Build allocated {allocated} bytes, expected < 16384");
     }
+
+    private static string RecordStructPattern() => @"\b(?:readonly\s+record\s+struct|record\s+readonly\s+struct|record\s+struct)\b";
 
     private static string FindRepoRoot()
     {

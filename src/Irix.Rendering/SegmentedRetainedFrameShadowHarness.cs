@@ -10,12 +10,17 @@ internal enum SegmentedRetainedFrameShadowResultKind : byte
     ShadowRejected
 }
 
-internal readonly record struct SegmentedRetainedFrameShadowResult(
+internal readonly struct SegmentedRetainedFrameShadowResult(
     SegmentedRetainedFrameShadowResultKind Kind,
     RetainedPartialApplyFallbackReason Reason,
     RetainedPartialApplyResultKind PlanKind,
-    IReadOnlyList<SegmentedFrameRead> Reads)
+    IReadOnlyList<SegmentedFrameRead> Reads) : IEquatable<SegmentedRetainedFrameShadowResult>
 {
+    public SegmentedRetainedFrameShadowResultKind Kind { get; } = Kind;
+    public RetainedPartialApplyFallbackReason Reason { get; } = Reason;
+    public RetainedPartialApplyResultKind PlanKind { get; } = PlanKind;
+    public IReadOnlyList<SegmentedFrameRead> Reads { get; } = Reads;
+
     public static SegmentedRetainedFrameShadowResult Disabled { get; } = new(
         SegmentedRetainedFrameShadowResultKind.Disabled,
         RetainedPartialApplyFallbackReason.None,
@@ -23,6 +28,22 @@ internal readonly record struct SegmentedRetainedFrameShadowResult(
         []);
 
     public bool Accepted => Kind == SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial;
+
+    public bool Equals(SegmentedRetainedFrameShadowResult other)
+    {
+        return Kind == other.Kind
+            && Reason == other.Reason
+            && PlanKind == other.PlanKind
+            && EqualityComparer<IReadOnlyList<SegmentedFrameRead>>.Default.Equals(Reads, other.Reads);
+    }
+
+    public override bool Equals(object? obj) => obj is SegmentedRetainedFrameShadowResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, Reason, PlanKind, Reads);
+
+    public static bool operator ==(SegmentedRetainedFrameShadowResult left, SegmentedRetainedFrameShadowResult right) => left.Equals(right);
+
+    public static bool operator !=(SegmentedRetainedFrameShadowResult left, SegmentedRetainedFrameShadowResult right) => !left.Equals(right);
 }
 
 internal sealed class SegmentedRetainedFrameShadowHarness : IDisposable

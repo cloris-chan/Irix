@@ -228,7 +228,52 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         public Vector4 Color;
     }
 
-    public readonly record struct RectData(float X, float Y, float Width, float Height, float R, float G, float B, float A, IntegerScissorRect Scissor);
+    public readonly struct RectData(float X, float Y, float Width, float Height, float R, float G, float B, float A, IntegerScissorRect Scissor) : IEquatable<RectData>
+    {
+        public float X { get; } = X;
+        public float Y { get; } = Y;
+        public float Width { get; } = Width;
+        public float Height { get; } = Height;
+        public float R { get; } = R;
+        public float G { get; } = G;
+        public float B { get; } = B;
+        public float A { get; } = A;
+        public IntegerScissorRect Scissor { get; } = Scissor;
+
+        public bool Equals(RectData other)
+        {
+            return X.Equals(other.X)
+                && Y.Equals(other.Y)
+                && Width.Equals(other.Width)
+                && Height.Equals(other.Height)
+                && R.Equals(other.R)
+                && G.Equals(other.G)
+                && B.Equals(other.B)
+                && A.Equals(other.A)
+                && Scissor == other.Scissor;
+        }
+
+        public override bool Equals(object? obj) => obj is RectData other && Equals(other);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(X);
+            hash.Add(Y);
+            hash.Add(Width);
+            hash.Add(Height);
+            hash.Add(R);
+            hash.Add(G);
+            hash.Add(B);
+            hash.Add(A);
+            hash.Add(Scissor);
+            return hash.ToHashCode();
+        }
+
+        public static bool operator ==(RectData left, RectData right) => left.Equals(right);
+
+        public static bool operator !=(RectData left, RectData right) => !left.Equals(right);
+    }
 
     private const string VsHlsl = @"
 struct VS_IN { float2 pos : POSITION; float4 col : COLOR; };

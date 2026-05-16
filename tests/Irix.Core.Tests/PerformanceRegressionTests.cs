@@ -34,6 +34,7 @@ public sealed class PerformanceRegressionTests
         Assert.Equal(frameCount, backend.BeginFrameCount);
         Assert.Equal(frameCount, backend.ExecuteCount);
         Assert.Equal(frameCount, backend.EndFrameCount);
+        TestContext.Current.SendDiagnosticMessage($"Mock backend average frame time: {compositor.AverageFrameTimeUs}us over {frameCount} frames.");
         Assert.True(compositor.AverageFrameTimeUs < 20_000, $"Mock backend average frame time {compositor.AverageFrameTimeUs}us exceeded 20,000us baseline");
     }
 
@@ -60,6 +61,7 @@ public sealed class PerformanceRegressionTests
         }
 
         var allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        TestContext.Current.SendDiagnosticMessage($"FrameDrawingResources warm pool allocation: {allocatedBytes:N0} bytes over {frameCount} frames.");
         Assert.True(allocatedBytes < 2_000_000, $"FrameDrawingResources warm pool allocated {allocatedBytes:N0} bytes over {frameCount} frames");
     }
 
@@ -115,6 +117,7 @@ public sealed class PerformanceRegressionTests
             GC.KeepAlive(node);
         });
 
+        TestContext.Current.SendDiagnosticMessage($"VirtualNode authoring allocation: builder={builderAllocated:N0} bytes, inline={inlineHelperAllocated:N0} bytes over {iterations} iterations.");
         AssertAllocationParity(
             builderAllocated,
             inlineHelperAllocated,
@@ -145,6 +148,7 @@ public sealed class PerformanceRegressionTests
             snapshot,
             viewport);
 
+        TestContext.Current.SendDiagnosticMessage($"VirtualNode pipeline allocation: builder={builderAllocated:N0} bytes, inline={inlineHelperAllocated:N0} bytes over {iterations} iterations.");
         AssertAllocationParity(
             builderAllocated,
             inlineHelperAllocated,

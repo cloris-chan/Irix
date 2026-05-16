@@ -12,7 +12,7 @@ internal enum PartialApplyIntegrationGate : byte
     RegressionCoverage
 }
 
-internal readonly record struct PartialApplyIntegrationGateStatus(
+internal readonly struct PartialApplyIntegrationGateStatus(
     PartialApplyIntegrationGate Gate,
     bool Satisfied,
     string PreflightEvidence,
@@ -21,7 +21,52 @@ internal readonly record struct PartialApplyIntegrationGateStatus(
     string ProductionRuntimeEvidence,
     string NoChangeRegressionEvidence,
     string BlockingCondition,
-    string RuntimePromotionCondition);
+    string RuntimePromotionCondition) : IEquatable<PartialApplyIntegrationGateStatus>
+{
+    public PartialApplyIntegrationGate Gate { get; } = Gate;
+    public bool Satisfied { get; } = Satisfied;
+    public string PreflightEvidence { get; } = PreflightEvidence;
+    public string ShadowRuntimeEvidence { get; } = ShadowRuntimeEvidence;
+    public string ProductionOffRuntimeEvidence { get; } = ProductionOffRuntimeEvidence;
+    public string ProductionRuntimeEvidence { get; } = ProductionRuntimeEvidence;
+    public string NoChangeRegressionEvidence { get; } = NoChangeRegressionEvidence;
+    public string BlockingCondition { get; } = BlockingCondition;
+    public string RuntimePromotionCondition { get; } = RuntimePromotionCondition;
+
+    public bool Equals(PartialApplyIntegrationGateStatus other)
+    {
+        return Gate == other.Gate
+            && Satisfied == other.Satisfied
+            && PreflightEvidence == other.PreflightEvidence
+            && ShadowRuntimeEvidence == other.ShadowRuntimeEvidence
+            && ProductionOffRuntimeEvidence == other.ProductionOffRuntimeEvidence
+            && ProductionRuntimeEvidence == other.ProductionRuntimeEvidence
+            && NoChangeRegressionEvidence == other.NoChangeRegressionEvidence
+            && BlockingCondition == other.BlockingCondition
+            && RuntimePromotionCondition == other.RuntimePromotionCondition;
+    }
+
+    public override bool Equals(object? obj) => obj is PartialApplyIntegrationGateStatus other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Gate);
+        hash.Add(Satisfied);
+        hash.Add(PreflightEvidence);
+        hash.Add(ShadowRuntimeEvidence);
+        hash.Add(ProductionOffRuntimeEvidence);
+        hash.Add(ProductionRuntimeEvidence);
+        hash.Add(NoChangeRegressionEvidence);
+        hash.Add(BlockingCondition);
+        hash.Add(RuntimePromotionCondition);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(PartialApplyIntegrationGateStatus left, PartialApplyIntegrationGateStatus right) => left.Equals(right);
+
+    public static bool operator !=(PartialApplyIntegrationGateStatus left, PartialApplyIntegrationGateStatus right) => !left.Equals(right);
+}
 
 internal static class PartialApplyIntegrationGateChecklist
 {

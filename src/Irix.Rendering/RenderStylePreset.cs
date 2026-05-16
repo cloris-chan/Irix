@@ -2,11 +2,16 @@ using Irix.Drawing;
 
 namespace Irix.Rendering;
 
-internal readonly record struct RenderStylePreset(
+internal readonly struct RenderStylePreset(
     LayoutStyle Layout,
     DrawingStyle Drawing,
-    ControlVisualStateResolver VisualStates)
+    ControlVisualStateResolver VisualStates) : IEquatable<RenderStylePreset>
 {
+
+    public LayoutStyle Layout { get; } = Layout;
+    public DrawingStyle Drawing { get; } = Drawing;
+    public ControlVisualStateResolver VisualStates { get; } = VisualStates;
+
     public const string DefaultName = "RenderStylePreset.Default";
 
     public static RenderStylePreset Default { get; } = new(
@@ -31,4 +36,19 @@ internal readonly record struct RenderStylePreset(
             TextStyle: TextStyle.Default,
             ButtonTextStyle: TextStyle.Default),
         VisualStates: ControlVisualStateResolver.Default);
+
+    public bool Equals(RenderStylePreset other)
+    {
+        return Layout == other.Layout
+            && Drawing == other.Drawing
+            && VisualStates == other.VisualStates;
+    }
+
+    public override bool Equals(object? obj) => obj is RenderStylePreset other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Layout, Drawing, VisualStates);
+
+    public static bool operator ==(RenderStylePreset left, RenderStylePreset right) => left.Equals(right);
+
+    public static bool operator !=(RenderStylePreset left, RenderStylePreset right) => !left.Equals(right);
 }

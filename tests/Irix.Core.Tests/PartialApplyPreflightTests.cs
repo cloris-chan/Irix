@@ -1135,11 +1135,7 @@ public sealed class PartialApplyPreflightTests
         var retainedCommandCount = retainedFrame.CommandCount;
         var retainedResources = retainedFrame.Resources;
         var retainedDirtyRanges = retainedFrame.DirtyCommandRanges.ToArray();
-        var options = new RetainedRenderFrameSegmentOwnershipOptions
-        {
-            EnableSegmentedOwner = true,
-            ResourceSnapshotFactory = tracker.Capture
-        };
+        var options = new RetainedRenderFrameSegmentOwnershipOptions(true, tracker.Capture);
         using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, options);
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var changedViewport = new PixelRectangle(0, 0, 640, 480);
@@ -1247,11 +1243,7 @@ public sealed class PartialApplyPreflightTests
         retainedFrame.ApplyFull(retainedBatch);
         var retainedCommandCount = retainedFrame.CommandCount;
         var retainedResources = retainedFrame.Resources;
-        var options = new RetainedRenderFrameSegmentOwnershipOptions
-        {
-            EnableSegmentedOwner = true,
-            ResourceSnapshotFactory = tracker.Capture
-        };
+        var options = new RetainedRenderFrameSegmentOwnershipOptions(true, tracker.Capture);
         using var ownership = new RetainedRenderFrameSegmentOwnership(retainedFrame, options);
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var buttonBounds = new PixelRectangle(16, 16, 140, 40);
@@ -2393,11 +2385,7 @@ public sealed class PartialApplyPreflightTests
         var pipeline = new RenderPipeline();
         using var ownership = new RetainedRenderFrameSegmentOwnership(
             pipeline.RetainedFrame,
-            new RetainedRenderFrameSegmentOwnershipOptions
-            {
-                EnableSegmentedOwner = true,
-                ResourceSnapshotFactory = tracker.Capture
-            });
+            new RetainedRenderFrameSegmentOwnershipOptions(true, tracker.Capture));
         var throwingBackend = new ThrowingBackend(throwOnExecuteCall: 3);
         using var compositor = new DrawingBackendCompositor(
             throwingBackend,
@@ -4057,14 +4045,9 @@ public sealed class PartialApplyPreflightTests
         Assert.Same(snapshot, segment.Snapshot);
     }
 
-    private sealed class SnapshotTracker
+    private sealed class SnapshotTracker(string resolverText = "")
     {
-        private readonly string _resolverText;
-
-        public SnapshotTracker(string resolverText = "")
-        {
-            _resolverText = resolverText;
-        }
+        private readonly string _resolverText = resolverText;
 
         public int RetainCount { get; private set; }
         public int ReleaseCount { get; private set; }

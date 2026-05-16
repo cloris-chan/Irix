@@ -74,12 +74,51 @@ internal sealed class RetainedResourceSnapshot(IFrameResourceResolver resolver, 
     }
 }
 
-internal readonly record struct RetainedResourceSegment(int CommandStart, int CommandCount, RetainedResourceSnapshot Snapshot)
+internal readonly struct RetainedResourceSegment(int CommandStart, int CommandCount, RetainedResourceSnapshot Snapshot) : IEquatable<RetainedResourceSegment>
 {
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+    public RetainedResourceSnapshot Snapshot { get; } = Snapshot;
+
     public int CommandEnd => CommandStart + CommandCount;
+
+    public bool Equals(RetainedResourceSegment other)
+    {
+        return CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount
+            && EqualityComparer<RetainedResourceSnapshot>.Default.Equals(Snapshot, other.Snapshot);
+    }
+
+    public override bool Equals(object? obj) => obj is RetainedResourceSegment other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(CommandStart, CommandCount, Snapshot);
+
+    public static bool operator ==(RetainedResourceSegment left, RetainedResourceSegment right) => left.Equals(right);
+
+    public static bool operator !=(RetainedResourceSegment left, RetainedResourceSegment right) => !left.Equals(right);
 }
 
-internal readonly record struct SegmentedFrameRead(int CommandStart, DrawCommand[] Commands, IFrameResourceResolver Resolver);
+internal readonly struct SegmentedFrameRead(int CommandStart, DrawCommand[] Commands, IFrameResourceResolver Resolver) : IEquatable<SegmentedFrameRead>
+{
+    public int CommandStart { get; } = CommandStart;
+    public DrawCommand[] Commands { get; } = Commands;
+    public IFrameResourceResolver Resolver { get; } = Resolver;
+
+    public bool Equals(SegmentedFrameRead other)
+    {
+        return CommandStart == other.CommandStart
+            && EqualityComparer<DrawCommand[]>.Default.Equals(Commands, other.Commands)
+            && EqualityComparer<IFrameResourceResolver>.Default.Equals(Resolver, other.Resolver);
+    }
+
+    public override bool Equals(object? obj) => obj is SegmentedFrameRead other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(CommandStart, Commands, Resolver);
+
+    public static bool operator ==(SegmentedFrameRead left, SegmentedFrameRead right) => left.Equals(right);
+
+    public static bool operator !=(SegmentedFrameRead left, SegmentedFrameRead right) => !left.Equals(right);
+}
 
 internal sealed class SegmentedRetainedFrameReader(RetainedCommandBuffer commandBuffer, RetainedResourceSegmentTable segmentTable)
 {
@@ -253,7 +292,7 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
             var current = segments[i];
             if (last.CommandEnd == current.CommandStart && ReferenceEquals(last.Snapshot, current.Snapshot))
             {
-                merged[^1] = last with { CommandCount = last.CommandCount + current.CommandCount };
+                merged[^1] = new RetainedResourceSegment(last.CommandStart, last.CommandCount + current.CommandCount, last.Snapshot);
             }
             else
             {

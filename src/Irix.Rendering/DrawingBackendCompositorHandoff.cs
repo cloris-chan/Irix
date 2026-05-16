@@ -1,12 +1,26 @@
 namespace Irix.Rendering;
 
-internal readonly record struct DrawingBackendCompositorHandoffOptions
+internal readonly struct DrawingBackendCompositorHandoffOptions(bool EnableSegmentedRenderSourceCandidate) : IEquatable<DrawingBackendCompositorHandoffOptions>
 {
-    public bool EnableSegmentedRenderSourceCandidate { get; init; }
+
+    public bool EnableSegmentedRenderSourceCandidate { get; } = EnableSegmentedRenderSourceCandidate;
 
     public static DrawingBackendCompositorHandoffOptions Disabled => default;
 
-    public static DrawingBackendCompositorHandoffOptions Enabled => new() { EnableSegmentedRenderSourceCandidate = true };
+    public static DrawingBackendCompositorHandoffOptions Enabled => new(true);
+
+    public bool Equals(DrawingBackendCompositorHandoffOptions other)
+    {
+        return EnableSegmentedRenderSourceCandidate == other.EnableSegmentedRenderSourceCandidate;
+    }
+
+    public override bool Equals(object? obj) => obj is DrawingBackendCompositorHandoffOptions other && Equals(other);
+
+    public override int GetHashCode() => EnableSegmentedRenderSourceCandidate.GetHashCode();
+
+    public static bool operator ==(DrawingBackendCompositorHandoffOptions left, DrawingBackendCompositorHandoffOptions right) => left.Equals(right);
+
+    public static bool operator !=(DrawingBackendCompositorHandoffOptions left, DrawingBackendCompositorHandoffOptions right) => !left.Equals(right);
 }
 
 internal enum DrawingBackendCompositorHandoffResultKind : byte
@@ -32,12 +46,18 @@ internal enum DrawingBackendCompositorHandoffReason : byte
     BackendThrewBeforeCommit
 }
 
-internal readonly record struct DrawingBackendCompositorHandoffResult(
+internal readonly struct DrawingBackendCompositorHandoffResult(
     DrawingBackendCompositorHandoffResultKind Kind,
     SegmentedRetainedFrameProductionOwnerFeedResult OwnerResult,
     RetainedRenderFrameHandoffHarnessResult CandidateResult,
-    DrawingBackendCompositorHandoffReason Reason)
+    DrawingBackendCompositorHandoffReason Reason) : IEquatable<DrawingBackendCompositorHandoffResult>
 {
+
+    public DrawingBackendCompositorHandoffResultKind Kind { get; } = Kind;
+    public SegmentedRetainedFrameProductionOwnerFeedResult OwnerResult { get; } = OwnerResult;
+    public RetainedRenderFrameHandoffHarnessResult CandidateResult { get; } = CandidateResult;
+    public DrawingBackendCompositorHandoffReason Reason { get; } = Reason;
+
     private static RetainedRenderFrameHandoffHarnessResult EmptyCandidateResult { get; } = RetainedRenderFrameHandoffHarnessResult.Disabled(new RetainedRenderFrameHandoffHarnessCounters(0, 0, 0, 0, [], false));
 
     public static DrawingBackendCompositorHandoffResult Disabled { get; } = new(
@@ -88,4 +108,20 @@ internal readonly record struct DrawingBackendCompositorHandoffResult(
             EmptyCandidateResult,
             reason);
     }
+
+    public bool Equals(DrawingBackendCompositorHandoffResult other)
+    {
+        return Kind == other.Kind
+            && OwnerResult == other.OwnerResult
+            && CandidateResult == other.CandidateResult
+            && Reason == other.Reason;
+    }
+
+    public override bool Equals(object? obj) => obj is DrawingBackendCompositorHandoffResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, OwnerResult, CandidateResult, Reason);
+
+    public static bool operator ==(DrawingBackendCompositorHandoffResult left, DrawingBackendCompositorHandoffResult right) => left.Equals(right);
+
+    public static bool operator !=(DrawingBackendCompositorHandoffResult left, DrawingBackendCompositorHandoffResult right) => !left.Equals(right);
 }

@@ -2,13 +2,26 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal readonly record struct RenderPipelineShadowOptions
+internal readonly struct RenderPipelineShadowOptions(bool EnableSegmentedRetainedFrame) : IEquatable<RenderPipelineShadowOptions>
 {
-    public bool EnableSegmentedRetainedFrame { get; init; }
+    public bool EnableSegmentedRetainedFrame { get; } = EnableSegmentedRetainedFrame;
 
     public static RenderPipelineShadowOptions Disabled => default;
 
-    public static RenderPipelineShadowOptions SegmentedRetainedFrameEnabled => new() { EnableSegmentedRetainedFrame = true };
+    public static RenderPipelineShadowOptions SegmentedRetainedFrameEnabled => new(true);
+
+    public bool Equals(RenderPipelineShadowOptions other)
+    {
+        return EnableSegmentedRetainedFrame == other.EnableSegmentedRetainedFrame;
+    }
+
+    public override bool Equals(object? obj) => obj is RenderPipelineShadowOptions other && Equals(other);
+
+    public override int GetHashCode() => EnableSegmentedRetainedFrame.GetHashCode();
+
+    public static bool operator ==(RenderPipelineShadowOptions left, RenderPipelineShadowOptions right) => left.Equals(right);
+
+    public static bool operator !=(RenderPipelineShadowOptions left, RenderPipelineShadowOptions right) => !left.Equals(right);
 }
 
 internal sealed class SegmentedRetainedFrameDiagnosticHarness(RenderPipeline pipeline, RenderPipelineShadowOptions options = default) : IDisposable

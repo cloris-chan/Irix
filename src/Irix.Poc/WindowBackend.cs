@@ -117,5 +117,23 @@ internal sealed class WindowBackend
 
     private static WindowColor ToWindowColor(DrawColor color) => new(color.A, color.R, color.G, color.B);
 
-    private readonly record struct ButtonPresentation(string Label, WindowColor TextColor);
+    private readonly struct ButtonPresentation(string Label, WindowColor TextColor) : IEquatable<ButtonPresentation>
+    {
+        public string Label { get; } = Label;
+        public WindowColor TextColor { get; } = TextColor;
+
+        public bool Equals(ButtonPresentation other)
+        {
+            return Label == other.Label
+                && TextColor == other.TextColor;
+        }
+
+        public override bool Equals(object? obj) => obj is ButtonPresentation other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Label, TextColor);
+
+        public static bool operator ==(ButtonPresentation left, ButtonPresentation right) => left.Equals(right);
+
+        public static bool operator !=(ButtonPresentation left, ButtonPresentation right) => !left.Equals(right);
+    }
 }

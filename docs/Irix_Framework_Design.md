@@ -411,7 +411,7 @@ public interface IDrawingBackend : IDisposable
 建议的最小结构如下：
 
 ```csharp
-public readonly record struct LayoutBox(
+public readonly struct LayoutBox(
     int NodeId,
     PixelRectangle Bounds,
     PixelRectangle ClipBounds,
@@ -430,7 +430,7 @@ public enum DrawCommandKind : byte
     DrawImage
 }
 
-public readonly record struct DrawCommand(
+public readonly struct DrawCommand(
     DrawCommandKind Kind,
     DrawRect Rect = default,
     DrawColor Color = default,
@@ -440,18 +440,18 @@ public readonly record struct DrawCommand(
     Matrix3x2 Transform = default,
     int ZIndex = 0);
 
-public readonly record struct TextSlice(int BufferId, int Start, int Length);
+public readonly struct TextSlice(int BufferId, int Start, int Length);
 
 public interface IFrameResourceResolver : ITextResolver
 {
     TextStyle ResolveTextStyle(ResourceHandle handle);
 }
 
-public readonly record struct DrawRect(float X, float Y, float Width, float Height);
+public readonly struct DrawRect(float X, float Y, float Width, float Height);
 
-public readonly record struct DrawColor(byte A, byte R, byte G, byte B);
+public readonly struct DrawColor(byte A, byte R, byte G, byte B);
 
-public readonly record struct ResourceHandle(int Id, DrawingResourceKind Kind);
+public readonly struct ResourceHandle(int Id, DrawingResourceKind Kind);
 
 public enum DrawingResourceKind : byte
 {
@@ -620,13 +620,13 @@ public enum InputEventType : byte
 }
 
 // 鼠标事件数据
-public readonly record struct MouseEventData(
+public readonly struct MouseEventData(
     float ClientX, float ClientY,
     MouseButton Button,
     ModifierKeys Modifiers);
 
 // 键盘事件数据
-public readonly record struct KeyboardEventData(
+public readonly struct KeyboardEventData(
     int VirtualKeyCode,
     int ScanCode,
     ModifierKeys Modifiers,
@@ -641,7 +641,7 @@ public readonly record struct KeyboardEventData(
 
 ```csharp
 // 命中目标 — 与 DrawCommand 并行传递，不嵌入 DrawCommand
-public readonly record struct HitTestTarget(
+public readonly struct HitTestTarget(
     int NodeId,           // 对应 VirtualNode / Element 的标识
     PixelRectangle Bounds,// 命中区域（与 LayoutBox.Bounds 一致）
     HitTestBehavior Behavior);
@@ -734,7 +734,7 @@ public interface ILayoutEngine
         PixelRectangle availableBounds);
 }
 
-public readonly record struct LayoutResult(
+public readonly struct LayoutResult(
     FrozenDictionary<int, LayoutBox> Boxes,
     PixelRectangle TotalBounds);
 ```

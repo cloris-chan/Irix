@@ -9,11 +9,33 @@ internal enum SegmentedBackendExecutionStrategy : byte
     ResourceRebase
 }
 
-internal readonly record struct SegmentedBackendExecutionAdapterDecision(
+internal readonly struct SegmentedBackendExecutionAdapterDecision(
     SegmentedBackendExecutionStrategy PreferredStrategy,
     string Rationale,
     string BackendContractImpact,
-    string BlockedAlternatives);
+    string BlockedAlternatives) : IEquatable<SegmentedBackendExecutionAdapterDecision>
+{
+    public SegmentedBackendExecutionStrategy PreferredStrategy { get; } = PreferredStrategy;
+    public string Rationale { get; } = Rationale;
+    public string BackendContractImpact { get; } = BackendContractImpact;
+    public string BlockedAlternatives { get; } = BlockedAlternatives;
+
+    public bool Equals(SegmentedBackendExecutionAdapterDecision other)
+    {
+        return PreferredStrategy == other.PreferredStrategy
+            && Rationale == other.Rationale
+            && BackendContractImpact == other.BackendContractImpact
+            && BlockedAlternatives == other.BlockedAlternatives;
+    }
+
+    public override bool Equals(object? obj) => obj is SegmentedBackendExecutionAdapterDecision other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(PreferredStrategy, Rationale, BackendContractImpact, BlockedAlternatives);
+
+    public static bool operator ==(SegmentedBackendExecutionAdapterDecision left, SegmentedBackendExecutionAdapterDecision right) => left.Equals(right);
+
+    public static bool operator !=(SegmentedBackendExecutionAdapterDecision left, SegmentedBackendExecutionAdapterDecision right) => !left.Equals(right);
+}
 
 internal static class SegmentedBackendExecutionAdapterDesign
 {

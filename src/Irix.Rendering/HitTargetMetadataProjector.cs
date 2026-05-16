@@ -93,5 +93,19 @@ internal static class HitTargetMetadataProjector
         return true;
     }
 
-    private readonly record struct ActionNodeMetadata(int DfsIndex, ActionId ActionId);
+    private readonly struct ActionNodeMetadata(int DfsIndex, ActionId ActionId) : IEquatable<ActionNodeMetadata>
+    {
+        public int DfsIndex { get; } = DfsIndex;
+        public ActionId ActionId { get; } = ActionId;
+
+        public bool Equals(ActionNodeMetadata other) => DfsIndex == other.DfsIndex && ActionId.Equals(other.ActionId);
+
+        public override bool Equals(object? obj) => obj is ActionNodeMetadata other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(DfsIndex, ActionId);
+
+        public static bool operator ==(ActionNodeMetadata left, ActionNodeMetadata right) => left.Equals(right);
+
+        public static bool operator !=(ActionNodeMetadata left, ActionNodeMetadata right) => !left.Equals(right);
+    }
 }

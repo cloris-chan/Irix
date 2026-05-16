@@ -332,7 +332,13 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             for (var i = node.ElementStart; i < node.ElementStart + node.ElementCount; i++)
             {
                 var el = elements[i];
-                elements[i] = el with { Bounds = new PixelRectangle(el.Bounds.X, el.Bounds.Y + offsetY, el.Bounds.Width, el.Bounds.Height) };
+                elements[i] = new LayoutElement(
+                    el.Kind,
+                    new PixelRectangle(el.Bounds.X, el.Bounds.Y + offsetY, el.Bounds.Width, el.Bounds.Height),
+                    el.ClipBounds,
+                    el.Text,
+                    el.ActionId,
+                    el.ButtonState);
             }
         }
     }

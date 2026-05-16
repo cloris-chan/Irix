@@ -2,7 +2,7 @@ using Irix.Drawing;
 
 namespace Irix.Rendering;
 
-internal readonly record struct ControlVisualStateResolver
+internal readonly struct ControlVisualStateResolver : IEquatable<ControlVisualStateResolver>
 {
     public static ControlVisualStateResolver Default { get; } = new();
 
@@ -20,4 +20,14 @@ internal readonly record struct ControlVisualStateResolver
 
         return state.IsFocused ? drawing.ButtonFocusedFillColor : drawing.ButtonFillColor;
     }
+
+    public bool Equals(ControlVisualStateResolver other) => true;
+
+    public override bool Equals(object? obj) => obj is ControlVisualStateResolver;
+
+    public override int GetHashCode() => 0;
+
+    public static bool operator ==(ControlVisualStateResolver left, ControlVisualStateResolver right) => left.Equals(right);
+
+    public static bool operator !=(ControlVisualStateResolver left, ControlVisualStateResolver right) => !left.Equals(right);
 }

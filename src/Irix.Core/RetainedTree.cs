@@ -4,10 +4,30 @@ namespace Irix;
 /// Result of <see cref="RetainedTree.Apply"/>, containing the dirty node set
 /// and the previous tree state for dirty classification.
 /// </summary>
-public readonly record struct ApplyResult(
+public readonly struct ApplyResult(
     IReadOnlyList<int> Dirty,
     VirtualNode PreviousRoot,
-    TextBufferSnapshot PreviousTextSnapshot);
+    TextBufferSnapshot PreviousTextSnapshot) : IEquatable<ApplyResult>
+{
+    public IReadOnlyList<int> Dirty { get; } = Dirty;
+    public VirtualNode PreviousRoot { get; } = PreviousRoot;
+    public TextBufferSnapshot PreviousTextSnapshot { get; } = PreviousTextSnapshot;
+
+    public bool Equals(ApplyResult other)
+    {
+        return EqualityComparer<IReadOnlyList<int>>.Default.Equals(Dirty, other.Dirty)
+            && PreviousRoot.Equals(other.PreviousRoot)
+            && PreviousTextSnapshot.Equals(other.PreviousTextSnapshot);
+    }
+
+    public override bool Equals(object? obj) => obj is ApplyResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Dirty, PreviousRoot, PreviousTextSnapshot);
+
+    public static bool operator ==(ApplyResult left, ApplyResult right) => left.Equals(right);
+
+    public static bool operator !=(ApplyResult left, ApplyResult right) => !left.Equals(right);
+}
 
 /// <summary>
 /// Applies <see cref="PatchBatch"/> patches to a <see cref="VirtualNode"/> tree,

@@ -3,15 +3,31 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal readonly record struct RetainedRenderFrameSegmentOwnershipOptions
+internal readonly struct RetainedRenderFrameSegmentOwnershipOptions(
+    bool EnableSegmentedOwner,
+    Func<IFrameResourceResolver, RetainedResourceSnapshot>? ResourceSnapshotFactory = null) : IEquatable<RetainedRenderFrameSegmentOwnershipOptions>
 {
-    public bool EnableSegmentedOwner { get; init; }
+    public bool EnableSegmentedOwner { get; } = EnableSegmentedOwner;
 
-    public Func<IFrameResourceResolver, RetainedResourceSnapshot>? ResourceSnapshotFactory { get; init; }
+    public Func<IFrameResourceResolver, RetainedResourceSnapshot>? ResourceSnapshotFactory { get; } = ResourceSnapshotFactory;
 
     public static RetainedRenderFrameSegmentOwnershipOptions Disabled => default;
 
-    public static RetainedRenderFrameSegmentOwnershipOptions Enabled => new() { EnableSegmentedOwner = true };
+    public static RetainedRenderFrameSegmentOwnershipOptions Enabled => new(true);
+
+    public bool Equals(RetainedRenderFrameSegmentOwnershipOptions other)
+    {
+        return EnableSegmentedOwner == other.EnableSegmentedOwner
+            && EqualityComparer<Func<IFrameResourceResolver, RetainedResourceSnapshot>?>.Default.Equals(ResourceSnapshotFactory, other.ResourceSnapshotFactory);
+    }
+
+    public override bool Equals(object? obj) => obj is RetainedRenderFrameSegmentOwnershipOptions other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(EnableSegmentedOwner, ResourceSnapshotFactory);
+
+    public static bool operator ==(RetainedRenderFrameSegmentOwnershipOptions left, RetainedRenderFrameSegmentOwnershipOptions right) => left.Equals(right);
+
+    public static bool operator !=(RetainedRenderFrameSegmentOwnershipOptions left, RetainedRenderFrameSegmentOwnershipOptions right) => !left.Equals(right);
 }
 
 internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame retainedFrame, RetainedRenderFrameSegmentOwnershipOptions options = default) : IDisposable
@@ -38,13 +54,15 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
 
     private static SegmentedRetainedFrameProductionOwnerFeedResult StampBatch(SegmentedRetainedFrameProductionOwnerFeedResult result, RenderFrameBatch batch)
     {
-        return result with
-        {
-            BatchFrameId = batch.Resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0,
-            BatchCommandCount = batch.Commands.Count,
-            BatchResources = batch.Resources,
-            BatchCommandOwner = batch.Commands.Owner
-        };
+        return new SegmentedRetainedFrameProductionOwnerFeedResult(
+            result.ShadowResult,
+            result.RuntimeOwnerEnabled,
+            result.FallbackApplied,
+            result.OwnerStatePreservedBeforeFallback,
+            batch.Resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0,
+            batch.Commands.Count,
+            batch.Resources,
+            batch.Commands.Owner);
     }
 
     private SegmentedRetainedFrameProductionOwnerFeedResult UpdateSegmentedOwner(

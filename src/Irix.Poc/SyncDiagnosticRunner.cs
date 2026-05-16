@@ -171,7 +171,27 @@ internal static class SyncDiagnosticRunner
             : default;
     }
 
-    private readonly record struct SyncSampleSummary(double AvgWaitMs, double P95WaitMs, double MaxWaitMs);
+    private readonly struct SyncSampleSummary(double AvgWaitMs, double P95WaitMs, double MaxWaitMs) : IEquatable<SyncSampleSummary>
+    {
+        public double AvgWaitMs { get; } = AvgWaitMs;
+        public double P95WaitMs { get; } = P95WaitMs;
+        public double MaxWaitMs { get; } = MaxWaitMs;
+
+        public bool Equals(SyncSampleSummary other)
+        {
+            return AvgWaitMs.Equals(other.AvgWaitMs)
+                && P95WaitMs.Equals(other.P95WaitMs)
+                && MaxWaitMs.Equals(other.MaxWaitMs);
+        }
+
+        public override bool Equals(object? obj) => obj is SyncSampleSummary other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(AvgWaitMs, P95WaitMs, MaxWaitMs);
+
+        public static bool operator ==(SyncSampleSummary left, SyncSampleSummary right) => left.Equals(right);
+
+        public static bool operator !=(SyncSampleSummary left, SyncSampleSummary right) => !left.Equals(right);
+    }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
     {

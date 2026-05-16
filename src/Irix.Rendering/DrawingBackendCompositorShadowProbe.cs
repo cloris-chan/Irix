@@ -2,26 +2,89 @@ using Irix.Drawing;
 
 namespace Irix.Rendering;
 
-internal readonly record struct DrawingBackendCompositorShadowProbeExecution(
+internal readonly struct DrawingBackendCompositorShadowProbeExecution(
     int CommandStart,
     int CommandCount,
-    IFrameResourceResolver Resolver);
+    IFrameResourceResolver Resolver) : IEquatable<DrawingBackendCompositorShadowProbeExecution>
+{
 
-internal readonly record struct DrawingBackendCompositorShadowProbeHitTest(
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+    public IFrameResourceResolver Resolver { get; } = Resolver;
+
+    public bool Equals(DrawingBackendCompositorShadowProbeExecution other)
+    {
+        return CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount
+            && EqualityComparer<IFrameResourceResolver>.Default.Equals(Resolver, other.Resolver);
+    }
+
+    public override bool Equals(object? obj) => obj is DrawingBackendCompositorShadowProbeExecution other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(CommandStart, CommandCount, Resolver);
+
+    public static bool operator ==(DrawingBackendCompositorShadowProbeExecution left, DrawingBackendCompositorShadowProbeExecution right) => left.Equals(right);
+
+    public static bool operator !=(DrawingBackendCompositorShadowProbeExecution left, DrawingBackendCompositorShadowProbeExecution right) => !left.Equals(right);
+}
+
+internal readonly struct DrawingBackendCompositorShadowProbeHitTest(
     bool BeforeHit,
     ActionId BeforeActionId,
     bool AfterHit,
-    ActionId AfterActionId)
+    ActionId AfterActionId) : IEquatable<DrawingBackendCompositorShadowProbeHitTest>
 {
+
+    public bool BeforeHit { get; } = BeforeHit;
+    public ActionId BeforeActionId { get; } = BeforeActionId;
+    public bool AfterHit { get; } = AfterHit;
+    public ActionId AfterActionId { get; } = AfterActionId;
+
     public bool Unchanged => BeforeHit == AfterHit && BeforeActionId == AfterActionId;
+
+    public bool Equals(DrawingBackendCompositorShadowProbeHitTest other)
+    {
+        return BeforeHit == other.BeforeHit
+            && BeforeActionId.Equals(other.BeforeActionId)
+            && AfterHit == other.AfterHit
+            && AfterActionId.Equals(other.AfterActionId);
+    }
+
+    public override bool Equals(object? obj) => obj is DrawingBackendCompositorShadowProbeHitTest other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(BeforeHit, BeforeActionId, AfterHit, AfterActionId);
+
+    public static bool operator ==(DrawingBackendCompositorShadowProbeHitTest left, DrawingBackendCompositorShadowProbeHitTest right) => left.Equals(right);
+
+    public static bool operator !=(DrawingBackendCompositorShadowProbeHitTest left, DrawingBackendCompositorShadowProbeHitTest right) => !left.Equals(right);
 }
 
-internal readonly record struct DrawingBackendCompositorShadowProbeResult(
+internal readonly struct DrawingBackendCompositorShadowProbeResult(
     IReadOnlyList<DrawingBackendCompositorShadowProbeExecution> Executions,
     IReadOnlyList<string> Calls,
-    DrawingBackendCompositorShadowProbeHitTest HitTest)
+    DrawingBackendCompositorShadowProbeHitTest HitTest) : IEquatable<DrawingBackendCompositorShadowProbeResult>
 {
+
+    public IReadOnlyList<DrawingBackendCompositorShadowProbeExecution> Executions { get; } = Executions;
+    public IReadOnlyList<string> Calls { get; } = Calls;
+    public DrawingBackendCompositorShadowProbeHitTest HitTest { get; } = HitTest;
+
     public bool HitTestUnchanged => HitTest.Unchanged;
+
+    public bool Equals(DrawingBackendCompositorShadowProbeResult other)
+    {
+        return EqualityComparer<IReadOnlyList<DrawingBackendCompositorShadowProbeExecution>>.Default.Equals(Executions, other.Executions)
+            && EqualityComparer<IReadOnlyList<string>>.Default.Equals(Calls, other.Calls)
+            && HitTest == other.HitTest;
+    }
+
+    public override bool Equals(object? obj) => obj is DrawingBackendCompositorShadowProbeResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Executions, Calls, HitTest);
+
+    public static bool operator ==(DrawingBackendCompositorShadowProbeResult left, DrawingBackendCompositorShadowProbeResult right) => left.Equals(right);
+
+    public static bool operator !=(DrawingBackendCompositorShadowProbeResult left, DrawingBackendCompositorShadowProbeResult right) => !left.Equals(right);
 }
 
 internal sealed class DrawingBackendCompositorShadowProbe(IDrawingBackend backend)

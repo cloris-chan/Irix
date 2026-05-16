@@ -192,9 +192,25 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
         }
     }
 
-    private readonly record struct CompositorWorkItem(
-        PatchBatch PatchBatch,
-        RenderCompletionWaitGroup? RenderCompletionWaitGroup);
+    private readonly struct CompositorWorkItem(PatchBatch PatchBatch, CompositorLoop.RenderCompletionWaitGroup? RenderCompletionWaitGroup) : IEquatable<CompositorWorkItem>
+    {
+        public PatchBatch PatchBatch { get; } = PatchBatch;
+        public RenderCompletionWaitGroup? RenderCompletionWaitGroup { get; } = RenderCompletionWaitGroup;
+
+        public bool Equals(CompositorWorkItem other)
+        {
+            return PatchBatch.Equals(other.PatchBatch)
+                && EqualityComparer<RenderCompletionWaitGroup?>.Default.Equals(RenderCompletionWaitGroup, other.RenderCompletionWaitGroup);
+        }
+
+        public override bool Equals(object? obj) => obj is CompositorWorkItem other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(PatchBatch, RenderCompletionWaitGroup);
+
+        public static bool operator ==(CompositorWorkItem left, CompositorWorkItem right) => left.Equals(right);
+
+        public static bool operator !=(CompositorWorkItem left, CompositorWorkItem right) => !left.Equals(right);
+    }
 
     private sealed class RenderCompletionWaitGroup
     {

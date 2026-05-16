@@ -124,11 +124,28 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void TextStyle_normalize_clamps_invalid_font_size()
     {
-        var style = TextStyle.Default with { FontSize = -1 };
+        var defaultStyle = TextStyle.Default;
+        var style = new TextStyle(
+            defaultStyle.FontFamily,
+            -1,
+            defaultStyle.FontWeight,
+            defaultStyle.FontStyle,
+            defaultStyle.FontStretch,
+            defaultStyle.HorizontalAlignment,
+            defaultStyle.VerticalAlignment,
+            defaultStyle.Wrapping);
         var normalized = style.Normalize();
         Assert.Equal(TextStyle.Default.FontSize, normalized.FontSize);
 
-        var styleNan = TextStyle.Default with { FontSize = float.NaN };
+        var styleNan = new TextStyle(
+            defaultStyle.FontFamily,
+            float.NaN,
+            defaultStyle.FontWeight,
+            defaultStyle.FontStyle,
+            defaultStyle.FontStretch,
+            defaultStyle.HorizontalAlignment,
+            defaultStyle.VerticalAlignment,
+            defaultStyle.Wrapping);
         var normalizedNan = styleNan.Normalize();
         Assert.Equal(TextStyle.Default.FontSize, normalizedNan.FontSize);
     }

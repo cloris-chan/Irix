@@ -331,11 +331,15 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
     }
 
-    private readonly record struct HandoffSelection(
+    private readonly struct HandoffSelection(
         bool Selected,
         SegmentedRetainedFrameProductionOwnerFeedResult OwnerResult,
-        DrawingBackendCompositorHandoffResult Result)
+        DrawingBackendCompositorHandoffResult Result) : IEquatable<HandoffSelection>
     {
+        public bool Selected { get; } = Selected;
+        public SegmentedRetainedFrameProductionOwnerFeedResult OwnerResult { get; } = OwnerResult;
+        public DrawingBackendCompositorHandoffResult Result { get; } = Result;
+
         public static HandoffSelection SelectedCandidate(SegmentedRetainedFrameProductionOwnerFeedResult ownerResult)
         {
             return new HandoffSelection(true, ownerResult, DrawingBackendCompositorHandoffResult.Disabled);
@@ -347,6 +351,21 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             return new HandoffSelection(false, ownerResult, result);
         }
+
+        public bool Equals(HandoffSelection other)
+        {
+            return Selected == other.Selected
+                && OwnerResult == other.OwnerResult
+                && Result == other.Result;
+        }
+
+        public override bool Equals(object? obj) => obj is HandoffSelection other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Selected, OwnerResult, Result);
+
+        public static bool operator ==(HandoffSelection left, HandoffSelection right) => left.Equals(right);
+
+        public static bool operator !=(HandoffSelection left, HandoffSelection right) => !left.Equals(right);
     }
 
     private sealed class NonDisposingBackend(IDrawingBackend inner) : IDrawingBackend, IDirtyRangeAware

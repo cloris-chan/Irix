@@ -4,19 +4,126 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal readonly record struct D3D12FillRectScissorPlan(EffectiveScissor EffectiveScissor, IntegerScissorRect RenderScissor, bool Skip);
+internal readonly struct D3D12FillRectScissorPlan(EffectiveScissor EffectiveScissor, IntegerScissorRect RenderScissor, bool Skip) : IEquatable<D3D12FillRectScissorPlan>
+{
 
-internal readonly record struct D3D12TextClipPlan(EffectiveScissor EffectiveClip, bool ClipEnabled, bool Skip);
+    public EffectiveScissor EffectiveScissor { get; } = EffectiveScissor;
+    public IntegerScissorRect RenderScissor { get; } = RenderScissor;
+    public bool Skip { get; } = Skip;
 
-internal readonly record struct D3D12FillRectScissorDiagnostics(int ClippedCommandCount, int EmptyIntersectionSkippedCount, int ScissorStateChangeCount, EffectiveScissor LastEffectiveScissor);
+    public bool Equals(D3D12FillRectScissorPlan other)
+    {
+        return EffectiveScissor == other.EffectiveScissor
+            && RenderScissor == other.RenderScissor
+            && Skip == other.Skip;
+    }
 
-internal readonly record struct D3D12TextClipDiagnostics(int TextClipSkippedCount, EffectiveScissor LastEffectiveTextClip);
+    public override bool Equals(object? obj) => obj is D3D12FillRectScissorPlan other && Equals(other);
 
-internal readonly record struct D3D12ExecuteCoreResult(
+    public override int GetHashCode() => HashCode.Combine(EffectiveScissor, RenderScissor, Skip);
+
+    public static bool operator ==(D3D12FillRectScissorPlan left, D3D12FillRectScissorPlan right) => left.Equals(right);
+
+    public static bool operator !=(D3D12FillRectScissorPlan left, D3D12FillRectScissorPlan right) => !left.Equals(right);
+}
+
+internal readonly struct D3D12TextClipPlan(EffectiveScissor EffectiveClip, bool ClipEnabled, bool Skip) : IEquatable<D3D12TextClipPlan>
+{
+
+    public EffectiveScissor EffectiveClip { get; } = EffectiveClip;
+    public bool ClipEnabled { get; } = ClipEnabled;
+    public bool Skip { get; } = Skip;
+
+    public bool Equals(D3D12TextClipPlan other)
+    {
+        return EffectiveClip == other.EffectiveClip
+            && ClipEnabled == other.ClipEnabled
+            && Skip == other.Skip;
+    }
+
+    public override bool Equals(object? obj) => obj is D3D12TextClipPlan other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(EffectiveClip, ClipEnabled, Skip);
+
+    public static bool operator ==(D3D12TextClipPlan left, D3D12TextClipPlan right) => left.Equals(right);
+
+    public static bool operator !=(D3D12TextClipPlan left, D3D12TextClipPlan right) => !left.Equals(right);
+}
+
+internal readonly struct D3D12FillRectScissorDiagnostics(int ClippedCommandCount, int EmptyIntersectionSkippedCount, int ScissorStateChangeCount, EffectiveScissor LastEffectiveScissor) : IEquatable<D3D12FillRectScissorDiagnostics>
+{
+
+    public int ClippedCommandCount { get; } = ClippedCommandCount;
+    public int EmptyIntersectionSkippedCount { get; } = EmptyIntersectionSkippedCount;
+    public int ScissorStateChangeCount { get; } = ScissorStateChangeCount;
+    public EffectiveScissor LastEffectiveScissor { get; } = LastEffectiveScissor;
+
+    public bool Equals(D3D12FillRectScissorDiagnostics other)
+    {
+        return ClippedCommandCount == other.ClippedCommandCount
+            && EmptyIntersectionSkippedCount == other.EmptyIntersectionSkippedCount
+            && ScissorStateChangeCount == other.ScissorStateChangeCount
+            && LastEffectiveScissor == other.LastEffectiveScissor;
+    }
+
+    public override bool Equals(object? obj) => obj is D3D12FillRectScissorDiagnostics other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(ClippedCommandCount, EmptyIntersectionSkippedCount, ScissorStateChangeCount, LastEffectiveScissor);
+
+    public static bool operator ==(D3D12FillRectScissorDiagnostics left, D3D12FillRectScissorDiagnostics right) => left.Equals(right);
+
+    public static bool operator !=(D3D12FillRectScissorDiagnostics left, D3D12FillRectScissorDiagnostics right) => !left.Equals(right);
+}
+
+internal readonly struct D3D12TextClipDiagnostics(int TextClipSkippedCount, EffectiveScissor LastEffectiveTextClip) : IEquatable<D3D12TextClipDiagnostics>
+{
+
+    public int TextClipSkippedCount { get; } = TextClipSkippedCount;
+    public EffectiveScissor LastEffectiveTextClip { get; } = LastEffectiveTextClip;
+
+    public bool Equals(D3D12TextClipDiagnostics other)
+    {
+        return TextClipSkippedCount == other.TextClipSkippedCount
+            && LastEffectiveTextClip == other.LastEffectiveTextClip;
+    }
+
+    public override bool Equals(object? obj) => obj is D3D12TextClipDiagnostics other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(TextClipSkippedCount, LastEffectiveTextClip);
+
+    public static bool operator ==(D3D12TextClipDiagnostics left, D3D12TextClipDiagnostics right) => left.Equals(right);
+
+    public static bool operator !=(D3D12TextClipDiagnostics left, D3D12TextClipDiagnostics right) => !left.Equals(right);
+}
+
+internal readonly struct D3D12ExecuteCoreResult(
     D3D12FillRectScissorDiagnostics FillRectDiagnostics,
     D3D12TextClipDiagnostics TextClipDiagnostics,
     bool HasBackgroundColor,
-    DrawColor BackgroundColor);
+    DrawColor BackgroundColor) : IEquatable<D3D12ExecuteCoreResult>
+{
+
+    public D3D12FillRectScissorDiagnostics FillRectDiagnostics { get; } = FillRectDiagnostics;
+    public D3D12TextClipDiagnostics TextClipDiagnostics { get; } = TextClipDiagnostics;
+    public bool HasBackgroundColor { get; } = HasBackgroundColor;
+    public DrawColor BackgroundColor { get; } = BackgroundColor;
+
+    public bool Equals(D3D12ExecuteCoreResult other)
+    {
+        return FillRectDiagnostics == other.FillRectDiagnostics
+            && TextClipDiagnostics == other.TextClipDiagnostics
+            && HasBackgroundColor == other.HasBackgroundColor
+            && BackgroundColor == other.BackgroundColor;
+    }
+
+    public override bool Equals(object? obj) => obj is D3D12ExecuteCoreResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(FillRectDiagnostics, TextClipDiagnostics, HasBackgroundColor, BackgroundColor);
+
+    public static bool operator ==(D3D12ExecuteCoreResult left, D3D12ExecuteCoreResult right) => left.Equals(right);
+
+    public static bool operator !=(D3D12ExecuteCoreResult left, D3D12ExecuteCoreResult right) => !left.Equals(right);
+}
 
 /// <summary>
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
@@ -209,7 +316,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public void BeginFrame(in FrameContext frameContext)
     {
-        _frameContext = frameContext with { Scale = frameContext.Scale.Normalize() };
+        _frameContext = new FrameContext(frameContext.Width, frameContext.Height, frameContext.Scale.Normalize(), frameContext.Timestamp);
         if (!_renderer.BeginFrame())
         {
             throw new InvalidOperationException($"D3D12 begin frame failed: {_renderer.DeviceErrorReason ?? "unknown device error"}");
@@ -331,7 +438,15 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             return style;
         }
 
-        return style with { FontSize = style.FontSize * scale.TextScale };
+        return new TextStyle(
+            style.FontFamily,
+            style.FontSize * scale.TextScale,
+            style.FontWeight,
+            style.FontStyle,
+            style.FontStretch,
+            style.HorizontalAlignment,
+            style.VerticalAlignment,
+            style.Wrapping);
     }
 
     private static DrawCommand ScaleCommandToPhysicalPixels(in DrawCommand command, DisplayScale scale)
