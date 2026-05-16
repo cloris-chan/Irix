@@ -28,7 +28,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     private readonly Dictionary<TextStyle, ResourceHandle> _textStyleHandles = [];
     private bool _sealed;
     private bool _returned;
-    private bool _retained;
+    private int _retainCount;
     private ulong _frameId;
 
     /// <summary>
@@ -68,7 +68,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
                 var instance = Pool.Dequeue();
                 instance._returned = false;
                 instance._sealed = false;
-                instance._retained = false; // defensive: clear stale retain state
+                instance._retainCount = 0; // defensive: clear stale retain state
                 instance._textArena.Reset(); // defensive: ensure arena is unsealed
                 instance._textStyles.Clear();
                 instance._textStyleHandles.Clear();
@@ -92,7 +92,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
 
         // If retained by a RetainedRenderFrame, do not return to pool.
         // The retained frame will Release() when done.
-        if (resources._retained)
+        if (resources._retainCount > 0)
         {
             System.Threading.Interlocked.Increment(ref _retainedReturnSkipCount);
             return;
@@ -131,32 +131,51 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     }
 
     /// <summary>
-    /// Mark this instance as retained by a <see cref="Irix.Rendering.RetainedRenderFrame"/>.
+    /// Mark this instance as retained by an owner such as <see cref="Irix.Rendering.RetainedRenderFrame"/>.
     /// While retained, <see cref="Return"/> is a no-op, preventing the pool from recycling
-    /// the instance while the retained frame still holds TextSlice references into it.
+    /// the instance while any retained frame still holds TextSlice references into it.
     /// </summary>
     internal void Retain()
     {
-        _retained = true;
+        if (_returned)
+        {
+            throw new InvalidOperationException("Cannot retain FrameDrawingResources after it has been returned to the pool.");
+        }
+
+        checked
+        {
+            _retainCount++;
+        }
     }
 
     /// <summary>
-    /// Release the retained claim. If the resources have not already been returned to the pool
-    /// (e.g., by a disposed batch), returns them now.
+    /// Release one retained claim. The final release returns the resources to the pool
+    /// if they have not already been returned.
     /// </summary>
     internal void Release()
     {
-        if (!_retained)
+        if (_retainCount == 0)
         {
             return;
         }
 
-        _retained = false;
+        _retainCount--;
 
-        if (!_returned)
+        if (_retainCount == 0 && !_returned)
         {
             Return(this);
         }
+    }
+
+    internal void Release(ulong expectedFrameId)
+    {
+        if (expectedFrameId != 0 && _frameId != expectedFrameId)
+        {
+            System.Threading.Interlocked.Increment(ref _staleReturnSkipCount);
+            return;
+        }
+
+        Release();
     }
 
     public TextSlice AddText(string? text)
@@ -234,7 +253,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     /// </summary>
     internal void Reset()
     {
-        if (_retained)
+        if (_retainCount > 0)
         {
             throw new InvalidOperationException(
                 "Cannot reset FrameDrawingResources while it is retained by a RetainedRenderFrame. " +
@@ -250,12 +269,12 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
 
     public void Dispose()
     {
-        if (_retained)
+        if (_retainCount > 0)
         {
             // Safety: release retained claim before disposing to avoid pool corruption.
             // This handles the case where a caller disposes resources that are still
             // retained by a RetainedRenderFrame.
-            Release();
+            _retainCount = 0;
         }
 
         _textArena.Dispose();

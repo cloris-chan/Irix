@@ -24,30 +24,57 @@ public readonly record struct HitTestTarget(PixelRectangle Bounds, ActionId Acti
     }
 }
 
-public readonly record struct RenderFrameBatch(
-    DrawCommandBatch Commands,
-    IReadOnlyList<HitTestTarget> HitTargets,
-    IFrameResourceResolver Resources,
-    IReadOnlyList<(int Start, int Count)> DirtyCommandRanges) : IDisposable
+public struct RenderFrameBatch : IDisposable
 {
-    private readonly ulong _resourceFrameId = Resources is FrameDrawingResources resources ? resources.FrameId : 0;
+    private readonly ulong _resourceFrameId;
+    private bool _disposed;
 
-    public RenderFrameBatch(DrawCommandBatch Commands, IReadOnlyList<HitTestTarget> HitTargets)
-        : this(Commands, HitTargets, FrameDrawingResources.Empty, [])
+    public RenderFrameBatch(
+        DrawCommandBatch commands,
+        IReadOnlyList<HitTestTarget> hitTargets,
+        IFrameResourceResolver resources,
+        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges)
+    {
+        Commands = commands;
+        HitTargets = hitTargets;
+        Resources = resources;
+        DirtyCommandRanges = dirtyCommandRanges;
+        _resourceFrameId = resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0;
+
+        if (resources is FrameDrawingResources retainedResources)
+        {
+            retainedResources.Retain();
+        }
+    }
+
+    public RenderFrameBatch(DrawCommandBatch commands, IReadOnlyList<HitTestTarget> hitTargets)
+        : this(commands, hitTargets, FrameDrawingResources.Empty, [])
     {
     }
 
-    public RenderFrameBatch(DrawCommandBatch Commands, IReadOnlyList<HitTestTarget> HitTargets, IFrameResourceResolver Resources)
-        : this(Commands, HitTargets, Resources, [])
+    public RenderFrameBatch(DrawCommandBatch commands, IReadOnlyList<HitTestTarget> hitTargets, IFrameResourceResolver resources)
+        : this(commands, hitTargets, resources, [])
     {
     }
+
+    public DrawCommandBatch Commands { get; }
+    public IReadOnlyList<HitTestTarget> HitTargets { get; }
+    public IFrameResourceResolver Resources { get; }
+    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; }
+    internal readonly ulong ResourceFrameId => _resourceFrameId;
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         Commands.Dispose();
         if (Resources is FrameDrawingResources resources)
         {
-            FrameDrawingResources.Return(resources, _resourceFrameId);
+            resources.Release(_resourceFrameId);
         }
     }
 }

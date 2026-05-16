@@ -18,7 +18,7 @@ public static class VirtualNodeDiffer
         // Empty → something or something → empty: ReplaceRoot
         if (prevEmpty || nextEmpty)
         {
-            if (NodesEqual(prevRoot, nextTree.Root, prevSnapshot, nextSnapshot))
+            if (VirtualNodeStructuralComparer.Equals(prevRoot, nextTree.Root, prevSnapshot, nextSnapshot))
             {
                 return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
             }
@@ -198,14 +198,31 @@ public static class VirtualNodeDiffer
         return true;
     }
 
-    internal static bool NodesEqual(VirtualNode a, VirtualNode b, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    internal static bool ContentEqual(NodeContent a, NodeContent b, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    {
+        if (a == b) return true;
+        if (a.TryGetText(out var aText) && b.TryGetText(out var bText))
+        {
+            if (prevSnapshot is not { } ps || nextSnapshot is not { } ns) return false;
+            var aSpan = ps.ResolveRequired(aText);
+            var bSpan = ns.ResolveRequired(bText);
+            if (aSpan.IsEmpty || bSpan.IsEmpty) return false;
+            return aSpan.SequenceEqual(bSpan);
+        }
+        return false;
+    }
+}
+
+internal static class VirtualNodeStructuralComparer
+{
+    public static bool Equals(VirtualNode a, VirtualNode b, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         if (a.Kind != b.Kind || a.Key != b.Key)
         {
             return false;
         }
 
-        if (!ContentEqual(a.Content, b.Content, prevSnapshot, nextSnapshot))
+        if (!VirtualNodeDiffer.ContentEqual(a.Content, b.Content, prevSnapshot, nextSnapshot))
         {
             return false;
         }
@@ -234,26 +251,12 @@ public static class VirtualNodeDiffer
 
         for (var i = 0; i < aChildren.Length; i++)
         {
-            if (!NodesEqual(aChildren[i], bChildren[i], prevSnapshot, nextSnapshot))
+            if (!Equals(aChildren[i], bChildren[i], prevSnapshot, nextSnapshot))
             {
                 return false;
             }
         }
 
         return true;
-    }
-
-    internal static bool ContentEqual(NodeContent a, NodeContent b, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
-    {
-        if (a == b) return true;
-        if (a.TryGetText(out var aText) && b.TryGetText(out var bText))
-        {
-            if (prevSnapshot is not { } ps || nextSnapshot is not { } ns) return false;
-            var aSpan = ps.ResolveRequired(aText);
-            var bSpan = ns.ResolveRequired(bText);
-            if (aSpan.IsEmpty || bSpan.IsEmpty) return false;
-            return aSpan.SequenceEqual(bSpan);
-        }
-        return false;
     }
 }

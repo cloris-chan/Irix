@@ -214,7 +214,7 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key -> NodeKey) ─
 
-public readonly struct VirtualNodeTree : IEquatable<VirtualNodeTree>
+public readonly struct VirtualNodeTree
 {
     public VirtualNodeTree(VirtualNode root, TextBufferSnapshot textSnapshot = default)
     {
@@ -225,18 +225,9 @@ public readonly struct VirtualNodeTree : IEquatable<VirtualNodeTree>
     public VirtualNode Root { get; }
     public TextBufferSnapshot TextSnapshot { get; }
 
-    public bool Equals(VirtualNodeTree other) => Root == other.Root && TextSnapshot.Equals(other.TextSnapshot);
-
-    public override bool Equals(object? obj) => obj is VirtualNodeTree other && Equals(other);
-
-    public override int GetHashCode() => HashCode.Combine(Root, TextSnapshot);
-
-    public static bool operator ==(VirtualNodeTree left, VirtualNodeTree right) => left.Equals(right);
-
-    public static bool operator !=(VirtualNodeTree left, VirtualNodeTree right) => !left.Equals(right);
 }
 
-public readonly struct VirtualNode : IEquatable<VirtualNode>
+public readonly struct VirtualNode
 {
     private readonly VirtualNodeProperty[]? _properties;
     private readonly VirtualNode[]? _children;
@@ -275,53 +266,17 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
     public ReadOnlySpan<VirtualNodeProperty> Properties => _properties is null ? ReadOnlySpan<VirtualNodeProperty>.Empty : _properties;
     public ReadOnlySpan<VirtualNode> Children => _children is null ? ReadOnlySpan<VirtualNode>.Empty : _children;
 
-    internal static VirtualNode CreateFromOwnedArrays(
+    /// <summary>
+    /// Takes ownership of already validated/frozen arrays without copying them again.
+    /// Callers must not mutate the arrays after this call.
+    /// </summary>
+    internal static VirtualNode CreateFromOwnedArraysUnsafe(
         VirtualNodeKind kind,
         NodeKey key,
         NodeContent content,
         VirtualNodeProperty[] properties,
         VirtualNode[] children) =>
         new(kind, key, content, properties, children);
-
-    public bool Equals(VirtualNode other)
-    {
-        if (Kind != other.Kind || Key != other.Key || Content != other.Content)
-        {
-            return false;
-        }
-
-        if (!PropertiesEqual(Properties, other.Properties))
-        {
-            return false;
-        }
-
-        return ChildrenEqual(Children, other.Children);
-    }
-
-    public override bool Equals(object? obj) => obj is VirtualNode other && Equals(other);
-
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-        hash.Add(Kind);
-        hash.Add(Key);
-        hash.Add(Content);
-        foreach (var property in Properties)
-        {
-            hash.Add(property);
-        }
-
-        foreach (var child in Children)
-        {
-            hash.Add(child);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    public static bool operator ==(VirtualNode left, VirtualNode right) => left.Equals(right);
-
-    public static bool operator !=(VirtualNode left, VirtualNode right) => !left.Equals(right);
 
     private static VirtualNode[] CreateChildren(scoped ReadOnlySpan<VirtualNode> children) =>
         children.IsEmpty ? [] : children.ToArray();
@@ -346,41 +301,6 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
         throw new ArgumentException("Button nodes require an explicit text label child.", nameof(children));
     }
 
-    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> left, ReadOnlySpan<VirtualNodeProperty> right)
-    {
-        if (left.Length != right.Length)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < left.Length; i++)
-        {
-            if (left[i] != right[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool ChildrenEqual(ReadOnlySpan<VirtualNode> left, ReadOnlySpan<VirtualNode> right)
-    {
-        if (left.Length != right.Length)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < left.Length; i++)
-        {
-            if (left[i] != right[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }
 
 public ref struct VirtualNodePropertyListBuilder
@@ -615,7 +535,7 @@ public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 
 // ── VirtualNodePatch ─────────────────────────────────────────────
 
-public readonly struct VirtualNodePatch : IEquatable<VirtualNodePatch>
+public readonly struct VirtualNodePatch
 {
     public VirtualNodePatch(VirtualNodePatchOperation operation, int nodeIndex, VirtualNode node, int screenId = 0)
     {
@@ -632,19 +552,6 @@ public readonly struct VirtualNodePatch : IEquatable<VirtualNodePatch>
 
     public VirtualNodePatch WithScreenId(int screenId) => new(Operation, NodeIndex, Node, screenId);
 
-    public bool Equals(VirtualNodePatch other) =>
-        Operation == other.Operation
-        && NodeIndex == other.NodeIndex
-        && Node == other.Node
-        && ScreenId == other.ScreenId;
-
-    public override bool Equals(object? obj) => obj is VirtualNodePatch other && Equals(other);
-
-    public override int GetHashCode() => HashCode.Combine(Operation, NodeIndex, Node, ScreenId);
-
-    public static bool operator ==(VirtualNodePatch left, VirtualNodePatch right) => left.Equals(right);
-
-    public static bool operator !=(VirtualNodePatch left, VirtualNodePatch right) => !left.Equals(right);
 }
 
 // ── VirtualNodeFactory (R13-6: Text accepts TextNodeContent, R13-19: NodeKey) ──
@@ -668,7 +575,7 @@ public static class VirtualNodeFactory
     {
         var childArray = children.ToArray();
         var propertyArray = VirtualNodePropertySet.Create(kind, properties);
-        return VirtualNode.CreateFromOwnedArrays(kind, key, content, propertyArray, childArray);
+        return VirtualNode.CreateFromOwnedArraysUnsafe(kind, key, content, propertyArray, childArray);
     }
 
     public static VirtualNode Text(TextNodeContent content, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>

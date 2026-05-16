@@ -93,7 +93,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             return new ApplyResult([0], prevRoot, prevSnapshot);
         }
 
-        var appliedRoot = ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty);
+        var appliedRoot = ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty, out _);
         var nextRoot = batch.HasCanonicalRoot
             ? batch.Root
             : appliedRoot;
@@ -115,10 +115,23 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         HashSet<NodeKey> removeKeySet, HashSet<int> removeIndexSet,
         List<int> dirty)
     {
+        return ApplyRecursive(node, currentIndex, updates, adds, removeKeySet, removeIndexSet, dirty, out _);
+    }
+
+    private static VirtualNode ApplyRecursive(
+        VirtualNode node, int currentIndex,
+        Dictionary<int, VirtualNode> updates,
+        Dictionary<int, List<VirtualNode>> adds,
+        HashSet<NodeKey> removeKeySet, HashSet<int> removeIndexSet,
+        List<int> dirty,
+        out bool changed)
+    {
+        changed = false;
         if (updates.Remove(currentIndex, out var replacement))
         {
             dirty.Add(currentIndex);
             node = new VirtualNode(replacement.Kind, replacement.Key, replacement.Content, replacement.Properties, node.Children);
+            changed = true;
         }
 
         var oldChildren = node.Children;
@@ -137,6 +150,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             {
                 newChildren.AddRange(addNodes);
                 dirty.Add(currentIndex);
+                changed = true;
             }
 
             var shouldRemove = (child.Key != NodeKey.None && removeKeySet.Remove(child.Key))
@@ -144,16 +158,20 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             if (shouldRemove)
             {
                 dirty.Add(currentIndex);
+                changed = true;
             }
             else
             {
-                newChildren.Add(ApplyRecursive(child, offset, updates, adds, removeKeySet, removeIndexSet, dirty));
+                var newChild = ApplyRecursive(child, offset, updates, adds, removeKeySet, removeIndexSet, dirty, out var childChanged);
+                newChildren.Add(newChild);
+                changed |= childChanged;
             }
 
             if (adds.Remove(childEnd, out var addAfterNodes))
             {
                 newChildren.AddRange(addAfterNodes);
                 dirty.Add(currentIndex);
+                changed = true;
             }
 
             offset = childEnd;
@@ -169,6 +187,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
                     newChildren.AddRange(kvp.Value);
                     dirty.Add(currentIndex);
                     adds.Remove(kvp.Key);
+                    changed = true;
                 }
             }
 
@@ -177,16 +196,14 @@ public sealed class RetainedTree(VirtualNodeTree tree)
                 dirty.Add(currentIndex);
                 removeKeySet.Clear();
                 removeIndexSet.Clear();
+                changed = true;
             }
         }
 
         if (newChildren.Count != oldChildren.Length)
-            return new VirtualNode(node.Kind, node.Key, node.Content, node.Properties, [.. newChildren]);
-
-        var changed = false;
-        for (var i = 0; i < newChildren.Count; i++)
         {
-            if (newChildren[i] != oldChildren[i]) { changed = true; break; }
+            changed = true;
+            return new VirtualNode(node.Kind, node.Key, node.Content, node.Properties, [.. newChildren]);
         }
 
         return changed

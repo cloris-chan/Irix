@@ -98,7 +98,7 @@ internal static class RetainedRootMetadataPatcher
                 return false;
             }
 
-            if (patchedChildrenArray is null && patchedChild != retainedChildren[i])
+            if (patchedChildrenArray is null && IsShallowNodeReplacement(patchedChild, retainedChildren[i]))
             {
                 patchedChildrenArray = retainedChildren.ToArray();
             }
@@ -250,4 +250,11 @@ internal static class RetainedRootMetadataPatcher
 
         return true;
     }
+
+    private static bool IsShallowNodeReplacement(VirtualNode left, VirtualNode right) =>
+        left.Kind != right.Kind
+        || left.Key != right.Key
+        || left.Content != right.Content
+        || !PropertiesEqual(left.Properties, right.Properties)
+        || left.Children.Length != right.Children.Length;
 }

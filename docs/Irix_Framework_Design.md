@@ -833,9 +833,9 @@ public readonly struct VirtualNodeProperty
 }
 ```
 
-v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 保持普通 `readonly struct`，构造时冻结复制 `Properties` / `Children`，public 读取面是 `ReadOnlySpan<T>`，不为每个 node 生成 `IReadOnlyList` wrapper；它仍可安全进入 retained tree、diff、patch、batch、async 和跨线程边界。`ref struct` 只允许出现在同步构造或读取边界。
+v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 保持普通 `readonly struct`，构造时冻结复制 `Properties` / `Children`，public 读取面是 `ReadOnlySpan<T>`，不为每个 node 生成 `IReadOnlyList` wrapper；它仍可安全进入 retained tree、diff、patch、batch、async 和跨线程边界。`VirtualNode`、`VirtualNodeTree`、`VirtualNodePatch` 不提供 public value equality 或 hash code，避免大树被误放进 dictionary/set 时触发隐式深递归；需要结构比较的框架路径使用 internal `VirtualNodeStructuralComparer.Equals(...)`。`ref struct` 只允许出现在同步构造或读取边界。
 
-> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还资源到池，资源生命周期已显式化。`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new List + ToArray。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。Round 13 已完成 text/value IR：`VirtualNode → LayoutElement → DrawCommandRecorder` 使用 `TextNodeContent + TextBufferSnapshot.ResolveRequired`，不再回退到 string text property。Round 14/15 已完成 typed property metadata 与 API cleanup：`VirtualPropertyKey` 是纯值 key，无 public constructor、无 primitive `ToString()`；`VirtualNodeProperty` constructor 为 private，正常构造只能走 helper；`VirtualNode.Properties` / `Children` 构造时复制并以 `ReadOnlySpan<T>` 暴露；`VirtualNodeKind.None` 是默认 node kind。Round 16 增加 `VirtualNodePropertyListBuilder`、`VirtualNodeChildrenBuilder`（`InlineArray(4)` inline child buffer）、span factory overload、`PropertyReader` 和 `LayoutContext` ref-struct 边界，降低构造/布局读取的中间分配与 interface dispatch。
+> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还资源到池，资源生命周期已显式化。`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new List + ToArray。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。Round 13 已完成 text/value IR：`VirtualNode → LayoutElement → DrawCommandRecorder` 使用 `TextNodeContent + TextBufferSnapshot.ResolveRequired`，不再回退到 string text property。Round 14/15 已完成 typed property metadata 与 API cleanup：`VirtualPropertyKey` 是纯值 key，无 public constructor、无 primitive `ToString()`；`VirtualNodeProperty` constructor 为 private，正常构造只能走 helper；`VirtualNode.Properties` / `Children` 构造时复制并以 `ReadOnlySpan<T>` 暴露；`VirtualNodeKind.None` 是默认 node kind。Round 16 增加 `VirtualNodePropertyListBuilder`、`VirtualNodeChildrenBuilder`（`InlineArray(4)` inline child buffer）、span factory overload、`PropertyReader`、`LayoutContext` ref-struct 边界和显式 structural comparer，降低构造/布局读取的中间分配与 interface dispatch。
 
 #### 6.2.1 `ref struct` boundary
 
@@ -849,6 +849,8 @@ Allowed `ref struct` types:
 | `LayoutContext` | `LayoutTreeBuilder.BuildLayoutTree` synchronous recursion | Carries layout state by ref inside layout recursion only. |
 
 Public authoring helpers may use modern `params scoped ReadOnlySpan<T>` for natural call sites without array `params`. Low-level creation APIs still accept explicit `ReadOnlySpan<VirtualNodeProperty>` / `ReadOnlySpan<VirtualNode>` for builder handoff.
+
+Owned-array construction is intentionally internal and named `CreateFromOwnedArraysUnsafe`: it transfers already validated arrays into `VirtualNode` without another copy. Callers must not mutate those arrays after handoff.
 
 Forbidden `ref struct` locations:
 

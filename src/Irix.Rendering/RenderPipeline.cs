@@ -88,7 +88,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         var hadRetainedLayout = _retainedLayout is not null;
         var classifyOldRoot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? previousRoot : _retainedRoot;
         var classifyOldSnapshot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? prevTextSnapshot : _retainedTextSnapshot;
-        var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(classifyOldRoot, root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
+        var treeChanged = _retainedLayout is null || !VirtualNodeStructuralComparer.Equals(classifyOldRoot, root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
         var dirtyClassifications = hasDirty && hadRetainedLayout
@@ -142,7 +142,9 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         // Falls back to full apply when resources differ or no dirty ranges.
         if (!hasDirty || result.DirtyCommandRanges.Count == 0 || !_retainedFrame.TryApplyPartial(batch))
         {
+            _retainedFrame.ReleaseResources();
             _retainedFrame.ApplyFull(batch);
+            _retainedFrame.RetainResources();
         }
 
         return batch;

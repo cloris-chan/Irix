@@ -617,6 +617,35 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualNode_does_not_expose_deep_value_equality()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
+
+        Assert.DoesNotContain(
+            typeof(VirtualNode).GetInterfaces(),
+            type => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEquatable<>));
+        Assert.DoesNotContain(
+            typeof(VirtualNode).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly),
+            method => method.Name is nameof(Equals) or nameof(GetHashCode));
+        Assert.DoesNotContain("IEquatable<VirtualNode>", source);
+        Assert.DoesNotContain("IEquatable<VirtualNodeTree>", source);
+        Assert.DoesNotContain("IEquatable<VirtualNodePatch>", source);
+        Assert.DoesNotContain("operator ==(VirtualNode ", source);
+        Assert.DoesNotContain("operator !=(VirtualNode ", source);
+        Assert.DoesNotContain("HashCode.Combine(Root", source);
+    }
+
+    [Fact]
+    public void Owned_array_virtual_node_creation_is_marked_unsafe()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
+
+        Assert.Contains("CreateFromOwnedArraysUnsafe", source);
+        Assert.Contains("Callers must not mutate the arrays after this call.", source);
+        Assert.DoesNotContain("CreateFromOwnedArrays(", source);
+    }
+
+    [Fact]
     public void Property_metadata_support_and_diagnostics_are_internal()
     {
         Assert.False(typeof(VirtualPropertyMetadata).IsPublic);

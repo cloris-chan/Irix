@@ -73,7 +73,7 @@ Round 15 hardening state:
 
 - `VirtualNodeKind.None` is the default node kind.
 - `VirtualNode.Properties` and `VirtualNode.Children` are immutable snapshots exposed as `ReadOnlySpan<T>`; no per-node `IReadOnlyList` wrapper is allocated.
-- `VirtualNode.Equals` performs structural comparison, not reference equality.
+- `VirtualNode`, `VirtualNodeTree`, and `VirtualNodePatch` do not expose public value equality; explicit structural comparison is internal.
 - `VirtualNodeProperty` constructor is private; normal construction goes through helpers.
 - `PropertyValue` exposes `TryGetX` and `GetRequiredX`; silent getters were removed.
 - `VirtualNodeFactory.Rectangle(width, height, ...)` was removed; width/height are explicit properties.
@@ -85,6 +85,7 @@ Round 16 construction/layout state:
 - `VirtualNodePropertyListBuilder` is a `ref struct` over caller-provided `Span<VirtualNodeProperty>`; small lists can use `stackalloc`, and callers hand off `Written` to span factories.
 - `VirtualNodeChildrenBuilder` is a `ref struct` with an `InlineArray(4)` child buffer and array fallback beyond inline capacity.
 - `VirtualNodeFactory.Create(...)` accepts `ReadOnlySpan<VirtualNodeProperty>` and `ReadOnlySpan<VirtualNode>` / children builder overloads.
+- Internal owned-array construction is named `CreateFromOwnedArraysUnsafe` and documents the no-mutation ownership handoff.
 - Public authoring helpers use `params scoped ReadOnlySpan<T>`, not array `params`; array `params` is guarded against reintroduction.
 - `LayoutTreeBuilder` reads node properties through internal `PropertyReader` over `VirtualNode.Properties`; `LayoutContext` is a synchronous `ref struct`.
 

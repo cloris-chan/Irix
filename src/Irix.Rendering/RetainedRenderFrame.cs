@@ -22,6 +22,7 @@ internal sealed class RetainedRenderFrame : IDisposable
 {
     private readonly RetainedCommandBuffer _commandBuffer = new();
     private IFrameResourceResolver _resources = FrameDrawingResources.Empty;
+    private ulong _resourceFrameId;
     private HitTestTarget[] _hitTargets = [];
     private IReadOnlyList<(int Start, int Count)> _dirtyCommandRanges = [];
 
@@ -49,6 +50,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     {
         _commandBuffer.ApplyFull(batch.Commands);
         _resources = batch.Resources;
+        _resourceFrameId = batch.ResourceFrameId;
         _hitTargets = [.. batch.HitTargets];
         _dirtyCommandRanges = batch.DirtyCommandRanges;
     }
@@ -74,8 +76,10 @@ internal sealed class RetainedRenderFrame : IDisposable
     {
         if (_resources is FrameDrawingResources fdr)
         {
-            fdr.Release();
+            fdr.Release(_resourceFrameId);
         }
+
+        _resourceFrameId = 0;
     }
 
     /// <summary>
@@ -171,6 +175,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     {
         _commandBuffer.Reset();
         _resources = FrameDrawingResources.Empty;
+        _resourceFrameId = 0;
         _hitTargets = [];
         _dirtyCommandRanges = [];
     }
@@ -180,6 +185,7 @@ internal sealed class RetainedRenderFrame : IDisposable
         _commandBuffer.Dispose();
         ReleaseResources();
         _resources = FrameDrawingResources.Empty;
+        _resourceFrameId = 0;
         _hitTargets = [];
         _dirtyCommandRanges = [];
     }

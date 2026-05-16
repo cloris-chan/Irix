@@ -141,6 +141,26 @@ public sealed class FrameDrawingResourcesTests
     }
 
     [Fact]
+    public void Multiple_retains_require_matching_releases_before_pool_return()
+    {
+        var resources = FrameDrawingResources.Rent();
+        var slice = resources.AddText("multi-retain");
+        resources.Seal();
+
+        resources.Retain();
+        resources.Retain();
+
+        FrameDrawingResources.Return(resources);
+        resources.Release();
+
+        Assert.Equal("multi-retain", resources.Resolve(slice).ToString());
+
+        resources.Release();
+        var recycled = FrameDrawingResources.Rent();
+        FrameDrawingResources.Return(recycled);
+    }
+
+    [Fact]
     public void Release_after_Return_is_noop()
     {
         var resources = FrameDrawingResources.Rent();

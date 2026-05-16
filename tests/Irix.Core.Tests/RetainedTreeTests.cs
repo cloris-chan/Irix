@@ -172,7 +172,7 @@ public sealed class RetainedTreeTests
         Assert.True(batch.HasCanonicalRoot);
         Assert.Equal(0, batch.Count);
         Assert.Empty(result.Dirty);
-        Assert.Equal(next, tree.Tree.Root);
+        Assert.True(VirtualNodeStructuralComparer.Equals(next, tree.Tree.Root, nextSnapshot, tree.Tree.TextSnapshot));
         Assert.Equal(nextSnapshot, tree.Tree.TextSnapshot);
         Assert.Equal("same", tree.Tree.TextSnapshot.ResolveRequired(tree.Tree.Root.Content.TryGetText(out var text) ? text : default).ToString());
     }
@@ -217,7 +217,7 @@ public sealed class RetainedTreeTests
 
         tree.Apply(batch);
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(next, tree.Tree.Root, snapshot, tree.Tree.TextSnapshot));
+        Assert.True(VirtualNodeStructuralComparer.Equals(next, tree.Tree.Root, snapshot, tree.Tree.TextSnapshot));
     }
 
     [Fact]

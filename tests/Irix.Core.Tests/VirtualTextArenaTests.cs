@@ -50,10 +50,10 @@ public sealed class VirtualTextArenaTests
         var next = VirtualNodeBuilder.Text(arena, "same", new NodeKey(1));
         var nextSnapshot = arena.GetOrCreateSnapshot();
 
-        Assert.True(VirtualNodeDiffer.NodesEqual(previous, next, previousSnapshot, nextSnapshot));
+        Assert.True(VirtualNodeStructuralComparer.Equals(previous, next, previousSnapshot, nextSnapshot));
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => VirtualNodeDiffer.NodesEqual(previous, next, nextSnapshot, nextSnapshot));
+            () => VirtualNodeStructuralComparer.Equals(previous, next, nextSnapshot, nextSnapshot));
         Assert.Contains("does not match snapshot buffer id", exception.Message);
     }
 
