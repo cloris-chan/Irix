@@ -63,7 +63,9 @@ internal static class RetainedRootMetadataPatcher
         patchedNode = default;
         reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
 
-        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedNode.Children.Count != nextNode.Children.Count)
+        var retainedChildren = retainedNode.Children;
+        var nextChildren = nextNode.Children;
+        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedChildren.Length != nextChildren.Length)
         {
             return false;
         }
@@ -87,18 +89,18 @@ internal static class RetainedRootMetadataPatcher
         }
 
         dfsIndex++;
-        var patchedChildren = retainedNode.Children;
+        var patchedChildren = retainedChildren;
         VirtualNode[]? patchedChildrenArray = null;
-        for (var i = 0; i < retainedNode.Children.Count; i++)
+        for (var i = 0; i < retainedChildren.Length; i++)
         {
-            if (!TryProject(retainedNode.Children[i], nextNode.Children[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason, snapshot))
+            if (!TryProject(retainedChildren[i], nextChildren[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason, snapshot))
             {
                 return false;
             }
 
-            if (patchedChildrenArray is null && patchedChild != retainedNode.Children[i])
+            if (patchedChildrenArray is null && patchedChild != retainedChildren[i])
             {
-                patchedChildrenArray = retainedNode.Children.ToArray();
+                patchedChildrenArray = retainedChildren.ToArray();
             }
 
             if (patchedChildrenArray is not null)
@@ -121,8 +123,8 @@ internal static class RetainedRootMetadataPatcher
     }
 
     private static bool TryValidateDirtyProperties(
-        IReadOnlyList<VirtualNodeProperty> retainedProperties,
-        IReadOnlyList<VirtualNodeProperty> nextProperties,
+        ReadOnlySpan<VirtualNodeProperty> retainedProperties,
+        ReadOnlySpan<VirtualNodeProperty> nextProperties,
         out RetainedPartialApplyFallbackReason reason)
     {
         reason = RetainedPartialApplyFallbackReason.None;
@@ -151,8 +153,8 @@ internal static class RetainedRootMetadataPatcher
     }
 
     private static bool TryGetChangedPropertyKeys(
-        IReadOnlyList<VirtualNodeProperty> retainedProperties,
-        IReadOnlyList<VirtualNodeProperty> nextProperties,
+        ReadOnlySpan<VirtualNodeProperty> retainedProperties,
+        ReadOnlySpan<VirtualNodeProperty> nextProperties,
         out VirtualPropertyKey[] changedKeys)
     {
         changedKeys = [];
@@ -187,7 +189,7 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool TryValidateNextMetadataProperty(IReadOnlyList<VirtualNodeProperty> properties, VirtualPropertyKey key)
+    private static bool TryValidateNextMetadataProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key)
     {
         if (!TryGetUniqueProperty(properties, key, out var found, out var property))
         {
@@ -208,7 +210,7 @@ internal static class RetainedRootMetadataPatcher
             && property.Value.Kind == metadata.ValueKind;
     }
 
-    private static bool TryGetUniqueProperty(IReadOnlyList<VirtualNodeProperty> properties, VirtualPropertyKey key, out bool found, out VirtualNodeProperty property)
+    private static bool TryGetUniqueProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key, out bool found, out VirtualNodeProperty property)
     {
         found = false;
         property = default;
@@ -231,14 +233,14 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool PropertiesEqual(IReadOnlyList<VirtualNodeProperty> left, IReadOnlyList<VirtualNodeProperty> right)
+    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> left, ReadOnlySpan<VirtualNodeProperty> right)
     {
-        if (left.Count != right.Count)
+        if (left.Length != right.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < left.Count; i++)
+        for (var i = 0; i < left.Length; i++)
         {
             if (left[i] != right[i])
             {

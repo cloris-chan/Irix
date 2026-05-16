@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Irix;
@@ -237,32 +238,15 @@ public readonly struct VirtualNodeTree : IEquatable<VirtualNodeTree>
 
 public readonly struct VirtualNode : IEquatable<VirtualNode>
 {
-    private static readonly VirtualNodeProperty[] EmptyPropertyArray = [];
-    private static readonly VirtualNode[] EmptyChildArray = [];
-    private static readonly IReadOnlyList<VirtualNodeProperty> EmptyProperties = Array.AsReadOnly(EmptyPropertyArray);
-    private static readonly IReadOnlyList<VirtualNode> EmptyChildren = Array.AsReadOnly(EmptyChildArray);
-
     private readonly VirtualNodeProperty[]? _properties;
     private readonly VirtualNode[]? _children;
-    private readonly IReadOnlyList<VirtualNodeProperty>? _propertiesView;
-    private readonly IReadOnlyList<VirtualNode>? _childrenView;
 
     public VirtualNode(
         VirtualNodeKind kind,
         NodeKey key = default,
         NodeContent content = default,
-        IReadOnlyList<VirtualNodeProperty>? properties = null,
-        IReadOnlyList<VirtualNode>? children = null)
-        : this(kind, key, content, VirtualNodePropertySet.Create(kind, properties), CreateChildren(children))
-    {
-    }
-
-    internal VirtualNode(
-        VirtualNodeKind kind,
-        NodeKey key,
-        NodeContent content,
-        scoped ReadOnlySpan<VirtualNodeProperty> properties,
-        scoped ReadOnlySpan<VirtualNode> children)
+        scoped ReadOnlySpan<VirtualNodeProperty> properties = default,
+        scoped ReadOnlySpan<VirtualNode> children = default)
         : this(kind, key, content, VirtualNodePropertySet.Create(kind, properties), CreateChildren(children))
     {
     }
@@ -282,20 +266,14 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
         Content = content;
         _properties = properties.Length == 0 ? null : properties;
         _children = children.Length == 0 ? null : children;
-        _propertiesView = properties.Length == 0 ? null : Array.AsReadOnly(properties);
-        _childrenView = children.Length == 0 ? null : Array.AsReadOnly(children);
         ValidateNodeShape(kind, children);
     }
 
     public VirtualNodeKind Kind { get; }
     public NodeKey Key { get; }
     public NodeContent Content { get; }
-    public IReadOnlyList<VirtualNodeProperty> Properties => _propertiesView ?? EmptyProperties;
-    public IReadOnlyList<VirtualNode> Children => _childrenView ?? EmptyChildren;
-
-    internal ReadOnlySpan<VirtualNodeProperty> PropertiesSpan => _properties is null ? ReadOnlySpan<VirtualNodeProperty>.Empty : _properties;
-
-    internal ReadOnlySpan<VirtualNode> ChildrenSpan => _children is null ? ReadOnlySpan<VirtualNode>.Empty : _children;
+    public ReadOnlySpan<VirtualNodeProperty> Properties => _properties is null ? ReadOnlySpan<VirtualNodeProperty>.Empty : _properties;
+    public ReadOnlySpan<VirtualNode> Children => _children is null ? ReadOnlySpan<VirtualNode>.Empty : _children;
 
     internal static VirtualNode CreateFromOwnedArrays(
         VirtualNodeKind kind,
@@ -345,22 +323,6 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
 
     public static bool operator !=(VirtualNode left, VirtualNode right) => !left.Equals(right);
 
-    private static VirtualNode[] CreateChildren(IReadOnlyList<VirtualNode>? children)
-    {
-        if (children is null || children.Count == 0)
-        {
-            return [];
-        }
-
-        var copy = new VirtualNode[children.Count];
-        for (var i = 0; i < children.Count; i++)
-        {
-            copy[i] = children[i];
-        }
-
-        return copy;
-    }
-
     private static VirtualNode[] CreateChildren(scoped ReadOnlySpan<VirtualNode> children) =>
         children.IsEmpty ? [] : children.ToArray();
 
@@ -384,14 +346,14 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
         throw new ArgumentException("Button nodes require an explicit text label child.", nameof(children));
     }
 
-    private static bool PropertiesEqual(IReadOnlyList<VirtualNodeProperty> left, IReadOnlyList<VirtualNodeProperty> right)
+    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> left, ReadOnlySpan<VirtualNodeProperty> right)
     {
-        if (left.Count != right.Count)
+        if (left.Length != right.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < left.Count; i++)
+        for (var i = 0; i < left.Length; i++)
         {
             if (left[i] != right[i])
             {
@@ -402,14 +364,14 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
         return true;
     }
 
-    private static bool ChildrenEqual(IReadOnlyList<VirtualNode> left, IReadOnlyList<VirtualNode> right)
+    private static bool ChildrenEqual(ReadOnlySpan<VirtualNode> left, ReadOnlySpan<VirtualNode> right)
     {
-        if (left.Count != right.Count)
+        if (left.Length != right.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < left.Count; i++)
+        for (var i = 0; i < left.Length; i++)
         {
             if (left[i] != right[i])
             {
@@ -476,21 +438,13 @@ public ref struct VirtualNodePropertyListBuilder
 
         _properties[_count++] = property;
     }
-
-    public readonly VirtualNodeProperty[] ToArray() => Written.ToArray();
 }
 
-[StructLayout(LayoutKind.Sequential)]
 public ref struct VirtualNodeChildrenBuilder
 {
     private const int InlineCapacity = 4;
 
-    private VirtualNode _child0;
-#pragma warning disable CS0169
-    private VirtualNode _child1;
-    private VirtualNode _child2;
-    private VirtualNode _child3;
-#pragma warning restore CS0169
+    private InlineChildBuffer _inlineChildren;
     private VirtualNode[]? _overflow;
     private int _count;
 
@@ -513,7 +467,7 @@ public ref struct VirtualNodeChildrenBuilder
 
         if (_count < InlineCapacity)
         {
-            InlineChildren[_count++] = child;
+            _inlineChildren[_count++] = child;
             return;
         }
 
@@ -521,7 +475,7 @@ public ref struct VirtualNodeChildrenBuilder
         _overflow![_count++] = child;
     }
 
-    public VirtualNode[] ToArray()
+    internal VirtualNode[] ToArray()
     {
         if (_count == 0)
         {
@@ -535,18 +489,15 @@ public ref struct VirtualNodeChildrenBuilder
             return result;
         }
 
-        InlineChildren[.._count].CopyTo(result);
+        _inlineChildren[.._count].CopyTo(result);
         return result;
     }
 
     private void PromoteToOverflow()
     {
         _overflow = new VirtualNode[InlineCapacity * 2];
-        InlineChildren.CopyTo(_overflow);
+        _inlineChildren[..InlineCapacity].CopyTo(_overflow);
     }
-
-    // VirtualNode contains references, so it cannot be stackalloc'd directly.
-    private Span<VirtualNode> InlineChildren => MemoryMarshal.CreateSpan(ref _child0, InlineCapacity);
 
     private void EnsureOverflowCapacity(int requiredCapacity)
     {
@@ -558,47 +509,16 @@ public ref struct VirtualNodeChildrenBuilder
         var newCapacity = Math.Max(requiredCapacity, _overflow.Length * 2);
         Array.Resize(ref _overflow, newCapacity);
     }
+
+    [InlineArray(InlineCapacity)]
+    private struct InlineChildBuffer
+    {
+        private VirtualNode _element0;
+    }
 }
 
 internal static class VirtualNodePropertySet
 {
-    public static VirtualNodeProperty[] Create(VirtualNodeKind kind, IReadOnlyList<VirtualNodeProperty>? properties)
-    {
-        if (properties is null || properties.Count == 0)
-        {
-            return [];
-        }
-
-        var copy = new VirtualNodeProperty[properties.Count];
-        for (var i = 0; i < properties.Count; i++)
-        {
-            copy[i] = properties[i];
-        }
-
-        for (var i = 0; i < copy.Length; i++)
-        {
-            var property = copy[i];
-            if (!VirtualNodePropertySupport.Supports(kind, property.Key))
-            {
-                throw new ArgumentException(
-                    $"Property {VirtualPropertyDiagnostics.Format(property.Key)} is not supported on {kind}.",
-                    nameof(properties));
-            }
-
-            for (var j = i + 1; j < copy.Length; j++)
-            {
-                if (property.Key == copy[j].Key)
-                {
-                    throw new ArgumentException(
-                        $"Duplicate property {VirtualPropertyDiagnostics.Format(property.Key)} on {kind}.",
-                        nameof(properties));
-                }
-            }
-        }
-
-        return copy;
-    }
-
     public static VirtualNodeProperty[] Create(VirtualNodeKind kind, scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         if (properties.IsEmpty)

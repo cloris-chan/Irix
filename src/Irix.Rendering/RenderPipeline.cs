@@ -229,14 +229,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             : new DirtyNodeClassification(LayoutRebuildReason.LayoutAffecting, InvalidationKind.Layout);
     }
 
-    private static DirtyNodeClassification ClassifyPropertyChanges(IReadOnlyList<VirtualNodeProperty> previousProperties, IReadOnlyList<VirtualNodeProperty> nextProperties)
+    private static DirtyNodeClassification ClassifyPropertyChanges(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)
     {
         var changeSet = GetChangedPropertySet(previousProperties, nextProperties);
         var invalidationKind = changeSet.ClassifySet();
         return new DirtyNodeClassification(invalidationKind.ToLayoutRebuildReason(), invalidationKind);
     }
 
-    private static PropertyChangeSet GetChangedPropertySet(IReadOnlyList<VirtualNodeProperty> previousProperties, IReadOnlyList<VirtualNodeProperty> nextProperties)
+    private static PropertyChangeSet GetChangedPropertySet(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)
     {
         var changeSet = default(PropertyChangeSet);
 
@@ -260,7 +260,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return changeSet;
     }
 
-    private static bool TryFindProperty(IReadOnlyList<VirtualNodeProperty> properties, VirtualPropertyKey key, out VirtualNodeProperty property)
+    private static bool TryFindProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key, out VirtualNodeProperty property)
     {
         foreach (var candidate in properties)
         {
@@ -275,14 +275,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return false;
     }
 
-    private static bool PropertiesEqual(IReadOnlyList<VirtualNodeProperty> previousProperties, IReadOnlyList<VirtualNodeProperty> nextProperties)
+    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)
     {
-        if (previousProperties.Count != nextProperties.Count)
+        if (previousProperties.Length != nextProperties.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < previousProperties.Count; i++)
+        for (var i = 0; i < previousProperties.Length; i++)
         {
             if (previousProperties[i] != nextProperties[i])
             {
@@ -293,14 +293,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return true;
     }
 
-    private static bool ChildrenShapeChanged(IReadOnlyList<VirtualNode> previousChildren, IReadOnlyList<VirtualNode> nextChildren)
+    private static bool ChildrenShapeChanged(ReadOnlySpan<VirtualNode> previousChildren, ReadOnlySpan<VirtualNode> nextChildren)
     {
-        if (previousChildren.Count != nextChildren.Count)
+        if (previousChildren.Length != nextChildren.Length)
         {
             return true;
         }
 
-        for (var i = 0; i < previousChildren.Count; i++)
+        for (var i = 0; i < previousChildren.Length; i++)
         {
             if (previousChildren[i].Kind != nextChildren[i].Kind || previousChildren[i].Key != nextChildren[i].Key)
             {

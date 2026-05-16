@@ -47,8 +47,8 @@ public static class VirtualNodeDiffer
     {
         var root = tree.Root;
         return root.Kind == VirtualNodeKind.None && root.Key == NodeKey.None && root.Content == default
-            && root.Properties.Count == 0
-            && root.Children.Count == 0;
+            && root.Properties.Length == 0
+            && root.Children.Length == 0;
     }
 
     private static void DiffNode(VirtualNode oldNode, VirtualNode newNode, int nodeIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot = null, TextBufferSnapshot? nextSnapshot = null)
@@ -73,14 +73,14 @@ public static class VirtualNodeDiffer
         DiffChildren(oldNode.Children, newNode.Children, nodeIndex, patches, prevSnapshot, nextSnapshot);
     }
 
-    private static void DiffChildren(IReadOnlyList<VirtualNode> oldChildren, IReadOnlyList<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static void DiffChildren(ReadOnlySpan<VirtualNode> oldChildren, ReadOnlySpan<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         // Fast path: both empty
-        if (oldChildren.Count == 0 && newChildren.Count == 0) return;
+        if (oldChildren.Length == 0 && newChildren.Length == 0) return;
 
         // Check if children use keys
         var hasKeys = false;
-        for (var i = 0; i < newChildren.Count; i++)
+        for (var i = 0; i < newChildren.Length; i++)
         {
             if (newChildren[i].Key != NodeKey.None)
             {
@@ -100,9 +100,9 @@ public static class VirtualNodeDiffer
         DiffChildrenByKeyed(oldChildren, newChildren, parentIndex, patches, prevSnapshot, nextSnapshot);
     }
 
-    private static void DiffChildrenByIndex(IReadOnlyList<VirtualNode> oldChildren, IReadOnlyList<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static void DiffChildrenByIndex(ReadOnlySpan<VirtualNode> oldChildren, ReadOnlySpan<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
-        var minLen = Math.Min(oldChildren.Count, newChildren.Count);
+        var minLen = Math.Min(oldChildren.Length, newChildren.Length);
         var childOffset = 0;
 
         // Diff common children
@@ -114,25 +114,25 @@ public static class VirtualNodeDiffer
         }
 
         // Remove extra old children
-        for (var i = minLen; i < oldChildren.Count; i++)
+        for (var i = minLen; i < oldChildren.Length; i++)
         {
             patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Remove, parentIndex + 1 + childOffset, oldChildren[i]));
             childOffset += CountNodes(oldChildren[i]);
         }
 
         // Add new children
-        for (var i = minLen; i < newChildren.Count; i++)
+        for (var i = minLen; i < newChildren.Length; i++)
         {
             patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Add, parentIndex + 1 + childOffset, newChildren[i]));
             childOffset += CountNodes(newChildren[i]);
         }
     }
 
-    private static void DiffChildrenByKeyed(IReadOnlyList<VirtualNode> oldChildren, IReadOnlyList<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static void DiffChildrenByKeyed(ReadOnlySpan<VirtualNode> oldChildren, ReadOnlySpan<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         // Build key → index map for old children
-        var oldKeyMap = new Dictionary<NodeKey, int>(oldChildren.Count);
-        for (var i = 0; i < oldChildren.Count; i++)
+        var oldKeyMap = new Dictionary<NodeKey, int>(oldChildren.Length);
+        for (var i = 0; i < oldChildren.Length; i++)
         {
             if (oldChildren[i].Key != NodeKey.None)
             {
@@ -141,7 +141,7 @@ public static class VirtualNodeDiffer
         }
 
         var childOffset = 0;
-        for (var i = 0; i < newChildren.Count; i++)
+        for (var i = 0; i < newChildren.Length; i++)
         {
             var newChild = newChildren[i];
             var childIndex = parentIndex + 1 + childOffset;
@@ -162,12 +162,12 @@ public static class VirtualNodeDiffer
 
         // Remove old children whose keys are not in new
         var newKeySet = new HashSet<NodeKey>();
-        for (var i = 0; i < newChildren.Count; i++)
+        for (var i = 0; i < newChildren.Length; i++)
         {
             if (newChildren[i].Key != NodeKey.None) newKeySet.Add(newChildren[i].Key);
         }
 
-        for (var i = 0; i < oldChildren.Count; i++)
+        for (var i = 0; i < oldChildren.Length; i++)
         {
             if (oldChildren[i].Key != NodeKey.None && !newKeySet.Contains(oldChildren[i].Key))
             {
@@ -181,17 +181,17 @@ public static class VirtualNodeDiffer
     {
         var count = 1;
         var children = node.Children;
-        for (var i = 0; i < children.Count; i++)
+        for (var i = 0; i < children.Length; i++)
         {
             count += CountNodes(children[i]);
         }
         return count;
     }
 
-    private static bool PropertiesEqual(IReadOnlyList<VirtualNodeProperty> a, IReadOnlyList<VirtualNodeProperty> b)
+    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> a, ReadOnlySpan<VirtualNodeProperty> b)
     {
-        if (a.Count != b.Count) return false;
-        for (var i = 0; i < a.Count; i++)
+        if (a.Length != b.Length) return false;
+        for (var i = 0; i < a.Length; i++)
         {
             if (a[i] != b[i]) return false;
         }
@@ -212,12 +212,12 @@ public static class VirtualNodeDiffer
 
         var aProperties = a.Properties;
         var bProperties = b.Properties;
-        if (aProperties.Count != bProperties.Count)
+        if (aProperties.Length != bProperties.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < aProperties.Count; i++)
+        for (var i = 0; i < aProperties.Length; i++)
         {
             if (aProperties[i] != bProperties[i])
             {
@@ -227,12 +227,12 @@ public static class VirtualNodeDiffer
 
         var aChildren = a.Children;
         var bChildren = b.Children;
-        if (aChildren.Count != bChildren.Count)
+        if (aChildren.Length != bChildren.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < aChildren.Count; i++)
+        for (var i = 0; i < aChildren.Length; i++)
         {
             if (!NodesEqual(aChildren[i], bChildren[i], prevSnapshot, nextSnapshot))
             {

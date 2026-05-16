@@ -137,7 +137,7 @@ public class TypedIdAllocationGuardTests
 
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1), ReadOnlySpan<VirtualNodeProperty>.Empty, ref children);
 
-        Assert.Equal(6, root.Children.Count);
+        Assert.Equal(6, root.Children.Length);
         Assert.Equal(new NodeKey(10), root.Children[0].Key);
         Assert.Equal(new NodeKey(15), root.Children[5].Key);
     }
@@ -150,7 +150,7 @@ public class TypedIdAllocationGuardTests
 
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1), ReadOnlySpan<VirtualNodeProperty>.Empty, ref children);
 
-        Assert.Single(root.Children);
+        Assert.Equal(1, root.Children.Length);
         Assert.Equal(new NodeKey(10), root.Children[0].Key);
     }
 
@@ -589,6 +589,31 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("params VirtualNode[]", source);
         Assert.Contains("params scoped ReadOnlySpan<VirtualNodeProperty>", source);
         Assert.Contains("params scoped ReadOnlySpan<VirtualNode>", source);
+    }
+
+    [Fact]
+    public void VirtualNode_exposes_span_snapshots_without_readonly_list_wrappers()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
+
+        Assert.Contains("public ReadOnlySpan<VirtualNodeProperty> Properties", source);
+        Assert.Contains("public ReadOnlySpan<VirtualNode> Children", source);
+        Assert.DoesNotContain("IReadOnlyList<VirtualNodeProperty>", source);
+        Assert.DoesNotContain("IReadOnlyList<VirtualNode>", source);
+        Assert.DoesNotContain("Array.AsReadOnly", source);
+        Assert.DoesNotContain("_propertiesView", source);
+        Assert.DoesNotContain("_childrenView", source);
+    }
+
+    [Fact]
+    public void VirtualNode_builders_keep_inline_and_freezing_boundaries_internal()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
+
+        Assert.Contains("[InlineArray(InlineCapacity)]", source);
+        Assert.DoesNotContain("MemoryMarshal.CreateSpan", source);
+        Assert.DoesNotContain("public readonly VirtualNodeProperty[] ToArray", source);
+        Assert.Contains("internal VirtualNode[] ToArray()", source);
     }
 
     [Fact]

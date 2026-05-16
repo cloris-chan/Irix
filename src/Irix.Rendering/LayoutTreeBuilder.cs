@@ -97,7 +97,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var containerClipWidth = isRootContainer ? ctx.AvailableWidth + (ctx.Style.HorizontalPadding * 2) : ctx.AvailableWidth;
 
                 var implicitVisibleHeight = ctx.ResolveImplicitVisibleHeight(contentTop);
-                var properties = new PropertyReader(node.PropertiesSpan);
+                var properties = new PropertyReader(node.Properties);
                 var explicitHeight = ReadInt(properties, VirtualPropertyKey.Height, 0);
                 var containerVisibleHeight = explicitHeight > 0
                     ? Math.Min(explicitHeight, implicitVisibleHeight)
@@ -117,7 +117,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 childCtx.Depth = ctx.Depth + 1;
                 childCtx.ClipBounds = containerClip;
                 cursorY = contentTop;
-                foreach (var child in node.ChildrenSpan)
+                foreach (var child in node.Children)
                 {
                     children.AddRange(LayoutNode(child, childDfsIndex, ref cursorY, elements, ref childCtx));
                     childDfsIndex += CountVirtualNodes(child);
@@ -125,7 +125,6 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var contentHeight = Math.Max(cursorY - contentTop, 0);
 
                 var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
-                properties = new PropertyReader(node.PropertiesSpan);
                 var scrollY = Math.Clamp(ReadInt(properties, VirtualPropertyKey.ScrollY, 0), 0, maxScrollY);
 
                 if (scrollY > 0)
@@ -194,11 +193,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
             case VirtualNodeKind.Rectangle:
             {
+                var properties = new PropertyReader(node.Properties);
                 var rectangleBounds = new PixelRectangle(
                     ctx.Style.HorizontalPadding,
                     cursorY,
-                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Width, Math.Min(ctx.AvailableWidth, 160)),
-                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Height, ctx.Style.RectangleHeight));
+                    ReadInt(properties, VirtualPropertyKey.Width, Math.Min(ctx.AvailableWidth, 160)),
+                    ReadInt(properties, VirtualPropertyKey.Height, ctx.Style.RectangleHeight));
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: ctx.ClipBounds));
                 cursorY += rectangleBounds.Height + ctx.Style.ItemSpacing;
@@ -217,12 +217,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var width = Math.Min(ctx.AvailableWidth, Math.Max(
                     ctx.Style.MinimumButtonWidth,
                     labelLength * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
+                var properties = new PropertyReader(node.Properties);
                 var bounds = new PixelRectangle(
                     ctx.Style.HorizontalPadding,
                     cursorY,
-                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Width, width),
-                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Height, ctx.Style.ButtonHeight));
-                var properties = new PropertyReader(node.PropertiesSpan);
+                    ReadInt(properties, VirtualPropertyKey.Width, width),
+                    ReadInt(properties, VirtualPropertyKey.Height, ctx.Style.ButtonHeight));
                 var actionId = properties.GetActionId(VirtualPropertyKey.ActionId);
                 var buttonState = new ButtonVisualState(
                     IsHovered: properties.GetBool(VirtualPropertyKey.IsHovered),
@@ -277,7 +277,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     private static int CountVirtualNodes(VirtualNode node)
     {
         var count = 1;
-        foreach (var child in node.ChildrenSpan)
+        foreach (var child in node.Children)
         {
             count += CountVirtualNodes(child);
         }
@@ -286,7 +286,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
     private static TextNodeContent GetButtonLabel(VirtualNode node)
     {
-        foreach (var child in node.ChildrenSpan)
+        foreach (var child in node.Children)
         {
             if (child.Kind == VirtualNodeKind.Text)
             {

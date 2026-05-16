@@ -424,7 +424,7 @@ public sealed class CounterInputRouterTests
         Assert.True(GetBooleanProperty(button, VirtualPropertyKey.IsHovered));
         Assert.True(GetBooleanProperty(button, VirtualPropertyKey.IsPressed));
         Assert.True(GetBooleanProperty(button, VirtualPropertyKey.IsFocused));
-        Assert.DoesNotContain(button.Properties, property => VirtualPropertyDiagnostics.Format(property.Key) == "IsEnabled");
+        Assert.False(ContainsProperty(button.Properties, property => VirtualPropertyDiagnostics.Format(property.Key) == "IsEnabled"));
     }
 
     [Fact]
@@ -1024,6 +1024,19 @@ public sealed class CounterInputRouterTests
             if (property.Key == key)
             {
                 return property.Value.GetRequiredBoolean();
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsProperty(ReadOnlySpan<VirtualNodeProperty> properties, Func<VirtualNodeProperty, bool> predicate)
+    {
+        foreach (var property in properties)
+        {
+            if (predicate(property))
+            {
+                return true;
             }
         }
 

@@ -629,21 +629,21 @@ public sealed class ProgramDiagnosticsTests
 
         var tree = app.BuildView(model);
 
-        Assert.Contains(tree.Root.Children, node =>
+        Assert.True(ContainsNode(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && ResolveNodeText(app._arena, node.Content) == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0");
-        Assert.Contains(tree.Root.Children, node =>
+            && ResolveNodeText(app._arena, node.Content) == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0"));
+        Assert.True(ContainsNode(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && ResolveNodeText(app._arena, node.Content) == "ScrollY: applied=0 target=0.0 pos=0.00 max=unknown acc=0.000 anim=False pendingPx=0 drained=0 frames=0 waitMs=0.0 dt=0.000 frameQueued=False tickLoop=False");
-        Assert.Contains(tree.Root.Children, node =>
+            && ResolveNodeText(app._arena, node.Content) == "ScrollY: applied=0 target=0.0 pos=0.00 max=unknown acc=0.000 anim=False pendingPx=0 drained=0 frames=0 waitMs=0.0 dt=0.000 frameQueued=False tickLoop=False"));
+        Assert.True(ContainsNode(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && ResolveNodeText(app._arena, node.Content) == "ClipMode: Diagnostic");
-        Assert.Contains(tree.Root.Children, node =>
+            && ResolveNodeText(app._arena, node.Content) == "ClipMode: Diagnostic"));
+        Assert.True(ContainsNode(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && ResolveNodeText(app._arena, node.Content) == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly");
-        Assert.Contains(tree.Root.Children, node =>
+            && ResolveNodeText(app._arena, node.Content) == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly"));
+        Assert.True(ContainsNode(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && ResolveNodeText(app._arena, node.Content) == "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=5");
+            && ResolveNodeText(app._arena, node.Content) == "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=5"));
     }
 
     #endregion
@@ -696,4 +696,17 @@ public sealed class ProgramDiagnosticsTests
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
+
+    private static bool ContainsNode(ReadOnlySpan<VirtualNode> nodes, Func<VirtualNode, bool> predicate)
+    {
+        foreach (var node in nodes)
+        {
+            if (predicate(node))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

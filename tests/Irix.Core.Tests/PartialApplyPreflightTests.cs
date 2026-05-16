@@ -2757,7 +2757,7 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, acceptedResult.Kind);
         Assert.Equal(VirtualNodeKind.ScrollContainer, beforeRoot.Kind);
-        Assert.Equal(2, beforeRoot.Children.Count);
+        Assert.Equal(2, beforeRoot.Children.Length);
         Assert.Equal(new ActionId(4), GetSingleProperty(beforeRoot.Children[1], VirtualPropertyKey.ActionId).Value.GetRequiredActionId());
         AssertBooleanProperty(beforeRoot.Children[1], VirtualPropertyKey.IsHovered, true);
         var beforeHitTarget = Assert.Single(beforeHitTargets);

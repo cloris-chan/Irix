@@ -582,7 +582,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(frame.HitTargets, snapshot.HitTargets);
         Assert.Equal(root.Kind, snapshot.RetainedRoot.Kind);
         Assert.Equal(root.Key, snapshot.RetainedRoot.Key);
-        Assert.Equal(root.Children.Count, snapshot.RetainedRoot.Children.Count);
+        Assert.Equal(root.Children.Length, snapshot.RetainedRoot.Children.Length);
         Assert.Equal(viewport, snapshot.Viewport);
         Assert.Empty(snapshot.DirtyClassifications);
         Assert.Empty(snapshot.DirtyElementRanges);

@@ -67,14 +67,14 @@ internal static class HitTargetMetadataProjector
     private static bool TryCollectActionNodes(VirtualNode retainedNode, VirtualNode nextNode, ref int dfsIndex, List<ActionNodeMetadata> actionNodes)
     {
         var currentIndex = dfsIndex;
-        var retainedChildren = retainedNode.ChildrenSpan;
-        var nextChildren = nextNode.ChildrenSpan;
+        var retainedChildren = retainedNode.Children;
+        var nextChildren = nextNode.Children;
         if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedChildren.Length != nextChildren.Length)
         {
             return false;
         }
 
-        var reader = new PropertyReader(nextNode.PropertiesSpan);
+        var reader = new PropertyReader(nextNode.Properties);
         var actionId = reader.GetActionId(VirtualPropertyKey.ActionId);
         if (nextNode.Kind == VirtualNodeKind.Button && !actionId.IsNone)
         {

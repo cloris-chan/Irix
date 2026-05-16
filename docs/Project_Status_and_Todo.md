@@ -72,7 +72,7 @@ Current exclusions:
 Round 15 hardening state:
 
 - `VirtualNodeKind.None` is the default node kind.
-- `VirtualNode.Properties` and `VirtualNode.Children` are immutable snapshots exposed as read-only lists.
+- `VirtualNode.Properties` and `VirtualNode.Children` are immutable snapshots exposed as `ReadOnlySpan<T>`; no per-node `IReadOnlyList` wrapper is allocated.
 - `VirtualNode.Equals` performs structural comparison, not reference equality.
 - `VirtualNodeProperty` constructor is private; normal construction goes through helpers.
 - `PropertyValue` exposes `TryGetX` and `GetRequiredX`; silent getters were removed.
@@ -82,11 +82,11 @@ Round 15 hardening state:
 Round 16 construction/layout state:
 
 - `VirtualNode` remains a normal `readonly struct`; it is safe for retained/diff/patch/batch storage.
-- `VirtualNodePropertyListBuilder` is a `ref struct` over caller-provided `Span<VirtualNodeProperty>`; small lists can use `stackalloc`.
-- `VirtualNodeChildrenBuilder` is a `ref struct` with inline child storage and array fallback beyond inline capacity.
+- `VirtualNodePropertyListBuilder` is a `ref struct` over caller-provided `Span<VirtualNodeProperty>`; small lists can use `stackalloc`, and callers hand off `Written` to span factories.
+- `VirtualNodeChildrenBuilder` is a `ref struct` with an `InlineArray(4)` child buffer and array fallback beyond inline capacity.
 - `VirtualNodeFactory.Create(...)` accepts `ReadOnlySpan<VirtualNodeProperty>` and `ReadOnlySpan<VirtualNode>` / children builder overloads.
 - Public authoring helpers use `params scoped ReadOnlySpan<T>`, not array `params`; array `params` is guarded against reintroduction.
-- `LayoutTreeBuilder` reads node properties through internal `PropertyReader` over `PropertiesSpan`; `LayoutContext` is a synchronous `ref struct`.
+- `LayoutTreeBuilder` reads node properties through internal `PropertyReader` over `VirtualNode.Properties`; `LayoutContext` is a synchronous `ref struct`.
 
 ---
 
@@ -100,20 +100,16 @@ dotnet test tests/Irix.Core.Tests/Irix.Core.Tests.csproj --no-restore
 dotnet test Irix.slnx --no-restore
 ```
 
-Result: 568 tests passed.
+Result: 571 tests passed.
 
 Round 16 allocation probes:
 
 ```text
 5,000 BuildView -> diff -> layout -> record iterations
-inline helper path: 1,833,248 bytes
-builder/span path: 1,835,536 bytes
-delta: within 128 KB parity guard
+inline helper path vs builder/span path: within 128 KB parity guard
 
 5,000 authoring-only VirtualNode iterations
-inline helper path: 2,000,080 bytes
-builder/span path: 2,000,080 bytes
-delta: 0 bytes
+inline helper path vs builder/span path: within 128 KB parity guard
 ```
 
 Source guards currently block:

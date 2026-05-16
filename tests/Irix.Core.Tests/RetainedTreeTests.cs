@@ -56,7 +56,7 @@ public sealed class RetainedTreeTests
 
         // Verify tree structure
         var tree = new RetainedTree(new VirtualNodeTree(root));
-        Assert.Single(tree.Tree.Root.Children);
+        Assert.Equal(1, tree.Tree.Root.Children.Length);
         Assert.Equal(VirtualNodeKind.Text, tree.Tree.Root.Children[0].Kind);
 
         // Verify CountNodes
@@ -67,8 +67,8 @@ public sealed class RetainedTreeTests
         var dirty = tree.Apply(batch).Dirty;
 
         var rootResult = tree.Tree.Root;
-        Assert.True(rootResult.Children.Count >= 2,
-            $"Expected �? children, got {rootResult.Children.Count}. dirty=[{string.Join(",", dirty)}]");
+        Assert.True(rootResult.Children.Length >= 2,
+            $"Expected �? children, got {rootResult.Children.Length}. dirty=[{string.Join(",", dirty)}]");
         Assert.Equal("a", ResolveNodeText(_arena, rootResult.Children[0].Content));
         Assert.Equal("b", ResolveNodeText(_arena, rootResult.Children[1].Content));
     }
@@ -86,7 +86,7 @@ public sealed class RetainedTreeTests
 
         var dirty = tree.Apply(batch).Dirty;
 
-        Assert.Single(tree.Tree.Root.Children);
+        Assert.Equal(1, tree.Tree.Root.Children.Length);
         Assert.Equal("keep", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
         Assert.Contains(0, dirty);
     }
@@ -132,8 +132,8 @@ public sealed class RetainedTreeTests
 
         var dirty = tree.Apply(batch).Dirty;
 
-        Assert.True(tree.Tree.Root.Children.Count == 3,
-            $"Expected 3 children, got {tree.Tree.Root.Children.Count}. dirty=[{string.Join(",", dirty)}]");
+        Assert.True(tree.Tree.Root.Children.Length == 3,
+            $"Expected 3 children, got {tree.Tree.Root.Children.Length}. dirty=[{string.Join(",", dirty)}]");
         Assert.Equal("A", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
         Assert.Equal("b", ResolveNodeText(_arena, tree.Tree.Root.Children[1].Content));
         Assert.Equal("c", ResolveNodeText(_arena, tree.Tree.Root.Children[2].Content));
@@ -194,7 +194,7 @@ public sealed class RetainedTreeTests
 
         Assert.False(batch.HasCanonicalRoot);
         Assert.Equal(new NodeKey(1), tree.Tree.Root.Key);
-        Assert.Single(tree.Tree.Root.Children);
+        Assert.Equal(1, tree.Tree.Root.Children.Length);
         Assert.Equal("after", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
     }
 
@@ -243,11 +243,11 @@ public sealed class RetainedTreeTests
         // After apply: "b" (key 20) is removed, "d" (key 40) is added.
         // The result should have the correct set of children (by key).
         var result = tree.Tree.Root;
-        Assert.Equal(3, result.Children.Count);
-        Assert.Contains(result.Children, c => c.Key == 10);  // "a"
-        Assert.Contains(result.Children, c => c.Key == 30);  // "c"
-        Assert.Contains(result.Children, c => c.Key == 40);  // "d"
-        Assert.DoesNotContain(result.Children, c => c.Key == 20);  // "b" removed
+        Assert.Equal(3, result.Children.Length);
+        Assert.True(ContainsChildKey(result.Children, new NodeKey(10)));  // "a"
+        Assert.True(ContainsChildKey(result.Children, new NodeKey(30)));  // "c"
+        Assert.True(ContainsChildKey(result.Children, new NodeKey(40)));  // "d"
+        Assert.False(ContainsChildKey(result.Children, new NodeKey(20)));  // "b" removed
     }
 
     [Fact]
@@ -338,4 +338,17 @@ public sealed class RetainedTreeTests
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
+
+    private static bool ContainsChildKey(ReadOnlySpan<VirtualNode> children, NodeKey key)
+    {
+        foreach (var child in children)
+        {
+            if (child.Key == key)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
