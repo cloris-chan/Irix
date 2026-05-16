@@ -12,7 +12,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 ## Priority Tiers
 
-### P0 — Completed Default-On / GA Gates
+### P0 — Completed Partial-Apply / GA Gates
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
