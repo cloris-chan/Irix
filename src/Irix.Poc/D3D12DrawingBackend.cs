@@ -12,6 +12,12 @@ internal readonly record struct D3D12FillRectScissorDiagnostics(int ClippedComma
 
 internal readonly record struct D3D12TextClipDiagnostics(int TextClipSkippedCount, EffectiveScissor LastEffectiveTextClip);
 
+internal readonly record struct D3D12ExecuteCoreResult(
+    D3D12FillRectScissorDiagnostics FillRectDiagnostics,
+    D3D12TextClipDiagnostics TextClipDiagnostics,
+    bool HasBackgroundColor,
+    DrawColor BackgroundColor);
+
 /// <summary>
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
@@ -95,7 +101,11 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return new D3D12TextClipPlan(effectiveClip, effectiveClip.Bounds != viewport, false);
     }
 
-    internal static D3D12FillRectScissorDiagnostics ComputeFillRectScissorDiagnostics(DrawingBackendClipMode clipMode, in DrawRect viewport, ReadOnlySpan<DrawCommand> commands)
+    internal static D3D12FillRectScissorDiagnostics ComputeFillRectScissorDiagnostics(
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        ReadOnlySpan<DrawCommand> commands,
+        DisplayScale scale = default)
     {
         var clippedCommandCount = 0;
         var emptyIntersectionSkippedCount = 0;
@@ -104,8 +114,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         var previousScissor = IntegerScissorRect.Empty;
         var lastEffectiveScissor = EffectiveScissor.Empty;
 
-        foreach (var command in commands)
+        foreach (var logicalCommand in commands)
         {
+            var command = ScaleCommandToPhysicalPixels(logicalCommand, scale);
             if (command.ClipBounds.Width > 0 && command.ClipBounds.Height > 0)
             {
                 clippedCommandCount++;
@@ -135,13 +146,18 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return new D3D12FillRectScissorDiagnostics(clippedCommandCount, emptyIntersectionSkippedCount, scissorStateChangeCount, lastEffectiveScissor);
     }
 
-    internal static D3D12TextClipDiagnostics ComputeTextClipDiagnostics(DrawingBackendClipMode clipMode, in DrawRect viewport, ReadOnlySpan<DrawCommand> commands)
+    internal static D3D12TextClipDiagnostics ComputeTextClipDiagnostics(
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        ReadOnlySpan<DrawCommand> commands,
+        DisplayScale scale = default)
     {
         var textClipSkippedCount = 0;
         var lastEffectiveTextClip = EffectiveScissor.Empty;
 
-        foreach (var command in commands)
+        foreach (var logicalCommand in commands)
         {
+            var command = ScaleCommandToPhysicalPixels(logicalCommand, scale);
             if (command.Kind != DrawCommandKind.DrawTextRun)
             {
                 continue;
@@ -178,38 +194,59 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
     {
         _resources = resources;
-        var physicalCommands = GetPhysicalCommands(commands, _frameContext.Scale);
         var viewportWidth = _renderer.Width;
         var viewportHeight = _renderer.Height;
         var viewport = new DrawRect(0, 0, viewportWidth, viewportHeight);
-        var diagnostics = ComputeFillRectScissorDiagnostics(ClipMode, viewport, physicalCommands);
-        var textDiagnostics = ComputeTextClipDiagnostics(ClipMode, viewport, physicalCommands);
-        _clippedCommandCount = diagnostics.ClippedCommandCount;
-        _emptyIntersectionSkippedCount = diagnostics.EmptyIntersectionSkippedCount;
-        _scissorStateChangeCount = diagnostics.ScissorStateChangeCount;
-        _lastEffectiveScissor = diagnostics.LastEffectiveScissor;
-        _textClipSkippedCount = textDiagnostics.TextClipSkippedCount;
-        _lastEffectiveTextClip = textDiagnostics.LastEffectiveTextClip;
+        var result = ExecuteCore(ClipMode, viewport, commands, resources, _frameContext.Scale, _rects, _texts);
+        _clippedCommandCount = result.FillRectDiagnostics.ClippedCommandCount;
+        _emptyIntersectionSkippedCount = result.FillRectDiagnostics.EmptyIntersectionSkippedCount;
+        _scissorStateChangeCount = result.FillRectDiagnostics.ScissorStateChangeCount;
+        _lastEffectiveScissor = result.FillRectDiagnostics.LastEffectiveScissor;
+        _textClipSkippedCount = result.TextClipDiagnostics.TextClipSkippedCount;
+        _lastEffectiveTextClip = result.TextClipDiagnostics.LastEffectiveTextClip;
 
-        foreach (var command in physicalCommands)
+        if (result.HasBackgroundColor)
         {
+            _bgR = result.BackgroundColor.R / 255f;
+            _bgG = result.BackgroundColor.G / 255f;
+            _bgB = result.BackgroundColor.B / 255f;
+            _bgA = result.BackgroundColor.A / 255f;
+        }
+    }
+
+    internal static D3D12ExecuteCoreResult ExecuteCore(
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        ReadOnlySpan<DrawCommand> commands,
+        IFrameResourceResolver resources,
+        DisplayScale scale,
+        FrameRenderList<D3D12Renderer2D.RectData> rects,
+        FrameRenderList<D3D12TextRenderer.TextData> texts)
+    {
+        var diagnostics = ComputeFillRectScissorDiagnostics(clipMode, viewport, commands, scale);
+        var textDiagnostics = ComputeTextClipDiagnostics(clipMode, viewport, commands, scale);
+        var hasBackgroundColor = false;
+        var backgroundColor = default(DrawColor);
+
+        foreach (var logicalCommand in commands)
+        {
+            var command = ScaleCommandToPhysicalPixels(logicalCommand, scale);
             switch (command.Kind)
             {
                 case DrawCommandKind.FillRect:
-                    var scissorPlan = ResolveFillRectScissor(ClipMode, viewport, command.ClipBounds);
+                    var scissorPlan = ResolveFillRectScissor(clipMode, viewport, command.ClipBounds);
                     if (scissorPlan.Skip)
                     {
                         break;
                     }
 
-                    if (_rects.Count == 0)
+                    if (rects.Count == 0 && !hasBackgroundColor)
                     {
-                        _bgR = command.Color.R / 255f;
-                        _bgG = command.Color.G / 255f;
-                        _bgB = command.Color.B / 255f;
-                        _bgA = command.Color.A / 255f;
+                        backgroundColor = command.Color;
+                        hasBackgroundColor = true;
                     }
-                    _rects.Add(new D3D12Renderer2D.RectData(
+
+                    rects.Add(new D3D12Renderer2D.RectData(
                         command.Rect.X, command.Rect.Y,
                         command.Rect.Width, command.Rect.Height,
                         command.Color.R / 255f, command.Color.G / 255f,
@@ -222,13 +259,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                         break;
                     }
 
-                    var textClipPlan = ResolveTextClip(ClipMode, viewport, command.ClipBounds);
+                    var textClipPlan = ResolveTextClip(clipMode, viewport, command.ClipBounds);
                     if (textClipPlan.Skip)
                     {
                         break;
                     }
 
-                    _texts.Add(new D3D12TextRenderer.TextData(
+                    texts.Add(new D3D12TextRenderer.TextData(
                         command.Rect.X,
                         command.Rect.Y,
                         command.Rect.Width,
@@ -241,22 +278,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                         command.Resource,
                         textClipPlan.EffectiveClip,
                         textClipPlan.ClipEnabled,
-                        ResolvePhysicalTextStyle(resources, command.Resource, _frameContext.Scale),
+                        ResolvePhysicalTextStyle(resources, command.Resource, scale),
                         resources));
                     break;
             }
         }
-    }
 
-    internal static DrawCommand[] ScaleCommandsToPhysicalPixels(ReadOnlySpan<DrawCommand> commands, DisplayScale scale)
-    {
-        var scaled = new DrawCommand[commands.Length];
-        for (var index = 0; index < commands.Length; index++)
-        {
-            scaled[index] = commands[index].Scale(scale);
-        }
-
-        return scaled;
+        return new D3D12ExecuteCoreResult(diagnostics, textDiagnostics, hasBackgroundColor, backgroundColor);
     }
 
     internal static TextStyle ScaleTextStyleToPhysicalPixels(TextStyle style, DisplayScale scale)
@@ -270,9 +298,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return style with { FontSize = style.FontSize * scaleFactor };
     }
 
-    private static ReadOnlySpan<DrawCommand> GetPhysicalCommands(ReadOnlySpan<DrawCommand> commands, DisplayScale scale)
+    private static DrawCommand ScaleCommandToPhysicalPixels(in DrawCommand command, DisplayScale scale)
     {
-        return scale.IsIdentity ? commands : ScaleCommandsToPhysicalPixels(commands, scale);
+        return scale.IsIdentity ? command : command.Scale(scale);
     }
 
     private static TextStyle ResolvePhysicalTextStyle(IFrameResourceResolver resources, ResourceHandle handle, DisplayScale scale)

@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Platform.Windows;
 using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
@@ -152,27 +153,42 @@ public class DisplayScaleTests
     [InlineData(1.25f)]
     [InlineData(1.5f)]
     [InlineData(2.0f)]
-    public void D3D12_backend_scales_command_and_text_style_to_physical_pixels_without_mutating_resources(float scaleValue)
+    public void D3D12_backend_scales_text_command_to_physical_pixels_without_mutating_resources(float scaleValue)
     {
         var scale = new DisplayScale(scaleValue, scaleValue);
 
         using var resources = FrameDrawingResources.Rent();
         var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
         var handle = resources.AddTextStyle(style);
+        var text = resources.AddText("Hello");
+        resources.Seal();
 
         var logicalCmd = new DrawCommand(
             DrawCommandKind.DrawTextRun,
             Rect: new DrawRect(10, 20, 200, 30),
-            Resource: handle);
+            Resource: handle,
+            Text: text,
+            ClipBounds: new DrawRect(0, 0, 240, 80));
 
-        var physicalCmd = Assert.Single(D3D12DrawingBackend.ScaleCommandsToPhysicalPixels([logicalCmd], scale));
-        var physicalStyle = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(resources.ResolveTextStyle(handle), scale);
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
+        _ = D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Diagnostic,
+            new DrawRect(0, 0, 480, 240),
+            [logicalCmd],
+            resources,
+            scale,
+            rects,
+            texts);
 
-        Assert.Equal(10 * scaleValue, physicalCmd.Rect.X);
-        Assert.Equal(20 * scaleValue, physicalCmd.Rect.Y);
-        Assert.Equal(200 * scaleValue, physicalCmd.Rect.Width);
-        Assert.Equal(30 * scaleValue, physicalCmd.Rect.Height);
-        Assert.Equal(16f * scaleValue, physicalStyle.FontSize);
+        var textSpan = texts.Span;
+        Assert.Equal(1, textSpan.Length);
+        var physicalText = textSpan[0];
+        Assert.Equal(10 * scaleValue, physicalText.X);
+        Assert.Equal(20 * scaleValue, physicalText.Y);
+        Assert.Equal(200 * scaleValue, physicalText.Width);
+        Assert.Equal(30 * scaleValue, physicalText.Height);
+        Assert.Equal(16f * scaleValue, physicalText.ResolvedStyle.FontSize);
         Assert.Equal(16f, resources.ResolveTextStyle(handle).FontSize);
     }
 
