@@ -1654,6 +1654,33 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void WindowDrawCommandTranslator_keeps_batches_in_logical_coordinates_under_display_scale()
+    {
+        var translator = new WindowDrawCommandTranslator(
+            new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 1440, 810))),
+            prepareFrame: null,
+            viewportProvider: null,
+            postFrameCallback: null,
+            displayScale: new DisplayScale(1.5f, 1.5f));
+        var root = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
+                VirtualNodeProperty.Action(new ActionId(1))));
+
+        using var patchBatch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root, _arena.GetOrCreateSnapshot()));
+        using var frame = translator.Translate(patchBatch);
+
+        Assert.Equal(new PixelRectangle(0, 0, 1440, 810), translator.LastViewport);
+        Assert.Equal(new PixelRectangle(0, 0, 960, 540), translator.LastLayoutViewport);
+        Assert.Equal(new DrawRect(16, 60, 140, 40), frame.Commands.Memory.Span[1].Rect);
+        Assert.Equal(new DrawRect(16, 60, 140, 40), frame.Commands.Memory.Span[2].Rect);
+        var hitTarget = Assert.Single(frame.HitTargets);
+        Assert.Equal(new PixelRectangle(16, 60, 140, 40), hitTarget.Bounds);
+        Assert.Equal(new PixelRectangle(0, 0, 960, 540), hitTarget.ClipBounds);
+    }
+
+    [Fact]
     public void WindowDrawCommandTranslator_builds_typed_scroll_feedback_alongside_legacy_max_scroll_callback()
     {
         double? callbackMaxScrollY = null;

@@ -445,7 +445,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("scaleMode=PhysicalPixelsV0", output);
         Assert.Contains("screenScale=1.25", output);
         Assert.Contains("dpiAwareness=ProcessDefault", output);
-        Assert.Contains("coordinateSpace=PhysicalPixels logicalCoordinates=False", output);
+        Assert.Contains("coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True", output);
     }
 
     [Fact]
@@ -487,7 +487,7 @@ public sealed class ProgramDiagnosticsTests
             "dpiAwareness=ProcessDefault",
             "scale=0x0",
             "logicalViewport=0x0",
-            "coordinateSpace=PhysicalPixels logicalCoordinates=False",
+            "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
             "=== Resize diagnostic mode complete ===",
             string.Empty
         ]), writer.ToString());

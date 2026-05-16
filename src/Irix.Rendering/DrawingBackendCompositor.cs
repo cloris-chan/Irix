@@ -103,7 +103,15 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
-        return RenderAsync(renderFrameBatch, null, new FrameContext(0, 0), cancellationToken);
+        return RenderAsync(renderFrameBatch, null, cancellationToken);
+    }
+
+    internal ValueTask RenderAsync(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership,
+        CancellationToken cancellationToken = default)
+    {
+        return RenderAsync(renderFrameBatch, ownership, CreateBackendFrameContext(), cancellationToken);
     }
 
     internal ValueTask RenderAsync(
@@ -204,8 +212,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
             try
             {
-                var backendFrameContext = new FrameContext(_physicalViewport.Width, _physicalViewport.Height, _displayScale);
-                _backend.BeginFrame(backendFrameContext);
+                _backend.BeginFrame(frameContext);
                 _backend.Execute(commands, resources);
                 _backend.EndFrame();
             }
@@ -238,7 +245,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return false;
         }
 
-        return _handoffCandidateHarness.TryGetActionIdAt(x, y, out actionId);
+        var logicalPoint = ToLogicalPoint(x, y);
+        return _handoffCandidateHarness.TryGetActionIdAt(logicalPoint.X, logicalPoint.Y, out actionId);
     }
 
     private HandoffSelection ResolveHandoffSelection(
@@ -496,24 +504,25 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     public bool TryGetActionIdAt(int x, int y, out ActionId actionId)
     {
+        var logicalPoint = ToLogicalPoint(x, y);
         lock (_hitTargetsLock)
         {
             foreach (var hitTarget in _hitTargets)
             {
-                if (x < hitTarget.Bounds.X
-                    || y < hitTarget.Bounds.Y
-                    || x >= hitTarget.Bounds.X + hitTarget.Bounds.Width
-                    || y >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
+                if (logicalPoint.X < hitTarget.Bounds.X
+                    || logicalPoint.Y < hitTarget.Bounds.Y
+                    || logicalPoint.X >= hitTarget.Bounds.X + hitTarget.Bounds.Width
+                    || logicalPoint.Y >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
                 {
                     continue;
                 }
 
                 if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
                 {
-                    if (x < hitTarget.ClipBounds.X
-                        || y < hitTarget.ClipBounds.Y
-                        || x >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
-                        || y >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
+                    if (logicalPoint.X < hitTarget.ClipBounds.X
+                        || logicalPoint.Y < hitTarget.ClipBounds.Y
+                        || logicalPoint.X >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
+                        || logicalPoint.Y >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
                     {
                         continue;
                     }
@@ -526,6 +535,23 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         actionId = ActionId.None;
         return false;
+    }
+
+    private FrameContext CreateBackendFrameContext()
+    {
+        return new FrameContext(_physicalViewport.Width, _physicalViewport.Height, _displayScale);
+    }
+
+    private (int X, int Y) ToLogicalPoint(int physicalX, int physicalY)
+    {
+        if (_displayScale.IsIdentity)
+        {
+            return (physicalX, physicalY);
+        }
+
+        return (
+            (int)(physicalX / _displayScale.ScaleX),
+            (int)(physicalY / _displayScale.ScaleY));
     }
 
     private void RecordFrameTime(Stopwatch sw)

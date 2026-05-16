@@ -30,6 +30,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     private int _textClipSkippedCount;
     private EffectiveScissor _lastEffectiveScissor = EffectiveScissor.Empty;
     private EffectiveScissor _lastEffectiveTextClip = EffectiveScissor.Empty;
+    private FrameContext _frameContext;
 
     /// <summary>Dirty command ranges from the last SetDirtyCommandRanges call.</summary>
     public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges => _dirtyCommandRanges;
@@ -164,6 +165,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public void BeginFrame(in FrameContext frameContext)
     {
+        _frameContext = frameContext;
         if (!_renderer.BeginFrame())
         {
             throw new InvalidOperationException($"D3D12 begin frame failed: {_renderer.DeviceErrorReason ?? "unknown device error"}");
@@ -176,11 +178,12 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
     {
         _resources = resources;
+        var physicalCommands = GetPhysicalCommands(commands, _frameContext.Scale);
         var viewportWidth = _renderer.Width;
         var viewportHeight = _renderer.Height;
         var viewport = new DrawRect(0, 0, viewportWidth, viewportHeight);
-        var diagnostics = ComputeFillRectScissorDiagnostics(ClipMode, viewport, commands);
-        var textDiagnostics = ComputeTextClipDiagnostics(ClipMode, viewport, commands);
+        var diagnostics = ComputeFillRectScissorDiagnostics(ClipMode, viewport, physicalCommands);
+        var textDiagnostics = ComputeTextClipDiagnostics(ClipMode, viewport, physicalCommands);
         _clippedCommandCount = diagnostics.ClippedCommandCount;
         _emptyIntersectionSkippedCount = diagnostics.EmptyIntersectionSkippedCount;
         _scissorStateChangeCount = diagnostics.ScissorStateChangeCount;
@@ -188,7 +191,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         _textClipSkippedCount = textDiagnostics.TextClipSkippedCount;
         _lastEffectiveTextClip = textDiagnostics.LastEffectiveTextClip;
 
-        foreach (var command in commands)
+        foreach (var command in physicalCommands)
         {
             switch (command.Kind)
             {
@@ -238,11 +241,43 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                         command.Resource,
                         textClipPlan.EffectiveClip,
                         textClipPlan.ClipEnabled,
-                        resources.ResolveTextStyle(command.Resource),
+                        ResolvePhysicalTextStyle(resources, command.Resource, _frameContext.Scale),
                         resources));
                     break;
             }
         }
+    }
+
+    internal static DrawCommand[] ScaleCommandsToPhysicalPixels(ReadOnlySpan<DrawCommand> commands, DisplayScale scale)
+    {
+        var scaled = new DrawCommand[commands.Length];
+        for (var index = 0; index < commands.Length; index++)
+        {
+            scaled[index] = commands[index].Scale(scale);
+        }
+
+        return scaled;
+    }
+
+    internal static TextStyle ScaleTextStyleToPhysicalPixels(TextStyle style, DisplayScale scale)
+    {
+        if (scale.IsIdentity)
+        {
+            return style;
+        }
+
+        var scaleFactor = (scale.ScaleX + scale.ScaleY) / 2f;
+        return style with { FontSize = style.FontSize * scaleFactor };
+    }
+
+    private static ReadOnlySpan<DrawCommand> GetPhysicalCommands(ReadOnlySpan<DrawCommand> commands, DisplayScale scale)
+    {
+        return scale.IsIdentity ? commands : ScaleCommandsToPhysicalPixels(commands, scale);
+    }
+
+    private static TextStyle ResolvePhysicalTextStyle(IFrameResourceResolver resources, ResourceHandle handle, DisplayScale scale)
+    {
+        return ScaleTextStyleToPhysicalPixels(resources.ResolveTextStyle(handle), scale);
     }
 
     public void EndFrame()

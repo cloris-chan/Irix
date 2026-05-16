@@ -94,6 +94,29 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task TryGetActionIdAt_maps_physical_input_to_logical_hit_targets()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow();
+        var backend = new PoCDrawingBackend(window);
+        var compositor = new DrawingBackendCompositor(backend);
+        compositor.SetViewport(new PixelRectangle(0, 0, 300, 180), new DisplayScale(1.5f, 1.5f));
+
+        using var frame = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 140, 40))
+            ]), 1),
+            [new HitTestTarget(new PixelRectangle(16, 20, 140, 40), new ActionId(100), new PixelRectangle(0, 0, 200, 120))]);
+
+        await compositor.RenderAsync(frame, cancellationToken);
+
+        Assert.True(compositor.TryGetActionIdAt(24, 30, out var actionId));
+        Assert.Equal(new ActionId(100), actionId);
+        Assert.False(compositor.TryGetActionIdAt(234, 30, out _));
+    }
+
+    [Fact]
     public async Task TryGetActionIdAt_cleared_on_empty_frame()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

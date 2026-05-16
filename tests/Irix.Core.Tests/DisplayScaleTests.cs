@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
 
@@ -147,57 +148,11 @@ public class DisplayScaleTests
     }
 
     [Theory]
-    [InlineData(1.25f, 20f)]
-    [InlineData(1.5f, 24f)]
-    [InlineData(2.0f, 32f)]
-    public void FrameDrawingResources_ScaleTextStyles_scales_font_size(float scaleValue, float expectedFontSize)
-    {
-        using var resources = FrameDrawingResources.Rent();
-        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
-        var handle = resources.AddTextStyle(style);
-
-        resources.ScaleTextStyles(new DisplayScale(scaleValue, scaleValue));
-        var resolved = resources.ResolveTextStyle(handle);
-
-        Assert.Equal(expectedFontSize, resolved.FontSize);
-    }
-
-    [Fact]
-    public void FrameDrawingResources_ScaleTextStyles_identity_is_noop()
-    {
-        using var resources = FrameDrawingResources.Rent();
-        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
-        var handle = resources.AddTextStyle(style);
-
-        resources.ScaleTextStyles(DisplayScale.Identity);
-        var resolved = resources.ResolveTextStyle(handle);
-
-        Assert.Equal(16f, resolved.FontSize);
-    }
-
-    [Fact]
-    public void FrameDrawingResources_ScaleTextStyles_preserves_non_font_fields()
-    {
-        using var resources = FrameDrawingResources.Rent();
-        var style = new TextStyle("Consolas", 14f, TextFontWeight.Bold, TextFontStyle.Italic, TextFontStretch.Normal, TextHorizontalAlignment.Center, TextVerticalAlignment.Top, TextWrapping.Wrap);
-        var handle = resources.AddTextStyle(style);
-
-        resources.ScaleTextStyles(new DisplayScale(1.5f, 1.5f));
-        var resolved = resources.ResolveTextStyle(handle);
-
-        Assert.Equal(21f, resolved.FontSize);
-        Assert.Equal("Consolas", resolved.FontFamily);
-        Assert.Equal(TextFontWeight.Bold, resolved.FontWeight);
-        Assert.Equal(TextFontStyle.Italic, resolved.FontStyle);
-        Assert.Equal(TextHorizontalAlignment.Center, resolved.HorizontalAlignment);
-    }
-
-    [Theory]
     [InlineData(1.0f)]
     [InlineData(1.25f)]
     [InlineData(1.5f)]
     [InlineData(2.0f)]
-    public void DrawCommand_and_text_style_scale_consistently(float scaleValue)
+    public void D3D12_backend_scales_command_and_text_style_to_physical_pixels_without_mutating_resources(float scaleValue)
     {
         var scale = new DisplayScale(scaleValue, scaleValue);
 
@@ -210,15 +165,15 @@ public class DisplayScaleTests
             Rect: new DrawRect(10, 20, 200, 30),
             Resource: handle);
 
-        var physicalCmd = logicalCmd.Scale(scale);
-        resources.ScaleTextStyles(scale);
-        var physicalStyle = resources.ResolveTextStyle(handle);
+        var physicalCmd = Assert.Single(D3D12DrawingBackend.ScaleCommandsToPhysicalPixels([logicalCmd], scale));
+        var physicalStyle = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(resources.ResolveTextStyle(handle), scale);
 
         Assert.Equal(10 * scaleValue, physicalCmd.Rect.X);
         Assert.Equal(20 * scaleValue, physicalCmd.Rect.Y);
         Assert.Equal(200 * scaleValue, physicalCmd.Rect.Width);
         Assert.Equal(30 * scaleValue, physicalCmd.Rect.Height);
         Assert.Equal(16f * scaleValue, physicalStyle.FontSize);
+        Assert.Equal(16f, resources.ResolveTextStyle(handle).FontSize);
     }
 
     [Theory]
@@ -288,11 +243,9 @@ public class DisplayScaleTests
         var bodyHandle = resources.AddTextStyle(bodyStyle);
         var buttonHandle = resources.AddTextStyle(buttonStyle);
 
-        resources.ScaleTextStyles(scale);
-
-        var scaledHeading = resources.ResolveTextStyle(headingHandle);
-        var scaledBody = resources.ResolveTextStyle(bodyHandle);
-        var scaledButton = resources.ResolveTextStyle(buttonHandle);
+        var scaledHeading = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(resources.ResolveTextStyle(headingHandle), scale);
+        var scaledBody = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(resources.ResolveTextStyle(bodyHandle), scale);
+        var scaledButton = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(resources.ResolveTextStyle(buttonHandle), scale);
 
         Assert.Equal(24f * scaleValue, scaledHeading.FontSize);
         Assert.Equal(14f * scaleValue, scaledBody.FontSize);

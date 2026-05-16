@@ -134,8 +134,9 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             [.. LastDirtyClassifications],
             [.. LastDirtyElementRanges],
             [.. LastDirtyCommandRanges],
-            LastLayoutRebuildReason,
-            _retainedTextSnapshot);
+            LayoutRebuildReason: LastLayoutRebuildReason,
+            PreviousTextSnapshot: classifyOldSnapshot,
+            TextSnapshot: _retainedTextSnapshot);
 
         // Update retained render frame: try partial apply when dirty ranges exist,
         // which only succeeds when resources are the same instance (same frame scope).
@@ -413,4 +414,5 @@ internal sealed record RenderPipelineRetainedInputSnapshot(
     IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
     IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
     LayoutRebuildReason LayoutRebuildReason,
+    TextBufferSnapshot? PreviousTextSnapshot = null,
     TextBufferSnapshot? TextSnapshot = null);

@@ -230,23 +230,6 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         return _textStyles[handle.Id];
     }
 
-    public void ScaleTextStyles(DisplayScale scale)
-    {
-        if (scale.IsIdentity)
-        {
-            return;
-        }
-
-        var scaleFactor = (scale.ScaleX + scale.ScaleY) / 2f;
-        for (var i = 0; i < _textStyles.Count; i++)
-        {
-            var style = _textStyles[i];
-            _textStyles[i] = style with { FontSize = style.FontSize * scaleFactor };
-        }
-
-        _textStyleHandles.Clear();
-    }
-
     /// <summary>
     /// Reset the arena and style lists for reuse. Only valid when not retained.
     /// Typically called by <see cref="Return"/> during pool recycling.

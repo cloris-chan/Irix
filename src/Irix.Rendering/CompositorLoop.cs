@@ -136,7 +136,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
                     if (_ownershipProvider?.Invoke() is { } ownership
                         && _compositor is DrawingBackendCompositor drawingBackendCompositor)
                     {
-                        await drawingBackendCompositor.RenderAsync(renderFrameBatch, ownership, default);
+                        await drawingBackendCompositor.RenderAsync(renderFrameBatch, ownership);
                     }
                     else
                     {

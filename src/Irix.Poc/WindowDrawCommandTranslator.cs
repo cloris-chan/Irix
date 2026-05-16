@@ -106,11 +106,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         LastScrollFeedback = BuildScrollFeedback(_renderPipeline.LastLayoutResult);
         _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
 
-        if (!_displayScale.IsIdentity)
-        {
-            batch = ScaleBatch(batch, _displayScale);
-        }
-
         return batch;
     }
 
@@ -133,32 +128,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         }
 
         return new ScrollFeedback(containers);
-    }
-
-    private static RenderFrameBatch ScaleBatch(RenderFrameBatch batch, DisplayScale scale)
-    {
-        var span = batch.Commands.Memory.Span;
-        for (var i = 0; i < batch.Commands.Count; i++)
-        {
-            span[i] = span[i].Scale(scale);
-        }
-
-        var scaledTargets = new HitTestTarget[batch.HitTargets.Count];
-        for (var i = 0; i < batch.HitTargets.Count; i++)
-        {
-            scaledTargets[i] = batch.HitTargets[i].Scale(scale);
-        }
-
-        if (batch.Resources is FrameDrawingResources frameResources)
-        {
-            frameResources.ScaleTextStyles(scale);
-        }
-
-        return new RenderFrameBatch(
-            batch.Commands,
-            scaledTargets,
-            batch.Resources,
-            batch.DirtyCommandRanges);
     }
 }
 

@@ -22,8 +22,12 @@ internal static class RetainedRootMetadataPatcher
         VirtualNode retainedRoot,
         VirtualNode nextRoot,
         IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
-        TextBufferSnapshot? snapshot = null)
+        TextBufferSnapshot? retainedSnapshot = null,
+        TextBufferSnapshot? nextSnapshot = null)
     {
+        retainedSnapshot ??= nextSnapshot;
+        nextSnapshot ??= retainedSnapshot;
+
         var dirtySet = new HashSet<int>();
         foreach (var classification in dirtyClassifications)
         {
@@ -42,7 +46,7 @@ internal static class RetainedRootMetadataPatcher
 
         var dfsIndex = 0;
         var patchedDirtyCount = 0;
-        return TryProject(retainedRoot, nextRoot, dirtySet, ref dfsIndex, ref patchedDirtyCount, out var root, out var reason, snapshot)
+        return TryProject(retainedRoot, nextRoot, dirtySet, ref dfsIndex, ref patchedDirtyCount, out var root, out var reason, retainedSnapshot, nextSnapshot)
             && patchedDirtyCount == dirtySet.Count
             ? RetainedRootMetadataPatch.CreateSucceeded(root)
             : RetainedRootMetadataPatch.CreateFallback(reason);
@@ -56,7 +60,8 @@ internal static class RetainedRootMetadataPatcher
         ref int patchedDirtyCount,
         out VirtualNode patchedNode,
         out RetainedPartialApplyFallbackReason reason,
-        TextBufferSnapshot? snapshot)
+        TextBufferSnapshot? retainedSnapshot,
+        TextBufferSnapshot? nextSnapshot)
     {
         var currentIndex = dfsIndex;
         var isDirty = dirtySet.Contains(currentIndex);
@@ -70,7 +75,7 @@ internal static class RetainedRootMetadataPatcher
             return false;
         }
 
-        if (!VirtualNodeDiffer.ContentEqual(retainedNode.Content, nextNode.Content, snapshot, snapshot))
+        if (!ContentEqualOrFallback(retainedNode.Content, nextNode.Content, retainedSnapshot, nextSnapshot))
         {
             reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
             return false;
@@ -93,7 +98,7 @@ internal static class RetainedRootMetadataPatcher
         VirtualNode[]? patchedChildrenArray = null;
         for (var i = 0; i < retainedChildren.Length; i++)
         {
-            if (!TryProject(retainedChildren[i], nextChildren[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason, snapshot))
+            if (!TryProject(retainedChildren[i], nextChildren[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason, retainedSnapshot, nextSnapshot))
             {
                 return false;
             }
@@ -257,4 +262,16 @@ internal static class RetainedRootMetadataPatcher
         || left.Content != right.Content
         || !PropertiesEqual(left.Properties, right.Properties)
         || left.Children.Length != right.Children.Length;
+
+    private static bool ContentEqualOrFallback(NodeContent retainedContent, NodeContent nextContent, TextBufferSnapshot? retainedSnapshot, TextBufferSnapshot? nextSnapshot)
+    {
+        try
+        {
+            return VirtualNodeDiffer.ContentEqual(retainedContent, nextContent, retainedSnapshot, nextSnapshot);
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
 }

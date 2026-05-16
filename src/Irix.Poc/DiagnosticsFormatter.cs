@@ -104,7 +104,7 @@ internal static class DiagnosticsFormatter
             $"dpiAwareness={snapshot.DpiAwareness}",
             $"scale={snapshot.Scale.ScaleX:0.##}x{snapshot.Scale.ScaleY:0.##}",
             $"logicalViewport={FormatSize(snapshot.LogicalViewport)}",
-            "coordinateSpace=PhysicalPixels logicalCoordinates=False"
+            "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True"
         ];
     }
 

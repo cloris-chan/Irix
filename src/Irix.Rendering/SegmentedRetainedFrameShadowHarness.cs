@@ -69,7 +69,7 @@ internal sealed class SegmentedRetainedFrameShadowHarness : IDisposable
             return new SegmentedRetainedFrameShadowResult(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, hitTargetProjection.FallbackReason, plan.Kind, []);
         }
 
-        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(_owner.RetainedRoot, nextRoot, snapshot.DirtyClassifications, snapshot.TextSnapshot);
+        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(_owner.RetainedRoot, nextRoot, snapshot.DirtyClassifications, snapshot.PreviousTextSnapshot, snapshot.TextSnapshot);
         if (!rootPatch.Succeeded)
         {
             return new SegmentedRetainedFrameShadowResult(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, rootPatch.FallbackReason, plan.Kind, []);

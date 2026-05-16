@@ -41,12 +41,21 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner(Func<IFrameResourceReso
 
     public SegmentedRetainedFrameShadowResult ApplyFallbackFull(RenderFrameBatch batch, VirtualNode retainedRoot, RetainedPartialApplyFallbackReason reason)
     {
+        return ApplyFallbackFull(batch, retainedRoot, reason, RetainedPartialApplyResultKind.FallbackFull);
+    }
+
+    public SegmentedRetainedFrameShadowResult ApplyFallbackFull(
+        RenderFrameBatch batch,
+        VirtualNode retainedRoot,
+        RetainedPartialApplyFallbackReason reason,
+        RetainedPartialApplyResultKind planKind)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         _owner.ApplyFull(batch, _captureSnapshot(batch.Resources), retainedRoot);
         return new SegmentedRetainedFrameShadowResult(
             SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull,
             reason,
-            RetainedPartialApplyResultKind.FallbackFull,
+            planKind,
             _owner.ReadSegments());
     }
 

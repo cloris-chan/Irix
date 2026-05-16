@@ -118,7 +118,7 @@ public sealed class ResizeStressTests
         await compositor.RenderAsync(batch2, cancellationToken);
 
         // Hit-test at physical coordinates (150% scale)
-        // Button at logical (16,16,68,32) �?physical (24,24,102,48)
+        // Button at logical (16,16,68,32) maps to physical (24,24,102,48)
         Assert.True(compositor.TryGetActionIdAt(50, 30, out var id2));
         Assert.Equal(new ActionId(100), id2);
 
