@@ -131,7 +131,7 @@
 
 本轮目标只覆盖 style/property domain cleanup；不做 glyph atlas，不重写 renderer，不回滚 Round 13 的 text arena / text value IR 设计。
 
-Public authoring API 是一套 unified typed property API：调用方使用 `VirtualNodeProperty.Width(...)`、`Height(...)`、`ScrollY(...)`、`Action(...)`、`Hovered(...)`、`Pressed(...)`、`Focused(...)`、`Opacity(...)` 等 helper，不需要也不应该选择 Layout / Visual / Composite 三套 public API。`VirtualPropertyKey + VirtualPropertyMetadata.Effects` 是框架内部 invalidation、animation、support validation metadata，不是用户 authoring 分层。
+Public authoring API 是一套 unified typed property API：调用方使用 `VirtualNodeProperty.Width(...)`、`Height(...)`、`ScrollY(...)`、`Action(...)`、`Hovered(...)`、`Pressed(...)`、`Focused(...)` 等 helper，不需要也不应该选择 Layout / Visual / Composite 三套 public API。`VirtualPropertyKey + VirtualPropertyMetadata.Effects` 是框架内部 invalidation、animation、support validation metadata，不是用户 authoring 分层。
 
 Global default style 仍由 `RenderStylePreset` / `LayoutStyle` / `DrawingStyle` 提供；`VirtualNodeProperty` 只表示 node-local override 或 runtime visual state。`HorizontalPadding`、`VerticalPadding`、`ItemSpacing`、`TextHeight`、button/rectangle 专用尺寸、text font/string style key 均不是 public node property。
 
@@ -139,7 +139,6 @@ Global default style 仍由 `RenderStylePreset` / `LayoutStyle` / `DrawingStyle`
 |----------|------------|---------|-------------------|-----------------|----------------|
 | `Width` / `Height` | Number | Layout | CpuStyle | Rectangle, Button, ScrollContainer | Public node-local override |
 | `ScrollY` | Number | Layout | CpuStyle | ScrollContainer | Public node-local scroll property; future composite scroll can reuse metadata |
-| `Opacity` | Number | Composite + Visual | Composite | All node kinds | Public key/helper reserved; renderer hookup deferred |
 | `ActionId` | ActionId | Interaction | None | Button | Interaction metadata; does not trigger layout |
 | `IsHovered` / `IsPressed` / `IsFocused` | Boolean | Interaction + Visual | Discrete | Button | Runtime state projected from input ownership |
 | `FillColor` / `TextColor` | Not public | Not applicable | Not applicable | Not applicable | Deferred until a typed color value exists; no string hex path |

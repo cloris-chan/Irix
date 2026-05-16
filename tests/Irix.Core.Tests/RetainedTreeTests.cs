@@ -67,8 +67,8 @@ public sealed class RetainedTreeTests
         var dirty = tree.Apply(batch).Dirty;
 
         var rootResult = tree.Tree.Root;
-        Assert.True(rootResult.Children.Length >= 2,
-            $"Expected �? children, got {rootResult.Children.Length}. dirty=[{string.Join(",", dirty)}]");
+        Assert.True(rootResult.Children.Count >= 2,
+            $"Expected �? children, got {rootResult.Children.Count}. dirty=[{string.Join(",", dirty)}]");
         Assert.Equal("a", ResolveNodeText(_arena, rootResult.Children[0].Content));
         Assert.Equal("b", ResolveNodeText(_arena, rootResult.Children[1].Content));
     }
@@ -132,8 +132,8 @@ public sealed class RetainedTreeTests
 
         var dirty = tree.Apply(batch).Dirty;
 
-        Assert.True(tree.Tree.Root.Children.Length == 3,
-            $"Expected 3 children, got {tree.Tree.Root.Children.Length}. dirty=[{string.Join(",", dirty)}]");
+        Assert.True(tree.Tree.Root.Children.Count == 3,
+            $"Expected 3 children, got {tree.Tree.Root.Children.Count}. dirty=[{string.Join(",", dirty)}]");
         Assert.Equal("A", ResolveNodeText(_arena, tree.Tree.Root.Children[0].Content));
         Assert.Equal("b", ResolveNodeText(_arena, tree.Tree.Root.Children[1].Content));
         Assert.Equal("c", ResolveNodeText(_arena, tree.Tree.Root.Children[2].Content));
@@ -243,7 +243,7 @@ public sealed class RetainedTreeTests
         // After apply: "b" (key 20) is removed, "d" (key 40) is added.
         // The result should have the correct set of children (by key).
         var result = tree.Tree.Root;
-        Assert.Equal(3, result.Children.Length);
+        Assert.Equal(3, result.Children.Count);
         Assert.Contains(result.Children, c => c.Key == 10);  // "a"
         Assert.Contains(result.Children, c => c.Key == 30);  // "c"
         Assert.Contains(result.Children, c => c.Key == 40);  // "d"

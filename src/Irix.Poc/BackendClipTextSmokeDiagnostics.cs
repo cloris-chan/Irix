@@ -14,7 +14,7 @@ internal static class BackendClipTextSmokeDiagnostics
             VirtualNodeKind.ScrollContainer,
             key: 1000,
             properties: [VirtualNodeProperty.Height(40)],
-            children: [VirtualNodeFactory.Rectangle(160, 80, new NodeKey(1001))]);
+            children: [VirtualNodeFactory.Rectangle(new NodeKey(1001), VirtualNodeProperty.Width(160), VirtualNodeProperty.Height(80))]);
         var viewport = new PixelRectangle(0, 0, renderer.Width, renderer.Height);
         using var batch = pipeline.Build(root, viewport, default);
 

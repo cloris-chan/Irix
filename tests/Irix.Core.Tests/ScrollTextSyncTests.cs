@@ -27,7 +27,7 @@ public sealed class ScrollTextSyncTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
+                properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
                     VirtualNodeBuilder.Button(_arena, "Button A", new NodeKey(2),
@@ -74,7 +74,7 @@ public sealed class ScrollTextSyncTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
+                properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
                     VirtualNodeBuilder.Button(_arena, "ScrollBtn", new NodeKey(2),
@@ -117,7 +117,7 @@ public sealed class ScrollTextSyncTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
+                properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
                     VirtualNodeBuilder.Button(_arena, "Fast", new NodeKey(2),
@@ -211,7 +211,7 @@ public sealed class ScrollTextSyncTests
         return new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
+            properties: [VirtualNodeProperty.ScrollY(scrollY)],
             children:
             [
                 VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(2),

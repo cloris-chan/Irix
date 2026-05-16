@@ -71,8 +71,6 @@ public readonly struct VirtualPropertyKey : IEquatable<VirtualPropertyKey>
     public static readonly VirtualPropertyKey Height = new(PropertyDomain.Layout, 2);
     public static readonly VirtualPropertyKey ScrollY = new(PropertyDomain.Layout, 3);
 
-    public static readonly VirtualPropertyKey Opacity = new(PropertyDomain.Visual, 1);
-
     public static readonly VirtualPropertyKey ActionId = new(PropertyDomain.Interaction, 1);
 
     public static readonly VirtualPropertyKey IsHovered = new(PropertyDomain.RuntimeState, 1);
@@ -162,17 +160,6 @@ internal static class VirtualPropertyMetadata
             return true;
         }
 
-        if (key == VirtualPropertyKey.Opacity)
-        {
-            metadata = Number(
-                key,
-                StyleEffect.Composite | StyleEffect.Visual,
-                AnimationChannel.Composite,
-                StylePropertyScope.NodeLocal,
-                VirtualNodeKindFlags.All);
-            return true;
-        }
-
         if (key == VirtualPropertyKey.ActionId)
         {
             metadata = new StylePropertyMetadata(
@@ -217,7 +204,6 @@ internal static class VirtualPropertyDiagnostics
         if (key == VirtualPropertyKey.Width) return nameof(VirtualPropertyKey.Width);
         if (key == VirtualPropertyKey.Height) return nameof(VirtualPropertyKey.Height);
         if (key == VirtualPropertyKey.ScrollY) return nameof(VirtualPropertyKey.ScrollY);
-        if (key == VirtualPropertyKey.Opacity) return nameof(VirtualPropertyKey.Opacity);
         if (key == VirtualPropertyKey.ActionId) return nameof(VirtualPropertyKey.ActionId);
         if (key == VirtualPropertyKey.IsHovered) return nameof(VirtualPropertyKey.IsHovered);
         if (key == VirtualPropertyKey.IsPressed) return nameof(VirtualPropertyKey.IsPressed);

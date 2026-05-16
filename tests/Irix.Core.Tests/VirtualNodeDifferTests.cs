@@ -47,7 +47,7 @@ public sealed class VirtualNodeDifferTests
     public void CreatePatchBatch_returns_replace_root_when_kind_differs()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.GetOrCreateSnapshot());
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(100, 50, new NodeKey(1)));
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(100), VirtualNodeProperty.Height(50)));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -75,8 +75,8 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_returns_update_when_property_differs()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(100, 50, new NodeKey(1)));
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(200, 50, new NodeKey(1)));
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(100), VirtualNodeProperty.Height(50)));
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(50)));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -137,12 +137,12 @@ public sealed class VirtualNodeDifferTests
         var a = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
-            VirtualNodeFactory.Rectangle(200, 48, new NodeKey(3)),
+            VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(48)),
             VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
         var b = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
-            VirtualNodeFactory.Rectangle(200, 48, new NodeKey(3)),
+            VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(48)),
             VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
 
         Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
@@ -334,7 +334,7 @@ public sealed class VirtualNodeDifferTests
     public void CreatePatchBatch_emits_replace_root_when_kind_changes()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.GetOrCreateSnapshot());
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(100, 50, new NodeKey(1)));
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(100), VirtualNodeProperty.Height(50)));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -349,12 +349,12 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "Title", new NodeKey(10)),
             VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(20)),
-            VirtualNodeFactory.Rectangle(100, 50, new NodeKey(30)));
+            VirtualNodeFactory.Rectangle(new NodeKey(30), VirtualNodeProperty.Width(100), VirtualNodeProperty.Height(50)));
         var newRoot = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "New Title", new NodeKey(10)),
             VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(20)),
-            VirtualNodeFactory.Rectangle(200, 50, new NodeKey(30)),
+            VirtualNodeFactory.Rectangle(new NodeKey(30), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(50)),
             VirtualNodeBuilder.Text(_arena, "Added", new NodeKey(40)));
         var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());

@@ -206,7 +206,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             case VirtualNodeKind.Button:
             {
                 var label = GetButtonLabel(node);
-                var labelLength = label.IsNone ? 6 : label.Range.Length; // 6 = "Button".Length
+                if (label.IsNone)
+                {
+                    throw new InvalidOperationException("Button nodes require an explicit text label child.");
+                }
+
+                var labelLength = label.Range.Length;
                 var width = Math.Min(ctx.AvailableWidth, Math.Max(
                     ctx.Style.MinimumButtonWidth,
                     labelLength * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
@@ -282,7 +287,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         {
             if (property.Key == key && property.Value.Kind == PropertyValueKind.Number)
             {
-                return (int)property.Value.Number;
+                return (int)property.Value.GetRequiredNumber();
             }
         }
 
@@ -312,7 +317,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         {
             if (property.Key == VirtualPropertyKey.ActionId && property.Value.Kind == PropertyValueKind.ActionId)
             {
-                return property.Value.ActionIdValue;
+                return property.Value.GetRequiredActionId();
             }
         }
 
@@ -325,7 +330,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         {
             if (property.Key == key && property.Value.Kind == PropertyValueKind.Boolean)
             {
-                return property.Value.Boolean;
+                return property.Value.GetRequiredBoolean();
             }
         }
 

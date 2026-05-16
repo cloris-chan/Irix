@@ -54,12 +54,12 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(0))],
+            properties: [VirtualNodeProperty.ScrollY(0)],
             children: [VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionPropertyAdapter.ToProperty(ActionIdRegistry.Increment))]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(24))],
+            properties: [VirtualNodeProperty.ScrollY(24)],
             children: [VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionPropertyAdapter.ToProperty(ActionIdRegistry.Increment))]);
 
         var snapshot = arena.GetOrCreateSnapshot();

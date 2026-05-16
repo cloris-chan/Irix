@@ -4,6 +4,7 @@ namespace Irix;
 
 public enum VirtualNodeKind
 {
+    None,
     Text,
     Rectangle,
     Button,
@@ -169,9 +170,35 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         return true;
     }
 
-    public double Number => _kind == PropertyValueKind.Number ? BitConverter.UInt64BitsToDouble(_data0) : 0;
-    public bool Boolean => _kind == PropertyValueKind.Boolean && _uintValue != 0;
-    public ActionId ActionIdValue => _kind == PropertyValueKind.ActionId ? new ActionId(_uintValue) : ActionId.None;
+    public double GetRequiredNumber()
+    {
+        if (TryGetNumber(out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.Number}.");
+    }
+
+    public bool GetRequiredBoolean()
+    {
+        if (TryGetBoolean(out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.Boolean}.");
+    }
+
+    public ActionId GetRequiredActionId()
+    {
+        if (TryGetActionId(out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.ActionId}.");
+    }
 
     public bool Equals(PropertyValue other) => _kind == other._kind && _uintValue == other._uintValue && _data0 == other._data0;
 
@@ -210,54 +237,171 @@ public readonly struct VirtualNodeTree : IEquatable<VirtualNodeTree>
 
 public readonly struct VirtualNode : IEquatable<VirtualNode>
 {
+    private static readonly IReadOnlyList<VirtualNodeProperty> EmptyProperties = Array.AsReadOnly(Array.Empty<VirtualNodeProperty>());
+    private static readonly IReadOnlyList<VirtualNode> EmptyChildren = Array.AsReadOnly(Array.Empty<VirtualNode>());
+
+    private readonly IReadOnlyList<VirtualNodeProperty>? _properties;
+    private readonly IReadOnlyList<VirtualNode>? _children;
+
     public VirtualNode(
         VirtualNodeKind kind,
         NodeKey key = default,
         NodeContent content = default,
-        VirtualNodeProperty[]? properties = null,
-        VirtualNode[]? children = null)
+        IReadOnlyList<VirtualNodeProperty>? properties = null,
+        IReadOnlyList<VirtualNode>? children = null)
     {
+        var childrenArray = CreateChildren(children);
         Kind = kind;
         Key = key;
         Content = content;
-        Properties = VirtualNodePropertySet.Create(kind, properties);
-        Children = children ?? [];
+        _properties = Wrap(VirtualNodePropertySet.Create(kind, properties));
+        _children = Wrap(childrenArray);
+        ValidateNodeShape(kind, childrenArray);
     }
 
     public VirtualNodeKind Kind { get; }
     public NodeKey Key { get; }
     public NodeContent Content { get; }
-    public VirtualNodeProperty[] Properties { get; }
-    public VirtualNode[] Children { get; }
+    public IReadOnlyList<VirtualNodeProperty> Properties => _properties ?? EmptyProperties;
+    public IReadOnlyList<VirtualNode> Children => _children ?? EmptyChildren;
 
-    public bool Equals(VirtualNode other) =>
-        Kind == other.Kind
-        && Key == other.Key
-        && Content == other.Content
-        && ReferenceEquals(Properties, other.Properties)
-        && ReferenceEquals(Children, other.Children);
+    public bool Equals(VirtualNode other)
+    {
+        if (Kind != other.Kind || Key != other.Key || Content != other.Content)
+        {
+            return false;
+        }
+
+        if (!PropertiesEqual(Properties, other.Properties))
+        {
+            return false;
+        }
+
+        return ChildrenEqual(Children, other.Children);
+    }
 
     public override bool Equals(object? obj) => obj is VirtualNode other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Kind, Key, Content, Properties, Children);
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Kind);
+        hash.Add(Key);
+        hash.Add(Content);
+        foreach (var property in Properties)
+        {
+            hash.Add(property);
+        }
+
+        foreach (var child in Children)
+        {
+            hash.Add(child);
+        }
+
+        return hash.ToHashCode();
+    }
 
     public static bool operator ==(VirtualNode left, VirtualNode right) => left.Equals(right);
 
     public static bool operator !=(VirtualNode left, VirtualNode right) => !left.Equals(right);
-}
 
-internal static class VirtualNodePropertySet
-{
-    public static VirtualNodeProperty[] Create(VirtualNodeKind kind, VirtualNodeProperty[]? properties)
+    private static IReadOnlyList<VirtualNodeProperty> Wrap(VirtualNodeProperty[] properties) =>
+        properties.Length == 0 ? EmptyProperties : Array.AsReadOnly(properties);
+
+    private static IReadOnlyList<VirtualNode> Wrap(VirtualNode[] children) =>
+        children.Length == 0 ? EmptyChildren : Array.AsReadOnly(children);
+
+    private static VirtualNode[] CreateChildren(IReadOnlyList<VirtualNode>? children)
     {
-        if (properties is null || properties.Length == 0)
+        if (children is null || children.Count == 0)
         {
             return [];
         }
 
-        for (var i = 0; i < properties.Length; i++)
+        var copy = new VirtualNode[children.Count];
+        for (var i = 0; i < children.Count; i++)
         {
-            var property = properties[i];
+            copy[i] = children[i];
+        }
+
+        return copy;
+    }
+
+    private static void ValidateNodeShape(VirtualNodeKind kind, VirtualNode[] children)
+    {
+        if (kind != VirtualNodeKind.Button)
+        {
+            return;
+        }
+
+        foreach (var child in children)
+        {
+            if (child.Kind == VirtualNodeKind.Text
+                && child.Content.TryGetText(out var label)
+                && !label.IsNone)
+            {
+                return;
+            }
+        }
+
+        throw new ArgumentException("Button nodes require an explicit text label child.", nameof(children));
+    }
+
+    private static bool PropertiesEqual(IReadOnlyList<VirtualNodeProperty> left, IReadOnlyList<VirtualNodeProperty> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ChildrenEqual(IReadOnlyList<VirtualNode> left, IReadOnlyList<VirtualNode> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}
+
+internal static class VirtualNodePropertySet
+{
+    public static VirtualNodeProperty[] Create(VirtualNodeKind kind, IReadOnlyList<VirtualNodeProperty>? properties)
+    {
+        if (properties is null || properties.Count == 0)
+        {
+            return [];
+        }
+
+        var copy = new VirtualNodeProperty[properties.Count];
+        for (var i = 0; i < properties.Count; i++)
+        {
+            copy[i] = properties[i];
+        }
+
+        for (var i = 0; i < copy.Length; i++)
+        {
+            var property = copy[i];
             if (!VirtualNodePropertySupport.Supports(kind, property.Key))
             {
                 throw new ArgumentException(
@@ -265,9 +409,9 @@ internal static class VirtualNodePropertySet
                     nameof(properties));
             }
 
-            for (var j = i + 1; j < properties.Length; j++)
+            for (var j = i + 1; j < copy.Length; j++)
             {
-                if (property.Key == properties[j].Key)
+                if (property.Key == copy[j].Key)
                 {
                     throw new ArgumentException(
                         $"Duplicate property {VirtualPropertyDiagnostics.Format(property.Key)} on {kind}.",
@@ -276,7 +420,7 @@ internal static class VirtualNodePropertySet
             }
         }
 
-        return properties;
+        return copy;
     }
 }
 
@@ -284,7 +428,7 @@ internal static class VirtualNodePropertySet
 
 public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 {
-    internal VirtualNodeProperty(VirtualPropertyKey key, PropertyValue value)
+    private VirtualNodeProperty(VirtualPropertyKey key, PropertyValue value)
     {
         Validate(key, value);
         Key = key;
@@ -305,9 +449,6 @@ public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 
     public static VirtualNodeProperty ScrollY(double value) =>
         new(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(value));
-
-    public static VirtualNodeProperty Opacity(double value) =>
-        new(VirtualPropertyKey.Opacity, PropertyValue.FromNumber(value));
 
     public static VirtualNodeProperty Hovered(bool value) =>
         new(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(value));
@@ -381,19 +522,21 @@ public static class VirtualNodeFactory
     public static VirtualNode Text(TextNodeContent content, NodeKey key = default, params VirtualNodeProperty[] properties) =>
         new(VirtualNodeKind.Text, key, NodeContent.FromText(content), properties);
 
-    public static VirtualNode Rectangle(double width, double height, NodeKey key = default, params VirtualNodeProperty[] properties) =>
-        new(
-            VirtualNodeKind.Rectangle,
-            key,
-            properties:
-            [
-                .. properties,
-                VirtualNodeProperty.Width(width),
-                VirtualNodeProperty.Height(height)
-            ]);
+    public static VirtualNode Rectangle(params VirtualNodeProperty[] properties) =>
+        new(VirtualNodeKind.Rectangle, properties: properties);
 
-    public static VirtualNode Button(TextNodeContent label, NodeKey key = default, params VirtualNodeProperty[] properties) =>
-        new(VirtualNodeKind.Button, key, properties: properties, children: [Text(label)]);
+    public static VirtualNode Rectangle(NodeKey key, params VirtualNodeProperty[] properties) =>
+        new(VirtualNodeKind.Rectangle, key, properties: properties);
+
+    public static VirtualNode Button(TextNodeContent label, NodeKey key = default, params VirtualNodeProperty[] properties)
+    {
+        if (label.IsNone)
+        {
+            throw new ArgumentException("Button label must be explicit.", nameof(label));
+        }
+
+        return new(VirtualNodeKind.Button, key, properties: properties, children: [Text(label)]);
+    }
 
     public static VirtualNode ScrollContainer(NodeKey key = default, params VirtualNode[] children) =>
         new(VirtualNodeKind.ScrollContainer, key, children: children);
@@ -411,6 +554,7 @@ public static class VirtualNodeBuilder
 
     public static VirtualNode Button(VirtualTextArena arena, string label, NodeKey key = default, params VirtualNodeProperty[] properties)
     {
+        ArgumentNullException.ThrowIfNull(label);
         var labelContent = arena.AddText(label.AsSpan());
         return VirtualNodeFactory.Button(labelContent, key, properties);
     }

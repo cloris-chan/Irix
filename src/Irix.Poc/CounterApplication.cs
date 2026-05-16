@@ -116,7 +116,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
             children:
             [
                 .. headerRows,
-                VirtualNodeFactory.Rectangle(220, 48, new NodeKey(5)),
+                VirtualNodeFactory.Rectangle(new NodeKey(5), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48)),
                 BuildButton(_arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership),
                 BuildButton(_arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership),
                 BuildButton(_arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership),

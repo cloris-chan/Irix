@@ -15,7 +15,7 @@ public sealed class WindowLayoutPipelineTests
         var root = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
-            VirtualNodeFactory.Rectangle(220, 48, new NodeKey(3)),
+            VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48)),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(4),
                 VirtualNodeProperty.Action(new ActionId(1))));
         var builder = new LayoutTreeBuilder();
@@ -180,9 +180,9 @@ public sealed class WindowLayoutPipelineTests
             1,
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsPressed, PropertyValue.FromBoolean(true)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsFocused, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true),
+                VirtualNodeProperty.Pressed(true),
+                VirtualNodeProperty.Focused(true)));
         var builder = new LayoutTreeBuilder();
 
         var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
@@ -402,7 +402,7 @@ public sealed class WindowLayoutPipelineTests
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(24))],
+            properties: [VirtualNodeProperty.ScrollY(24)],
             children: [VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2))]);
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
@@ -421,11 +421,11 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(100)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))));
+                VirtualNodeProperty.Hovered(false)));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(100)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -478,22 +478,22 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(0))],
+            properties: [VirtualNodeProperty.ScrollY(0)],
             children:
             [
                 VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(2),
                     VirtualNodeProperty.Action(new ActionId(100)),
-                    new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false)))
+                    VirtualNodeProperty.Hovered(false))
             ]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(24))],
+            properties: [VirtualNodeProperty.ScrollY(24)],
             children:
             [
                 VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(2),
                     VirtualNodeProperty.Action(new ActionId(100)),
-                    new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true)))
+                    VirtualNodeProperty.Hovered(true))
             ]);
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
@@ -582,7 +582,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(frame.HitTargets, snapshot.HitTargets);
         Assert.Equal(root.Kind, snapshot.RetainedRoot.Kind);
         Assert.Equal(root.Key, snapshot.RetainedRoot.Key);
-        Assert.Equal(root.Children.Length, snapshot.RetainedRoot.Children.Length);
+        Assert.Equal(root.Children.Count, snapshot.RetainedRoot.Children.Count);
         Assert.Equal(viewport, snapshot.Viewport);
         Assert.Empty(snapshot.DirtyClassifications);
         Assert.Empty(snapshot.DirtyElementRanges);
@@ -600,26 +600,26 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.Height, PropertyValue.FromNumber(120))],
+            properties: [VirtualNodeProperty.Height(120)],
             children:
             [
                 VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
                 VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
                     VirtualNodeProperty.Action(new ActionId(1)),
-                    new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))),
-                VirtualNodeFactory.Rectangle(220, 48, new NodeKey(4))
+                    VirtualNodeProperty.Hovered(false)),
+                VirtualNodeFactory.Rectangle(new NodeKey(4), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48))
             ]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.Height, PropertyValue.FromNumber(120))],
+            properties: [VirtualNodeProperty.Height(120)],
             children:
             [
                 VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
                 VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
                     VirtualNodeProperty.Action(new ActionId(1)),
-                    new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))),
-                VirtualNodeFactory.Rectangle(220, 48, new NodeKey(4))
+                    VirtualNodeProperty.Hovered(true)),
+                VirtualNodeFactory.Rectangle(new NodeKey(4), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48))
             ]);
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
@@ -688,11 +688,11 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))));
+                VirtualNodeProperty.Hovered(false)));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var initialRebuildCount = pipeline.LayoutRebuildCount;
@@ -720,12 +720,12 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(0))],
+            properties: [VirtualNodeProperty.ScrollY(0)],
             children: [VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(1)))]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(24))],
+            properties: [VirtualNodeProperty.ScrollY(24)],
             children: [VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(1)))]);
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
@@ -751,11 +751,11 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))));
+                VirtualNodeProperty.Hovered(false)));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -794,11 +794,11 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))));
+                VirtualNodeProperty.Hovered(false)));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -899,11 +899,11 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))));
+                VirtualNodeProperty.Hovered(false)));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -941,26 +941,26 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.Height, PropertyValue.FromNumber(120))],
+            properties: [VirtualNodeProperty.Height(120)],
             children:
             [
                 VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
                 VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
                     VirtualNodeProperty.Action(new ActionId(1)),
-                    new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))),
-                VirtualNodeFactory.Rectangle(220, 48, new NodeKey(4))
+                    VirtualNodeProperty.Hovered(false)),
+                VirtualNodeFactory.Rectangle(new NodeKey(4), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48))
             ]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.Height, PropertyValue.FromNumber(120))],
+            properties: [VirtualNodeProperty.Height(120)],
             children:
             [
                 VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
                 VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
                     VirtualNodeProperty.Action(new ActionId(1)),
-                    new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))),
-                VirtualNodeFactory.Rectangle(220, 48, new NodeKey(4))
+                    VirtualNodeProperty.Hovered(true)),
+                VirtualNodeFactory.Rectangle(new NodeKey(4), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48))
             ]);
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
@@ -1039,11 +1039,11 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))));
+                VirtualNodeProperty.Hovered(false)));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var resources1 = Assert.IsType<FrameDrawingResources>(frame1.Resources);
@@ -1066,11 +1066,11 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(false))));
+                VirtualNodeProperty.Hovered(false)));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1)),
-                new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromBoolean(true))));
+                VirtualNodeProperty.Hovered(true)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var retainedLayout = pipeline.LastLayoutResult;
@@ -1141,12 +1141,12 @@ public sealed class WindowLayoutPipelineTests
         var root1 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(0))],
+            properties: [VirtualNodeProperty.ScrollY(0)],
             children: [VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(1)))]);
         var root2 = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(24))],
+            properties: [VirtualNodeProperty.ScrollY(24)],
             children: [VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(1)))]);
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
@@ -2028,7 +2028,7 @@ public sealed class WindowLayoutPipelineTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(-50))],
+            properties: [VirtualNodeProperty.ScrollY(-50)],
             children: [
                 VirtualNodeBuilder.Text(_arena, "hello", new NodeKey(2))
             ]);
@@ -2059,7 +2059,7 @@ public sealed class WindowLayoutPipelineTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(9999))],
+            properties: [VirtualNodeProperty.ScrollY(9999)],
             children: children);
         var viewport = new PixelRectangle(0, 0, 960, 100);
 
@@ -2082,7 +2082,7 @@ public sealed class WindowLayoutPipelineTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.Height, PropertyValue.FromNumber(60))],
+            properties: [VirtualNodeProperty.Height(60)],
             children: [
                 VirtualNodeBuilder.Text(_arena, "hello", new NodeKey(2)),
                 VirtualNodeBuilder.Text(_arena, "world", new NodeKey(3)),
@@ -2736,7 +2736,7 @@ public sealed class WindowLayoutPipelineTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(30))],
+            properties: [VirtualNodeProperty.ScrollY(30)],
             children:
             [
                 VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2)),

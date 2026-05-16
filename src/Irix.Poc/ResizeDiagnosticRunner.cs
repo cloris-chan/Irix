@@ -45,7 +45,7 @@ internal static class ResizeDiagnosticRunner
             children:
             [
                 VirtualNodeBuilder.Text(arena, "Resize Diagnostic: renderer/layout viewport", new NodeKey(1201)),
-                VirtualNodeFactory.Rectangle(300, 44, new NodeKey(1202)),
+                VirtualNodeFactory.Rectangle(new NodeKey(1202), VirtualNodeProperty.Width(300), VirtualNodeProperty.Height(44)),
                 VirtualNodeBuilder.Button(arena, "ResizeBtn", new NodeKey(1203), VirtualNodeProperty.Action(new ActionId(400)))
             ]);
 

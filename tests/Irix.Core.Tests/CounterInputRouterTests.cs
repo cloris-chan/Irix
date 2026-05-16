@@ -1010,7 +1010,7 @@ public sealed class CounterInputRouterTests
         {
             if (property.Key == VirtualPropertyKey.ActionId)
             {
-                return property.Value.ActionIdValue;
+                return property.Value.GetRequiredActionId();
             }
         }
 
@@ -1023,7 +1023,7 @@ public sealed class CounterInputRouterTests
         {
             if (property.Key == key)
             {
-                return property.Value.Boolean;
+                return property.Value.GetRequiredBoolean();
             }
         }
 
@@ -1036,7 +1036,7 @@ public sealed class CounterInputRouterTests
         {
             if (property.Key == key)
             {
-                return property.Value.Boolean;
+                return property.Value.GetRequiredBoolean();
             }
         }
 
@@ -1049,7 +1049,7 @@ public sealed class CounterInputRouterTests
         {
             if (property.Key == VirtualPropertyKey.ActionId)
             {
-                return property.Value.ActionIdValue;
+                return property.Value.GetRequiredActionId();
             }
         }
 
@@ -1164,7 +1164,7 @@ public sealed class CounterInputRouterTests
             }
         }
         Assert.Equal(VirtualPropertyKey.ScrollY, scrollYProperty.Key);
-        Assert.Equal(80.0, scrollYProperty.Value.Number);
+        Assert.Equal(80.0, scrollYProperty.Value.GetRequiredNumber());
     }
 
     [Fact]

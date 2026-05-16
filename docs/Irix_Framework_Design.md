@@ -848,7 +848,6 @@ VirtualNodeProperty.Action(actionId);
 VirtualNodeProperty.Hovered(isHovered);
 VirtualNodeProperty.Pressed(isPressed);
 VirtualNodeProperty.Focused(isFocused);
-VirtualNodeProperty.Opacity(0.8);
 ```
 
 `StylePropertyId` / 当前实现中的 `VirtualPropertyKey` 加 `VirtualPropertyMetadata.Effects` 只作为框架内部 invalidation、animation、supported-node validation metadata。它不是用户 authoring 分层，不得演变为 `SetLayoutStyle(...)` / `SetVisualStyle(...)` / `SetCompositeStyle(...)` 三套 public 主 API。
@@ -867,7 +866,6 @@ Global default style 与 node override 分离：
 |----------|------------|---------|-------------------|----------------------|
 | `Width`, `Height` | Number | Layout | CpuStyle | Rectangle, Button, ScrollContainer |
 | `ScrollY` | Number | Layout | CpuStyle | ScrollContainer |
-| `Opacity` | Number | Composite + Visual | Composite | Text, Rectangle, Button, ScrollContainer |
 | `ActionId` | ActionId | Interaction | None | Button |
 | `IsHovered`, `IsPressed`, `IsFocused` | Boolean | Interaction + Visual | Discrete | Button |
 

@@ -428,7 +428,7 @@ public sealed class DrawingBackendCompositorTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(30))],
+            properties: [VirtualNodeProperty.ScrollY(30)],
             children: [
                 VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2),
                     VirtualNodeProperty.Action(new ActionId(100))),

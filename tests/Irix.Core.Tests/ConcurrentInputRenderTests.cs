@@ -30,7 +30,7 @@ public sealed class ConcurrentInputRenderTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
+                properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
                     VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(2),
@@ -157,7 +157,7 @@ public sealed class ConcurrentInputRenderTests
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
+                properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
                     VirtualNodeBuilder.Button(_arena, "CycleBtn", new NodeKey(2),

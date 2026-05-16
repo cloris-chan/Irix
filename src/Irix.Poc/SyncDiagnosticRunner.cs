@@ -88,7 +88,7 @@ internal static class SyncDiagnosticRunner
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
+                properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
                     VirtualNodeBuilder.Button(arena, "SyncTest", new NodeKey(2),

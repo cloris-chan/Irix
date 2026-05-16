@@ -124,10 +124,10 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         var oldChildren = node.Children;
         var extraCapacity = 0;
         foreach (var kvp in adds) extraCapacity += kvp.Value.Count;
-        var newChildren = new List<VirtualNode>(oldChildren.Length + extraCapacity);
+        var newChildren = new List<VirtualNode>(oldChildren.Count + extraCapacity);
         var offset = currentIndex + 1;
 
-        for (var i = 0; i < oldChildren.Length; i++)
+        for (var i = 0; i < oldChildren.Count; i++)
         {
             var child = oldChildren[i];
             var childSize = CountNodes(child);
@@ -159,7 +159,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             offset = childEnd;
         }
 
-        if (oldChildren.Length > 0)
+        if (oldChildren.Count > 0)
         {
             if (adds.Count > 0)
             {
@@ -180,7 +180,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             }
         }
 
-        if (newChildren.Count != oldChildren.Length)
+        if (newChildren.Count != oldChildren.Count)
             return new VirtualNode(node.Kind, node.Key, node.Content, node.Properties, [.. newChildren]);
 
         var changed = false;
@@ -198,7 +198,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
     {
         var count = 1;
         var children = node.Children;
-        for (var i = 0; i < children.Length; i++) count += CountNodes(children[i]);
+        for (var i = 0; i < children.Count; i++) count += CountNodes(children[i]);
         return count;
     }
 }

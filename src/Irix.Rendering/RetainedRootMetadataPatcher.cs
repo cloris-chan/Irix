@@ -63,7 +63,7 @@ internal static class RetainedRootMetadataPatcher
         patchedNode = default;
         reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
 
-        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedNode.Children.Length != nextNode.Children.Length)
+        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedNode.Children.Count != nextNode.Children.Count)
         {
             return false;
         }
@@ -88,40 +88,41 @@ internal static class RetainedRootMetadataPatcher
 
         dfsIndex++;
         var patchedChildren = retainedNode.Children;
-        for (var i = 0; i < retainedNode.Children.Length; i++)
+        VirtualNode[]? patchedChildrenArray = null;
+        for (var i = 0; i < retainedNode.Children.Count; i++)
         {
             if (!TryProject(retainedNode.Children[i], nextNode.Children[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason, snapshot))
             {
                 return false;
             }
 
-            if (patchedChildren == retainedNode.Children && patchedChild != retainedNode.Children[i])
+            if (patchedChildrenArray is null && patchedChild != retainedNode.Children[i])
             {
-                patchedChildren = retainedNode.Children.ToArray();
+                patchedChildrenArray = retainedNode.Children.ToArray();
             }
 
-            if (patchedChildren != retainedNode.Children)
+            if (patchedChildrenArray is not null)
             {
-                patchedChildren[i] = patchedChild;
+                patchedChildrenArray[i] = patchedChild;
             }
         }
 
         if (isDirty)
         {
             patchedDirtyCount++;
-            patchedNode = new VirtualNode(retainedNode.Kind, retainedNode.Key, retainedNode.Content, nextNode.Properties.ToArray(), patchedChildren);
+            patchedNode = new VirtualNode(retainedNode.Kind, retainedNode.Key, retainedNode.Content, nextNode.Properties, patchedChildrenArray ?? patchedChildren);
             return true;
         }
 
-        patchedNode = patchedChildren == retainedNode.Children
+        patchedNode = patchedChildrenArray is null
             ? retainedNode
-            : new VirtualNode(retainedNode.Kind, retainedNode.Key, retainedNode.Content, retainedNode.Properties, patchedChildren);
+            : new VirtualNode(retainedNode.Kind, retainedNode.Key, retainedNode.Content, retainedNode.Properties, patchedChildrenArray);
         return true;
     }
 
     private static bool TryValidateDirtyProperties(
-        VirtualNodeProperty[] retainedProperties,
-        VirtualNodeProperty[] nextProperties,
+        IReadOnlyList<VirtualNodeProperty> retainedProperties,
+        IReadOnlyList<VirtualNodeProperty> nextProperties,
         out RetainedPartialApplyFallbackReason reason)
     {
         reason = RetainedPartialApplyFallbackReason.None;
@@ -150,8 +151,8 @@ internal static class RetainedRootMetadataPatcher
     }
 
     private static bool TryGetChangedPropertyKeys(
-        VirtualNodeProperty[] retainedProperties,
-        VirtualNodeProperty[] nextProperties,
+        IReadOnlyList<VirtualNodeProperty> retainedProperties,
+        IReadOnlyList<VirtualNodeProperty> nextProperties,
         out VirtualPropertyKey[] changedKeys)
     {
         changedKeys = [];
@@ -186,7 +187,7 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool TryValidateNextMetadataProperty(VirtualNodeProperty[] properties, VirtualPropertyKey key)
+    private static bool TryValidateNextMetadataProperty(IReadOnlyList<VirtualNodeProperty> properties, VirtualPropertyKey key)
     {
         if (!TryGetUniqueProperty(properties, key, out var found, out var property))
         {
@@ -199,7 +200,7 @@ internal static class RetainedRootMetadataPatcher
         }
 
         if (key == VirtualPropertyKey.ActionId)
-            return property.Value.Kind == PropertyValueKind.ActionId && !property.Value.ActionIdValue.IsNone;
+            return property.Value.Kind == PropertyValueKind.ActionId && !property.Value.GetRequiredActionId().IsNone;
         if (key == VirtualPropertyKey.IsHovered || key == VirtualPropertyKey.IsPressed || key == VirtualPropertyKey.IsFocused)
             return property.Value.Kind == PropertyValueKind.Boolean;
         return VirtualPropertyMetadata.TryGet(key, out var metadata)
@@ -207,7 +208,7 @@ internal static class RetainedRootMetadataPatcher
             && property.Value.Kind == metadata.ValueKind;
     }
 
-    private static bool TryGetUniqueProperty(VirtualNodeProperty[] properties, VirtualPropertyKey key, out bool found, out VirtualNodeProperty property)
+    private static bool TryGetUniqueProperty(IReadOnlyList<VirtualNodeProperty> properties, VirtualPropertyKey key, out bool found, out VirtualNodeProperty property)
     {
         found = false;
         property = default;
@@ -230,14 +231,14 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool PropertiesEqual(VirtualNodeProperty[] left, VirtualNodeProperty[] right)
+    private static bool PropertiesEqual(IReadOnlyList<VirtualNodeProperty> left, IReadOnlyList<VirtualNodeProperty> right)
     {
-        if (left.Length != right.Length)
+        if (left.Count != right.Count)
         {
             return false;
         }
 
-        for (var i = 0; i < left.Length; i++)
+        for (var i = 0; i < left.Count; i++)
         {
             if (left[i] != right[i])
             {

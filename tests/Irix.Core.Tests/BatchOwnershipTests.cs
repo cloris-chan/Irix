@@ -162,7 +162,7 @@ public sealed class BatchOwnershipTests
         var compositor = new RecordingCompositor();
         await using var loop = new CompositorLoop(translator, compositor);
 
-        // Publish a regular empty diff (Count == 0, Kind == Diff) â€?should be skipped
+        // Publish a regular empty diff (Count == 0, Kind == Diff) ï¿½?should be skipped
         var emptyOwner = new ArrayMemoryOwner<VirtualNodePatch>([]);
         var emptyBatch = new PatchBatch(emptyOwner, 0);
         await loop.PublishAsync(emptyBatch, cancellationToken);
@@ -188,18 +188,18 @@ public sealed class BatchOwnershipTests
         await compositor.WaitForRenderCountAsync(1, cancellationToken);
 
         // While first render is blocked, enqueue 3 more render requests.
-        // Request #2: _renderRequestDirty=0â†?, _renderRequestQueued=0â†?, writes batch
+        // Request #2: _renderRequestDirty=0ï¿½?, _renderRequestQueued=0ï¿½?, writes batch
         // Requests #3,#4: _renderRequestDirty already 1, ScheduleRenderRequest CAS fails (queued=1)
         await loop.RequestRenderAsync(cancellationToken);
         await loop.RequestRenderAsync(cancellationToken);
         await loop.RequestRenderAsync(cancellationToken);
 
-        // Release render #1 â†?loop picks up coalesced batch, clears queued+dirty, renders (count=2, blocks)
+        // Release render #1 ï¿½?loop picks up coalesced batch, clears queued+dirty, renders (count=2, blocks)
         compositor.Release();
         await compositor.WaitForRenderCountAsync(2, cancellationToken);
 
-        // Release render #2 â†?channel is empty, no reschedule (dirty was cleared when batch was picked up).
-        // This is correct coalescing: 3 extra requests â†?1 coalesced render.
+        // Release render #2 ï¿½?channel is empty, no reschedule (dirty was cleared when batch was picked up).
+        // This is correct coalescing: 3 extra requests ï¿½?1 coalesced render.
         // Total renders: 2 (initial + 1 coalesced).
         compositor.Release();
         await Task.Delay(50, cancellationToken);

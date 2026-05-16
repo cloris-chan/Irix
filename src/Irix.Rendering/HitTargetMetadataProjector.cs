@@ -67,7 +67,7 @@ internal static class HitTargetMetadataProjector
     private static bool TryCollectActionNodes(VirtualNode retainedNode, VirtualNode nextNode, ref int dfsIndex, List<ActionNodeMetadata> actionNodes)
     {
         var currentIndex = dfsIndex;
-        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedNode.Children.Length != nextNode.Children.Length)
+        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedNode.Children.Count != nextNode.Children.Count)
         {
             return false;
         }
@@ -78,7 +78,7 @@ internal static class HitTargetMetadataProjector
         }
 
         dfsIndex++;
-        for (var i = 0; i < retainedNode.Children.Length; i++)
+        for (var i = 0; i < retainedNode.Children.Count; i++)
         {
             if (!TryCollectActionNodes(retainedNode.Children[i], nextNode.Children[i], ref dfsIndex, actionNodes))
             {
@@ -89,13 +89,13 @@ internal static class HitTargetMetadataProjector
         return true;
     }
 
-    private static bool TryGetActionId(VirtualNodeProperty[] properties, out ActionId actionId)
+    private static bool TryGetActionId(IReadOnlyList<VirtualNodeProperty> properties, out ActionId actionId)
     {
         foreach (var property in properties)
         {
-            if (property.Key == VirtualPropertyKey.ActionId && property.Value.Kind == PropertyValueKind.ActionId && !property.Value.ActionIdValue.IsNone)
+            if (property.Key == VirtualPropertyKey.ActionId && property.Value.Kind == PropertyValueKind.ActionId && !property.Value.GetRequiredActionId().IsNone)
             {
-                actionId = property.Value.ActionIdValue;
+                actionId = property.Value.GetRequiredActionId();
                 return true;
             }
         }

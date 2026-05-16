@@ -68,11 +68,11 @@ public class TypedIdAllocationGuardTests
     [Fact]
     public void VirtualNodeProperty_uses_typed_key()
     {
-        var property = new VirtualNodeProperty(VirtualPropertyKey.ActionId, PropertyValue.FromActionId(new ActionId(5)));
+        var property = VirtualNodeProperty.Action(new ActionId(5));
 
         Assert.Equal(VirtualPropertyKey.ActionId, property.Key);
         Assert.Equal(PropertyValueKind.ActionId, property.Value.Kind);
-        Assert.Equal(new ActionId(5), property.Value.ActionIdValue);
+        Assert.Equal(new ActionId(5), property.Value.GetRequiredActionId());
     }
 
     [Fact]
@@ -85,7 +85,6 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(VirtualPropertyKey.IsHovered, VirtualNodeProperty.Hovered(true).Key);
         Assert.Equal(VirtualPropertyKey.IsPressed, VirtualNodeProperty.Pressed(true).Key);
         Assert.Equal(VirtualPropertyKey.IsFocused, VirtualNodeProperty.Focused(true).Key);
-        Assert.Equal(VirtualPropertyKey.Opacity, VirtualNodeProperty.Opacity(0.5).Key);
     }
 
     [Fact]
@@ -180,6 +179,13 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualNodeKind_default_is_None()
+    {
+        Assert.Equal(VirtualNodeKind.None, default);
+        Assert.Equal(VirtualNodeKind.None, new VirtualNode().Kind);
+    }
+
+    [Fact]
     public void PropertyChangeSet_has_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<PropertyChangeSet>());
@@ -207,11 +213,6 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(StyleEffect.Layout, VirtualPropertyMetadata.Get(VirtualPropertyKey.Height).Effects);
         Assert.Equal(StyleEffect.Layout, VirtualPropertyMetadata.Get(VirtualPropertyKey.ScrollY).Effects);
 
-        var opacity = VirtualPropertyMetadata.Get(VirtualPropertyKey.Opacity);
-        Assert.Equal(PropertyValueKind.Number, opacity.ValueKind);
-        Assert.True((opacity.Effects & StyleEffect.Composite) != 0);
-        Assert.Equal(AnimationChannel.Composite, opacity.AnimationChannel);
-
         var action = VirtualPropertyMetadata.Get(VirtualPropertyKey.ActionId);
         Assert.Equal(PropertyValueKind.ActionId, action.ValueKind);
         Assert.Equal(StyleEffect.Interaction, action.Effects);
@@ -229,17 +230,18 @@ public class TypedIdAllocationGuardTests
     {
         Assert.Equal(InvalidationKind.Layout, PropertyChangeSet.AddKey(default, VirtualPropertyKey.Width).ClassifySet());
         Assert.Equal(InvalidationKind.Layout, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ScrollY).ClassifySet());
-        Assert.Equal(InvalidationKind.CompositeOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.Opacity).ClassifySet());
         Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ActionId).ClassifySet());
         Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.IsHovered).ClassifySet());
     }
 
     [Fact]
-    public void VirtualNodeProperty_constructor_rejects_key_value_mismatch()
+    public void VirtualNodeProperty_constructor_is_private()
     {
-        Assert.Throws<ArgumentException>(() => new VirtualNodeProperty(VirtualPropertyKey.ActionId, PropertyValue.FromNumber(1)));
-        Assert.Throws<ArgumentException>(() => new VirtualNodeProperty(VirtualPropertyKey.Width, PropertyValue.FromBoolean(true)));
-        Assert.Throws<ArgumentException>(() => new VirtualNodeProperty(VirtualPropertyKey.IsHovered, PropertyValue.FromActionId(new ActionId(1))));
+        var constructors = typeof(VirtualNodeProperty)
+            .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        Assert.NotEmpty(constructors);
+        Assert.All(constructors, constructor => Assert.True(constructor.IsPrivate));
     }
 
     [Fact]
@@ -280,7 +282,6 @@ public class TypedIdAllocationGuardTests
 
         Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualPropertyKey.Width));
         Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualPropertyKey.Height));
-        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualPropertyKey.Opacity));
         Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualPropertyKey.ActionId));
 
         Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.ScrollContainer, VirtualPropertyKey.ScrollY));
@@ -397,6 +398,7 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("Wrapping", source);
         Assert.DoesNotContain("FillColor", source);
         Assert.DoesNotContain("TextColor", source);
+        Assert.DoesNotContain("Opacity", source);
 
         Assert.DoesNotContain("ButtonHeight", source);
         Assert.DoesNotContain("RectangleHeight", source);
@@ -447,6 +449,25 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("record struct VirtualNodeProperty", source);
         Assert.DoesNotContain("record struct VirtualNodePatch", source);
         Assert.DoesNotContain("record struct StylePropertyMetadata", metadataSource);
+    }
+
+    [Fact]
+    public void Core_property_api_has_no_round15_removed_names()
+    {
+        var coreDir = Path.Combine(FindRepoRoot(), "src", "Irix.Core");
+        var sourceFiles = Directory.GetFiles(coreDir, "*.cs", SearchOption.AllDirectories);
+
+        foreach (var file in sourceFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.DoesNotContain("VirtualNodeProperty.Opacity", content);
+            Assert.DoesNotContain("VirtualPropertyKey.Opacity", content);
+            Assert.DoesNotContain("ActionIdValue", content);
+            Assert.DoesNotContain("public double Number", content);
+            Assert.DoesNotContain("public bool Boolean", content);
+            Assert.DoesNotContain("ReferenceEquals(Properties", content);
+            Assert.DoesNotContain("Rectangle(double width", content);
+        }
     }
 
     [Fact]

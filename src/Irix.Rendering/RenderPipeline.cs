@@ -86,8 +86,8 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     {
         LastViewport = viewportBounds;
         var hadRetainedLayout = _retainedLayout is not null;
-        var classifyOldRoot = hadRetainedLayout && previousRoot.Kind != default ? previousRoot : _retainedRoot;
-        var classifyOldSnapshot = hadRetainedLayout && previousRoot.Kind != default ? prevTextSnapshot : _retainedTextSnapshot;
+        var classifyOldRoot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? previousRoot : _retainedRoot;
+        var classifyOldSnapshot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? prevTextSnapshot : _retainedTextSnapshot;
         var treeChanged = _retainedLayout is null || !VirtualNodeDiffer.NodesEqual(classifyOldRoot, root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
@@ -229,14 +229,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             : new DirtyNodeClassification(LayoutRebuildReason.LayoutAffecting, InvalidationKind.Layout);
     }
 
-    private static DirtyNodeClassification ClassifyPropertyChanges(VirtualNodeProperty[] previousProperties, VirtualNodeProperty[] nextProperties)
+    private static DirtyNodeClassification ClassifyPropertyChanges(IReadOnlyList<VirtualNodeProperty> previousProperties, IReadOnlyList<VirtualNodeProperty> nextProperties)
     {
         var changeSet = GetChangedPropertySet(previousProperties, nextProperties);
         var invalidationKind = changeSet.ClassifySet();
         return new DirtyNodeClassification(invalidationKind.ToLayoutRebuildReason(), invalidationKind);
     }
 
-    private static PropertyChangeSet GetChangedPropertySet(VirtualNodeProperty[] previousProperties, VirtualNodeProperty[] nextProperties)
+    private static PropertyChangeSet GetChangedPropertySet(IReadOnlyList<VirtualNodeProperty> previousProperties, IReadOnlyList<VirtualNodeProperty> nextProperties)
     {
         var changeSet = default(PropertyChangeSet);
 
@@ -260,7 +260,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return changeSet;
     }
 
-    private static bool TryFindProperty(VirtualNodeProperty[] properties, VirtualPropertyKey key, out VirtualNodeProperty property)
+    private static bool TryFindProperty(IReadOnlyList<VirtualNodeProperty> properties, VirtualPropertyKey key, out VirtualNodeProperty property)
     {
         foreach (var candidate in properties)
         {
@@ -275,14 +275,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return false;
     }
 
-    private static bool PropertiesEqual(VirtualNodeProperty[] previousProperties, VirtualNodeProperty[] nextProperties)
+    private static bool PropertiesEqual(IReadOnlyList<VirtualNodeProperty> previousProperties, IReadOnlyList<VirtualNodeProperty> nextProperties)
     {
-        if (previousProperties.Length != nextProperties.Length)
+        if (previousProperties.Count != nextProperties.Count)
         {
             return false;
         }
 
-        for (var i = 0; i < previousProperties.Length; i++)
+        for (var i = 0; i < previousProperties.Count; i++)
         {
             if (previousProperties[i] != nextProperties[i])
             {
@@ -293,14 +293,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return true;
     }
 
-    private static bool ChildrenShapeChanged(VirtualNode[] previousChildren, VirtualNode[] nextChildren)
+    private static bool ChildrenShapeChanged(IReadOnlyList<VirtualNode> previousChildren, IReadOnlyList<VirtualNode> nextChildren)
     {
-        if (previousChildren.Length != nextChildren.Length)
+        if (previousChildren.Count != nextChildren.Count)
         {
             return true;
         }
 
-        for (var i = 0; i < previousChildren.Length; i++)
+        for (var i = 0; i < previousChildren.Count; i++)
         {
             if (previousChildren[i].Kind != nextChildren[i].Kind || previousChildren[i].Key != nextChildren[i].Key)
             {
