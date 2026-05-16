@@ -833,11 +833,33 @@ public readonly struct VirtualNodeProperty
 }
 ```
 
-v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 可采用轻量不可变结构配合池化 Builder / Arena 分配策略，在复杂度、可调试性和性能之间取得更稳妥的平衡。
+v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 保持普通 `readonly struct`，构造时冻结复制 `Properties` / `Children`，可安全进入 retained tree、diff、patch、batch、async 和跨线程边界。`ref struct` 只允许出现在同步构造或读取边界。
 
-> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还资源到池，资源生命周期已显式化。`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new List + ToArray。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。Round 13 已完成 text/value IR：`VirtualNode → LayoutElement → DrawCommandRecorder` 使用 `TextNodeContent + TextBufferSnapshot.ResolveRequired`，不再回退到 string text property。Round 14/15 已完成 typed property metadata 与 API cleanup：`VirtualPropertyKey` 是纯值 key，无 public constructor、无 primitive `ToString()`；`VirtualNodeProperty` constructor 为 private，正常构造只能走 helper；`VirtualNode.Properties` / `Children` 构造时复制并只读暴露；`VirtualNodeKind.None` 是默认 node kind。热路径 GC pressure 已基本消除。
+> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还资源到池，资源生命周期已显式化。`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new List + ToArray。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。Round 13 已完成 text/value IR：`VirtualNode → LayoutElement → DrawCommandRecorder` 使用 `TextNodeContent + TextBufferSnapshot.ResolveRequired`，不再回退到 string text property。Round 14/15 已完成 typed property metadata 与 API cleanup：`VirtualPropertyKey` 是纯值 key，无 public constructor、无 primitive `ToString()`；`VirtualNodeProperty` constructor 为 private，正常构造只能走 helper；`VirtualNode.Properties` / `Children` 构造时复制并只读暴露；`VirtualNodeKind.None` 是默认 node kind。Round 16 增加 `VirtualNodePropertyListBuilder`、`VirtualNodeChildrenBuilder`、span factory overload、`PropertyReader` 和 `LayoutContext` ref-struct 边界，降低构造/布局读取的中间分配与 interface dispatch。
 
-#### 6.2.1 Unified typed style/property API
+#### 6.2.1 `ref struct` boundary
+
+Allowed `ref struct` types:
+
+| Type | Scope | Rule |
+|------|-------|------|
+| `VirtualNodePropertyListBuilder` | Synchronous authoring/build-view helper | Wraps caller-provided `Span<VirtualNodeProperty>`; small property lists can use `stackalloc`; `ToArray()` only happens when freezing a `VirtualNode`. |
+| `VirtualNodeChildrenBuilder` | Synchronous authoring/build-view helper | Keeps a small inline child buffer and falls back to an array only beyond inline capacity; final node construction freezes children once. |
+| `PropertyReader` | Synchronous layout/render metadata read | Wraps `ReadOnlySpan<VirtualNodeProperty>` for typed number/bool/action lookup; no retained storage. |
+| `LayoutContext` | `LayoutTreeBuilder.BuildLayoutTree` synchronous recursion | Carries layout state by ref inside layout recursion only. |
+
+Public authoring helpers may use modern `params scoped ReadOnlySpan<T>` for natural call sites without array `params`. Low-level creation APIs still accept explicit `ReadOnlySpan<VirtualNodeProperty>` / `ReadOnlySpan<VirtualNode>` for builder handoff.
+
+Forbidden `ref struct` locations:
+
+- `VirtualNode`, `VirtualNodeTree`, `VirtualNodeProperty`, and `VirtualNodePatch`.
+- `PatchBatch`, `RenderFrameBatch`, `DrawCommandBatch`, retained frame/state/resource ownership types, compositor queues, and any async/cross-thread payload.
+- Class fields, record payloads, `IMemoryOwner<T>` payloads, diagnostics snapshots, or public retained API contracts.
+- Any method that awaits, yields, stores the value, captures it in a lambda, or returns it across an async boundary.
+
+This boundary is intentional: `ref struct` is for synchronous, non-owning builders/readers/contexts only. Retained IR remains ordinary value/reference-backed data with explicit freezing and ownership transfer.
+
+#### 6.2.2 Unified typed style/property API
 
 Public authoring API 是一套 unified typed property API。调用方不需要知道某个 property 最终由 layout、text measure、paint 还是 compositor 处理，也不需要选择三套 public style API。框架暴露语义 helper，例如：
 
@@ -901,7 +923,7 @@ public interface IMessageDispatcher<TMessage>
 
 | 上下文 | 发生场景 | 内存策略 |
 |--------|---------|---------|
-| **同步/栈上下文** | Layout Measure/Arrange、局部 Diff、绘制参数计算 | 优先使用 `ref struct` + `ReadOnlySpan<T>`；热路径禁止持续性托管堆分配 |
+| **同步/栈上下文** | BuildView helper、Layout Measure/Arrange、局部 Diff、绘制参数计算 | 只在非持有、非 async、非 retained 的 builder/reader/context 中使用 `ref struct` + `ReadOnlySpan<T>`；热路径禁止持续性托管堆分配 |
 | **异步/跨界上下文** | 跨线程传递 Patch、跨网络传递 Patch | `MemoryPool<T>` 租用 + `IMemoryOwner<T>` 所有权转移 |
 
 ### 7.2 所有权转移模型

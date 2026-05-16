@@ -6,7 +6,7 @@ namespace Irix.Rendering;
 /// Carries layout state through recursive LayoutNode calls.
 /// Prevents parameter list bloat as more layout features are added.
 /// </summary>
-internal struct LayoutContext
+internal ref struct LayoutContext
 {
     public int AvailableWidth;
     public int ViewportHeight;
@@ -97,7 +97,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var containerClipWidth = isRootContainer ? ctx.AvailableWidth + (ctx.Style.HorizontalPadding * 2) : ctx.AvailableWidth;
 
                 var implicitVisibleHeight = ctx.ResolveImplicitVisibleHeight(contentTop);
-                var explicitHeight = GetDimension(node, VirtualPropertyKey.Height, 0);
+                var properties = new PropertyReader(node.PropertiesSpan);
+                var explicitHeight = ReadInt(properties, VirtualPropertyKey.Height, 0);
                 var containerVisibleHeight = explicitHeight > 0
                     ? Math.Min(explicitHeight, implicitVisibleHeight)
                     : implicitVisibleHeight;
@@ -116,7 +117,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 childCtx.Depth = ctx.Depth + 1;
                 childCtx.ClipBounds = containerClip;
                 cursorY = contentTop;
-                foreach (var child in node.Children)
+                foreach (var child in node.ChildrenSpan)
                 {
                     children.AddRange(LayoutNode(child, childDfsIndex, ref cursorY, elements, ref childCtx));
                     childDfsIndex += CountVirtualNodes(child);
@@ -124,7 +125,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var contentHeight = Math.Max(cursorY - contentTop, 0);
 
                 var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
-                var scrollY = Math.Clamp(GetDimension(node, VirtualPropertyKey.ScrollY, 0), 0, maxScrollY);
+                properties = new PropertyReader(node.PropertiesSpan);
+                var scrollY = Math.Clamp(ReadInt(properties, VirtualPropertyKey.ScrollY, 0), 0, maxScrollY);
 
                 if (scrollY > 0)
                 {
@@ -195,8 +197,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var rectangleBounds = new PixelRectangle(
                     ctx.Style.HorizontalPadding,
                     cursorY,
-                    GetDimension(node, VirtualPropertyKey.Width, Math.Min(ctx.AvailableWidth, 160)),
-                    GetDimension(node, VirtualPropertyKey.Height, ctx.Style.RectangleHeight));
+                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Width, Math.Min(ctx.AvailableWidth, 160)),
+                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Height, ctx.Style.RectangleHeight));
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: ctx.ClipBounds));
                 cursorY += rectangleBounds.Height + ctx.Style.ItemSpacing;
@@ -218,13 +220,14 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 var bounds = new PixelRectangle(
                     ctx.Style.HorizontalPadding,
                     cursorY,
-                    GetDimension(node, VirtualPropertyKey.Width, width),
-                    GetDimension(node, VirtualPropertyKey.Height, ctx.Style.ButtonHeight));
-                var actionId = GetActionId(node);
+                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Width, width),
+                    ReadInt(new PropertyReader(node.PropertiesSpan), VirtualPropertyKey.Height, ctx.Style.ButtonHeight));
+                var properties = new PropertyReader(node.PropertiesSpan);
+                var actionId = properties.GetActionId(VirtualPropertyKey.ActionId);
                 var buttonState = new ButtonVisualState(
-                    IsHovered: GetBooleanProperty(node, VirtualPropertyKey.IsHovered),
-                    IsPressed: GetBooleanProperty(node, VirtualPropertyKey.IsPressed),
-                    IsFocused: GetBooleanProperty(node, VirtualPropertyKey.IsFocused));
+                    IsHovered: properties.GetBool(VirtualPropertyKey.IsHovered),
+                    IsPressed: properties.GetBool(VirtualPropertyKey.IsPressed),
+                    IsFocused: properties.GetBool(VirtualPropertyKey.IsFocused));
                 var elementIndex = elements.Count;
                 elements.Add(new LayoutElement(
                     LayoutElementKind.Button,
@@ -274,29 +277,16 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     private static int CountVirtualNodes(VirtualNode node)
     {
         var count = 1;
-        foreach (var child in node.Children)
+        foreach (var child in node.ChildrenSpan)
         {
             count += CountVirtualNodes(child);
         }
         return count;
     }
 
-    private static int GetDimension(VirtualNode node, VirtualPropertyKey key, int defaultValue)
-    {
-        foreach (var property in node.Properties)
-        {
-            if (property.Key == key && property.Value.Kind == PropertyValueKind.Number)
-            {
-                return (int)property.Value.GetRequiredNumber();
-            }
-        }
-
-        return defaultValue;
-    }
-
     private static TextNodeContent GetButtonLabel(VirtualNode node)
     {
-        foreach (var child in node.Children)
+        foreach (var child in node.ChildrenSpan)
         {
             if (child.Kind == VirtualNodeKind.Text)
             {
@@ -311,31 +301,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return default;
     }
 
-    private static ActionId GetActionId(VirtualNode node)
-    {
-        foreach (var property in node.Properties)
-        {
-            if (property.Key == VirtualPropertyKey.ActionId && property.Value.Kind == PropertyValueKind.ActionId)
-            {
-                return property.Value.GetRequiredActionId();
-            }
-        }
-
-        return ActionId.None;
-    }
-
-    private static bool GetBooleanProperty(VirtualNode node, VirtualPropertyKey key)
-    {
-        foreach (var property in node.Properties)
-        {
-            if (property.Key == key && property.Value.Kind == PropertyValueKind.Boolean)
-            {
-                return property.Value.GetRequiredBoolean();
-            }
-        }
-
-        return false;
-    }
+    private static int ReadInt(PropertyReader reader, VirtualPropertyKey key, int defaultValue) =>
+        (int)reader.GetNumber(key, defaultValue);
 
     private static TextNodeContent GetTextContent(VirtualNode node)
     {

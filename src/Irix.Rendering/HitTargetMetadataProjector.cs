@@ -67,41 +67,30 @@ internal static class HitTargetMetadataProjector
     private static bool TryCollectActionNodes(VirtualNode retainedNode, VirtualNode nextNode, ref int dfsIndex, List<ActionNodeMetadata> actionNodes)
     {
         var currentIndex = dfsIndex;
-        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedNode.Children.Count != nextNode.Children.Count)
+        var retainedChildren = retainedNode.ChildrenSpan;
+        var nextChildren = nextNode.ChildrenSpan;
+        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedChildren.Length != nextChildren.Length)
         {
             return false;
         }
 
-        if (nextNode.Kind == VirtualNodeKind.Button && TryGetActionId(nextNode.Properties, out var actionId))
+        var reader = new PropertyReader(nextNode.PropertiesSpan);
+        var actionId = reader.GetActionId(VirtualPropertyKey.ActionId);
+        if (nextNode.Kind == VirtualNodeKind.Button && !actionId.IsNone)
         {
             actionNodes.Add(new ActionNodeMetadata(currentIndex, actionId));
         }
 
         dfsIndex++;
-        for (var i = 0; i < retainedNode.Children.Count; i++)
+        for (var i = 0; i < retainedChildren.Length; i++)
         {
-            if (!TryCollectActionNodes(retainedNode.Children[i], nextNode.Children[i], ref dfsIndex, actionNodes))
+            if (!TryCollectActionNodes(retainedChildren[i], nextChildren[i], ref dfsIndex, actionNodes))
             {
                 return false;
             }
         }
 
         return true;
-    }
-
-    private static bool TryGetActionId(IReadOnlyList<VirtualNodeProperty> properties, out ActionId actionId)
-    {
-        foreach (var property in properties)
-        {
-            if (property.Key == VirtualPropertyKey.ActionId && property.Value.Kind == PropertyValueKind.ActionId && !property.Value.GetRequiredActionId().IsNone)
-            {
-                actionId = property.Value.GetRequiredActionId();
-                return true;
-            }
-        }
-
-        actionId = ActionId.None;
-        return false;
     }
 
     private readonly record struct ActionNodeMetadata(int DfsIndex, ActionId ActionId);

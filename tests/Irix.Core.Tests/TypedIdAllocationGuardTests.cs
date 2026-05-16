@@ -88,6 +88,73 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualNodePropertyListBuilder_writes_to_caller_span_and_rejects_duplicates()
+    {
+        Span<VirtualNodeProperty> storage = stackalloc VirtualNodeProperty[4];
+        var builder = new VirtualNodePropertyListBuilder(storage);
+
+        builder.AddWidth(120);
+        builder.AddHeight(48);
+        builder.AddAction(new ActionId(9));
+
+        Assert.Equal(3, builder.Count);
+        Assert.Equal(VirtualPropertyKey.Width, builder.Written[0].Key);
+        Assert.Equal(VirtualPropertyKey.Height, builder.Written[1].Key);
+        Assert.Equal(VirtualPropertyKey.ActionId, builder.Written[2].Key);
+        try
+        {
+            builder.AddWidth(160);
+            throw new Xunit.Sdk.XunitException("Expected duplicate width to throw.");
+        }
+        catch (ArgumentException)
+        {
+        }
+    }
+
+    [Fact]
+    public void VirtualNodeFactory_span_overload_freezes_property_snapshot_once()
+    {
+        Span<VirtualNodeProperty> storage = stackalloc VirtualNodeProperty[2];
+        var builder = new VirtualNodePropertyListBuilder(storage);
+        builder.AddWidth(120);
+        builder.AddHeight(48);
+
+        var node = VirtualNodeFactory.Rectangle(new NodeKey(7), builder.Written);
+        storage[0] = VirtualNodeProperty.Width(999);
+
+        Assert.Equal(120, node.Properties[0].Value.GetRequiredNumber());
+        Assert.Equal(48, node.Properties[1].Value.GetRequiredNumber());
+    }
+
+    [Fact]
+    public void VirtualNodeChildrenBuilder_handles_inline_and_overflow_children()
+    {
+        var children = new VirtualNodeChildrenBuilder();
+        for (var i = 0; i < 6; i++)
+        {
+            children.Add(VirtualNodeBuilder.Text(_arena, $"child {i}", new NodeKey((uint)(10 + i))));
+        }
+
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1), ReadOnlySpan<VirtualNodeProperty>.Empty, ref children);
+
+        Assert.Equal(6, root.Children.Count);
+        Assert.Equal(new NodeKey(10), root.Children[0].Key);
+        Assert.Equal(new NodeKey(15), root.Children[5].Key);
+    }
+
+    [Fact]
+    public void VirtualNodeChildrenBuilder_default_value_is_usable()
+    {
+        VirtualNodeChildrenBuilder children = default;
+        children.Add(VirtualNodeBuilder.Text(_arena, "child", new NodeKey(10)));
+
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1), ReadOnlySpan<VirtualNodeProperty>.Empty, ref children);
+
+        Assert.Single(root.Children);
+        Assert.Equal(new NodeKey(10), root.Children[0].Key);
+    }
+
+    [Fact]
     public void VirtualNode_Key_is_NodeKey()
     {
         var node = VirtualNodeBuilder.Text(_arena, "hello", new NodeKey(42));
@@ -452,6 +519,49 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Ref_struct_types_stay_limited_to_builder_reader_and_context_boundaries()
+    {
+        Assert.True(typeof(VirtualNodePropertyListBuilder).IsByRefLike);
+        Assert.True(typeof(VirtualNodeChildrenBuilder).IsByRefLike);
+        Assert.False(typeof(VirtualNode).IsByRefLike);
+        Assert.False(typeof(VirtualNodeTree).IsByRefLike);
+        Assert.False(typeof(VirtualNodeProperty).IsByRefLike);
+        Assert.False(typeof(VirtualNodePatch).IsByRefLike);
+        Assert.False(typeof(PatchBatch).IsByRefLike);
+        Assert.False(typeof(RenderFrameBatch).IsByRefLike);
+
+        var root = FindRepoRoot();
+        var propertyReaderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "PropertyReader.cs"));
+        var layoutSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+
+        Assert.Contains("internal readonly ref struct PropertyReader", propertyReaderSource);
+        Assert.Contains("internal ref struct LayoutContext", layoutSource);
+    }
+
+    [Fact]
+    public void Ref_struct_names_do_not_enter_batch_or_retained_state_sources()
+    {
+        var root = FindRepoRoot();
+        var sourceFiles = Directory.GetFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
+            .Where(file =>
+            {
+                var name = Path.GetFileName(file);
+                return name.Contains("Batch", StringComparison.Ordinal)
+                    || name.Contains("Retained", StringComparison.Ordinal)
+                    || name.Contains("Segmented", StringComparison.Ordinal);
+            });
+
+        foreach (var file in sourceFiles)
+        {
+            var content = File.ReadAllText(file);
+            Assert.DoesNotContain("VirtualNodePropertyListBuilder", content);
+            Assert.DoesNotContain("VirtualNodeChildrenBuilder", content);
+            Assert.DoesNotContain("PropertyReader", content);
+            Assert.DoesNotContain("LayoutContext", content);
+        }
+    }
+
+    [Fact]
     public void Core_property_api_has_no_round15_removed_names()
     {
         var coreDir = Path.Combine(FindRepoRoot(), "src", "Irix.Core");
@@ -468,6 +578,17 @@ public class TypedIdAllocationGuardTests
             Assert.DoesNotContain("ReferenceEquals(Properties", content);
             Assert.DoesNotContain("Rectangle(double width", content);
         }
+    }
+
+    [Fact]
+    public void VirtualNode_authoring_helpers_do_not_use_array_params()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
+
+        Assert.DoesNotContain("params VirtualNodeProperty[]", source);
+        Assert.DoesNotContain("params VirtualNode[]", source);
+        Assert.Contains("params scoped ReadOnlySpan<VirtualNodeProperty>", source);
+        Assert.Contains("params scoped ReadOnlySpan<VirtualNode>", source);
     }
 
     [Fact]

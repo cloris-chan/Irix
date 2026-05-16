@@ -32,6 +32,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
+| Ref struct boundary | Complete for Round 16. `ref struct` is limited to synchronous builders/readers/layout context; retained IR and batches stay ordinary storable types. |
 | Docs | Trimmed to canonical docs only; obsolete prep/checkpoint docs deleted. |
 
 ---
@@ -78,6 +79,15 @@ Round 15 hardening state:
 - `VirtualNodeFactory.Rectangle(width, height, ...)` was removed; width/height are explicit properties.
 - Buttons require an explicit label; layout no longer falls back to `"Button"`.
 
+Round 16 construction/layout state:
+
+- `VirtualNode` remains a normal `readonly struct`; it is safe for retained/diff/patch/batch storage.
+- `VirtualNodePropertyListBuilder` is a `ref struct` over caller-provided `Span<VirtualNodeProperty>`; small lists can use `stackalloc`.
+- `VirtualNodeChildrenBuilder` is a `ref struct` with inline child storage and array fallback beyond inline capacity.
+- `VirtualNodeFactory.Create(...)` accepts `ReadOnlySpan<VirtualNodeProperty>` and `ReadOnlySpan<VirtualNode>` / children builder overloads.
+- Public authoring helpers use `params scoped ReadOnlySpan<T>`, not array `params`; array `params` is guarded against reintroduction.
+- `LayoutTreeBuilder` reads node properties through internal `PropertyReader` over `PropertiesSpan`; `LayoutContext` is a synchronous `ref struct`.
+
 ---
 
 ## Current Verification
@@ -90,7 +100,21 @@ dotnet test tests/Irix.Core.Tests/Irix.Core.Tests.csproj --no-restore
 dotnet test Irix.slnx --no-restore
 ```
 
-Result: 560 tests passed.
+Result: 568 tests passed.
+
+Round 16 allocation probes:
+
+```text
+5,000 BuildView -> diff -> layout -> record iterations
+inline helper path: 1,833,248 bytes
+builder/span path: 1,835,536 bytes
+delta: within 128 KB parity guard
+
+5,000 authoring-only VirtualNode iterations
+inline helper path: 2,000,080 bytes
+builder/span path: 2,000,080 bytes
+delta: 0 bytes
+```
 
 Source guards currently block:
 
@@ -104,6 +128,7 @@ Source guards currently block:
 - `VirtualNodeProperty` public/internal construction.
 - Silent `PropertyValue` getters.
 - Reference-equality `VirtualNode` semantics.
+- Ref struct leakage into batch/retained state sources.
 
 ---
 

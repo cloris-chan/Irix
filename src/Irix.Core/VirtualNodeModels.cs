@@ -237,11 +237,15 @@ public readonly struct VirtualNodeTree : IEquatable<VirtualNodeTree>
 
 public readonly struct VirtualNode : IEquatable<VirtualNode>
 {
-    private static readonly IReadOnlyList<VirtualNodeProperty> EmptyProperties = Array.AsReadOnly(Array.Empty<VirtualNodeProperty>());
-    private static readonly IReadOnlyList<VirtualNode> EmptyChildren = Array.AsReadOnly(Array.Empty<VirtualNode>());
+    private static readonly VirtualNodeProperty[] EmptyPropertyArray = [];
+    private static readonly VirtualNode[] EmptyChildArray = [];
+    private static readonly IReadOnlyList<VirtualNodeProperty> EmptyProperties = Array.AsReadOnly(EmptyPropertyArray);
+    private static readonly IReadOnlyList<VirtualNode> EmptyChildren = Array.AsReadOnly(EmptyChildArray);
 
-    private readonly IReadOnlyList<VirtualNodeProperty>? _properties;
-    private readonly IReadOnlyList<VirtualNode>? _children;
+    private readonly VirtualNodeProperty[]? _properties;
+    private readonly VirtualNode[]? _children;
+    private readonly IReadOnlyList<VirtualNodeProperty>? _propertiesView;
+    private readonly IReadOnlyList<VirtualNode>? _childrenView;
 
     public VirtualNode(
         VirtualNodeKind kind,
@@ -249,21 +253,57 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
         NodeContent content = default,
         IReadOnlyList<VirtualNodeProperty>? properties = null,
         IReadOnlyList<VirtualNode>? children = null)
+        : this(kind, key, content, VirtualNodePropertySet.Create(kind, properties), CreateChildren(children))
     {
-        var childrenArray = CreateChildren(children);
+    }
+
+    internal VirtualNode(
+        VirtualNodeKind kind,
+        NodeKey key,
+        NodeContent content,
+        scoped ReadOnlySpan<VirtualNodeProperty> properties,
+        scoped ReadOnlySpan<VirtualNode> children)
+        : this(kind, key, content, VirtualNodePropertySet.Create(kind, properties), CreateChildren(children))
+    {
+    }
+
+    private VirtualNode(
+        VirtualNodeKind kind,
+        NodeKey key,
+        NodeContent content,
+        VirtualNodeProperty[] properties,
+        VirtualNode[] children)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        ArgumentNullException.ThrowIfNull(children);
+
         Kind = kind;
         Key = key;
         Content = content;
-        _properties = Wrap(VirtualNodePropertySet.Create(kind, properties));
-        _children = Wrap(childrenArray);
-        ValidateNodeShape(kind, childrenArray);
+        _properties = properties.Length == 0 ? null : properties;
+        _children = children.Length == 0 ? null : children;
+        _propertiesView = properties.Length == 0 ? null : Array.AsReadOnly(properties);
+        _childrenView = children.Length == 0 ? null : Array.AsReadOnly(children);
+        ValidateNodeShape(kind, children);
     }
 
     public VirtualNodeKind Kind { get; }
     public NodeKey Key { get; }
     public NodeContent Content { get; }
-    public IReadOnlyList<VirtualNodeProperty> Properties => _properties ?? EmptyProperties;
-    public IReadOnlyList<VirtualNode> Children => _children ?? EmptyChildren;
+    public IReadOnlyList<VirtualNodeProperty> Properties => _propertiesView ?? EmptyProperties;
+    public IReadOnlyList<VirtualNode> Children => _childrenView ?? EmptyChildren;
+
+    internal ReadOnlySpan<VirtualNodeProperty> PropertiesSpan => _properties is null ? ReadOnlySpan<VirtualNodeProperty>.Empty : _properties;
+
+    internal ReadOnlySpan<VirtualNode> ChildrenSpan => _children is null ? ReadOnlySpan<VirtualNode>.Empty : _children;
+
+    internal static VirtualNode CreateFromOwnedArrays(
+        VirtualNodeKind kind,
+        NodeKey key,
+        NodeContent content,
+        VirtualNodeProperty[] properties,
+        VirtualNode[] children) =>
+        new(kind, key, content, properties, children);
 
     public bool Equals(VirtualNode other)
     {
@@ -305,12 +345,6 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
 
     public static bool operator !=(VirtualNode left, VirtualNode right) => !left.Equals(right);
 
-    private static IReadOnlyList<VirtualNodeProperty> Wrap(VirtualNodeProperty[] properties) =>
-        properties.Length == 0 ? EmptyProperties : Array.AsReadOnly(properties);
-
-    private static IReadOnlyList<VirtualNode> Wrap(VirtualNode[] children) =>
-        children.Length == 0 ? EmptyChildren : Array.AsReadOnly(children);
-
     private static VirtualNode[] CreateChildren(IReadOnlyList<VirtualNode>? children)
     {
         if (children is null || children.Count == 0)
@@ -326,6 +360,9 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
 
         return copy;
     }
+
+    private static VirtualNode[] CreateChildren(scoped ReadOnlySpan<VirtualNode> children) =>
+        children.IsEmpty ? [] : children.ToArray();
 
     private static void ValidateNodeShape(VirtualNodeKind kind, VirtualNode[] children)
     {
@@ -384,6 +421,145 @@ public readonly struct VirtualNode : IEquatable<VirtualNode>
     }
 }
 
+public ref struct VirtualNodePropertyListBuilder
+{
+    private Span<VirtualNodeProperty> _properties;
+    private int _count;
+
+    public VirtualNodePropertyListBuilder(Span<VirtualNodeProperty> properties)
+    {
+        _properties = properties;
+        _count = 0;
+    }
+
+    public readonly int Count => _count;
+
+    public readonly ReadOnlySpan<VirtualNodeProperty> Written => _properties[.._count];
+
+    public void AddWidth(double value) => Add(VirtualNodeProperty.Width(value));
+
+    public void AddHeight(double value) => Add(VirtualNodeProperty.Height(value));
+
+    public void AddAction(ActionId actionId) => Add(VirtualNodeProperty.Action(actionId));
+
+    public void AddState(bool hovered, bool pressed, bool focused)
+    {
+        AddHovered(hovered);
+        AddPressed(pressed);
+        AddFocused(focused);
+    }
+
+    public void AddHovered(bool value) => Add(VirtualNodeProperty.Hovered(value));
+
+    public void AddPressed(bool value) => Add(VirtualNodeProperty.Pressed(value));
+
+    public void AddFocused(bool value) => Add(VirtualNodeProperty.Focused(value));
+
+    public void AddScrollY(double value) => Add(VirtualNodeProperty.ScrollY(value));
+
+    public void Add(VirtualNodeProperty property)
+    {
+        for (var i = 0; i < _count; i++)
+        {
+            if (_properties[i].Key == property.Key)
+            {
+                throw new ArgumentException(
+                    $"Duplicate property {VirtualPropertyDiagnostics.Format(property.Key)}.",
+                    nameof(property));
+            }
+        }
+
+        if (_count >= _properties.Length)
+        {
+            throw new InvalidOperationException("The virtual node property builder storage is full.");
+        }
+
+        _properties[_count++] = property;
+    }
+
+    public readonly VirtualNodeProperty[] ToArray() => Written.ToArray();
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public ref struct VirtualNodeChildrenBuilder
+{
+    private const int InlineCapacity = 4;
+
+    private VirtualNode _child0;
+#pragma warning disable CS0169
+    private VirtualNode _child1;
+    private VirtualNode _child2;
+    private VirtualNode _child3;
+#pragma warning restore CS0169
+    private VirtualNode[]? _overflow;
+    private int _count;
+
+    public VirtualNodeChildrenBuilder()
+    {
+        _overflow = null;
+        _count = 0;
+    }
+
+    public readonly int Count => _count;
+
+    public void Add(VirtualNode child)
+    {
+        if (_overflow is not null)
+        {
+            EnsureOverflowCapacity(_count + 1);
+            _overflow[_count++] = child;
+            return;
+        }
+
+        if (_count < InlineCapacity)
+        {
+            InlineChildren[_count++] = child;
+            return;
+        }
+
+        PromoteToOverflow();
+        _overflow![_count++] = child;
+    }
+
+    public VirtualNode[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        var result = new VirtualNode[_count];
+        if (_overflow is not null)
+        {
+            Array.Copy(_overflow, result, _count);
+            return result;
+        }
+
+        InlineChildren[.._count].CopyTo(result);
+        return result;
+    }
+
+    private void PromoteToOverflow()
+    {
+        _overflow = new VirtualNode[InlineCapacity * 2];
+        InlineChildren.CopyTo(_overflow);
+    }
+
+    // VirtualNode contains references, so it cannot be stackalloc'd directly.
+    private Span<VirtualNode> InlineChildren => MemoryMarshal.CreateSpan(ref _child0, InlineCapacity);
+
+    private void EnsureOverflowCapacity(int requiredCapacity)
+    {
+        if (_overflow is null || requiredCapacity <= _overflow.Length)
+        {
+            return;
+        }
+
+        var newCapacity = Math.Max(requiredCapacity, _overflow.Length * 2);
+        Array.Resize(ref _overflow, newCapacity);
+    }
+}
+
 internal static class VirtualNodePropertySet
 {
     public static VirtualNodeProperty[] Create(VirtualNodeKind kind, IReadOnlyList<VirtualNodeProperty>? properties)
@@ -421,6 +597,42 @@ internal static class VirtualNodePropertySet
         }
 
         return copy;
+    }
+
+    public static VirtualNodeProperty[] Create(VirtualNodeKind kind, scoped ReadOnlySpan<VirtualNodeProperty> properties)
+    {
+        if (properties.IsEmpty)
+        {
+            return [];
+        }
+
+        var copy = properties.ToArray();
+        Validate(kind, copy);
+        return copy;
+    }
+
+    private static void Validate(VirtualNodeKind kind, VirtualNodeProperty[] properties)
+    {
+        for (var i = 0; i < properties.Length; i++)
+        {
+            var property = properties[i];
+            if (!VirtualNodePropertySupport.Supports(kind, property.Key))
+            {
+                throw new ArgumentException(
+                    $"Property {VirtualPropertyDiagnostics.Format(property.Key)} is not supported on {kind}.",
+                    nameof(properties));
+            }
+
+            for (var j = i + 1; j < properties.Length; j++)
+            {
+                if (property.Key == properties[j].Key)
+                {
+                    throw new ArgumentException(
+                        $"Duplicate property {VirtualPropertyDiagnostics.Format(property.Key)} on {kind}.",
+                        nameof(properties));
+                }
+            }
+        }
     }
 }
 
@@ -519,40 +731,74 @@ public readonly struct VirtualNodePatch : IEquatable<VirtualNodePatch>
 
 public static class VirtualNodeFactory
 {
-    public static VirtualNode Text(TextNodeContent content, NodeKey key = default, params VirtualNodeProperty[] properties) =>
-        new(VirtualNodeKind.Text, key, NodeContent.FromText(content), properties);
+    public static VirtualNode Create(
+        VirtualNodeKind kind,
+        NodeKey key,
+        NodeContent content,
+        scoped ReadOnlySpan<VirtualNodeProperty> properties,
+        scoped ReadOnlySpan<VirtualNode> children) =>
+        new(kind, key, content, properties, children);
 
-    public static VirtualNode Rectangle(params VirtualNodeProperty[] properties) =>
-        new(VirtualNodeKind.Rectangle, properties: properties);
+    public static VirtualNode Create(
+        VirtualNodeKind kind,
+        NodeKey key,
+        NodeContent content,
+        scoped ReadOnlySpan<VirtualNodeProperty> properties,
+        scoped ref VirtualNodeChildrenBuilder children)
+    {
+        var childArray = children.ToArray();
+        var propertyArray = VirtualNodePropertySet.Create(kind, properties);
+        return VirtualNode.CreateFromOwnedArrays(kind, key, content, propertyArray, childArray);
+    }
 
-    public static VirtualNode Rectangle(NodeKey key, params VirtualNodeProperty[] properties) =>
-        new(VirtualNodeKind.Rectangle, key, properties: properties);
+    public static VirtualNode Text(TextNodeContent content, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        Create(VirtualNodeKind.Text, key, NodeContent.FromText(content), properties, ReadOnlySpan<VirtualNode>.Empty);
 
-    public static VirtualNode Button(TextNodeContent label, NodeKey key = default, params VirtualNodeProperty[] properties)
+    public static VirtualNode Rectangle(params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        Create(VirtualNodeKind.Rectangle, default, default, properties, ReadOnlySpan<VirtualNode>.Empty);
+
+    public static VirtualNode Rectangle(NodeKey key, params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        Create(VirtualNodeKind.Rectangle, key, default, properties, ReadOnlySpan<VirtualNode>.Empty);
+
+    public static VirtualNode Button(TextNodeContent label, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         if (label.IsNone)
         {
             throw new ArgumentException("Button label must be explicit.", nameof(label));
         }
 
-        return new(VirtualNodeKind.Button, key, properties: properties, children: [Text(label)]);
+        var children = new VirtualNodeChildrenBuilder();
+        children.Add(Text(label));
+        return Create(VirtualNodeKind.Button, key, default, properties, ref children);
     }
 
-    public static VirtualNode ScrollContainer(NodeKey key = default, params VirtualNode[] children) =>
-        new(VirtualNodeKind.ScrollContainer, key, children: children);
+    public static VirtualNode ScrollContainer(NodeKey key = default, params scoped ReadOnlySpan<VirtualNode> children) =>
+        Create(VirtualNodeKind.ScrollContainer, key, default, ReadOnlySpan<VirtualNodeProperty>.Empty, children);
+
+    public static VirtualNode ScrollContainer(
+        NodeKey key,
+        scoped ReadOnlySpan<VirtualNodeProperty> properties,
+        scoped ReadOnlySpan<VirtualNode> children) =>
+        Create(VirtualNodeKind.ScrollContainer, key, default, properties, children);
+
+    public static VirtualNode ScrollContainer(
+        NodeKey key,
+        scoped ReadOnlySpan<VirtualNodeProperty> properties,
+        scoped ref VirtualNodeChildrenBuilder children) =>
+        Create(VirtualNodeKind.ScrollContainer, key, default, properties, ref children);
 }
 
 // ── PoC authoring helper (R13-6: edge accepts string, writes to arena) ──
 
 public static class VirtualNodeBuilder
 {
-    public static VirtualNode Text(VirtualTextArena arena, string content, NodeKey key = default, params VirtualNodeProperty[] properties)
+    public static VirtualNode Text(VirtualTextArena arena, string content, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         var textContent = arena.AddText(content.AsSpan());
         return VirtualNodeFactory.Text(textContent, key, properties);
     }
 
-    public static VirtualNode Button(VirtualTextArena arena, string label, NodeKey key = default, params VirtualNodeProperty[] properties)
+    public static VirtualNode Button(VirtualTextArena arena, string label, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         ArgumentNullException.ThrowIfNull(label);
         var labelContent = arena.AddText(label.AsSpan());
