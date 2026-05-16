@@ -37,6 +37,10 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// Window visual compositor hit targets stay in layout/logical coordinates.
+    /// D3D12 input routing uses DrawingBackendCompositor.TryGetActionIdAtPhysicalPixel.
+    /// </summary>
     public bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
         lock (_hitTargetsLock)

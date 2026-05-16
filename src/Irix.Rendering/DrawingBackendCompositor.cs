@@ -502,12 +502,18 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return true;
     }
 
+    /// <summary>
+    /// Input-facing hit test API. Coordinates are physical pixels from platform input.
+    /// </summary>
     public bool TryGetActionIdAtPhysicalPixel(int x, int y, out ActionId actionId)
     {
         var logicalPoint = ToLogicalPoint(x, y);
         return TryGetActionIdAtLogicalPixel(logicalPoint.X, logicalPoint.Y, out actionId);
     }
 
+    /// <summary>
+    /// Internal/test hit test API for retained logical hit targets. Do not use for platform input.
+    /// </summary>
     internal bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
         lock (_hitTargetsLock)

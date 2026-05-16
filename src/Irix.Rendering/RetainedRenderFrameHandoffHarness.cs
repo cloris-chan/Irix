@@ -125,6 +125,9 @@ internal sealed class RetainedRenderFrameHandoffHarness(IDrawingBackend backend,
         return LastResult;
     }
 
+    /// <summary>
+    /// Harness hit test uses retained logical coordinates; production input enters through the compositor physical-pixel API.
+    /// </summary>
     public bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
         foreach (var hitTarget in _hitTargets)

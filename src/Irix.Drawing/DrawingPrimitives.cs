@@ -119,6 +119,7 @@ public readonly record struct DisplayScale(float ScaleX, float ScaleY)
 {
     public static DisplayScale Identity => new(1f, 1f);
     public bool IsIdentity => ScaleX == 1f && ScaleY == 1f;
+    public float TextScale => Normalize().ScaleY;
 
     public DisplayScale Normalize()
     {

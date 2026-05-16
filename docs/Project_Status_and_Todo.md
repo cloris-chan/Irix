@@ -89,6 +89,13 @@ Round 16 construction/layout state:
 - Public authoring helpers use `params scoped ReadOnlySpan<T>`, not array `params`; array `params` is guarded against reintroduction.
 - `LayoutTreeBuilder` reads node properties through internal `PropertyReader` over `VirtualNode.Properties`; `LayoutContext` is a synchronous `ref struct`.
 
+Display/input coordinate rules:
+
+- Public input-facing compositor hit testing uses physical pixels: `DrawingBackendCompositor.TryGetActionIdAtPhysicalPixel(...)`.
+- Logical hit testing is internal/test/handoff-only: `TryGetActionIdAtLogicalPixel(...)` is not a platform input API.
+- Stored `DisplayScale` values are normalized at ingress; default/invalid scale is converted to `1x` before storage or backend frame use.
+- Non-uniform draw scale remains supported. Text font size uses the normalized Y-axis text scale, not an average of X/Y.
+
 ---
 
 ## Current Verification

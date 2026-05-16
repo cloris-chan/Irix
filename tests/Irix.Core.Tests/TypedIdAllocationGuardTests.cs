@@ -675,6 +675,44 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Stored_display_scale_values_are_normalized_at_ingress()
+    {
+        var root = FindRepoRoot();
+        var sourceFiles = Directory.GetFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories);
+
+        foreach (var file in sourceFiles)
+        {
+            var source = File.ReadAllText(file);
+            Assert.DoesNotContain("_displayScale = scale;", source);
+            Assert.DoesNotContain("_displayScale = displayScale;", source);
+            Assert.DoesNotContain("displayScale = newScale;", source);
+            Assert.DoesNotContain("var displayScale = screen.Scale;", source);
+            Assert.DoesNotContain("var displayScale = platformHost.Screens[0].Scale;", source);
+            Assert.DoesNotContain("new DisplayScale(newDpi / 96f, newDpi / 96f);", source);
+        }
+    }
+
+    [Fact]
+    public void Public_hit_test_api_names_distinguish_physical_and_logical_pixels()
+    {
+        var compositorMethods = typeof(DrawingBackendCompositor)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Select(method => method.Name)
+            .ToArray();
+
+        Assert.Contains("TryGetActionIdAtPhysicalPixel", compositorMethods);
+        Assert.DoesNotContain("TryGetActionIdAt", compositorMethods);
+
+        var renderingDir = Path.Combine(FindRepoRoot(), "src", "Irix.Rendering");
+        var sourceFiles = Directory.GetFiles(renderingDir, "*.cs", SearchOption.AllDirectories);
+        foreach (var file in sourceFiles)
+        {
+            var source = File.ReadAllText(file);
+            Assert.DoesNotContain("TryGetCandidateActionIdAt(", source);
+        }
+    }
+
+    [Fact]
     public void Irix_Core_has_no_ResolveString_text_api()
     {
         var sourceFiles = Directory.GetFiles(

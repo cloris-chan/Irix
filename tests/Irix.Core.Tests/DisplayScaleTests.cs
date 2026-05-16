@@ -156,6 +156,13 @@ public class DisplayScaleTests
     }
 
     [Fact]
+    public void TextScale_uses_normalized_y_scale()
+    {
+        Assert.Equal(2.0f, new DisplayScale(1.5f, 2.0f).TextScale);
+        Assert.Equal(1.0f, default(DisplayScale).TextScale);
+    }
+
+    [Fact]
     public void Asymmetric_scale_scales_x_and_y_independently()
     {
         var scale = new DisplayScale(1.5f, 2.0f);
@@ -308,6 +315,15 @@ public class DisplayScaleTests
         Assert.Equal(TextFontWeight.Bold, scaledHeading.FontWeight);
         Assert.Equal(TextWrapping.Wrap, scaledBody.Wrapping);
         Assert.Equal(TextHorizontalAlignment.Center, scaledButton.HorizontalAlignment);
+    }
+
+    [Fact]
+    public void D3D12_text_style_uses_y_scale_for_asymmetric_display_scale()
+    {
+        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var scaled = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(style, new DisplayScale(1.5f, 2.0f));
+
+        Assert.Equal(32f, scaled.FontSize);
     }
 
     [Theory]
