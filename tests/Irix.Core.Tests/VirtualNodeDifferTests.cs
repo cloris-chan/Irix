@@ -22,7 +22,7 @@ public sealed class VirtualNodeDifferTests
         var root = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
-            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3), VirtualNodeAttribute.Action(new ActionId(100))));
+            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(100))));
         var tree = new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
@@ -73,7 +73,7 @@ public sealed class VirtualNodeDifferTests
     }
 
     [Fact]
-    public void CreatePatchBatch_returns_update_when_attribute_differs()
+    public void CreatePatchBatch_returns_update_when_property_differs()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(100, 50, new NodeKey(1)));
         var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(200, 50, new NodeKey(1)));
@@ -138,12 +138,12 @@ public sealed class VirtualNodeDifferTests
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
             VirtualNodeFactory.Rectangle(200, 48, new NodeKey(3)),
-            VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeAttribute.Action(new ActionId(100))));
+            VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
         var b = VirtualNodeFactory.ScrollContainer(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
             VirtualNodeFactory.Rectangle(200, 48, new NodeKey(3)),
-            VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeAttribute.Action(new ActionId(100))));
+            VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
 
         Assert.True(VirtualNodeDiffer.NodesEqual(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
     }
@@ -361,7 +361,7 @@ public sealed class VirtualNodeDifferTests
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
-        // Expected: Update (Title changed) + Update (Rectangle attrs changed) + Add (new Text)
+        // Expected: Update (Title changed) + Update (Rectangle properties changed) + Add (new Text)
         Assert.True(batch.Count >= 2);
         var hasUpdate = false;
         var hasAdd = false;

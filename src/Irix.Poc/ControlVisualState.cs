@@ -14,27 +14,27 @@ internal static class ControlVisualStateProjection
             IsFocused: ownership.FocusedTarget == targetId);
 }
 
-internal static class ControlVisualStateAttributeAdapter
+internal static class ControlVisualStatePropertyAdapter
 {
-    internal static VirtualNodeAttribute[] ToAttributes(ControlVisualState state) =>
+    internal static VirtualNodeProperty[] ToProperties(ControlVisualState state) =>
         [
-            VirtualNodeAttribute.Hovered(state.IsHovered),
-            VirtualNodeAttribute.Pressed(state.IsPressed),
-            VirtualNodeAttribute.Focused(state.IsFocused)
+            VirtualNodeProperty.Hovered(state.IsHovered),
+            VirtualNodeProperty.Pressed(state.IsPressed),
+            VirtualNodeProperty.Focused(state.IsFocused)
         ];
 }
 
-internal static class ControlActionAttributeAdapter
+internal static class ControlActionPropertyAdapter
 {
-    internal static VirtualNodeAttribute ToAttribute(ActionId actionId) =>
-        VirtualNodeAttribute.Action(actionId);
+    internal static VirtualNodeProperty ToProperty(ActionId actionId) =>
+        VirtualNodeProperty.Action(actionId);
 }
 
-internal static class ButtonAttributeBundle
+internal static class ButtonPropertyBundle
 {
-    internal static VirtualNodeAttribute[] Create(ActionId actionId, ControlVisualState visualState) =>
+    internal static VirtualNodeProperty[] Create(ActionId actionId, ControlVisualState visualState) =>
         [
-            ControlActionAttributeAdapter.ToAttribute(actionId),
-            .. ControlVisualStateAttributeAdapter.ToAttributes(visualState)
+            ControlActionPropertyAdapter.ToProperty(actionId),
+            .. ControlVisualStatePropertyAdapter.ToProperties(visualState)
         ];
 }

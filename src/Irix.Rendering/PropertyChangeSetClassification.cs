@@ -1,8 +1,8 @@
 namespace Irix.Rendering;
 
-internal static class AttributeChangeSetClassification
+internal static class PropertyChangeSetClassification
 {
-    public static InvalidationKind ClassifySet(this AttributeChangeSet changeSet)
+    public static InvalidationKind ClassifySet(this PropertyChangeSet changeSet)
     {
         return changeSet.Effects.ToInvalidationKind();
     }
@@ -42,13 +42,13 @@ internal static class AttributeChangeSetClassification
         };
     }
 
-    public static LayoutRebuildReason ClassifyMask(this AttributeChangeSet changeSet)
+    public static LayoutRebuildReason ClassifyMask(this PropertyChangeSet changeSet)
     {
         return changeSet.ClassifySet().ToLayoutRebuildReason();
     }
 
-    public static bool IsControlMetadataKey(VirtualAttributeKey key) =>
-        VirtualAttributeMetadata.TryGet(key, out var metadata)
+    public static bool IsControlMetadataKey(VirtualPropertyKey key) =>
+        VirtualPropertyMetadata.TryGet(key, out var metadata)
         && (metadata.Effects & StyleEffect.Layout) == 0
         && (metadata.Effects & StyleEffect.TextMeasure) == 0
         && (metadata.Effects & (StyleEffect.Visual | StyleEffect.Composite | StyleEffect.Interaction)) != 0;

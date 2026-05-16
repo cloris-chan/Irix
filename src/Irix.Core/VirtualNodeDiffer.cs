@@ -37,7 +37,7 @@ public static class VirtualNodeDiffer
 
         for (var i = 0; i < patches.Count; i++)
         {
-            patches[i] = patches[i] with { ScreenId = screenId };
+            patches[i] = patches[i].WithScreenId(screenId);
         }
 
         return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([.. patches]), patches.Count, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
@@ -47,7 +47,7 @@ public static class VirtualNodeDiffer
     {
         var root = tree.Root;
         return root.Kind == default && root.Key == NodeKey.None && root.Content == default
-            && (root.Attributes == null || root.Attributes.Length == 0)
+            && (root.Properties == null || root.Properties.Length == 0)
             && (root.Children == null || root.Children.Length == 0);
     }
 
@@ -60,11 +60,11 @@ public static class VirtualNodeDiffer
             return;
         }
 
-        // Same kind → check if content or attributes changed
+        // Same kind → check if content or properties changed
         var contentChanged = !ContentEqual(oldNode.Content, newNode.Content, prevSnapshot, nextSnapshot);
-        var attributesChanged = !AttributesEqual(oldNode.Attributes ?? [], newNode.Attributes ?? []);
+        var propertiesChanged = !PropertiesEqual(oldNode.Properties ?? [], newNode.Properties ?? []);
 
-        if (contentChanged || attributesChanged)
+        if (contentChanged || propertiesChanged)
         {
             patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Update, nodeIndex, newNode));
         }
@@ -188,7 +188,7 @@ public static class VirtualNodeDiffer
         return count;
     }
 
-    private static bool AttributesEqual(VirtualNodeAttribute[] a, VirtualNodeAttribute[] b)
+    private static bool PropertiesEqual(VirtualNodeProperty[] a, VirtualNodeProperty[] b)
     {
         if (a.Length != b.Length) return false;
         for (var i = 0; i < a.Length; i++)
@@ -210,16 +210,16 @@ public static class VirtualNodeDiffer
             return false;
         }
 
-        var aAttrs = a.Attributes ?? [];
-        var bAttrs = b.Attributes ?? [];
-        if (aAttrs.Length != bAttrs.Length)
+        var aProperties = a.Properties ?? [];
+        var bProperties = b.Properties ?? [];
+        if (aProperties.Length != bProperties.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < aAttrs.Length; i++)
+        for (var i = 0; i < aProperties.Length; i++)
         {
-            if (aAttrs[i] != bAttrs[i])
+            if (aProperties[i] != bProperties[i])
             {
                 return false;
             }

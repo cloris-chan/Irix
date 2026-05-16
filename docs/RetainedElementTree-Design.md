@@ -9,7 +9,7 @@
 - `Root` — the full new `VirtualNode` tree (always present)
 - `Memory<VirtualNodePatch>` — granular patches (`Update`, `Add`, `Remove`, `ReplaceRoot`)
 
-Today consumers ignore the patches and rebuild from `PatchBatch.Root` every frame. This is correct but wasteful — the entire downstream element tree is reconstructed even for small attribute changes.
+Today consumers ignore the patches and rebuild from `PatchBatch.Root` every frame. This is correct but wasteful — the entire downstream element tree is reconstructed even for small property changes.
 
 ## Goal
 
@@ -36,7 +36,7 @@ public sealed class RetainedElement
     public VirtualNodeKind Kind { get; set; }
     public ulong Key { get; set; }
     public NodeContent Content { get; set; }
-    public VirtualNodeAttribute[] Attributes { get; set; }
+    public VirtualNodeProperty[] Properties { get; set; }
     public List<RetainedElement> Children { get; }
     public RetainedElement? Parent { get; }
 }
@@ -72,7 +72,7 @@ When a node has `Key != 0`, the differ uses key-based reconciliation (matching o
 ### `Update`
 
 - Target: node at `NodeIndex`
-- Action: replace `Content` and `Attributes` on the retained node
+- Action: replace `Content` and `Properties` on the retained node
 - Children: untouched
 - Failure: if node not found → fallback to full rebuild
 
@@ -125,7 +125,7 @@ Apply(PatchBatch batch):
                 node = FindByDfsIndex(index)
                 if node == null: → Fallback(batch.Root)
                 node.Content = patch.Node.Content
-                node.Attributes = patch.Node.Attributes
+                node.Properties = patch.Node.Properties
 
             Add:
                 parent = FindByDfsIndex(index)

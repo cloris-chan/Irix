@@ -88,14 +88,14 @@ internal static class SyncDiagnosticRunner
             var root = new VirtualNode(
                 VirtualNodeKind.ScrollContainer,
                 key: 1,
-                attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
+                properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
                 children:
                 [
                     VirtualNodeBuilder.Button(arena, "SyncTest", new NodeKey(2),
-                        VirtualNodeAttribute.Action(new ActionId(300))),
+                        VirtualNodeProperty.Action(new ActionId(300))),
                     VirtualNodeBuilder.Text(arena, $"Frame {i} �?sync overhead measurement", new NodeKey(3)),
                     VirtualNodeBuilder.Button(arena, "Another", new NodeKey(4),
-                        VirtualNodeAttribute.Action(new ActionId(301))),
+                        VirtualNodeProperty.Action(new ActionId(301))),
                 ]);
 
             var nextTree = new VirtualNodeTree(root, arena.GetOrCreateSnapshot());

@@ -356,7 +356,7 @@ public sealed class DrawingBackendCompositorTests
         // Point at (20, 52) is inside button (16..104, 16..56) but outside clip (0..120, 0..50)
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "ClickMe", new NodeKey(2),
-                VirtualNodeAttribute.Action(new ActionId(100))));
+                VirtualNodeProperty.Action(new ActionId(100))));
         var viewport = new PixelRectangle(0, 0, 120, 50);
         var pipeline = new RenderPipeline();
         using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -395,7 +395,7 @@ public sealed class DrawingBackendCompositorTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.ScrollContainer(new NodeKey(2),
                 VirtualNodeBuilder.Button(_arena, "Inner", new NodeKey(3),
-                    VirtualNodeAttribute.Action(new ActionId(100)))));
+                    VirtualNodeProperty.Action(new ActionId(100)))));
         var viewport = new PixelRectangle(0, 0, 300, 200);
         var pipeline = new RenderPipeline();
         using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -428,12 +428,12 @@ public sealed class DrawingBackendCompositorTests
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(30))],
+            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(30))],
             children: [
                 VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2),
-                    VirtualNodeAttribute.Action(new ActionId(100))),
+                    VirtualNodeProperty.Action(new ActionId(100))),
                 VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3),
-                    VirtualNodeAttribute.Action(new ActionId(101)))
+                    VirtualNodeProperty.Action(new ActionId(101)))
             ]);
         var viewport = new PixelRectangle(0, 0, 200, 60);
         var pipeline = new RenderPipeline();

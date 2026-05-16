@@ -9,7 +9,7 @@ Layout dirty v1 is a diagnostic and planning step before partial layout. The cur
 | Category | Examples | Future partial-layout boundary |
 | --- | --- | --- |
 | `StyleOnly` | `IsHovered`, `IsPressed`, `IsFocused`, current non-geometric `ActionId` metadata | May stay at the element/draw-command level when bounds, clip, hit target geometry, scroll metrics, and child ranges are unchanged. Current v0 still rebuilds layout when a dirty DFS node is supplied, but the reason is explicit. |
-| `TextSizeAffecting` | `Text` content, future `FontSize`, `FontFamily`, `FontWeight`, wrapping/text style attributes | May relayout the text leaf first. If measured size is unchanged, it can stop locally; if size changes, it must bubble to the containing layout flow because later siblings move. |
+| `TextSizeAffecting` | `Text` content, future `FontSize`, `FontFamily`, `FontWeight`, wrapping/text style properties | May relayout the text leaf first. If measured size is unchanged, it can stop locally; if size changes, it must bubble to the containing layout flow because later siblings move. |
 | `LayoutAffecting` | `ScrollY`, `Width`, `Height`, padding/spacing/layout metric changes | Must relayout the affected container/subtree. If child bounds, visible height, max scroll, or sibling offsets change, bubble to the nearest `ScrollContainer` and possibly root. |
 | `TreeStructure` | add/remove/move, key/kind changes, child order changes | Must bubble to the parent container because DFS ranges, element ranges, command ranges, and hit target ranges can change. Root replacement remains a root rebuild. |
 | `ViewportChanged` | renderer/layout viewport size changes after resize | Root rebuild. Viewport affects available width, root clip, scroll visible height, and every descendant clip intersection. |
@@ -55,7 +55,7 @@ A future style-only patch may reuse retained layout only when every dirty classi
 - Scroll diagnostics: visible height, content height, `ScrollY`, `MaxScrollY`, visible/clipped element counts.
 - Element to draw command range mapping.
 
-Any `TextSizeAffecting`, `LayoutAffecting`, `TreeStructure`, or `ViewportChanged` reason must bail out to the existing full layout path. Unknown attributes should also bail out unless they are explicitly added to the style-only allowlist with tests proving the invariants above.
+Any `TextSizeAffecting`, `LayoutAffecting`, `TreeStructure`, or `ViewportChanged` reason must bail out to the existing full layout path. Unknown properties should also bail out unless they are explicitly added to the style-only allowlist with tests proving the invariants above.
 
 ### Draw Command Rerecord Scope
 
@@ -128,7 +128,7 @@ The current plan builder accepts `nextLayoutElements`, so it cannot be the actua
 - Viewport identity and root clip identity.
 - A metadata projection step that maps dirty DFS nodes to retained elements, preserves retained bounds/clip, and reads only style-only metadata from the next `VirtualNode` tree.
 
-The metadata projection must not call layout and must not consume next layout output. For buttons, it can derive visual command metadata from retained geometry plus next-node `IsHovered`, `IsPressed`, `IsFocused`, `ActionId`, and stable label metadata only when the dirty classification proves text measurement is unchanged. Any content or attribute that can affect measurement remains `TextSizeAffecting` or `LayoutAffecting` and must fall back.
+The metadata projection must not call layout and must not consume next layout output. For buttons, it can derive visual command metadata from retained geometry plus next-node `IsHovered`, `IsPressed`, `IsFocused`, `ActionId`, and stable label metadata only when the dirty classification proves text measurement is unchanged. Any content or property that can affect measurement remains `TextSizeAffecting` or `LayoutAffecting` and must fall back.
 
 ### Future Patch Output Boundary
 

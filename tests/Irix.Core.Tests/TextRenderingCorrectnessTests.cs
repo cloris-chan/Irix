@@ -95,7 +95,7 @@ public sealed class TextRenderingCorrectnessTests
     {
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Click Me", new NodeKey(2),
-                VirtualNodeAttribute.Action(new ActionId(100))));
+                VirtualNodeProperty.Action(new ActionId(100))));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
 

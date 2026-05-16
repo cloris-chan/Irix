@@ -20,7 +20,7 @@ public readonly record struct ApplyResult(
 ///     <see cref="PatchBatch.Root"/> is the canonical next retained root and wins over the
 ///     reconstructed patch result.</item>
 ///   <item><b>ReplaceRoot</b> — replaces the entire root node (and all children) with the patch node.</item>
-///   <item><b>Update</b> — replaces the <em>content and attributes</em> of the target node, but
+///   <item><b>Update</b> — replaces the <em>content and properties</em> of the target node, but
 ///     <em>preserves its existing children</em> from the old tree. The patch node's Children are ignored.</item>
 ///   <item><b>Add</b> — inserts a new node at the DFS position specified by <c>NodeIndex</c>.
 ///     The index is in the <em>old tree's</em> DFS coordinate system (before this batch is applied).</item>
@@ -118,7 +118,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         if (updates.Remove(currentIndex, out var replacement))
         {
             dirty.Add(currentIndex);
-            node = new VirtualNode(replacement.Kind, replacement.Key, replacement.Content, replacement.Attributes, node.Children);
+            node = new VirtualNode(replacement.Kind, replacement.Key, replacement.Content, replacement.Properties, node.Children);
         }
 
         var oldChildren = node.Children;
@@ -181,7 +181,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         }
 
         if (newChildren.Count != oldChildren.Length)
-            return new VirtualNode(node.Kind, node.Key, node.Content, node.Attributes, [.. newChildren]);
+            return new VirtualNode(node.Kind, node.Key, node.Content, node.Properties, [.. newChildren]);
 
         var changed = false;
         for (var i = 0; i < newChildren.Count; i++)
@@ -190,7 +190,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         }
 
         return changed
-            ? new VirtualNode(node.Kind, node.Key, node.Content, node.Attributes, [.. newChildren])
+            ? new VirtualNode(node.Kind, node.Key, node.Content, node.Properties, [.. newChildren])
             : node;
     }
 

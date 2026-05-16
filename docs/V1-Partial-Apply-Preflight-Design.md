@@ -114,9 +114,9 @@ A future partial path must not depend on next layout output. It can reuse retain
 |------|--------|------|
 | Bounds | Retained layout snapshot | Reuse only for stable style-only dirty ranges. |
 | Clip bounds | Retained layout snapshot | Reuse only when viewport, scroll, and clip-affecting layout inputs are unchanged. |
-| Action id | Next `VirtualNode` attributes / control metadata | Reproject for dirty hit targets. |
+| Action id | Next `VirtualNode` properties / control metadata | Reproject for dirty hit targets. |
 | Hit target count/order | Retained layout tree plus next node mapping | Must remain stable. |
-| Hover/pressed/focused visual state | Next `VirtualNode` attributes / control metadata | Reproject into replacement draw commands, not hit-test geometry. |
+| Hover/pressed/focused visual state | Next `VirtualNode` properties / control metadata | Reproject into replacement draw commands, not hit-test geometry. |
 
 Future input shape for a projector:
 
@@ -157,9 +157,9 @@ Accepted partial apply must advance retained root/control metadata or the next d
 | Metadata | Accepted partial update | Full fallback trigger |
 |----------|-------------------------|-----------------------|
 | `ActionId` | May update on dirty action nodes after hit target metadata projection succeeds. | Missing/ambiguous action metadata, changed hit target count/order, or non-dirty action id drift. |
-| `IsHovered` / `IsPressed` / `IsFocused` | May update on dirty controls when dirty classification is style-only. | Any unknown visual state attribute or mismatch between retained and next node path/key. |
+| `IsHovered` / `IsPressed` / `IsFocused` | May update on dirty controls when dirty classification is style-only. | Any unknown visual state property or mismatch between retained and next node path/key. |
 | Text label/content | Do not update in partial path. | Any text/content change remains text-size-affecting unless a future measurement proof exists. |
-| Layout-affecting attributes | Do not update in partial path. | Width/height/spacing/scroll/clip-affecting changes require full layout. |
+| Layout-affecting properties | Do not update in partial path. | Width/height/spacing/scroll/clip-affecting changes require full layout. |
 | Tree shape / keys / kinds | Do not update in partial path. | Child count/order, key mismatch, kind mismatch, add/remove/move require full fallback. |
 
 Future retained root update should run after command range planning, resource ownership, and hit target metadata projection all succeed. It should apply only the accepted dirty metadata patch to the retained root snapshot, then expose that root as the next retained baseline. If any dirty node cannot be updated from next-node metadata alone, the path must use the existing full layout/full apply behavior.

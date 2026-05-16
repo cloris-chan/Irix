@@ -60,18 +60,18 @@
 | Layout dirty diagnostics v1 | ✅ 完成 / regression-only：只修现有输出或分类 regression；`scale` / `logicalViewport` / `physicalViewport` / `swapchainSize` 已固化为 resize diagnostic regression output；不扩诊断面，不做 partial layout，不跳过 `StyleOnly` layout |
 | StyleOnly plan diagnostics | 只修 formatter/smoke regression；不继续扩 formatter，不接入 `RenderPipeline.Build`，不替换 retained frame apply |
 | V1 API/control boundary prep | design inventory complete / regression-only；`ControlVisualState projection helper` 已实现且仍为 PoC-owned |
-| ControlVisualState / action attribute helpers | ✅ 完成 / regression-only：internal PoC projection helper、ActionId attribute helper、button attribute bundle helper；PoC source raw `ActionId` 构造已清；target/action 继续用 string；不改 renderer / VirtualNode wire contract |
+| ControlVisualState / action property helpers | ✅ 完成 / regression-only：internal PoC projection helper、ActionId property helper、button property bundle helper；PoC source raw `ActionId` 构造已清；target/action 继续用 string；不改 renderer / VirtualNode wire contract |
 | Scroll feedback vocabulary v0 | ✅ 第一小步完成：`ScrollFeedback` / `ScrollContainerMetrics` side-channel 由 translator 生成；旧 `Action<double>` max-scroll callback 仍保留；不移动 controller/state/pump |
 | Translator feedback contract prep | ✅ internal seam 完成 / no behavior change：`TranslatorRenderPipelineFactory` 可替换 pipeline creation；默认仍走 `CounterStylePreset.Default`；translator 仍留在 `Irix.Poc` |
 | Scroll settings provider design | ✅ decision recorded：runtime 继续 postponed；若重开，先做 fallback-only internal provider；不读 Win32、不接 controller |
 | Retained / partial apply prep | ✅ V1 core gate-driven complete：每个 local reason 有 regression test；segmented reader edge guards、resource segment / lifecycle model、`SegmentedRetainedFrameOwner` shadow owner + opt-in diagnostic harness、`SegmentedRetainedFrameRuntimeOwner`、default-off `RetainedRenderFrameSegmentOwnership`、default-off `RetainedRenderFrameHandoffHarness`、default-off `DrawingBackendCompositor` selected render-source path、strict freshness/range/segment guards、multi-`FrameDrawingResources` exact-once lifecycle、owner-side hit-test ownership、handoff counter semantics、segment-local dirty-range routing、default-off `SegmentedRetainedFrameProductionOwnerFeed`、`DrawingBackendCompositorShadowProbe`、fallback reporting reasons、accepted partial four-piece atomicity、failed partial owner-state preservation、style-only default-off pre-switch、production runtime evidence 与 no-change coverage 已落地；`PartialApplyIntegrationGateChecklist.CanHookUpPartialApply=true`，但仍不默认启用、不改 public API / `IDrawingBackend.Execute` / D3D12 / CLI diagnostics |
-| Round 14 style/property cleanup | ✅ 完成 / regression-only：public authoring 面是一套 unified typed property API；`VirtualAttributeKey + VirtualAttributeMetadata.Effects` 仅用于框架内部 invalidation / animation / validation；不拆三套 public style API，不引入 string style key，不做 glyph atlas |
+| Round 14 style/property cleanup | ✅ 完成 / regression-only：public authoring 面是一套 unified typed property API；`VirtualPropertyKey + VirtualPropertyMetadata.Effects` 仅用于框架内部 invalidation / animation / validation；不拆三套 public style API，不引入 string style key，不做 glyph atlas |
 
 ### 下一步候选
 
 - 当前主线：[Translator feedback contract draft](V1-Translator-Feedback-Contract-Prep.md) 已完成 internal factory seam；默认行为不变，translator 仍留在 `Irix.Poc`，不新增 framework API。
 - 已封版：`v1 API/control boundary prep` 为 design inventory complete / regression-only；只修 boundary 文档 regression。
-- 已实现：`ControlVisualState projection helper`、`Control action attribute helper`、`Button attribute bundle helper` 仍为 PoC-owned internal code；PoC source raw `ActionId` 构造已清；target/action 继续用 string，不引入 typed id wrappers。
+- 已实现：`ControlVisualState projection helper`、`Control action property helper`、`Button property bundle helper` 仍为 PoC-owned internal code；PoC source raw `ActionId` 构造已清；target/action 继续用 string，不引入 typed id wrappers。
 - 已实现：`ScrollFeedback` / `ScrollContainerMetrics` vocabulary v0 作为 translator side-channel；旧 `Action<double>` callback 继续驱动 runtime 行为。
 - 已记录：[Scroll settings provider design](V1-Scroll-Settings-Provider-Prep.md) 决策为 runtime 继续 postponed；若重开，先做 fallback-only internal provider，不读 Win32、不接线到 controller。
 - 已记录：[Retained / partial apply prep](V1-Retained-Partial-Apply-Prep.md)、[Partial apply preflight design](V1-Partial-Apply-Preflight-Design.md) 与 [runtime integration checkpoint](V1-Partial-Apply-Runtime-Integration-Checkpoint.md)：default-off selected segmented render-source path 已从可执行推进到 gate-driven core complete；所有 partial apply integration gates 已 satisfied，`CanHookUpPartialApply=true`；default-off 行为与现有 production path 等价；enabled internal path 覆盖 selected execution、fallback、stale/missing/rejected owner、malformed guard、backend throw、hit-test ownership、counter semantics、dirty-range routing、resource lifecycle、retained root update 与 diagnostics no-change。
@@ -85,8 +85,8 @@
 - **GA hardening first batch 完成（2026-05-13）：** D3D12 smoke tests（7 个 headless 测试）、1000-frame soak（3 个测试）、resize stress（4 个测试）、frame time profiling（compositor-level Stopwatch）。详见 [GA-Hardening-Plan.md](GA-Hardening-Plan.md)。
 - **D2D text overlay sync 修复（2026-05-13）：** 滚动时按钮文字滞后矩形 — 根因：D3D12 rect pass 与 D3D11on12/D2D text overlay 未同步。修复：默认 `D3D12FenceAfterOverlay` wait 插入在 D2D text overlay 之后、Present 之前。默认开启（`SyncTextOverlay=true`），`--no-sync-text-overlay` 仅用于 A/B diagnostics。4 个 scroll text-sync regression tests。Frame serial diagnostics 可追踪 sync wait count/时间与当前 strategy。
 - **启动 / resize 背景闪烁修复（2026-05-14）：** 低概率黑色或绿色背景闪烁的最终根因不是 D3D12 clear color，而是 `DrawCommandBatch.Memory` 暴露了 pooled backing buffer 的容量，导致 logical `Count` 之后的尾部垃圾被 `RetainedCommandBuffer.ApplyFull` 当作真实 `DrawCommand` 复制；由于 `FillRect == 0`，尾部垃圾可能表现为随机大矩形。修复：`DrawCommandBatch.Memory` 只暴露 `Count` 内的 logical memory，并新增 retained full-apply / batch memory 回归测试。`dotnet test .\Irix.slnx --no-restore` 通过 506/506。
-- **String inventory 完成（2026-05-14，历史基线）：** 三层（Irix.Drawing / Irix.Rendering / Irix.Poc）string 使用盘点当时发现 dirty classification 与 attribute name lookup 仍有 string/collection 问题。该问题已在 Round 13/14 通过 typed IDs、typed attribute keys、metadata effects 与 `InvalidationKind` 清理完成；保留该记录作为 pre-cleanup baseline。详见下方 IRIX-V1 收口任务表 Round 12 / Round 14。
-- **Typed IR 完成（2026-05-16）：** Round 13 text/value IR 主线完成并冻结；Round 14 完成 unified typed style/property metadata + invalidation cleanup。`ActionId` / `NodeKey` / `ElementId` / `TargetId` 为纯值 typed id；`VirtualAttributeKey` 无 public constructor、无 primitive `ToString()`；`VirtualNodeAttribute` constructor 做 key/value metadata validation；dirty classification 由 `StyleEffect` 推导 `InvalidationKind`，diagnostics 输出 `Layout/TextMeasure/VisualOnly/CompositeOnly` 语义。`dotnet test tests\Irix.Core.Tests\Irix.Core.Tests.csproj --no-restore` 通过 552 tests。
+- **String inventory 完成（2026-05-14，历史基线）：** 三层（Irix.Drawing / Irix.Rendering / Irix.Poc）string 使用盘点当时发现 dirty classification 与 property name lookup 仍有 string/collection 问题。该问题已在 Round 13/14 通过 typed IDs、typed property keys、metadata effects 与 `InvalidationKind` 清理完成；保留该记录作为 pre-cleanup baseline。详见下方 IRIX-V1 收口任务表 Round 12 / Round 14。
+- **Typed IR 完成（2026-05-16）：** Round 13 text/value IR 主线完成并冻结；Round 14 完成 unified typed style/property metadata + invalidation cleanup。`ActionId` / `NodeKey` / `ElementId` / `TargetId` 为纯值 typed id；`VirtualPropertyKey` 无 public constructor、无 primitive `ToString()`；`VirtualNodeProperty` constructor 做 key/value metadata validation；dirty classification 由 `StyleEffect` 推导 `InvalidationKind`，diagnostics 输出 `Layout/TextMeasure/VisualOnly/CompositeOnly` 语义。`dotnet test tests\Irix.Core.Tests\Irix.Core.Tests.csproj --no-restore` 通过 552 tests。
 - 暂缓：scroll extraction、settings provider、pure controller extraction、state ownership、pump/scheduler、translator promotion；StyleOnly 只新增 internal/default-off pre-switch，不跳过 layout，不接入 public API，不改 `RenderPipeline.Build`。
 - 暂缓：unified diagnostics channel / event bus / registry；Program diagnostics runner split 已封版为 regression-only。
 - **下一步：** V1 MVP/GA candidate scope 已冻结：不再开 V1 core 新功能，不重写 renderer，不改 public API，不重新调默认 sync strategy。GA hardening second batch 已完成（D2D text overlay sync、D3D12 smoke CI integration、concurrent input+render validation、sync overhead diagnostics、Windows SDK 26100 CI check、minimal platform/performance CI lanes）。Release build、ordinary tests、D3D12 smoke、performance lane、AOT publish 均通过；platform integration smoke 覆盖 minimize/restore、occlusion/restore、resize、scroll/click、default、`--no-partial-apply`、100% / 150% / 200% startup scale、runtime scale switch。sync wait 作为 V1 accepted risk；144Hz 与 glyph atlas 均为 post-GA follow-up。详见 [V1-MVP-GA-Candidate-Summary.md](V1-MVP-GA-Candidate-Summary.md)、[V1-MVP-GA-Candidate-Release-Notes.md](V1-MVP-GA-Candidate-Release-Notes.md)、[Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)、[GA-Hardening-Plan.md](GA-Hardening-Plan.md)、[Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md)。
@@ -120,7 +120,7 @@
 | R12-1 | P0 | Define render-core no-string allocation invariant | Done (inventory complete) | 写入 invariant 文档 |
 | R12-2 | P0 | Inventory all string name/id | Done | 三层盘点报告已完成（Drawing/Rendering/Poc） |
 | R12-3 | P1 | Introduce typed IDs | Done (Round 13) | `ActionId`, `TargetId`, `ElementId`, `NodeKey` 已为 `readonly struct`；primitive `ActionId.ToString()` guard 覆盖 |
-| R12-4 | P1 | Introduce typed attribute keys | Done (Round 14) | `VirtualAttributeKey` 为纯值 typed key；合法 public key 只由 static readonly 字段提供；无 public constructor |
+| R12-4 | P1 | Introduce typed property keys | Done (Round 14) | `VirtualPropertyKey` 为纯值 typed key；合法 public key 只由 static readonly 字段提供；无 public constructor |
 | R12-5 | P1 | Dirty/diagnostic reason enum化 | Done (Round 14 compat) | `LayoutRebuildReason` 保留兼容；`InvalidationKind` / `StyleEffect` 进入 dirty classification 与 diagnostics |
 | R12-6 | P1 | Allocation audit baseline | Pending | 建立热路径 string 分配 baseline CI test |
 | R12-7 | P2 | API boundary cleanup | Pending | 清理 API 边界裸 string |
@@ -131,22 +131,21 @@
 
 本轮目标只覆盖 style/property domain cleanup；不做 glyph atlas，不重写 renderer，不回滚 Round 13 的 text arena / text value IR 设计。
 
-Public authoring API 是一套 unified typed property API：调用方使用 `VirtualNodeAttribute.Width(...)`、`Height(...)`、`ScrollY(...)`、`Action(...)`、`Hovered(...)`、`Pressed(...)`、`Focused(...)`、`Opacity(...)` 等 helper，不需要也不应该选择 Layout / Visual / Composite 三套 public API。`VirtualAttributeKey + VirtualAttributeMetadata.Effects` 是框架内部 invalidation、animation、support validation metadata，不是用户 authoring 分层。
+Public authoring API 是一套 unified typed property API：调用方使用 `VirtualNodeProperty.Width(...)`、`Height(...)`、`ScrollY(...)`、`Action(...)`、`Hovered(...)`、`Pressed(...)`、`Focused(...)`、`Opacity(...)` 等 helper，不需要也不应该选择 Layout / Visual / Composite 三套 public API。`VirtualPropertyKey + VirtualPropertyMetadata.Effects` 是框架内部 invalidation、animation、support validation metadata，不是用户 authoring 分层。
 
-Global default style 仍由 `RenderStylePreset` / `LayoutStyle` / `DrawingStyle` 提供；`VirtualNodeAttribute` 只表示 node-local override 或 runtime visual state。`HorizontalPadding`、`VerticalPadding`、`ItemSpacing`、`TextHeight`、button/rectangle 专用尺寸、text font/string style key 均不是 public node attribute。
+Global default style 仍由 `RenderStylePreset` / `LayoutStyle` / `DrawingStyle` 提供；`VirtualNodeProperty` 只表示 node-local override 或 runtime visual state。`HorizontalPadding`、`VerticalPadding`、`ItemSpacing`、`TextHeight`、button/rectangle 专用尺寸、text font/string style key 均不是 public node property。
 
 | Property | Value kind | Effects | Animation channel | Supported nodes | Current status |
 |----------|------------|---------|-------------------|-----------------|----------------|
 | `Width` / `Height` | Number | Layout | CpuStyle | Rectangle, Button, ScrollContainer | Public node-local override |
-| `MinWidth` / `MaxWidth` / `MinHeight` / `MaxHeight` | Number | Layout | Discrete | Rectangle, Button, ScrollContainer | Metadata present; layout use can expand later |
-| `ScrollY` | Number | Layout | CpuStyle | ScrollContainer | Public node-local scroll attribute; future composite scroll can reuse metadata |
+| `ScrollY` | Number | Layout | CpuStyle | ScrollContainer | Public node-local scroll property; future composite scroll can reuse metadata |
 | `Opacity` | Number | Composite + Visual | Composite | All node kinds | Public key/helper reserved; renderer hookup deferred |
 | `ActionId` | ActionId | Interaction | None | Button | Interaction metadata; does not trigger layout |
 | `IsHovered` / `IsPressed` / `IsFocused` | Boolean | Interaction + Visual | Discrete | Button | Runtime state projected from input ownership |
 | `FillColor` / `TextColor` | Not public | Not applicable | Not applicable | Not applicable | Deferred until a typed color value exists; no string hex path |
-| `FontFamily` / `TextStyle` / `FontSize` / `FontWeight` / `Wrapping` | Not public | Not applicable | Not applicable | Not applicable | Deferred; no string/font `AttributeValue` |
+| `FontFamily` / `TextStyle` / `FontSize` / `FontWeight` / `Wrapping` | Not public | Not applicable | Not applicable | Not applicable | Deferred; no string/font `PropertyValue` |
 
-Source guards now block primitive `VirtualAttributeKey.ToString()`, style string/value factories, global layout keys, missing metadata, and key/value mismatches. Next reasonable line after Round 14 is allocation baseline tightening or post-GA glyph atlas design; do not mix glyph atlas implementation into this metadata cleanup.
+Round 15 cleanup removed the unused public min/max size keys instead of leaving metadata without layout behavior. Source guards now block primitive `VirtualPropertyKey.ToString()`, legacy attribute-era API names, alias helpers, style string/value factories, global layout keys, missing metadata, and key/value mismatches. Next reasonable line after Round 15 is allocation baseline tightening or post-GA glyph atlas design; do not mix glyph atlas implementation into this metadata cleanup.
 
 **String inventory 关键发现（pre-Round 13/14 历史记录）：**
 
@@ -156,9 +155,9 @@ Source guards now block primitive `VirtualAttributeKey.ToString()`, style string
 | Irix.Rendering | `HashSet<string>` + `List<string>` 在 dirty classification（2 处） | LayoutRebuildReason 已为 byte enum；diagnostics 文字 |
 | Irix.Poc | ActionId 裸 string literal 从 PoC → layout → compositor → input router | Exception messages, diagnostics output |
 
-**6 个 attribute name 裸 string：** 已被 Round 14 typed key path 取代；保留此记录仅作为历史 inventory baseline。
+**6 个 property name 裸 string：** 已被 Round 14 typed key path 取代；保留此记录仅作为历史 inventory baseline。
 
-**ActionId 数据流：** `VirtualNodeAttribute` → `LayoutTreeBuilder` typed key comparison → `LayoutElement.ActionId` → `HitTestTarget.ActionId` → compositor `TryGetActionIdAt` → `CounterInputRouter.MapActionId`。
+**ActionId 数据流：** `VirtualNodeProperty` → `LayoutTreeBuilder` typed key comparison → `LayoutElement.ActionId` → `HitTestTarget.ActionId` → compositor `TryGetActionIdAt` → `CounterInputRouter.MapActionId`。
 
 ---
 
@@ -846,7 +845,7 @@ Counter PoC 默认 UI 隐藏 `ScrollY:` 与 `Input:` 调试文本，只保留计
 
 ### Button visual state v0
 
-Button 已基于 `CounterModel.InputOwnership` 派生 `IsHovered` / `IsPressed` / `IsFocused`，由 `CounterApplication.BuildView` 写入 `VirtualNodeAttribute`，`LayoutTreeBuilder` 携带到 `LayoutElement.ButtonState`，`DrawCommandRecorder` 通过现有 `DrawCommand.Color` 选择 button fill color。v0 不直接修改 `DrawCommand`、`IDrawingBackend` 或 D3D12 backend；颜色优先级固定为 `Pressed > Hovered > Focused > Normal`。
+Button 已基于 `CounterModel.InputOwnership` 派生 `IsHovered` / `IsPressed` / `IsFocused`，由 `CounterApplication.BuildView` 写入 `VirtualNodeProperty`，`LayoutTreeBuilder` 携带到 `LayoutElement.ButtonState`，`DrawCommandRecorder` 通过现有 `DrawCommand.Color` 选择 button fill color。v0 不直接修改 `DrawCommand`、`IDrawingBackend` 或 D3D12 backend；颜色优先级固定为 `Pressed > Hovered > Focused > Normal`。
 
 ### Button visual state scope freeze
 

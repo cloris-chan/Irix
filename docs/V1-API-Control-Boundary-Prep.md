@@ -1,7 +1,7 @@
 # v1 API / Control Boundary Prep
 
 > Design-only boundary inventory for the next line after Program diagnostics runner split. This document does not move code, change APIs, enable StyleOnly fast-path, or introduce a unified diagnostics channel.
-> Status: design inventory complete and regression-only. Controls-boundary helpers are complete and regression-only: `ControlVisualState projection helper`, `Control action attribute helper`, and `Button attribute bundle helper` are implemented as PoC-owned internal code. Do not continue controls-boundary helper splitting.
+> Status: design inventory complete and regression-only. Controls-boundary helpers are complete and regression-only: `ControlVisualState projection helper`, `Control action property helper`, and `Button property bundle helper` are implemented as PoC-owned internal code. Do not continue controls-boundary helper splitting.
 
 ## 1. Scope
 
@@ -9,7 +9,7 @@ Current status:
 
 - This design inventory is complete and sealed as regression-only.
 - Controls-boundary helpers are complete and regression-only.
-- `ControlVisualState projection helper`, `Control action attribute helper`, and `Button attribute bundle helper` are implemented in `Irix.Poc` and remain PoC-owned.
+- `ControlVisualState projection helper`, `Control action property helper`, and `Button property bundle helper` are implemented in `Irix.Poc` and remain PoC-owned.
 - `ScrollFeedback` / `ScrollContainerMetrics` vocabulary v0 is implemented in `Irix.Poc` as side-channel translator feedback; the legacy `Action<double>` max-scroll callback remains unchanged.
 - Program diagnostics runner split is complete and regression-only.
 - Diagnostics snapshot v0 and debug UI bridge v0 remain regression-only.
@@ -34,20 +34,20 @@ Non-goals:
 
 ## 2. Controls Boundary
 
-Current controls are represented as `VirtualNodeKind` values plus loosely typed content/attributes. `VirtualNodeFactory` is a convenience layer over those primitives, not a final v1 controls API.
+Current controls are represented as `VirtualNodeKind` values plus loosely typed content/properties. `VirtualNodeFactory` is a convenience layer over those primitives, not a final v1 controls API.
 
 | Current surface | Current owner | Boundary conclusion |
 |-----------------|---------------|---------------------|
 | `VirtualNodeKind.Text` / `VirtualNodeFactory.Text` | `Irix.Core` node model; consumed by `Irix.Rendering` layout/draw recording | Framework primitive. Text content is core node data; layout and rendering own measurement/recording policy. |
-| `VirtualNodeKind.Rectangle` / `VirtualNodeFactory.Rectangle` | `Irix.Core` node model with `Width` / `Height` attributes; consumed by `Irix.Rendering` | Framework primitive / demo drawing primitive. The factory is a low-level convenience for setting size attributes, not Counter-specific. |
-| `VirtualNodeKind.Button` / `VirtualNodeFactory.Button` | `Irix.Core` node kind; `Irix.Rendering` consumes child text plus `ActionId`, `IsHovered`, `IsPressed`, `IsFocused` attributes | Framework primitive in the current renderer, but not a final controls API. The generic button shape and visual-state attributes are reusable; Counter action ids and message mapping are sample-owned. |
-| `VirtualNodeKind.ScrollContainer` / `VirtualNodeFactory.ScrollContainer` | `Irix.Core` node kind; `Irix.Rendering` consumes `ScrollY` and optional `Height` attributes | Framework layout primitive. Scroll geometry/clip behavior belongs to rendering; scroll input policy and animation remain outside the node primitive. |
+| `VirtualNodeKind.Rectangle` / `VirtualNodeFactory.Rectangle` | `Irix.Core` node model with `Width` / `Height` properties; consumed by `Irix.Rendering` | Framework primitive / demo drawing primitive. The factory is a low-level convenience for setting size properties, not Counter-specific. |
+| `VirtualNodeKind.Button` / `VirtualNodeFactory.Button` | `Irix.Core` node kind; `Irix.Rendering` consumes child text plus `ActionId`, `IsHovered`, `IsPressed`, `IsFocused` properties | Framework primitive in the current renderer, but not a final controls API. The generic button shape and visual-state properties are reusable; Counter action ids and message mapping are sample-owned. |
+| `VirtualNodeKind.ScrollContainer` / `VirtualNodeFactory.ScrollContainer` | `Irix.Core` node kind; `Irix.Rendering` consumes `ScrollY` and optional `Height` properties | Framework layout primitive. Scroll geometry/clip behavior belongs to rendering; scroll input policy and animation remain outside the node primitive. |
 
 Counter sample convenience lives outside the primitive factory:
 
 | Counter-specific surface | Why it is sample-owned |
 |--------------------------|------------------------|
-| `CounterApplication.BuildButton` | Attaches Counter action ids and derives visual-state attributes from `OwnershipSnapshot`. |
+| `CounterApplication.BuildButton` | Attaches Counter action ids and derives visual-state properties from `OwnershipSnapshot`. |
 | `CounterMessage.Increment` / `Decrement` / `Reset` action ids | These are app commands, not framework command identifiers. |
 | `CounterApplication.BuildScrollProbeRows` | Generates sample content to exercise scrolling. |
 | Debug header rows in `CounterApplication` | Sample diagnostics presentation, not a reusable control surface. |
@@ -56,8 +56,8 @@ Naming and ownership conclusion:
 
 - Keep `VirtualNodeFactory` as a low-level node-construction convenience for now.
 - Treat `Button` as a current framework primitive, not yet a complete controls API.
-- Treat attribute names (`ActionId`, `IsHovered`, `IsPressed`, `IsFocused`, `ScrollY`, `Width`, `Height`) as the current wire contract between `VirtualNode` and rendering.
-- Treat attribute values and action-id vocabulary as app-owned unless the value is a generic rendering/layout concept.
+- Treat property names (`ActionId`, `IsHovered`, `IsPressed`, `IsFocused`, `ScrollY`, `Width`, `Height`) as the current wire contract between `VirtualNode` and rendering.
+- Treat property values and action-id vocabulary as app-owned unless the value is a generic rendering/layout concept.
 - Future v1 controls work should introduce typed ownership for target ids and visual state before promoting sample helpers.
 
 ## 3. Input Boundary
@@ -140,7 +140,7 @@ The current PoC uses string ids in several places. For v1 API design, those stri
 | Draft concept | Meaning | Current source or equivalent | Owner boundary |
 |---------------|---------|------------------------------|----------------|
 | `HitTestTargetId` | The rendered target under a pointer for the current frame. It answers "what visual/control surface was hit?" | Current hit-test result strings used by input routing | Render/input boundary. It is frame-derived and should not be treated as an app command. |
-| `ControlActionId` | The activation identifier attached to a control, such as a button action. It answers "what control action should activation request?" | Current `ActionId` attribute on `Button` nodes | Control/view boundary. The attribute name stays as-is for now; future API can type this concept. |
+| `ControlActionId` | The activation identifier attached to a control, such as a button action. It answers "what control action should activation request?" | Current `ActionId` property on `Button` nodes | Control/view boundary. The property name stays as-is for now; future API can type this concept. |
 | `FocusTargetId` | The target that receives keyboard focus and keyboard activation policy. | Current focused target inside `InputOwnershipState` / `OwnershipSnapshot` | Input ownership boundary. It can differ from hover and capture targets. |
 | `PointerCaptureTargetId` | The target that owns an active pointer press/drag sequence until release or cancel. | Current pressed/captured target inside `InputOwnershipState` / `OwnershipSnapshot` | Input ownership boundary. It should outlive transient hover changes during a press. |
 | `AppCommandId` | The application command vocabulary after routing a control action into app semantics. | Counter `Increment`, `Decrement`, and `Reset` message/action vocabulary | App boundary. It is sample-owned today and should not leak into platform/render layers. |
@@ -158,65 +158,65 @@ Naming rules for future work:
 
 - Do not use bare `targetId` in promoted APIs when the role is known; choose hit-test, focus, or capture vocabulary.
 - Do not use `ActionId` to mean app command once a typed control API exists; keep `ControlActionId` and `AppCommandId` distinct.
-- Keep the current `ActionId` attribute and string target ids unchanged during this prep line.
+- Keep the current `ActionId` property and string target ids unchanged during this prep line.
 - Treat Counter command ids as sample vocabulary until an app command abstraction is explicitly designed.
 
 Typed identity prep:
 
 | Option | Fit for v1 | Notes |
 |--------|------------|-------|
-| Bare `string` | Current implementation only | Easy to pass through `VirtualNodeAttribute`, but it lets hit-test, focus, capture, action, and app command identities be mixed accidentally. Keep for existing wire compatibility, not as the recommended promoted API shape. |
+| Bare `string` | Current implementation only | Easy to pass through `VirtualNodeProperty`, but it lets hit-test, focus, capture, action, and app command identities be mixed accidentally. Keep for existing wire compatibility, not as the recommended promoted API shape. |
 | Role-specific string wrapper | Recommended direction | Prefer small role-specific value types such as `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId` that wrap the current string payload. This preserves current id vocabulary while making API boundaries explicit. |
 | Shared generic id, such as `Id<TScope>` | Not first choice for v1 | It can reduce duplicate code, but it hides the domain vocabulary at call sites and makes public APIs harder to read. Reconsider only after role-specific wrappers prove too repetitive. |
 | Numeric/runtime handle | Not appropriate yet | Hit-test and control action ids are currently authored as stable strings in the view tree. A numeric handle would require lifetime, recycling, and diagnostics naming rules that do not exist yet. |
 
-Recommendation: when this becomes implementation work, prefer `readonly record struct`-style role wrappers over strings, with explicit conversion at the current attribute/hit-test boundary. Do not introduce a generic id abstraction before the roles are stable. Default/empty identity semantics must be designed before any wrapper becomes public API.
+Recommendation: when this becomes implementation work, prefer `readonly record struct`-style role wrappers over strings, with explicit conversion at the current property/hit-test boundary. Do not introduce a generic id abstraction before the roles are stable. Default/empty identity semantics must be designed before any wrapper becomes public API.
 
 ## 6. Visual State Ownership
 
-`IsHovered`, `IsPressed`, and `IsFocused` are currently `VirtualNode` attributes consumed by rendering. They should be treated as renderable visual-state inputs produced from input ownership state, not as independent Counter domain state and not as renderer-owned interaction state.
+`IsHovered`, `IsPressed`, and `IsFocused` are currently `VirtualNode` properties consumed by rendering. They should be treated as renderable visual-state inputs produced from input ownership state, not as independent Counter domain state and not as renderer-owned interaction state.
 
-| Attribute | Current storage | Current producer | Current consumer | Boundary conclusion |
+| Property | Current storage | Current producer | Current consumer | Boundary conclusion |
 |-----------|-----------------|------------------|------------------|---------------------|
-| `IsHovered` | Boolean `VirtualNodeAttribute` on button-like nodes | `CounterApplication` derives it from `OwnershipSnapshot` | `Irix.Rendering` style/layout/draw recording | Visual state projection from input ownership. Rendering may style it, but should not define hover policy. |
-| `IsPressed` | Boolean `VirtualNodeAttribute` on button-like nodes | `CounterApplication` derives it from pressed/capture ownership | `Irix.Rendering` style/layout/draw recording | Visual state projection from pointer capture/press state. It is not the app command itself. |
-| `IsFocused` | Boolean `VirtualNodeAttribute` on button-like nodes | `CounterApplication` derives it from focused ownership | `Irix.Rendering` style/layout/draw recording | Visual state projection from focus ownership. It is not keyboard routing policy by itself. |
+| `IsHovered` | Boolean `VirtualNodeProperty` on button-like nodes | `CounterApplication` derives it from `OwnershipSnapshot` | `Irix.Rendering` style/layout/draw recording | Visual state projection from input ownership. Rendering may style it, but should not define hover policy. |
+| `IsPressed` | Boolean `VirtualNodeProperty` on button-like nodes | `CounterApplication` derives it from pressed/capture ownership | `Irix.Rendering` style/layout/draw recording | Visual state projection from pointer capture/press state. It is not the app command itself. |
+| `IsFocused` | Boolean `VirtualNodeProperty` on button-like nodes | `CounterApplication` derives it from focused ownership | `Irix.Rendering` style/layout/draw recording | Visual state projection from focus ownership. It is not keyboard routing policy by itself. |
 
 Future Button API boundary:
 
-- Rendering owns how visual-state attributes affect drawing, style selection, and layout invalidation.
+- Rendering owns how visual-state properties affect drawing, style selection, and layout invalidation.
 - Input ownership owns hover, focus, press, and capture facts.
-- A future controls layer may own a typed `ControlVisualState` projection from input ownership into renderable attributes.
+- A future controls layer may own a typed `ControlVisualState` projection from input ownership into renderable properties.
 - App code owns command handling and model updates after activation; it should not need to hand-roll hover/press/focus projection once a generic controls layer exists.
-- Until that layer exists, `CounterApplication` remains the projection site and the existing attributes remain the wire contract.
+- Until that layer exists, `CounterApplication` remains the projection site and the existing properties remain the wire contract.
 
-Design answer for `Button` v1 prep: the three attributes are current rendering attributes whose values are produced by input-state projection. They are likely future control visual state, but they are not Counter app state and should not be computed inside the renderer.
+Design answer for `Button` v1 prep: the three properties are current rendering properties whose values are produced by input-state projection. They are likely future control visual state, but they are not Counter app state and should not be computed inside the renderer.
 
 `ControlVisualState` prep:
 
 | Draft field | Source | Projection rule | Current compatibility |
 |-------------|--------|-----------------|-----------------------|
-| `IsHovered` | Current hover target from input ownership | True when the control target is the current hover target and not blocked by capture/focus policy. | Writes the existing `IsHovered` attribute. |
-| `IsPressed` | Current pointer capture / pressed target from input ownership | True while the control owns the active press/capture sequence. | Writes the existing `IsPressed` attribute. |
-| `IsFocused` | Current focus target from input ownership | True when keyboard focus belongs to the control target. | Writes the existing `IsFocused` attribute. |
-| `IsEnabled` | Future control/app policy | Default would be enabled unless app/control state says otherwise. | No current attribute; do not add during this prep line. |
+| `IsHovered` | Current hover target from input ownership | True when the control target is the current hover target and not blocked by capture/focus policy. | Writes the existing `IsHovered` property. |
+| `IsPressed` | Current pointer capture / pressed target from input ownership | True while the control owns the active press/capture sequence. | Writes the existing `IsPressed` property. |
+| `IsFocused` | Current focus target from input ownership | True when keyboard focus belongs to the control target. | Writes the existing `IsFocused` property. |
+| `IsEnabled` | Future control/app policy | Default would be enabled unless app/control state says otherwise. | No current property; do not add during this prep line. |
 
 Projection location:
 
 - Input ownership should expose facts such as hover target, focus target, and pointer capture target.
 - A future controls layer should project those facts plus control policy into `ControlVisualState`.
 - Rendering should consume the projected state as style/layout input; it should not compute hover, focus, or capture rules.
-- App code should receive activation results and own command handling, but it should not manually derive the common hover/press/focus attributes once a controls layer exists.
+- App code should receive activation results and own command handling, but it should not manually derive the common hover/press/focus properties once a controls layer exists.
 
-Compatibility rule: the future `ControlVisualState` must remain source-compatible with existing `IsHovered`, `IsPressed`, and `IsFocused` attributes until the renderer has a typed state input. The first implementation step should be an adapter that emits the existing attributes, not a renderer contract change.
+Compatibility rule: the future `ControlVisualState` must remain source-compatible with existing `IsHovered`, `IsPressed`, and `IsFocused` properties until the renderer has a typed state input. The first implementation step should be an adapter that emits the existing properties, not a renderer contract change.
 
 ## 7. Scroll Ownership
 
-Scroll currently spans node attributes, layout feedback, input conversion, animation, and sample state. The v1 boundary should keep these roles separate before extracting a reusable scroll primitive.
+Scroll currently spans node properties, layout feedback, input conversion, animation, and sample state. The v1 boundary should keep these roles separate before extracting a reusable scroll primitive.
 
 | Scroll surface | Current owner | Boundary conclusion |
 |----------------|---------------|---------------------|
-| `ScrollY` attribute | `VirtualNode` wire contract consumed by `Irix.Rendering` | Layout/render input. It is the pixel offset used for layout and clipping, not the animation state. |
+| `ScrollY` property | `VirtualNode` wire contract consumed by `Irix.Rendering` | Layout/render input. It is the pixel offset used for layout and clipping, not the animation state. |
 | `ScrollState` | `Irix.Poc` | PoC scroll model containing accumulator, target position, animated position, max scroll, and animation flag. Candidate for extraction only after container ids and feedback contracts are named. |
 | `ScrollController` | `Irix.Poc` | Pure scroll transformation policy. Reusable-looking, but still tied to current PoC contracts and naming. |
 | `ScrollFramePump` | `Irix.Poc` | Animation/coalescing scheduler for the Counter PoC. It dispatches Counter messages and should not be treated as runtime infrastructure yet. |
@@ -301,9 +301,9 @@ Design inventory is complete. The next work should be a small implementation lin
 
 | Priority | Candidate | Scope | Decision |
 |----------|-----------|-------|----------|
-| P0 implemented | `ControlVisualState projection helper` | Small PoC-owned helper projects existing input ownership facts into the current `IsHovered`, `IsPressed`, and `IsFocused` attributes. Existing attributes and behavior remain unchanged. | Done as internal `Irix.Poc` code. Keep target/action ids as strings; do not promote this to a framework controls API yet. |
-| P0 implemented | `Control action attribute helper` | Small PoC-owned helper constructs the current string-backed `ActionId` attribute. | Done as internal `Irix.Poc` code. Keep target/action ids as strings; do not introduce typed id wrappers. |
-| P1 implemented | `Button attribute bundle helper` | Small PoC-owned helper combines `ActionId` plus `ControlVisualState` attributes for `CounterApplication.BuildButton`. | Done as internal `Irix.Poc` code. It reduces hand-written wire contract in the sample without changing the `VirtualNode` contract. |
+| P0 implemented | `ControlVisualState projection helper` | Small PoC-owned helper projects existing input ownership facts into the current `IsHovered`, `IsPressed`, and `IsFocused` properties. Existing properties and behavior remain unchanged. | Done as internal `Irix.Poc` code. Keep target/action ids as strings; do not promote this to a framework controls API yet. |
+| P0 implemented | `Control action property helper` | Small PoC-owned helper constructs the current string-backed `ActionId` property. | Done as internal `Irix.Poc` code. Keep target/action ids as strings; do not introduce typed id wrappers. |
+| P1 implemented | `Button property bundle helper` | Small PoC-owned helper combines `ActionId` plus `ControlVisualState` properties for `CounterApplication.BuildButton`. | Done as internal `Irix.Poc` code. It reduces hand-written wire contract in the sample without changing the `VirtualNode` contract. |
 | P1 complete | Controls-boundary helper seal | Static scan found no remaining raw `ActionId` construction in `src/**/*.cs`; focused tests cover bundle output and `BuildView` integration. | Complete / regression-only. Do not continue controls-boundary helper splitting. |
 | P2 postponed | Typed identity wrappers | Future role-specific wrappers for `HitTestTargetId`, `ControlActionId`, `FocusTargetId`, `PointerCaptureTargetId`, and `AppCommandId`. | Do not implement yet. Keep current string ids until the control helper boundary is explicitly promoted. |
 | P3 first step complete | Scroll feedback vocabulary | PoC-owned `ScrollFeedback` / `ScrollContainerMetrics` records name scroll container id, viewport extent, content extent, and max scroll. | Complete as translator side-channel only. Do not extract scroll yet; settings provider, pure controller, state ownership, and pump/scheduler work remain postponed. |
@@ -313,9 +313,9 @@ Design inventory is complete. The next work should be a small implementation lin
 Implemented helper line:
 
 1. `ControlVisualState projection helper` exists as PoC-owned internal code.
-2. `Control action attribute helper` exists as PoC-owned internal code.
-3. `Button attribute bundle helper` exists as PoC-owned internal code.
-4. Existing `ActionId`, `IsHovered`, `IsPressed`, and `IsFocused` attributes remain the compatibility output.
+2. `Control action property helper` exists as PoC-owned internal code.
+3. `Button property bundle helper` exists as PoC-owned internal code.
+4. Existing `ActionId`, `IsHovered`, `IsPressed`, and `IsFocused` properties remain the compatibility output.
 5. Target/action ids remain strings.
 6. Typed id wrappers remain postponed.
 7. Scroll feedback vocabulary v0 exists as side-channel translator data.
@@ -334,15 +334,15 @@ No code moves in this line. The design inventory is complete and regression-only
 | Controls | Which node kinds are framework primitives? | `Text`, `Rectangle`, `Button`, and `ScrollContainer` are current primitives. Their factory methods are convenience constructors, not final controls APIs. |
 | Controls | Which parts are Counter-specific? | Action-id values, ownership-derived visual state, sample rows, debug rows, and Counter messages. |
 | Boundary prep | Is this document line still active design work? | No. Design inventory is complete; only regression repairs should touch this line. |
-| Implemented helpers | What shipped first? | `ControlVisualState projection helper`, `Control action attribute helper`, and `Button attribute bundle helper`, preserving existing button attributes and behavior as PoC-owned internal code. |
+| Implemented helpers | What shipped first? | `ControlVisualState projection helper`, `Control action property helper`, and `Button property bundle helper`, preserving existing button properties and behavior as PoC-owned internal code. |
 | Controls helper seal | Is there remaining helper split work? | No. Static scan found no raw `ActionId` construction in PoC source; helper line is complete / regression-only. |
 | Target/action ids | Which ids must stay distinct? | Hit-test target, control action, focus target, pointer capture target, and app command id are separate design concepts. Current strings remain unchanged. |
 | Typed identity | What representation is preferred later? | Role-specific string wrappers, preferably `readonly record struct`-style value types. Do not start with bare strings or a shared generic id as the promoted API shape. |
-| Visual state | Who owns `IsHovered` / `IsPressed` / `IsFocused`? | They are current rendering attributes whose values are projected from input ownership state. Future controls may own a typed visual-state projection. |
-| Control visual state | What should `ControlVisualState` contain first? | Hovered, pressed, and focused fields mapped back to existing attributes; enabled can be designed later without changing current attributes now. |
+| Visual state | Who owns `IsHovered` / `IsPressed` / `IsFocused`? | They are current rendering properties whose values are projected from input ownership state. Future controls may own a typed visual-state projection. |
+| Control visual state | What should `ControlVisualState` contain first? | Hovered, pressed, and focused fields mapped back to existing properties; enabled can be designed later without changing current properties now. |
 | Input | What is generic today? | Raw platform input facts and raw event publication. |
 | Input | What is Counter-specific today? | Routing raw input to Counter messages and wrapping visual-state updates into the Counter model. |
-| Scroll | What does `ScrollY` own? | `ScrollY` is the layout/render offset attribute, not scroll animation state. |
+| Scroll | What does `ScrollY` own? | `ScrollY` is the layout/render offset property, not scroll animation state. |
 | Scroll | What remains outside the node primitive? | `ScrollState`, pump scheduling, system settings, metrics feedback, and app-level scroll storage remain separately owned until extraction contracts are explicit. |
 | Scroll feedback | What first step is complete? | `ScrollFeedback` / `ScrollContainerMetrics` side-channel vocabulary exists in `Irix.Poc`; old max-scroll callback remains active. |
 | Scroll extraction | What order prevents premature movement? | Metrics / feedback vocabulary first is complete; settings provider second; pure controller third; state ownership fourth; pump / scheduler last. |
@@ -359,7 +359,7 @@ Regression-only rules remain in force:
 - Do not change debug UI rows.
 - Do not enable StyleOnly fast-path.
 - Do not move runtime, renderer, input, or backend files during this prep line.
-- Do not rename current target/action attributes or public APIs during this prep line.
+- Do not rename current target/action properties or public APIs during this prep line.
 - Do not continue controls-boundary helper splitting.
 - Do not implement typed id wrappers, scroll extraction, or translator promotion as part of this sealed controls-boundary line.
 - Do not move `ScrollController`, `ScrollState`, or `ScrollFramePump`; scheduler/message flow remains PoC-owned and unchanged.

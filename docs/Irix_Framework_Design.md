@@ -820,63 +820,62 @@ public abstract class Command<TMessage>
 public readonly struct VirtualNode
 {
     public readonly NodeType Type;
-    public readonly ReadOnlyMemory<VirtualNodeAttribute> Attributes;
+    public readonly ReadOnlyMemory<VirtualNodeProperty> Properties;
     public readonly ReadOnlyMemory<VirtualNode> Children;
     public readonly ulong Key;  // 用于 Diff keyed reconciliation
 }
 
-public readonly struct VirtualNodeAttribute
+public readonly struct VirtualNodeProperty
 {
-    public readonly AttributeKind Kind;
-    public readonly AttributeValue Value;  // union-like blittable struct
+    public readonly PropertyKind Kind;
+    public readonly PropertyValue Value;  // union-like blittable struct
 }
 ```
 
 v1 的零分配目标聚焦在 **Diff 输出、Patch 管线、布局热路径、渲染热路径**，而非强制要求整个声明式树结构绝对栈上化。`VirtualNode` 可采用轻量不可变结构配合池化 Builder / Arena 分配策略，在复杂度、可调试性和性能之间取得更稳妥的平衡。
 
-> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还资源到池，资源生命周期已显式化。`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new List + ToArray。`FrameTextArena` 的 `Seal()` 从 `ArrayPool<char>` 租用 buffer 而非生成 `string`。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。Round 13 已完成 text/value IR：`VirtualNode → LayoutElement → DrawCommandRecorder` 使用 `TextNodeContent + TextBufferSnapshot.ResolveRequired`，不再回退到 string text attribute。Round 14 已完成 typed property metadata：`VirtualAttributeKey` 是纯值 key，无 public constructor、无 primitive `ToString()`；`VirtualNodeAttribute` constructor 按 metadata 校验 key/value。热路径 GC pressure 已基本消除。
+> **当前实现状态：** Diff / patch 所有权模型已经较接近目标；`DrawCommandRecorder` 每帧从 `FrameDrawingResources` 静态池 Rent，`RenderFrameBatch.Dispose()` 归还资源到池，资源生命周期已显式化。`D3D12DrawingBackend` 使用 `FrameRenderList<T>`（ArrayPool 背板），每帧 Reset 而非 new List + ToArray。`FrameTextArena` 的 `Seal()` 从 `ArrayPool<char>` 租用 buffer 而非生成 `string`。`DrawCommand` 录制走小批量 `stackalloc` + 大批量 pooled owner，并在跨 async/线程边界时通过 `DrawCommandBatch` 转移所有权。Round 13 已完成 text/value IR：`VirtualNode → LayoutElement → DrawCommandRecorder` 使用 `TextNodeContent + TextBufferSnapshot.ResolveRequired`，不再回退到 string text property。Round 14 已完成 typed property metadata：`VirtualPropertyKey` 是纯值 key，无 public constructor、无 primitive `ToString()`；`VirtualNodeProperty` constructor 按 metadata 校验 key/value。热路径 GC pressure 已基本消除。
 
 #### 6.2.1 Unified typed style/property API
 
 Public authoring API 是一套 unified typed property API。调用方不需要知道某个 property 最终由 layout、text measure、paint 还是 compositor 处理，也不需要选择三套 public style API。框架暴露语义 helper，例如：
 
 ```csharp
-VirtualNodeAttribute.Width(160);
-VirtualNodeAttribute.Height(40);
-VirtualNodeAttribute.ScrollY(scrollY);
-VirtualNodeAttribute.Action(actionId);
-VirtualNodeAttribute.Hovered(isHovered);
-VirtualNodeAttribute.Pressed(isPressed);
-VirtualNodeAttribute.Focused(isFocused);
-VirtualNodeAttribute.Opacity(0.8);
+VirtualNodeProperty.Width(160);
+VirtualNodeProperty.Height(40);
+VirtualNodeProperty.ScrollY(scrollY);
+VirtualNodeProperty.Action(actionId);
+VirtualNodeProperty.Hovered(isHovered);
+VirtualNodeProperty.Pressed(isPressed);
+VirtualNodeProperty.Focused(isFocused);
+VirtualNodeProperty.Opacity(0.8);
 ```
 
-`StylePropertyId` / 当前实现中的 `VirtualAttributeKey` 加 `VirtualAttributeMetadata.Effects` 只作为框架内部 invalidation、animation、supported-node validation metadata。它不是用户 authoring 分层，不得演变为 `SetLayoutStyle(...)` / `SetVisualStyle(...)` / `SetCompositeStyle(...)` 三套 public 主 API。
+`StylePropertyId` / 当前实现中的 `VirtualPropertyKey` 加 `VirtualPropertyMetadata.Effects` 只作为框架内部 invalidation、animation、supported-node validation metadata。它不是用户 authoring 分层，不得演变为 `SetLayoutStyle(...)` / `SetVisualStyle(...)` / `SetCompositeStyle(...)` 三套 public 主 API。
 
 Global default style 与 node override 分离：
 
 | Source | Ownership |
 |--------|-----------|
 | `RenderStylePreset` / `LayoutStyle` / `DrawingStyle` | 全局默认、style preset、未来 stylesheet 的基础 |
-| `VirtualNodeAttribute` | node-local override 或 runtime visual state |
-| Future stylesheet | 另行设计；不把 preset metrics 塞回 node attribute |
+| `VirtualNodeProperty` | node-local override 或 runtime visual state |
+| Future stylesheet | 另行设计；不把 preset metrics 塞回 node property |
 
 当前 public property table：
 
 | Property | Value kind | Effects | Animation channel | Supported node kinds |
 |----------|------------|---------|-------------------|----------------------|
 | `Width`, `Height` | Number | Layout | CpuStyle | Rectangle, Button, ScrollContainer |
-| `MinWidth`, `MaxWidth`, `MinHeight`, `MaxHeight` | Number | Layout | Discrete | Rectangle, Button, ScrollContainer |
 | `ScrollY` | Number | Layout | CpuStyle | ScrollContainer |
 | `Opacity` | Number | Composite + Visual | Composite | Text, Rectangle, Button, ScrollContainer |
 | `ActionId` | ActionId | Interaction | None | Button |
 | `IsHovered`, `IsPressed`, `IsFocused` | Boolean | Interaction + Visual | Discrete | Button |
 
-Explicit exclusions for this round: no string style key, no `AttributeValue.Text`, no `FontFamily` string attribute, no public `FillColor` / `TextColor` until a pure typed color value exists, no global layout metrics as node attributes (`HorizontalPadding`, `VerticalPadding`, `ItemSpacing`, `TextHeight`), and no control-specific sizing keys (`ButtonHeight`, `RectangleHeight`, etc.). Glyph atlas work remains post-GA renderer work and is not part of this property metadata cleanup.
+Round 15 removed unused public min/max sizing keys rather than keeping half-implemented metadata. Explicit exclusions for this round: no string style key, no `PropertyValue.Text`, no `FontFamily` string property, no public `FillColor` / `TextColor` until a pure typed color value exists, no global layout metrics as node properties (`HorizontalPadding`, `VerticalPadding`, `ItemSpacing`, `TextHeight`), and no control-specific sizing keys (`ButtonHeight`, `RectangleHeight`, etc.). Glyph atlas work remains post-GA renderer work and is not part of this property metadata cleanup.
 
 **Diff 算法策略：**
 
-- 递归深比较：逐节点比较 `Kind`、`Key`、`Content`、`Attributes`、`Children`，短路于首个差异。
+- 递归深比较：逐节点比较 `Kind`、`Key`、`Content`、`Properties`、`Children`，短路于首个差异。
 - **已落地：** 局部 diff — 相同 Kind/Key 的节点输出 `Update` patch（内容或属性变化）；Keyed reconciliation 用于子节点列表匹配（同 React keys）；新增子节点输出 `Add`，移除子节点输出 `Remove`；Kind 变化时退化为 `ReplaceRoot`。
 - **待落地：** `Move` 操作的优化（当前通过 `Remove` + `Add` 实现）；深度局部 patch 路径标识。
 - Diff 计算优先在同步上下文中完成，输出的 `VirtualNodePatch` 数组从 `MemoryPool<VirtualNodePatch>` 租用，随后以 `IMemoryOwner` 形式转移给 Compositor。

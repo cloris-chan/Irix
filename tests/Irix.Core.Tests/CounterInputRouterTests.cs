@@ -254,7 +254,7 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void ControlVisualState_projection_and_adapter_preserve_existing_button_attributes()
+    public void ControlVisualState_projection_and_adapter_preserve_existing_button_properties()
     {
         var targetId = new ActionId(1);
         var cases = new[]
@@ -316,34 +316,34 @@ public sealed class CounterInputRouterTests
         foreach (var caseItem in cases)
         {
             var state = ControlVisualStateProjection.Project(caseItem.Snapshot, targetId);
-            var attributes = ControlVisualStateAttributeAdapter.ToAttributes(state);
+            var properties = ControlVisualStatePropertyAdapter.ToProperties(state);
 
             Assert.Equal(caseItem.Expected, state);
-            Assert.Equal(caseItem.Expected.IsHovered, GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
-            Assert.Equal(caseItem.Expected.IsPressed, GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
-            Assert.Equal(caseItem.Expected.IsFocused, GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
-            Assert.DoesNotContain(attributes, attribute => VirtualAttributeDiagnostics.Format(attribute.Key) == "IsEnabled");
+            Assert.Equal(caseItem.Expected.IsHovered, GetBooleanProperty(properties, VirtualPropertyKey.IsHovered));
+            Assert.Equal(caseItem.Expected.IsPressed, GetBooleanProperty(properties, VirtualPropertyKey.IsPressed));
+            Assert.Equal(caseItem.Expected.IsFocused, GetBooleanProperty(properties, VirtualPropertyKey.IsFocused));
+            Assert.DoesNotContain(properties, property => VirtualPropertyDiagnostics.Format(property.Key) == "IsEnabled");
         }
     }
 
     [Fact]
-    public void ButtonAttributeBundle_preserves_action_and_visual_state_wire_contract()
+    public void ButtonPropertyBundle_preserves_action_and_visual_state_wire_contract()
     {
         var actionId = new ActionId(1);
-        var attributes = ButtonAttributeBundle.Create(
+        var properties = ButtonPropertyBundle.Create(
             actionId,
             new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: true));
 
-        Assert.Equal(4, attributes.Length);
-        Assert.Equal(actionId, GetActionId(attributes));
-        Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsHovered));
-        Assert.False(GetBooleanAttribute(attributes, VirtualAttributeKey.IsPressed));
-        Assert.True(GetBooleanAttribute(attributes, VirtualAttributeKey.IsFocused));
-        Assert.DoesNotContain(attributes, attribute => VirtualAttributeDiagnostics.Format(attribute.Key) == "IsEnabled");
+        Assert.Equal(4, properties.Length);
+        Assert.Equal(actionId, GetActionId(properties));
+        Assert.True(GetBooleanProperty(properties, VirtualPropertyKey.IsHovered));
+        Assert.False(GetBooleanProperty(properties, VirtualPropertyKey.IsPressed));
+        Assert.True(GetBooleanProperty(properties, VirtualPropertyKey.IsFocused));
+        Assert.DoesNotContain(properties, property => VirtualPropertyDiagnostics.Format(property.Key) == "IsEnabled");
     }
 
     [Fact]
-    public void CounterApplication_button_attributes_match_derived_visual_state_for_each_input_state()
+    public void CounterApplication_button_properties_match_derived_visual_state_for_each_input_state()
     {
         var app = new CounterApplication();
         var targetId = new ActionId(1);
@@ -394,9 +394,9 @@ public sealed class CounterInputRouterTests
             var expected = CounterApplication.DeriveButtonState(snapshot, targetId);
             var button = FindButton(app.BuildView(model).Root, targetId);
 
-            Assert.Equal(expected.IsHovered, GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
-            Assert.Equal(expected.IsPressed, GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
-            Assert.Equal(expected.IsFocused, GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
+            Assert.Equal(expected.IsHovered, GetBooleanProperty(button, VirtualPropertyKey.IsHovered));
+            Assert.Equal(expected.IsPressed, GetBooleanProperty(button, VirtualPropertyKey.IsPressed));
+            Assert.Equal(expected.IsFocused, GetBooleanProperty(button, VirtualPropertyKey.IsFocused));
         }
     }
 
@@ -421,10 +421,10 @@ public sealed class CounterInputRouterTests
         var button = FindButton(app.BuildView(model).Root, targetId);
 
         Assert.Equal(targetId, GetActionId(button));
-        Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
-        Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
-        Assert.True(GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
-        Assert.DoesNotContain(button.Attributes, attribute => VirtualAttributeDiagnostics.Format(attribute.Key) == "IsEnabled");
+        Assert.True(GetBooleanProperty(button, VirtualPropertyKey.IsHovered));
+        Assert.True(GetBooleanProperty(button, VirtualPropertyKey.IsPressed));
+        Assert.True(GetBooleanProperty(button, VirtualPropertyKey.IsFocused));
+        Assert.DoesNotContain(button.Properties, property => VirtualPropertyDiagnostics.Format(property.Key) == "IsEnabled");
     }
 
     [Fact]
@@ -557,7 +557,7 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void CounterApplication_default_view_emits_normal_button_visual_state_attributes()
+    public void CounterApplication_default_view_emits_normal_button_visual_state_properties()
     {
         var app = new CounterApplication();
 
@@ -960,9 +960,9 @@ public sealed class CounterInputRouterTests
     private static void AssertButtonState(VirtualNodeTree tree, bool isHovered, bool isPressed, bool isFocused)
     {
         var button = FindButton(tree.Root, new ActionId(1));
-        Assert.Equal(isHovered, GetBooleanAttribute(button, VirtualAttributeKey.IsHovered));
-        Assert.Equal(isPressed, GetBooleanAttribute(button, VirtualAttributeKey.IsPressed));
-        Assert.Equal(isFocused, GetBooleanAttribute(button, VirtualAttributeKey.IsFocused));
+        Assert.Equal(isHovered, GetBooleanProperty(button, VirtualPropertyKey.IsHovered));
+        Assert.Equal(isPressed, GetBooleanProperty(button, VirtualPropertyKey.IsPressed));
+        Assert.Equal(isFocused, GetBooleanProperty(button, VirtualPropertyKey.IsFocused));
     }
 
     private static void AssertButtonFillColor(VirtualNodeTree tree, DrawColor expectedColor)
@@ -1006,50 +1006,50 @@ public sealed class CounterInputRouterTests
 
     private static ActionId GetActionId(VirtualNode node)
     {
-        foreach (var attribute in node.Attributes)
+        foreach (var property in node.Properties)
         {
-            if (attribute.Key == VirtualAttributeKey.ActionId)
+            if (property.Key == VirtualPropertyKey.ActionId)
             {
-                return attribute.Value.ActionIdValue;
+                return property.Value.ActionIdValue;
             }
         }
 
         return ActionId.None;
     }
 
-    private static bool GetBooleanAttribute(VirtualNode node, VirtualAttributeKey key)
+    private static bool GetBooleanProperty(VirtualNode node, VirtualPropertyKey key)
     {
-        foreach (var attribute in node.Attributes)
+        foreach (var property in node.Properties)
         {
-            if (attribute.Key == key)
+            if (property.Key == key)
             {
-                return attribute.Value.Boolean;
+                return property.Value.Boolean;
             }
         }
 
         return false;
     }
 
-    private static bool GetBooleanAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key)
+    private static bool GetBooleanProperty(VirtualNodeProperty[] properties, VirtualPropertyKey key)
     {
-        foreach (var attribute in attributes)
+        foreach (var property in properties)
         {
-            if (attribute.Key == key)
+            if (property.Key == key)
             {
-                return attribute.Value.Boolean;
+                return property.Value.Boolean;
             }
         }
 
         return false;
     }
 
-    private static ActionId GetActionId(VirtualNodeAttribute[] attributes)
+    private static ActionId GetActionId(VirtualNodeProperty[] properties)
     {
-        foreach (var attribute in attributes)
+        foreach (var property in properties)
         {
-            if (attribute.Key == VirtualAttributeKey.ActionId)
+            if (property.Key == VirtualPropertyKey.ActionId)
             {
-                return attribute.Value.ActionIdValue;
+                return property.Value.ActionIdValue;
             }
         }
 
@@ -1146,25 +1146,25 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void ScrollY_appears_in_view_as_attribute()
+    public void ScrollY_appears_in_view_as_property()
     {
         var app = new CounterApplication();
         var model = app.Initialize() with { Scroll = new ScrollState { TargetPosition = 80, Position = 80 } };
         var tree = app.BuildView(model);
 
-        // The root ScrollContainer should have ScrollY=80 attribute
+        // The root ScrollContainer should have ScrollY=80 property
         Assert.Equal(VirtualNodeKind.ScrollContainer, tree.Root.Kind);
-        var scrollYAttr = default(VirtualNodeAttribute);
-        foreach (var attr in tree.Root.Attributes)
+        var scrollYProperty = default(VirtualNodeProperty);
+        foreach (var property in tree.Root.Properties)
         {
-            if (attr.Key == VirtualAttributeKey.ScrollY)
+            if (property.Key == VirtualPropertyKey.ScrollY)
             {
-                scrollYAttr = attr;
+                scrollYProperty = property;
                 break;
             }
         }
-        Assert.Equal(VirtualAttributeKey.ScrollY, scrollYAttr.Key);
-        Assert.Equal(80.0, scrollYAttr.Value.Number);
+        Assert.Equal(VirtualPropertyKey.ScrollY, scrollYProperty.Key);
+        Assert.Equal(80.0, scrollYProperty.Value.Number);
     }
 
     [Fact]

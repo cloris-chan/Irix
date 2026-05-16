@@ -212,9 +212,9 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             classification = DirtyNodeClassification.Max(classification, ClassifyContentChange(previousNode.Content, nextNode.Content));
         }
 
-        if (!AttributesEqual(previousNode.Attributes, nextNode.Attributes))
+        if (!PropertiesEqual(previousNode.Properties, nextNode.Properties))
         {
-            classification = DirtyNodeClassification.Max(classification, ClassifyAttributeChanges(previousNode.Attributes, nextNode.Attributes));
+            classification = DirtyNodeClassification.Max(classification, ClassifyPropertyChanges(previousNode.Properties, nextNode.Properties));
         }
 
         return classification.Reason == LayoutRebuildReason.None
@@ -229,62 +229,62 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             : new DirtyNodeClassification(LayoutRebuildReason.LayoutAffecting, InvalidationKind.Layout);
     }
 
-    private static DirtyNodeClassification ClassifyAttributeChanges(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    private static DirtyNodeClassification ClassifyPropertyChanges(VirtualNodeProperty[] previousProperties, VirtualNodeProperty[] nextProperties)
     {
-        var changeSet = GetChangedAttributeSet(previousAttributes, nextAttributes);
+        var changeSet = GetChangedPropertySet(previousProperties, nextProperties);
         var invalidationKind = changeSet.ClassifySet();
         return new DirtyNodeClassification(invalidationKind.ToLayoutRebuildReason(), invalidationKind);
     }
 
-    private static AttributeChangeSet GetChangedAttributeSet(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    private static PropertyChangeSet GetChangedPropertySet(VirtualNodeProperty[] previousProperties, VirtualNodeProperty[] nextProperties)
     {
-        var changeSet = default(AttributeChangeSet);
+        var changeSet = default(PropertyChangeSet);
 
-        foreach (var attribute in previousAttributes)
+        foreach (var property in previousProperties)
         {
-            if (!TryFindAttribute(nextAttributes, attribute.Key, out var nextAttribute)
-                || attribute.Value != nextAttribute.Value)
+            if (!TryFindProperty(nextProperties, property.Key, out var nextProperty)
+                || property.Value != nextProperty.Value)
             {
-                changeSet = AttributeChangeSet.AddKey(changeSet, attribute.Key);
+                changeSet = PropertyChangeSet.AddKey(changeSet, property.Key);
             }
         }
 
-        foreach (var attribute in nextAttributes)
+        foreach (var property in nextProperties)
         {
-            if (!TryFindAttribute(previousAttributes, attribute.Key, out _))
+            if (!TryFindProperty(previousProperties, property.Key, out _))
             {
-                changeSet = AttributeChangeSet.AddKey(changeSet, attribute.Key);
+                changeSet = PropertyChangeSet.AddKey(changeSet, property.Key);
             }
         }
 
         return changeSet;
     }
 
-    private static bool TryFindAttribute(VirtualNodeAttribute[] attributes, VirtualAttributeKey key, out VirtualNodeAttribute attribute)
+    private static bool TryFindProperty(VirtualNodeProperty[] properties, VirtualPropertyKey key, out VirtualNodeProperty property)
     {
-        foreach (var candidate in attributes)
+        foreach (var candidate in properties)
         {
             if (candidate.Key == key)
             {
-                attribute = candidate;
+                property = candidate;
                 return true;
             }
         }
 
-        attribute = default;
+        property = default;
         return false;
     }
 
-    private static bool AttributesEqual(VirtualNodeAttribute[] previousAttributes, VirtualNodeAttribute[] nextAttributes)
+    private static bool PropertiesEqual(VirtualNodeProperty[] previousProperties, VirtualNodeProperty[] nextProperties)
     {
-        if (previousAttributes.Length != nextAttributes.Length)
+        if (previousProperties.Length != nextProperties.Length)
         {
             return false;
         }
 
-        for (var i = 0; i < previousAttributes.Length; i++)
+        for (var i = 0; i < previousProperties.Length; i++)
         {
-            if (previousAttributes[i] != nextAttributes[i])
+            if (previousProperties[i] != nextProperties[i])
             {
                 return false;
             }

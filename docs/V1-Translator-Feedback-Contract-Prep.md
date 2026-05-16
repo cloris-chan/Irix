@@ -7,7 +7,7 @@
 Current status:
 
 - Diagnostics consolidation is regression-only: Program diagnostics runner split, diagnostics snapshot v0, debug UI bridge v0, and formatter contracts are sealed.
-- Controls-boundary helpers are regression-only: `ControlVisualState`, `ControlActionAttributeAdapter`, and `ButtonAttributeBundle` remain PoC-owned internal code.
+- Controls-boundary helpers are regression-only: `ControlVisualState`, `ControlActionPropertyAdapter`, and `ButtonPropertyBundle` remain PoC-owned internal code.
 - Scroll feedback vocabulary v0 is regression-only: `ScrollFeedback` / `ScrollContainerMetrics` are side-channel translator feedback; the legacy `Action<double>` max-scroll callback still drives runtime behavior.
 - `WindowDrawCommandTranslator` is not ready for promotion. It now has an internal `TranslatorRenderPipelineFactory` seam, but default style/pipeline creation still resolves to Counter PoC defaults and the translator still owns private retained-tree state plus sample-shaped feedback.
 - Contract naming is sufficient for the next implementation planning step; the first internal seam is complete without runtime behavior change.

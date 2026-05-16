@@ -134,12 +134,12 @@ internal static class TextCacheAllocationDiagnosticRunner
         return new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: 1,
-            attributes: [new VirtualNodeAttribute(VirtualAttributeKey.ScrollY, AttributeValue.FromNumber(scrollY))],
+            properties: [new VirtualNodeProperty(VirtualPropertyKey.ScrollY, PropertyValue.FromNumber(scrollY))],
             children:
             [
-                VirtualNodeBuilder.Button(arena, "Cache A", new NodeKey(2), VirtualNodeAttribute.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(arena, "Cache A", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(200))),
                 VirtualNodeBuilder.Text(arena, text, new NodeKey(4)),
-                VirtualNodeBuilder.Button(arena, "Cache B", new NodeKey(5), VirtualNodeAttribute.Action(new ActionId(201))),
+                VirtualNodeBuilder.Button(arena, "Cache B", new NodeKey(5), VirtualNodeProperty.Action(new ActionId(201))),
             ]);
     }
 

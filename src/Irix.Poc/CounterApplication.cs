@@ -112,7 +112,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         var root = new VirtualNode(
             VirtualNodeKind.ScrollContainer,
             key: new NodeKey(1),
-            attributes: [VirtualNodeAttribute.ScrollY(scrollY)],
+            properties: [VirtualNodeProperty.ScrollY(scrollY)],
             children:
             [
                 .. headerRows,
@@ -159,7 +159,7 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
             arena,
             label,
             new NodeKey(key),
-            ButtonAttributeBundle.Create(actionId, visualState));
+            ButtonPropertyBundle.Create(actionId, visualState));
     }
 
     private static VirtualNode[] BuildScrollProbeRows(VirtualTextArena arena)

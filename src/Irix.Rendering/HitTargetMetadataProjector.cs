@@ -72,7 +72,7 @@ internal static class HitTargetMetadataProjector
             return false;
         }
 
-        if (nextNode.Kind == VirtualNodeKind.Button && TryGetActionId(nextNode.Attributes, out var actionId))
+        if (nextNode.Kind == VirtualNodeKind.Button && TryGetActionId(nextNode.Properties, out var actionId))
         {
             actionNodes.Add(new ActionNodeMetadata(currentIndex, actionId));
         }
@@ -89,13 +89,13 @@ internal static class HitTargetMetadataProjector
         return true;
     }
 
-    private static bool TryGetActionId(VirtualNodeAttribute[] attributes, out ActionId actionId)
+    private static bool TryGetActionId(VirtualNodeProperty[] properties, out ActionId actionId)
     {
-        foreach (var attribute in attributes)
+        foreach (var property in properties)
         {
-            if (attribute.Key == VirtualAttributeKey.ActionId && attribute.Value.Kind == AttributeValueKind.ActionId && !attribute.Value.ActionIdValue.IsNone)
+            if (property.Key == VirtualPropertyKey.ActionId && property.Value.Kind == PropertyValueKind.ActionId && !property.Value.ActionIdValue.IsNone)
             {
-                actionId = attribute.Value.ActionIdValue;
+                actionId = property.Value.ActionIdValue;
                 return true;
             }
         }

@@ -205,11 +205,11 @@ public sealed class RetainedTreeTests
         var prev = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
-                VirtualNodeAttribute.Action(new ActionId(1))));
+                VirtualNodeProperty.Action(new ActionId(1))));
         var next = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
-                VirtualNodeAttribute.Action(new ActionId(1))));
+                VirtualNodeProperty.Action(new ActionId(1))));
 
         var snapshot = _arena.GetOrCreateSnapshot();
         using var batch = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(prev, snapshot), new VirtualNodeTree(next, snapshot));

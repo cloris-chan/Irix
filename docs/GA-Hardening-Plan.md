@@ -70,7 +70,7 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Performance regression CI | Mock backend frame timing baseline and warm `FrameDrawingResources` allocation baseline in `Category=Performance` | Already done | — |
 | Text cache hit rate in steady state | `scripts/ga-baseline.ps1 -Mode TextCache` validates static, scroll, and scale-change phases; current-machine 100% / 150% / 200% runs remain healthy | Already done for current machine | — |
 | DrawCommand recording allocation | `stackalloc` + `ArrayPool`; warm `FrameDrawingResources` allocation baseline in CI | Keep performance lane green | P2 |
-| Hot-path string allocation | Round 13/14 complete (2026-05-16): text content uses `TextNodeContent` / `TextBufferSnapshot` plus frame-local `TextSlice`; `ActionId`, `TargetId`, `ElementId`, and `NodeKey` are typed value ids; style/property changes use `VirtualAttributeKey` and metadata effects instead of string attribute names. `VirtualAttributeKey` has no public constructor and no primitive `ToString()`. Diagnostics strings remain exempt. | Keep source guards green; next work is allocation baseline tightening, not string-key redesign | P2 |
+| Hot-path string allocation | Round 13/14 complete (2026-05-16): text content uses `TextNodeContent` / `TextBufferSnapshot` plus frame-local `TextSlice`; `ActionId`, `TargetId`, `ElementId`, and `NodeKey` are typed value ids; style/property changes use `VirtualPropertyKey` and metadata effects instead of string property names. `VirtualPropertyKey` has no public constructor and no primitive `ToString()`. Diagnostics strings remain exempt. | Keep source guards green; next work is allocation baseline tightening, not string-key redesign | P2 |
 | Sync wait overhead | Current default `D3D12FenceAfterOverlay` is correctness-preserving but can exceed the old provisional `<2ms avg` target. `D3D11Query` was correctness-clean but refresh-rate dependent and therefore diagnostic-only. | Accepted temporarily for GA/MVP; long-term fix is D3D12-only glyph atlas text renderer | — |
 
 ### Sync Wait Evidence and Decision (2026-05-13)
@@ -117,13 +117,13 @@ The render hot path (`RenderPipeline.Build`, `DrawCommandRecorder`, `DrawingBack
 | VirtualNode text content | Compliant | `TextNodeContent` indexes `VirtualTextArena`; layout/draw resolves through `TextBufferSnapshot.ResolveRequired` |
 | TextStyle.FontFamily | Compliant | String flows through but is not allocated per frame; set once at style creation |
 | Layout rebuild reason | Compliant | `LayoutRebuildReason` is already a `byte` enum |
-| Dirty classification | Compliant | Attribute changes accumulate `AttributeChangeSet` and classify through `StyleEffect` / `InvalidationKind`; no string attribute-name set |
-| Attribute name lookup | Compliant | `VirtualAttributeKey` is a pure value key; public keys come from static readonly fields and metadata |
-| HitTestTarget.ActionId | Compliant | `ActionId` is a typed value id from VirtualNode attribute through layout and compositor hit-test |
-| Style/property string values | Compliant by exclusion | No public `FontFamily` string attribute, no `AttributeValue.Text`, no string hex color path |
+| Dirty classification | Compliant | Property changes accumulate `PropertyChangeSet` and classify through `StyleEffect` / `InvalidationKind`; no string property-name set |
+| Property name lookup | Compliant | `VirtualPropertyKey` is a pure value key; public keys come from static readonly fields and metadata |
+| HitTestTarget.ActionId | Compliant | `ActionId` is a typed value id from VirtualNode property through layout and compositor hit-test |
+| Style/property string values | Compliant by exclusion | No public `FontFamily` string property, no `PropertyValue.Text`, no string hex color path |
 | Diagnostics output | Exempt | Diagnostic strings are not on the per-frame render path |
 
-Source guards cover primitive `ActionId.ToString()`, primitive `VirtualAttributeKey.ToString()`, missing property metadata, key/value mismatches, global layout key reintroduction, and style string value factories. Future allocation work should measure and tighten baselines without reopening string style keys.
+Source guards cover primitive `ActionId.ToString()`, primitive `VirtualPropertyKey.ToString()`, missing property metadata, key/value mismatches, global layout key reintroduction, and style string value factories. Future allocation work should measure and tighten baselines without reopening string style keys.
 
 ---
 

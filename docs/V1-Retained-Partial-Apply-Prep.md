@@ -89,10 +89,10 @@ Future hit target patching must separate retained geometry from reprojected meta
 | Hit target data | Future handling | Fallback trigger |
 |-----------------|-----------------|------------------|
 | Bounds | Preserve from retained layout when dirty classification is style-only and viewport is unchanged. | Any bounds change, layout-affecting dirty reason, tree structure change, or missing retained layout. |
-| Clip bounds | Preserve from retained layout when root/nested clip identity is unchanged. | Viewport change, scroll/layout change, clip-affecting attributes, or changed container geometry. |
+| Clip bounds | Preserve from retained layout when root/nested clip identity is unchanged. | Viewport change, scroll/layout change, clip-affecting properties, or changed container geometry. |
 | Action id | Reproject from the next `VirtualNode` / control metadata for dirty hit targets. | Missing next node, target count/order mismatch, or control/action identity ambiguity. |
 | Hit target count/order | Preserve only when dirty element ranges map to stable command/hit-target ranges. | Added/removed hit targets or unstable element-to-command mapping. |
-| Visual command metadata | Reproject hover/pressed/focused style inputs for replacement draw commands. | Any text-size/layout-affecting metadata, changed label measurement, or unknown attribute. |
+| Visual command metadata | Reproject hover/pressed/focused style inputs for replacement draw commands. | Any text-size/layout-affecting metadata, changed label measurement, or unknown property. |
 
 Current preflight scaffold includes local metadata projection from next `VirtualNode` for hit-target action ids and retained-root control metadata. It remains internal/test-only and is not connected to `RenderPipeline.Build`. A future runtime planner must read retained geometry plus next-node metadata without consuming next layout output.
 
