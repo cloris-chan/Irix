@@ -37,7 +37,7 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
         return ValueTask.CompletedTask;
     }
 
-    public bool TryGetActionIdAt(int x, int y, out ActionId actionId)
+    public bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
         lock (_hitTargetsLock)
         {

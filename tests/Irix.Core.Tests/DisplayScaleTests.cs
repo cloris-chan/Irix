@@ -108,13 +108,51 @@ public class DisplayScaleTests
     }
 
     [Fact]
-    public void Default_DisplayScale_is_identity()
+    public void Default_DisplayScale_normalizes_to_identity()
     {
         var scale = default(DisplayScale);
+        var normalized = scale.Normalize();
 
-        Assert.True(scale.IsIdentity);
+        Assert.False(scale.IsIdentity);
+        Assert.True(normalized.IsIdentity);
         Assert.Equal(0f, scale.ScaleX);
         Assert.Equal(0f, scale.ScaleY);
+        Assert.Equal(1f, normalized.ScaleX);
+        Assert.Equal(1f, normalized.ScaleY);
+    }
+
+    [Theory]
+    [InlineData(0f, 1f)]
+    [InlineData(-1f, 1f)]
+    [InlineData(float.NaN, 1f)]
+    [InlineData(float.PositiveInfinity, 1f)]
+    public void DisplayScale_normalize_replaces_invalid_components(float input, float expected)
+    {
+        var scale = new DisplayScale(input, input);
+        var normalized = scale.Normalize();
+
+        Assert.Equal(expected, normalized.ScaleX);
+        Assert.Equal(expected, normalized.ScaleY);
+        Assert.True(normalized.IsIdentity);
+    }
+
+    [Fact]
+    public void FrameContext_uses_normalized_default_scale()
+    {
+        var ctx = new FrameContext(1920, 1080, default);
+
+        Assert.Equal(1920, ctx.LogicalWidth);
+        Assert.Equal(1080, ctx.LogicalHeight);
+    }
+
+    [Fact]
+    public void DrawCommand_scale_normalizes_default_scale()
+    {
+        var command = new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(10, 20, 30, 40));
+
+        var scaled = command.Scale(default);
+
+        Assert.Equal(command, scaled);
     }
 
     [Fact]

@@ -31,7 +31,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         _ownerFeed = ownerOptions.EnableSegmentedRetainedFrameRuntimeOwner
             ? new SegmentedRetainedFrameProductionOwnerFeed(_renderPipeline, ownerOptions)
             : null;
-        _displayScale = displayScale;
+        _displayScale = displayScale.Normalize();
     }
 
     private readonly RetainedTree _retainedTree = new(default);
@@ -60,7 +60,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 
     public void SetDisplayScale(DisplayScale scale)
     {
-        _displayScale = scale;
+        _displayScale = scale.Normalize();
     }
 
     public RenderFrameBatch Translate(PatchBatch patchBatch)

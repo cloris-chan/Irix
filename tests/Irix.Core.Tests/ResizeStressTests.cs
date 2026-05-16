@@ -104,7 +104,7 @@ public sealed class ResizeStressTests
         await compositor.RenderAsync(batch, cancellationToken);
 
         // Hit-test at physical coordinates (100% scale = logical = physical)
-        Assert.True(compositor.TryGetActionIdAt(50, 25, out var id1));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(50, 25, out var id1));
         Assert.Equal(new ActionId(100), id1);
 
         // Change to 150% scale
@@ -119,11 +119,11 @@ public sealed class ResizeStressTests
 
         // Hit-test at physical coordinates (150% scale)
         // Button at logical (16,16,68,32) maps to physical (24,24,102,48)
-        Assert.True(compositor.TryGetActionIdAt(50, 30, out var id2));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(50, 30, out var id2));
         Assert.Equal(new ActionId(100), id2);
 
         // Point outside physical button bounds should miss
-        Assert.False(compositor.TryGetActionIdAt(200, 200, out _));
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(200, 200, out _));
     }
 
     [Fact]

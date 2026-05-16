@@ -83,10 +83,10 @@ internal sealed class InputOwnershipState
         _isPointerPressed);
 
     /// <summary>Updates hover diagnostics from the latest pointer location.</summary>
-    public void UpdateHover(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAt)
+    public void UpdateHover(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel)
     {
         var previousTarget = HoveredTarget;
-        var nextTarget = tryGetActionIdAt(inputEvent.X, inputEvent.Y);
+        var nextTarget = tryGetActionIdAtPhysicalPixel(inputEvent.X, inputEvent.Y);
         if (previousTarget == nextTarget)
         {
             return;
@@ -103,9 +103,9 @@ internal sealed class InputOwnershipState
     /// Starts left-button ownership. A hit target becomes pressed, captured, and focused;
     /// an empty press clears focus and prevents the matching release from activating a target.
     /// </summary>
-    public void PressPointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAt)
+    public void PressPointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel)
     {
-        var target = tryGetActionIdAt(inputEvent.X, inputEvent.Y);
+        var target = tryGetActionIdAtPhysicalPixel(inputEvent.X, inputEvent.Y);
         var previousFocus = FocusedTarget;
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
@@ -136,14 +136,14 @@ internal sealed class InputOwnershipState
     /// a release without a prior stateful press falls back to release-point hit testing for
     /// compatibility with the legacy stateless router overload.
     /// </summary>
-    public ActionId ReleasePointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAt)
+    public ActionId ReleasePointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel)
     {
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
         var wasPointerPressed = _isPointerPressed;
         var target = _isPointerPressed
             ? CapturedTarget
-            : tryGetActionIdAt(inputEvent.X, inputEvent.Y);
+            : tryGetActionIdAtPhysicalPixel(inputEvent.X, inputEvent.Y);
         _isPointerPressed = false;
         PressedTarget = ActionId.None;
         CapturedTarget = ActionId.None;

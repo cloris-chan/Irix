@@ -109,7 +109,13 @@ public sealed class ScreenInfo : IScreenInfo
 
     public required float DpiScale { get; init; }
 
-    public DisplayScale Scale { get; init; } = DisplayScale.Identity;
+    private DisplayScale _scale = DisplayScale.Identity;
+
+    public DisplayScale Scale
+    {
+        get => _scale;
+        init => _scale = value.Normalize();
+    }
 
     public required int RefreshRateHz { get; init; }
 

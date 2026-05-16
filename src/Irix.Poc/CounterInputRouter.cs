@@ -12,10 +12,10 @@ internal static class CounterInputRouter
     /// </summary>
     public static bool TryMapInput(
         RawInputEvent inputEvent,
-        Func<int, int, ActionId> tryGetActionIdAt,
+        Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
         out CounterMessage message)
     {
-        return TryMapInput(inputEvent, new InputOwnershipState(), tryGetActionIdAt, out message);
+        return TryMapInput(inputEvent, new InputOwnershipState(), tryGetActionIdAtPhysicalPixel, out message);
     }
 
     /// <summary>
@@ -25,21 +25,21 @@ internal static class CounterInputRouter
     public static bool TryMapInput(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
-        Func<int, int, ActionId> tryGetActionIdAt,
+        Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
         out CounterMessage message)
     {
         switch (inputEvent.Kind)
         {
             case RawInputEventKind.PointerMoved:
-                ownershipState.UpdateHover(inputEvent, tryGetActionIdAt);
+                ownershipState.UpdateHover(inputEvent, tryGetActionIdAtPhysicalPixel);
                 break;
             case RawInputEventKind.PointerPressed
                 when inputEvent.Button == PointerButton.Left:
-                ownershipState.PressPointer(inputEvent, tryGetActionIdAt);
+                ownershipState.PressPointer(inputEvent, tryGetActionIdAtPhysicalPixel);
                 break;
             case RawInputEventKind.PointerReleased
                 when inputEvent.Button == PointerButton.Left:
-                var actionId = ownershipState.ReleasePointer(inputEvent, tryGetActionIdAt);
+                var actionId = ownershipState.ReleasePointer(inputEvent, tryGetActionIdAtPhysicalPixel);
                 if (!actionId.IsNone)
                 {
                     message = MapActionId(actionId);

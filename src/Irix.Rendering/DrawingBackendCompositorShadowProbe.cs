@@ -33,10 +33,10 @@ internal sealed class DrawingBackendCompositorShadowProbe(IDrawingBackend backen
         int hitTestX,
         int hitTestY)
     {
-        var beforeHit = compositor.TryGetActionIdAt(hitTestX, hitTestY, out var beforeActionId);
+        var beforeHit = compositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var beforeActionId);
         var recordingBackend = new RecordingBackend(backend, segments);
         new SegmentedBackendExecutionAdapter(recordingBackend).Execute(frameContext, segments);
-        var afterHit = compositor.TryGetActionIdAt(hitTestX, hitTestY, out var afterActionId);
+        var afterHit = compositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var afterActionId);
 
         return new DrawingBackendCompositorShadowProbeResult(
             recordingBackend.Executions,

@@ -80,7 +80,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     public void SetViewport(PixelRectangle physicalViewport, DisplayScale scale)
     {
         _physicalViewport = physicalViewport;
-        _displayScale = scale;
+        _displayScale = scale.Normalize();
     }
 
     public DisplayScale CurrentDisplayScale => _displayScale;
@@ -237,7 +237,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return ValueTask.CompletedTask;
     }
 
-    internal bool TryGetCandidateActionIdAt(int x, int y, out ActionId actionId)
+    internal bool TryGetCandidateActionIdAtPhysicalPixel(int x, int y, out ActionId actionId)
     {
         if (_handoffCandidateHarness is null)
         {
@@ -246,7 +246,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
 
         var logicalPoint = ToLogicalPoint(x, y);
-        return _handoffCandidateHarness.TryGetActionIdAt(logicalPoint.X, logicalPoint.Y, out actionId);
+        return _handoffCandidateHarness.TryGetActionIdAtLogicalPixel(logicalPoint.X, logicalPoint.Y, out actionId);
     }
 
     private HandoffSelection ResolveHandoffSelection(
@@ -502,27 +502,32 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return true;
     }
 
-    public bool TryGetActionIdAt(int x, int y, out ActionId actionId)
+    public bool TryGetActionIdAtPhysicalPixel(int x, int y, out ActionId actionId)
     {
         var logicalPoint = ToLogicalPoint(x, y);
+        return TryGetActionIdAtLogicalPixel(logicalPoint.X, logicalPoint.Y, out actionId);
+    }
+
+    internal bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
+    {
         lock (_hitTargetsLock)
         {
             foreach (var hitTarget in _hitTargets)
             {
-                if (logicalPoint.X < hitTarget.Bounds.X
-                    || logicalPoint.Y < hitTarget.Bounds.Y
-                    || logicalPoint.X >= hitTarget.Bounds.X + hitTarget.Bounds.Width
-                    || logicalPoint.Y >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
+                if (x < hitTarget.Bounds.X
+                    || y < hitTarget.Bounds.Y
+                    || x >= hitTarget.Bounds.X + hitTarget.Bounds.Width
+                    || y >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
                 {
                     continue;
                 }
 
                 if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
                 {
-                    if (logicalPoint.X < hitTarget.ClipBounds.X
-                        || logicalPoint.Y < hitTarget.ClipBounds.Y
-                        || logicalPoint.X >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
-                        || logicalPoint.Y >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
+                    if (x < hitTarget.ClipBounds.X
+                        || y < hitTarget.ClipBounds.Y
+                        || x >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
+                        || y >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
                     {
                         continue;
                     }

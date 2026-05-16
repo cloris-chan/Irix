@@ -72,7 +72,7 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
-    public async Task TryGetActionIdAt_returns_cached_hit_targets()
+    public async Task TryGetActionIdAtPhysicalPixel_returns_cached_hit_targets()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow();
@@ -88,13 +88,13 @@ public sealed class DrawingBackendCompositorTests
 
         await compositor.RenderAsync(frame, cancellationToken);
 
-        Assert.True(compositor.TryGetActionIdAt(16, 120, out var actionId));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(16, 120, out var actionId));
         Assert.Equal(new ActionId(100), actionId);
-        Assert.False(compositor.TryGetActionIdAt(15, 120, out _));
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(15, 120, out _));
     }
 
     [Fact]
-    public async Task TryGetActionIdAt_maps_physical_input_to_logical_hit_targets()
+    public async Task TryGetActionIdAtPhysicalPixel_maps_physical_input_to_logical_hit_targets()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow();
@@ -111,13 +111,15 @@ public sealed class DrawingBackendCompositorTests
 
         await compositor.RenderAsync(frame, cancellationToken);
 
-        Assert.True(compositor.TryGetActionIdAt(24, 30, out var actionId));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(24, 30, out var actionId));
         Assert.Equal(new ActionId(100), actionId);
-        Assert.False(compositor.TryGetActionIdAt(234, 30, out _));
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(16, 20, out actionId));
+        Assert.Equal(new ActionId(100), actionId);
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(234, 30, out _));
     }
 
     [Fact]
-    public async Task TryGetActionIdAt_cleared_on_empty_frame()
+    public async Task TryGetActionIdAtPhysicalPixel_cleared_on_empty_frame()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow();
@@ -132,14 +134,14 @@ public sealed class DrawingBackendCompositorTests
             [new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(100))]);
 
         await compositor.RenderAsync(firstFrame, cancellationToken);
-        Assert.True(compositor.TryGetActionIdAt(16, 120, out _));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(16, 120, out _));
 
         using var emptyFrame = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0),
             []);
 
         await compositor.RenderAsync(emptyFrame, cancellationToken);
-        Assert.False(compositor.TryGetActionIdAt(16, 120, out _));
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(16, 120, out _));
     }
 
     [Fact]
@@ -365,7 +367,7 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
-    public async Task TryGetActionIdAt_respects_clip_bounds()
+    public async Task TryGetActionIdAtPhysicalPixel_respects_clip_bounds()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow();
@@ -394,15 +396,15 @@ public sealed class DrawingBackendCompositorTests
         Assert.True(target.ClipBounds.Y + target.ClipBounds.Height < target.Bounds.Y + target.Bounds.Height);
 
         // Inside both bounds and clip �?should hit
-        Assert.True(compositor.TryGetActionIdAt(20, 20, out var actionId));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(20, 20, out var actionId));
         Assert.Equal(new ActionId(100), actionId);
 
         // Inside button bounds but OUTSIDE clip (y=52 > clip bottom=50)
         // �?clip check should reject this
-        Assert.False(compositor.TryGetActionIdAt(20, 52, out _));
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(20, 52, out _));
 
         // Outside button bounds entirely �?bounds check rejects
-        Assert.False(compositor.TryGetActionIdAt(200, 20, out _));
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(200, 20, out _));
     }
 
     [Fact]
@@ -476,19 +478,19 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(new PixelRectangle(0, 0, 200, 60), firstTarget.ClipBounds);
 
         // Point inside first button bounds but outside clip (y=-1 < clip top=0)
-        Assert.False(compositor.TryGetActionIdAt(20, -1, out _));
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(20, -1, out _));
 
         // Point inside first button bounds AND inside viewport clip
-        Assert.True(compositor.TryGetActionIdAt(20, 10, out var firstId));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(20, 10, out var firstId));
         Assert.Equal(new ActionId(100), firstId);
 
         // Second button: y=38, bottom=78. Clip bottom=60.
         // Point at y=45 is inside button (38..78) and inside clip (0..60)
-        Assert.True(compositor.TryGetActionIdAt(20, 45, out var secondId));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(20, 45, out var secondId));
         Assert.Equal(new ActionId(101), secondId);
 
         // Point at y=65 is inside button (38..78) but outside clip (0..60)
-        Assert.False(compositor.TryGetActionIdAt(20, 65, out _));
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(20, 65, out _));
     }
 
     private sealed class FakeWindow : INativeWindow

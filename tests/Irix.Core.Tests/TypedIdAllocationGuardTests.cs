@@ -163,12 +163,12 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
-    public void DrawingBackendCompositor_TryGetActionIdAt_returns_typed_ActionId()
+    public void DrawingBackendCompositor_TryGetActionIdAtPhysicalPixel_returns_typed_ActionId()
     {
         var backend = new NullBackend();
         var compositor = new DrawingBackendCompositor(backend);
 
-        var result = compositor.TryGetActionIdAt(0, 0, out var actionId);
+        var result = compositor.TryGetActionIdAtPhysicalPixel(0, 0, out var actionId);
 
         Assert.False(result);
         Assert.Equal(ActionId.None, actionId);

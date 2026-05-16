@@ -383,7 +383,7 @@ internal sealed class WindowsNativeWindow : INativeWindow
     private unsafe void HandleDpiChanged(HWND windowHandle, WPARAM wParam, LPARAM lParam)
     {
         var newDpi = (int)(wParam.Value & 0xFFFF);
-        var newScale = new DisplayScale(newDpi / 96f, newDpi / 96f);
+        var newScale = new DisplayScale(newDpi / 96f, newDpi / 96f).Normalize();
 
         _dpiChangedSink?.Invoke(newScale);
         DpiChanged?.Invoke(newScale);

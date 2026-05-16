@@ -39,14 +39,14 @@ public sealed class WindowVisualCompositorTests
         await compositor.RenderAsync(frame, cancellationToken);
 
         Assert.Single(window.LastElements);
-        Assert.True(compositor.TryGetActionIdAt(16, 120, out var actionId));
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(16, 120, out var actionId));
         Assert.Equal(new ActionId(1), actionId);
-        Assert.True(compositor.TryGetActionIdAt(155, 159, out actionId));
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(155, 159, out actionId));
         Assert.Equal(new ActionId(1), actionId);
     }
 
     [Fact]
-    public async Task TryGetActionIdAt_uses_inclusive_top_left_and_exclusive_bottom_right_bounds()
+    public async Task TryGetActionIdAtLogicalPixel_uses_inclusive_top_left_and_exclusive_bottom_right_bounds()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
@@ -75,10 +75,10 @@ public sealed class WindowVisualCompositorTests
 
         await compositor.RenderAsync(frame, cancellationToken);
 
-        Assert.False(compositor.TryGetActionIdAt(15, 120, out _));
-        Assert.False(compositor.TryGetActionIdAt(16, 119, out _));
-        Assert.False(compositor.TryGetActionIdAt(156, 120, out _));
-        Assert.False(compositor.TryGetActionIdAt(16, 160, out _));
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(15, 120, out _));
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(16, 119, out _));
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(156, 120, out _));
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(16, 160, out _));
     }
 
     [Fact]
@@ -110,14 +110,14 @@ public sealed class WindowVisualCompositorTests
                     resources);
 
         await compositor.RenderAsync(firstFrame, cancellationToken);
-        Assert.True(compositor.TryGetActionIdAt(32, 140, out _));
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(32, 140, out _));
 
         using var emptyFrame = new RenderFrameBatch(new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0), []);
 
         await compositor.RenderAsync(emptyFrame, cancellationToken);
 
         Assert.Empty(window.LastElements);
-        Assert.False(compositor.TryGetActionIdAt(32, 140, out _));
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(32, 140, out _));
     }
 
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow

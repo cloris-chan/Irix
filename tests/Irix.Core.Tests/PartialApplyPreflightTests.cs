@@ -814,7 +814,7 @@ public sealed class PartialApplyPreflightTests
         var directBackend = new CapturingBackend();
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directBatch, cancellationToken);
-        var directHit = directCompositor.TryGetActionIdAt(20, 130, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(20, 130, out var directActionId);
 
         var diagnosticPipeline = new RenderPipeline();
         using var diagnosticHarness = new SegmentedRetainedFrameDiagnosticHarness(diagnosticPipeline, RenderPipelineShadowOptions.Disabled);
@@ -822,7 +822,7 @@ public sealed class PartialApplyPreflightTests
         var diagnosticBackend = new CapturingBackend();
         using var diagnosticCompositor = new DrawingBackendCompositor(diagnosticBackend);
         await diagnosticCompositor.RenderAsync(diagnosticBatch, cancellationToken);
-        var diagnosticHit = diagnosticCompositor.TryGetActionIdAt(20, 130, out var diagnosticActionId);
+        var diagnosticHit = diagnosticCompositor.TryGetActionIdAtPhysicalPixel(20, 130, out var diagnosticActionId);
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, diagnosticHarness.LastShadowResult.Kind);
         Assert.False(diagnosticHarness.HasSegmentedRetainedFrameOwner);
@@ -911,7 +911,7 @@ public sealed class PartialApplyPreflightTests
         var directBackend = new CapturingBackend();
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directBatch, cancellationToken);
-        var directHit = directCompositor.TryGetActionIdAt(hitTestX, hitTestY, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var directActionId);
 
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.Disabled);
@@ -919,7 +919,7 @@ public sealed class PartialApplyPreflightTests
         var feedBackend = new CapturingBackend();
         using var feedCompositor = new DrawingBackendCompositor(feedBackend);
         await feedCompositor.RenderAsync(feedBatch, cancellationToken);
-        var feedHit = feedCompositor.TryGetActionIdAt(hitTestX, hitTestY, out var feedActionId);
+        var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var feedActionId);
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, feed.LastResult.Kind);
@@ -970,7 +970,7 @@ public sealed class PartialApplyPreflightTests
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directFrame1, cancellationToken);
         await directCompositor.RenderAsync(directFrame2, cancellationToken);
-        var directHit = directCompositor.TryGetActionIdAt(hitTestX, hitTestY, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var directActionId);
 
         var feedPipeline = new RenderPipeline();
         var options = enabled
@@ -983,7 +983,7 @@ public sealed class PartialApplyPreflightTests
         using var feedCompositor = new DrawingBackendCompositor(feedBackend);
         await feedCompositor.RenderAsync(feedFrame1, cancellationToken);
         await feedCompositor.RenderAsync(feedFrame2, cancellationToken);
-        var feedHit = feedCompositor.TryGetActionIdAt(hitTestX, hitTestY, out var feedActionId);
+        var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var feedActionId);
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
@@ -1372,7 +1372,7 @@ public sealed class PartialApplyPreflightTests
         Assert.True(result.FallbackApplied);
         Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, result.ShadowResult.Reason);
         Assert.True(ownership.TryGetSegmentedOwnerActionIdAt(hitX, hitY, out var ownerActionId));
-        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var productionActionId));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var productionActionId));
         Assert.Equal(new ActionId(202), ownerActionId);
         Assert.Equal(new ActionId(202), productionActionId);
     }
@@ -1448,7 +1448,7 @@ public sealed class PartialApplyPreflightTests
         var directBackend = new DirtyRangeAwareCapturingBackend();
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directFrame, cancellationToken);
-        var directHit = directCompositor.TryGetActionIdAt(hitX, hitY, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var directActionId);
 
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
@@ -1463,7 +1463,7 @@ public sealed class PartialApplyPreflightTests
         using var harness = new RetainedRenderFrameHandoffHarness(harnessBackend, RetainedRenderFrameHandoffHarnessOptions.Disabled);
 
         var result = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), feedPipeline.LastDirtyCommandRanges);
-        var feedHit = feedCompositor.TryGetActionIdAt(hitX, hitY, out var feedActionId);
+        var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, result.Kind);
@@ -1499,7 +1499,7 @@ public sealed class PartialApplyPreflightTests
         using var harness = new RetainedRenderFrameHandoffHarness(backend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
 
         var result = harness.ExecuteCandidateFrame(ownership, new FrameContext(100, 100), [(0, 1)]);
-        var hit = harness.TryGetActionIdAt(1, 1, out var actionId);
+        var hit = harness.TryGetActionIdAtLogicalPixel(1, 1, out var actionId);
 
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.MissingSegmentedOwner, result.Kind);
         Assert.Empty(result.Reads);
@@ -1543,7 +1543,7 @@ public sealed class PartialApplyPreflightTests
         var directHitTarget = Assert.Single(directFrame2.HitTargets);
         var hitX = directHitTarget.Bounds.X + 1;
         var hitY = directHitTarget.Bounds.Y + 1;
-        var directHit = directCompositor.TryGetActionIdAt(hitX, hitY, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var directActionId);
 
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
@@ -1559,8 +1559,8 @@ public sealed class PartialApplyPreflightTests
         await feedCompositor.RenderAsync(feedFrame2, cancellationToken);
         var productionRenderCountAfterFrame2 = feedCompositor.RenderCount;
         var partialResult = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), feedPipeline.LastDirtyCommandRanges);
-        var feedHit = feedCompositor.TryGetActionIdAt(hitX, hitY, out var feedActionId);
-        var harnessHit = harness.TryGetActionIdAt(hitX, hitY, out var harnessActionId);
+        var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
+        var harnessHit = harness.TryGetActionIdAtLogicalPixel(hitX, hitY, out var harnessActionId);
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.Equal(productionRenderCountAfterFrame1, feedCompositor.RenderCount - 1);
@@ -1612,9 +1612,9 @@ public sealed class PartialApplyPreflightTests
         using var harness = new RetainedRenderFrameHandoffHarness(backend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
 
         var result = harness.ExecuteCandidateFrame(ownership, new FrameContext(100, 100), [(0, 1)]);
-        var inClipHit = harness.TryGetActionIdAt(15, 15, out var inClipActionId);
-        var outsideClipHit = harness.TryGetActionIdAt(5, 5, out var outsideClipActionId);
-        var outsideBoundsHit = harness.TryGetActionIdAt(101, 101, out var outsideBoundsActionId);
+        var inClipHit = harness.TryGetActionIdAtLogicalPixel(15, 15, out var inClipActionId);
+        var outsideClipHit = harness.TryGetActionIdAtLogicalPixel(5, 5, out var outsideClipActionId);
+        var outsideBoundsHit = harness.TryGetActionIdAtLogicalPixel(101, 101, out var outsideBoundsActionId);
 
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Executed, result.Kind);
         Assert.Single(result.Reads);
@@ -1712,7 +1712,7 @@ public sealed class PartialApplyPreflightTests
         using var harness = new RetainedRenderFrameHandoffHarness(harnessBackend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
 
         var emptyResult = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), feedPipeline.LastDirtyCommandRanges);
-        var harnessHit = harness.TryGetActionIdAt(20, 20, out var harnessActionId);
+        var harnessHit = harness.TryGetActionIdAtLogicalPixel(20, 20, out var harnessActionId);
 
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.EmptyFrame, emptyResult.Kind);
         Assert.Empty(emptyResult.Reads);
@@ -1761,7 +1761,7 @@ public sealed class PartialApplyPreflightTests
         var hitTarget = Assert.Single(frame2.HitTargets);
         var hitX = hitTarget.Bounds.X + 1;
         var hitY = hitTarget.Bounds.Y + 1;
-        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionBeforeHarness));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var actionBeforeHarness));
         var renderCount = compositor.RenderCount;
         var fullApplyCount = compositor.FullApplyCount;
         var partialApplyCount = compositor.PartialApplyCount;
@@ -1788,7 +1788,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(renderCount, compositor.RenderCount);
         Assert.Equal(fullApplyCount, compositor.FullApplyCount);
         Assert.Equal(partialApplyCount, compositor.PartialApplyCount);
-        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionAfterHarness));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var actionAfterHarness));
         Assert.Equal(actionBeforeHarness, actionAfterHarness);
     }
 
@@ -1817,8 +1817,8 @@ public sealed class PartialApplyPreflightTests
         using var harness = new RetainedRenderFrameHandoffHarness(harnessBackend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
 
         var result = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), pipeline.LastDirtyCommandRanges);
-        var harnessHit = harness.TryGetActionIdAt(hitX, hitY, out var harnessActionId);
-        var productionHit = compositor.TryGetActionIdAt(hitX, hitY, out var productionActionId);
+        var harnessHit = harness.TryGetActionIdAtLogicalPixel(hitX, hitY, out var harnessActionId);
+        var productionHit = compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var productionActionId);
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, feed.LastResult.Kind);
         Assert.True(feed.LastResult.FallbackApplied);
@@ -1867,7 +1867,7 @@ public sealed class PartialApplyPreflightTests
         var directBackend = new DirtyRangeAwareCapturingBackend();
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directFrame, cancellationToken);
-        var directHit = directCompositor.TryGetActionIdAt(hitX, hitY, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var directActionId);
 
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
@@ -1878,8 +1878,8 @@ public sealed class PartialApplyPreflightTests
             DrawingBackendCompositorHandoffOptions.Disabled);
 
         await feedCompositor.RenderAsync(feedFrame, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
-        var feedHit = feedCompositor.TryGetActionIdAt(hitX, hitY, out var feedActionId);
-        var candidateHit = feedCompositor.TryGetCandidateActionIdAt(hitX, hitY, out var candidateActionId);
+        var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
+        var candidateHit = feedCompositor.TryGetCandidateActionIdAtPhysicalPixel(hitX, hitY, out var candidateActionId);
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, feedCompositor.LastHandoffResult.Kind);
@@ -1926,7 +1926,7 @@ public sealed class PartialApplyPreflightTests
         var directHitTarget = Assert.Single(directFrame2.HitTargets);
         var hitX = directHitTarget.Bounds.X + 1;
         var hitY = directHitTarget.Bounds.Y + 1;
-        var directHit = directCompositor.TryGetActionIdAt(hitX, hitY, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var directActionId);
 
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
@@ -1940,8 +1940,8 @@ public sealed class PartialApplyPreflightTests
         using var feedFrame2 = feed.Build(partialRoot, viewport, _arena.GetOrCreateSnapshot(), [2]);
         await feedCompositor.RenderAsync(feedFrame2, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var partialResult = feedCompositor.LastHandoffResult;
-        var feedHit = feedCompositor.TryGetActionIdAt(hitX, hitY, out var feedActionId);
-        var candidateHit = feedCompositor.TryGetCandidateActionIdAt(hitX, hitY, out var candidateActionId);
+        var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
+        var candidateHit = feedCompositor.TryGetCandidateActionIdAtPhysicalPixel(hitX, hitY, out var candidateActionId);
         var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
 
         Assert.True(feedCompositor.HasHandoffCandidateHarness);
@@ -2043,7 +2043,7 @@ public sealed class PartialApplyPreflightTests
 
         await compositor.RenderAsync(frame, null, new FrameContext(960, 540), cancellationToken);
         var result = compositor.LastHandoffResult;
-        var hit = compositor.TryGetCandidateActionIdAt(1, 1, out var actionId);
+        var hit = compositor.TryGetCandidateActionIdAtPhysicalPixel(1, 1, out var actionId);
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.MissingOwner, result.Kind);
         Assert.Equal(DrawingBackendCompositorHandoffReason.MissingOwner, result.Reason);
@@ -2086,8 +2086,8 @@ public sealed class PartialApplyPreflightTests
         using var compositor = new DrawingBackendCompositor(backend, DrawingBackendCompositorHandoffOptions.Enabled);
 
         await compositor.RenderAsync(selectedFrame, ownership, new FrameContext(100, 100), cancellationToken);
-        var inClipHit = compositor.TryGetActionIdAt(15, 15, out var inClipActionId);
-        var outsideClipHit = compositor.TryGetActionIdAt(5, 5, out var outsideClipActionId);
+        var inClipHit = compositor.TryGetActionIdAtPhysicalPixel(15, 15, out var inClipActionId);
+        var outsideClipHit = compositor.TryGetActionIdAtPhysicalPixel(5, 5, out var outsideClipActionId);
 
         using var fallbackCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
         using var fallbackFrame = new RenderFrameBatch(
@@ -2099,7 +2099,7 @@ public sealed class PartialApplyPreflightTests
             VirtualNodeBuilder.Button(_arena, "Fallback", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(205))));
         ownership.Update(null, fallbackRoot, viewport, fallbackFrame);
         await compositor.RenderAsync(fallbackFrame, ownership, new FrameContext(100, 100), cancellationToken);
-        var fallbackHit = compositor.TryGetActionIdAt(5, 5, out var fallbackActionId);
+        var fallbackHit = compositor.TryGetActionIdAtPhysicalPixel(5, 5, out var fallbackActionId);
 
         Assert.True(inClipHit);
         Assert.Equal(new ActionId(204), inClipActionId);
@@ -2342,7 +2342,7 @@ public sealed class PartialApplyPreflightTests
         var firstHitTarget = Assert.Single(frame1.HitTargets);
         var hitX = firstHitTarget.Bounds.X + 1;
         var hitY = firstHitTarget.Bounds.Y + 1;
-        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionBeforeThrow));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var actionBeforeThrow));
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, compositor.LastHandoffResult.Kind);
         Assert.False(compositor.HasHandoffCandidateHarness);
@@ -2370,7 +2370,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(0, compositor.PartialApplyCount);
         Assert.False(compositor.LastPartialApplySucceeded);
         Assert.Equal(feedPipeline.LastDirtyCommandRanges, compositor.LastDirtyCommandRanges);
-        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionAfterThrow));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var actionAfterThrow));
         Assert.Equal(actionBeforeThrow, actionAfterThrow);
     }
 
@@ -2409,7 +2409,7 @@ public sealed class PartialApplyPreflightTests
         var firstHitTarget = Assert.Single(frame1.HitTargets);
         var hitX = firstHitTarget.Bounds.X + 1;
         var hitY = firstHitTarget.Bounds.Y + 1;
-        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionBeforeThrow));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var actionBeforeThrow));
 
         using var frame2 = pipeline.Build(partialRoot, viewport, _arena.GetOrCreateSnapshot(), [2]);
         var partialResult = ownership.Update(pipeline.LastRetainedInputSnapshot, partialRoot, viewport, frame2);
@@ -2422,7 +2422,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(2, tracker.Captures.Count);
         AssertFrameResourceCapture(tracker.Captures[0], frame1.Resources, retainCount: 1, releaseCount: 0);
         AssertFrameResourceCapture(tracker.Captures[1], frame2.Resources, retainCount: 1, releaseCount: 0);
-        Assert.True(compositor.TryGetActionIdAt(hitX, hitY, out var actionAfterThrow));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var actionAfterThrow));
         Assert.Equal(actionBeforeThrow, actionAfterThrow);
 
         ownership.Dispose();
@@ -2681,7 +2681,7 @@ public sealed class PartialApplyPreflightTests
         using var directCompositor = new DrawingBackendCompositor(directBackend);
         await directCompositor.RenderAsync(directFrame1, cancellationToken);
         await directCompositor.RenderAsync(directEmptyFrame, cancellationToken);
-        var directHit = directCompositor.TryGetActionIdAt(16, 16, out var directActionId);
+        var directHit = directCompositor.TryGetActionIdAtPhysicalPixel(16, 16, out var directActionId);
 
         var feedPipeline = new RenderPipeline();
         using var feed = new SegmentedRetainedFrameProductionOwnerFeed(feedPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
@@ -2692,7 +2692,7 @@ public sealed class PartialApplyPreflightTests
         using var feedCompositor = new DrawingBackendCompositor(feedBackend);
         await feedCompositor.RenderAsync(feedFrame1, cancellationToken);
         await feedCompositor.RenderAsync(feedEmptyFrame, cancellationToken);
-        var feedHit = feedCompositor.TryGetActionIdAt(16, 16, out var feedActionId);
+        var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(16, 16, out var feedActionId);
 
         Assert.Equal(0, directEmptyFrame.Commands.Count);
         Assert.Equal(0, feedEmptyFrame.Commands.Count);
@@ -2812,7 +2812,7 @@ public sealed class PartialApplyPreflightTests
         var fullApplyCount = compositor.FullApplyCount;
         var partialApplyCount = compositor.PartialApplyCount;
         var productionExecuteCount = productionBackend.ExecuteCalls.Count;
-        var hitBeforeProbe = compositor.TryGetActionIdAt(hitTestX, hitTestY, out var actionBeforeProbe);
+        var hitBeforeProbe = compositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var actionBeforeProbe);
         var probeBackend = new CapturingBackend();
         var probe = new DrawingBackendCompositorShadowProbe(probeBackend);
 
@@ -2843,7 +2843,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(fullApplyCount, compositor.FullApplyCount);
         Assert.Equal(partialApplyCount, compositor.PartialApplyCount);
         Assert.Equal(productionExecuteCount, productionBackend.ExecuteCalls.Count);
-        Assert.True(compositor.TryGetActionIdAt(hitTestX, hitTestY, out var actionAfterProbe));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var actionAfterProbe));
         Assert.Equal(actionBeforeProbe, actionAfterProbe);
     }
 
@@ -2887,7 +2887,7 @@ public sealed class PartialApplyPreflightTests
         var renderCount = compositor.RenderCount;
         var fullApplyCount = compositor.FullApplyCount;
         var partialApplyCount = compositor.PartialApplyCount;
-        Assert.True(compositor.TryGetActionIdAt(1, 1, out var actionBeforeProbe));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(1, 1, out var actionBeforeProbe));
         var throwingBackend = new ThrowingBackend(throwOnExecuteCall: 2);
         var probe = new DrawingBackendCompositorShadowProbe(throwingBackend);
         var resolver = new NamedResolver("segment");
@@ -2906,7 +2906,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(renderCount, compositor.RenderCount);
         Assert.Equal(fullApplyCount, compositor.FullApplyCount);
         Assert.Equal(partialApplyCount, compositor.PartialApplyCount);
-        Assert.True(compositor.TryGetActionIdAt(1, 1, out var actionAfterProbe));
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(1, 1, out var actionAfterProbe));
         Assert.Equal(actionBeforeProbe, actionAfterProbe);
     }
 
@@ -3867,7 +3867,7 @@ public sealed class PartialApplyPreflightTests
         ActionId expectedActionId)
     {
         var ownerHit = ownership.TryGetSegmentedOwnerActionIdAt(x, y, out var ownerActionId);
-        var productionHit = compositor.TryGetActionIdAt(x, y, out var productionActionId);
+        var productionHit = compositor.TryGetActionIdAtPhysicalPixel(x, y, out var productionActionId);
 
         Assert.Equal(expectedHit, ownerHit);
         Assert.Equal(expectedHit, productionHit);

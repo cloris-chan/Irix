@@ -118,7 +118,14 @@ public readonly record struct TextSlice(int BufferId, int Start, int Length)
 public readonly record struct DisplayScale(float ScaleX, float ScaleY)
 {
     public static DisplayScale Identity => new(1f, 1f);
-    public bool IsIdentity => (ScaleX == 1f || ScaleX == 0f) && (ScaleY == 1f || ScaleY == 0f);
+    public bool IsIdentity => ScaleX == 1f && ScaleY == 1f;
+
+    public DisplayScale Normalize()
+    {
+        var scaleX = ScaleX > 0f && float.IsFinite(ScaleX) ? ScaleX : 1f;
+        var scaleY = ScaleY > 0f && float.IsFinite(ScaleY) ? ScaleY : 1f;
+        return new DisplayScale(scaleX, scaleY);
+    }
 }
 
 public readonly record struct FrameContext(
@@ -127,8 +134,23 @@ public readonly record struct FrameContext(
     DisplayScale Scale = default,
     long Timestamp = 0)
 {
-    public int LogicalWidth => Scale.IsIdentity ? Width : (int)(Width / Scale.ScaleX);
-    public int LogicalHeight => Scale.IsIdentity ? Height : (int)(Height / Scale.ScaleY);
+    public int LogicalWidth
+    {
+        get
+        {
+            var scale = Scale.Normalize();
+            return scale.IsIdentity ? Width : (int)(Width / scale.ScaleX);
+        }
+    }
+
+    public int LogicalHeight
+    {
+        get
+        {
+            var scale = Scale.Normalize();
+            return scale.IsIdentity ? Height : (int)(Height / scale.ScaleY);
+        }
+    }
 }
 
 public readonly record struct DrawCommand(
@@ -144,6 +166,7 @@ public readonly record struct DrawCommand(
 {
     public DrawCommand Scale(DisplayScale scale)
     {
+        scale = scale.Normalize();
         if (scale.IsIdentity) return this;
         return this with
         {

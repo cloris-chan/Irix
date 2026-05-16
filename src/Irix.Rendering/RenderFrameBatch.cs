@@ -7,6 +7,7 @@ public readonly record struct HitTestTarget(PixelRectangle Bounds, ActionId Acti
 {
     public HitTestTarget Scale(DisplayScale scale)
     {
+        scale = scale.Normalize();
         if (scale.IsIdentity) return this;
         return this with
         {

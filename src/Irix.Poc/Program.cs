@@ -77,7 +77,7 @@ internal static class Program
         var syncTextOverlay = !args.Contains("--no-sync-text-overlay");
         d3d12Renderer.SyncTextOverlay = syncTextOverlay;
         d3d12Renderer.TextOverlaySyncStrategy = ParseTextOverlaySyncStrategy(args);
-        var displayScale = platformHost.Screens[0].Scale;
+        var displayScale = platformHost.Screens[0].Scale.Normalize();
 
         Action<double>? maxScrollYCallback = null;
         Action<CounterLayoutDiagnostics>? layoutDiagnosticsCallback = null;
@@ -166,10 +166,10 @@ internal static class Program
 
         window.DpiChanged += newScale =>
         {
-            displayScale = newScale;
-            drawCommandTranslator.SetDisplayScale(newScale);
-            d3d12Compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), newScale);
-            Console.WriteLine($"DPI changed: scale={newScale.ScaleX:0.##}x{newScale.ScaleY:0.##}");
+            displayScale = newScale.Normalize();
+            drawCommandTranslator.SetDisplayScale(displayScale);
+            d3d12Compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
+            Console.WriteLine($"DPI changed: scale={displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         };
 
         using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
@@ -193,7 +193,7 @@ internal static class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, TryGetActionIdAt, out var message))
+            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, TryGetActionIdAtPhysicalPixel, out var message))
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
@@ -214,9 +214,9 @@ internal static class Program
             }
         }
 
-        ActionId TryGetActionIdAt(int x, int y)
+        ActionId TryGetActionIdAtPhysicalPixel(int x, int y)
         {
-            return d3d12Compositor.TryGetActionIdAt(x, y, out var actionId) ? actionId : ActionId.None;
+            return d3d12Compositor.TryGetActionIdAtPhysicalPixel(x, y, out var actionId) ? actionId : ActionId.None;
         }
 
         void OnTopologyChanged(object? sender, ScreenTopologyChangedEventArgs args)
@@ -271,6 +271,7 @@ internal static class Program
 
     private static CounterViewportDiagnostics CreateViewportDiagnostics(INativeWindow window, D3D12Renderer renderer, WindowDrawCommandTranslator? translator, DisplayScale displayScale = default)
     {
+        displayScale = displayScale.Normalize();
         var bounds = window.Region.PhysicalBounds;
         var rendererViewport = new PixelRectangle(bounds.X, bounds.Y, renderer.Width, renderer.Height);
         var layoutViewport = translator?.LastLayoutViewport ?? rendererViewport;
@@ -365,11 +366,11 @@ internal static class Program
     internal static bool TryMapInputForRuntime(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
-        Func<int, int, ActionId> tryGetActionIdAt,
+        Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
         out CounterMessage? message)
     {
         var before = ownershipState.Snapshot;
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, tryGetActionIdAt, out var mappedMessage);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, tryGetActionIdAtPhysicalPixel, out var mappedMessage);
         var after = ownershipState.Snapshot;
 
         if (mapped)

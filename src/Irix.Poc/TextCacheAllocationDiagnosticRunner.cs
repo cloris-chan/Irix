@@ -11,7 +11,7 @@ internal static class TextCacheAllocationDiagnosticRunner
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
-        var displayScale = screen.Scale;
+        var displayScale = screen.Scale.Normalize();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
@@ -85,7 +85,7 @@ internal static class TextCacheAllocationDiagnosticRunner
             {
                 activeScale = displayScale.ScaleX >= 2f || displayScale.ScaleY >= 2f
                     ? DisplayScale.Identity
-                    : new DisplayScale(2f, 2f);
+                    : new DisplayScale(2f, 2f).Normalize();
                 translator.SetDisplayScale(activeScale);
                 compositor.SetViewport(new PixelRectangle(0, 0, renderer.Width, renderer.Height), activeScale);
             }

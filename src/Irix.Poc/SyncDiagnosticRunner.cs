@@ -15,7 +15,7 @@ internal static class SyncDiagnosticRunner
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
-        var displayScale = screen.Scale;
+        var displayScale = screen.Scale.Normalize();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);

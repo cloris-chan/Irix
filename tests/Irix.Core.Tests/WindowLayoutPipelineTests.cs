@@ -2791,7 +2791,7 @@ public sealed class WindowLayoutPipelineTests
         // (x=150 is within bounds [16..216] but outside clip [16..116])
         var compositor = new DrawingBackendCompositor(new NoOpBackend());
 
-        // We can't directly test TryGetActionIdAt with a single HitTestTarget,
+        // We can't directly test hit routing with a single HitTestTarget,
         // so test the logic via a full render cycle. For a unit-level test,
         // verify the HitTestTarget struct carries clip bounds.
         Assert.True(target.ClipBounds.Width > 0);
