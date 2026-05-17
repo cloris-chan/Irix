@@ -277,25 +277,37 @@ public readonly struct VirtualNode
 
     private static void ValidateNodeShape(VirtualNodeKind kind, VirtualNode[] children)
     {
-        if (kind != VirtualNodeKind.Button)
+        switch (kind)
         {
-            return;
-        }
+            case VirtualNodeKind.Text:
+            case VirtualNodeKind.Rectangle:
+                if (children.Length != 0)
+                {
+                    throw new ArgumentException($"{kind} nodes cannot have children.", nameof(children));
+                }
 
-        if (children.Length != 1)
-        {
-            throw new ArgumentException("Button nodes require exactly one explicit text label child.", nameof(children));
-        }
+                return;
 
-        var child = children[0];
-        if (child.Kind == VirtualNodeKind.Text
-            && child.Content.TryGetText(out var label)
-            && !label.IsNone)
-        {
-            return;
-        }
+            case VirtualNodeKind.Button:
+                if (children.Length != 1)
+                {
+                    throw new ArgumentException("Button nodes require exactly one leaf text label child.", nameof(children));
+                }
 
-        throw new ArgumentException("Button nodes require exactly one explicit text label child.", nameof(children));
+                var child = children[0];
+                if (child.Kind == VirtualNodeKind.Text
+                    && child.Children.IsEmpty
+                    && child.Content.TryGetText(out var label)
+                    && !label.IsNone)
+                {
+                    return;
+                }
+
+                throw new ArgumentException("Button nodes require exactly one leaf text label child.", nameof(children));
+
+            default:
+                return;
+        }
     }
 
 }

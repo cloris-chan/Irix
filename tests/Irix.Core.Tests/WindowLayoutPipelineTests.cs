@@ -20,7 +20,7 @@ public sealed class WindowLayoutPipelineTests
                 VirtualNodeProperty.Action(new ActionId(1))));
         var builder = new LayoutTreeBuilder();
 
-        var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
+        var elements = builder.BuildElements(root, new PixelRectangle(0, 0, 960, 540));
         var snapshot = _arena.GetOrCreateSnapshot();
 
         Assert.Equal(3, elements.Count);
@@ -90,7 +90,7 @@ public sealed class WindowLayoutPipelineTests
             ButtonTextWidthFactor: 10,
             ButtonHorizontalPadding: 20));
 
-        var elements = builder.Build(root, new PixelRectangle(0, 0, 400, 300));
+        var elements = builder.BuildElements(root, new PixelRectangle(0, 0, 400, 300));
 
         Assert.Equal(new PixelRectangle(24, 20, 352, 28), elements[0].Bounds);
         Assert.Equal(new PixelRectangle(24, 56, 120, 36), elements[1].Bounds);
@@ -185,7 +185,7 @@ public sealed class WindowLayoutPipelineTests
                 VirtualNodeProperty.Focused(true)));
         var builder = new LayoutTreeBuilder();
 
-        var elements = builder.Build(root, new PixelRectangle(0, 0, 960, 540));
+        var elements = builder.BuildElements(root, new PixelRectangle(0, 0, 960, 540));
 
         Assert.Single(elements);
         Assert.Equal(new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true), elements[0].ButtonState);

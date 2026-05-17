@@ -8,8 +8,8 @@ namespace Irix.Core.Tests;
 /// <summary>
 /// Tests that verify patches produced by VirtualNodeDiffer are semantically correct:
 /// PatchBatch.Root must produce the same layout as if we built directly from the new tree.
-/// NOTE: These test the diff-outputs-layout equivalence, not a retained-tree Apply(patches) path.
-/// When a real RetainedTree.Apply(PatchBatch) is implemented, add dedicated tests for that.
+/// NOTE: These test the diff-outputs-layout equivalence. RetainedTree applies only
+/// canonical differ-created batches.
 /// </summary>
 public sealed class PatchDiffEquivalenceTests
 {
@@ -31,7 +31,7 @@ public sealed class PatchDiffEquivalenceTests
         Assert.Equal("World", ResolveNodeText(_arena, patch.Node.Content));
 
         // Layout from new tree root should produce "World"
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().BuildElements(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Single(layout);
         Assert.Equal("World", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
 
@@ -57,7 +57,7 @@ public sealed class PatchDiffEquivalenceTests
         }
         Assert.True(hasAdd, "Expected an Add patch");
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().BuildElements(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Equal(2, layout.Count);
         Assert.Equal("Hello", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
         Assert.Equal("World", batch.TextSnapshot.ResolveRequired(layout[1].Text).ToString());
@@ -84,7 +84,7 @@ public sealed class PatchDiffEquivalenceTests
         }
         Assert.True(hasRemove, "Expected a Remove patch");
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().BuildElements(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Single(layout);
         Assert.Equal("Hello", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
 
@@ -118,7 +118,7 @@ public sealed class PatchDiffEquivalenceTests
         Assert.Equal("B-modified", ResolveNodeText(_arena, updatePatches[0].Node.Content));
 
         // Layout from PatchBatch.Root should have all 3 children with "B-modified"
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().BuildElements(batch.Root, new PixelRectangle(0, 0, 960, 540));
         Assert.Equal(3, layout.Count);
         Assert.Equal("A", batch.TextSnapshot.ResolveRequired(layout[0].Text).ToString());
         Assert.Equal("B-modified", batch.TextSnapshot.ResolveRequired(layout[1].Text).ToString());
@@ -178,7 +178,7 @@ public sealed class PatchDiffEquivalenceTests
         var patch = batch.Memory.Span[0];
         Assert.Equal(VirtualNodePatchOperation.ReplaceRoot, patch.Operation);
 
-        var layout = new LayoutTreeBuilder().Build(batch.Root, new PixelRectangle(0, 0, 960, 540));
+        var layout = new LayoutTreeBuilder().BuildElements(batch.Root, new PixelRectangle(0, 0, 960, 540));
         // Button produces at least one layout element with text
         Assert.True(layout.Count >= 1, $"Expected at least 1 layout element, got {layout.Count}");
         var hasClickText = false;

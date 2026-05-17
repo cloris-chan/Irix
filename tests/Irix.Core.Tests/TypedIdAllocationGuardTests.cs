@@ -353,6 +353,31 @@ public class TypedIdAllocationGuardTests
                 label,
                 VirtualNodeBuilder.Text(_arena, "extra", new NodeKey(12))
             ]));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Button,
+            children: [VirtualNodeFactory.Rectangle()]));
+
+        var button = new VirtualNode(VirtualNodeKind.Button, children: [label]);
+        Assert.Equal(VirtualNodeKind.Button, button.Kind);
+        Assert.Equal(1, button.Children.Length);
+        Assert.Equal(VirtualNodeKind.Text, button.Children[0].Kind);
+        Assert.True(button.Children[0].Children.IsEmpty);
+    }
+
+    [Fact]
+    public void VirtualNode_leaf_shapes_reject_children()
+    {
+        var label = VirtualNodeBuilder.Text(_arena, "label", new NodeKey(11));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Text,
+            content: label.Content,
+            children: [VirtualNodeFactory.Rectangle()]));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Rectangle,
+            children: [label]));
     }
 
     [Fact]
@@ -659,12 +684,19 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("new List<", differSource);
         Assert.Contains("KeyedLinearThreshold", differSource);
         Assert.Contains("CreateNodeKeyIndexMap", differSource);
-        Assert.Contains("Legacy manual patch fallback", retainedTreeSource);
+        Assert.Contains("RetainedTree only accepts canonical diff batches", retainedTreeSource);
+        Assert.DoesNotContain("Legacy manual patch fallback", retainedTreeSource);
+        Assert.DoesNotContain("ApplyRecursive", retainedTreeSource);
+        Assert.DoesNotContain("new Dictionary<int", retainedTreeSource);
+        Assert.DoesNotContain("new HashSet<", retainedTreeSource);
+        Assert.DoesNotContain("new List<VirtualNode>", retainedTreeSource);
 
         Assert.DoesNotContain("new HashSet<int>", renderPipelineSource);
         Assert.DoesNotContain("HashSet<int>", renderPipelineSource);
         Assert.DoesNotContain("new List<LayoutDirtyClassification>", renderPipelineSource);
 
+        Assert.Contains("BuildElements", layoutBuilderSource);
+        Assert.DoesNotContain("public IReadOnlyList<LayoutElement> Build(", layoutBuilderSource);
         Assert.DoesNotContain("new HashSet<int>", layoutBuilderSource);
         Assert.DoesNotContain("HashSet<int>", layoutBuilderSource);
         Assert.DoesNotContain("new List<LayoutElement>", layoutBuilderSource);
@@ -682,6 +714,9 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("subtreeStart", layoutBuilderSource);
         Assert.Contains("subtreeCount", layoutBuilderSource);
         Assert.Contains("AdvanceDirtyCursor", layoutBuilderSource);
+        Assert.Contains("CollectDirtyRangesFromElementRanges", layoutBuilderSource);
+        Assert.DoesNotContain("CollectDirtyRangesRecursive", layoutBuilderSource);
+        Assert.Contains("Debug.Assert(consumed == _elementRanges.Count", layoutBuilderSource);
 
         Assert.Contains("int SubtreeStart", layoutModelSource);
         Assert.Contains("int SubtreeCount", layoutModelSource);
@@ -707,7 +742,7 @@ public class TypedIdAllocationGuardTests
         var canonicalApplySource = ExtractSourceBetween(
             retainedTreeSource,
             "private ApplyResult ApplyCanonicalRootBatch",
-            "private static VirtualNode ApplyRecursive");
+            "private static IReadOnlyList<int> SortAndDeduplicateDirty");
         Assert.DoesNotContain("new List<", canonicalApplySource);
         Assert.DoesNotContain("new Dictionary<", canonicalApplySource);
         Assert.DoesNotContain("new HashSet<", canonicalApplySource);
@@ -890,6 +925,18 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("CreateFromOwnedArraysUnsafe", source);
         Assert.Contains("Callers must not mutate the arrays after this call.", source);
         Assert.DoesNotContain("CreateFromOwnedArrays(", source);
+    }
+
+    [Fact]
+    public void VirtualNode_shape_contract_is_guarded_in_source()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
+
+        Assert.Contains("nodes cannot have children", source);
+        Assert.Contains("Button nodes require exactly one leaf text label child", source);
+        Assert.Contains("child.Kind == VirtualNodeKind.Text", source);
+        Assert.Contains("child.Children.IsEmpty", source);
+        Assert.Contains("!label.IsNone", source);
     }
 
     [Fact]

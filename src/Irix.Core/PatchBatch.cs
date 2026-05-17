@@ -63,7 +63,8 @@ public sealed class PatchBatch : IDisposable
     /// True when <see cref="Root"/> is the canonical next retained root for this batch.
     /// Differ-created batches set this even when <see cref="Count"/> is zero so retained
     /// metadata can advance to the next tree and text snapshot atomically.
-    /// Hand-authored patch batches default to false; their patch list defines the result.
+    /// Hand-authored patch batches default to false; retained application rejects
+    /// non-empty non-canonical batches.
     /// </summary>
     public bool HasCanonicalRoot { get; }
 

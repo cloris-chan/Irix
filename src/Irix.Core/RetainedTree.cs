@@ -30,23 +30,10 @@ public readonly struct ApplyResult(
 }
 
 /// <summary>
-/// Applies <see cref="PatchBatch"/> patches to a <see cref="VirtualNode"/> tree,
-/// producing a new immutable tree. Uses a single DFS pass to avoid index drift
-/// from sequential patch application.
-///
-/// <para><b>Patch semantics:</b></para>
-/// <list type="bullet">
-///   <item><b>Canonical root</b> — when <see cref="PatchBatch.HasCanonicalRoot"/> is true,
-///     <see cref="PatchBatch.Root"/> is the canonical next retained root and wins over the
-///     reconstructed patch result.</item>
-///   <item><b>ReplaceRoot</b> — replaces the entire root node (and all children) with the patch node.</item>
-///   <item><b>Update</b> — replaces the <em>content and properties</em> of the target node, but
-///     <em>preserves its existing children</em> from the old tree. The patch node's Children are ignored.</item>
-///   <item><b>Add</b> — inserts a new node at the DFS position specified by <c>NodeIndex</c>.
-///     The index is in the <em>old tree's</em> DFS coordinate system (before this batch is applied).</item>
-///   <item><b>Remove</b> — removes the node at the DFS position specified by <c>NodeIndex</c>.
-///     For keyed nodes (Key ≠ 0), matching is by key; for unkeyed nodes, by DFS index.</item>
-/// </list>
+/// Applies canonical diff batches to a <see cref="VirtualNode"/> tree.
+/// Non-canonical patch application is intentionally unsupported; runtime diff
+/// batches carry <see cref="PatchBatch.HasCanonicalRoot"/> and provide the next
+/// retained root directly.
 ///
 /// <para><b>Dirty index semantics:</b></para>
 /// <para>
@@ -84,43 +71,7 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             return new ApplyResult([], prevRoot, prevSnapshot);
         }
 
-        // Legacy manual patch fallback for hand-authored tests/tools. Runtime diff batches
-        // carry HasCanonicalRoot=true and take the scratch-backed canonical path above.
-        var dirty = new List<int>();
-        var memory = batch.Memory.Span;
-        var replacePatches = new Dictionary<int, VirtualNode>();
-        var updatePatches = new Dictionary<int, VirtualNode>();
-        var addPatches = new Dictionary<int, List<VirtualNode>>();
-        var removeKeySet = new HashSet<NodeKey>();
-        var removeIndexSet = new HashSet<int>();
-
-        for (var i = 0; i < memory.Length; i++)
-        {
-            var patch = memory[i];
-            switch (patch.Operation)
-            {
-                case VirtualNodePatchOperation.ReplaceRoot:
-                    replacePatches[patch.NodeIndex] = patch.Node; break;
-                case VirtualNodePatchOperation.Update:
-                    updatePatches[patch.NodeIndex] = patch.Node; break;
-                case VirtualNodePatchOperation.Add:
-                    if (!addPatches.TryGetValue(patch.NodeIndex, out var addList)) { addList = []; addPatches[patch.NodeIndex] = addList; }
-                    addList.Add(patch.Node); break;
-                case VirtualNodePatchOperation.Remove:
-                    if (patch.Node.Key != NodeKey.None) removeKeySet.Add(patch.Node.Key);
-                    else removeIndexSet.Add(patch.NodeIndex); break;
-            }
-        }
-
-        if (replacePatches.TryGetValue(0, out VirtualNode value))
-        {
-            _tree = new VirtualNodeTree(value, batch.TextSnapshot);
-            return new ApplyResult([0], prevRoot, prevSnapshot);
-        }
-
-        var appliedRoot = ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty, out _);
-        _tree = new VirtualNodeTree(appliedRoot, batch.TextSnapshot);
-        return new ApplyResult(SortAndDeduplicateDirty(dirty), prevRoot, prevSnapshot);
+        throw new InvalidOperationException("RetainedTree only accepts canonical diff batches.");
     }
 
     private ApplyResult ApplyCanonicalRootBatch(PatchBatch batch, VirtualNode prevRoot, TextBufferSnapshot prevSnapshot)
@@ -186,169 +137,6 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             nextParentIndex.Dispose();
             previousParentIndex.Dispose();
         }
-    }
-
-    private static VirtualNode ApplyRecursive(
-        VirtualNode node, int currentIndex,
-        Dictionary<int, VirtualNode> updates,
-        Dictionary<int, List<VirtualNode>> adds,
-        HashSet<NodeKey> removeKeySet, HashSet<int> removeIndexSet,
-        List<int> dirty)
-    {
-        return ApplyRecursive(node, currentIndex, updates, adds, removeKeySet, removeIndexSet, dirty, out _);
-    }
-
-    private static VirtualNode ApplyRecursive(
-        VirtualNode node, int currentIndex,
-        Dictionary<int, VirtualNode> updates,
-        Dictionary<int, List<VirtualNode>> adds,
-        HashSet<NodeKey> removeKeySet, HashSet<int> removeIndexSet,
-        List<int> dirty,
-        out bool changed)
-    {
-        changed = false;
-        if (updates.Remove(currentIndex, out var replacement))
-        {
-            dirty.Add(currentIndex);
-            node = new VirtualNode(replacement.Kind, replacement.Key, replacement.Content, replacement.Properties, node.Children);
-            changed = true;
-        }
-
-        var oldChildren = node.Children;
-        var extraCapacity = 0;
-        foreach (var kvp in adds) extraCapacity += kvp.Value.Count;
-        var newChildren = new List<VirtualNode>(oldChildren.Length + extraCapacity);
-        var offset = currentIndex + 1;
-
-        for (var i = 0; i < oldChildren.Length; i++)
-        {
-            var child = oldChildren[i];
-            var childSize = CountNodes(child);
-            var childEnd = offset + childSize;
-
-            if (adds.Remove(offset, out var addNodes))
-            {
-                newChildren.AddRange(addNodes);
-                dirty.Add(currentIndex);
-                changed = true;
-            }
-
-            var shouldRemove = (child.Key != NodeKey.None && removeKeySet.Remove(child.Key))
-                             || removeIndexSet.Remove(offset);
-            if (shouldRemove)
-            {
-                dirty.Add(currentIndex);
-                changed = true;
-            }
-            else
-            {
-                var newChild = ApplyRecursive(child, offset, updates, adds, removeKeySet, removeIndexSet, dirty, out var childChanged);
-                newChildren.Add(newChild);
-                changed |= childChanged;
-            }
-
-            if (adds.Remove(childEnd, out var addAfterNodes))
-            {
-                newChildren.AddRange(addAfterNodes);
-                dirty.Add(currentIndex);
-                changed = true;
-            }
-
-            offset = childEnd;
-        }
-
-        if (oldChildren.Length > 0)
-        {
-            if (adds.Count > 0)
-            {
-                var remainingAdds = adds.Where(kvp => kvp.Key >= offset).OrderBy(kvp => kvp.Key).ToList();
-                foreach (var kvp in remainingAdds)
-                {
-                    newChildren.AddRange(kvp.Value);
-                    dirty.Add(currentIndex);
-                    adds.Remove(kvp.Key);
-                    changed = true;
-                }
-            }
-
-            if (removeKeySet.Count > 0 || removeIndexSet.Count > 0)
-            {
-                dirty.Add(currentIndex);
-                removeKeySet.Clear();
-                removeIndexSet.Clear();
-                changed = true;
-            }
-        }
-
-        if (newChildren.Count != oldChildren.Length)
-        {
-            changed = true;
-            return new VirtualNode(node.Kind, node.Key, node.Content, node.Properties, [.. newChildren]);
-        }
-
-        return changed
-            ? new VirtualNode(node.Kind, node.Key, node.Content, node.Properties, [.. newChildren])
-            : node;
-    }
-
-    private static int CountNodes(VirtualNode node)
-    {
-        var count = 1;
-        var children = node.Children;
-        for (var i = 0; i < children.Length; i++) count += CountNodes(children[i]);
-        return count;
-    }
-
-    private static IReadOnlyList<int> SortAndDeduplicateDirty(List<int> dirty)
-    {
-        if (dirty.Count == 0)
-        {
-            return [];
-        }
-
-        dirty.Sort();
-        var write = 1;
-        for (var read = 1; read < dirty.Count; read++)
-        {
-            if (dirty[read] != dirty[write - 1])
-            {
-                dirty[write++] = dirty[read];
-            }
-        }
-
-        if (write == dirty.Count)
-        {
-            return dirty;
-        }
-
-        return dirty.GetRange(0, write);
-    }
-
-    private static IReadOnlyList<int> SortAndDeduplicateDirty(int[] dirty)
-    {
-        if (dirty.Length == 0)
-        {
-            return [];
-        }
-
-        Array.Sort(dirty);
-        var write = 1;
-        for (var read = 1; read < dirty.Length; read++)
-        {
-            if (dirty[read] != dirty[write - 1])
-            {
-                dirty[write++] = dirty[read];
-            }
-        }
-
-        if (write == dirty.Length)
-        {
-            return dirty;
-        }
-
-        var result = new int[write];
-        Array.Copy(dirty, result, write);
-        return result;
     }
 
     private static IReadOnlyList<int> SortAndDeduplicateDirty(ref ScratchList<int> dirty)

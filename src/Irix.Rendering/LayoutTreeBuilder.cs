@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Irix.Platform;
 
 namespace Irix.Rendering;
@@ -79,10 +80,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         }
     }
 
-    /// <summary>
-    /// Backward-compatible overload returning flat elements only.
-    /// </summary>
-    public IReadOnlyList<LayoutElement> Build(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
+    public IReadOnlyList<LayoutElement> BuildElements(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         return BuildLayoutTree(root, viewportBounds, dirtyNodes).Elements;
     }
@@ -134,7 +132,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 Style = _style,
             };
 
-            LayoutNode(root, 0);
+            var consumed = LayoutNode(root, 0);
+            Debug.Assert(consumed == _elementRanges.Count, "Layout DFS projection did not register every consumed virtual node.");
         }
 
         public void Dispose()
@@ -391,7 +390,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             var dirtyCursor = 0;
             try
             {
-                CollectDirtyRangesRecursive(elementRanges, sortedDirty.Written, ref dirtyCursor, ref ranges);
+                CollectDirtyRangesFromElementRanges(elementRanges, sortedDirty.Written, ref dirtyCursor, ref ranges);
                 return MergeDirtyRanges(ref ranges);
             }
             finally
@@ -405,7 +404,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         }
     }
 
-    private static void CollectDirtyRangesRecursive(
+    private static void CollectDirtyRangesFromElementRanges(
         ReadOnlySpan<LayoutElementRange> elementRanges,
         ReadOnlySpan<int> sortedDirtyIndices,
         ref int dirtyCursor,
