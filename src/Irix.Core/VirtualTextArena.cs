@@ -52,6 +52,32 @@ public sealed class VirtualTextArena
         return CollectionsMarshal.AsSpan(_buffer).Slice(start, length);
     }
 
+    internal bool TryResolve(TextNodeContent content, out ReadOnlySpan<char> span)
+    {
+        if (content.IsNone)
+        {
+            span = [];
+            return true;
+        }
+
+        if (content.BufferId != CurrentBufferId)
+        {
+            span = [];
+            return false;
+        }
+
+        var start = content.Range.Start;
+        var length = content.Range.Length;
+        if ((uint)start > (uint)_buffer.Count || (uint)length > (uint)(_buffer.Count - start))
+        {
+            span = [];
+            return false;
+        }
+
+        span = CollectionsMarshal.AsSpan(_buffer).Slice(start, length);
+        return true;
+    }
+
     [Obsolete("Use GetOrCreateSnapshot(). Snapshot() returns the cached snapshot for compatibility.")]
     public TextBufferSnapshot Snapshot()
     {
@@ -124,6 +150,32 @@ public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) 
         }
 
         return Buffer.AsSpan(start, length);
+    }
+
+    internal bool TryResolve(TextNodeContent content, out ReadOnlySpan<char> span)
+    {
+        if (content.IsNone)
+        {
+            span = [];
+            return true;
+        }
+
+        if (Buffer is null || BufferId.IsNone || content.BufferId != BufferId)
+        {
+            span = [];
+            return false;
+        }
+
+        var start = content.Range.Start;
+        var length = content.Range.Length;
+        if ((uint)start > (uint)Buffer.Length || (uint)length > (uint)(Buffer.Length - start))
+        {
+            span = [];
+            return false;
+        }
+
+        span = Buffer.AsSpan(start, length);
+        return true;
     }
 
     public bool Equals(TextBufferSnapshot other) => BufferId == other.BufferId && ReferenceEquals(Buffer, other.Buffer);

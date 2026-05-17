@@ -193,7 +193,8 @@ internal static class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, TryGetActionIdAtPhysicalPixel, out var message))
+            var hitTestResolver = new DrawingBackendCompositorActionHitTestResolver(d3d12Compositor);
+            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, hitTestResolver, out var message))
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
@@ -212,11 +213,6 @@ internal static class Program
                     runtime.Dispatch(message);
                 }
             }
-        }
-
-        ActionId TryGetActionIdAtPhysicalPixel(int x, int y)
-        {
-            return d3d12Compositor.TryGetActionIdAtPhysicalPixel(x, y, out var actionId) ? actionId : ActionId.None;
         }
 
         void OnTopologyChanged(object? sender, ScreenTopologyChangedEventArgs args)
@@ -369,8 +365,19 @@ internal static class Program
         Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
         out CounterMessage? message)
     {
+        var hitTestResolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
+        return TryMapInputForRuntime(inputEvent, ownershipState, hitTestResolver, out message);
+    }
+
+    internal static bool TryMapInputForRuntime<THitTestResolver>(
+        RawInputEvent inputEvent,
+        InputOwnershipState ownershipState,
+        THitTestResolver hitTestResolver,
+        out CounterMessage? message)
+        where THitTestResolver : struct, IActionHitTestResolver
+    {
         var before = ownershipState.Snapshot;
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, tryGetActionIdAtPhysicalPixel, out var mappedMessage);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, hitTestResolver, out var mappedMessage);
         var after = ownershipState.Snapshot;
 
         if (mapped)

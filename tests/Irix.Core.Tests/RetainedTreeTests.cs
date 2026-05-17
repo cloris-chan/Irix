@@ -221,6 +221,40 @@ public sealed class RetainedTreeTests
     }
 
     [Fact]
+    public void Apply_diff_batch_uses_canonical_root_for_style_only_update()
+    {
+        var prev = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(
+                _arena,
+                "Increment",
+                new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(1)),
+                VirtualNodeProperty.Hovered(false)));
+        var prevSnapshot = _arena.GetOrCreateSnapshot();
+
+        _arena.BeginFrame();
+        var next = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(
+                _arena,
+                "Increment",
+                new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(1)),
+                VirtualNodeProperty.Hovered(true)));
+        var nextSnapshot = _arena.GetOrCreateSnapshot();
+
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(
+            new VirtualNodeTree(prev, prevSnapshot),
+            new VirtualNodeTree(next, nextSnapshot));
+        var tree = new RetainedTree(new VirtualNodeTree(prev, prevSnapshot));
+
+        var result = tree.Apply(batch);
+
+        Assert.True(batch.HasCanonicalRoot);
+        Assert.Equal([1], result.Dirty);
+        Assert.True(VirtualNodeStructuralComparer.Equals(next, tree.Tree.Root, nextSnapshot, tree.Tree.TextSnapshot));
+    }
+
+    [Fact]
     public void Apply_keyed_add_and_remove_matches_next_tree()
     {
         // Test: remove "b", add "d" via differ �?apply patches �?verify result

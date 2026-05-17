@@ -71,13 +71,13 @@ public sealed class RetainedTree(VirtualNodeTree tree)
     {
         var prevRoot = _tree.Root;
         var prevSnapshot = _tree.TextSnapshot;
+        if (batch.HasCanonicalRoot)
+        {
+            return ApplyCanonicalRootBatch(batch, prevRoot, prevSnapshot);
+        }
+
         if (batch.Count == 0)
         {
-            if (batch.HasCanonicalRoot)
-            {
-                _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
-            }
-
             return new ApplyResult([], prevRoot, prevSnapshot);
         }
 
@@ -114,18 +114,34 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         }
 
         var appliedRoot = ApplyRecursive(_tree.Root, 0, updatePatches, addPatches, removeKeySet, removeIndexSet, dirty, out _);
-        var nextRoot = batch.HasCanonicalRoot
-            ? batch.Root
-            : appliedRoot;
-        _tree = new VirtualNodeTree(nextRoot, batch.TextSnapshot);
-        dirty.Sort();
-        var deduped = new List<int>(dirty.Count);
-        var last = -1;
-        foreach (var d in dirty)
+        _tree = new VirtualNodeTree(appliedRoot, batch.TextSnapshot);
+        return new ApplyResult(SortAndDeduplicateDirty(dirty), prevRoot, prevSnapshot);
+    }
+
+    private ApplyResult ApplyCanonicalRootBatch(PatchBatch batch, VirtualNode prevRoot, TextBufferSnapshot prevSnapshot)
+    {
+        _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
+        if (batch.Count == 0)
         {
-            if (d != last) { deduped.Add(d); last = d; }
+            return new ApplyResult([], prevRoot, prevSnapshot);
         }
-        return new ApplyResult(deduped, prevRoot, prevSnapshot);
+
+        var memory = batch.Memory.Span;
+        var dirty = new int[memory.Length];
+        for (var i = 0; i < memory.Length; i++)
+        {
+            var patch = memory[i];
+            dirty[i] = patch.Operation switch
+            {
+                VirtualNodePatchOperation.Update => patch.NodeIndex,
+                VirtualNodePatchOperation.ReplaceRoot => patch.NodeIndex,
+                VirtualNodePatchOperation.Add => FindParentIndex(batch.Root, patch.NodeIndex),
+                VirtualNodePatchOperation.Remove => FindParentIndex(prevRoot, patch.NodeIndex),
+                _ => patch.NodeIndex
+            };
+        }
+
+        return new ApplyResult(SortAndDeduplicateDirty(dirty), prevRoot, prevSnapshot);
     }
 
     private static VirtualNode ApplyRecursive(
@@ -237,5 +253,93 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         var children = node.Children;
         for (var i = 0; i < children.Length; i++) count += CountNodes(children[i]);
         return count;
+    }
+
+    private static IReadOnlyList<int> SortAndDeduplicateDirty(List<int> dirty)
+    {
+        if (dirty.Count == 0)
+        {
+            return [];
+        }
+
+        dirty.Sort();
+        var write = 1;
+        for (var read = 1; read < dirty.Count; read++)
+        {
+            if (dirty[read] != dirty[write - 1])
+            {
+                dirty[write++] = dirty[read];
+            }
+        }
+
+        if (write == dirty.Count)
+        {
+            return dirty;
+        }
+
+        return dirty.GetRange(0, write);
+    }
+
+    private static IReadOnlyList<int> SortAndDeduplicateDirty(int[] dirty)
+    {
+        if (dirty.Length == 0)
+        {
+            return [];
+        }
+
+        Array.Sort(dirty);
+        var write = 1;
+        for (var read = 1; read < dirty.Length; read++)
+        {
+            if (dirty[read] != dirty[write - 1])
+            {
+                dirty[write++] = dirty[read];
+            }
+        }
+
+        if (write == dirty.Length)
+        {
+            return dirty;
+        }
+
+        var result = new int[write];
+        Array.Copy(dirty, result, write);
+        return result;
+    }
+
+    private static int FindParentIndex(VirtualNode root, int targetIndex)
+    {
+        if (targetIndex <= 0)
+        {
+            return 0;
+        }
+
+        var cursor = 0;
+        return TryFindParentIndex(root, 0, targetIndex, ref cursor, out var parentIndex)
+            ? parentIndex
+            : 0;
+    }
+
+    private static bool TryFindParentIndex(VirtualNode node, int currentIndex, int targetIndex, ref int cursor, out int parentIndex)
+    {
+        var children = node.Children;
+        cursor = currentIndex + 1;
+        for (var i = 0; i < children.Length; i++)
+        {
+            var childIndex = cursor;
+            if (childIndex == targetIndex)
+            {
+                parentIndex = currentIndex;
+                return true;
+            }
+
+            if (TryFindParentIndex(children[i], childIndex, targetIndex, ref cursor, out parentIndex))
+            {
+                return true;
+            }
+        }
+
+        parentIndex = 0;
+        return false;
     }
 }

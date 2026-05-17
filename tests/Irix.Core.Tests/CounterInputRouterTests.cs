@@ -198,30 +198,49 @@ public sealed class CounterInputRouterTests
             ownershipState.DiagnosticEvents,
             diagnosticEvent =>
             {
-                var hover = Assert.IsType<InputOwnershipEvent.HoverChanged>(diagnosticEvent);
-                Assert.True(hover.PreviousTarget.IsNone);
-                Assert.Equal(new ActionId(1), hover.CurrentTarget);
+                Assert.Equal(InputOwnershipEventKind.HoverChanged, diagnosticEvent.Kind);
+                Assert.True(diagnosticEvent.PreviousTarget.IsNone);
+                Assert.Equal(new ActionId(1), diagnosticEvent.CurrentTarget);
             },
             diagnosticEvent =>
             {
-                var focus = Assert.IsType<InputOwnershipEvent.FocusChanged>(diagnosticEvent);
-                Assert.True(focus.PreviousTarget.IsNone);
-                Assert.Equal(new ActionId(1), focus.CurrentTarget);
+                Assert.Equal(InputOwnershipEventKind.FocusChanged, diagnosticEvent.Kind);
+                Assert.True(diagnosticEvent.PreviousTarget.IsNone);
+                Assert.Equal(new ActionId(1), diagnosticEvent.CurrentTarget);
             },
             diagnosticEvent =>
             {
-                var pressed = Assert.IsType<InputOwnershipEvent.PressedChanged>(diagnosticEvent);
-                Assert.True(pressed.PreviousPressedTarget.IsNone);
-                Assert.Equal(new ActionId(1), pressed.CurrentPressedTarget);
-                Assert.True(pressed.IsPointerPressed);
+                Assert.Equal(InputOwnershipEventKind.PressedChanged, diagnosticEvent.Kind);
+                Assert.True(diagnosticEvent.PreviousPressedTarget.IsNone);
+                Assert.Equal(new ActionId(1), diagnosticEvent.CurrentPressedTarget);
+                Assert.True(diagnosticEvent.IsPointerPressed);
             },
             diagnosticEvent =>
             {
-                var pressed = Assert.IsType<InputOwnershipEvent.PressedChanged>(diagnosticEvent);
-                Assert.Equal(new ActionId(1), pressed.PreviousPressedTarget);
-                Assert.True(pressed.CurrentPressedTarget.IsNone);
-                Assert.False(pressed.IsPointerPressed);
+                Assert.Equal(InputOwnershipEventKind.PressedChanged, diagnosticEvent.Kind);
+                Assert.Equal(new ActionId(1), diagnosticEvent.PreviousPressedTarget);
+                Assert.True(diagnosticEvent.CurrentPressedTarget.IsNone);
+                Assert.False(diagnosticEvent.IsPointerPressed);
             });
+    }
+
+    [Fact]
+    public void Ownership_diagnostic_events_are_bounded()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        for (var i = 0; i < 160; i++)
+        {
+            var x = i % 2 == 0 ? 32 : 500;
+            CounterInputRouter.TryMapInput(
+                new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: i + 1, X: x, Y: 140),
+                ownershipState,
+                HitIncrementAtButton,
+                out _);
+        }
+
+        Assert.Equal(128, ownershipState.DiagnosticEvents.Count);
+        Assert.All(ownershipState.DiagnosticEvents, diagnosticEvent => Assert.Equal(InputOwnershipEventKind.HoverChanged, diagnosticEvent.Kind));
     }
 
     [Fact]

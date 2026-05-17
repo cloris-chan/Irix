@@ -15,7 +15,8 @@ internal static class CounterInputRouter
         Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
         out CounterMessage message)
     {
-        return TryMapInput(inputEvent, new InputOwnershipState(), tryGetActionIdAtPhysicalPixel, out message);
+        var resolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
+        return TryMapInput(inputEvent, new InputOwnershipState(), resolver, out message);
     }
 
     /// <summary>
@@ -28,18 +29,33 @@ internal static class CounterInputRouter
         Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
         out CounterMessage message)
     {
+        var resolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
+        return TryMapInput(inputEvent, ownershipState, resolver, out message);
+    }
+
+    /// <summary>
+    /// Maps one input event using a value-type resolver. Runtime input paths use this overload
+    /// to avoid allocating a delegate/closure per native input event.
+    /// </summary>
+    public static bool TryMapInput<THitTestResolver>(
+        RawInputEvent inputEvent,
+        InputOwnershipState ownershipState,
+        THitTestResolver hitTestResolver,
+        out CounterMessage message)
+        where THitTestResolver : struct, IActionHitTestResolver
+    {
         switch (inputEvent.Kind)
         {
             case RawInputEventKind.PointerMoved:
-                ownershipState.UpdateHover(inputEvent, tryGetActionIdAtPhysicalPixel);
+                ownershipState.UpdateHover(inputEvent, ref hitTestResolver);
                 break;
             case RawInputEventKind.PointerPressed
                 when inputEvent.Button == PointerButton.Left:
-                ownershipState.PressPointer(inputEvent, tryGetActionIdAtPhysicalPixel);
+                ownershipState.PressPointer(inputEvent, ref hitTestResolver);
                 break;
             case RawInputEventKind.PointerReleased
                 when inputEvent.Button == PointerButton.Left:
-                var actionId = ownershipState.ReleasePointer(inputEvent, tryGetActionIdAtPhysicalPixel);
+                var actionId = ownershipState.ReleasePointer(inputEvent, ref hitTestResolver);
                 if (!actionId.IsNone)
                 {
                     message = MapActionId(actionId);
@@ -88,4 +104,5 @@ internal static class CounterInputRouter
             _ => throw new NotSupportedException($"Unsupported action id: {actionId.Value}")
         };
     }
+
 }

@@ -183,15 +183,15 @@ internal static class DiagnosticsFormatter
 
     internal static string FormatOwnershipEvent(InputOwnershipEvent diagnosticEvent)
     {
-        return diagnosticEvent switch
+        return diagnosticEvent.Kind switch
         {
-            InputOwnershipEvent.HoverChanged hover =>
-                $"HoverChanged previous={FormatTarget(hover.PreviousTarget)} current={FormatTarget(hover.CurrentTarget)}",
-            InputOwnershipEvent.FocusChanged focus =>
-                $"FocusChanged previous={FormatTarget(focus.PreviousTarget)} current={FormatTarget(focus.CurrentTarget)}",
-            InputOwnershipEvent.PressedChanged pressed =>
-                $"PressedChanged previousPressed={FormatTarget(pressed.PreviousPressedTarget)} currentPressed={FormatTarget(pressed.CurrentPressedTarget)} previousCapture={FormatTarget(pressed.PreviousCapturedTarget)} currentCapture={FormatTarget(pressed.CurrentCapturedTarget)} pointerPressed={pressed.IsPointerPressed}",
-            _ => diagnosticEvent.GetType().Name
+            InputOwnershipEventKind.HoverChanged =>
+                $"HoverChanged previous={FormatTarget(diagnosticEvent.PreviousTarget)} current={FormatTarget(diagnosticEvent.CurrentTarget)}",
+            InputOwnershipEventKind.FocusChanged =>
+                $"FocusChanged previous={FormatTarget(diagnosticEvent.PreviousTarget)} current={FormatTarget(diagnosticEvent.CurrentTarget)}",
+            InputOwnershipEventKind.PressedChanged =>
+                $"PressedChanged previousPressed={FormatTarget(diagnosticEvent.PreviousPressedTarget)} currentPressed={FormatTarget(diagnosticEvent.CurrentPressedTarget)} previousCapture={FormatTarget(diagnosticEvent.PreviousCapturedTarget)} currentCapture={FormatTarget(diagnosticEvent.CurrentCapturedTarget)} pointerPressed={diagnosticEvent.IsPointerPressed}",
+            _ => nameof(InputOwnershipEventKind.None)
         };
     }
 

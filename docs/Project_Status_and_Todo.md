@@ -34,6 +34,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
 | Ref struct boundary | Complete for Round 16. `ref struct` is limited to synchronous builders/readers/layout context; retained IR and batches stay ordinary storable types. |
 | Record struct boundary | Complete for Round 18. Framework/internal primitives, IR, render hot paths, platform types, and PoC backend/diagnostics do not use `record struct`. |
+| Profiler allocation pass | Complete for retained/input first pass. The 2026-05-17 VS profiler GCDump drove targeted cleanup in canonical retained apply, input hit-test routing, input ownership diagnostics, retained metadata projection, and text snapshot comparison. |
 | Docs | Trimmed to canonical docs only; obsolete prep/checkpoint docs deleted. |
 
 ---
@@ -104,6 +105,19 @@ No-record-struct boundary:
 - `Irix.Poc` backend, diagnostics snapshots, and rendering/window helpers follow the same no-record-struct rule.
 - The only exception is UI authoring/MVU state and message shape in `Irix.Poc`, such as `CounterModel` / `CounterMessage`, scroll/input/control state, and feedback state. That exception is for authoring ergonomics only and must not leak into framework or backend hot paths.
 - Framework/internal hot paths also avoid record `with` syntax; any rebuild is explicit constructor reconstruction.
+
+Profiler-driven retained/input allocation pass:
+
+- `RetainedTree.Apply` treats differ-created canonical-root batches as authoritative and no longer reconstructs an intermediate tree that is discarded. Dirty indices are still derived from patches: updates mark the node, adds mark the parent in the next tree, and removes mark the parent in the previous tree.
+- Runtime input routing uses a value-type hit-test resolver instead of allocating a `Func<int,int,ActionId>` delegate/closure on the native input path. Delegate overloads remain only for tests and diagnostic helpers.
+- Input ownership diagnostics are value events in a bounded 128-event buffer. The diagnostic stream is not a retained unbounded object log.
+- Text content equality uses internal `TryResolve` instead of `ResolveRequired` when diffing/classifying. Mismatched snapshots return `false` for comparison; actual draw recording still uses `ResolveRequired` and continues to fail hard on invalid text ownership.
+- Retained root metadata projection and hit-target metadata projection use stack spans/arrays for small dirty/key sets instead of short-lived `HashSet` / `List` objects on the partial-apply path.
+
+Profiler findings intentionally not folded into this pass:
+
+- `List<LayoutElement>`, `List<LayoutTreeNode>`, and dirty range scratch allocations remain the next layout-builder scratch arena / pooling target.
+- D3D12 text layout cache and overlay synchronization remain in the post-GA glyph atlas line; this pass does not implement glyph atlas or rewrite renderer ownership.
 
 ---
 

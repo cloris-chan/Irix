@@ -1,10 +1,18 @@
 namespace Irix.Rendering;
 
-internal sealed record RetainedRootMetadataPatch(
-    bool Succeeded,
-    RetainedPartialApplyFallbackReason FallbackReason,
-    VirtualNode Root)
+internal readonly struct RetainedRootMetadataPatch : IEquatable<RetainedRootMetadataPatch>
 {
+    private RetainedRootMetadataPatch(bool succeeded, RetainedPartialApplyFallbackReason fallbackReason, VirtualNode root)
+    {
+        Succeeded = succeeded;
+        FallbackReason = fallbackReason;
+        Root = root;
+    }
+
+    public bool Succeeded { get; }
+    public RetainedPartialApplyFallbackReason FallbackReason { get; }
+    public VirtualNode Root { get; }
+
     public static RetainedRootMetadataPatch CreateSucceeded(VirtualNode root)
     {
         return new RetainedRootMetadataPatch(true, RetainedPartialApplyFallbackReason.None, root);
@@ -14,6 +22,21 @@ internal sealed record RetainedRootMetadataPatch(
     {
         return new RetainedRootMetadataPatch(false, reason, default);
     }
+
+    public bool Equals(RetainedRootMetadataPatch other)
+    {
+        return Succeeded == other.Succeeded
+            && FallbackReason == other.FallbackReason
+            && Root.Equals(other.Root);
+    }
+
+    public override bool Equals(object? obj) => obj is RetainedRootMetadataPatch other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Succeeded, FallbackReason, Root);
+
+    public static bool operator ==(RetainedRootMetadataPatch left, RetainedRootMetadataPatch right) => left.Equals(right);
+
+    public static bool operator !=(RetainedRootMetadataPatch left, RetainedRootMetadataPatch right) => !left.Equals(right);
 }
 
 internal static class RetainedRootMetadataPatcher
@@ -28,7 +51,12 @@ internal static class RetainedRootMetadataPatcher
         retainedSnapshot ??= nextSnapshot;
         nextSnapshot ??= retainedSnapshot;
 
-        var dirtySet = new HashSet<int>();
+        Span<int> inlineDirty = stackalloc int[8];
+        var dirtyArray = dirtyClassifications.Count > inlineDirty.Length
+            ? new int[dirtyClassifications.Count]
+            : null;
+        var dirtySet = dirtyArray is null ? inlineDirty : dirtyArray.AsSpan();
+        var dirtyCount = 0;
         foreach (var classification in dirtyClassifications)
         {
             if (classification.Reason != LayoutRebuildReason.StyleOnly)
@@ -36,18 +64,21 @@ internal static class RetainedRootMetadataPatcher
                 return RetainedRootMetadataPatch.CreateFallback(RetainedPartialApplyFallbackReason.NotStyleOnly);
             }
 
-            dirtySet.Add(classification.DfsIndex);
+            if (!Contains(dirtySet[..dirtyCount], classification.DfsIndex))
+            {
+                dirtySet[dirtyCount++] = classification.DfsIndex;
+            }
         }
 
-        if (dirtySet.Count == 0)
+        if (dirtyCount == 0)
         {
             return RetainedRootMetadataPatch.CreateFallback(RetainedPartialApplyFallbackReason.HitTargetPatchFailed);
         }
 
         var dfsIndex = 0;
         var patchedDirtyCount = 0;
-        return TryProject(retainedRoot, nextRoot, dirtySet, ref dfsIndex, ref patchedDirtyCount, out var root, out var reason, retainedSnapshot, nextSnapshot)
-            && patchedDirtyCount == dirtySet.Count
+        return TryProject(retainedRoot, nextRoot, dirtySet[..dirtyCount], ref dfsIndex, ref patchedDirtyCount, out var root, out var reason, retainedSnapshot, nextSnapshot)
+            && patchedDirtyCount == dirtyCount
             ? RetainedRootMetadataPatch.CreateSucceeded(root)
             : RetainedRootMetadataPatch.CreateFallback(reason);
     }
@@ -55,7 +86,7 @@ internal static class RetainedRootMetadataPatcher
     private static bool TryProject(
         VirtualNode retainedNode,
         VirtualNode nextNode,
-        HashSet<int> dirtySet,
+        ReadOnlySpan<int> dirtySet,
         ref int dfsIndex,
         ref int patchedDirtyCount,
         out VirtualNode patchedNode,
@@ -64,7 +95,7 @@ internal static class RetainedRootMetadataPatcher
         TextBufferSnapshot? nextSnapshot)
     {
         var currentIndex = dfsIndex;
-        var isDirty = dirtySet.Contains(currentIndex);
+        var isDirty = Contains(dirtySet, currentIndex);
         patchedNode = default;
         reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
 
@@ -75,7 +106,7 @@ internal static class RetainedRootMetadataPatcher
             return false;
         }
 
-        if (!ContentEqualOrFallback(retainedNode.Content, nextNode.Content, retainedSnapshot, nextSnapshot))
+        if (!VirtualNodeDiffer.ContentEqual(retainedNode.Content, nextNode.Content, retainedSnapshot, nextSnapshot))
         {
             reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
             return false;
@@ -133,14 +164,22 @@ internal static class RetainedRootMetadataPatcher
         out RetainedPartialApplyFallbackReason reason)
     {
         reason = RetainedPartialApplyFallbackReason.None;
-        if (!TryGetChangedPropertyKeys(retainedProperties, nextProperties, out var changedKeys))
+        var keyCapacity = retainedProperties.Length + nextProperties.Length;
+        Span<VirtualPropertyKey> inlineKeys = stackalloc VirtualPropertyKey[8];
+        var keyArray = keyCapacity > inlineKeys.Length
+            ? new VirtualPropertyKey[keyCapacity]
+            : null;
+        var changedKeys = keyArray is null ? inlineKeys : keyArray.AsSpan();
+
+        if (!TryGetChangedPropertyKeys(retainedProperties, nextProperties, changedKeys, out var changedKeyCount))
         {
             reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
             return false;
         }
 
-        foreach (var key in changedKeys)
+        for (var i = 0; i < changedKeyCount; i++)
         {
+            var key = changedKeys[i];
             if (!PropertyChangeSetClassification.IsControlMetadataKey(key))
             {
                 reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
@@ -160,37 +199,44 @@ internal static class RetainedRootMetadataPatcher
     private static bool TryGetChangedPropertyKeys(
         ReadOnlySpan<VirtualNodeProperty> retainedProperties,
         ReadOnlySpan<VirtualNodeProperty> nextProperties,
-        out VirtualPropertyKey[] changedKeys)
+        scoped Span<VirtualPropertyKey> changedKeys,
+        out int changedKeyCount)
     {
-        changedKeys = [];
-        var keys = new HashSet<VirtualPropertyKey>();
+        changedKeyCount = 0;
         foreach (var property in retainedProperties)
         {
-            keys.Add(property.Key);
+            if (property.Key != default(VirtualPropertyKey) && !Contains(changedKeys[..changedKeyCount], property.Key))
+            {
+                changedKeys[changedKeyCount++] = property.Key;
+            }
         }
 
         foreach (var property in nextProperties)
         {
-            keys.Add(property.Key);
+            if (property.Key != default(VirtualPropertyKey) && !Contains(changedKeys[..changedKeyCount], property.Key))
+            {
+                changedKeys[changedKeyCount++] = property.Key;
+            }
         }
 
-        var changed = new List<VirtualPropertyKey>();
-        foreach (var key in keys)
+        var write = 0;
+        for (var i = 0; i < changedKeyCount; i++)
         {
-            if (key == default(VirtualPropertyKey)) continue;
+            var key = changedKeys[i];
             if (!TryGetUniqueProperty(retainedProperties, key, out var retainedFound, out var retainedProperty)
                 || !TryGetUniqueProperty(nextProperties, key, out var nextFound, out var nextProperty))
             {
+                changedKeyCount = 0;
                 return false;
             }
 
             if (retainedFound != nextFound || retainedProperty.Value != nextProperty.Value)
             {
-                changed.Add(key);
+                changedKeys[write++] = key;
             }
         }
 
-        changedKeys = [.. changed];
+        changedKeyCount = write;
         return true;
     }
 
@@ -263,15 +309,29 @@ internal static class RetainedRootMetadataPatcher
         || !PropertiesEqual(left.Properties, right.Properties)
         || left.Children.Length != right.Children.Length;
 
-    private static bool ContentEqualOrFallback(NodeContent retainedContent, NodeContent nextContent, TextBufferSnapshot? retainedSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static bool Contains(ReadOnlySpan<int> values, int value)
     {
-        try
+        for (var i = 0; i < values.Length; i++)
         {
-            return VirtualNodeDiffer.ContentEqual(retainedContent, nextContent, retainedSnapshot, nextSnapshot);
+            if (values[i] == value)
+            {
+                return true;
+            }
         }
-        catch (InvalidOperationException)
+
+        return false;
+    }
+
+    private static bool Contains(ReadOnlySpan<VirtualPropertyKey> values, VirtualPropertyKey value)
+    {
+        for (var i = 0; i < values.Length; i++)
         {
-            return false;
+            if (values[i] == value)
+            {
+                return true;
+            }
         }
+
+        return false;
     }
 }
