@@ -78,30 +78,21 @@ public readonly struct VirtualPropertyKey : IEquatable<VirtualPropertyKey>
     public static readonly VirtualPropertyKey IsFocused = new(PropertyDomain.RuntimeState, 3);
 }
 
-internal readonly struct StylePropertyMetadata : IEquatable<StylePropertyMetadata>
+internal readonly struct StylePropertyMetadata(
+    VirtualPropertyKey key,
+    PropertyValueKind valueKind,
+    StyleEffect effects,
+    AnimationChannel animationChannel,
+    StylePropertyScope scope,
+    VirtualNodeKindFlags supportedNodeKinds) : IEquatable<StylePropertyMetadata>
 {
-    public StylePropertyMetadata(
-        VirtualPropertyKey key,
-        PropertyValueKind valueKind,
-        StyleEffect effects,
-        AnimationChannel animationChannel,
-        StylePropertyScope scope,
-        VirtualNodeKindFlags supportedNodeKinds)
-    {
-        Key = key;
-        ValueKind = valueKind;
-        Effects = effects;
-        AnimationChannel = animationChannel;
-        Scope = scope;
-        SupportedNodeKinds = supportedNodeKinds;
-    }
 
-    public VirtualPropertyKey Key { get; }
-    public PropertyValueKind ValueKind { get; }
-    public StyleEffect Effects { get; }
-    public AnimationChannel AnimationChannel { get; }
-    public StylePropertyScope Scope { get; }
-    public VirtualNodeKindFlags SupportedNodeKinds { get; }
+    public VirtualPropertyKey Key { get; } = key;
+    public PropertyValueKind ValueKind { get; } = valueKind;
+    public StyleEffect Effects { get; } = effects;
+    public AnimationChannel AnimationChannel { get; } = animationChannel;
+    public StylePropertyScope Scope { get; } = scope;
+    public VirtualNodeKindFlags SupportedNodeKinds { get; } = supportedNodeKinds;
 
     public bool Equals(StylePropertyMetadata other) =>
         Key == other.Key

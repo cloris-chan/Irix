@@ -214,16 +214,10 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key -> NodeKey) ─
 
-public readonly struct VirtualNodeTree
+public readonly struct VirtualNodeTree(VirtualNode root, TextBufferSnapshot textSnapshot = default)
 {
-    public VirtualNodeTree(VirtualNode root, TextBufferSnapshot textSnapshot = default)
-    {
-        Root = root;
-        TextSnapshot = textSnapshot;
-    }
-
-    public VirtualNode Root { get; }
-    public TextBufferSnapshot TextSnapshot { get; }
+    public VirtualNode Root { get; } = root;
+    public TextBufferSnapshot TextSnapshot { get; } = textSnapshot;
 
 }
 
@@ -535,20 +529,12 @@ public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 
 // ── VirtualNodePatch ─────────────────────────────────────────────
 
-public readonly struct VirtualNodePatch
+public readonly struct VirtualNodePatch(VirtualNodePatchOperation operation, int nodeIndex, VirtualNode node, int screenId = 0)
 {
-    public VirtualNodePatch(VirtualNodePatchOperation operation, int nodeIndex, VirtualNode node, int screenId = 0)
-    {
-        Operation = operation;
-        NodeIndex = nodeIndex;
-        Node = node;
-        ScreenId = screenId;
-    }
-
-    public VirtualNodePatchOperation Operation { get; }
-    public int NodeIndex { get; }
-    public VirtualNode Node { get; }
-    public int ScreenId { get; }
+    public VirtualNodePatchOperation Operation { get; } = operation;
+    public int NodeIndex { get; } = nodeIndex;
+    public VirtualNode Node { get; } = node;
+    public int ScreenId { get; } = screenId;
 
     public VirtualNodePatch WithScreenId(int screenId) => new(Operation, NodeIndex, Node, screenId);
 
