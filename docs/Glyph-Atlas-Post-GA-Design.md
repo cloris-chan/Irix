@@ -33,6 +33,57 @@ Phase 1 closeout: local evidence has been captured for default overlay regressio
 
 P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list. Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer.
 
+## Shader Bytecode Provenance
+
+The embedded DXBC blobs in `D3D12Renderer2D.cs` and `D3D12GlyphAtlasTextRenderer.cs` were generated with Windows SDK `fxc.exe` from the HLSL below. They are intentionally embedded to remove runtime `D3DCompile` / `d3dcompiler_47.dll` from the default renderer path. If the shaders grow beyond this small fixed surface, replace inline bytecode with a build-time shader asset pipeline rather than reintroducing runtime compilation.
+
+Rectangle pass HLSL:
+
+```hlsl
+struct VS_IN { float2 pos : POSITION; float4 col : COLOR; };
+struct VS_OUT { float4 pos : SV_POSITION; float4 col : COLOR; };
+VS_OUT VSMain(VS_IN i) { VS_OUT o; o.pos = float4(i.pos, 0, 1); o.col = i.col; return o; }
+struct PS_IN { float4 pos : SV_POSITION; float4 col : COLOR; };
+float4 PSMain(PS_IN i) : SV_TARGET { return i.col; }
+```
+
+Glyph-atlas text pass HLSL:
+
+```hlsl
+struct VS_IN { float2 pos : POSITION; float2 uv : TEXCOORD; float4 col : COLOR; };
+struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD; float4 col : COLOR; };
+VS_OUT VSMain(VS_IN i)
+{
+    VS_OUT o;
+    o.pos = float4(i.pos, 0.0f, 1.0f);
+    o.uv = i.uv;
+    o.col = i.col;
+    return o;
+}
+
+Texture2D<float> Atlas : register(t0);
+SamplerState AtlasSampler : register(s0);
+struct PS_IN { float4 pos : SV_POSITION; float2 uv : TEXCOORD; float4 col : COLOR; };
+float4 PSMain(PS_IN i) : SV_TARGET
+{
+    float coverage = Atlas.Sample(AtlasSampler, i.uv);
+    return float4(i.col.rgb, i.col.a * coverage);
+}
+```
+
+Update flow:
+
+```powershell
+$fxc = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe'
+& $fxc /nologo /T vs_5_0 /E VSMain /Fo D3D12Renderer2D.vs.cso D3D12Renderer2D.hlsl
+& $fxc /nologo /T ps_5_0 /E PSMain /Fo D3D12Renderer2D.ps.cso D3D12Renderer2D.hlsl
+& $fxc /nologo /T vs_5_0 /E VSMain /Fo GlyphAtlasText.vs.cso GlyphAtlasText.hlsl
+& $fxc /nologo /T ps_5_0 /E PSMain /Fo GlyphAtlasText.ps.cso GlyphAtlasText.hlsl
+[Convert]::ToBase64String([IO.File]::ReadAllBytes('D3D12Renderer2D.vs.cso'))
+```
+
+After updating embedded blobs, run the shader bytecode decode tests plus D3D12 smoke and publish. The normal test lane contains bytecode decode guards so malformed base64 does not rely on manual smoke to catch packaging errors.
+
 Known limitations:
 
 - Shader bytecode is currently embedded inline. A future build-time shader asset pipeline can replace the inline packaging if shader source grows, but the runtime compiler dependency is removed.
@@ -40,6 +91,7 @@ Known limitations:
 - Atlas eviction is not implemented; AtlasFull fallback is the safety behavior.
 - Complex shaping, fallback font face identity, color glyphs, wrapping, and mixed atlas/overlay composition are deferred.
 - Warm glyph-atlas scroll allocation was previously about `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution. Optimization should wait for the attributed evidence rather than guessing.
+- Warm allocation follow-up should start with tree construction and translator attribution. Current local evidence attributes the warm scroll sample mostly to tree construction and translation rather than renderer submit.
 
 ## Non-Goals
 

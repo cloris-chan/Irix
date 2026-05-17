@@ -58,18 +58,23 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         };
         ID3DBlob* sig = null;
         ID3DBlob* err = null;
-        PInvoke.D3D12SerializeRootSignature(desc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err);
-        if (sig == null)
+        try
         {
-            throw new InvalidOperationException("D3D12SerializeRootSignature returned a null signature blob.");
+            PInvoke.D3D12SerializeRootSignature(desc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err);
+            RequirePointer(sig, "D3D12Renderer2D.D3D12SerializeRootSignature returned a null signature blob.");
+        }
+        catch (COMException ex)
+        {
+            throw WrapD3D12Exception("D3D12Renderer2D.D3D12SerializeRootSignature", ex);
         }
 
         try
         {
-            _device->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), typeof(ID3D12RootSignature).GUID, out var obj);
+            void* obj = null;
+            _device->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), typeof(ID3D12RootSignature).GUID, out obj);
             if (obj == null)
             {
-                throw new InvalidOperationException("CreateRootSignature returned a null root signature.");
+                throw new InvalidOperationException("D3D12Renderer2D.CreateRootSignature returned a null root signature.");
             }
 
             _rootSig = (ID3D12RootSignature*)obj;
@@ -117,10 +122,19 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
                 desc.RTVFormats._0 = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
                 desc.SampleDesc.Count = 1;
 
-                _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out var psoObj);
+                void* psoObj = null;
+                try
+                {
+                    _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out psoObj);
+                }
+                catch (COMException ex)
+                {
+                    throw WrapD3D12Exception("D3D12Renderer2D.CreateGraphicsPipelineState", ex);
+                }
+
                 if (psoObj == null)
                 {
-                    throw new InvalidOperationException("CreateGraphicsPipelineState returned a null PSO.");
+                    throw new InvalidOperationException("D3D12Renderer2D.CreateGraphicsPipelineState returned a null PSO.");
                 }
 
                 _pso = (ID3D12PipelineState*)psoObj;
@@ -141,17 +155,27 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR
         };
-        _device->CreateCommittedResource(
-            heapProps,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            resDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            null,
-            typeof(ID3D12Resource).GUID,
-            out var resObj);
+
+        void* resObj = null;
+        try
+        {
+            _device->CreateCommittedResource(
+                heapProps,
+                D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+                resDesc,
+                D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+                null,
+                typeof(ID3D12Resource).GUID,
+                out resObj);
+        }
+        catch (COMException ex)
+        {
+            throw WrapD3D12Exception("D3D12Renderer2D.CreateCommittedResource(vertex buffer)", ex);
+        }
+
         if (resObj == null)
         {
-            throw new InvalidOperationException("Create D3D12Renderer2D vertex buffer returned a null resource.");
+            throw new InvalidOperationException("D3D12Renderer2D.CreateCommittedResource(vertex buffer) returned a null resource.");
         }
 
         _vbuf = (ID3D12Resource*)resObj;
@@ -168,11 +192,19 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
     {
         if (rects.Length == 0) return 0;
 
-        void* mapped;
-        _vbuf->Map(0, null, &mapped);
+        void* mapped = null;
+        try
+        {
+            _vbuf->Map(0, null, &mapped);
+        }
+        catch (COMException ex)
+        {
+            throw WrapD3D12Exception("D3D12Renderer2D.Map(vertex buffer)", ex);
+        }
+
         if (mapped == null)
         {
-            throw new InvalidOperationException("Map D3D12Renderer2D vertex buffer returned null.");
+            throw new InvalidOperationException("D3D12Renderer2D.Map(vertex buffer) returned null.");
         }
 
         var verts = new Span<Vertex>(mapped, MaxVerts);
@@ -243,6 +275,19 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         if (_pso != null) _pso->Release();
         if (_rootSig != null) _rootSig->Release();
         _disposed = true;
+    }
+
+    private static COMException WrapD3D12Exception(string context, COMException ex)
+    {
+        return new COMException($"{context} failed: 0x{unchecked((uint)ex.ErrorCode):X8}", ex.ErrorCode);
+    }
+
+    private static void RequirePointer(void* pointer, string message)
+    {
+        if (pointer == null)
+        {
+            throw new InvalidOperationException(message);
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
