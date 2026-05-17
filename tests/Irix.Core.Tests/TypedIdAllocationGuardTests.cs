@@ -655,6 +655,8 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("RentLayoutTreeNodeList", layoutBuilderSource);
         Assert.DoesNotContain("RentDirtyIndexList", layoutBuilderSource);
         Assert.DoesNotContain("LayoutTreeNode[] Children", layoutBuilderSource);
+        Assert.DoesNotContain("Children[]", layoutBuilderSource);
+        Assert.DoesNotContain("return [new LayoutTreeNode", layoutBuilderSource);
         Assert.DoesNotContain("children.ToArray()", layoutBuilderSource);
         Assert.Contains("subtreeStart", layoutBuilderSource);
         Assert.Contains("subtreeCount", layoutBuilderSource);

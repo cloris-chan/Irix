@@ -2069,6 +2069,20 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void LayoutTree_dirty_empty_container_does_not_emit_zero_count_range()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.ScrollContainer(new NodeKey(2)),
+            VirtualNodeBuilder.Text(_arena, "after", new NodeKey(3)));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var result = builder.BuildLayoutTree(root, viewport, [1]);
+
+        Assert.Empty(result.DirtyElementRanges);
+    }
+
+    [Fact]
     public void ScrollContainer_negative_scrollY_clamped_to_zero()
     {
         var builder = new LayoutTreeBuilder();
@@ -2173,6 +2187,64 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(1, diag.VisibleElementCount); // only item 0 intersects the viewport
         Assert.Equal(4, diag.ClippedElementCount); // items 1-4 outside clip
         Assert.Equal(0, diag.ScrollY); // no scroll, content extends beyond clip
+    }
+
+    [Fact]
+    public void Nested_scroll_offsets_child_elements_once_per_scroll_container()
+    {
+        var builder = new LayoutTreeBuilder();
+        var nested = VirtualNodeFactory.ScrollContainer(
+            new NodeKey(2),
+            [VirtualNodeProperty.Height(50), VirtualNodeProperty.ScrollY(20)],
+            [
+                VirtualNodeBuilder.Text(_arena, "first", new NodeKey(3)),
+                VirtualNodeBuilder.Text(_arena, "second", new NodeKey(4)),
+                VirtualNodeBuilder.Text(_arena, "third", new NodeKey(5))
+            ]);
+        var root = VirtualNodeFactory.ScrollContainer(
+            new NodeKey(1),
+            [VirtualNodeProperty.Height(40), VirtualNodeProperty.ScrollY(10)],
+            [nested]);
+        var viewport = new PixelRectangle(0, 0, 960, 200);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Equal(3, result.Elements.Count);
+        Assert.Equal(-14, result.Elements[0].Bounds.Y);
+        Assert.Equal(30, result.Elements[1].Bounds.Y);
+        Assert.Equal(74, result.Elements[2].Bounds.Y);
+        Assert.Equal(2, result.ScrollDiagnostics.Count);
+        Assert.Equal(20, result.ScrollDiagnostics[0].ScrollY);
+        Assert.Equal(10, result.ScrollDiagnostics[1].ScrollY);
+    }
+
+    [Fact]
+    public void Nested_scroll_diagnostics_do_not_count_subtree_elements_more_than_once()
+    {
+        var builder = new LayoutTreeBuilder();
+        var nested = VirtualNodeFactory.ScrollContainer(
+            new NodeKey(2),
+            [VirtualNodeProperty.Height(50)],
+            [
+                VirtualNodeBuilder.Text(_arena, "first", new NodeKey(3)),
+                VirtualNodeBuilder.Text(_arena, "second", new NodeKey(4)),
+                VirtualNodeBuilder.Text(_arena, "third", new NodeKey(5))
+            ]);
+        var root = VirtualNodeFactory.ScrollContainer(
+            new NodeKey(1),
+            [VirtualNodeProperty.Height(140)],
+            [nested]);
+        var viewport = new PixelRectangle(0, 0, 960, 200);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Equal(2, result.ScrollDiagnostics.Count);
+        var outer = result.ScrollDiagnostics.Single(diag => diag.DfsIndex == 0);
+        var inner = result.ScrollDiagnostics.Single(diag => diag.DfsIndex == 1);
+        Assert.Equal(3, outer.VisibleElementCount);
+        Assert.Equal(0, outer.ClippedElementCount);
+        Assert.Equal(2, inner.VisibleElementCount);
+        Assert.Equal(1, inner.ClippedElementCount);
     }
 
     [Fact]

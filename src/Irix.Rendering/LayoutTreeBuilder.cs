@@ -211,25 +211,22 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
             if (scrollY > 0)
             {
-                OffsetElementY(_treeNodes.Written[subtreeStart..(subtreeStart + subtreeCount)], -scrollY);
+                OffsetElementY(elementStart, elementCount, -scrollY);
             }
 
             var visibleCount = 0;
             var clippedCount = 0;
-            foreach (var child in _treeNodes.Written[subtreeStart..(subtreeStart + subtreeCount)])
+            for (var i = elementStart; i < elementStart + elementCount; i++)
             {
-                for (var i = child.ElementStart; i < child.ElementStart + child.ElementCount; i++)
+                var el = _elements[i];
+                if (el.Bounds.Y + el.Bounds.Height <= containerClip.Y
+                    || el.Bounds.Y >= containerClip.Y + containerClip.Height)
                 {
-                    var el = _elements[i];
-                    if (el.Bounds.Y + el.Bounds.Height <= containerClip.Y
-                        || el.Bounds.Y >= containerClip.Y + containerClip.Height)
-                    {
-                        clippedCount++;
-                    }
-                    else
-                    {
-                        visibleCount++;
-                    }
+                    clippedCount++;
+                }
+                else
+                {
+                    visibleCount++;
                 }
             }
 
@@ -320,26 +317,23 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
         }
 
-        private void OffsetElementY(ReadOnlySpan<LayoutTreeNode> nodes, int offsetY)
+        private void OffsetElementY(int elementStart, int elementCount, int offsetY)
         {
-            if (offsetY == 0)
+            if (offsetY == 0 || elementCount <= 0)
             {
                 return;
             }
 
-            foreach (var node in nodes)
+            for (var i = elementStart; i < elementStart + elementCount; i++)
             {
-                for (var i = node.ElementStart; i < node.ElementStart + node.ElementCount; i++)
-                {
-                    var el = _elements[i];
-                    _elements[i] = new LayoutElement(
-                        el.Kind,
-                        new PixelRectangle(el.Bounds.X, el.Bounds.Y + offsetY, el.Bounds.Width, el.Bounds.Height),
-                        el.ClipBounds,
-                        el.Text,
-                        el.ActionId,
-                        el.ButtonState);
-                }
+                var el = _elements[i];
+                _elements[i] = new LayoutElement(
+                    el.Kind,
+                    new PixelRectangle(el.Bounds.X, el.Bounds.Y + offsetY, el.Bounds.Width, el.Bounds.Height),
+                    el.ClipBounds,
+                    el.Text,
+                    el.ActionId,
+                    el.ButtonState);
             }
         }
     }
@@ -387,7 +381,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     {
         foreach (var node in treeNodes)
         {
-            if (AdvanceDirtyCursor(sortedDirtyIndices, ref dirtyCursor, node.DfsIndex))
+            if (AdvanceDirtyCursor(sortedDirtyIndices, ref dirtyCursor, node.DfsIndex) && node.ElementCount > 0)
             {
                 ranges.Add((node.ElementStart, node.ElementCount));
             }
