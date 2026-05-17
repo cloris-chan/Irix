@@ -37,7 +37,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Design only for issue #2 | Post-GA; design captured in `Glyph-Atlas-Post-GA-Design.md`; implementation is not part of current GA/MVP |
+| POST-017 | D3D12-only glyph atlas text renderer | Opt-in prototype foundation | Post-GA; `Overlay` remains default; glyph atlas supports narrow ASCII/NoWrap runs with overlay fallback and local evidence |
 | POST-011 | Resource cache / stable global handles | Not started | D3D12-specific; can align with glyph atlas/resource cache work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -84,7 +84,7 @@ D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
 
 Phase 1 foundation keeps the current overlay path as the default runtime behavior and adds only an internal composition seam. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data; D3D11On12/D2D overlay remains the correctness fallback until the D3D12 atlas pass is complete. This phase does not change public API or `IDrawingBackend.Execute`.
 
-The first atlas execution path is opt-in with `--text-composition glyph-atlas`. It records a D3D12 glyph pass for basic single-line ASCII runs and falls back to the overlay renderer for unsupported text. Full shaping, wrapping, color glyphs, fallback fonts, clipped text runs, eviction, and production enablement remain follow-up work.
+The first atlas execution path is opt-in with `--text-composition glyph-atlas`. It records a D3D12 glyph pass for basic single-line ASCII / `NoWrap` runs, uses an `R8_UNORM` atlas, supports leading/center/trailing alignment and per-run scissor for accepted runs, and falls back to the overlay renderer for unsupported text or atlas initialization/upload failure. Full shaping, wrapping, color glyphs, fallback font identity, eviction, mixed per-run atlas/overlay fallback, and production enablement remain follow-up work.
 
 | Work item | Scope | Acceptance criteria |
 |-----------|-------|---------------------|
@@ -124,7 +124,7 @@ Non-goals:
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
-| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | Planned |
+| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Opt-in prototype |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
 
 ---

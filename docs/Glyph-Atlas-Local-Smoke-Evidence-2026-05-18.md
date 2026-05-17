@@ -27,9 +27,10 @@ dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contain
 Composition/sync smoke:
 
 ```powershell
+dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 60 1
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --text-composition overlay
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --text-composition glyph-atlas
-dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 5 1 --text-composition glyph-atlas --diagnose-sync-non-ascii
+dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --text-composition glyph-atlas --diagnose-sync-non-ascii
 ```
 
 Resize/scale/cache smoke:
@@ -63,21 +64,23 @@ Validation:
 
 - `dotnet restore`: passed
 - `dotnet build --no-restore -c Release`: passed
-- normal tests: `594` passed
+- normal tests: `603` passed
 - D3D12 tests: `6` passed
 - performance tests: `6` passed
 - self-contained publish: passed
 
 Sync comparison:
 
+- Default overlay `60 x 1` without `--text-composition`: `Text composition mode: Overlay`, `frameSerial=60`, `presentSerial=60`, `syncWaits=60`; no device lost.
 - Overlay `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; avg sync wait range `1.991ms..2.346ms`; no device lost.
 - Glyph atlas `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=0`; `cachedGlyphs=29`, `drawnGlyphs=41070`, `uploads=45568 bytes`, `misses=29`, `fallbacks=0`, all fallback reasons `0`, `initFailurePhase=None`, `rasterScratch=1088 bytes/8 resizes`.
-- Glyph atlas non-ASCII fallback `5 x 1`: `frameSerial=5`, `presentSerial=5`, `syncWaits=5`; `drawnGlyphs=0`, `uploads=0 bytes`, `fallbacks=5`, `unsupportedRuns=5`, `NonAscii=5`, `initFailurePhase=None`; no device lost.
+- Glyph atlas non-ASCII fallback `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; `drawnGlyphs=0`, `uploads=0 bytes`, `fallbacks=900`, `unsupportedRuns=900`, `NonAscii=900`, `initFailurePhase=None`; no device lost.
 - Final short glyph atlas smoke `30 x 1`: `frameSerial=30`, `presentSerial=30`, `syncWaits=0`; `cachedGlyphs=29`, `drawnGlyphs=1340`, `uploads=45568 bytes`, `fallbacks=0`, all fallback reasons `0`, `initFailurePhase=None`, `rasterScratch=1088 bytes/8 resizes`.
 
 Default UI smoke:
 
 - Published `Irix.Poc.exe --text-composition glyph-atlas` stayed running for 5 seconds and printed `Text composition mode: GlyphAtlas`, `Display scale: 1.5x1.5`; the process was stopped manually after the smoke window.
+- Published `Irix.Poc.exe` with no `--text-composition` stayed running for 5 seconds and printed `Text composition mode: Overlay`, `Display scale: 1.5x1.5`; the process was stopped manually after the smoke window.
 
 Resize smoke:
 
@@ -92,6 +95,11 @@ Scale partition smoke:
 | `200` | `15 / 6400 bytes / 15` | `18 / 6400 bytes / 3` | `36 / 9216 bytes / 18` | `0` |
 
 The upload sizes and scratch sizes differ by diagnostic scale, which gives evidence that the atlas key includes resolved physical font size rather than stretching a 100% raster at 150% or 200%.
+
+Opt-in allocation baseline:
+
+- Warm scroll scenario after the atlas is populated reports no D2D format/layout cache activity and no fallback. Per-frame allocation was `6247 bytes` at 100%, `6246 bytes` at 150%, and `6246 bytes` at 200%.
+- Static first-use scenarios still include glyph misses and startup/window/resource allocations. They are not the warm-frame baseline.
 
 Atlas full stress:
 

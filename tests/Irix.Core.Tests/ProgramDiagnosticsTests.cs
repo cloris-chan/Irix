@@ -28,24 +28,108 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Glyph_atlas_renderer_uses_reusable_frame_buffers_and_reports_fallback_reasons()
+    public void Glyph_atlas_fallback_classifier_accepts_ascii_nowrap_and_rejects_known_unsupported_runs()
     {
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs"));
-        var buildFrameBody = source[source.IndexOf("    private GlyphFrame BuildFrame(", StringComparison.Ordinal)..source.IndexOf("    private static GlyphAtlasFallbackReason GetUnsupportedReason(", StringComparison.Ordinal)];
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 123".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 測試".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Line\nBreak".AsSpan(), TextStyle.Default));
 
-        Assert.DoesNotContain("new Vertex[MaxGlyphVertices]", buildFrameBody);
-        Assert.Contains("private readonly Vertex[] _vertices", source);
-        Assert.Contains("GlyphAtlasFallbackReasonCounts", source);
-        Assert.Contains("NonAscii", source);
-        Assert.Contains("AtlasFull", source);
-        Assert.Contains("GlyphAtlasInitializationPhase.RootSignature", source);
-        Assert.Contains("GlyphAtlasInitializationPhase.ShaderCompile", source);
-        Assert.Contains("GlyphAtlasInitializationPhase.PSO", source);
-        Assert.Contains("GlyphAtlasInitializationPhase.AtlasTexture", source);
-        Assert.Contains("GlyphAtlasInitializationPhase.UploadBuffer", source);
-        Assert.Contains("GlyphAtlasInitializationPhase.VertexBuffer", source);
-        Assert.Contains("RentClearTypeScratch", source);
-        Assert.Contains("RentGrayscaleScratch", source);
+        var wrappingStyle = new TextStyle(
+            TextStyle.Default.FontFamily,
+            TextStyle.Default.FontSize,
+            TextStyle.Default.FontWeight,
+            TextStyle.Default.FontStyle,
+            TextStyle.Default.FontStretch,
+            TextStyle.Default.HorizontalAlignment,
+            TextStyle.Default.VerticalAlignment,
+            TextWrapping.Wrap);
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Wrapping,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 123".AsSpan(), wrappingStyle));
+    }
+
+    [Theory]
+    [InlineData(TextHorizontalAlignment.Leading, 10, 100, 40, 10)]
+    [InlineData(TextHorizontalAlignment.Center, 10, 100, 40, 40)]
+    [InlineData(TextHorizontalAlignment.Trailing, 10, 100, 40, 70)]
+    [InlineData(TextHorizontalAlignment.Center, 10, 30, 40, 10)]
+    [InlineData(TextHorizontalAlignment.Trailing, 10, 30, 40, 10)]
+    public void Glyph_atlas_alignment_pen_uses_resolved_line_width(
+        TextHorizontalAlignment alignment,
+        float runX,
+        float runWidth,
+        float lineWidth,
+        float expectedPenX)
+    {
+        Assert.Equal(
+            expectedPenX,
+            GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(runX, runWidth, alignment, lineWidth));
+    }
+
+    [Fact]
+    public void Glyph_atlas_dirty_rect_merges_new_glyph_bounds()
+    {
+        var first = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
+            hasDirtyRect: false,
+            currentLeft: 1024,
+            currentTop: 1024,
+            currentRight: 0,
+            currentBottom: 0,
+            x: 10,
+            y: 20,
+            width: 30,
+            height: 40);
+        Assert.Equal(new GlyphAtlasDirtyRect(true, 10, 20, 40, 60), first);
+
+        var merged = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
+            first.HasDirtyRect,
+            first.Left,
+            first.Top,
+            first.Right,
+            first.Bottom,
+            x: 5,
+            y: 35,
+            width: 12,
+            height: 8);
+        Assert.Equal(new GlyphAtlasDirtyRect(true, 5, 20, 40, 60), merged);
+
+        var ignored = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
+            merged.HasDirtyRect,
+            merged.Left,
+            merged.Top,
+            merged.Right,
+            merged.Bottom,
+            x: 1,
+            y: 1,
+            width: 0,
+            height: 10);
+        Assert.Equal(merged, ignored);
+    }
+
+    [Fact]
+    public void Glyph_atlas_initialization_wrapper_preserves_phase_and_existing_initialization_exception()
+    {
+        var inner = new InvalidOperationException("compile failed");
+        var wrapped = GlyphAtlasTextCompositionHelpers.WrapInitializationException(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile,
+            inner);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile, wrapped.Phase);
+        Assert.Same(inner, wrapped.InnerException);
+
+        var existing = new D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationException(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.PSO,
+            new InvalidOperationException("pso"));
+        Assert.Same(
+            existing,
+            GlyphAtlasTextCompositionHelpers.WrapInitializationException(
+                D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.RootSignature,
+                existing));
     }
 
     [Fact]
@@ -74,6 +158,30 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("NonAscii=1", summary);
         Assert.Contains("initFailurePhase=ShaderCompile", summary);
         Assert.Contains("rasterScratch=768 bytes/2 resizes", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_diagnostics_summary_reports_initialization_failure_phase()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed)
+            .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.UploadBuffer);
+
+        var summary = diagnostics.FormatSummary();
+
+        Assert.Contains("InitializationFailed=1", summary);
+        Assert.Contains("initFailurePhase=UploadBuffer", summary);
     }
 
     [Fact]

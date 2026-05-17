@@ -176,9 +176,9 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public int Width => Volatile.Read(ref _width);
     public int Height => Volatile.Read(ref _height);
 
-    public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false) || (_glyphAtlasTextRenderer?.IsDeviceRemoved ?? false);
+    public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false);
 
-    public string? DeviceErrorReason => _deviceErrorReason ?? _textRenderer?.DeviceErrorReason ?? _glyphAtlasTextRenderer?.DeviceErrorReason;
+    public string? DeviceErrorReason => _deviceErrorReason ?? _textRenderer?.DeviceErrorReason;
 
     public event Action? DeviceLost;
 
@@ -517,11 +517,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
 
         var recorded = glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height);
-        if (!recorded && glyphAtlasTextRenderer.IsDeviceRemoved)
-        {
-            MarkDeviceRemoved(glyphAtlasTextRenderer.DeviceErrorReason ?? "Glyph atlas text pass failed");
-        }
-
         return recorded;
     }
 

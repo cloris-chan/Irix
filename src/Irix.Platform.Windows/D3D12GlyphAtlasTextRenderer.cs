@@ -50,7 +50,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private int _dirtyRight;
     private int _dirtyBottom;
     private bool _disposed;
-    private bool _deviceRemoved;
+    private bool _disabled;
     private string? _deviceErrorReason;
     private GlyphAtlasTextRendererDiagnostics _diagnostics;
 
@@ -87,7 +87,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    public bool IsDeviceRemoved => _deviceRemoved;
+    public bool IsDisabled => _disabled;
     public string? DeviceErrorReason => _deviceErrorReason;
 
     public GlyphAtlasTextRendererDiagnostics GetDiagnostics()
@@ -121,7 +121,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int viewportWidth,
         int viewportHeight)
     {
-        if (_deviceRemoved || textRuns.Length == 0)
+        if (_disabled || textRuns.Length == 0)
         {
             return false;
         }
@@ -153,12 +153,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
         catch (COMException ex)
         {
-            MarkDeviceRemoved($"Glyph atlas COMException: 0x{ex.ErrorCode:X8}");
+            DisableGlyphAtlasFallback(
+                GlyphAtlasFallbackReason.InitializationFailed,
+                GlyphAtlasInitializationPhase.UploadBuffer,
+                $"Glyph atlas COMException during record: 0x{ex.ErrorCode:X8}");
             return false;
         }
         catch (InvalidOperationException ex)
         {
-            MarkDeviceRemoved($"Glyph atlas invalid operation: {ex.Message}");
+            DisableGlyphAtlasFallback(
+                GlyphAtlasFallbackReason.InitializationFailed,
+                GlyphAtlasInitializationPhase.UploadBuffer,
+                $"Glyph atlas invalid operation during record: {ex.Message}");
             return false;
         }
     }
@@ -183,7 +189,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             var style = (textRun.ResolvedStyle != default ? textRun.ResolvedStyle : runResolver.ResolveTextStyle(textRun.Style)).Normalize();
-            unsupportedReason = GetUnsupportedReason(text, style);
+            unsupportedReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
                 break;
@@ -214,7 +220,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 break;
             }
 
-            var penX = ComputeAlignedPenX(textRun, style, lineWidth);
+            var penX = GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(textRun.X, textRun.Width, style.HorizontalAlignment, lineWidth);
             var maxX = textRun.X + textRun.Width;
             var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
             if (scissor.IsEmpty)
@@ -283,24 +289,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return (metrics.ascent + metrics.descent) * scale <= textRun.Height;
     }
 
-    private static GlyphAtlasFallbackReason GetUnsupportedReason(ReadOnlySpan<char> text, TextStyle style)
-    {
-        if (style.Wrapping != TextWrapping.NoWrap)
-        {
-            return GlyphAtlasFallbackReason.Wrapping;
-        }
-
-        foreach (var character in text)
-        {
-            if (character is < ' ' or > '~')
-            {
-                return GlyphAtlasFallbackReason.NonAscii;
-            }
-        }
-
-        return GlyphAtlasFallbackReason.None;
-    }
-
     private float ComputeLineWidth(ReadOnlySpan<char> text, CachedFontFace fontFace, TextStyle style, out GlyphAtlasFallbackReason unsupportedReason)
     {
         var width = 0f;
@@ -316,16 +304,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         unsupportedReason = GlyphAtlasFallbackReason.None;
         return width;
-    }
-
-    private static float ComputeAlignedPenX(D3D12TextRenderer.TextData textRun, TextStyle style, float lineWidth)
-    {
-        return style.HorizontalAlignment switch
-        {
-            TextHorizontalAlignment.Center => textRun.X + MathF.Max(0, (textRun.Width - lineWidth) * 0.5f),
-            TextHorizontalAlignment.Trailing => textRun.X + MathF.Max(0, textRun.Width - lineWidth),
-            _ => textRun.X
-        };
     }
 
     private static IntegerScissorRect ResolveRunScissor(D3D12TextRenderer.TextData textRun, int viewportWidth, int viewportHeight)
@@ -575,11 +553,21 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void MarkAtlasDirty(int x, int y, int width, int height)
     {
-        _atlasDirty = true;
-        _dirtyLeft = Math.Min(_dirtyLeft, x);
-        _dirtyTop = Math.Min(_dirtyTop, y);
-        _dirtyRight = Math.Max(_dirtyRight, x + width);
-        _dirtyBottom = Math.Max(_dirtyBottom, y + height);
+        var dirtyRect = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
+            _atlasDirty,
+            _dirtyLeft,
+            _dirtyTop,
+            _dirtyRight,
+            _dirtyBottom,
+            x,
+            y,
+            width,
+            height);
+        _atlasDirty = dirtyRect.HasDirtyRect;
+        _dirtyLeft = dirtyRect.Left;
+        _dirtyTop = dirtyRect.Top;
+        _dirtyRight = dirtyRect.Right;
+        _dirtyBottom = dirtyRect.Bottom;
     }
 
     private void ResetAtlasDirtyRect()
@@ -767,11 +755,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
         catch (COMException ex)
         {
-            throw new GlyphAtlasInitializationException(phase, ex);
+            throw GlyphAtlasTextCompositionHelpers.WrapInitializationException(phase, ex);
         }
         catch (InvalidOperationException ex)
         {
-            throw new GlyphAtlasInitializationException(phase, ex);
+            throw GlyphAtlasTextCompositionHelpers.WrapInitializationException(phase, ex);
         }
     }
 
@@ -1036,11 +1024,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _diagnostics = _diagnostics.WithFallback(unsupportedRuns, reason);
     }
 
-    private void MarkDeviceRemoved(string reason)
+    private void DisableGlyphAtlasFallback(
+        GlyphAtlasFallbackReason reason,
+        GlyphAtlasInitializationPhase phase,
+        string message)
     {
-        _deviceRemoved = true;
-        _deviceErrorReason = reason;
-        System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] {reason}");
+        _disabled = true;
+        _deviceErrorReason = message;
+        _diagnostics = _diagnostics
+            .WithFallback(1, reason)
+            .WithInitializationFailure(phase);
+        System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] {message}");
     }
 
     private static void Check(HRESULT hr, string context)

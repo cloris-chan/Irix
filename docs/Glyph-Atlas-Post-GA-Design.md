@@ -12,7 +12,21 @@ The first post-GA renderer-foundation change introduces an internal text composi
 
 DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to remove D3D11On12 / D2D / DirectWrite from final overlay composition, not to remove DirectWrite from text processing. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
 
-The first executable atlas path is intentionally narrow and opt-in. Basic single-line ASCII runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. Unsupported runs, including complex shaping, non-ASCII fallback faces, wrapping, and text clips, must fall back to the existing overlay renderer until the atlas path is correctness-complete for those cases.
+The first executable atlas path is intentionally narrow and opt-in. Basic single-line ASCII / `NoWrap` runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. Per-run scissor clipping is supported for accepted runs. Unsupported runs, including complex shaping, non-ASCII fallback faces, wrapping, missing fonts, atlas-full conditions, vertex/batch limits, and initialization/upload failures, must fall back to the existing overlay renderer until the atlas path is correctness-complete for those cases.
+
+Current implementation status:
+
+| Area | Current status |
+|------|----------------|
+| Public API | No change; `IDrawingBackend.Execute` remains unchanged |
+| Default composition | `Overlay`; glyph atlas is opt-in only |
+| Supported atlas text | ASCII printable characters, single-line `NoWrap`, DirectWrite glyph metrics/raster source |
+| Atlas format | Single `R8_UNORM` alpha atlas |
+| Draw model | D3D12 glyph quads recorded before command-list close/execute |
+| Alignment | Leading, center, and trailing are supported for no-wrap line widths |
+| Clip | Per-run scissor clip supported for accepted atlas runs |
+| Fallback | Overlay renderer for unsupported/failed atlas frames; fallback reasons are diagnostic output |
+| Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, mixed per-run atlas/overlay composition |
 
 ## Non-Goals
 
@@ -109,14 +123,14 @@ Rules:
 
 ## Fallback Strategy
 
-Direct2D / DirectWrite remains the authoritative fallback.
+Direct2D / DirectWrite remains the authoritative fallback. Current opt-in glyph atlas fallback is frame-level: if any text run in the frame is unsupported, the frame uses overlay text composition. A future mixed fallback design should allow accepted ASCII runs to draw through atlas while unsupported runs draw through overlay, but that requires careful ordering, clip, and sync semantics before implementation.
 
 Fallback cases:
 
 - Complex color glyphs not supported by the first atlas format.
 - Scripts or shaping features not yet covered by the glyph-run conversion.
 - Atlas full and eviction cannot safely free space for the current frame.
-- Device lost or upload failure.
+- Glyph atlas initialization or upload failure.
 - Debug flag forces Direct2D text for A/B comparison.
 
 Fallback must preserve text/rect synchronization and clip behavior.
