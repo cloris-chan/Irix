@@ -188,7 +188,7 @@ Non-goals for this GA batch:
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete and ready for the Private GA tag. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, D2D text overlay synchronization, platform integration smokes, GPU resource failure handling, and command allocator reset guards are complete. Sync wait cost is accepted temporarily as a correctness-first tradeoff; the long-term performance fix is a D3D12-only glyph atlas text renderer. This is not a public API freeze.
+**Current state:** PoC V1 core architecture-complete and tagged as `v1.0-private-ga`. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, D2D text overlay synchronization, platform integration smokes, GPU resource failure handling, and command allocator reset guards are complete. Sync wait cost is accepted temporarily as a correctness-first tradeoff; the long-term performance fix is a D3D12-only glyph atlas text renderer. This is not a public API freeze.
 
 **Minimum GA checklist:**
 
@@ -206,7 +206,7 @@ Non-goals for this GA batch:
 12. ~~GPU memory pressure graceful path~~ — Done for V1 scope: explicit resource creation failure reasons, including `E_OUTOFMEMORY`
 13. ~~Command allocator reset failure guard~~ — Done: retry once after GPU wait, then device-lost escalation
 
-**Remaining before GA tag:** create `v1.0-private-ga` from the committed candidate snapshot, then open `post-ga-renderer-foundation`. 144Hz hardware validation is removed from the current matrix because no hardware is available; glyph atlas implementation is post-GA renderer work.
+**Private GA closeout:** `v1.0-private-ga` exists and `post-ga-renderer-foundation` is the active follow-up branch. 144Hz hardware validation is removed from the current matrix because no hardware is available; glyph atlas implementation is post-GA renderer work.
 
 ### Known Issues / Accepted Constraints
 

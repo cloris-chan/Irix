@@ -1,7 +1,7 @@
 # Irix Project Status
 
 > Current developer handoff note for the Irix Windows PoC.
-> Last verified: 2026-05-17.
+> Last verified: 2026-05-18.
 
 ---
 
@@ -27,7 +27,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Area | Status |
 |------|--------|
 | V1 core | Complete / regression-only. Do not reopen core feature scope for GA cleanup. |
-| Windows backend | D3D12 is the active v1 PoC backend; D3D11On12/D2D text overlay remains accepted until the post-GA glyph atlas path lands. |
+| Windows backend | D3D12 is the active v1 PoC backend. D3D11On12/D2D text overlay remains the default text path; the post-GA glyph atlas path is opt-in prototype work on `post-ga-renderer-foundation`. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
@@ -36,8 +36,8 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Record struct boundary | Complete for Round 18. Framework/internal primitives, IR, render hot paths, platform types, and PoC backend/diagnostics do not use `record struct`. |
 | Profiler allocation pass | Complete for retained/input first pass. The 2026-05-17 VS profiler GCDump drove targeted cleanup in canonical retained apply, input hit-test routing, input ownership diagnostics, retained metadata projection, and text snapshot comparison. |
 | Allocation baseline | In place for MVU BuildView, diff, retained apply, layout full/dirty, draw command record full/dirty, D3D12 ExecuteCore at 100%/150%, render-request reuse, mock backend frame timing, and FrameDrawingResources warm pool allocation. |
-| Performance micro-optimization | Frozen for Private GA. Do not chase the remaining ~2 KB render-request reuse allocation before the GA tag. |
-| Private GA | Ready to tag after candidate docs commit. This is an internal/private milestone, not a public API freeze. |
+| Performance micro-optimization | Pre-GA micro-optimization is closed. For glyph-atlas hardening, attribute the current warm scroll allocation around `6.2 KB/frame` before optimizing. |
+| Private GA | Tagged as `v1.0-private-ga`; `post-ga-renderer-foundation` is the active next branch. This is an internal/private milestone, not a public API freeze. |
 | Docs | Trimmed to canonical docs only; obsolete prep/checkpoint docs deleted. |
 
 ---
@@ -211,10 +211,12 @@ Source guards currently block:
 
 | Priority | Work | Boundary |
 |----------|------|----------|
-| P0 | Private GA tag | Create `v1.0-private-ga` from the committed candidate snapshot. This tag is internal/private and does not freeze public API. |
-| P1 | Post-GA renderer foundation branch | Open `post-ga-renderer-foundation` for D3D12-only text/glyph atlas groundwork. Do not continue pre-GA micro-optimizing the 2 KB render-request reuse allocation. |
-| P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); do not change public API without a separate review. |
+| P0 | Renderer foundation hardening | Start with shader bytecode / resource lifetime hardening in the opt-in glyph atlas renderer; do not expand complex shaping or eviction first. |
+| P1 | Runtime shader compile decision | Replace runtime `d3dcompiler_47.dll` dependency with build-time or embedded bytecode, or document an explicit fallback-safe runtime strategy. |
+| P1 | Glyph-atlas allocation attribution | Attribute the warm scroll allocation around `6.2 KB/frame` before attempting allocation cleanup. |
+| P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); keep it opt-in and internal until a separate API review. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
+| P2 | Mixed fallback / eviction planning | Defer mixed per-run atlas/overlay fallback and eviction until shader/resource lifetime is stable. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
 
 Do not mix glyph atlas implementation, renderer rewrites, or public API expansion into style/property cleanup.
