@@ -356,6 +356,121 @@ public sealed class PerformanceRegressionTests
         Assert.Equal(LayoutRebuildReason.None, renderRequestPipeline.LastLayoutRebuildReason);
     }
 
+    [Fact]
+    public void Render_request_reuse_allocation_is_attributed_by_stage()
+    {
+        var arena = new VirtualTextArena();
+        var title = arena.AddText("Title".AsSpan());
+        var button = arena.AddText("Click".AsSpan());
+        var row = arena.AddText("Row".AsSpan());
+        var snapshot = arena.GetOrCreateSnapshot();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root = BuildMeasuredRoot(title, button, row, rectangleWidth: 136);
+        var pipeline = new RenderPipeline();
+        using (pipeline.Build(root, viewport, snapshot))
+        {
+        }
+
+        var layoutResult = pipeline.LastLayoutResult!;
+        var layout = layoutResult.Elements;
+        var recorder = new DrawCommandRecorder();
+        var emptyClassifications = Array.Empty<LayoutDirtyClassification>();
+        var emptyRanges = Array.Empty<(int Start, int Count)>();
+
+        for (var i = 0; i < 8; i++)
+        {
+            var warmRecord = recorder.Record(layout, snapshot);
+            var warmHitTargets = RenderPipeline.BuildHitTargets(layout);
+            var warmSnapshot = RenderPipeline.CreateRetainedInputSnapshot(
+                layoutResult,
+                warmRecord.ElementCommandRanges,
+                warmHitTargets,
+                root,
+                viewport,
+                emptyClassifications,
+                emptyRanges,
+                warmRecord.DirtyCommandRanges,
+                LayoutRebuildReason.None,
+                snapshot,
+                snapshot);
+            GC.KeepAlive(warmSnapshot.HitTargets.Count);
+            using var warmBatch = new RenderFrameBatch(warmRecord.Commands, warmHitTargets, warmRecord.Resources, warmRecord.DirtyCommandRanges);
+        }
+
+        var recordAllocated = MeasureAllocatedBytes(() =>
+        {
+            var result = recorder.Record(layout, snapshot);
+            GC.KeepAlive(result.Commands.Count);
+            GC.KeepAlive(result.ElementCommandRanges.Length);
+            ReleaseRecordResult(result);
+        });
+
+        var buildHitTargetsAllocated = MeasureAllocatedBytes(() =>
+        {
+            var hitTargets = RenderPipeline.BuildHitTargets(layout);
+            GC.KeepAlive(hitTargets.Count);
+        });
+
+        var snapshotRecord = recorder.Record(layout, snapshot);
+        var snapshotHitTargets = RenderPipeline.BuildHitTargets(layout);
+        var snapshotSpreadCopyAllocated = MeasureAllocatedBytes(() =>
+        {
+            var retainedInputSnapshot = RenderPipeline.CreateRetainedInputSnapshot(
+                layoutResult,
+                snapshotRecord.ElementCommandRanges,
+                snapshotHitTargets,
+                root,
+                viewport,
+                emptyClassifications,
+                emptyRanges,
+                snapshotRecord.DirtyCommandRanges,
+                LayoutRebuildReason.None,
+                snapshot,
+                snapshot);
+            GC.KeepAlive(retainedInputSnapshot.ElementCommandRanges.Length);
+            GC.KeepAlive(retainedInputSnapshot.HitTargets.Count);
+        });
+        ReleaseRecordResult(snapshotRecord);
+
+        var batchRecord = recorder.Record(layout, snapshot);
+        var batchHitTargets = RenderPipeline.BuildHitTargets(layout);
+        var batchResources = Assert.IsType<FrameDrawingResources>(batchRecord.Resources);
+        batchResources.Retain();
+        var renderFrameBatchAllocated = MeasureAllocatedBytes(() =>
+        {
+            var batch = new RenderFrameBatch(batchRecord.Commands, batchHitTargets, batchRecord.Resources, batchRecord.DirtyCommandRanges);
+            GC.KeepAlive(batch.HitTargets.Count);
+            if (batch.Resources is FrameDrawingResources resources)
+            {
+                resources.Release(batch.ResourceFrameId);
+            }
+        });
+        batchResources.Release();
+        batchRecord.Commands.Dispose();
+
+        var layoutRebuildCountBeforeRenderRequest = pipeline.LayoutRebuildCount;
+        var renderRequestTotalAllocated = MeasureAllocatedBytes(() =>
+        {
+            using var frame = pipeline.Build(root, viewport, snapshot);
+            GC.KeepAlive(frame.Commands.Count);
+            GC.KeepAlive(frame.HitTargets.Count);
+        });
+
+        var message =
+            $"Render-request reuse allocation attribution: total={renderRequestTotalAllocated:N0} bytes, record={recordAllocated:N0} bytes, " +
+            $"hitTargets={buildHitTargetsAllocated:N0} bytes, snapshotSpreadCopy={snapshotSpreadCopyAllocated:N0} bytes, renderFrameBatch={renderFrameBatchAllocated:N0} bytes.";
+        Console.WriteLine(message);
+        TestContext.Current.SendDiagnosticMessage(message);
+
+        Assert.Equal(layoutRebuildCountBeforeRenderRequest, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.None, pipeline.LastLayoutRebuildReason);
+        Assert.True(renderRequestTotalAllocated < 64 * 1024, $"Render request reuse warm path allocated {renderRequestTotalAllocated:N0} bytes.");
+        Assert.True(recordAllocated < 64 * 1024, $"Render-request record stage allocated {recordAllocated:N0} bytes.");
+        Assert.True(buildHitTargetsAllocated < 8 * 1024, $"BuildHitTargets allocated {buildHitTargetsAllocated:N0} bytes.");
+        Assert.True(snapshotSpreadCopyAllocated < 16 * 1024, $"Retained input snapshot spread/copy allocated {snapshotSpreadCopyAllocated:N0} bytes.");
+        Assert.True(renderFrameBatchAllocated < 1 * 1024, $"RenderFrameBatch construction allocated {renderFrameBatchAllocated:N0} bytes.");
+    }
+
     private static long MeasureAllocatedBytes(Action action)
     {
         GC.Collect();

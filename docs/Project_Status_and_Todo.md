@@ -133,7 +133,7 @@ dotnet test tests/Irix.Core.Tests/Irix.Core.Tests.csproj --no-restore
 dotnet test Irix.slnx --no-restore
 ```
 
-Result: 601 tests passed.
+Result: 602 tests passed.
 
 Current allocation/performance guards:
 
@@ -160,7 +160,17 @@ Latest local frame-stage allocation output (2026-05-17, Debug build, .NET 10.0.8
 | `DrawCommandRecorder.Record` dirty | 1,752 | Necessary command/resource result boundary plus dirty command range result | Higher than full because dirty range/result handoff is included; verify before changing recorder internals. |
 | D3D12 `ExecuteCore` 100% | 0 | No allocation | Scale-free backend execute path is clean. |
 | D3D12 `ExecuteCore` 150% | 0 | No allocation | On-the-fly scale path does not allocate command arrays. |
-| Render-request reuse | 2,960 | Necessary retained input/frame result boundary, plus possible temporary frame wrapper allocation | Priority check: layout rebuild stays skipped; next useful probe is `RetainedInputSnapshot` / frame wrapper cost, not layout. |
+| Render-request reuse | 2,280 | Re-record result boundary plus retained input snapshot copies; no layout rebuild | Attribution below shows record/result handoff is the largest residual source, not hit targets. |
+
+Render-request reuse allocation attribution (same local environment):
+
+| Component | Allocated bytes | Reading |
+|-----------|-----------------|---------|
+| `DrawCommandRecorder.Record` | 1,688 | Main residual cost. This includes command owner/resource result handoff and element-command range result arrays even when layout is reused. |
+| `BuildHitTargets` | 152 | One small `HitTestTarget[]`; not the primary optimization target for this measured tree. |
+| `RenderPipelineRetainedInputSnapshot` spread/copy | 448 | Snapshot copies are visible but smaller than record. Reusing retained arrays may help, but it should follow record/result analysis. |
+| `RenderFrameBatch` construction | 24 | Effectively noise; not worth targeting. |
+| Total render-request reuse path | 2,280 | Layout rebuild count stayed unchanged and `LastLayoutRebuildReason == None`. |
 
 CI currently enforces the guards above but does not persist exact per-stage byte output as an artifact. Treat the table as the latest local measurement, not a CI average.
 
@@ -185,7 +195,7 @@ Source guards currently block:
 
 | Priority | Work | Boundary |
 |----------|------|----------|
-| P0 | Allocation baseline tightening | Use the measured table above to choose the next target. First inspect render-request reuse residual allocation, then BuildView authoring arrays; layout/record look mostly result-boundary limited. |
+| P0 | Allocation baseline tightening | Use the measured table above to choose the next target. Render-request reuse is now attributed: inspect record/result reuse first, then snapshot copy reuse; hit-target caching is lower priority for the measured tree. |
 | P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); do not change public API. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |

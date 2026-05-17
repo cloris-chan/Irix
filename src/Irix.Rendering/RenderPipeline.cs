@@ -124,18 +124,18 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
         var hitTargets = BuildHitTargets(layout);
         var batch = new RenderFrameBatch(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
-        LastRetainedInputSnapshot = new RenderPipelineRetainedInputSnapshot(
+        LastRetainedInputSnapshot = CreateRetainedInputSnapshot(
             _retainedLayoutResult!,
-            [.. result.ElementCommandRanges],
-            [.. hitTargets],
+            result.ElementCommandRanges,
+            hitTargets,
             _retainedRoot,
             _retainedViewport,
-            [.. LastDirtyClassifications],
-            [.. LastDirtyElementRanges],
-            [.. LastDirtyCommandRanges],
-            LayoutRebuildReason: LastLayoutRebuildReason,
-            PreviousTextSnapshot: classifyOldSnapshot,
-            TextSnapshot: _retainedTextSnapshot);
+            LastDirtyClassifications,
+            LastDirtyElementRanges,
+            LastDirtyCommandRanges,
+            LastLayoutRebuildReason,
+            classifyOldSnapshot,
+            _retainedTextSnapshot);
 
         // Update retained render frame: try partial apply when dirty ranges exist,
         // which only succeeds when resources are the same instance (same frame scope).
@@ -403,7 +403,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         public static bool operator !=(DirtyNodeClassification left, DirtyNodeClassification right) => !left.Equals(right);
     }
 
-    private static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
+    internal static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
     {
         if (layoutElements.Count == 0)
         {
@@ -436,6 +436,31 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
         return hitTargets;
     }
+
+    internal static RenderPipelineRetainedInputSnapshot CreateRetainedInputSnapshot(
+        LayoutTreeResult layoutResult,
+        ElementCommandRange[] elementCommandRanges,
+        IReadOnlyList<HitTestTarget> hitTargets,
+        VirtualNode retainedRoot,
+        PixelRectangle viewport,
+        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
+        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
+        LayoutRebuildReason layoutRebuildReason,
+        TextBufferSnapshot? previousTextSnapshot,
+        TextBufferSnapshot? textSnapshot) =>
+        new(
+            layoutResult,
+            [.. elementCommandRanges],
+            [.. hitTargets],
+            retainedRoot,
+            viewport,
+            [.. dirtyClassifications],
+            [.. dirtyElementRanges],
+            [.. dirtyCommandRanges],
+            LayoutRebuildReason: layoutRebuildReason,
+            PreviousTextSnapshot: previousTextSnapshot,
+            TextSnapshot: textSnapshot);
 }
 
 internal sealed record RenderPipelineRetainedInputSnapshot(
