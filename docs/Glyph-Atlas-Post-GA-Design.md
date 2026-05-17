@@ -6,6 +6,12 @@
 
 Introduce an explicit glyph atlas/cache after V1 GA only if profiling shows DirectWrite / Direct2D text rendering is the limiting cost or if a future backend needs portable glyph resources. The design must not change the current `IDrawingBackend` public contract until a separate API review accepts it.
 
+## Phase 1 Composition Seam
+
+The first post-GA renderer-foundation change introduces an internal text composition mode seam only. `Overlay` remains the default and preserves the existing `D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present` behavior. `GlyphAtlas` is reserved for a future D3D12 command-list text pass recorded before command-list close/execute; until that pass is implemented, it falls back to the overlay renderer.
+
+DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to remove D3D11On12 / D2D / DirectWrite from final overlay composition, not to remove DirectWrite from text processing. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
+
 ## Non-Goals
 
 - No implementation before the current GA candidate.

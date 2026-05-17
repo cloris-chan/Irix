@@ -15,6 +15,9 @@ using Windows.Win32.System.Com;
 
 namespace Irix.Platform.Windows;
 
+// Current D3D11On12 / D2D / DirectWrite overlay fallback renderer.
+// Post-GA glyph-atlas work may retain DirectWrite as a shaping/raster source,
+// but final D3D12 text composition is owned by D3D12Renderer's text path seam.
 internal sealed unsafe class D3D12TextRenderer : IDisposable
 {
     private const int MaxCachedTextFormats = 64;

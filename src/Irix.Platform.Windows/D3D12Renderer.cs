@@ -9,6 +9,12 @@ using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Irix.Platform.Windows;
 
+internal enum TextCompositionMode
+{
+    Overlay,
+    GlyphAtlas
+}
+
 /// <summary>
 /// D3D12 renderer using CsWin32 generated raw-pointer COM wrappers.
 /// All vtable offsets and GUIDs are managed by CsWin32 — no manual bindings.
@@ -59,6 +65,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public bool SyncTextOverlay { get; set; } = true;
 
     internal TextOverlaySyncStrategy TextOverlaySyncStrategy { get; set; } = TextOverlaySyncStrategy.D3D12FenceAfterOverlay;
+
+    internal TextCompositionMode TextCompositionMode { get; set; } = TextCompositionMode.Overlay;
 
     public D3D12Renderer(nint hwnd, int width, int height)
     {
@@ -448,7 +456,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         var textRenderer = _textRenderer;
         var hasText = textRuns.Length > 0 && textRenderer != null;
-        if (!hasText)
+        var renderTextWithOverlayFallback = hasText;
+        if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
+        {
+            renderTextWithOverlayFallback = !TryRecordGlyphAtlasTextPass(textRuns, resources);
+        }
+
+        if (!renderTextWithOverlayFallback)
         {
             // Transition to present when Direct2D is not handling the wrapped back buffer.
             barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -462,30 +476,51 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _queue->ExecuteCommandLists(1, &pList);
         Interlocked.Increment(ref _frameSerial);
 
-        if (hasText)
+        if (renderTextWithOverlayFallback)
         {
-            if (!textRenderer!.Render(_frameIndex, textRuns, resources))
-            {
-                if (!_deviceRemoved)
-                {
-                    _deviceRemoved = true;
-                    _deviceErrorReason = textRenderer.DeviceErrorReason ?? "TextRenderer render failed";
-                    System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
-                    DeviceLost?.Invoke();
-                }
-                return;
-            }
-
-            // Diagnostic sync: wait for all GPU work (D3D12 rects + D3D11/D2D text)
-            // to complete before presenting. Confirms whether text-lag is a sync issue.
-            if (SyncTextOverlay)
-            {
-                if (!WaitForTextOverlaySync(textRenderer)) return;
-            }
+            if (!RenderOverlayTextAndMaybeSync(textRenderer!, textRuns, resources)) return;
         }
 
         if (!Present()) return;
         _ = MoveToNextFrame();
+    }
+
+    private bool TryRecordGlyphAtlasTextPass(ReadOnlySpan<D3D12TextRenderer.TextData> textRuns, IFrameResourceResolver resources)
+    {
+        _ = textRuns;
+        _ = resources;
+
+        // The D3D12 glyph atlas final-composition pass belongs here, before the
+        // command list is closed/executed. Until the atlas pipeline exists,
+        // preserve the GA overlay behavior by falling back to D3D11On12/D2D.
+        return false;
+    }
+
+    private bool RenderOverlayTextAndMaybeSync(
+        D3D12TextRenderer textRenderer,
+        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        IFrameResourceResolver resources)
+    {
+        if (!textRenderer.Render(_frameIndex, textRuns, resources))
+        {
+            if (!_deviceRemoved)
+            {
+                _deviceRemoved = true;
+                _deviceErrorReason = textRenderer.DeviceErrorReason ?? "TextRenderer render failed";
+                System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+                DeviceLost?.Invoke();
+            }
+            return false;
+        }
+
+        // Diagnostic sync: wait for all GPU work (D3D12 rects + D3D11/D2D text)
+        // to complete before presenting. Confirms whether text-lag is a sync issue.
+        if (SyncTextOverlay)
+        {
+            return WaitForTextOverlaySync(textRenderer);
+        }
+
+        return true;
     }
 
     private bool Present()
