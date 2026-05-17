@@ -205,7 +205,6 @@ public static class VirtualNodeDiffer
         {
             if (prevSnapshot is not { } ps || nextSnapshot is not { } ns) return false;
             if (!ps.TryResolve(aText, out var aSpan) || !ns.TryResolve(bText, out var bSpan)) return false;
-            if (aSpan.IsEmpty || bSpan.IsEmpty) return false;
             return aSpan.SequenceEqual(bSpan);
         }
         return false;

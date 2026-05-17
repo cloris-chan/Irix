@@ -5,15 +5,69 @@ namespace Irix.Poc;
 /// <summary>
 /// Immutable read model for the PoC input ownership state.
 /// </summary>
-internal readonly record struct OwnershipSnapshot(
-    ActionId HoveredTarget,
-    ActionId FocusedTarget,
-    ActionId PressedTarget,
-    ActionId CapturedTarget,
-    ActionId LastHoverEnteredTarget,
-    ActionId LastHoverLeftTarget,
-    long HoverChangeCount,
-    bool IsPointerPressed);
+internal readonly struct OwnershipSnapshot : IEquatable<OwnershipSnapshot>
+{
+    public OwnershipSnapshot(
+        ActionId HoveredTarget,
+        ActionId FocusedTarget,
+        ActionId PressedTarget,
+        ActionId CapturedTarget,
+        ActionId LastHoverEnteredTarget,
+        ActionId LastHoverLeftTarget,
+        long HoverChangeCount,
+        bool IsPointerPressed)
+    {
+        this.HoveredTarget = HoveredTarget;
+        this.FocusedTarget = FocusedTarget;
+        this.PressedTarget = PressedTarget;
+        this.CapturedTarget = CapturedTarget;
+        this.LastHoverEnteredTarget = LastHoverEnteredTarget;
+        this.LastHoverLeftTarget = LastHoverLeftTarget;
+        this.HoverChangeCount = HoverChangeCount;
+        this.IsPointerPressed = IsPointerPressed;
+    }
+
+    public ActionId HoveredTarget { get; }
+    public ActionId FocusedTarget { get; }
+    public ActionId PressedTarget { get; }
+    public ActionId CapturedTarget { get; }
+    public ActionId LastHoverEnteredTarget { get; }
+    public ActionId LastHoverLeftTarget { get; }
+    public long HoverChangeCount { get; }
+    public bool IsPointerPressed { get; }
+
+    public bool Equals(OwnershipSnapshot other)
+    {
+        return HoveredTarget == other.HoveredTarget
+            && FocusedTarget == other.FocusedTarget
+            && PressedTarget == other.PressedTarget
+            && CapturedTarget == other.CapturedTarget
+            && LastHoverEnteredTarget == other.LastHoverEnteredTarget
+            && LastHoverLeftTarget == other.LastHoverLeftTarget
+            && HoverChangeCount == other.HoverChangeCount
+            && IsPointerPressed == other.IsPointerPressed;
+    }
+
+    public override bool Equals(object? obj) => obj is OwnershipSnapshot other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(HoveredTarget);
+        hash.Add(FocusedTarget);
+        hash.Add(PressedTarget);
+        hash.Add(CapturedTarget);
+        hash.Add(LastHoverEnteredTarget);
+        hash.Add(LastHoverLeftTarget);
+        hash.Add(HoverChangeCount);
+        hash.Add(IsPointerPressed);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(OwnershipSnapshot left, OwnershipSnapshot right) => left.Equals(right);
+
+    public static bool operator !=(OwnershipSnapshot left, OwnershipSnapshot right) => !left.Equals(right);
+}
 
 /// <summary>
 /// Diagnostic-only ownership event stream for v0 input ownership changes.
@@ -114,8 +168,16 @@ internal sealed class InputOwnershipState
 {
     private const int MaxDiagnosticEventCount = 128;
 
-    private readonly List<InputOwnershipEvent> _diagnosticEvents = new(MaxDiagnosticEventCount);
+    private readonly InputOwnershipEvent[] _diagnosticEvents = new InputOwnershipEvent[MaxDiagnosticEventCount];
+    private readonly InputOwnershipEventList _diagnosticEventView;
+    private int _diagnosticEventStart;
+    private int _diagnosticEventCount;
     private bool _isPointerPressed;
+
+    public InputOwnershipState()
+    {
+        _diagnosticEventView = new InputOwnershipEventList(this);
+    }
 
     /// <summary>The current hit-test target under the pointer, updated by pointer move.</summary>
     public ActionId HoveredTarget { get; private set; }
@@ -139,7 +201,7 @@ internal sealed class InputOwnershipState
     public long HoverChangeCount { get; private set; }
 
     /// <summary>Diagnostic ownership events emitted by v0 state transitions.</summary>
-    public IReadOnlyList<InputOwnershipEvent> DiagnosticEvents => _diagnosticEvents;
+    public IReadOnlyList<InputOwnershipEvent> DiagnosticEvents => _diagnosticEventView;
 
     /// <summary>
     /// A single consistent read of the current ownership state for diagnostics.
@@ -292,11 +354,42 @@ internal sealed class InputOwnershipState
 
     private void AddDiagnosticEvent(InputOwnershipEvent diagnosticEvent)
     {
-        if (_diagnosticEvents.Count == MaxDiagnosticEventCount)
+        var writeIndex = (_diagnosticEventStart + _diagnosticEventCount) % MaxDiagnosticEventCount;
+        if (_diagnosticEventCount == MaxDiagnosticEventCount)
         {
-            _diagnosticEvents.RemoveAt(0);
+            _diagnosticEvents[_diagnosticEventStart] = diagnosticEvent;
+            _diagnosticEventStart = (_diagnosticEventStart + 1) % MaxDiagnosticEventCount;
+            return;
         }
 
-        _diagnosticEvents.Add(diagnosticEvent);
+        _diagnosticEvents[writeIndex] = diagnosticEvent;
+        _diagnosticEventCount++;
+    }
+
+    private InputOwnershipEvent GetDiagnosticEvent(int index)
+    {
+        if ((uint)index >= (uint)_diagnosticEventCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        return _diagnosticEvents[(_diagnosticEventStart + index) % MaxDiagnosticEventCount];
+    }
+
+    private sealed class InputOwnershipEventList(InputOwnershipState owner) : IReadOnlyList<InputOwnershipEvent>
+    {
+        public int Count => owner._diagnosticEventCount;
+
+        public InputOwnershipEvent this[int index] => owner.GetDiagnosticEvent(index);
+
+        public IEnumerator<InputOwnershipEvent> GetEnumerator()
+        {
+            for (var i = 0; i < owner._diagnosticEventCount; i++)
+            {
+                yield return owner.GetDiagnosticEvent(i);
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

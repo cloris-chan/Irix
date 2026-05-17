@@ -118,7 +118,7 @@ public sealed class PerformanceRegressionTests
         });
 
         TestContext.Current.SendDiagnosticMessage($"VirtualNode authoring allocation: builder={builderAllocated:N0} bytes, inline={inlineHelperAllocated:N0} bytes over {iterations} iterations.");
-        AssertAllocationParity(
+        AssertAllocationDoesNotRegress(
             builderAllocated,
             inlineHelperAllocated,
             "Builder authoring path",
@@ -149,7 +149,7 @@ public sealed class PerformanceRegressionTests
             viewport);
 
         TestContext.Current.SendDiagnosticMessage($"VirtualNode pipeline allocation: builder={builderAllocated:N0} bytes, inline={inlineHelperAllocated:N0} bytes over {iterations} iterations.");
-        AssertAllocationParity(
+        AssertAllocationDoesNotRegress(
             builderAllocated,
             inlineHelperAllocated,
             "Builder pipeline path",
@@ -167,17 +167,17 @@ public sealed class PerformanceRegressionTests
         return GC.GetAllocatedBytesForCurrentThread() - before;
     }
 
-    private static void AssertAllocationParity(
+    private static void AssertAllocationDoesNotRegress(
         long actualAllocated,
         long baselineAllocated,
         string actualName,
         string baselineName)
     {
         const long allowedDeltaBytes = 128 * 1024;
-        var delta = Math.Abs(actualAllocated - baselineAllocated);
+        var regression = actualAllocated - baselineAllocated;
 
-        Assert.True(delta <= allowedDeltaBytes,
-            $"{actualName} allocated {actualAllocated:N0} bytes; {baselineName} allocated {baselineAllocated:N0} bytes; delta {delta:N0} exceeded {allowedDeltaBytes:N0} bytes.");
+        Assert.True(regression <= allowedDeltaBytes,
+            $"{actualName} allocated {actualAllocated:N0} bytes; {baselineName} allocated {baselineAllocated:N0} bytes; regression {regression:N0} exceeded {allowedDeltaBytes:N0} bytes.");
     }
 
     private static long MeasurePipelineAllocatedBytes(

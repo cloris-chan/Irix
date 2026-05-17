@@ -109,8 +109,8 @@ No-record-struct boundary:
 Profiler-driven retained/input allocation pass:
 
 - `RetainedTree.Apply` treats differ-created canonical-root batches as authoritative and no longer reconstructs an intermediate tree that is discarded. Dirty indices are still derived from patches: updates mark the node, adds mark the parent in the next tree, and removes mark the parent in the previous tree.
-- Runtime input routing uses a value-type hit-test resolver instead of allocating a `Func<int,int,ActionId>` delegate/closure on the native input path. Delegate overloads remain only for tests and diagnostic helpers.
-- Input ownership diagnostics are value events in a bounded 128-event buffer. The diagnostic stream is not a retained unbounded object log.
+- Runtime input routing uses a value-type hit-test resolver instead of allocating a `Func<int,int,ActionId>` delegate/closure on the native input path. `Program.TryMapInputForRuntime` has no delegate overload.
+- Input ownership diagnostics are value events in a bounded 128-event ring buffer. The diagnostic stream is not a retained unbounded object log and does not compact with `RemoveAt(0)`.
 - Text content equality uses internal `TryResolve` instead of `ResolveRequired` when diffing/classifying. Mismatched snapshots return `false` for comparison; actual draw recording still uses `ResolveRequired` and continues to fail hard on invalid text ownership.
 - Retained root metadata projection and hit-target metadata projection use stack spans/arrays for small dirty/key sets instead of short-lived `HashSet` / `List` objects on the partial-apply path.
 
@@ -137,18 +137,18 @@ Round 16 allocation probes:
 
 ```text
 5,000 BuildView -> diff -> layout -> record iterations
-inline helper path vs builder/span path: within 128 KB parity guard
+builder/span path: must not allocate more than inline helper path by over 128 KB; lower allocation is allowed
 
 5,000 authoring-only VirtualNode iterations
-inline helper path vs builder/span path: within 128 KB parity guard
+builder/span path: must not allocate more than inline helper path by over 128 KB; lower allocation is allowed
 ```
 
 Round 18 allocation guard baseline:
 
 | Area | Current guard |
 |------|---------------|
-| BuildView authoring helpers | Builder/span path stays within 128 KB of inline helper path over 5,000 iterations. |
-| Diff -> layout -> record pipeline | Builder/span root path stays within 128 KB of inline helper path over 500 retained pipeline iterations. |
+| BuildView authoring helpers | Builder/span path must not regress over inline helper path by more than 128 KB over 5,000 iterations. |
+| Diff -> layout -> record pipeline | Builder/span root path must not regress over inline helper path by more than 128 KB over 500 retained pipeline iterations. |
 | FrameDrawingResources warm pool | Warm rent/add/seal/return stays under 2 MB over 1,000 frames. |
 | D3D12 ExecuteCore scale path | 150% / 200% scale executes without allocating a scaled command array. |
 | Compositor render loop | Mock backend render loop stays under the 20 ms/frame average guard over 180 frames. |

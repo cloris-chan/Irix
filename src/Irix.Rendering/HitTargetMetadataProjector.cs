@@ -1,6 +1,6 @@
 namespace Irix.Rendering;
 
-internal readonly struct HitTargetMetadataProjection : IEquatable<HitTargetMetadataProjection>
+internal readonly struct HitTargetMetadataProjection
 {
     private HitTargetMetadataProjection(
         bool succeeded,
@@ -26,20 +26,6 @@ internal readonly struct HitTargetMetadataProjection : IEquatable<HitTargetMetad
         return new HitTargetMetadataProjection(false, RetainedPartialApplyFallbackReason.HitTargetPatchFailed, []);
     }
 
-    public bool Equals(HitTargetMetadataProjection other)
-    {
-        return Succeeded == other.Succeeded
-            && FallbackReason == other.FallbackReason
-            && EqualityComparer<HitTestTarget[]>.Default.Equals(HitTargets, other.HitTargets);
-    }
-
-    public override bool Equals(object? obj) => obj is HitTargetMetadataProjection other && Equals(other);
-
-    public override int GetHashCode() => HashCode.Combine(Succeeded, FallbackReason, HitTargets);
-
-    public static bool operator ==(HitTargetMetadataProjection left, HitTargetMetadataProjection right) => left.Equals(right);
-
-    public static bool operator !=(HitTargetMetadataProjection left, HitTargetMetadataProjection right) => !left.Equals(right);
 }
 
 internal static class HitTargetMetadataProjector

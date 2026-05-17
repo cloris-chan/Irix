@@ -267,7 +267,15 @@ public sealed class CounterInputRouterTests
         Assert.False(decrementState.IsFocused);
 
         var releasedState = CounterApplication.DeriveButtonState(
-            snapshot with { IsPointerPressed = false },
+            new OwnershipSnapshot(
+                snapshot.HoveredTarget,
+                snapshot.FocusedTarget,
+                snapshot.PressedTarget,
+                snapshot.CapturedTarget,
+                snapshot.LastHoverEnteredTarget,
+                snapshot.LastHoverLeftTarget,
+                snapshot.HoverChangeCount,
+                IsPointerPressed: false),
             new ActionId(1));
         Assert.False(releasedState.IsPressed);
     }
@@ -492,11 +500,12 @@ public sealed class CounterInputRouterTests
     public void Program_input_mapping_returns_visual_refresh_for_hover_only_change()
     {
         var ownershipState = new InputOwnershipState();
+        var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
 
         var mapped = Program.TryMapInputForRuntime(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
             ownershipState,
-            HitIncrementAtButton,
+            hitTestResolver,
             out var message);
 
         Assert.True(mapped);
@@ -509,16 +518,17 @@ public sealed class CounterInputRouterTests
     public void Program_input_mapping_skips_visual_refresh_when_ownership_does_not_change()
     {
         var ownershipState = new InputOwnershipState();
+        var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
         Program.TryMapInputForRuntime(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
             ownershipState,
-            HitIncrementAtButton,
+            hitTestResolver,
             out _);
 
         var mapped = Program.TryMapInputForRuntime(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 2, X: 32, Y: 140),
             ownershipState,
-            HitIncrementAtButton,
+            hitTestResolver,
             out var message);
 
         Assert.False(mapped);
@@ -529,6 +539,7 @@ public sealed class CounterInputRouterTests
     public void Program_input_mapping_wraps_action_with_latest_snapshot()
     {
         var ownershipState = new InputOwnershipState();
+        var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
         Program.TryMapInputForRuntime(
             new RawInputEvent(
                 RawInputEventKind.PointerPressed,
@@ -537,7 +548,7 @@ public sealed class CounterInputRouterTests
                 Y: 140,
                 Button: PointerButton.Left),
             ownershipState,
-            HitIncrementAtButton,
+            hitTestResolver,
             out _);
 
         var mapped = Program.TryMapInputForRuntime(
@@ -548,7 +559,7 @@ public sealed class CounterInputRouterTests
                 Y: 500,
                 Button: PointerButton.Left),
             ownershipState,
-            HitIncrementAtButton,
+            hitTestResolver,
             out var message);
 
         Assert.True(mapped);
@@ -971,7 +982,8 @@ public sealed class CounterInputRouterTests
         InputOwnershipState ownershipState,
         RawInputEvent inputEvent)
     {
-        return Program.TryMapInputForRuntime(inputEvent, ownershipState, HitIncrementAtButton, out var message) && message is not null and not CounterMessage.WheelRaw
+        var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
+        return Program.TryMapInputForRuntime(inputEvent, ownershipState, hitTestResolver, out var message) && message is not null and not CounterMessage.WheelRaw
             ? app.Update(model, message).NextModel
             : model;
     }

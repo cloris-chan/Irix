@@ -56,6 +56,19 @@ public sealed class VirtualTextArenaTests
     }
 
     [Fact]
+    public void ContentEqual_returns_true_for_two_valid_empty_text_spans()
+    {
+        var snapshot = new TextBufferSnapshot(new TextBufferId(1), []);
+        var emptyText = new TextNodeContent(new TextBufferId(1), new TextRange(0, 0));
+
+        Assert.True(VirtualNodeDiffer.ContentEqual(
+            NodeContent.FromText(emptyText),
+            NodeContent.FromText(emptyText),
+            snapshot,
+            snapshot));
+    }
+
+    [Fact]
     public void DrawCommandRecorder_throws_on_mismatched_text_snapshot_before_recording_text()
     {
         var arena = new VirtualTextArena();

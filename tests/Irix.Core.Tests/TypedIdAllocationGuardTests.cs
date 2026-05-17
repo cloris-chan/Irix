@@ -566,7 +566,6 @@ public class TypedIdAllocationGuardTests
         {
             "ControlVisualState.cs",
             "CounterApplication.cs",
-            "InputOwnershipState.cs",
             "ScrollController.cs",
             "ScrollFeedback.cs"
         };
@@ -581,6 +580,30 @@ public class TypedIdAllocationGuardTests
             var content = File.ReadAllText(file);
             Assert.DoesNotMatch(RecordStructPattern(), content);
         }
+    }
+
+    [Fact]
+    public void Poc_runtime_input_path_does_not_use_delegate_hit_test_resolver()
+    {
+        var root = FindRepoRoot();
+        var programSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs"));
+
+        Assert.DoesNotContain("Func<int, int, ActionId>", programSource);
+        Assert.DoesNotContain("DelegateActionHitTestResolver", programSource);
+        Assert.DoesNotContain("TryMapInputForRuntime(\r\n        RawInputEvent inputEvent,\r\n        InputOwnershipState ownershipState,\r\n        Func<int, int, ActionId>", programSource);
+    }
+
+    [Fact]
+    public void Input_ownership_diagnostics_use_ring_buffer_not_remove_at()
+    {
+        var root = FindRepoRoot();
+        var source = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.cs"));
+
+        Assert.DoesNotMatch(RecordStructPattern(), source);
+        Assert.Contains("InputOwnershipEvent[]", source);
+        Assert.DoesNotContain("RemoveAt(0)", source);
+        Assert.DoesNotContain("new List<InputOwnershipEvent>", source);
+        Assert.DoesNotContain("List<InputOwnershipEvent> _diagnosticEvents", source);
     }
 
     [Fact]

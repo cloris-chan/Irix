@@ -1487,11 +1487,12 @@ public sealed class WindowLayoutPipelineTests
         await runtime.StartAsync(cancellationToken);
         var initialRebuildCount = translator.LayoutRebuildCount;
         var ownershipState = new InputOwnershipState();
+        var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
 
         var mapped = Program.TryMapInputForRuntime(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
             ownershipState,
-            HitIncrementAtButton,
+            hitTestResolver,
             out var message);
 
         Assert.True(mapped);

@@ -197,7 +197,8 @@ internal static class InputDiagnosticRunner
 
         void ApplyInput(string name, RawInputEvent inputEvent)
         {
-            if (!Program.TryMapInputForRuntime(inputEvent, ownershipState, HitDiagnosticTarget, out var message) || message is null or CounterMessage.WheelRaw)
+            var hitTestResolver = new DelegateActionHitTestResolver(HitDiagnosticTarget);
+            if (!Program.TryMapInputForRuntime(inputEvent, ownershipState, hitTestResolver, out var message) || message is null or CounterMessage.WheelRaw)
             {
                 lines.Add($"dirtyReason {name} reason={LayoutRebuildReason.None} classifications=(none)");
                 return;

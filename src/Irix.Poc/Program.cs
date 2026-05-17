@@ -359,16 +359,6 @@ internal static class Program
     internal static OwnershipSnapshot DiagInputOwnership => _inputOwnershipState?.Snapshot ?? default;
     internal static DrawingBackendClipMode DiagBackendClipMode => _backendClipMode;
 
-    internal static bool TryMapInputForRuntime(
-        RawInputEvent inputEvent,
-        InputOwnershipState ownershipState,
-        Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
-        out CounterMessage? message)
-    {
-        var hitTestResolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
-        return TryMapInputForRuntime(inputEvent, ownershipState, hitTestResolver, out message);
-    }
-
     internal static bool TryMapInputForRuntime<THitTestResolver>(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
