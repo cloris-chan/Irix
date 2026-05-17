@@ -67,9 +67,9 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 |------|--------------|----------------|----------|
 | Frame time profiling | Compositor-level `LastFrameTimeUs`, `AverageFrameTimeUs`, `MaxFrameTimeUs` via `Stopwatch` | Already done | — |
 | Partial apply overhead measurement | Frame time profiling can compare partial vs full path; measure through `PartialApplyCount` / `FullApplyCount` | Already done | — |
-| Performance regression CI | Mock backend frame timing baseline and warm `FrameDrawingResources` allocation baseline in `Category=Performance` | Already done | — |
+| Performance regression CI | `Category=Performance` covers mock backend frame timing, warm `FrameDrawingResources`, split frame-stage allocation baseline, and D3D12 `ExecuteCore` 100% / 150% scale allocation guards | Already done | — |
 | Text cache hit rate in steady state | `scripts/ga-baseline.ps1 -Mode TextCache` validates static, scroll, and scale-change phases; current-machine 100% / 150% / 200% runs remain healthy | Already done for current machine | — |
-| DrawCommand recording allocation | `stackalloc` + `ArrayPool`; warm `FrameDrawingResources` allocation baseline in CI | Keep performance lane green | P2 |
+| DrawCommand recording allocation | `stackalloc` + `ArrayPool`; record full/dirty stages are covered by the split allocation baseline, with warm `FrameDrawingResources` guarded in CI | Keep performance lane green | P2 |
 | Hot-path string allocation | Round 13/14 complete (2026-05-16): text content uses `TextNodeContent` / `TextBufferSnapshot` plus frame-local `TextSlice`; `ActionId`, `TargetId`, `ElementId`, and `NodeKey` are typed value ids; style/property changes use `VirtualPropertyKey` and metadata effects instead of string property names. `VirtualPropertyKey` has no public constructor and no primitive `ToString()`. Diagnostics strings remain exempt. | Keep source guards green; next work is allocation baseline tightening, not string-key redesign | P2 |
 | Sync wait overhead | Current default `D3D12FenceAfterOverlay` is correctness-preserving but can exceed the old provisional `<2ms avg` target. `D3D11Query` was correctness-clean but refresh-rate dependent and therefore diagnostic-only. | Accepted temporarily for GA/MVP; long-term fix is D3D12-only glyph atlas text renderer | — |
 
@@ -178,7 +178,7 @@ Non-goals for this GA batch:
 | CI test suite | Windows 2025 / SDK 26100 matrix lane runs normal tests | Maintain green | — |
 | D3D12-specific tests | Headless D3D12 smoke matrix lane runs `Category=D3D12` with graceful skip when D3D12 unavailable | Already done | — |
 | Platform matrix CI | Minimal Windows 2025 / SDK 26100 lanes for tests, headless D3D12, performance baseline, and AOT publish | Already done | — |
-| Performance regression CI | `Category=Performance` mock backend frame-time baseline + warm `FrameDrawingResources` allocation baseline | Already done | — |
+| Performance regression CI | `Category=Performance` mock backend frame-time baseline + split frame-stage allocation baseline (`BuildView`, diff, retained apply, layout, record, D3D12 execute, render-request reuse) + warm `FrameDrawingResources` allocation baseline | Already done | — |
 | Sync wait regression baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode Sync`; not a hard CI gate because hosted runners do not provide stable refresh/scale/GPU timing | Keep as local evidence; accepted budget documented above | — |
 | Text cache/allocation baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode TextCache`; CI guards pool allocation with a hardware-independent performance test | Already done for 100% / 150% / 200% on current machine | — |
 | Manual smoke baseline | Semi-automatic local runner via `scripts/ga-baseline.ps1 -Mode Smoke`; user verifies scroll/text sync, hit-test, resize, occlusion, minimize/restore, and scale behavior | Latest default, rollback, 100% / 150% / 200%, and runtime scale-switch smokes passed on current display | — |

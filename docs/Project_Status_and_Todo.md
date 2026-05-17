@@ -133,26 +133,18 @@ dotnet test tests/Irix.Core.Tests/Irix.Core.Tests.csproj --no-restore
 dotnet test Irix.slnx --no-restore
 ```
 
-Result: 589 tests passed.
+Result: 601 tests passed.
 
-Round 16 allocation probes:
-
-```text
-5,000 BuildView -> diff -> layout -> record iterations
-builder/span path: must not allocate more than inline helper path by over 128 KB; lower allocation is allowed
-
-5,000 authoring-only VirtualNode iterations
-builder/span path: must not allocate more than inline helper path by over 128 KB; lower allocation is allowed
-```
-
-Round 18 allocation guard baseline:
+Current allocation/performance guards:
 
 | Area | Current guard |
 |------|---------------|
-| BuildView authoring helpers | Builder/span path must not regress over inline helper path by more than 128 KB over 5,000 iterations. |
-| Diff -> layout -> record pipeline | Builder/span root path must not regress over inline helper path by more than 128 KB over 500 retained pipeline iterations. |
+| VirtualNode authoring helpers | Builder/span path must not regress over inline helper path by more than 128 KB over 5,000 authoring iterations. |
+| Diff -> layout -> record pipeline parity | Builder/span root path must not regress over inline helper path by more than 128 KB over 500 retained pipeline iterations. |
+| Frame-stage warm path baseline | `BuildView`, diff, retained apply, layout full/dirty, record full/dirty, render-request reuse, and D3D12 `ExecuteCore` are measured as separate stages. |
+| Stage allocation budgets | `BuildView` < 128 KB; diff < 16 KB; retained apply < 8 KB; layout full/dirty < 32 KB each; record full/dirty < 64 KB each; render-request reuse < 64 KB. |
+| D3D12 ExecuteCore scale path | 100% and 150% scale execute with zero command-scaling allocation. |
 | FrameDrawingResources warm pool | Warm rent/add/seal/return stays under 2 MB over 1,000 frames. |
-| D3D12 ExecuteCore scale path | 150% / 200% scale executes without allocating a scaled command array. |
 | Compositor render loop | Mock backend render loop stays under the 20 ms/frame average guard over 180 frames. |
 
 Source guards currently block:

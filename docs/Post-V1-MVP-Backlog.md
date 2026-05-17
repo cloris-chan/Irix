@@ -23,7 +23,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | POST-013 | Sync wait overhead validation | Decision complete | Current `D3D12FenceAfterOverlay` sync wait cost accepted temporarily for correctness; `D3D11Query` remains diagnostic-only; long-term fix moved to POST-017 |
 | POST-014 | Windows SDK 26100 CI check | Done | CI fails early if .NET 10 or Windows SDK 26100 is absent |
 | POST-015 | Platform matrix CI | Minimal matrix added | Windows 2025 lanes cover tests, headless D3D12, performance baseline, AOT publish |
-| POST-016 | Performance regression CI | Done | Mock backend frame-time baseline + warm `FrameDrawingResources` allocation baseline |
+| POST-016 | Performance regression CI | Done | Mock backend frame-time baseline + split frame-stage allocation baseline + warm `FrameDrawingResources` allocation baseline |
 
 ### P1 — Remaining GA/MVP Hardening
 
