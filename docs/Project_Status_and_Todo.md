@@ -147,6 +147,23 @@ Current allocation/performance guards:
 | FrameDrawingResources warm pool | Warm rent/add/seal/return stays under 2 MB over 1,000 frames. |
 | Compositor render loop | Mock backend render loop stays under the 20 ms/frame average guard over 180 frames. |
 
+Latest local frame-stage allocation output (2026-05-17, Debug build, .NET 10.0.8, Windows x64):
+
+| Stage | Allocated bytes | Allocation type | Current reading |
+|-------|-----------------|-----------------|-----------------|
+| MVU `BuildView` | 17,408 | Necessary authoring/result allocation plus remaining temporary arrays in the PoC view builder | Highest measured stage; do not optimize blind yet. Next investigation should separate `CounterApplication` authoring arrays from framework node freezing cost. |
+| `VirtualNodeDiffer.CreatePatchBatch` | 1,288 | Necessary patch result boundary, with small retained temporary overhead | Already low; not the next target unless patch payload grows. |
+| `RetainedTree.Apply` canonical path | 80 | Necessary `ApplyResult` / dirty result boundary | Canonical retained apply is effectively clean after the profiler pass. |
+| `LayoutTreeBuilder.BuildLayoutTree` full | 544 | Necessary result arrays | Flat layout tree removed the main temporary collection cost; remaining bytes should mostly be returned result arrays. |
+| `LayoutTreeBuilder.BuildLayoutTree` dirty | 576 | Necessary result arrays plus dirty range result | Dirty path is near full path; no obvious temporary collection issue. |
+| `DrawCommandRecorder.Record` full | 192 | Necessary command/resource result boundary | Full record is low; current command/resource handoff dominates. |
+| `DrawCommandRecorder.Record` dirty | 1,752 | Necessary command/resource result boundary plus dirty command range result | Higher than full because dirty range/result handoff is included; verify before changing recorder internals. |
+| D3D12 `ExecuteCore` 100% | 0 | No allocation | Scale-free backend execute path is clean. |
+| D3D12 `ExecuteCore` 150% | 0 | No allocation | On-the-fly scale path does not allocate command arrays. |
+| Render-request reuse | 2,960 | Necessary retained input/frame result boundary, plus possible temporary frame wrapper allocation | Priority check: layout rebuild stays skipped; next useful probe is `RetainedInputSnapshot` / frame wrapper cost, not layout. |
+
+CI currently enforces the guards above but does not persist exact per-stage byte output as an artifact. Treat the table as the latest local measurement, not a CI average.
+
 Source guards currently block:
 
 - Primitive `ActionId.ToString()` and `VirtualPropertyKey.ToString()`.
@@ -168,7 +185,7 @@ Source guards currently block:
 
 | Priority | Work | Boundary |
 |----------|------|----------|
-| P0 | Allocation baseline tightening | Continue tightening budgets from the split BuildView/diff/retained apply/layout/record/D3D12 ExecuteCore baseline. |
+| P0 | Allocation baseline tightening | Use the measured table above to choose the next target. First inspect render-request reuse residual allocation, then BuildView authoring arrays; layout/record look mostly result-boundary limited. |
 | P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); do not change public API. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
