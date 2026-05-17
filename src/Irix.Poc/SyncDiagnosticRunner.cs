@@ -76,8 +76,7 @@ internal static class SyncDiagnosticRunner
         var atlasDiag = d3d12Renderer.GetGlyphAtlasTextDiagnostics();
         if (atlasDiag.HasValue)
         {
-            var d = atlasDiag.Value;
-            output.WriteLine($"Glyph atlas: cachedGlyphs={d.CachedGlyphs}, drawnGlyphs={d.DrawnGlyphs}, uploads={d.UploadedBytes} bytes, hits={d.CacheHits}, misses={d.CacheMisses}, fallbacks={d.FallbackFrames}, unsupportedRuns={d.UnsupportedRuns}, reasons=[{d.Reasons}]");
+            output.WriteLine($"Glyph atlas: {atlasDiag.Value.FormatSummary()}");
         }
         output.WriteLine("=== Sync diagnostic complete ===");
     }

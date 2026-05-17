@@ -505,16 +505,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             glyphAtlasTextRenderer = _glyphAtlasTextRenderer ??= new D3D12GlyphAtlasTextRenderer(_device);
         }
-        catch (COMException ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: 0x{ex.ErrorCode:X8}");
-            RecordGlyphAtlasInitializationFallback(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed);
-            return false;
-        }
-        catch (InvalidOperationException ex)
+        catch (D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationException ex)
         {
             System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: {ex.Message}");
-            RecordGlyphAtlasInitializationFallback(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.CompileFailed);
+            RecordGlyphAtlasInitializationFallback(
+                ex.Phase == D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile
+                    ? D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.CompileFailed
+                    : D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed,
+                ex.Phase);
             return false;
         }
 
@@ -527,9 +525,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         return recorded;
     }
 
-    private void RecordGlyphAtlasInitializationFallback(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason reason)
+    private void RecordGlyphAtlasInitializationFallback(
+        D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason reason,
+        D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase phase)
     {
-        _glyphAtlasTextDiagnostics = _glyphAtlasTextDiagnostics.WithFallback(1, reason);
+        _glyphAtlasTextDiagnostics = _glyphAtlasTextDiagnostics
+            .WithFallback(1, reason)
+            .WithInitializationFailure(phase);
     }
 
     private bool RenderOverlayTextAndMaybeSync(

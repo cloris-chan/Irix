@@ -19,6 +19,15 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Diagnose_scale_accepts_percent_and_multiplier_values()
+    {
+        Assert.Equal(DisplayScale.Identity, Program.ParseDiagnosticScale([]).Normalize());
+        Assert.Equal(new DisplayScale(1.5f, 1.5f), Program.ParseDiagnosticScale(["--diagnose-scale", "150"]));
+        Assert.Equal(new DisplayScale(2f, 2f), Program.ParseDiagnosticScale(["--diagnose-scale", "200%"]));
+        Assert.Equal(new DisplayScale(1.25f, 1.25f), Program.ParseDiagnosticScale(["--diagnose-scale", "1.25"]));
+    }
+
+    [Fact]
     public void Glyph_atlas_renderer_uses_reusable_frame_buffers_and_reports_fallback_reasons()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs"));
@@ -29,6 +38,88 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasFallbackReasonCounts", source);
         Assert.Contains("NonAscii", source);
         Assert.Contains("AtlasFull", source);
+        Assert.Contains("GlyphAtlasInitializationPhase.RootSignature", source);
+        Assert.Contains("GlyphAtlasInitializationPhase.ShaderCompile", source);
+        Assert.Contains("GlyphAtlasInitializationPhase.PSO", source);
+        Assert.Contains("GlyphAtlasInitializationPhase.AtlasTexture", source);
+        Assert.Contains("GlyphAtlasInitializationPhase.UploadBuffer", source);
+        Assert.Contains("GlyphAtlasInitializationPhase.VertexBuffer", source);
+        Assert.Contains("RentClearTypeScratch", source);
+        Assert.Contains("RentGrayscaleScratch", source);
+    }
+
+    [Fact]
+    public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 12,
+            UploadedBytes: 4096,
+            DrawnGlyphs: 48,
+            CacheHits: 9,
+            CacheMisses: 3,
+            FallbackFrames: 1,
+            UnsupportedRuns: 1,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RasterScratchBytes: 768,
+            RasterScratchResizes: 2)
+            .WithFallback(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
+            .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
+
+        var summary = diagnostics.FormatSummary();
+
+        Assert.Contains("cachedGlyphs=12", summary);
+        Assert.Contains("uploads=4096 bytes", summary);
+        Assert.Contains("fallbacks=2", summary);
+        Assert.Contains("NonAscii=1", summary);
+        Assert.Contains("initFailurePhase=ShaderCompile", summary);
+        Assert.Contains("rasterScratch=768 bytes/2 resizes", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_stress_report_includes_atlas_full_fallback_contract()
+    {
+        var glyphAtlas = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 470,
+            UploadedBytes: 1048576,
+            DrawnGlyphs: 1200,
+            CacheHits: 40,
+            CacheMisses: 471,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RasterScratchBytes: 8192,
+            RasterScratchResizes: 4)
+            .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.AtlasFull);
+        var frameSerial = new D3D12Renderer.FrameSerialDiagnostics(
+            FrameSerial: 1,
+            PresentSerial: 1,
+            SyncWaitCount: 1,
+            SyncWaitTicks: 0,
+            BackBufferIndex: 0,
+            SyncStrategy: TextOverlaySyncStrategy.D3D12FenceAfterOverlay);
+        var writer = new StringWriter();
+
+        GlyphAtlasStressDiagnosticRunner.WriteReport(
+            writer,
+            TextCompositionMode.GlyphAtlas,
+            refreshRateHz: 240,
+            new DisplayScale(1.5f, 1.5f),
+            runCount: 32,
+            asciiCharsPerRun: 95,
+            deviceRemoved: false,
+            deviceErrorReason: null,
+            frameSerial,
+            glyphAtlas);
+
+        var report = writer.ToString();
+        Assert.Contains("=== Glyph Atlas Stress Diagnostic ===", report);
+        Assert.Contains("Text composition mode: GlyphAtlas", report);
+        Assert.Contains("Device removed: False", report);
+        Assert.Contains("Frame serial: frameSerial=1, presentSerial=1, syncWaits=1", report);
+        Assert.Contains("AtlasFull=1", report);
+        Assert.Contains("=== Glyph atlas stress diagnostic complete ===", report);
     }
 
     #region Scroll Snapshot
@@ -487,14 +578,35 @@ public sealed class ProgramDiagnosticsTests
             DpiAwareness: "ProcessDefault",
             ScaleMode: "PhysicalPixelsV0");
         var writer = new StringWriter();
+        var glyphAtlas = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 8,
+            UploadedBytes: 2048,
+            DrawnGlyphs: 24,
+            CacheHits: 30,
+            CacheMisses: 8,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RasterScratchBytes: 512,
+            RasterScratchResizes: 2);
 
-        ResizeDiagnosticRunner.WriteReport(writer, deviceRemoved: false, deviceErrorReason: null, swapchainWidth: 929, swapchainHeight: 454, snapshot);
+        ResizeDiagnosticRunner.WriteReport(
+            writer,
+            deviceRemoved: false,
+            deviceErrorReason: null,
+            swapchainWidth: 929,
+            swapchainHeight: 454,
+            snapshot,
+            TextCompositionMode.GlyphAtlas,
+            glyphAtlas);
 
         Assert.Equal(string.Join(Environment.NewLine, [
             "=== D3D12 Resize Diagnostics ===",
             "Device removed: False",
             "Device error reason: (none)",
             "Swapchain size: 929x454",
+            "Text composition mode: GlyphAtlas",
             "windowPhysicalSize=929x454",
             "rendererSwapchainSize=929x454",
             "translatorViewportSize=929x454",
@@ -511,6 +623,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
+            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, uploads=2048 bytes, hits=30, misses=8, fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0], initFailurePhase=None, rasterScratch=512 bytes/2 resizes",
             "=== Resize diagnostic mode complete ===",
             string.Empty
         ]), writer.ToString());

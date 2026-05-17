@@ -7,14 +7,23 @@ namespace Irix.Poc;
 
 internal static class TextCacheAllocationDiagnosticRunner
 {
-    internal static void Run(TextWriter output, int frameCount = 180)
+    internal static void Run(
+        TextWriter output,
+        int frameCount = 180,
+        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        DisplayScale diagnosticScale = default)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
-        var displayScale = screen.Scale.Normalize();
+        var displayScale = diagnosticScale.Normalize();
+        if (diagnosticScale == default)
+        {
+            displayScale = screen.Scale.Normalize();
+        }
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        d3d12Renderer.TextCompositionMode = textCompositionMode;
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
         using var compositor = new DrawingBackendCompositor(d3d12Backend);
         compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
@@ -34,6 +43,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine($"Frames per scenario: {frameCount}");
         output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
+        output.WriteLine($"Text composition mode: {d3d12Renderer.TextCompositionMode}");
         output.WriteLine();
 
         var arena = new VirtualTextArena();
@@ -121,6 +131,11 @@ internal static class TextCacheAllocationDiagnosticRunner
             var layoutTotal = d.LayoutHits + d.LayoutMisses;
             output.WriteLine($"Format cache: hits={d.FormatHits}, misses={d.FormatMisses}, hitRate={(formatTotal > 0 ? 100.0 * d.FormatHits / formatTotal : 0):F1}%, cached={d.CachedFormats}, evictions={d.FormatEvictions}");
             output.WriteLine($"Layout cache: hits={d.LayoutHits}, misses={d.LayoutMisses}, hitRate={(layoutTotal > 0 ? 100.0 * d.LayoutHits / layoutTotal : 0):F1}%, cached={d.CachedLayouts}, evictions={d.LayoutEvictions}");
+        }
+        var glyphAtlasDiagnostics = renderer.GetGlyphAtlasTextDiagnostics();
+        if (glyphAtlasDiagnostics.HasValue)
+        {
+            output.WriteLine($"Glyph atlas: {glyphAtlasDiagnostics.Value.FormatSummary()}");
         }
 
         var allocatedBytes = allocatedAfter - allocatedBefore;

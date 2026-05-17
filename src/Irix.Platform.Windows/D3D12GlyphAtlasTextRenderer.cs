@@ -24,7 +24,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const uint Shader4ComponentMapping = 0u | (1u << 3) | (2u << 6) | (3u << 9) | (1u << 12);
 
     private readonly ID3D12Device* _device;
-    private readonly IDWriteFactory* _dwriteFactory;
+    private IDWriteFactory* _dwriteFactory;
     private IDWriteFontCollection* _fontCollection;
     private ID3D12RootSignature* _rootSig;
     private ID3D12PipelineState* _pso;
@@ -34,6 +34,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private ID3D12Resource* _vbuf;
     private D3D12_VERTEX_BUFFER_VIEW _vbv;
     private readonly byte[] _atlasPixels = new byte[AtlasRowPitch * AtlasHeight];
+    private byte[] _clearTypeScratch = [];
+    private byte[] _grayscaleScratch = [];
+    private int _rasterScratchResizeCount;
     private readonly Vertex[] _vertices = new Vertex[MaxGlyphVertices];
     private readonly GlyphDrawBatch[] _batches = new GlyphDrawBatch[MaxGlyphDrawBatches];
     private readonly Dictionary<FontFaceKey, CachedFontFace> _fontFaces = [];
@@ -55,25 +58,44 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         _device = device;
 
-        PInvoke.DWriteCreateFactory(
-            DWRITE_FACTORY_TYPE.DWRITE_FACTORY_TYPE_SHARED,
-            typeof(IDWriteFactory).GUID,
-            out var dwriteFactoryObject).ThrowOnFailure();
-        _dwriteFactory = (IDWriteFactory*)dwriteFactoryObject;
-        IDWriteFontCollection* fontCollection;
-        _dwriteFactory->GetSystemFontCollection(&fontCollection, false);
-        _fontCollection = fontCollection;
+        try
+        {
+            RunInitializationPhase(GlyphAtlasInitializationPhase.DirectWriteFactory, () =>
+            {
+                PInvoke.DWriteCreateFactory(
+                    DWRITE_FACTORY_TYPE.DWRITE_FACTORY_TYPE_SHARED,
+                    typeof(IDWriteFactory).GUID,
+                    out var dwriteFactoryObject).ThrowOnFailure();
+                _dwriteFactory = (IDWriteFactory*)dwriteFactoryObject;
+            });
+            RunInitializationPhase(GlyphAtlasInitializationPhase.FontCollection, () =>
+            {
+                IDWriteFontCollection* fontCollection;
+                _dwriteFactory->GetSystemFontCollection(&fontCollection, false);
+                _fontCollection = fontCollection;
+            });
 
-        CreateRootSignature();
-        CreatePSO();
-        CreateAtlasResources();
-        CreateVertexBuffer();
+            RunInitializationPhase(GlyphAtlasInitializationPhase.RootSignature, CreateRootSignature);
+            CreatePSO();
+            CreateAtlasResources();
+            RunInitializationPhase(GlyphAtlasInitializationPhase.VertexBuffer, CreateVertexBuffer);
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
     public bool IsDeviceRemoved => _deviceRemoved;
     public string? DeviceErrorReason => _deviceErrorReason;
 
-    public GlyphAtlasTextRendererDiagnostics GetDiagnostics() => _diagnostics.WithCachedGlyphs(_glyphs.Count);
+    public GlyphAtlasTextRendererDiagnostics GetDiagnostics()
+    {
+        return _diagnostics
+            .WithCachedGlyphs(_glyphs.Count)
+            .WithRasterScratch(_clearTypeScratch.Length + _grayscaleScratch.Length, _rasterScratchResizeCount);
+    }
 
     public void ResetDiagnostics()
     {
@@ -85,7 +107,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             CacheMisses: 0,
             FallbackFrames: 0,
             UnsupportedRuns: 0,
-            Reasons: default);
+            Reasons: default,
+            InitializationFailurePhase: GlyphAtlasInitializationPhase.None,
+            RasterScratchBytes: _clearTypeScratch.Length + _grayscaleScratch.Length,
+            RasterScratchResizes: 0);
+        _rasterScratchResizeCount = 0;
     }
 
     public bool TryRecord(
@@ -440,10 +466,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             var clearTypeBytes = checked(width * height * 3);
-            var clearType = new byte[clearTypeBytes];
+            var clearType = RentClearTypeScratch(clearTypeBytes);
             analysis->CreateAlphaTexture(DWRITE_TEXTURE_TYPE.DWRITE_TEXTURE_CLEARTYPE_3x1, bounds, clearType);
 
-            var grayscale = new byte[width * height];
+            var grayscale = RentGrayscaleScratch(width * height);
             for (var i = 0; i < grayscale.Length; i++)
             {
                 var source = i * 3;
@@ -478,6 +504,28 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             if (analysis != null) analysis->Release();
         }
+    }
+
+    private Span<byte> RentClearTypeScratch(int byteCount)
+    {
+        if (_clearTypeScratch.Length < byteCount)
+        {
+            _clearTypeScratch = new byte[byteCount];
+            _rasterScratchResizeCount++;
+        }
+
+        return _clearTypeScratch.AsSpan(0, byteCount);
+    }
+
+    private Span<byte> RentGrayscaleScratch(int byteCount)
+    {
+        if (_grayscaleScratch.Length < byteCount)
+        {
+            _grayscaleScratch = new byte[byteCount];
+            _rasterScratchResizeCount++;
+        }
+
+        return _grayscaleScratch.AsSpan(0, byteCount);
     }
 
     private static float ComputeGlyphAdvance(CachedFontFace fontFace, float emSize, ushort glyphIndex)
@@ -517,11 +565,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
-    private void CopyGlyphToAtlas(byte[] glyphPixels, int width, int height, int atlasX, int atlasY)
+    private void CopyGlyphToAtlas(ReadOnlySpan<byte> glyphPixels, int width, int height, int atlasX, int atlasY)
     {
         for (var row = 0; row < height; row++)
         {
-            glyphPixels.AsSpan(row * width, width).CopyTo(_atlasPixels.AsSpan((atlasY + row) * AtlasRowPitch + atlasX, width));
+            glyphPixels.Slice(row * width, width).CopyTo(_atlasPixels.AsSpan((atlasY + row) * AtlasRowPitch + atlasX, width));
         }
     }
 
@@ -707,6 +755,26 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return barrier;
     }
 
+    private static void RunInitializationPhase(GlyphAtlasInitializationPhase phase, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (GlyphAtlasInitializationException)
+        {
+            throw;
+        }
+        catch (COMException ex)
+        {
+            throw new GlyphAtlasInitializationException(phase, ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new GlyphAtlasInitializationException(phase, ex);
+        }
+    }
+
     private void CreateRootSignature()
     {
         var range = new D3D12_DESCRIPTOR_RANGE
@@ -766,52 +834,69 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void CreatePSO()
     {
-        var vs = CompileShader(VsHlsl, "VSMain", "vs_5_0");
-        var ps = CompileShader(PsHlsl, "PSMain", "ps_5_0");
+        ID3DBlob* vs = null;
+        ID3DBlob* ps = null;
         try
         {
-            fixed (byte* posBytes = "POSITION"u8)
-            fixed (byte* texBytes = "TEXCOORD"u8)
-            fixed (byte* colBytes = "COLOR"u8)
+            vs = CompileShaderForInitialization(VsHlsl, "VSMain", "vs_5_0");
+            ps = CompileShaderForInitialization(PsHlsl, "PSMain", "ps_5_0");
+            RunInitializationPhase(GlyphAtlasInitializationPhase.PSO, () =>
             {
-                var elems = stackalloc D3D12_INPUT_ELEMENT_DESC[3];
-                elems[0] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)posBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT };
-                elems[1] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)texBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT, AlignedByteOffset = 8 };
-                elems[2] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)colBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT, AlignedByteOffset = 16 };
+                fixed (byte* posBytes = "POSITION"u8)
+                fixed (byte* texBytes = "TEXCOORD"u8)
+                fixed (byte* colBytes = "COLOR"u8)
+                {
+                    var elems = stackalloc D3D12_INPUT_ELEMENT_DESC[3];
+                    elems[0] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)posBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT };
+                    elems[1] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)texBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT, AlignedByteOffset = 8 };
+                    elems[2] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)colBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT, AlignedByteOffset = 16 };
 
-                var desc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
-                desc.pRootSignature = _rootSig;
-                desc.InputLayout.pInputElementDescs = elems;
-                desc.InputLayout.NumElements = 3;
-                desc.VS.pShaderBytecode = vs->GetBufferPointer();
-                desc.VS.BytecodeLength = vs->GetBufferSize();
-                desc.PS.pShaderBytecode = ps->GetBufferPointer();
-                desc.PS.BytecodeLength = ps->GetBufferSize();
-                desc.BlendState.RenderTarget._0.BlendEnable = true;
-                desc.BlendState.RenderTarget._0.SrcBlend = D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
-                desc.BlendState.RenderTarget._0.DestBlend = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
-                desc.BlendState.RenderTarget._0.BlendOp = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
-                desc.BlendState.RenderTarget._0.SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE;
-                desc.BlendState.RenderTarget._0.DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
-                desc.BlendState.RenderTarget._0.BlendOpAlpha = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
-                desc.BlendState.RenderTarget._0.RenderTargetWriteMask = 0xF;
-                desc.SampleMask = 0xFFFFFFFF;
-                desc.RasterizerState.FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
-                desc.RasterizerState.CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
-                desc.RasterizerState.DepthClipEnable = true;
-                desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-                desc.NumRenderTargets = 1;
-                desc.RTVFormats._0 = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                desc.SampleDesc.Count = 1;
+                    var desc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
+                    desc.pRootSignature = _rootSig;
+                    desc.InputLayout.pInputElementDescs = elems;
+                    desc.InputLayout.NumElements = 3;
+                    desc.VS.pShaderBytecode = vs->GetBufferPointer();
+                    desc.VS.BytecodeLength = vs->GetBufferSize();
+                    desc.PS.pShaderBytecode = ps->GetBufferPointer();
+                    desc.PS.BytecodeLength = ps->GetBufferSize();
+                    desc.BlendState.RenderTarget._0.BlendEnable = true;
+                    desc.BlendState.RenderTarget._0.SrcBlend = D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
+                    desc.BlendState.RenderTarget._0.DestBlend = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+                    desc.BlendState.RenderTarget._0.BlendOp = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+                    desc.BlendState.RenderTarget._0.SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE;
+                    desc.BlendState.RenderTarget._0.DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+                    desc.BlendState.RenderTarget._0.BlendOpAlpha = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+                    desc.BlendState.RenderTarget._0.RenderTargetWriteMask = 0xF;
+                    desc.SampleMask = 0xFFFFFFFF;
+                    desc.RasterizerState.FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
+                    desc.RasterizerState.CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
+                    desc.RasterizerState.DepthClipEnable = true;
+                    desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+                    desc.NumRenderTargets = 1;
+                    desc.RTVFormats._0 = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+                    desc.SampleDesc.Count = 1;
 
-                _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out var psoObj);
-                _pso = (ID3D12PipelineState*)psoObj;
-            }
+                    _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out var psoObj);
+                    _pso = (ID3D12PipelineState*)psoObj;
+                }
+            });
         }
         finally
         {
             if (vs != null) vs->Release();
             if (ps != null) ps->Release();
+        }
+    }
+
+    private ID3DBlob* CompileShaderForInitialization(string source, string entryPoint, string profile)
+    {
+        try
+        {
+            return CompileShader(source, entryPoint, profile);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new GlyphAtlasInitializationException(GlyphAtlasInitializationPhase.ShaderCompile, ex);
         }
     }
 
@@ -857,15 +942,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN
         };
 
-        _device->CreateCommittedResource(
-            defaultHeap,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            textureDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-            null,
-            typeof(ID3D12Resource).GUID,
-            out var textureObj);
-        _atlasTexture = (ID3D12Resource*)textureObj;
+        RunInitializationPhase(GlyphAtlasInitializationPhase.AtlasTexture, () =>
+        {
+            _device->CreateCommittedResource(
+                defaultHeap,
+                D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+                textureDesc,
+                D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                null,
+                typeof(ID3D12Resource).GUID,
+                out var textureObj);
+            _atlasTexture = (ID3D12Resource*)textureObj;
+        });
 
         var uploadHeap = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD };
         var uploadDesc = new D3D12_RESOURCE_DESC
@@ -878,15 +966,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR
         };
-        _device->CreateCommittedResource(
-            uploadHeap,
-            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            uploadDesc,
-            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            null,
-            typeof(ID3D12Resource).GUID,
-            out var uploadObj);
-        _atlasUpload = (ID3D12Resource*)uploadObj;
+        RunInitializationPhase(GlyphAtlasInitializationPhase.UploadBuffer, () =>
+        {
+            _device->CreateCommittedResource(
+                uploadHeap,
+                D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+                uploadDesc,
+                D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+                null,
+                typeof(ID3D12Resource).GUID,
+                out var uploadObj);
+            _atlasUpload = (ID3D12Resource*)uploadObj;
+        });
 
         var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC
         {
@@ -894,8 +985,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
             Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
         };
-        _device->CreateDescriptorHeap(heapDesc, typeof(ID3D12DescriptorHeap).GUID, out var heapObj);
-        _srvHeap = (ID3D12DescriptorHeap*)heapObj;
+        RunInitializationPhase(GlyphAtlasInitializationPhase.DescriptorHeap, () =>
+        {
+            _device->CreateDescriptorHeap(heapDesc, typeof(ID3D12DescriptorHeap).GUID, out var heapObj);
+            _srvHeap = (ID3D12DescriptorHeap*)heapObj;
+        });
 
         var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC
         {
@@ -904,7 +998,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             Shader4ComponentMapping = Shader4ComponentMapping
         };
         srvDesc.Anonymous.Texture2D.MipLevels = 1;
-        _device->CreateShaderResourceView(_atlasTexture, srvDesc, _srvHeap->GetCPUDescriptorHandleForHeapStart());
+        RunInitializationPhase(GlyphAtlasInitializationPhase.ShaderResourceView, () =>
+        {
+            _device->CreateShaderResourceView(_atlasTexture, srvDesc, _srvHeap->GetCPUDescriptorHandleForHeapStart());
+        });
     }
 
     private void CreateVertexBuffer()
@@ -920,9 +1017,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR
         };
-        _device->CreateCommittedResource(heapProps, D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-            resDesc, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-            null, typeof(ID3D12Resource).GUID, out var resObj);
+        _device->CreateCommittedResource(
+            heapProps,
+            D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+            resDesc,
+            D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+            null,
+            typeof(ID3D12Resource).GUID,
+            out var resObj);
         _vbuf = (ID3D12Resource*)resObj;
         _vbv.BufferLocation = _vbuf->GetGPUVirtualAddress();
         _vbv.SizeInBytes = (uint)(MaxGlyphVertices * sizeof(Vertex));
@@ -1027,6 +1129,28 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int StartVertex { get; } = StartVertex;
         public int VertexCount { get; } = VertexCount;
         public IntegerScissorRect Scissor { get; } = Scissor;
+    }
+
+    public enum GlyphAtlasInitializationPhase : byte
+    {
+        None,
+        DirectWriteFactory,
+        FontCollection,
+        RootSignature,
+        ShaderCompile,
+        PSO,
+        AtlasTexture,
+        UploadBuffer,
+        DescriptorHeap,
+        ShaderResourceView,
+        VertexBuffer
+    }
+
+    public sealed class GlyphAtlasInitializationException(
+        GlyphAtlasInitializationPhase phase,
+        Exception innerException) : InvalidOperationException($"Glyph atlas initialization failed during {phase}.", innerException)
+    {
+        public GlyphAtlasInitializationPhase Phase { get; } = phase;
     }
 
     [Flags]
@@ -1192,7 +1316,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int CacheMisses,
         int FallbackFrames,
         int UnsupportedRuns,
-        GlyphAtlasFallbackReasonCounts Reasons) : IEquatable<GlyphAtlasTextRendererDiagnostics>
+        GlyphAtlasFallbackReasonCounts Reasons,
+        GlyphAtlasInitializationPhase InitializationFailurePhase,
+        int RasterScratchBytes,
+        int RasterScratchResizes) : IEquatable<GlyphAtlasTextRendererDiagnostics>
     {
         public int CachedGlyphs { get; } = CachedGlyphs;
         public long UploadedBytes { get; } = UploadedBytes;
@@ -1202,12 +1329,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int FallbackFrames { get; } = FallbackFrames;
         public int UnsupportedRuns { get; } = UnsupportedRuns;
         public GlyphAtlasFallbackReasonCounts Reasons { get; } = Reasons;
+        public GlyphAtlasInitializationPhase InitializationFailurePhase { get; } = InitializationFailurePhase;
+        public int RasterScratchBytes { get; } = RasterScratchBytes;
+        public int RasterScratchResizes { get; } = RasterScratchResizes;
 
-        public GlyphAtlasTextRendererDiagnostics WithCachedGlyphs(int cachedGlyphs) => new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons);
-        public GlyphAtlasTextRendererDiagnostics WithCacheHit() => new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons);
-        public GlyphAtlasTextRendererDiagnostics WithCacheMiss() => new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons);
-        public GlyphAtlasTextRendererDiagnostics WithDrawnGlyphs(int glyphs) => new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons);
-        public GlyphAtlasTextRendererDiagnostics WithUploadedBytes(long bytes) => new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons);
+        public GlyphAtlasTextRendererDiagnostics WithCachedGlyphs(int cachedGlyphs) => new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RasterScratchBytes, RasterScratchResizes);
+        public GlyphAtlasTextRendererDiagnostics WithCacheHit() => new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RasterScratchBytes, RasterScratchResizes);
+        public GlyphAtlasTextRendererDiagnostics WithCacheMiss() => new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RasterScratchBytes, RasterScratchResizes);
+        public GlyphAtlasTextRendererDiagnostics WithDrawnGlyphs(int glyphs) => new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RasterScratchBytes, RasterScratchResizes);
+        public GlyphAtlasTextRendererDiagnostics WithUploadedBytes(long bytes) => new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RasterScratchBytes, RasterScratchResizes);
+        public GlyphAtlasTextRendererDiagnostics WithRasterScratch(int bytes, int resizes) => new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, bytes, resizes);
+        public GlyphAtlasTextRendererDiagnostics WithInitializationFailure(GlyphAtlasInitializationPhase phase) => new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, phase, RasterScratchBytes, RasterScratchResizes);
+
         public GlyphAtlasTextRendererDiagnostics WithFallback(int unsupportedRuns, GlyphAtlasFallbackReason reason)
         {
             return new GlyphAtlasTextRendererDiagnostics(
@@ -1218,7 +1351,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 CacheMisses,
                 FallbackFrames + 1,
                 UnsupportedRuns + unsupportedRuns,
-                reason == GlyphAtlasFallbackReason.None ? Reasons : Reasons.With(reason));
+                reason == GlyphAtlasFallbackReason.None ? Reasons : Reasons.With(reason),
+                InitializationFailurePhase,
+                RasterScratchBytes,
+                RasterScratchResizes);
+        }
+
+        public string FormatSummary()
+        {
+            return $"cachedGlyphs={CachedGlyphs}, drawnGlyphs={DrawnGlyphs}, uploads={UploadedBytes} bytes, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], initFailurePhase={InitializationFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
         }
 
         public bool Equals(GlyphAtlasTextRendererDiagnostics other)
@@ -1230,12 +1371,30 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && CacheMisses == other.CacheMisses
                 && FallbackFrames == other.FallbackFrames
                 && UnsupportedRuns == other.UnsupportedRuns
-                && Reasons.Equals(other.Reasons);
+                && Reasons.Equals(other.Reasons)
+                && InitializationFailurePhase == other.InitializationFailurePhase
+                && RasterScratchBytes == other.RasterScratchBytes
+                && RasterScratchResizes == other.RasterScratchResizes;
         }
 
         public override bool Equals(object? obj) => obj is GlyphAtlasTextRendererDiagnostics other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons);
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(CachedGlyphs);
+            hash.Add(UploadedBytes);
+            hash.Add(DrawnGlyphs);
+            hash.Add(CacheHits);
+            hash.Add(CacheMisses);
+            hash.Add(FallbackFrames);
+            hash.Add(UnsupportedRuns);
+            hash.Add(Reasons);
+            hash.Add(InitializationFailurePhase);
+            hash.Add(RasterScratchBytes);
+            hash.Add(RasterScratchResizes);
+            return hash.ToHashCode();
+        }
     }
 
     private const string VsHlsl = @"

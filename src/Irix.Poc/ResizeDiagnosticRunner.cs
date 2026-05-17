@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
 using Irix.Rendering;
@@ -8,14 +9,22 @@ internal static class ResizeDiagnosticRunner
 {
     private const string ScaleModePhysicalPixelsV0 = "PhysicalPixelsV0";
 
-    internal static void Run(TextWriter output)
+    internal static void Run(
+        TextWriter output,
+        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        DisplayScale diagnosticScale = default)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
-        var displayScale = screen.Scale.Normalize();
+        var displayScale = diagnosticScale.Normalize();
+        if (diagnosticScale == default)
+        {
+            displayScale = screen.Scale.Normalize();
+        }
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        d3d12Renderer.TextCompositionMode = textCompositionMode;
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
         using var compositor = new DrawingBackendCompositor(d3d12Backend);
         compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
@@ -98,7 +107,15 @@ internal static class ResizeDiagnosticRunner
             displayScale,
             logicalViewport);
 
-        WriteReport(output, d3d12Renderer.IsDeviceRemoved, d3d12Renderer.DeviceErrorReason, d3d12Renderer.Width, d3d12Renderer.Height, snapshot);
+        WriteReport(
+            output,
+            d3d12Renderer.IsDeviceRemoved,
+            d3d12Renderer.DeviceErrorReason,
+            d3d12Renderer.Width,
+            d3d12Renderer.Height,
+            snapshot,
+            d3d12Renderer.TextCompositionMode,
+            d3d12Renderer.GetGlyphAtlasTextDiagnostics());
     }
 
     internal static void WriteReport(
@@ -107,15 +124,22 @@ internal static class ResizeDiagnosticRunner
         string? deviceErrorReason,
         int swapchainWidth,
         int swapchainHeight,
-        ViewportDiagnosticsSnapshot snapshot)
+        ViewportDiagnosticsSnapshot snapshot,
+        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? glyphAtlasDiagnostics = null)
     {
         output.WriteLine("=== D3D12 Resize Diagnostics ===");
         output.WriteLine($"Device removed: {deviceRemoved}");
         output.WriteLine($"Device error reason: {deviceErrorReason ?? "(none)"}");
         output.WriteLine($"Swapchain size: {swapchainWidth}x{swapchainHeight}");
+        output.WriteLine($"Text composition mode: {textCompositionMode}");
         foreach (var line in DiagnosticsFormatter.BuildResizeViewportDiagnosticLines(snapshot))
         {
             output.WriteLine(line);
+        }
+        if (glyphAtlasDiagnostics.HasValue)
+        {
+            output.WriteLine($"Glyph atlas: {glyphAtlasDiagnostics.Value.FormatSummary()}");
         }
         output.WriteLine("=== Resize diagnostic mode complete ===");
     }

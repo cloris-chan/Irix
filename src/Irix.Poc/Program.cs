@@ -21,7 +21,10 @@ internal static class Program
         if (args.Contains("--diagnose-resize"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            ResizeDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
+            ResizeDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                ParseTextCompositionMode(args),
+                ParseDiagnosticScale(args));
             return;
         }
 
@@ -58,13 +61,24 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-glyph-atlas-stress"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            GlyphAtlasStressDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
+            return;
+        }
+
         if (args.Contains("--diagnose-text-cache"))
         {
             var frameCount = 180;
             var frameArg = args.SkipWhile(a => a != "--diagnose-text-cache").Skip(1).FirstOrDefault();
             if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            TextCacheAllocationDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, frameCount);
+            TextCacheAllocationDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                frameCount,
+                ParseTextCompositionMode(args),
+                ParseDiagnosticScale(args));
             return;
         }
 
@@ -344,6 +358,24 @@ internal static class Program
             "overlay" => TextCompositionMode.Overlay,
             _ => TextCompositionMode.Overlay
         };
+    }
+
+    internal static DisplayScale ParseDiagnosticScale(string[] args)
+    {
+        var value = args.SkipWhile(a => a != "--diagnose-scale").Skip(1).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return default;
+        }
+
+        value = value.Trim().TrimEnd('%');
+        if (!float.TryParse(value, out var parsed) || parsed <= 0 || !float.IsFinite(parsed))
+        {
+            return default;
+        }
+
+        var scale = parsed > 10 ? parsed / 100f : parsed;
+        return new DisplayScale(scale, scale).Normalize();
     }
 
     private sealed class PlatformInputObserver(Action<RawInputEvent> onNext) : IObserver<RawInputEvent>

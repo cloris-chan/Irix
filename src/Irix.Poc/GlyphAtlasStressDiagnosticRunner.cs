@@ -1,0 +1,116 @@
+using Irix.Drawing;
+using Irix.Platform;
+using Irix.Platform.Windows;
+using Irix.Rendering;
+
+namespace Irix.Poc;
+
+internal static class GlyphAtlasStressDiagnosticRunner
+{
+    private const int RunCount = 32;
+
+    internal static void Run(TextWriter output)
+    {
+        using var platformHost = new WindowsPlatformHost();
+        var screen = platformHost.Screens[0];
+        var displayScale = screen.Scale.Normalize();
+        using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
+
+        using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        d3d12Renderer.TextCompositionMode = TextCompositionMode.GlyphAtlas;
+        var resources = FrameDrawingResources.Rent();
+        using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        using var compositor = new DrawingBackendCompositor(d3d12Backend);
+        compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
+
+        var ascii = new string(Enumerable.Range(32, 95).Select(static code => (char)code).ToArray());
+        var commands = new DrawCommand[RunCount + 1];
+        commands[0] = new DrawCommand(
+            DrawCommandKind.FillRect,
+            Rect: new DrawRect(0, 0, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height),
+            Color: DrawColor.Opaque(18, 18, 18));
+
+        for (var i = 0; i < RunCount; i++)
+        {
+            var fontSize = 48f + i * 4f;
+            var style = new TextStyle(
+                "Segoe UI",
+                fontSize,
+                i % 3 == 0 ? TextFontWeight.Bold : TextFontWeight.Normal,
+                i % 4 == 0 ? TextFontStyle.Italic : TextFontStyle.Normal,
+                TextFontStretch.Normal,
+                TextHorizontalAlignment.Leading,
+                TextVerticalAlignment.Top,
+                TextWrapping.NoWrap);
+            var styleHandle = resources.AddTextStyle(style);
+            var text = resources.AddText(ascii);
+            commands[i + 1] = new DrawCommand(
+                DrawCommandKind.DrawTextRun,
+                Rect: new DrawRect(8, 8 + (i % 6) * 40, 60000, MathF.Ceiling(fontSize * 2.2f)),
+                Resource: styleHandle,
+                Text: text,
+                Color: DrawColor.Opaque(245, 245, 245));
+        }
+
+        resources.Seal();
+        using var batch = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(commands), commands.Length),
+            [],
+            resources);
+        compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
+
+        WriteReport(
+            output,
+            d3d12Renderer.TextCompositionMode,
+            screen.RefreshRateHz,
+            displayScale,
+            RunCount,
+            ascii.Length,
+            d3d12Renderer.IsDeviceRemoved,
+            d3d12Renderer.DeviceErrorReason,
+            d3d12Backend.FrameSerialDiagnostics,
+            d3d12Renderer.GetGlyphAtlasTextDiagnostics());
+    }
+
+    internal static void WriteReport(
+        TextWriter output,
+        TextCompositionMode textCompositionMode,
+        int refreshRateHz,
+        DisplayScale displayScale,
+        int runCount,
+        int asciiCharsPerRun,
+        bool deviceRemoved,
+        string? deviceErrorReason,
+        D3D12Renderer.FrameSerialDiagnostics frameSerialDiagnostics,
+        D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? glyphAtlasDiagnostics)
+    {
+        output.WriteLine("=== Glyph Atlas Stress Diagnostic ===");
+        output.WriteLine($"Text composition mode: {textCompositionMode}");
+        output.WriteLine($"Display refresh: {refreshRateHz}Hz");
+        output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
+        output.WriteLine($"Runs: {runCount}");
+        output.WriteLine($"ASCII chars per run: {asciiCharsPerRun}");
+        output.WriteLine($"Device removed: {deviceRemoved}");
+        output.WriteLine($"Device error reason: {deviceErrorReason ?? "(none)"}");
+        output.WriteLine($"Frame serial: frameSerial={frameSerialDiagnostics.FrameSerial}, presentSerial={frameSerialDiagnostics.PresentSerial}, syncWaits={frameSerialDiagnostics.SyncWaitCount}");
+        if (glyphAtlasDiagnostics.HasValue)
+        {
+            output.WriteLine($"Glyph atlas: {glyphAtlasDiagnostics.Value.FormatSummary()}");
+        }
+        else
+        {
+            output.WriteLine("Glyph atlas: (not initialized)");
+        }
+        output.WriteLine("=== Glyph atlas stress diagnostic complete ===");
+    }
+
+    private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
+    {
+        const int windowWidth = 960;
+        const int windowHeight = 540;
+        var bounds = screen.PhysicalBounds;
+        var x = bounds.X + Math.Max((bounds.Width - windowWidth) / 2, 0);
+        var y = bounds.Y + Math.Max((bounds.Height - windowHeight) / 2, 0);
+        return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
+    }
+}
