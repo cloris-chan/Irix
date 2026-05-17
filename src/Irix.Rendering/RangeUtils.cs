@@ -12,33 +12,73 @@ internal static class RangeUtils
     /// </summary>
     public static IReadOnlyList<(int Start, int Count)> Merge(IReadOnlyList<(int Start, int Count)> ranges)
     {
-        if (ranges.Count <= 1)
+        if (ranges.Count == 0)
         {
-            return ranges;
+            return [];
         }
 
-        var sorted = new List<(int Start, int Count)>(ranges);
-        sorted.Sort((a, b) => a.Start.CompareTo(b.Start));
-
-        var merged = new List<(int Start, int Count)> { sorted[0] };
-        for (var i = 1; i < sorted.Count; i++)
+        var scratch = new RenderScratchBuffer();
+        var sorted = scratch.RentRangeList(ranges.Count);
+        try
         {
-            var last = merged[^1];
-            var current = sorted[i];
+            for (var i = 0; i < ranges.Count; i++)
+            {
+                sorted.Add(ranges[i]);
+            }
+
+            return MergeScratch(ref sorted, rejectOverlap: false, out _);
+        }
+        finally
+        {
+            sorted.Dispose();
+        }
+    }
+
+    private static IReadOnlyList<(int Start, int Count)> MergeScratch(
+        ref ScratchList<(int Start, int Count)> ranges,
+        bool rejectOverlap,
+        out bool valid)
+    {
+        valid = true;
+        if (ranges.Count == 0)
+        {
+            return [];
+        }
+
+        if (ranges.Count == 1)
+        {
+            return ranges.ToArray();
+        }
+
+        ranges.Sort(RangeStartComparer.Instance);
+        var span = ranges.WrittenMutable;
+        var write = 1;
+        for (var read = 1; read < span.Length; read++)
+        {
+            var last = span[write - 1];
+            var current = span[read];
             var lastEnd = last.Start + last.Count;
+
+            if (rejectOverlap && current.Start < lastEnd)
+            {
+                valid = false;
+                return [];
+            }
 
             if (current.Start <= lastEnd)
             {
                 var newEnd = Math.Max(lastEnd, current.Start + current.Count);
-                merged[^1] = (last.Start, newEnd - last.Start);
+                span[write - 1] = (last.Start, newEnd - last.Start);
             }
             else
             {
-                merged.Add(current);
+                span[write++] = current;
             }
         }
 
-        return merged;
+        var result = new (int Start, int Count)[write];
+        span[..write].CopyTo(result);
+        return result;
     }
 
     public static bool TryNormalizeStrict(
@@ -52,41 +92,34 @@ internal static class RangeUtils
             return false;
         }
 
-        var sorted = new List<(int Start, int Count)>(ranges.Count);
-        foreach (var (start, count) in ranges)
+        var scratch = new RenderScratchBuffer();
+        var sorted = scratch.RentRangeList(ranges.Count);
+        try
         {
-            if (start < 0 || count <= 0 || start > maxCount - count)
+            for (var i = 0; i < ranges.Count; i++)
             {
+                var (start, count) = ranges[i];
+                if (start < 0 || count <= 0 || start > maxCount - count)
+                {
+                    return false;
+                }
+
+                sorted.Add((start, count));
+            }
+
+            normalized = MergeScratch(ref sorted, rejectOverlap: true, out var valid);
+            if (!valid)
+            {
+                normalized = [];
                 return false;
             }
 
-            sorted.Add((start, count));
+            return normalized.Count > 0;
         }
-
-        sorted.Sort((left, right) => left.Start.CompareTo(right.Start));
-        var merged = new List<(int Start, int Count)>(sorted.Count) { sorted[0] };
-        for (var i = 1; i < sorted.Count; i++)
+        finally
         {
-            var last = merged[^1];
-            var current = sorted[i];
-            var lastEnd = last.Start + last.Count;
-            if (current.Start < lastEnd)
-            {
-                return false;
-            }
-
-            if (current.Start == lastEnd)
-            {
-                merged[^1] = (last.Start, last.Count + current.Count);
-            }
-            else
-            {
-                merged.Add(current);
-            }
+            sorted.Dispose();
         }
-
-        normalized = merged;
-        return normalized.Count > 0;
     }
 
     /// <summary>
@@ -96,23 +129,31 @@ internal static class RangeUtils
         ElementCommandRange[] elementRanges,
         IReadOnlyList<(int Start, int Count)> elementDirtyRanges)
     {
-        var ranges = new List<(int Start, int Count)>();
-        foreach (var (elementStart, elementCount) in elementDirtyRanges)
+        var scratch = new RenderScratchBuffer();
+        var ranges = scratch.RentRangeList(elementDirtyRanges.Count);
+        try
         {
-            var elementEnd = elementStart + elementCount;
-            if (elementStart >= elementRanges.Length)
+            foreach (var (elementStart, elementCount) in elementDirtyRanges)
             {
-                continue;
+                var elementEnd = elementStart + elementCount;
+                if (elementStart >= elementRanges.Length)
+                {
+                    continue;
+                }
+
+                var clampedEnd = Math.Min(elementEnd, elementRanges.Length);
+                var cmdStart = elementRanges[elementStart].CommandStart;
+                var lastRange = elementRanges[clampedEnd - 1];
+                var cmdEnd = lastRange.CommandStart + lastRange.CommandCount;
+                ranges.Add((cmdStart, cmdEnd - cmdStart));
             }
 
-            var clampedEnd = Math.Min(elementEnd, elementRanges.Length);
-            var cmdStart = elementRanges[elementStart].CommandStart;
-            var lastRange = elementRanges[clampedEnd - 1];
-            var cmdEnd = lastRange.CommandStart + lastRange.CommandCount;
-            ranges.Add((cmdStart, cmdEnd - cmdStart));
+            return MergeScratch(ref ranges, rejectOverlap: false, out _);
         }
-
-        return Merge(ranges);
+        finally
+        {
+            ranges.Dispose();
+        }
     }
 
     /// <summary>
@@ -134,5 +175,12 @@ internal static class RangeUtils
         }
 
         return false;
+    }
+
+    private sealed class RangeStartComparer : IComparer<(int Start, int Count)>
+    {
+        public static readonly RangeStartComparer Instance = new();
+
+        public int Compare((int Start, int Count) x, (int Start, int Count) y) => x.Start.CompareTo(y.Start);
     }
 }

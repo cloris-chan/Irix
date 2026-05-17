@@ -597,20 +597,50 @@ public class TypedIdAllocationGuardTests
     public void Retained_diff_and_dirty_range_hot_paths_do_not_allocate_hash_collections()
     {
         var root = FindRepoRoot();
+        var scratchSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "FrameScratchArena.cs"));
+        var renderScratchSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderScratchBuffer.cs"));
         var differSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "VirtualNodeDiffer.cs"));
+        var retainedTreeSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "RetainedTree.cs"));
         var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
         var layoutBuilderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+        var rangeUtilsSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RangeUtils.cs"));
+
+        Assert.Contains("RentIntSpan", scratchSource);
+        Assert.Contains("RentNodeIndexSpan", scratchSource);
+        Assert.Contains("RentVirtualNodePatchList", scratchSource);
+        Assert.Contains("RentNodeKeyIndexMap", scratchSource);
+        Assert.Contains("RentLayoutElementList", renderScratchSource);
 
         Assert.DoesNotContain("new Dictionary<NodeKey", differSource);
         Assert.DoesNotContain("new HashSet<NodeKey>", differSource);
         Assert.DoesNotContain("Dictionary<NodeKey", differSource);
         Assert.DoesNotContain("HashSet<NodeKey>", differSource);
+        Assert.DoesNotContain("new List<", differSource);
+        Assert.Contains("KeyedLinearThreshold", differSource);
+        Assert.Contains("RentNodeKeyIndexMap", differSource);
 
         Assert.DoesNotContain("new HashSet<int>", renderPipelineSource);
         Assert.DoesNotContain("HashSet<int>", renderPipelineSource);
+        Assert.DoesNotContain("new List<LayoutDirtyClassification>", renderPipelineSource);
 
         Assert.DoesNotContain("new HashSet<int>", layoutBuilderSource);
         Assert.DoesNotContain("HashSet<int>", layoutBuilderSource);
+        Assert.DoesNotContain("new List<LayoutElement>", layoutBuilderSource);
+        Assert.DoesNotContain("new List<LayoutTreeNode>", layoutBuilderSource);
+        Assert.DoesNotContain("new List<ScrollContainerDiag>", layoutBuilderSource);
+        Assert.Contains("AdvanceDirtyCursor", layoutBuilderSource);
+
+        Assert.DoesNotContain("new List<", rangeUtilsSource);
+
+        var canonicalApplySource = ExtractSourceBetween(
+            retainedTreeSource,
+            "private ApplyResult ApplyCanonicalRootBatch",
+            "private static VirtualNode ApplyRecursive");
+        Assert.DoesNotContain("new List<", canonicalApplySource);
+        Assert.DoesNotContain("new Dictionary<", canonicalApplySource);
+        Assert.DoesNotContain("new HashSet<", canonicalApplySource);
+        Assert.Contains("BuildParentIndexTable", retainedTreeSource);
+        Assert.Contains("FindParentIndex(ReadOnlySpan<NodeIndexEntry>", retainedTreeSource);
     }
 
     [Fact]
@@ -927,6 +957,15 @@ public class TypedIdAllocationGuardTests
     private static IEnumerable<FieldInfo> GetPublicVirtualPropertyKeyFields() =>
         typeof(VirtualPropertyKey).GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(field => field.FieldType == typeof(VirtualPropertyKey));
+
+    private static string ExtractSourceBetween(string source, string startMarker, string endMarker)
+    {
+        var start = source.IndexOf(startMarker, StringComparison.Ordinal);
+        var end = source.IndexOf(endMarker, start + startMarker.Length, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"Could not find source marker: {startMarker}");
+        Assert.True(end > start, $"Could not find source marker: {endMarker}");
+        return source[start..end];
+    }
 
     private sealed class NullBackend : IDrawingBackend
     {

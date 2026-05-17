@@ -27,20 +27,28 @@ public static class VirtualNodeDiffer
         }
 
         // Both non-empty: local diff
-        var patches = new List<VirtualNodePatch>();
-        DiffNode(prevRoot, nextTree.Root, 0, patches, prevSnapshot, nextSnapshot);
-
-        if (patches.Count == 0)
+        var scratch = new FrameScratchArena();
+        var patches = scratch.RentVirtualNodePatchList();
+        try
         {
-            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
-        }
+            DiffNode(prevRoot, nextTree.Root, 0, ref patches, prevSnapshot, nextSnapshot, scratch);
 
-        for (var i = 0; i < patches.Count; i++)
+            if (patches.Count == 0)
+            {
+                return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
+            }
+
+            for (var i = 0; i < patches.Count; i++)
+            {
+                patches[i] = patches[i].WithScreenId(screenId);
+            }
+
+            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>(patches.ToArray()), patches.Count, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
+        }
+        finally
         {
-            patches[i] = patches[i].WithScreenId(screenId);
+            patches.Dispose();
         }
-
-        return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([.. patches]), patches.Count, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
     }
 
     private static bool IsDefaultTree(VirtualNodeTree tree)
@@ -51,7 +59,14 @@ public static class VirtualNodeDiffer
             && root.Children.Length == 0;
     }
 
-    private static void DiffNode(VirtualNode oldNode, VirtualNode newNode, int nodeIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot = null, TextBufferSnapshot? nextSnapshot = null)
+    private static void DiffNode(
+        VirtualNode oldNode,
+        VirtualNode newNode,
+        int nodeIndex,
+        ref ScratchList<VirtualNodePatch> patches,
+        TextBufferSnapshot? prevSnapshot,
+        TextBufferSnapshot? nextSnapshot,
+        FrameScratchArena scratch)
     {
         // Different kind → can't do incremental, replace whole subtree
         if (oldNode.Kind != newNode.Kind)
@@ -70,10 +85,17 @@ public static class VirtualNodeDiffer
         }
 
         // Diff children with keyed reconciliation
-        DiffChildren(oldNode.Children, newNode.Children, nodeIndex, patches, prevSnapshot, nextSnapshot);
+        DiffChildren(oldNode.Children, newNode.Children, nodeIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
     }
 
-    private static void DiffChildren(ReadOnlySpan<VirtualNode> oldChildren, ReadOnlySpan<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static void DiffChildren(
+        ReadOnlySpan<VirtualNode> oldChildren,
+        ReadOnlySpan<VirtualNode> newChildren,
+        int parentIndex,
+        ref ScratchList<VirtualNodePatch> patches,
+        TextBufferSnapshot? prevSnapshot,
+        TextBufferSnapshot? nextSnapshot,
+        FrameScratchArena scratch)
     {
         // Fast path: both empty
         if (oldChildren.Length == 0 && newChildren.Length == 0) return;
@@ -92,15 +114,22 @@ public static class VirtualNodeDiffer
         if (!hasKeys)
         {
             // No keys → index-based comparison
-            DiffChildrenByIndex(oldChildren, newChildren, parentIndex, patches, prevSnapshot, nextSnapshot);
+            DiffChildrenByIndex(oldChildren, newChildren, parentIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
             return;
         }
 
         // Keyed reconciliation
-        DiffChildrenByKeyed(oldChildren, newChildren, parentIndex, patches, prevSnapshot, nextSnapshot);
+        DiffChildrenByKeyed(oldChildren, newChildren, parentIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
     }
 
-    private static void DiffChildrenByIndex(ReadOnlySpan<VirtualNode> oldChildren, ReadOnlySpan<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static void DiffChildrenByIndex(
+        ReadOnlySpan<VirtualNode> oldChildren,
+        ReadOnlySpan<VirtualNode> newChildren,
+        int parentIndex,
+        ref ScratchList<VirtualNodePatch> patches,
+        TextBufferSnapshot? prevSnapshot,
+        TextBufferSnapshot? nextSnapshot,
+        FrameScratchArena scratch)
     {
         var minLen = Math.Min(oldChildren.Length, newChildren.Length);
         var childOffset = 0;
@@ -109,7 +138,7 @@ public static class VirtualNodeDiffer
         for (var i = 0; i < minLen; i++)
         {
             var childIndex = parentIndex + 1 + childOffset;
-            DiffNode(oldChildren[i], newChildren[i], childIndex, patches, prevSnapshot, nextSnapshot);
+            DiffNode(oldChildren[i], newChildren[i], childIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
             childOffset += CountNodes(oldChildren[i]);
         }
 
@@ -128,7 +157,33 @@ public static class VirtualNodeDiffer
         }
     }
 
-    private static void DiffChildrenByKeyed(ReadOnlySpan<VirtualNode> oldChildren, ReadOnlySpan<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static void DiffChildrenByKeyed(
+        ReadOnlySpan<VirtualNode> oldChildren,
+        ReadOnlySpan<VirtualNode> newChildren,
+        int parentIndex,
+        ref ScratchList<VirtualNodePatch> patches,
+        TextBufferSnapshot? prevSnapshot,
+        TextBufferSnapshot? nextSnapshot,
+        FrameScratchArena scratch)
+    {
+        const int KeyedLinearThreshold = 8;
+        if (Math.Max(oldChildren.Length, newChildren.Length) <= KeyedLinearThreshold)
+        {
+            DiffChildrenByKeyedLinear(oldChildren, newChildren, parentIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
+            return;
+        }
+
+        DiffChildrenByKeyedMap(oldChildren, newChildren, parentIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
+    }
+
+    private static void DiffChildrenByKeyedLinear(
+        ReadOnlySpan<VirtualNode> oldChildren,
+        ReadOnlySpan<VirtualNode> newChildren,
+        int parentIndex,
+        ref ScratchList<VirtualNodePatch> patches,
+        TextBufferSnapshot? prevSnapshot,
+        TextBufferSnapshot? nextSnapshot,
+        FrameScratchArena scratch)
     {
         var childOffset = 0;
         for (var i = 0; i < newChildren.Length; i++)
@@ -139,7 +194,7 @@ public static class VirtualNodeDiffer
             if (newChild.Key != NodeKey.None && TryFindChildIndexByKey(oldChildren, newChild.Key, out var oldIdx))
             {
                 // Same key → diff recursively
-                DiffNode(oldChildren[oldIdx], newChild, childIndex, patches, prevSnapshot, nextSnapshot);
+                DiffNode(oldChildren[oldIdx], newChild, childIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
             }
             else
             {
@@ -154,6 +209,56 @@ public static class VirtualNodeDiffer
         for (var i = 0; i < oldChildren.Length; i++)
         {
             if (oldChildren[i].Key != NodeKey.None && !ContainsChildKey(newChildren, oldChildren[i].Key))
+            {
+                patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Remove, parentIndex + 1 + childOffset, oldChildren[i]));
+                childOffset += CountNodes(oldChildren[i]);
+            }
+        }
+    }
+
+    private static void DiffChildrenByKeyedMap(
+        ReadOnlySpan<VirtualNode> oldChildren,
+        ReadOnlySpan<VirtualNode> newChildren,
+        int parentIndex,
+        ref ScratchList<VirtualNodePatch> patches,
+        TextBufferSnapshot? prevSnapshot,
+        TextBufferSnapshot? nextSnapshot,
+        FrameScratchArena scratch)
+    {
+        using var oldKeyToIndex = scratch.RentNodeKeyIndexMap(oldChildren.Length);
+        using var newKeyToIndex = scratch.RentNodeKeyIndexMap(newChildren.Length);
+
+        for (var i = 0; i < oldChildren.Length; i++)
+        {
+            oldKeyToIndex.Set(oldChildren[i].Key, i);
+        }
+
+        for (var i = 0; i < newChildren.Length; i++)
+        {
+            newKeyToIndex.Set(newChildren[i].Key, i);
+        }
+
+        var childOffset = 0;
+        for (var i = 0; i < newChildren.Length; i++)
+        {
+            var newChild = newChildren[i];
+            var childIndex = parentIndex + 1 + childOffset;
+
+            if (newChild.Key != NodeKey.None && oldKeyToIndex.TryGet(newChild.Key, out var oldIdx))
+            {
+                DiffNode(oldChildren[oldIdx], newChild, childIndex, ref patches, prevSnapshot, nextSnapshot, scratch);
+            }
+            else
+            {
+                patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Add, childIndex, newChild));
+            }
+
+            childOffset += CountNodes(newChild);
+        }
+
+        for (var i = 0; i < oldChildren.Length; i++)
+        {
+            if (oldChildren[i].Key != NodeKey.None && !newKeyToIndex.Contains(oldChildren[i].Key))
             {
                 patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Remove, parentIndex + 1 + childOffset, oldChildren[i]));
                 childOffset += CountNodes(oldChildren[i]);

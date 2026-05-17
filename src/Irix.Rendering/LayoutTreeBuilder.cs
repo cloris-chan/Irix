@@ -13,7 +13,6 @@ internal ref struct LayoutContext
     public int Depth; // 0 = root container, 1+ = nested
     public PixelRectangle ClipBounds;
     public LayoutStyle Style;
-    public List<ScrollContainerDiag> ScrollDiags;
 
     /// <summary>
     /// Implicit visible height for a container without a usable explicit Height.
@@ -46,27 +45,35 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     /// </summary>
     public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
-        var elements = new List<LayoutElement>();
-        var scrollDiags = new List<ScrollContainerDiag>();
-        var cursorY = style.VerticalPadding;
-
-        var ctx = new LayoutContext
+        var scratch = new RenderScratchBuffer();
+        var elements = scratch.RentLayoutElementList();
+        var scrollDiags = scratch.RentScrollContainerDiagList();
+        try
         {
-            AvailableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0),
-            ViewportHeight = viewportBounds.Height,
-            Depth = 0,
-            ClipBounds = default,
-            Style = style,
-            ScrollDiags = scrollDiags,
-        };
+            var cursorY = style.VerticalPadding;
 
-        var treeNodes = LayoutNode(root, 0, ref cursorY, elements, ref ctx);
+            var ctx = new LayoutContext
+            {
+                AvailableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0),
+                ViewportHeight = viewportBounds.Height,
+                Depth = 0,
+                ClipBounds = default,
+                Style = style,
+            };
 
-        var dirtyRanges = dirtyNodes is { Count: > 0 }
-            ? RangeUtils.Merge(CollectDirtyRanges(treeNodes, dirtyNodes))
-            : [];
+            var treeNodes = LayoutNode(root, 0, ref cursorY, ref elements, ref ctx, ref scrollDiags, scratch);
 
-        return new LayoutTreeResult(elements, treeNodes, dirtyRanges, scrollDiags);
+            var dirtyRanges = dirtyNodes is { Count: > 0 }
+                ? CollectDirtyRanges(treeNodes, dirtyNodes, scratch)
+                : [];
+
+            return new LayoutTreeResult(elements.ToArray(), treeNodes, dirtyRanges, scrollDiags.ToArray());
+        }
+        finally
+        {
+            elements.Dispose();
+            scrollDiags.Dispose();
+        }
     }
 
     /// <summary>
@@ -81,14 +88,16 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         VirtualNode node,
         int dfsIndex,
         ref int cursorY,
-        List<LayoutElement> elements,
-        ref LayoutContext ctx)
+        ref ScratchList<LayoutElement> elements,
+        ref LayoutContext ctx,
+        ref ScratchList<ScrollContainerDiag> scrollDiags,
+        RenderScratchBuffer scratch)
     {
         switch (node.Kind)
         {
             case VirtualNodeKind.ScrollContainer:
             {
-                var children = new List<LayoutTreeNode>();
+                using var children = scratch.RentLayoutTreeNodeList(node.Children.Length);
                 var childDfsIndex = dfsIndex + 1;
                 var contentTop = cursorY;
                 var isRootContainer = ctx.Depth == 0;
@@ -119,7 +128,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 cursorY = contentTop;
                 foreach (var child in node.Children)
                 {
-                    children.AddRange(LayoutNode(child, childDfsIndex, ref cursorY, elements, ref childCtx));
+                    children.AddRange(LayoutNode(child, childDfsIndex, ref cursorY, ref elements, ref childCtx, ref scrollDiags, scratch));
                     childDfsIndex += CountVirtualNodes(child);
                 }
                 var contentHeight = Math.Max(cursorY - contentTop, 0);
@@ -129,12 +138,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
                 if (scrollY > 0)
                 {
-                    OffsetElementY(elements, children, -scrollY);
+                    OffsetElementY(ref elements, children.Written, -scrollY);
                 }
 
                 var visibleCount = 0;
                 var clippedCount = 0;
-                foreach (var child in children)
+                foreach (var child in children.Written)
                 {
                     for (var i = child.ElementStart; i < child.ElementStart + child.ElementCount; i++)
                     {
@@ -151,7 +160,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                     }
                 }
 
-                ctx.ScrollDiags.Add(new ScrollContainerDiag(
+                scrollDiags.Add(new ScrollContainerDiag(
                     dfsIndex,
                     containerVisibleHeight,
                     contentHeight,
@@ -168,7 +177,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 }
 
                 var elementStart = children[0].ElementStart;
-                var lastChild = children[^1];
+                var lastChild = children[children.Count - 1];
                 var elementCount = (lastChild.ElementStart + lastChild.ElementCount) - elementStart;
                 return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, elementStart, elementCount, children.ToArray())];
             }
@@ -245,46 +254,114 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         }
     }
 
-    private static List<(int Start, int Count)> CollectDirtyRanges(
+    private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges(
         LayoutTreeNode[] treeNodes,
-        IReadOnlyList<int> dirtyIndices)
+        IReadOnlyList<int> dirtyIndices,
+        RenderScratchBuffer scratch)
     {
-        var ranges = new List<(int Start, int Count)>();
-        CollectDirtyRangesRecursive(treeNodes, dirtyIndices, ranges);
-        ranges.Sort((a, b) => a.Start.CompareTo(b.Start));
-        return ranges;
+        using var sortedDirty = scratch.RentIntList(dirtyIndices.Count);
+        for (var i = 0; i < dirtyIndices.Count; i++)
+        {
+            sortedDirty.Add(dirtyIndices[i]);
+        }
+
+        sortedDirty.Sort();
+
+        var ranges = scratch.RentRangeList();
+        try
+        {
+            var dirtyCursor = 0;
+            CollectDirtyRangesRecursive(treeNodes, sortedDirty.Written, ref dirtyCursor, ref ranges);
+            return MergeDirtyRanges(ref ranges);
+        }
+        finally
+        {
+            ranges.Dispose();
+        }
     }
 
     private static void CollectDirtyRangesRecursive(
         LayoutTreeNode[] treeNodes,
-        IReadOnlyList<int> dirtyIndices,
-        List<(int Start, int Count)> ranges)
+        ReadOnlySpan<int> sortedDirtyIndices,
+        ref int dirtyCursor,
+        ref ScratchList<(int Start, int Count)> ranges)
     {
         foreach (var node in treeNodes)
         {
-            if (ContainsDirtyIndex(dirtyIndices, node.DfsIndex))
+            if (AdvanceDirtyCursor(sortedDirtyIndices, ref dirtyCursor, node.DfsIndex))
             {
                 ranges.Add((node.ElementStart, node.ElementCount));
             }
 
             if (node.Children.Length > 0)
             {
-                CollectDirtyRangesRecursive(node.Children, dirtyIndices, ranges);
+                CollectDirtyRangesRecursive(node.Children, sortedDirtyIndices, ref dirtyCursor, ref ranges);
             }
         }
     }
 
-    private static bool ContainsDirtyIndex(IReadOnlyList<int> dirtyIndices, int dfsIndex)
+    private static bool AdvanceDirtyCursor(ReadOnlySpan<int> sortedDirtyIndices, ref int dirtyCursor, int dfsIndex)
     {
-        for (var i = 0; i < dirtyIndices.Count; i++)
+        while (dirtyCursor < sortedDirtyIndices.Length && sortedDirtyIndices[dirtyCursor] < dfsIndex)
         {
-            if (dirtyIndices[i] == dfsIndex)
+            dirtyCursor++;
+        }
+
+        if (dirtyCursor >= sortedDirtyIndices.Length || sortedDirtyIndices[dirtyCursor] != dfsIndex)
+        {
+            return false;
+        }
+
+        while (dirtyCursor < sortedDirtyIndices.Length && sortedDirtyIndices[dirtyCursor] == dfsIndex)
+        {
+            dirtyCursor++;
+        }
+
+        return true;
+    }
+
+    private static IReadOnlyList<(int Start, int Count)> MergeDirtyRanges(ref ScratchList<(int Start, int Count)> ranges)
+    {
+        if (ranges.Count == 0)
+        {
+            return [];
+        }
+
+        if (ranges.Count == 1)
+        {
+            return ranges.ToArray();
+        }
+
+        ranges.Sort(RangeStartComparer.Instance);
+        var span = ranges.WrittenMutable;
+        var write = 1;
+        for (var read = 1; read < span.Length; read++)
+        {
+            var last = span[write - 1];
+            var current = span[read];
+            var lastEnd = last.Start + last.Count;
+
+            if (current.Start <= lastEnd)
             {
-                return true;
+                var newEnd = Math.Max(lastEnd, current.Start + current.Count);
+                span[write - 1] = (last.Start, newEnd - last.Start);
+            }
+            else
+            {
+                span[write++] = current;
             }
         }
 
-        return false;
+        var result = new (int Start, int Count)[write];
+        span[..write].CopyTo(result);
+        return result;
+    }
+
+    private sealed class RangeStartComparer : IComparer<(int Start, int Count)>
+    {
+        public static readonly RangeStartComparer Instance = new();
+
+        public int Compare((int Start, int Count) x, (int Start, int Count) y) => x.Start.CompareTo(y.Start);
     }
 
     private static int CountVirtualNodes(VirtualNode node)
@@ -333,7 +410,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return new PixelRectangle(x, y, width, height);
     }
 
-    private static void OffsetElementY(List<LayoutElement> elements, List<LayoutTreeNode> nodes, int offsetY)
+    private static void OffsetElementY(ref ScratchList<LayoutElement> elements, ReadOnlySpan<LayoutTreeNode> nodes, int offsetY)
     {
         if (offsetY == 0)
         {

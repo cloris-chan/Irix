@@ -127,21 +127,57 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         }
 
         var memory = batch.Memory.Span;
-        var dirty = new int[memory.Length];
-        for (var i = 0; i < memory.Length; i++)
+        var scratch = new FrameScratchArena();
+        var dirty = scratch.RentIntList(memory.Length);
+        var nextParentIndex = scratch.RentNodeIndexList();
+        var previousParentIndex = scratch.RentNodeIndexList();
+        try
         {
-            var patch = memory[i];
-            dirty[i] = patch.Operation switch
+            var needsNextParentIndex = false;
+            var needsPreviousParentIndex = false;
+            for (var i = 0; i < memory.Length; i++)
             {
-                VirtualNodePatchOperation.Update => patch.NodeIndex,
-                VirtualNodePatchOperation.ReplaceRoot => patch.NodeIndex,
-                VirtualNodePatchOperation.Add => FindParentIndex(batch.Root, patch.NodeIndex),
-                VirtualNodePatchOperation.Remove => FindParentIndex(prevRoot, patch.NodeIndex),
-                _ => patch.NodeIndex
-            };
-        }
+                if (memory[i].Operation == VirtualNodePatchOperation.Add)
+                {
+                    needsNextParentIndex = true;
+                }
+                else if (memory[i].Operation == VirtualNodePatchOperation.Remove)
+                {
+                    needsPreviousParentIndex = true;
+                }
+            }
 
-        return new ApplyResult(SortAndDeduplicateDirty(dirty), prevRoot, prevSnapshot);
+            if (needsNextParentIndex)
+            {
+                BuildParentIndexTable(batch.Root, ref nextParentIndex);
+            }
+
+            if (needsPreviousParentIndex)
+            {
+                BuildParentIndexTable(prevRoot, ref previousParentIndex);
+            }
+
+            for (var i = 0; i < memory.Length; i++)
+            {
+                var patch = memory[i];
+                dirty.Add(patch.Operation switch
+                {
+                    VirtualNodePatchOperation.Update => patch.NodeIndex,
+                    VirtualNodePatchOperation.ReplaceRoot => patch.NodeIndex,
+                    VirtualNodePatchOperation.Add => FindParentIndex(nextParentIndex.Written, patch.NodeIndex),
+                    VirtualNodePatchOperation.Remove => FindParentIndex(previousParentIndex.Written, patch.NodeIndex),
+                    _ => patch.NodeIndex
+                });
+            }
+
+            return new ApplyResult(SortAndDeduplicateDirty(ref dirty), prevRoot, prevSnapshot);
+        }
+        finally
+        {
+            dirty.Dispose();
+            nextParentIndex.Dispose();
+            previousParentIndex.Dispose();
+        }
     }
 
     private static VirtualNode ApplyRecursive(
@@ -307,39 +343,82 @@ public sealed class RetainedTree(VirtualNodeTree tree)
         return result;
     }
 
-    private static int FindParentIndex(VirtualNode root, int targetIndex)
+    private static IReadOnlyList<int> SortAndDeduplicateDirty(ref ScratchList<int> dirty)
     {
-        if (targetIndex <= 0)
+        if (dirty.Count == 0)
+        {
+            return [];
+        }
+
+        dirty.Sort();
+        var span = dirty.WrittenMutable;
+        var write = 1;
+        for (var read = 1; read < span.Length; read++)
+        {
+            if (span[read] != span[write - 1])
+            {
+                span[write++] = span[read];
+            }
+        }
+
+        if (write == span.Length)
+        {
+            return dirty.ToArray();
+        }
+
+        var result = new int[write];
+        span[..write].CopyTo(result);
+        return result;
+    }
+
+    private static void BuildParentIndexTable(VirtualNode root, ref ScratchList<NodeIndexEntry> table)
+    {
+        table.Add(new NodeIndexEntry(0, 0));
+        BuildParentIndexTableRecursive(root, 0, ref table);
+    }
+
+    private static int BuildParentIndexTableRecursive(VirtualNode node, int currentIndex, ref ScratchList<NodeIndexEntry> table)
+    {
+        var nextIndex = currentIndex + 1;
+        var children = node.Children;
+        for (var i = 0; i < children.Length; i++)
+        {
+            var childIndex = nextIndex;
+            table.Add(new NodeIndexEntry(childIndex, currentIndex));
+            nextIndex += BuildParentIndexTableRecursive(children[i], childIndex, ref table);
+        }
+
+        return nextIndex - currentIndex;
+    }
+
+    private static int FindParentIndex(ReadOnlySpan<NodeIndexEntry> table, int targetIndex)
+    {
+        if (targetIndex <= 0 || table.IsEmpty)
         {
             return 0;
         }
 
-        var cursor = 0;
-        return TryFindParentIndex(root, 0, targetIndex, ref cursor, out var parentIndex)
-            ? parentIndex
-            : 0;
-    }
-
-    private static bool TryFindParentIndex(VirtualNode node, int currentIndex, int targetIndex, ref int cursor, out int parentIndex)
-    {
-        var children = node.Children;
-        cursor = currentIndex + 1;
-        for (var i = 0; i < children.Length; i++)
+        var left = 0;
+        var right = table.Length - 1;
+        while (left <= right)
         {
-            var childIndex = cursor;
-            if (childIndex == targetIndex)
+            var mid = left + ((right - left) >> 1);
+            var entry = table[mid];
+            if (entry.DfsIndex == targetIndex)
             {
-                parentIndex = currentIndex;
-                return true;
+                return entry.ParentDfsIndex;
             }
 
-            if (TryFindParentIndex(children[i], childIndex, targetIndex, ref cursor, out parentIndex))
+            if (entry.DfsIndex < targetIndex)
             {
-                return true;
+                left = mid + 1;
+            }
+            else
+            {
+                right = mid - 1;
             }
         }
 
-        parentIndex = 0;
-        return false;
+        return 0;
     }
 }

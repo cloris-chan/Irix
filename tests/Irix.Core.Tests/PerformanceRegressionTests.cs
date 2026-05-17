@@ -156,6 +156,63 @@ public sealed class PerformanceRegressionTests
             "inline helper path");
     }
 
+    [Fact]
+    public void Diff_layout_record_warm_path_allocation_baseline_is_split_by_stage()
+    {
+        var arena = new VirtualTextArena();
+        var title = arena.AddText("Title".AsSpan());
+        var button = arena.AddText("Click".AsSpan());
+        var row = arena.AddText("Row".AsSpan());
+        var snapshot = arena.GetOrCreateSnapshot();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var previousRoot = BuildMeasuredRoot(title, button, row, rectangleWidth: 120);
+        var nextRoot = BuildMeasuredRoot(title, button, row, rectangleWidth: 136);
+        var previousTree = new VirtualNodeTree(previousRoot, snapshot);
+        var nextTree = new VirtualNodeTree(nextRoot, snapshot);
+        var dirtyNodes = new[] { 2 };
+        var layoutBuilder = new LayoutTreeBuilder();
+        var recorder = new DrawCommandRecorder();
+
+        for (var i = 0; i < 8; i++)
+        {
+            using var patch = VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree);
+            var warmLayout = layoutBuilder.BuildLayoutTree(nextRoot, viewport, dirtyNodes);
+            var warmRecord = recorder.Record(warmLayout.Elements, warmLayout.DirtyElementRanges, snapshot);
+            ReleaseRecordResult(warmRecord);
+        }
+
+        var diffAllocated = MeasureAllocatedBytes(() =>
+        {
+            using var patch = VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree);
+            GC.KeepAlive(patch.Count);
+        });
+
+        var layoutAllocated = MeasureAllocatedBytes(() =>
+        {
+            var result = layoutBuilder.BuildLayoutTree(nextRoot, viewport, dirtyNodes);
+            GC.KeepAlive(result.Elements.Count);
+            GC.KeepAlive(result.DirtyElementRanges.Count);
+        });
+
+        var recordLayout = layoutBuilder.BuildLayoutTree(nextRoot, viewport, dirtyNodes);
+        var recordAllocated = MeasureAllocatedBytes(() =>
+        {
+            var result = recorder.Record(recordLayout.Elements, recordLayout.DirtyElementRanges, snapshot);
+            GC.KeepAlive(result.Commands.Count);
+            GC.KeepAlive(result.DirtyCommandRanges.Count);
+            ReleaseRecordResult(result);
+        });
+
+        var message = $"Warm path allocation baseline: diff={diffAllocated:N0} bytes, layout={layoutAllocated:N0} bytes, record={recordAllocated:N0} bytes.";
+        Console.WriteLine(message);
+        TestContext.Current.SendDiagnosticMessage(message);
+
+        Assert.True(diffAllocated < 16 * 1024, $"Diff warm path allocated {diffAllocated:N0} bytes.");
+        Assert.True(layoutAllocated < 32 * 1024, $"Layout warm path allocated {layoutAllocated:N0} bytes.");
+        Assert.True(recordAllocated < 64 * 1024, $"Record warm path allocated {recordAllocated:N0} bytes.");
+    }
+
     private static long MeasureAllocatedBytes(Action action)
     {
         GC.Collect();
@@ -242,6 +299,27 @@ public sealed class PerformanceRegressionTests
         children.Add(VirtualNodeFactory.Text(row, new NodeKey(5), ReadOnlySpan<VirtualNodeProperty>.Empty));
 
         return VirtualNodeFactory.ScrollContainer(new NodeKey(1), ReadOnlySpan<VirtualNodeProperty>.Empty, ref children);
+    }
+
+    private static VirtualNode BuildMeasuredRoot(
+        TextNodeContent title,
+        TextNodeContent button,
+        TextNodeContent row,
+        double rectangleWidth) =>
+        VirtualNodeFactory.ScrollContainer(
+            new NodeKey(1),
+            VirtualNodeFactory.Text(title, new NodeKey(2)),
+            VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(rectangleWidth), VirtualNodeProperty.Height(48)),
+            VirtualNodeFactory.Button(button, new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))),
+            VirtualNodeFactory.Text(row, new NodeKey(5)));
+
+    private static void ReleaseRecordResult(DrawCommandRecordResult result)
+    {
+        result.Commands.Dispose();
+        if (result.Resources is FrameDrawingResources resources)
+        {
+            FrameDrawingResources.Return(resources);
+        }
     }
 
     private sealed class CountingBackend : IDrawingBackend

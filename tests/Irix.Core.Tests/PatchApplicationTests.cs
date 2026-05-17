@@ -128,6 +128,42 @@ public sealed class PatchDiffEquivalenceTests
     }
 
     [Fact]
+    public void Keyed_reconciliation_large_child_set_preserves_correct_child()
+    {
+        var oldChildren = new VirtualNode[12];
+        var newChildren = new VirtualNode[12];
+        for (var i = 0; i < oldChildren.Length; i++)
+        {
+            var key = new NodeKey((uint)(10 + i));
+            oldChildren[i] = VirtualNodeBuilder.Text(_arena, $"item {i}", key);
+            newChildren[i] = i == 9
+                ? VirtualNodeBuilder.Text(_arena, "item 9 updated", key)
+                : VirtualNodeBuilder.Text(_arena, $"item {i}", key);
+        }
+
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1), oldChildren), _arena.GetOrCreateSnapshot());
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1), newChildren), _arena.GetOrCreateSnapshot());
+
+        var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
+
+        var updates = 0;
+        VirtualNodePatch updatePatch = default;
+        foreach (var patch in batch.Memory.Span)
+        {
+            if (patch.Operation == VirtualNodePatchOperation.Update)
+            {
+                updates++;
+                updatePatch = patch;
+            }
+        }
+
+        Assert.Equal(1, updates);
+        Assert.Equal("item 9 updated", ResolveNodeText(_arena, updatePatch.Node.Content));
+
+        batch.Dispose();
+    }
+
+    [Fact]
     public void Kind_change_produces_ReplaceRoot_with_correct_layout()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(new NodeKey(1),

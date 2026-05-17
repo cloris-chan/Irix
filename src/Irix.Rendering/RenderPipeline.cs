@@ -184,34 +184,32 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
     private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
-        var classifications = new List<LayoutDirtyClassification>(dirtyNodes.Count);
-        foreach (var dirtyNode in dirtyNodes)
+        var scratch = new RenderScratchBuffer();
+        using var sortedDirty = scratch.RentIntList(dirtyNodes.Count);
+        for (var i = 0; i < dirtyNodes.Count; i++)
         {
-            if (ContainsDfsIndex(classifications, dirtyNode))
+            sortedDirty.Add(dirtyNodes[i]);
+        }
+
+        sortedDirty.Sort();
+
+        using var classifications = scratch.RentLayoutDirtyClassificationList(dirtyNodes.Count);
+        var lastDirtyNode = -1;
+        foreach (var dirtyNode in sortedDirty.Written)
+        {
+            if (dirtyNode == lastDirtyNode)
             {
                 continue;
             }
 
+            lastDirtyNode = dirtyNode;
             var reason = TryFindNode(previousRoot, dirtyNode, out var previousNode) && TryFindNode(nextRoot, dirtyNode, out var nextNode)
                 ? ClassifyNodeChange(previousNode, nextNode, prevSnapshot, nextSnapshot)
                 : new DirtyNodeClassification(LayoutRebuildReason.TreeStructure, InvalidationKind.TreeStructure);
             classifications.Add(new LayoutDirtyClassification(dirtyNode, reason.Reason, reason.InvalidationKind));
         }
 
-        return classifications;
-    }
-
-    private static bool ContainsDfsIndex(List<LayoutDirtyClassification> classifications, int dfsIndex)
-    {
-        for (var i = 0; i < classifications.Count; i++)
-        {
-            if (classifications[i].DfsIndex == dfsIndex)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return classifications.ToArray();
     }
 
     private static DirtyNodeClassification ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
