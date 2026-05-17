@@ -889,7 +889,8 @@ Global default style 与 node override 分离：
 
 | Property | Value kind | Effects | Animation channel | Supported node kinds |
 |----------|------------|---------|-------------------|----------------------|
-| `Width`, `Height` | Number | Layout | CpuStyle | Rectangle, Button, ScrollContainer |
+| `Width` | Number | Layout | CpuStyle | Rectangle, Button |
+| `Height` | Number | Layout | CpuStyle | Rectangle, Button, ScrollContainer |
 | `ScrollY` | Number | Layout | CpuStyle | ScrollContainer |
 | `ActionId` | ActionId | Interaction | None | Button |
 | `IsHovered`, `IsPressed`, `IsFocused` | Boolean | Interaction + Visual | Discrete | Button |

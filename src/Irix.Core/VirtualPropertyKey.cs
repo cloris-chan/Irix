@@ -113,7 +113,10 @@ internal readonly struct StylePropertyMetadata(
 
 internal static class VirtualPropertyMetadata
 {
-    private const VirtualNodeKindFlags SizedNodes =
+    private const VirtualNodeKindFlags WidthNodes =
+        VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button;
+
+    private const VirtualNodeKindFlags HeightNodes =
         VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button | VirtualNodeKindFlags.ScrollContainer;
 
     public static StylePropertyMetadata Get(VirtualPropertyKey key)
@@ -130,13 +133,13 @@ internal static class VirtualPropertyMetadata
     {
         if (key == VirtualPropertyKey.Width)
         {
-            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, SizedNodes);
+            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, WidthNodes);
             return true;
         }
 
         if (key == VirtualPropertyKey.Height)
         {
-            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, SizedNodes);
+            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, HeightNodes);
             return true;
         }
 

@@ -35,6 +35,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Ref struct boundary | Complete for Round 16. `ref struct` is limited to synchronous builders/readers/layout context; retained IR and batches stay ordinary storable types. |
 | Record struct boundary | Complete for Round 18. Framework/internal primitives, IR, render hot paths, platform types, and PoC backend/diagnostics do not use `record struct`. |
 | Profiler allocation pass | Complete for retained/input first pass. The 2026-05-17 VS profiler GCDump drove targeted cleanup in canonical retained apply, input hit-test routing, input ownership diagnostics, retained metadata projection, and text snapshot comparison. |
+| Allocation baseline | In place for BuildView, diff, retained apply, layout, draw command record, D3D12 ExecuteCore, mock backend frame timing, and FrameDrawingResources warm pool allocation. |
 | Docs | Trimmed to canonical docs only; obsolete prep/checkpoint docs deleted. |
 
 ---
@@ -57,7 +58,8 @@ Current public keys:
 
 | Property | Value kind | Effects | Supported nodes |
 |----------|------------|---------|-----------------|
-| `Width`, `Height` | Number | Layout | Rectangle, Button, ScrollContainer |
+| `Width` | Number | Layout | Rectangle, Button |
+| `Height` | Number | Layout | Rectangle, Button, ScrollContainer |
 | `ScrollY` | Number | Layout | ScrollContainer |
 | `ActionId` | ActionId | Interaction | Button |
 | `IsHovered`, `IsPressed`, `IsFocused` | Boolean | Interaction + Visual | Button |
@@ -174,7 +176,7 @@ Source guards currently block:
 
 | Priority | Work | Boundary |
 |----------|------|----------|
-| P0 | Allocation baseline tightening | Measure/tighten hot path allocations without reopening string property design. |
+| P0 | Allocation baseline tightening | Continue tightening budgets from the split BuildView/diff/retained apply/layout/record/D3D12 ExecuteCore baseline. |
 | P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); do not change public API. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |

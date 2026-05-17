@@ -1,5 +1,7 @@
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Platform.Windows;
+using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
 
@@ -176,16 +178,44 @@ public sealed class PerformanceRegressionTests
 
         for (var i = 0; i < 8; i++)
         {
+            _ = BuildMeasuredRoot(title, button, row, rectangleWidth: 128 + i);
             using var patch = VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree);
+            var warmRetained = new RetainedTree(previousTree);
+            warmRetained.Apply(patch);
             var warmLayout = layoutBuilder.BuildLayoutTree(nextRoot, viewport, dirtyNodes);
             var warmRecord = recorder.Record(warmLayout.Elements, warmLayout.DirtyElementRanges, snapshot);
+            using var warmRects = new FrameRenderList<D3D12Renderer2D.RectData>();
+            using var warmTexts = new FrameRenderList<D3D12TextRenderer.TextData>();
+            _ = D3D12DrawingBackend.ExecuteCore(
+                DrawingBackendClipMode.Scissor,
+                new DrawRect(0, 0, viewport.Width, viewport.Height),
+                warmRecord.Commands.Memory.Span,
+                warmRecord.Resources,
+                new DisplayScale(1.5f, 1.5f),
+                warmRects,
+                warmTexts);
             ReleaseRecordResult(warmRecord);
         }
+
+        var buildViewAllocated = MeasureAllocatedBytes(() =>
+        {
+            var root = BuildMeasuredRoot(title, button, row, rectangleWidth: 144);
+            GC.KeepAlive(root);
+        });
 
         var diffAllocated = MeasureAllocatedBytes(() =>
         {
             using var patch = VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree);
             GC.KeepAlive(patch.Count);
+        });
+
+        using var retainedApplyPatch = VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree);
+        var retainedApplyAllocated = MeasureAllocatedBytes(() =>
+        {
+            var retained = new RetainedTree(previousTree);
+            var result = retained.Apply(retainedApplyPatch);
+            GC.KeepAlive(result.Dirty.Count);
+            GC.KeepAlive(retained.Tree.Root.Kind);
         });
 
         var layoutAllocated = MeasureAllocatedBytes(() =>
@@ -204,13 +234,42 @@ public sealed class PerformanceRegressionTests
             ReleaseRecordResult(result);
         });
 
-        var message = $"Warm path allocation baseline: diff={diffAllocated:N0} bytes, layout={layoutAllocated:N0} bytes, record={recordAllocated:N0} bytes.";
+        var executeRecord = recorder.Record(recordLayout.Elements, recordLayout.DirtyElementRanges, snapshot);
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
+        _ = D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, viewport.Width, viewport.Height),
+            executeRecord.Commands.Memory.Span,
+            executeRecord.Resources,
+            new DisplayScale(1.5f, 1.5f),
+            rects,
+            texts);
+        rects.Reset();
+        texts.Reset();
+        var d3d12ExecuteAllocated = MeasureAllocatedBytes(() =>
+        {
+            _ = D3D12DrawingBackend.ExecuteCore(
+                DrawingBackendClipMode.Scissor,
+                new DrawRect(0, 0, viewport.Width, viewport.Height),
+                executeRecord.Commands.Memory.Span,
+                executeRecord.Resources,
+                new DisplayScale(1.5f, 1.5f),
+                rects,
+                texts);
+        });
+        ReleaseRecordResult(executeRecord);
+
+        var message = $"Warm path allocation baseline: buildView={buildViewAllocated:N0} bytes, diff={diffAllocated:N0} bytes, retainedApply={retainedApplyAllocated:N0} bytes, layout={layoutAllocated:N0} bytes, record={recordAllocated:N0} bytes, d3d12Execute={d3d12ExecuteAllocated:N0} bytes.";
         Console.WriteLine(message);
         TestContext.Current.SendDiagnosticMessage(message);
 
+        Assert.True(buildViewAllocated < 16 * 1024, $"BuildView warm path allocated {buildViewAllocated:N0} bytes.");
         Assert.True(diffAllocated < 16 * 1024, $"Diff warm path allocated {diffAllocated:N0} bytes.");
+        Assert.True(retainedApplyAllocated < 8 * 1024, $"Retained apply warm path allocated {retainedApplyAllocated:N0} bytes.");
         Assert.True(layoutAllocated < 32 * 1024, $"Layout warm path allocated {layoutAllocated:N0} bytes.");
         Assert.True(recordAllocated < 64 * 1024, $"Record warm path allocated {recordAllocated:N0} bytes.");
+        Assert.Equal(0, d3d12ExecuteAllocated);
     }
 
     private static long MeasureAllocatedBytes(Action action)

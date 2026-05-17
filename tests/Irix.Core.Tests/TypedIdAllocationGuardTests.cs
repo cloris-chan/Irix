@@ -403,6 +403,35 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualNode_content_contract_matches_node_kind()
+    {
+        var textContent = _arena.AddText("text".AsSpan());
+        var textNode = new VirtualNode(VirtualNodeKind.Text, content: NodeContent.FromText(textContent));
+        Assert.Equal(NodeContentKind.Text, textNode.Content.Kind);
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Text,
+            content: NodeContent.None));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Text,
+            content: NodeContent.FromNumber(1)));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Rectangle,
+            content: NodeContent.FromText(textContent)));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Button,
+            content: NodeContent.FromText(textContent),
+            children: [VirtualNodeFactory.Text(textContent)]));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            content: NodeContent.FromText(textContent)));
+    }
+
+    [Fact]
     public void VirtualNodePropertySupport_declares_control_support_sets()
     {
         Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualPropertyKey.Width));
@@ -416,7 +445,11 @@ public class TypedIdAllocationGuardTests
         Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualPropertyKey.Height));
         Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.Rectangle, VirtualPropertyKey.ActionId));
 
+        Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.ScrollContainer, VirtualPropertyKey.Width));
+        Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.ScrollContainer, VirtualPropertyKey.Height));
         Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.ScrollContainer, VirtualPropertyKey.ScrollY));
+        Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.ScrollContainer, VirtualPropertyKey.ActionId));
+        Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.ScrollContainer, VirtualPropertyKey.IsHovered));
         Assert.False(VirtualNodePropertySupport.Supports(VirtualNodeKind.Text, VirtualPropertyKey.ScrollY));
     }
 
@@ -969,10 +1002,35 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("nodes cannot have children", source);
         Assert.Contains("None nodes must be empty", source);
         Assert.Contains("case VirtualNodeKind.None", source);
+        Assert.Contains("Text nodes require text content", source);
+        Assert.Contains("Rectangle nodes cannot have content", source);
+        Assert.Contains("Button nodes cannot have content", source);
+        Assert.Contains("ScrollContainer nodes cannot have content", source);
         Assert.Contains("Button nodes require exactly one leaf text label child", source);
         Assert.Contains("child.Kind == VirtualNodeKind.Text", source);
         Assert.Contains("child.Children.IsEmpty", source);
         Assert.Contains("!label.IsNone", source);
+    }
+
+    [Fact]
+    public void ScrollContainer_property_contract_excludes_width_and_interaction_state()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualPropertyKey.cs"));
+
+        Assert.Contains("private const VirtualNodeKindFlags WidthNodes", source);
+        Assert.Contains("private const VirtualNodeKindFlags HeightNodes", source);
+        Assert.Contains("VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button;", source);
+        Assert.Contains("VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button | VirtualNodeKindFlags.ScrollContainer;", source);
+
+        Assert.Throws<ArgumentException>(() => VirtualNodeFactory.ScrollContainer(
+            new NodeKey(7),
+            [VirtualNodeProperty.Width(100)],
+            ReadOnlySpan<VirtualNode>.Empty));
+
+        Assert.Throws<ArgumentException>(() => VirtualNodeFactory.ScrollContainer(
+            new NodeKey(7),
+            [VirtualNodeProperty.Action(new ActionId(1))],
+            ReadOnlySpan<VirtualNode>.Empty));
     }
 
     [Fact]

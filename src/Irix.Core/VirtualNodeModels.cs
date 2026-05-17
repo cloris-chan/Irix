@@ -296,15 +296,37 @@ public readonly struct VirtualNode
                 return;
 
             case VirtualNodeKind.Text:
+                if (children.Length != 0)
+                {
+                    throw new ArgumentException($"{kind} nodes cannot have children.", nameof(children));
+                }
+
+                if (content.Kind != NodeContentKind.Text)
+                {
+                    throw new ArgumentException("Text nodes require text content.", nameof(content));
+                }
+
+                return;
+
             case VirtualNodeKind.Rectangle:
                 if (children.Length != 0)
                 {
                     throw new ArgumentException($"{kind} nodes cannot have children.", nameof(children));
                 }
 
+                if (content != NodeContent.None)
+                {
+                    throw new ArgumentException("Rectangle nodes cannot have content.", nameof(content));
+                }
+
                 return;
 
             case VirtualNodeKind.Button:
+                if (content != NodeContent.None)
+                {
+                    throw new ArgumentException("Button nodes cannot have content.", nameof(content));
+                }
+
                 if (children.Length != 1)
                 {
                     throw new ArgumentException("Button nodes require exactly one leaf text label child.", nameof(children));
@@ -320,6 +342,14 @@ public readonly struct VirtualNode
                 }
 
                 throw new ArgumentException("Button nodes require exactly one leaf text label child.", nameof(children));
+
+            case VirtualNodeKind.ScrollContainer:
+                if (content != NodeContent.None)
+                {
+                    throw new ArgumentException("ScrollContainer nodes cannot have content.", nameof(content));
+                }
+
+                return;
 
             default:
                 return;
