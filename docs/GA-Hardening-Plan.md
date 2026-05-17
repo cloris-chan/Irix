@@ -15,6 +15,7 @@
 | Text overlay sync | Keep `SyncTextOverlay=true` and default `D3D12FenceAfterOverlay`. `D3D11Query` remains diagnostic-only. |
 | Sync wait budget | Temporarily accepted for GA/MVP correctness. The current wait cost is documented and no longer blocks GA by itself. |
 | Long-term text renderer direction | Replace the current D3D12 + D3D11On12 + D2D/DirectWrite overlay with a D3D12-only text path using an internal glyph atlas, similar in spirit to Impeller-style glyph atlas rendering. |
+| Release scope | Private GA only. `v1.0-private-ga` is an internal milestone and is not a public API freeze. |
 
 ---
 
@@ -181,13 +182,13 @@ Non-goals for this GA batch:
 | Performance regression CI | `Category=Performance` mock backend frame-time baseline + split frame-stage allocation baseline (`BuildView`, diff, retained apply, layout, record, D3D12 execute, render-request reuse) + warm `FrameDrawingResources` allocation baseline. Exact latest local byte output is recorded in `Project_Status_and_Todo.md`. | Already done | — |
 | Sync wait regression baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode Sync`; not a hard CI gate because hosted runners do not provide stable refresh/scale/GPU timing | Keep as local evidence; accepted budget documented above | — |
 | Text cache/allocation baseline | Semi-automatic local diagnostic via `scripts/ga-baseline.ps1 -Mode TextCache`; CI guards pool allocation with a hardware-independent performance test | Already done for 100% / 150% / 200% on current machine | — |
-| Manual smoke baseline | Semi-automatic local runner via `scripts/ga-baseline.ps1 -Mode Smoke`; user verifies scroll/text sync, hit-test, resize, occlusion, minimize/restore, and scale behavior | Latest default, rollback, 100% / 150% / 200%, and runtime scale-switch smokes passed on current display | — |
+| Manual smoke baseline | Semi-automatic local runner via `scripts/ga-baseline.ps1 -Mode Smoke`; user verifies scroll/text sync, hit-test, resize, occlusion, minimize/restore, and scale behavior | Latest default, 100% / 150% / 200%, and runtime scale-switch smokes passed on current display | — |
 
 ---
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, D2D text overlay synchronization, platform integration smokes, GPU resource failure handling, and command allocator reset guards are complete. Sync wait cost is accepted temporarily as a correctness-first tradeoff; the long-term performance fix is a D3D12-only glyph atlas text renderer.
+**Current state:** PoC V1 core architecture-complete and ready for the Private GA tag. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, D2D text overlay synchronization, platform integration smokes, GPU resource failure handling, and command allocator reset guards are complete. Sync wait cost is accepted temporarily as a correctness-first tradeoff; the long-term performance fix is a D3D12-only glyph atlas text renderer. This is not a public API freeze.
 
 **Minimum GA checklist:**
 
@@ -205,7 +206,17 @@ Non-goals for this GA batch:
 12. ~~GPU memory pressure graceful path~~ — Done for V1 scope: explicit resource creation failure reasons, including `E_OUTOFMEMORY`
 13. ~~Command allocator reset failure guard~~ — Done: retry once after GPU wait, then device-lost escalation
 
-**Remaining before GA tag:** review and commit the candidate snapshot, then create the candidate tag. 144Hz hardware validation and glyph atlas implementation are post-GA follow-ups, not blockers for this candidate.
+**Remaining before GA tag:** create `v1.0-private-ga` from the committed candidate snapshot, then open `post-ga-renderer-foundation`. 144Hz hardware validation is removed from the current matrix because no hardware is available; glyph atlas implementation is post-GA renderer work.
+
+### Known Issues / Accepted Constraints
+
+| Item | Status |
+|------|--------|
+| Sync wait cost | Accepted for Private GA. `D3D12FenceAfterOverlay` remains the default because correctness and no text lag win over the old provisional `<2ms avg` target. |
+| D3D12-only text | Not implemented in this GA. The current D3D11On12/D2D/DirectWrite overlay remains the v1 text path. |
+| Glyph atlas | Post-GA renderer foundation work. It must stay internal unless a later API review explicitly exposes anything. |
+| 144Hz validation | Removed from the current evidence matrix because there is no 144Hz hardware in the environment. 60Hz / 120Hz / 240Hz coverage is accepted for this Private GA. |
+| Public API stability | Not frozen. The repository is private and this tag is an internal architecture milestone. |
 
 ---
 
@@ -214,7 +225,6 @@ Non-goals for this GA batch:
 - HDR / wide color gamut
 - Screen reader accessibility
 - Multi-monitor hot-plug
-- 144Hz-specific validation without real hardware
 - Rewriting the current text renderer before GA
 - Replacing the D3D11On12/D2D overlay before GA
 - Introducing Skia

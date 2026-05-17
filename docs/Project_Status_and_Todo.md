@@ -36,6 +36,8 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Record struct boundary | Complete for Round 18. Framework/internal primitives, IR, render hot paths, platform types, and PoC backend/diagnostics do not use `record struct`. |
 | Profiler allocation pass | Complete for retained/input first pass. The 2026-05-17 VS profiler GCDump drove targeted cleanup in canonical retained apply, input hit-test routing, input ownership diagnostics, retained metadata projection, and text snapshot comparison. |
 | Allocation baseline | In place for MVU BuildView, diff, retained apply, layout full/dirty, draw command record full/dirty, D3D12 ExecuteCore at 100%/150%, render-request reuse, mock backend frame timing, and FrameDrawingResources warm pool allocation. |
+| Performance micro-optimization | Frozen for Private GA. Do not chase the remaining ~2 KB render-request reuse allocation before the GA tag. |
+| Private GA | Ready to tag after candidate docs commit. This is an internal/private milestone, not a public API freeze. |
 | Docs | Trimmed to canonical docs only; obsolete prep/checkpoint docs deleted. |
 
 ---
@@ -128,12 +130,26 @@ Profiler findings intentionally not folded into this pass:
 Last local verification:
 
 ```powershell
-dotnet build Irix.slnx --no-restore
-dotnet test tests/Irix.Core.Tests/Irix.Core.Tests.csproj --no-restore
-dotnet test Irix.slnx --no-restore
+dotnet restore
+dotnet build --no-restore -c Release
+dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance" --verbosity normal
+dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
+dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal
+dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained
 ```
 
-Result: 602 tests passed.
+Result: Release local CI parity passed: 590 normal tests, 6 D3D12 tests, 6 performance tests, and AOT publish succeeded.
+
+Manual smoke status:
+
+| Smoke | Status |
+|-------|--------|
+| Default run | Passed |
+| 100% scale | Passed |
+| 150% scale | Passed |
+| 200% scale | Passed |
+| Runtime scale switch | Passed |
+| Refresh evidence | 60Hz / 120Hz / 240Hz accepted; 144Hz removed from the current matrix because no hardware is available. |
 
 Current allocation/performance guards:
 
@@ -195,8 +211,9 @@ Source guards currently block:
 
 | Priority | Work | Boundary |
 |----------|------|----------|
-| P0 | Allocation baseline tightening | Use the measured table above to choose the next target. Render-request reuse is now attributed: inspect record/result reuse first, then snapshot copy reuse; hit-target caching is lower priority for the measured tree. |
-| P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); do not change public API. |
+| P0 | Private GA tag | Create `v1.0-private-ga` from the committed candidate snapshot. This tag is internal/private and does not freeze public API. |
+| P1 | Post-GA renderer foundation branch | Open `post-ga-renderer-foundation` for D3D12-only text/glyph atlas groundwork. Do not continue pre-GA micro-optimizing the 2 KB render-request reuse allocation. |
+| P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); do not change public API without a separate review. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
 

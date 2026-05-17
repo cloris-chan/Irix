@@ -57,7 +57,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 ## Dependency Graph
 
 ```text
-POST-001..004, POST-013..020 complete ──> GA/MVP candidate tag
+POST-001..004, POST-013..020 complete ──> v1.0-private-ga tag
 
 Current D3D11On12/D2D overlay accepted temporarily ──> POST-017 D3D12-only glyph atlas text renderer
                                                     └─ POST-011 D3D12 resource cache / stable handles
@@ -101,7 +101,7 @@ Non-goals:
 
 ## Execution Plan
 
-### Batch A: GA/MVP closeout
+### Batch A: Private GA closeout
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
@@ -110,7 +110,10 @@ Non-goals:
 | Platform integration checks | `Irix.Poc`, manual smoke | Minimize/restore, occlusion, live DPI, resize + scroll + text sync pass on available hardware | ✅ Done |
 | GPU memory pressure handling | `D3D12Renderer.cs` | Resource creation failures produce explicit device error reasons; no undefined pointer continuation | ✅ Done |
 | Command allocator reset failure handling | `D3D12Renderer.cs` | Reset retry or device-lost escalation | ✅ Done |
-| Keep CI green | GitHub Actions | Tests, D3D12 smoke, performance lane, AOT publish stay green | Ongoing |
+| Keep CI green | GitHub Actions / local CI parity | Tests, D3D12 smoke, performance lane, AOT publish stay green | ✅ Done for Private GA |
+| Stop pre-GA performance micro-optimization | `Project_Status_and_Todo.md` | Do not chase the remaining ~2 KB render-request reuse allocation before tag | ✅ Done |
+| Private GA tag | Git | Tag committed snapshot as `v1.0-private-ga`; not a public API freeze | Pending |
+| Next branch | Git | Open `post-ga-renderer-foundation` after tag | Pending |
 
 ### Batch B: Post-GA text renderer replacement
 
