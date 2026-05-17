@@ -40,6 +40,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private D3D12Renderer2D? _renderer2D;
     private D3D12TextRenderer? _textRenderer;
     private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
+    private D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics _glyphAtlasTextDiagnostics;
     private readonly nint _hwnd;
     private readonly Lock _resizeLock = new();
     private int _width;
@@ -188,13 +189,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? GetGlyphAtlasTextDiagnostics()
     {
-        return _glyphAtlasTextRenderer?.GetDiagnostics();
+        return _glyphAtlasTextRenderer?.GetDiagnostics() ?? (_glyphAtlasTextDiagnostics.FallbackFrames > 0 ? _glyphAtlasTextDiagnostics : null);
     }
 
     public void ResetTextDiagnostics()
     {
         _textRenderer?.ResetDiagnostics();
         _glyphAtlasTextRenderer?.ResetDiagnostics();
+        _glyphAtlasTextDiagnostics = default;
     }
 
     /// <summary>Snapshot of frame serial counters for diagnostics.</summary>
@@ -506,11 +508,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         catch (COMException ex)
         {
             System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: 0x{ex.ErrorCode:X8}");
+            RecordGlyphAtlasInitializationFallback(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed);
             return false;
         }
         catch (InvalidOperationException ex)
         {
             System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: {ex.Message}");
+            RecordGlyphAtlasInitializationFallback(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.CompileFailed);
             return false;
         }
 
@@ -521,6 +525,11 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
 
         return recorded;
+    }
+
+    private void RecordGlyphAtlasInitializationFallback(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason reason)
+    {
+        _glyphAtlasTextDiagnostics = _glyphAtlasTextDiagnostics.WithFallback(1, reason);
     }
 
     private bool RenderOverlayTextAndMaybeSync(

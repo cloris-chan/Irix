@@ -18,6 +18,19 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "atlas"]));
     }
 
+    [Fact]
+    public void Glyph_atlas_renderer_uses_reusable_frame_buffers_and_reports_fallback_reasons()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs"));
+        var buildFrameBody = source[source.IndexOf("    private GlyphFrame BuildFrame(", StringComparison.Ordinal)..source.IndexOf("    private static GlyphAtlasFallbackReason GetUnsupportedReason(", StringComparison.Ordinal)];
+
+        Assert.DoesNotContain("new Vertex[MaxGlyphVertices]", buildFrameBody);
+        Assert.Contains("private readonly Vertex[] _vertices", source);
+        Assert.Contains("GlyphAtlasFallbackReasonCounts", source);
+        Assert.Contains("NonAscii", source);
+        Assert.Contains("AtlasFull", source);
+    }
+
     #region Scroll Snapshot
 
     [Fact]
@@ -706,6 +719,19 @@ public sealed class ProgramDiagnosticsTests
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
+
+    private static string FindRepoRoot()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir, "Irix.slnx")))
+                return dir;
+            dir = Path.GetDirectoryName(dir);
+        }
+
+        throw new InvalidOperationException("Could not find repo root (Irix.slnx)");
+    }
 
     private static bool ContainsNode(ReadOnlySpan<VirtualNode> nodes, Func<VirtualNode, bool> predicate)
     {

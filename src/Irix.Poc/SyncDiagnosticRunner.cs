@@ -16,7 +16,8 @@ internal static class SyncDiagnosticRunner
         int frameCount = 300,
         int sampleCount = 1,
         TextOverlaySyncStrategy syncStrategy = TextOverlaySyncStrategy.D3D12FenceAfterOverlay,
-        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay)
+        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        bool includeNonAsciiText = false)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
@@ -57,7 +58,7 @@ internal static class SyncDiagnosticRunner
         for (var sample = 0; sample < sampleCount; sample++)
         {
             output.WriteLine($"--- Sample {sample + 1}/{sampleCount} ---");
-            sampleSummaries.Add(RunSample(arena, output, frameCount, translator, compositor, d3d12Backend, d3d12Renderer));
+            sampleSummaries.Add(RunSample(arena, output, frameCount, translator, compositor, d3d12Backend, d3d12Renderer, includeNonAsciiText));
             output.WriteLine();
         }
 
@@ -76,7 +77,7 @@ internal static class SyncDiagnosticRunner
         if (atlasDiag.HasValue)
         {
             var d = atlasDiag.Value;
-            output.WriteLine($"Glyph atlas: cachedGlyphs={d.CachedGlyphs}, drawnGlyphs={d.DrawnGlyphs}, uploads={d.UploadedBytes} bytes, hits={d.CacheHits}, misses={d.CacheMisses}, fallbacks={d.FallbackFrames}, unsupportedRuns={d.UnsupportedRuns}");
+            output.WriteLine($"Glyph atlas: cachedGlyphs={d.CachedGlyphs}, drawnGlyphs={d.DrawnGlyphs}, uploads={d.UploadedBytes} bytes, hits={d.CacheHits}, misses={d.CacheMisses}, fallbacks={d.FallbackFrames}, unsupportedRuns={d.UnsupportedRuns}, reasons=[{d.Reasons}]");
         }
         output.WriteLine("=== Sync diagnostic complete ===");
     }
@@ -88,7 +89,8 @@ internal static class SyncDiagnosticRunner
         WindowDrawCommandTranslator translator,
         DrawingBackendCompositor compositor,
         D3D12DrawingBackend d3d12Backend,
-        D3D12Renderer d3d12Renderer)
+        D3D12Renderer d3d12Renderer,
+        bool includeNonAsciiText)
     {
         var syncWaits = new List<double>(frameCount);
         var frameTimes = new List<long>(frameCount);
@@ -106,7 +108,7 @@ internal static class SyncDiagnosticRunner
                 [
                     VirtualNodeBuilder.Button(arena, "SyncTest", new NodeKey(2),
                         VirtualNodeProperty.Action(new ActionId(300))),
-                    VirtualNodeBuilder.Text(arena, $"Frame {i} sync overhead measurement", new NodeKey(3)),
+                    VirtualNodeBuilder.Text(arena, includeNonAsciiText ? $"Frame {i} sync 測試" : $"Frame {i} sync overhead measurement", new NodeKey(3)),
                     VirtualNodeBuilder.Button(arena, "Another", new NodeKey(4),
                         VirtualNodeProperty.Action(new ActionId(301))),
                 ]);

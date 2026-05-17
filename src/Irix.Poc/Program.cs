@@ -48,7 +48,13 @@ internal static class Program
             var syncSampleArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(2).FirstOrDefault();
             if (int.TryParse(syncSampleArg, out var sampleCount) && sampleCount > 0) syncSampleCount = sampleCount;
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            SyncDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, syncFrameCount, syncSampleCount, ParseTextOverlaySyncStrategy(args), ParseTextCompositionMode(args));
+            SyncDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                syncFrameCount,
+                syncSampleCount,
+                ParseTextOverlaySyncStrategy(args),
+                ParseTextCompositionMode(args),
+                args.Contains("--diagnose-sync-non-ascii"));
             return;
         }
 
