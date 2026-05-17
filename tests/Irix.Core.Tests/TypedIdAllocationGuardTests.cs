@@ -253,6 +253,28 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualNodeKind_None_shape_must_be_empty()
+    {
+        var label = VirtualNodeBuilder.Text(_arena, "label", new NodeKey(11));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.None,
+            key: new NodeKey(1)));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.None,
+            content: label.Content));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.None,
+            properties: [VirtualNodeProperty.Width(10)]));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.None,
+            children: [label]));
+    }
+
+    [Fact]
     public void PropertyChangeSet_has_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<PropertyChangeSet>());
@@ -918,6 +940,18 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void ApplyResult_does_not_expose_list_reference_equality()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "RetainedTree.cs"));
+
+        Assert.DoesNotContain("IEquatable<ApplyResult>", source);
+        Assert.DoesNotContain("EqualityComparer<IReadOnlyList<int>>", source);
+        Assert.DoesNotContain("operator ==(ApplyResult", source);
+        Assert.DoesNotContain("operator !=(ApplyResult", source);
+        Assert.DoesNotContain("PreviousRoot.Equals(other.PreviousRoot)", source);
+    }
+
+    [Fact]
     public void Owned_array_virtual_node_creation_is_marked_unsafe()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
@@ -933,6 +967,8 @@ public class TypedIdAllocationGuardTests
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
 
         Assert.Contains("nodes cannot have children", source);
+        Assert.Contains("None nodes must be empty", source);
+        Assert.Contains("case VirtualNodeKind.None", source);
         Assert.Contains("Button nodes require exactly one leaf text label child", source);
         Assert.Contains("child.Kind == VirtualNodeKind.Text", source);
         Assert.Contains("child.Children.IsEmpty", source);

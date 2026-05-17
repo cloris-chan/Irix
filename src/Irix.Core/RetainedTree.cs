@@ -7,26 +7,11 @@ namespace Irix;
 public readonly struct ApplyResult(
     IReadOnlyList<int> Dirty,
     VirtualNode PreviousRoot,
-    TextBufferSnapshot PreviousTextSnapshot) : IEquatable<ApplyResult>
+    TextBufferSnapshot PreviousTextSnapshot)
 {
     public IReadOnlyList<int> Dirty { get; } = Dirty;
     public VirtualNode PreviousRoot { get; } = PreviousRoot;
     public TextBufferSnapshot PreviousTextSnapshot { get; } = PreviousTextSnapshot;
-
-    public bool Equals(ApplyResult other)
-    {
-        return EqualityComparer<IReadOnlyList<int>>.Default.Equals(Dirty, other.Dirty)
-            && PreviousRoot.Equals(other.PreviousRoot)
-            && PreviousTextSnapshot.Equals(other.PreviousTextSnapshot);
-    }
-
-    public override bool Equals(object? obj) => obj is ApplyResult other && Equals(other);
-
-    public override int GetHashCode() => HashCode.Combine(Dirty, PreviousRoot, PreviousTextSnapshot);
-
-    public static bool operator ==(ApplyResult left, ApplyResult right) => left.Equals(right);
-
-    public static bool operator !=(ApplyResult left, ApplyResult right) => !left.Equals(right);
 }
 
 /// <summary>

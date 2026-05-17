@@ -251,7 +251,7 @@ public readonly struct VirtualNode
         Content = content;
         _properties = properties.Length == 0 ? null : properties;
         _children = children.Length == 0 ? null : children;
-        ValidateNodeShape(kind, children);
+        ValidateNodeShape(kind, key, content, properties, children);
     }
 
     public VirtualNodeKind Kind { get; }
@@ -275,10 +275,26 @@ public readonly struct VirtualNode
     private static VirtualNode[] CreateChildren(scoped ReadOnlySpan<VirtualNode> children) =>
         children.IsEmpty ? [] : children.ToArray();
 
-    private static void ValidateNodeShape(VirtualNodeKind kind, VirtualNode[] children)
+    private static void ValidateNodeShape(
+        VirtualNodeKind kind,
+        NodeKey key,
+        NodeContent content,
+        VirtualNodeProperty[] properties,
+        VirtualNode[] children)
     {
         switch (kind)
         {
+            case VirtualNodeKind.None:
+                if (key != NodeKey.None
+                    || content != NodeContent.None
+                    || properties.Length != 0
+                    || children.Length != 0)
+                {
+                    throw new ArgumentException("None nodes must be empty.");
+                }
+
+                return;
+
             case VirtualNodeKind.Text:
             case VirtualNodeKind.Rectangle:
                 if (children.Length != 0)
