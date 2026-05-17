@@ -608,6 +608,7 @@ public class TypedIdAllocationGuardTests
         var retainedTreeSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "RetainedTree.cs"));
         var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
         var layoutBuilderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+        var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
         var rangeUtilsSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RangeUtils.cs"));
 
         Assert.Contains("RentIntSpan", scratchSource);
@@ -623,10 +624,13 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("NodeKey[]", scratchMapSource);
         Assert.DoesNotContain("int[]? _values", scratchMapSource);
         Assert.DoesNotContain("byte[]? _occupied", scratchMapSource);
-        Assert.Contains("RentLayoutElementList", renderScratchSource);
+        Assert.Contains("CreateLayoutElementList", renderScratchSource);
+        Assert.Contains("CreateLayoutTreeNodeList", renderScratchSource);
         Assert.Contains("CreateRangeList", renderScratchSource);
+        Assert.Contains("CreateDirtyIndexList", renderScratchSource);
         Assert.Contains("CreateDirtyIndexSet", renderScratchSource);
-        Assert.Contains("RentDirtyIndexList", renderScratchSource);
+        Assert.DoesNotContain("RentDirtyIndexList", renderScratchSource);
+        Assert.DoesNotContain("RentLayoutTreeNodeList", renderScratchSource);
         Assert.DoesNotContain("new FrameScratchArena()", renderScratchSource);
         Assert.DoesNotContain("new FrameScratchArena().", renderScratchSource);
 
@@ -647,7 +651,20 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("new List<LayoutElement>", layoutBuilderSource);
         Assert.DoesNotContain("new List<LayoutTreeNode>", layoutBuilderSource);
         Assert.DoesNotContain("new List<ScrollContainerDiag>", layoutBuilderSource);
+        Assert.DoesNotContain("RentLayoutElementList", layoutBuilderSource);
+        Assert.DoesNotContain("RentLayoutTreeNodeList", layoutBuilderSource);
+        Assert.DoesNotContain("RentDirtyIndexList", layoutBuilderSource);
+        Assert.DoesNotContain("LayoutTreeNode[] Children", layoutBuilderSource);
+        Assert.DoesNotContain("children.ToArray()", layoutBuilderSource);
+        Assert.Contains("subtreeStart", layoutBuilderSource);
+        Assert.Contains("subtreeCount", layoutBuilderSource);
         Assert.Contains("AdvanceDirtyCursor", layoutBuilderSource);
+
+        Assert.Contains("int SubtreeStart", layoutModelSource);
+        Assert.Contains("int SubtreeCount", layoutModelSource);
+        Assert.DoesNotContain("FirstChildIndex", layoutModelSource);
+        Assert.DoesNotContain("ChildCount", layoutModelSource);
+        Assert.DoesNotContain("LayoutTreeNode[] Children", layoutModelSource);
 
         Assert.DoesNotContain("new List<", rangeUtilsSource);
 
@@ -659,7 +676,7 @@ public class TypedIdAllocationGuardTests
 
         var layoutRecursiveSource = ExtractSourceBetween(
             layoutBuilderSource,
-            "private LayoutTreeNode[] LayoutNode",
+            "private void LayoutNode",
             "private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges");
         Assert.DoesNotContain("elements.ToArray()", layoutRecursiveSource);
         Assert.DoesNotContain("scrollDiags.ToArray()", layoutRecursiveSource);
@@ -690,13 +707,26 @@ public class TypedIdAllocationGuardTests
 
         var scratchListSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchList.cs"));
         var scratchMapSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchNodeKeyIndexMap.cs"));
-        var renderPipelineSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "RenderPipeline.cs"));
+        var root = FindRepoRoot();
+        var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
+        var layoutBuilderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+        var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
 
         Assert.Contains("public static ScratchList<T> Create(Span<T> initialBuffer)", scratchListSource);
         Assert.Contains("private Span<T> _initialBuffer", scratchListSource);
+        Assert.Contains("_initialBuffer[.._count].Clear()", scratchListSource);
         Assert.Contains("private Span<Entry> _entries", scratchMapSource);
+        Assert.Contains("returning without clear does not retain refs", scratchMapSource);
         Assert.Contains("Span<LayoutDirtyClassification> classificationStorage = stackalloc", renderPipelineSource);
         Assert.Contains("Span<int> dirtySetStorage = stackalloc", renderPipelineSource);
+        Assert.Contains("Span<LayoutElement> elementStorage = stackalloc", layoutBuilderSource);
+        Assert.Contains("Span<LayoutTreeNode> treeNodeStorage = stackalloc", layoutBuilderSource);
+        Assert.Contains("Span<ScrollContainerDiag> scrollDiagStorage = stackalloc", layoutBuilderSource);
+        Assert.Contains("Span<int> sortedDirtyStorage = stackalloc", layoutBuilderSource);
+        Assert.Contains("Span<(int Start, int Count)> rangeStorage = stackalloc", layoutBuilderSource);
+        Assert.Contains("int SubtreeStart", layoutModelSource);
+        Assert.Contains("int SubtreeCount", layoutModelSource);
+        Assert.DoesNotContain("LayoutTreeNode[] Children", layoutModelSource);
     }
 
     [Fact]

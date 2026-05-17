@@ -121,21 +121,24 @@ internal readonly struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildRe
 
 /// <summary>
 /// A node in the layout tree, mapping a VirtualNode's DFS index to its
-/// layout element range in the flat <see cref="LayoutElement"/> array.
+/// layout element range in the flat <see cref="LayoutElement"/> array and
+/// its contiguous subtree range in the flat preorder layout tree.
 /// </summary>
 internal readonly struct LayoutTreeNode(
     int DfsIndex,
     VirtualNodeKind Kind,
     int ElementStart,
     int ElementCount,
-    LayoutTreeNode[] Children) : IEquatable<LayoutTreeNode>
+    int SubtreeStart,
+    int SubtreeCount) : IEquatable<LayoutTreeNode>
 {
 
     public int DfsIndex { get; } = DfsIndex;
     public VirtualNodeKind Kind { get; } = Kind;
     public int ElementStart { get; } = ElementStart;
     public int ElementCount { get; } = ElementCount;
-    public LayoutTreeNode[] Children { get; } = Children;
+    public int SubtreeStart { get; } = SubtreeStart;
+    public int SubtreeCount { get; } = SubtreeCount;
 
     public bool Equals(LayoutTreeNode other)
     {
@@ -143,12 +146,13 @@ internal readonly struct LayoutTreeNode(
             && Kind == other.Kind
             && ElementStart == other.ElementStart
             && ElementCount == other.ElementCount
-            && EqualityComparer<LayoutTreeNode[]>.Default.Equals(Children, other.Children);
+            && SubtreeStart == other.SubtreeStart
+            && SubtreeCount == other.SubtreeCount;
     }
 
     public override bool Equals(object? obj) => obj is LayoutTreeNode other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(DfsIndex, Kind, ElementStart, ElementCount, Children);
+    public override int GetHashCode() => HashCode.Combine(DfsIndex, Kind, ElementStart, ElementCount, SubtreeStart, SubtreeCount);
 
     public static bool operator ==(LayoutTreeNode left, LayoutTreeNode right) => left.Equals(right);
 
@@ -178,7 +182,7 @@ internal readonly struct ElementCommandRange(int CommandStart, int CommandCount)
 }
 
 /// <summary>
-/// Result of building a layout tree: the flat element array, the tree structure
+/// Result of building a layout tree: the flat element array, the flat tree structure
 /// for DFS-index lookups, and the dirty element ranges for incremental re-recording.
 /// </summary>
 internal sealed class LayoutTreeResult(
@@ -198,7 +202,11 @@ internal sealed class LayoutTreeResult(
     /// <summary>The flat layout element array (full frame).</summary>
     public IReadOnlyList<LayoutElement> Elements { get; } = elements;
 
-    /// <summary>Top-level layout tree nodes (usually one root).</summary>
+    /// <summary>
+    /// Flat preorder layout tree nodes. The root is usually <c>TreeNodes[0]</c>;
+    /// subtree relationships use <see cref="LayoutTreeNode.SubtreeStart"/> and
+    /// <see cref="LayoutTreeNode.SubtreeCount"/>.
+    /// </summary>
     public LayoutTreeNode[] TreeNodes { get; } = treeNodes;
 
     /// <summary>

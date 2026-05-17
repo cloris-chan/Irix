@@ -25,11 +25,10 @@ internal readonly struct RenderScratchBuffer
 
     public ScratchIntSet CreateDirtyIndexSet(Span<int> initialBuffer) => _arena.CreateIntSet(initialBuffer);
 
+    public ScratchList<int> CreateDirtyIndexList(Span<int> initialBuffer) => _arena.CreateIntList(initialBuffer);
+
     public ScratchList<LayoutElement> RentLayoutElementList(int capacity = 0) =>
         _arena.RentList<LayoutElement>(capacity);
-
-    public ScratchList<LayoutTreeNode> RentLayoutTreeNodeList(int capacity = 0) =>
-        _arena.RentList<LayoutTreeNode>(capacity);
 
     public ScratchList<ScrollContainerDiag> RentScrollContainerDiagList(int capacity = 0) =>
         _arena.RentList<ScrollContainerDiag>(capacity);
@@ -40,5 +39,4 @@ internal readonly struct RenderScratchBuffer
     public ScratchList<LayoutDirtyClassification> RentLayoutDirtyClassificationList(int capacity = 0) =>
         _arena.RentList<LayoutDirtyClassification>(capacity);
 
-    public ScratchList<int> RentDirtyIndexList(int capacity = 0) => _arena.RentIntList(capacity);
 }

@@ -86,6 +86,8 @@ internal ref struct ScratchNodeKeyIndexMap
         if (pooled is not null)
         {
             _pooled = null;
+            // Entry is pure value state. Occupied controls validity and rentals clear
+            // the active capacity, so returning without clear does not retain refs.
             ArrayPool<Entry>.Shared.Return(pooled);
         }
 

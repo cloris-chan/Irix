@@ -5,7 +5,7 @@ namespace Irix.Rendering;
 
 internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle, ControlVisualStateResolver visualStateResolver)
 {
-    private const int StackDirtyClassificationCapacity = 32;
+    private const int InlineDirtyClassificationCapacity = 32;
 
     private readonly LayoutTreeBuilder _layoutTreeBuilder = new(layoutStyle);
     private readonly DrawCommandRecorder _drawCommandRecorder = new(drawingStyle, visualStateResolver);
@@ -187,8 +187,8 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         var scratch = new RenderScratchBuffer();
-        Span<int> dirtySetStorage = stackalloc int[StackDirtyClassificationCapacity];
-        Span<LayoutDirtyClassification> classificationStorage = stackalloc LayoutDirtyClassification[StackDirtyClassificationCapacity];
+        Span<int> dirtySetStorage = stackalloc int[InlineDirtyClassificationCapacity];
+        Span<LayoutDirtyClassification> classificationStorage = stackalloc LayoutDirtyClassification[InlineDirtyClassificationCapacity];
         using var dirtySet = scratch.CreateDirtyIndexSet(dirtySetStorage);
         using var classifications = scratch.CreateLayoutDirtyClassificationList(classificationStorage);
         for (var i = 0; i < dirtyNodes.Count; i++)

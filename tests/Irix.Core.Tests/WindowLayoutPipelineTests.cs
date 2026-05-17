@@ -1316,9 +1316,18 @@ public sealed class WindowLayoutPipelineTests
 
     private static LayoutTreeRangeInvariant[] SnapshotLayoutTreeRanges(LayoutTreeNode[] treeNodes)
     {
-        var snapshot = new List<LayoutTreeRangeInvariant>();
-        AppendLayoutTreeRanges(treeNodes, snapshot);
-        return [.. snapshot];
+        var snapshot = new LayoutTreeRangeInvariant[treeNodes.Length];
+        for (var i = 0; i < treeNodes.Length; i++)
+        {
+            var treeNode = treeNodes[i];
+            snapshot[i] = new LayoutTreeRangeInvariant(
+                treeNode.DfsIndex,
+                treeNode.Kind,
+                treeNode.ElementStart,
+                treeNode.ElementCount);
+        }
+
+        return snapshot;
     }
 
     private static LayoutGeometryInvariant[] SnapshotLayoutGeometryInvariants(IReadOnlyList<LayoutElement> elements)
@@ -1396,19 +1405,6 @@ public sealed class WindowLayoutPipelineTests
         }
 
         Assert.Equal(expected.DirtyCommandRanges, actual.DirtyCommandRanges);
-    }
-
-    private static void AppendLayoutTreeRanges(LayoutTreeNode[] treeNodes, List<LayoutTreeRangeInvariant> snapshot)
-    {
-        foreach (var treeNode in treeNodes)
-        {
-            snapshot.Add(new LayoutTreeRangeInvariant(
-                treeNode.DfsIndex,
-                treeNode.Kind,
-                treeNode.ElementStart,
-                treeNode.ElementCount));
-            AppendLayoutTreeRanges(treeNode.Children, snapshot);
-        }
     }
 
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow
@@ -2030,23 +2026,46 @@ public sealed class WindowLayoutPipelineTests
 
         var result = builder.BuildLayoutTree(root, viewport);
 
-        // Should have 1 top-level tree node (root ScrollContainer)
-        Assert.Single(result.TreeNodes);
+        // Should have one flat preorder node for root plus one per laid-out child.
+        Assert.Equal(3, result.TreeNodes.Length);
         var rootNode = result.TreeNodes[0];
         Assert.Equal(0, rootNode.DfsIndex);
         Assert.Equal(2, rootNode.ElementCount); // 2 children �?2 elements
-        Assert.Equal(2, rootNode.Children.Length);
+        Assert.Equal(1, rootNode.SubtreeStart);
+        Assert.Equal(2, rootNode.SubtreeCount);
 
         // Children should be the Text and Button
-        Assert.Equal(1, rootNode.Children[0].DfsIndex);
-        Assert.Equal(VirtualNodeKind.Text, rootNode.Children[0].Kind);
-        Assert.Equal(0, rootNode.Children[0].ElementStart);
-        Assert.Equal(1, rootNode.Children[0].ElementCount);
+        Assert.Equal(1, result.TreeNodes[1].DfsIndex);
+        Assert.Equal(VirtualNodeKind.Text, result.TreeNodes[1].Kind);
+        Assert.Equal(0, result.TreeNodes[1].ElementStart);
+        Assert.Equal(1, result.TreeNodes[1].ElementCount);
 
-        Assert.Equal(2, rootNode.Children[1].DfsIndex);
-        Assert.Equal(VirtualNodeKind.Button, rootNode.Children[1].Kind);
-        Assert.Equal(1, rootNode.Children[1].ElementStart);
-        Assert.Equal(1, rootNode.Children[1].ElementCount);
+        Assert.Equal(2, result.TreeNodes[2].DfsIndex);
+        Assert.Equal(VirtualNodeKind.Button, result.TreeNodes[2].Kind);
+        Assert.Equal(1, result.TreeNodes[2].ElementStart);
+        Assert.Equal(1, result.TreeNodes[2].ElementCount);
+    }
+
+    [Fact]
+    public void LayoutTree_container_element_range_ignores_empty_nested_container()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.ScrollContainer(new NodeKey(2)),
+            VirtualNodeBuilder.Text(_arena, "after", new NodeKey(3)));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var result = builder.BuildLayoutTree(root, viewport);
+
+        Assert.Single(result.Elements);
+        Assert.Equal(3, result.TreeNodes.Length);
+        Assert.Equal(0, result.TreeNodes[0].ElementStart);
+        Assert.Equal(1, result.TreeNodes[0].ElementCount);
+        Assert.Equal(1, result.TreeNodes[0].SubtreeStart);
+        Assert.Equal(2, result.TreeNodes[0].SubtreeCount);
+        Assert.Equal(0, result.TreeNodes[1].ElementCount);
+        Assert.Equal(0, result.TreeNodes[2].ElementStart);
+        Assert.Equal(1, result.TreeNodes[2].ElementCount);
     }
 
     [Fact]

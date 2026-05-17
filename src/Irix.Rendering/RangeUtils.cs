@@ -6,7 +6,7 @@ namespace Irix.Rendering;
 /// </summary>
 internal static class RangeUtils
 {
-    private const int StackRangeCapacity = 16;
+    private const int InlineRangeCapacity = 16;
 
     /// <summary>
     /// Sort and merge overlapping/adjacent ranges into the minimal non-overlapping set.
@@ -20,7 +20,7 @@ internal static class RangeUtils
         }
 
         var scratch = new RenderScratchBuffer();
-        Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[StackRangeCapacity];
+        Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[InlineRangeCapacity];
         var sorted = scratch.CreateRangeList(storage);
         try
         {
@@ -96,7 +96,7 @@ internal static class RangeUtils
         }
 
         var scratch = new RenderScratchBuffer();
-        Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[StackRangeCapacity];
+        Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[InlineRangeCapacity];
         var sorted = scratch.CreateRangeList(storage);
         try
         {
@@ -134,7 +134,7 @@ internal static class RangeUtils
         IReadOnlyList<(int Start, int Count)> elementDirtyRanges)
     {
         var scratch = new RenderScratchBuffer();
-        Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[StackRangeCapacity];
+        Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[InlineRangeCapacity];
         var ranges = scratch.CreateRangeList(storage);
         try
         {

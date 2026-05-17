@@ -21,9 +21,12 @@ internal ref struct ScratchIntSet
 
     public bool Add(int value)
     {
-        if (Contains(value))
+        foreach (var item in _items.Written)
         {
-            return false;
+            if (item == value)
+            {
+                return false;
+            }
         }
 
         _items.Add(value);
@@ -33,6 +36,19 @@ internal ref struct ScratchIntSet
 
     public bool Contains(int value)
     {
+        if (!_sorted)
+        {
+            foreach (var item in _items.Written)
+            {
+                if (item == value)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         if (_items.Count <= LinearThreshold)
         {
             foreach (var item in _items.Written)
@@ -46,7 +62,6 @@ internal ref struct ScratchIntSet
             return false;
         }
 
-        EnsureSorted();
         return _items.Written.BinarySearch(value) >= 0;
     }
 

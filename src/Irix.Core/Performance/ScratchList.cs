@@ -129,6 +129,10 @@ internal ref struct ScratchList<T>
             _pooled = null;
             ArrayPool<T>.Shared.Return(pooled, clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>());
         }
+        else if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+        {
+            _initialBuffer[.._count].Clear();
+        }
 
         _initialBuffer = default;
         _count = 0;

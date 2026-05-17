@@ -33,11 +33,11 @@ internal ref struct LayoutContext
 
 internal sealed class LayoutTreeBuilder(LayoutStyle style)
 {
-    private const int StackLayoutElementCapacity = 32;
-    private const int StackScrollDiagCapacity = 8;
-    private const int StackChildTreeNodeCapacity = 8;
-    private const int StackDirtyIndexCapacity = 32;
-    private const int StackRangeCapacity = 16;
+    private const int InlineLayoutElementCapacity = 32;
+    private const int InlineLayoutTreeNodeCapacity = 32;
+    private const int InlineScrollDiagCapacity = 8;
+    private const int InlineDirtyIndexCapacity = 32;
+    private const int InlineRangeCapacity = 16;
 
     public LayoutTreeBuilder()
         : this(LayoutStyle.Default)
@@ -52,33 +52,27 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         var scratch = new RenderScratchBuffer();
-        var elements = scratch.RentLayoutElementList(StackLayoutElementCapacity);
-        var scrollDiags = scratch.RentScrollContainerDiagList(StackScrollDiagCapacity);
+        Span<LayoutElement> elementStorage = stackalloc LayoutElement[InlineLayoutElementCapacity];
+        Span<LayoutTreeNode> treeNodeStorage = stackalloc LayoutTreeNode[InlineLayoutTreeNodeCapacity];
+        Span<ScrollContainerDiag> scrollDiagStorage = stackalloc ScrollContainerDiag[InlineScrollDiagCapacity];
+        var state = new LayoutBuildState(
+            scratch.CreateLayoutElementList(elementStorage),
+            scratch.CreateLayoutTreeNodeList(treeNodeStorage),
+            scratch.CreateScrollContainerDiagList(scrollDiagStorage),
+            style);
         try
         {
-            var cursorY = style.VerticalPadding;
-
-            var ctx = new LayoutContext
-            {
-                AvailableWidth = Math.Max(viewportBounds.Width - (style.HorizontalPadding * 2), 0),
-                ViewportHeight = viewportBounds.Height,
-                Depth = 0,
-                ClipBounds = default,
-                Style = style,
-            };
-
-            var treeNodes = LayoutNode(root, 0, ref cursorY, ref elements, ref ctx, ref scrollDiags, scratch);
+            state.LayoutRoot(root, viewportBounds);
 
             var dirtyRanges = dirtyNodes is { Count: > 0 }
-                ? CollectDirtyRanges(treeNodes, dirtyNodes, scratch)
+                ? CollectDirtyRanges(state.TreeNodes, dirtyNodes, scratch)
                 : [];
 
-            return new LayoutTreeResult(elements.ToArray(), treeNodes, dirtyRanges, scrollDiags.ToArray());
+            return new LayoutTreeResult(state.ElementsToArray(), state.TreeNodesToArray(), dirtyRanges, state.ScrollDiagnosticsToArray());
         }
         finally
         {
-            elements.Dispose();
-            scrollDiags.Dispose();
+            state.Dispose();
         }
     }
 
@@ -90,218 +84,312 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return BuildLayoutTree(root, viewportBounds, dirtyNodes).Elements;
     }
 
-    private LayoutTreeNode[] LayoutNode(
-        VirtualNode node,
-        int dfsIndex,
-        ref int cursorY,
-        ref ScratchList<LayoutElement> elements,
-        ref LayoutContext ctx,
-        ref ScratchList<ScrollContainerDiag> scrollDiags,
-        RenderScratchBuffer scratch)
+    private ref struct LayoutBuildState
     {
-        switch (node.Kind)
+        private ScratchList<LayoutElement> _elements;
+        private ScratchList<LayoutTreeNode> _treeNodes;
+        private ScratchList<ScrollContainerDiag> _scrollDiags;
+        private readonly LayoutStyle _style;
+        private int _cursorY;
+        private LayoutContext _ctx;
+
+        public LayoutBuildState(
+            ScratchList<LayoutElement> elements,
+            ScratchList<LayoutTreeNode> treeNodes,
+            ScratchList<ScrollContainerDiag> scrollDiags,
+            LayoutStyle style)
         {
-            case VirtualNodeKind.ScrollContainer:
+            _elements = elements;
+            _treeNodes = treeNodes;
+            _scrollDiags = scrollDiags;
+            _style = style;
+            _cursorY = style.VerticalPadding;
+            _ctx = default;
+        }
+
+        public readonly ReadOnlySpan<LayoutTreeNode> TreeNodes => _treeNodes.Written;
+
+        public LayoutElement[] ElementsToArray() => _elements.ToArray();
+
+        public LayoutTreeNode[] TreeNodesToArray() => _treeNodes.ToArray();
+
+        public ScrollContainerDiag[] ScrollDiagnosticsToArray() => _scrollDiags.ToArray();
+
+        public void LayoutRoot(VirtualNode root, PixelRectangle viewportBounds)
+        {
+            _ctx = new LayoutContext
             {
-                using var children = scratch.RentLayoutTreeNodeList(StackChildTreeNodeCapacity);
-                var childDfsIndex = dfsIndex + 1;
-                var contentTop = cursorY;
-                var isRootContainer = ctx.Depth == 0;
-                var containerClipLeft = isRootContainer ? 0 : ctx.Style.HorizontalPadding;
-                var containerClipTop = isRootContainer ? 0 : contentTop;
-                var containerClipWidth = isRootContainer ? ctx.AvailableWidth + (ctx.Style.HorizontalPadding * 2) : ctx.AvailableWidth;
+                AvailableWidth = Math.Max(viewportBounds.Width - (_style.HorizontalPadding * 2), 0),
+                ViewportHeight = viewportBounds.Height,
+                Depth = 0,
+                ClipBounds = default,
+                Style = _style,
+            };
 
-                var implicitVisibleHeight = ctx.ResolveImplicitVisibleHeight(contentTop);
-                var properties = new PropertyReader(node.Properties);
-                var explicitHeight = ReadInt(properties, VirtualPropertyKey.Height, 0);
-                var containerVisibleHeight = explicitHeight > 0
-                    ? Math.Min(explicitHeight, implicitVisibleHeight)
-                    : implicitVisibleHeight;
+            LayoutNode(root, 0);
+        }
 
-                var containerClip = new PixelRectangle(
-                    containerClipLeft,
-                    containerClipTop,
-                    containerClipWidth,
-                    containerVisibleHeight);
-                if (ctx.ClipBounds.Width > 0 && ctx.ClipBounds.Height > 0)
+        public void Dispose()
+        {
+            _elements.Dispose();
+            _treeNodes.Dispose();
+            _scrollDiags.Dispose();
+        }
+
+        private void LayoutNode(VirtualNode node, int dfsIndex)
+        {
+            switch (node.Kind)
+            {
+                case VirtualNodeKind.ScrollContainer:
+                    LayoutScrollContainer(node, dfsIndex);
+                    return;
+
+                case VirtualNodeKind.Text:
+                    LayoutText(node, dfsIndex);
+                    return;
+
+                case VirtualNodeKind.Rectangle:
+                    LayoutRectangle(node, dfsIndex);
+                    return;
+
+                case VirtualNodeKind.Button:
+                    LayoutButton(node, dfsIndex);
+                    return;
+
+                default:
+                    return;
+            }
+        }
+
+        private void LayoutScrollContainer(VirtualNode node, int dfsIndex)
+        {
+            var treeNodeIndex = _treeNodes.Count;
+            _treeNodes.Add(default);
+            var childDfsIndex = dfsIndex + 1;
+            var contentTop = _cursorY;
+            var isRootContainer = _ctx.Depth == 0;
+            var containerClipLeft = isRootContainer ? 0 : _ctx.Style.HorizontalPadding;
+            var containerClipTop = isRootContainer ? 0 : contentTop;
+            var containerClipWidth = isRootContainer ? _ctx.AvailableWidth + (_ctx.Style.HorizontalPadding * 2) : _ctx.AvailableWidth;
+
+            var implicitVisibleHeight = _ctx.ResolveImplicitVisibleHeight(contentTop);
+            var properties = new PropertyReader(node.Properties);
+            var explicitHeight = ReadInt(properties, VirtualPropertyKey.Height, 0);
+            var containerVisibleHeight = explicitHeight > 0
+                ? Math.Min(explicitHeight, implicitVisibleHeight)
+                : implicitVisibleHeight;
+
+            var containerClip = new PixelRectangle(
+                containerClipLeft,
+                containerClipTop,
+                containerClipWidth,
+                containerVisibleHeight);
+            if (_ctx.ClipBounds.Width > 0 && _ctx.ClipBounds.Height > 0)
+            {
+                containerClip = IntersectRect(containerClip, _ctx.ClipBounds);
+            }
+
+            var parentCtx = _ctx;
+            _ctx.Depth = parentCtx.Depth + 1;
+            _ctx.ClipBounds = containerClip;
+            _cursorY = contentTop;
+            var elementStart = _elements.Count;
+            var subtreeStart = treeNodeIndex + 1;
+            foreach (var child in node.Children)
+            {
+                LayoutNode(child, childDfsIndex);
+                childDfsIndex += CountVirtualNodes(child);
+            }
+
+            var subtreeCount = _treeNodes.Count - subtreeStart;
+            var elementCount = _elements.Count - elementStart;
+            var contentHeight = Math.Max(_cursorY - contentTop, 0);
+            _ctx = parentCtx;
+
+            var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
+            var scrollY = Math.Clamp(ReadInt(properties, VirtualPropertyKey.ScrollY, 0), 0, maxScrollY);
+
+            if (scrollY > 0)
+            {
+                OffsetElementY(_treeNodes.Written[subtreeStart..(subtreeStart + subtreeCount)], -scrollY);
+            }
+
+            var visibleCount = 0;
+            var clippedCount = 0;
+            foreach (var child in _treeNodes.Written[subtreeStart..(subtreeStart + subtreeCount)])
+            {
+                for (var i = child.ElementStart; i < child.ElementStart + child.ElementCount; i++)
                 {
-                    containerClip = IntersectRect(containerClip, ctx.ClipBounds);
-                }
-
-                var childCtx = ctx;
-                childCtx.Depth = ctx.Depth + 1;
-                childCtx.ClipBounds = containerClip;
-                cursorY = contentTop;
-                foreach (var child in node.Children)
-                {
-                    children.AddRange(LayoutNode(child, childDfsIndex, ref cursorY, ref elements, ref childCtx, ref scrollDiags, scratch));
-                    childDfsIndex += CountVirtualNodes(child);
-                }
-                var contentHeight = Math.Max(cursorY - contentTop, 0);
-
-                var maxScrollY = Math.Max(contentHeight - containerVisibleHeight, 0);
-                var scrollY = Math.Clamp(ReadInt(properties, VirtualPropertyKey.ScrollY, 0), 0, maxScrollY);
-
-                if (scrollY > 0)
-                {
-                    OffsetElementY(ref elements, children.Written, -scrollY);
-                }
-
-                var visibleCount = 0;
-                var clippedCount = 0;
-                foreach (var child in children.Written)
-                {
-                    for (var i = child.ElementStart; i < child.ElementStart + child.ElementCount; i++)
+                    var el = _elements[i];
+                    if (el.Bounds.Y + el.Bounds.Height <= containerClip.Y
+                        || el.Bounds.Y >= containerClip.Y + containerClip.Height)
                     {
-                        var el = elements[i];
-                        if (el.Bounds.Y + el.Bounds.Height <= containerClip.Y
-                            || el.Bounds.Y >= containerClip.Y + containerClip.Height)
-                        {
-                            clippedCount++;
-                        }
-                        else
-                        {
-                            visibleCount++;
-                        }
+                        clippedCount++;
+                    }
+                    else
+                    {
+                        visibleCount++;
                     }
                 }
-
-                scrollDiags.Add(new ScrollContainerDiag(
-                    dfsIndex,
-                    containerVisibleHeight,
-                    contentHeight,
-                    scrollY,
-                    maxScrollY,
-                    visibleCount,
-                    clippedCount));
-
-                cursorY = contentTop + containerVisibleHeight + ctx.Style.ItemSpacing;
-
-                if (children.Count == 0)
-                {
-                    return [];
-                }
-
-                var elementStart = children[0].ElementStart;
-                var lastChild = children[children.Count - 1];
-                var elementCount = (lastChild.ElementStart + lastChild.ElementCount) - elementStart;
-                return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, elementStart, elementCount, children.ToArray())];
             }
 
-            case VirtualNodeKind.Text:
+            _scrollDiags.Add(new ScrollContainerDiag(
+                dfsIndex,
+                containerVisibleHeight,
+                contentHeight,
+                scrollY,
+                maxScrollY,
+                visibleCount,
+                clippedCount));
+
+            _cursorY = contentTop + containerVisibleHeight + _ctx.Style.ItemSpacing;
+
+            if (subtreeCount == 0)
             {
-                var content = GetTextContent(node);
-                if (!content.IsNone)
-                {
-                    var elementIndex = elements.Count;
-                    elements.Add(new LayoutElement(
-                        LayoutElementKind.Text,
-                        new PixelRectangle(ctx.Style.HorizontalPadding, cursorY, ctx.AvailableWidth, ctx.Style.TextHeight),
-                        ClipBounds: ctx.ClipBounds,
-                        Text: content));
-                    cursorY += ctx.Style.TextHeight + ctx.Style.ItemSpacing;
-                    return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Text, elementIndex, 1, [])];
-                }
-
-                return [];
+                _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, 0, 0, subtreeStart, 0);
+                return;
             }
 
-            case VirtualNodeKind.Rectangle:
+            _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, elementStart, elementCount, subtreeStart, subtreeCount);
+        }
+
+        private void LayoutText(VirtualNode node, int dfsIndex)
+        {
+            var content = GetTextContent(node);
+            if (content.IsNone)
             {
-                var properties = new PropertyReader(node.Properties);
-                var rectangleBounds = new PixelRectangle(
-                    ctx.Style.HorizontalPadding,
-                    cursorY,
-                    ReadInt(properties, VirtualPropertyKey.Width, Math.Min(ctx.AvailableWidth, 160)),
-                    ReadInt(properties, VirtualPropertyKey.Height, ctx.Style.RectangleHeight));
-                var elementIndex = elements.Count;
-                elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: ctx.ClipBounds));
-                cursorY += rectangleBounds.Height + ctx.Style.ItemSpacing;
-                return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Rectangle, elementIndex, 1, [])];
+                return;
             }
 
-            case VirtualNodeKind.Button:
+            var elementIndex = _elements.Count;
+            _elements.Add(new LayoutElement(
+                LayoutElementKind.Text,
+                new PixelRectangle(_ctx.Style.HorizontalPadding, _cursorY, _ctx.AvailableWidth, _ctx.Style.TextHeight),
+                ClipBounds: _ctx.ClipBounds,
+                Text: content));
+            _cursorY += _ctx.Style.TextHeight + _ctx.Style.ItemSpacing;
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Text, elementIndex, 1, 0, 0));
+        }
+
+        private void LayoutRectangle(VirtualNode node, int dfsIndex)
+        {
+            var properties = new PropertyReader(node.Properties);
+            var rectangleBounds = new PixelRectangle(
+                _ctx.Style.HorizontalPadding,
+                _cursorY,
+                ReadInt(properties, VirtualPropertyKey.Width, Math.Min(_ctx.AvailableWidth, 160)),
+                ReadInt(properties, VirtualPropertyKey.Height, _ctx.Style.RectangleHeight));
+            var elementIndex = _elements.Count;
+            _elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: _ctx.ClipBounds));
+            _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
+        }
+
+        private void LayoutButton(VirtualNode node, int dfsIndex)
+        {
+            var label = GetButtonLabel(node);
+            if (label.IsNone)
             {
-                var label = GetButtonLabel(node);
-                if (label.IsNone)
-                {
-                    throw new InvalidOperationException("Button nodes require an explicit text label child.");
-                }
-
-                var labelLength = label.Range.Length;
-                var width = Math.Min(ctx.AvailableWidth, Math.Max(
-                    ctx.Style.MinimumButtonWidth,
-                    labelLength * ctx.Style.ButtonTextWidthFactor + ctx.Style.ButtonHorizontalPadding));
-                var properties = new PropertyReader(node.Properties);
-                var bounds = new PixelRectangle(
-                    ctx.Style.HorizontalPadding,
-                    cursorY,
-                    ReadInt(properties, VirtualPropertyKey.Width, width),
-                    ReadInt(properties, VirtualPropertyKey.Height, ctx.Style.ButtonHeight));
-                var actionId = properties.GetActionId(VirtualPropertyKey.ActionId);
-                var buttonState = new ButtonVisualState(
-                    IsHovered: properties.GetBool(VirtualPropertyKey.IsHovered),
-                    IsPressed: properties.GetBool(VirtualPropertyKey.IsPressed),
-                    IsFocused: properties.GetBool(VirtualPropertyKey.IsFocused));
-                var elementIndex = elements.Count;
-                elements.Add(new LayoutElement(
-                    LayoutElementKind.Button,
-                    bounds,
-                    ClipBounds: ctx.ClipBounds,
-                    Text: label,
-                    ActionId: actionId,
-                    ButtonState: buttonState));
-                cursorY += bounds.Height + ctx.Style.ItemSpacing;
-                return [new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, [])];
+                throw new InvalidOperationException("Button nodes require an explicit text label child.");
             }
 
-            default:
-                return [];
+            var labelLength = label.Range.Length;
+            var width = Math.Min(_ctx.AvailableWidth, Math.Max(
+                _ctx.Style.MinimumButtonWidth,
+                labelLength * _ctx.Style.ButtonTextWidthFactor + _ctx.Style.ButtonHorizontalPadding));
+            var properties = new PropertyReader(node.Properties);
+            var bounds = new PixelRectangle(
+                _ctx.Style.HorizontalPadding,
+                _cursorY,
+                ReadInt(properties, VirtualPropertyKey.Width, width),
+                ReadInt(properties, VirtualPropertyKey.Height, _ctx.Style.ButtonHeight));
+            var actionId = properties.GetActionId(VirtualPropertyKey.ActionId);
+            var buttonState = new ButtonVisualState(
+                IsHovered: properties.GetBool(VirtualPropertyKey.IsHovered),
+                IsPressed: properties.GetBool(VirtualPropertyKey.IsPressed),
+                IsFocused: properties.GetBool(VirtualPropertyKey.IsFocused));
+            var elementIndex = _elements.Count;
+            _elements.Add(new LayoutElement(
+                LayoutElementKind.Button,
+                bounds,
+                ClipBounds: _ctx.ClipBounds,
+                Text: label,
+                ActionId: actionId,
+                ButtonState: buttonState));
+            _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
+        }
+
+        private void OffsetElementY(ReadOnlySpan<LayoutTreeNode> nodes, int offsetY)
+        {
+            if (offsetY == 0)
+            {
+                return;
+            }
+
+            foreach (var node in nodes)
+            {
+                for (var i = node.ElementStart; i < node.ElementStart + node.ElementCount; i++)
+                {
+                    var el = _elements[i];
+                    _elements[i] = new LayoutElement(
+                        el.Kind,
+                        new PixelRectangle(el.Bounds.X, el.Bounds.Y + offsetY, el.Bounds.Width, el.Bounds.Height),
+                        el.ClipBounds,
+                        el.Text,
+                        el.ActionId,
+                        el.ButtonState);
+                }
+            }
         }
     }
 
     private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges(
-        LayoutTreeNode[] treeNodes,
+        ReadOnlySpan<LayoutTreeNode> treeNodes,
         IReadOnlyList<int> dirtyIndices,
         RenderScratchBuffer scratch)
     {
-        using var sortedDirty = scratch.RentDirtyIndexList(Math.Max(dirtyIndices.Count, StackDirtyIndexCapacity));
+        Span<int> sortedDirtyStorage = stackalloc int[InlineDirtyIndexCapacity];
+        scoped var sortedDirty = scratch.CreateDirtyIndexList(sortedDirtyStorage);
         for (var i = 0; i < dirtyIndices.Count; i++)
         {
             sortedDirty.Add(dirtyIndices[i]);
         }
 
-        sortedDirty.Sort();
-
-        var ranges = scratch.RentRangeList(StackRangeCapacity);
         try
         {
+            sortedDirty.Sort();
+
+            Span<(int Start, int Count)> rangeStorage = stackalloc (int Start, int Count)[InlineRangeCapacity];
+            scoped var ranges = scratch.CreateRangeList(rangeStorage);
             var dirtyCursor = 0;
-            CollectDirtyRangesRecursive(treeNodes, sortedDirty.Written, ref dirtyCursor, ref ranges);
-            return MergeDirtyRanges(ref ranges);
+            try
+            {
+                CollectDirtyRangesRecursive(treeNodes, sortedDirty.Written, ref dirtyCursor, ref ranges);
+                return MergeDirtyRanges(ref ranges);
+            }
+            finally
+            {
+                ranges.Dispose();
+            }
         }
         finally
         {
-            ranges.Dispose();
+            sortedDirty.Dispose();
         }
     }
 
     private static void CollectDirtyRangesRecursive(
-        LayoutTreeNode[] treeNodes,
+        ReadOnlySpan<LayoutTreeNode> treeNodes,
         ReadOnlySpan<int> sortedDirtyIndices,
         ref int dirtyCursor,
-        ref ScratchList<(int Start, int Count)> ranges)
+        scoped ref ScratchList<(int Start, int Count)> ranges)
     {
         foreach (var node in treeNodes)
         {
             if (AdvanceDirtyCursor(sortedDirtyIndices, ref dirtyCursor, node.DfsIndex))
             {
                 ranges.Add((node.ElementStart, node.ElementCount));
-            }
-
-            if (node.Children.Length > 0)
-            {
-                CollectDirtyRangesRecursive(node.Children, sortedDirtyIndices, ref dirtyCursor, ref ranges);
             }
         }
     }
@@ -326,7 +414,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return true;
     }
 
-    private static IReadOnlyList<(int Start, int Count)> MergeDirtyRanges(ref ScratchList<(int Start, int Count)> ranges)
+    private static IReadOnlyList<(int Start, int Count)> MergeDirtyRanges(scoped ref ScratchList<(int Start, int Count)> ranges)
     {
         if (ranges.Count == 0)
         {
@@ -416,26 +504,4 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return new PixelRectangle(x, y, width, height);
     }
 
-    private static void OffsetElementY(ref ScratchList<LayoutElement> elements, ReadOnlySpan<LayoutTreeNode> nodes, int offsetY)
-    {
-        if (offsetY == 0)
-        {
-            return;
-        }
-
-        foreach (var node in nodes)
-        {
-            for (var i = node.ElementStart; i < node.ElementStart + node.ElementCount; i++)
-            {
-                var el = elements[i];
-                elements[i] = new LayoutElement(
-                    el.Kind,
-                    new PixelRectangle(el.Bounds.X, el.Bounds.Y + offsetY, el.Bounds.Width, el.Bounds.Height),
-                    el.ClipBounds,
-                    el.Text,
-                    el.ActionId,
-                    el.ButtonState);
-            }
-        }
-    }
 }
