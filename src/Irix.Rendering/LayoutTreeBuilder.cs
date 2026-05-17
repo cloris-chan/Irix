@@ -33,6 +33,12 @@ internal ref struct LayoutContext
 
 internal sealed class LayoutTreeBuilder(LayoutStyle style)
 {
+    private const int StackLayoutElementCapacity = 32;
+    private const int StackScrollDiagCapacity = 8;
+    private const int StackChildTreeNodeCapacity = 8;
+    private const int StackDirtyIndexCapacity = 32;
+    private const int StackRangeCapacity = 16;
+
     public LayoutTreeBuilder()
         : this(LayoutStyle.Default)
     {
@@ -46,8 +52,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         var scratch = new RenderScratchBuffer();
-        var elements = scratch.RentLayoutElementList();
-        var scrollDiags = scratch.RentScrollContainerDiagList();
+        var elements = scratch.RentLayoutElementList(StackLayoutElementCapacity);
+        var scrollDiags = scratch.RentScrollContainerDiagList(StackScrollDiagCapacity);
         try
         {
             var cursorY = style.VerticalPadding;
@@ -97,7 +103,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         {
             case VirtualNodeKind.ScrollContainer:
             {
-                using var children = scratch.RentLayoutTreeNodeList(node.Children.Length);
+                using var children = scratch.RentLayoutTreeNodeList(StackChildTreeNodeCapacity);
                 var childDfsIndex = dfsIndex + 1;
                 var contentTop = cursorY;
                 var isRootContainer = ctx.Depth == 0;
@@ -259,7 +265,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         IReadOnlyList<int> dirtyIndices,
         RenderScratchBuffer scratch)
     {
-        using var sortedDirty = scratch.RentIntList(dirtyIndices.Count);
+        using var sortedDirty = scratch.RentDirtyIndexList(Math.Max(dirtyIndices.Count, StackDirtyIndexCapacity));
         for (var i = 0; i < dirtyIndices.Count; i++)
         {
             sortedDirty.Add(dirtyIndices[i]);
@@ -267,7 +273,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
         sortedDirty.Sort();
 
-        var ranges = scratch.RentRangeList();
+        var ranges = scratch.RentRangeList(StackRangeCapacity);
         try
         {
             var dirtyCursor = 0;

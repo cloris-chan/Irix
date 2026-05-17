@@ -58,6 +58,9 @@ public readonly struct ApplyResult(
 /// </summary>
 public sealed class RetainedTree(VirtualNodeTree tree)
 {
+    private const int StackDirtyCapacity = 32;
+    private const int StackParentIndexCapacity = 64;
+
     private VirtualNodeTree _tree = tree;
 
     /// <summary>The current retained tree.</summary>
@@ -128,9 +131,12 @@ public sealed class RetainedTree(VirtualNodeTree tree)
 
         var memory = batch.Memory.Span;
         var scratch = new FrameScratchArena();
-        var dirty = scratch.RentIntList(memory.Length);
-        var nextParentIndex = scratch.RentNodeIndexList();
-        var previousParentIndex = scratch.RentNodeIndexList();
+        Span<int> dirtyStorage = stackalloc int[Math.Min(memory.Length, StackDirtyCapacity)];
+        Span<NodeIndexEntry> nextParentIndexStorage = stackalloc NodeIndexEntry[StackParentIndexCapacity];
+        Span<NodeIndexEntry> previousParentIndexStorage = stackalloc NodeIndexEntry[StackParentIndexCapacity];
+        var dirty = scratch.CreateIntList(dirtyStorage);
+        var nextParentIndex = scratch.CreateList(nextParentIndexStorage);
+        var previousParentIndex = scratch.CreateList(previousParentIndexStorage);
         try
         {
             var needsNextParentIndex = false;

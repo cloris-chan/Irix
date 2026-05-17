@@ -2,6 +2,8 @@ namespace Irix;
 
 public static class VirtualNodeDiffer
 {
+    private const int StackKeyMapEntryCapacity = 64;
+
     public static PatchBatch CreatePatchBatch(VirtualNodeTree previousTree, VirtualNodeTree nextTree, int screenId = 0)
     {
         // Empty → empty: no patches
@@ -225,8 +227,10 @@ public static class VirtualNodeDiffer
         TextBufferSnapshot? nextSnapshot,
         FrameScratchArena scratch)
     {
-        using var oldKeyToIndex = scratch.RentNodeKeyIndexMap(oldChildren.Length);
-        using var newKeyToIndex = scratch.RentNodeKeyIndexMap(newChildren.Length);
+        Span<ScratchNodeKeyIndexMap.Entry> oldMapStorage = stackalloc ScratchNodeKeyIndexMap.Entry[StackKeyMapEntryCapacity];
+        Span<ScratchNodeKeyIndexMap.Entry> newMapStorage = stackalloc ScratchNodeKeyIndexMap.Entry[StackKeyMapEntryCapacity];
+        using var oldKeyToIndex = scratch.CreateNodeKeyIndexMap(oldMapStorage, oldChildren.Length);
+        using var newKeyToIndex = scratch.CreateNodeKeyIndexMap(newMapStorage, newChildren.Length);
 
         for (var i = 0; i < oldChildren.Length; i++)
         {

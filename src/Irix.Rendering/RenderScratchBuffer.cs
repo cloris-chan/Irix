@@ -2,20 +2,43 @@ namespace Irix.Rendering;
 
 internal readonly struct RenderScratchBuffer
 {
+    private readonly FrameScratchArena _arena = new();
+
+    public RenderScratchBuffer()
+    {
+    }
+
+    public ScratchList<LayoutElement> CreateLayoutElementList(Span<LayoutElement> initialBuffer) =>
+        _arena.CreateList(initialBuffer);
+
+    public ScratchList<LayoutTreeNode> CreateLayoutTreeNodeList(Span<LayoutTreeNode> initialBuffer) =>
+        _arena.CreateList(initialBuffer);
+
+    public ScratchList<ScrollContainerDiag> CreateScrollContainerDiagList(Span<ScrollContainerDiag> initialBuffer) =>
+        _arena.CreateList(initialBuffer);
+
+    public ScratchList<(int Start, int Count)> CreateRangeList(Span<(int Start, int Count)> initialBuffer) =>
+        _arena.CreateList(initialBuffer);
+
+    public ScratchList<LayoutDirtyClassification> CreateLayoutDirtyClassificationList(Span<LayoutDirtyClassification> initialBuffer) =>
+        _arena.CreateList(initialBuffer);
+
+    public ScratchIntSet CreateDirtyIndexSet(Span<int> initialBuffer) => _arena.CreateIntSet(initialBuffer);
+
     public ScratchList<LayoutElement> RentLayoutElementList(int capacity = 0) =>
-        new FrameScratchArena().RentList<LayoutElement>(capacity);
+        _arena.RentList<LayoutElement>(capacity);
 
     public ScratchList<LayoutTreeNode> RentLayoutTreeNodeList(int capacity = 0) =>
-        new FrameScratchArena().RentList<LayoutTreeNode>(capacity);
+        _arena.RentList<LayoutTreeNode>(capacity);
 
     public ScratchList<ScrollContainerDiag> RentScrollContainerDiagList(int capacity = 0) =>
-        new FrameScratchArena().RentList<ScrollContainerDiag>(capacity);
+        _arena.RentList<ScrollContainerDiag>(capacity);
 
     public ScratchList<(int Start, int Count)> RentRangeList(int capacity = 0) =>
-        new FrameScratchArena().RentList<(int Start, int Count)>(capacity);
+        _arena.RentList<(int Start, int Count)>(capacity);
 
     public ScratchList<LayoutDirtyClassification> RentLayoutDirtyClassificationList(int capacity = 0) =>
-        new FrameScratchArena().RentList<LayoutDirtyClassification>(capacity);
+        _arena.RentList<LayoutDirtyClassification>(capacity);
 
-    public ScratchList<int> RentIntList(int capacity = 0) => new FrameScratchArena().RentIntList(capacity);
+    public ScratchList<int> RentDirtyIndexList(int capacity = 0) => _arena.RentIntList(capacity);
 }

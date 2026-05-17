@@ -5,6 +5,8 @@ namespace Irix.Rendering;
 
 internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawingStyle, ControlVisualStateResolver visualStateResolver)
 {
+    private const int StackDirtyClassificationCapacity = 32;
+
     private readonly LayoutTreeBuilder _layoutTreeBuilder = new(layoutStyle);
     private readonly DrawCommandRecorder _drawCommandRecorder = new(drawingStyle, visualStateResolver);
 
@@ -185,24 +187,18 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         var scratch = new RenderScratchBuffer();
-        using var sortedDirty = scratch.RentIntList(dirtyNodes.Count);
+        Span<int> dirtySetStorage = stackalloc int[StackDirtyClassificationCapacity];
+        Span<LayoutDirtyClassification> classificationStorage = stackalloc LayoutDirtyClassification[StackDirtyClassificationCapacity];
+        using var dirtySet = scratch.CreateDirtyIndexSet(dirtySetStorage);
+        using var classifications = scratch.CreateLayoutDirtyClassificationList(classificationStorage);
         for (var i = 0; i < dirtyNodes.Count; i++)
         {
-            sortedDirty.Add(dirtyNodes[i]);
-        }
-
-        sortedDirty.Sort();
-
-        using var classifications = scratch.RentLayoutDirtyClassificationList(dirtyNodes.Count);
-        var lastDirtyNode = -1;
-        foreach (var dirtyNode in sortedDirty.Written)
-        {
-            if (dirtyNode == lastDirtyNode)
+            if (!dirtySet.Add(dirtyNodes[i]))
             {
                 continue;
             }
 
-            lastDirtyNode = dirtyNode;
+            var dirtyNode = dirtyNodes[i];
             var reason = TryFindNode(previousRoot, dirtyNode, out var previousNode) && TryFindNode(nextRoot, dirtyNode, out var nextNode)
                 ? ClassifyNodeChange(previousNode, nextNode, prevSnapshot, nextSnapshot)
                 : new DirtyNodeClassification(LayoutRebuildReason.TreeStructure, InvalidationKind.TreeStructure);

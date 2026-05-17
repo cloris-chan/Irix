@@ -597,7 +597,12 @@ public class TypedIdAllocationGuardTests
     public void Retained_diff_and_dirty_range_hot_paths_do_not_allocate_hash_collections()
     {
         var root = FindRepoRoot();
-        var scratchSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "FrameScratchArena.cs"));
+        var performanceDir = Path.Combine(root, "src", "Irix.Core", "Performance");
+        var scratchSource = File.ReadAllText(Path.Combine(performanceDir, "FrameScratchArena.cs"));
+        var scratchListSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchList.cs"));
+        var scratchSpanSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchSpan.cs"));
+        var scratchMapSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchNodeKeyIndexMap.cs"));
+        var scratchSetSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchIntSet.cs"));
         var renderScratchSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderScratchBuffer.cs"));
         var differSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "VirtualNodeDiffer.cs"));
         var retainedTreeSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "RetainedTree.cs"));
@@ -609,7 +614,21 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("RentNodeIndexSpan", scratchSource);
         Assert.Contains("RentVirtualNodePatchList", scratchSource);
         Assert.Contains("RentNodeKeyIndexMap", scratchSource);
+        Assert.Contains("public static ScratchList<T> Create(Span<T> initialBuffer)", scratchListSource);
+        Assert.Contains("Return(buffer, clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>())", scratchSpanSource);
+        Assert.Contains("Return(pooled, clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>())", scratchListSource);
+        Assert.Contains("internal ref struct ScratchIntSet", scratchSetSource);
+        Assert.Contains("internal ref struct ScratchNodeKeyIndexMap", scratchMapSource);
+        Assert.Contains("internal readonly struct Entry", scratchMapSource);
+        Assert.DoesNotContain("NodeKey[]", scratchMapSource);
+        Assert.DoesNotContain("int[]? _values", scratchMapSource);
+        Assert.DoesNotContain("byte[]? _occupied", scratchMapSource);
         Assert.Contains("RentLayoutElementList", renderScratchSource);
+        Assert.Contains("CreateRangeList", renderScratchSource);
+        Assert.Contains("CreateDirtyIndexSet", renderScratchSource);
+        Assert.Contains("RentDirtyIndexList", renderScratchSource);
+        Assert.DoesNotContain("new FrameScratchArena()", renderScratchSource);
+        Assert.DoesNotContain("new FrameScratchArena().", renderScratchSource);
 
         Assert.DoesNotContain("new Dictionary<NodeKey", differSource);
         Assert.DoesNotContain("new HashSet<NodeKey>", differSource);
@@ -617,7 +636,7 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("HashSet<NodeKey>", differSource);
         Assert.DoesNotContain("new List<", differSource);
         Assert.Contains("KeyedLinearThreshold", differSource);
-        Assert.Contains("RentNodeKeyIndexMap", differSource);
+        Assert.Contains("CreateNodeKeyIndexMap", differSource);
 
         Assert.DoesNotContain("new HashSet<int>", renderPipelineSource);
         Assert.DoesNotContain("HashSet<int>", renderPipelineSource);
@@ -632,6 +651,19 @@ public class TypedIdAllocationGuardTests
 
         Assert.DoesNotContain("new List<", rangeUtilsSource);
 
+        var diffInnerSource = ExtractSourceBetween(
+            differSource,
+            "private static void DiffNode",
+            "private static int CountNodes");
+        Assert.DoesNotContain("ToArray()", diffInnerSource);
+
+        var layoutRecursiveSource = ExtractSourceBetween(
+            layoutBuilderSource,
+            "private LayoutTreeNode[] LayoutNode",
+            "private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges");
+        Assert.DoesNotContain("elements.ToArray()", layoutRecursiveSource);
+        Assert.DoesNotContain("scrollDiags.ToArray()", layoutRecursiveSource);
+
         var canonicalApplySource = ExtractSourceBetween(
             retainedTreeSource,
             "private ApplyResult ApplyCanonicalRootBatch",
@@ -639,8 +671,32 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("new List<", canonicalApplySource);
         Assert.DoesNotContain("new Dictionary<", canonicalApplySource);
         Assert.DoesNotContain("new HashSet<", canonicalApplySource);
+        Assert.DoesNotContain("ToArray()", canonicalApplySource);
         Assert.Contains("BuildParentIndexTable", retainedTreeSource);
         Assert.Contains("FindParentIndex(ReadOnlySpan<NodeIndexEntry>", retainedTreeSource);
+    }
+
+    [Fact]
+    public void Scratch_primitives_are_split_by_type_and_stack_first()
+    {
+        var performanceDir = Path.Combine(FindRepoRoot(), "src", "Irix.Core", "Performance");
+
+        Assert.True(File.Exists(Path.Combine(performanceDir, "FrameScratchArena.cs")));
+        Assert.True(File.Exists(Path.Combine(performanceDir, "ScratchList.cs")));
+        Assert.True(File.Exists(Path.Combine(performanceDir, "ScratchSpan.cs")));
+        Assert.True(File.Exists(Path.Combine(performanceDir, "ScratchNodeKeyIndexMap.cs")));
+        Assert.True(File.Exists(Path.Combine(performanceDir, "ScratchIntSet.cs")));
+        Assert.False(File.Exists(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "FrameScratchArena.cs")));
+
+        var scratchListSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchList.cs"));
+        var scratchMapSource = File.ReadAllText(Path.Combine(performanceDir, "ScratchNodeKeyIndexMap.cs"));
+        var renderPipelineSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "RenderPipeline.cs"));
+
+        Assert.Contains("public static ScratchList<T> Create(Span<T> initialBuffer)", scratchListSource);
+        Assert.Contains("private Span<T> _initialBuffer", scratchListSource);
+        Assert.Contains("private Span<Entry> _entries", scratchMapSource);
+        Assert.Contains("Span<LayoutDirtyClassification> classificationStorage = stackalloc", renderPipelineSource);
+        Assert.Contains("Span<int> dirtySetStorage = stackalloc", renderPipelineSource);
     }
 
     [Fact]
