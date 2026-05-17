@@ -22,6 +22,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int AtlasRowPitch = 1024;
     private const int TextureDataPitchAlignment = 256;
     private const uint Shader4ComponentMapping = 0u | (1u << 3) | (2u << 6) | (3u << 9) | (1u << 12);
+    private const string VertexShaderBytecodeBase64 =
+        "RFhCQ0hOwF2N9gtTu/HrKRNRsV8BAAAA4AIAAAUAAAA0AAAAoAAAABABAACEAQAARAIAAFJERUZkAAAAAAAAAAAAAAAAAAAAPAAAAAAF/v8AgQAAPAAAAFJEMTE8AAAAGAAAACAAAAAoAAAAJAAAAAwAAAAAAAAATWljcm9zb2Z0IChSKSBITFNMIFNoYWRlciBDb21waWxlciAxMC4xAElTR05oAAAAAwAAAAgAAABQAAAAAAAAAAAAAAADAAAAAAAAAAMDAABZAAAAAAAAAAAAAAADAAAAAQAAAAMDAABiAAAAAAAAAAAAAAADAAAAAgAAAA8PAABQT1NJVElPTgBURVhDT09SRABDT0xPUgBPU0dObAAAAAMAAAAIAAAAUAAAAAAAAAABAAAAAwAAAAAAAAAPAAAAXAAAAAAAAAAAAAAAAwAAAAEAAAADDAAAZQAAAAAAAAAAAAAAAwAAAAIAAAAPAAAAU1ZfUE9TSVRJT04AVEVYQ09PUkQAQ09MT1IAq1NIRVi4AAAAUAABAC4AAABqCAABXwAAAzIQEAAAAAAAXwAAAzIQEAABAAAAXwAAA/IQEAACAAAAZwAABPIgEAAAAAAAAQAAAGUAAAMyIBAAAQAAAGUAAAPyIBAAAgAAADYAAAUyIBAAAAAAAEYQEAAAAAAANgAACMIgEAAAAAAAAkAAAAAAAAAAAAAAAAAAAAAAgD82AAAFMiAQAAEAAABGEBAAAQAAADYAAAXyIBAAAgAAAEYeEAACAAAAPgAAAVNUQVSUAAAABQAAAAAAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+    private const string PixelShaderBytecodeBase64 =
+        "RFhCQw3tOgpD5F95IlkFLIOjg2ABAAAA9AIAAAUAAAA0AAAA9AAAAGgBAACcAQAAWAIAAFJERUa4AAAAAAAAAAAAAAACAAAAPAAAAAAF//8AgQAAjwAAAFJEMTE8AAAAGAAAACAAAAAoAAAAJAAAAAwAAAAAAAAAfAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAACJAAAAAgAAAAUAAAAEAAAA/////wAAAAABAAAAAQAAAEF0bGFzU2FtcGxlcgBBdGxhcwBNaWNyb3NvZnQgKFIpIEhMU0wgU2hhZGVyIENvbXBpbGVyIDEwLjEAq0lTR05sAAAAAwAAAAgAAABQAAAAAAAAAAEAAAADAAAAAAAAAA8AAABcAAAAAAAAAAAAAAADAAAAAQAAAAMDAABlAAAAAAAAAAAAAAADAAAAAgAAAA8PAABTVl9QT1NJVElPTgBURVhDT09SRABDT0xPUgCrT1NHTiwAAAABAAAACAAAACAAAAAAAAAAAAAAAAMAAAAAAAAADwAAAFNWX1RBUkdFVACrq1NIRVi0AAAAUAAAAC0AAABqCAABWgAAAwBgEAAAAAAAWBgABABwEAAAAAAAVVUAAGIQAAMyEBAAAQAAAGIQAAPyEBAAAgAAAGUAAAPyIBAAAAAAAGgAAAIBAAAARQAAi8IAAIBDVRUAEgAQAAAAAABGEBAAAQAAAEZ+EAAAAAAAAGAQAAAAAAA4AAAHgiAQAAAAAAAKABAAAAAAADoQEAACAAAANgAABXIgEAAAAAAARhIQAAIAAAA+AAABU1RBVJQAAAAEAAAAAQAAAAAAAAADAAAAAQAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     private readonly ID3D12Device* _device;
     private IDWriteFactory* _dwriteFactory;
@@ -33,6 +37,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private ID3D12Resource* _atlasUpload;
     private ID3D12Resource* _vbuf;
     private D3D12_VERTEX_BUFFER_VIEW _vbv;
+    private byte[] _vertexShaderBytecode = [];
+    private byte[] _pixelShaderBytecode = [];
     private readonly byte[] _atlasPixels = new byte[AtlasRowPitch * AtlasHeight];
     private byte[] _clearTypeScratch = [];
     private byte[] _grayscaleScratch = [];
@@ -76,7 +82,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             });
 
             RunInitializationPhase(GlyphAtlasInitializationPhase.RootSignature, CreateRootSignature);
-            CreatePSO();
+            RunInitializationPhase(GlyphAtlasInitializationPhase.ShaderCompile, LoadEmbeddedShaderBytecode);
+            RunInitializationPhase(GlyphAtlasInitializationPhase.PSO, CreatePSO);
             CreateAtlasResources();
             RunInitializationPhase(GlyphAtlasInitializationPhase.VertexBuffer, CreateVertexBuffer);
         }
@@ -634,6 +641,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         void* mapped;
         _vbuf->Map(0, null, &mapped);
+        if (mapped == null)
+        {
+            throw new InvalidOperationException("Map glyph atlas vertex buffer returned null.");
+        }
+
         vertices.CopyTo(new Span<Vertex>(mapped, MaxGlyphVertices));
         _vbuf->Unmap(0, null);
     }
@@ -652,6 +664,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var uploadBytes = uploadRowPitch * dirtyHeight;
         void* mapped;
         _atlasUpload->Map(0, null, &mapped);
+        if (mapped == null)
+        {
+            throw new InvalidOperationException("Map glyph atlas upload buffer returned null.");
+        }
+
         var destination = new Span<byte>(mapped, uploadBytes);
         for (var row = 0; row < dirtyHeight; row++)
         {
@@ -805,12 +822,22 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             Flags = D3D12_ROOT_SIGNATURE_FLAGS.D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT
         };
 
-        ID3DBlob* sig;
-        ID3DBlob* err;
-        Check(PInvoke.D3D12SerializeRootSignature(desc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err), "D3D12SerializeRootSignature");
+        ID3DBlob* sig = null;
+        ID3DBlob* err = null;
+        PInvoke.D3D12SerializeRootSignature(desc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err);
+        if (sig == null)
+        {
+            throw new InvalidOperationException("D3D12SerializeRootSignature returned a null signature blob.");
+        }
+
         try
         {
             _device->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), typeof(ID3D12RootSignature).GUID, out var obj);
+            if (obj == null)
+            {
+                throw new InvalidOperationException("CreateRootSignature returned a null root signature.");
+            }
+
             _rootSig = (ID3D12RootSignature*)obj;
         }
         finally
@@ -822,96 +849,88 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void CreatePSO()
     {
-        ID3DBlob* vs = null;
-        ID3DBlob* ps = null;
-        try
+        if (_vertexShaderBytecode.Length == 0 || _pixelShaderBytecode.Length == 0)
         {
-            vs = CompileShaderForInitialization(VsHlsl, "VSMain", "vs_5_0");
-            ps = CompileShaderForInitialization(PsHlsl, "PSMain", "ps_5_0");
-            RunInitializationPhase(GlyphAtlasInitializationPhase.PSO, () =>
+            throw new InvalidOperationException("Glyph atlas embedded shader bytecode is empty.");
+        }
+
+        fixed (byte* vs = _vertexShaderBytecode)
+        fixed (byte* ps = _pixelShaderBytecode)
+        {
+            fixed (byte* posBytes = "POSITION"u8)
+            fixed (byte* texBytes = "TEXCOORD"u8)
+            fixed (byte* colBytes = "COLOR"u8)
             {
-                fixed (byte* posBytes = "POSITION"u8)
-                fixed (byte* texBytes = "TEXCOORD"u8)
-                fixed (byte* colBytes = "COLOR"u8)
+                var elems = stackalloc D3D12_INPUT_ELEMENT_DESC[3];
+                elems[0] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)posBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT };
+                elems[1] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)texBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT, AlignedByteOffset = 8 };
+                elems[2] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)colBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT, AlignedByteOffset = 16 };
+
+                var desc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
+                desc.pRootSignature = _rootSig;
+                desc.InputLayout.pInputElementDescs = elems;
+                desc.InputLayout.NumElements = 3;
+                desc.VS.pShaderBytecode = vs;
+                desc.VS.BytecodeLength = (nuint)_vertexShaderBytecode.Length;
+                desc.PS.pShaderBytecode = ps;
+                desc.PS.BytecodeLength = (nuint)_pixelShaderBytecode.Length;
+                desc.BlendState.RenderTarget._0.BlendEnable = true;
+                desc.BlendState.RenderTarget._0.SrcBlend = D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
+                desc.BlendState.RenderTarget._0.DestBlend = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+                desc.BlendState.RenderTarget._0.BlendOp = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+                desc.BlendState.RenderTarget._0.SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE;
+                desc.BlendState.RenderTarget._0.DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+                desc.BlendState.RenderTarget._0.BlendOpAlpha = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+                desc.BlendState.RenderTarget._0.RenderTargetWriteMask = 0xF;
+                desc.SampleMask = 0xFFFFFFFF;
+                desc.RasterizerState.FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
+                desc.RasterizerState.CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
+                desc.RasterizerState.DepthClipEnable = true;
+                desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+                desc.NumRenderTargets = 1;
+                desc.RTVFormats._0 = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+                desc.SampleDesc.Count = 1;
+
+                _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out var psoObj);
+                if (psoObj == null)
                 {
-                    var elems = stackalloc D3D12_INPUT_ELEMENT_DESC[3];
-                    elems[0] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)posBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT };
-                    elems[1] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)texBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT, AlignedByteOffset = 8 };
-                    elems[2] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)colBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT, AlignedByteOffset = 16 };
-
-                    var desc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
-                    desc.pRootSignature = _rootSig;
-                    desc.InputLayout.pInputElementDescs = elems;
-                    desc.InputLayout.NumElements = 3;
-                    desc.VS.pShaderBytecode = vs->GetBufferPointer();
-                    desc.VS.BytecodeLength = vs->GetBufferSize();
-                    desc.PS.pShaderBytecode = ps->GetBufferPointer();
-                    desc.PS.BytecodeLength = ps->GetBufferSize();
-                    desc.BlendState.RenderTarget._0.BlendEnable = true;
-                    desc.BlendState.RenderTarget._0.SrcBlend = D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
-                    desc.BlendState.RenderTarget._0.DestBlend = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
-                    desc.BlendState.RenderTarget._0.BlendOp = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
-                    desc.BlendState.RenderTarget._0.SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE;
-                    desc.BlendState.RenderTarget._0.DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
-                    desc.BlendState.RenderTarget._0.BlendOpAlpha = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
-                    desc.BlendState.RenderTarget._0.RenderTargetWriteMask = 0xF;
-                    desc.SampleMask = 0xFFFFFFFF;
-                    desc.RasterizerState.FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
-                    desc.RasterizerState.CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
-                    desc.RasterizerState.DepthClipEnable = true;
-                    desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-                    desc.NumRenderTargets = 1;
-                    desc.RTVFormats._0 = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                    desc.SampleDesc.Count = 1;
-
-                    _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out var psoObj);
-                    _pso = (ID3D12PipelineState*)psoObj;
+                    throw new InvalidOperationException("CreateGraphicsPipelineState returned a null PSO.");
                 }
-            });
-        }
-        finally
-        {
-            if (vs != null) vs->Release();
-            if (ps != null) ps->Release();
+
+                _pso = (ID3D12PipelineState*)psoObj;
+            }
         }
     }
 
-    private ID3DBlob* CompileShaderForInitialization(string source, string entryPoint, string profile)
+    private void LoadEmbeddedShaderBytecode()
+    {
+        var (vertexShader, pixelShader) = DecodeEmbeddedShaderBytecode();
+        _vertexShaderBytecode = vertexShader;
+        _pixelShaderBytecode = pixelShader;
+    }
+
+    internal static (int VertexBytes, int PixelBytes) GetEmbeddedShaderBytecodeLengths()
+    {
+        var (vertexShader, pixelShader) = DecodeEmbeddedShaderBytecode();
+        return (vertexShader.Length, pixelShader.Length);
+    }
+
+    private static (byte[] VertexShader, byte[] PixelShader) DecodeEmbeddedShaderBytecode()
     {
         try
         {
-            return CompileShader(source, entryPoint, profile);
-        }
-        catch (InvalidOperationException ex)
-        {
-            throw new GlyphAtlasInitializationException(GlyphAtlasInitializationPhase.ShaderCompile, ex);
-        }
-    }
-
-    private ID3DBlob* CompileShader(string source, string entryPoint, string profile)
-    {
-        var srcBytes = System.Text.Encoding.UTF8.GetBytes(source);
-        fixed (byte* pSrc = srcBytes)
-        {
-            var ep = stackalloc sbyte[entryPoint.Length + 1];
-            for (var i = 0; i < entryPoint.Length; i++) ep[i] = (sbyte)entryPoint[i];
-            ep[entryPoint.Length] = 0;
-
-            var prof = stackalloc sbyte[profile.Length + 1];
-            for (var i = 0; i < profile.Length; i++) prof[i] = (sbyte)profile[i];
-            prof[profile.Length] = 0;
-
-            ID3DBlob* blob;
-            ID3DBlob* err;
-            var hr = D3DCompile(pSrc, (nuint)srcBytes.Length, null, null, null, ep, prof, 0, 0, &blob, &err);
-            if (hr < 0)
+            var vertexShader = Convert.FromBase64String(VertexShaderBytecodeBase64);
+            var pixelShader = Convert.FromBase64String(PixelShaderBytecodeBase64);
+            if (vertexShader.Length == 0 || pixelShader.Length == 0)
             {
-                var msg = err != null ? new string((sbyte*)err->GetBufferPointer()) : $"D3DCompile failed: 0x{hr:X8}";
-                if (err != null) err->Release();
-                throw new InvalidOperationException(msg);
+                throw new InvalidOperationException("Glyph atlas embedded shader bytecode is empty.");
             }
 
-            return blob;
+            return (vertexShader, pixelShader);
+        }
+        catch (FormatException ex)
+        {
+            throw new InvalidOperationException("Glyph atlas embedded shader bytecode is not valid base64.", ex);
         }
     }
 
@@ -940,6 +959,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 null,
                 typeof(ID3D12Resource).GUID,
                 out var textureObj);
+            if (textureObj == null)
+            {
+                throw new InvalidOperationException("Create glyph atlas texture returned a null resource.");
+            }
+
             _atlasTexture = (ID3D12Resource*)textureObj;
         });
 
@@ -964,6 +988,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 null,
                 typeof(ID3D12Resource).GUID,
                 out var uploadObj);
+            if (uploadObj == null)
+            {
+                throw new InvalidOperationException("Create glyph atlas upload buffer returned a null resource.");
+            }
+
             _atlasUpload = (ID3D12Resource*)uploadObj;
         });
 
@@ -976,6 +1005,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         RunInitializationPhase(GlyphAtlasInitializationPhase.DescriptorHeap, () =>
         {
             _device->CreateDescriptorHeap(heapDesc, typeof(ID3D12DescriptorHeap).GUID, out var heapObj);
+            if (heapObj == null)
+            {
+                throw new InvalidOperationException("Create glyph atlas SRV descriptor heap returned a null heap.");
+            }
+
             _srvHeap = (ID3D12DescriptorHeap*)heapObj;
         });
 
@@ -1013,6 +1047,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             null,
             typeof(ID3D12Resource).GUID,
             out var resObj);
+        if (resObj == null)
+        {
+            throw new InvalidOperationException("Create glyph atlas vertex buffer returned a null resource.");
+        }
+
         _vbuf = (ID3D12Resource*)resObj;
         _vbv.BufferLocation = _vbuf->GetGPUVirtualAddress();
         _vbv.SizeInBytes = (uint)(MaxGlyphVertices * sizeof(Vertex));
@@ -1035,14 +1074,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             .WithFallback(1, reason)
             .WithInitializationFailure(phase);
         System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] {message}");
-    }
-
-    private static void Check(HRESULT hr, string context)
-    {
-        if (hr.Failed)
-        {
-            throw new COMException($"{context} failed: 0x{unchecked((uint)hr.Value):X8}", hr.Value);
-        }
     }
 
     private static DWRITE_FONT_WEIGHT ToDirectWriteFontWeight(TextFontWeight fontWeight)
@@ -1092,14 +1123,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (_dwriteFactory != null) _dwriteFactory->Release();
         _disposed = true;
     }
-
-    [DllImport("d3dcompiler_47.dll")]
-    private static extern int D3DCompile(
-        void* pSrcData, nuint srcDataSize,
-        void* pSourceName, void* pDefines, void* pInclude,
-        sbyte* pEntrypoint, sbyte* pTarget,
-        uint flags1, uint flags2,
-        ID3DBlob** ppCode, ID3DBlob** ppErrorMsgs);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Vertex
@@ -1391,27 +1414,4 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    private const string VsHlsl = @"
-struct VS_IN { float2 pos : POSITION; float2 uv : TEXCOORD; float4 col : COLOR; };
-struct VS_OUT { float4 pos : SV_POSITION; float2 uv : TEXCOORD; float4 col : COLOR; };
-VS_OUT VSMain(VS_IN i)
-{
-    VS_OUT o;
-    o.pos = float4(i.pos, 0.0f, 1.0f);
-    o.uv = i.uv;
-    o.col = i.col;
-    return o;
-}
-";
-
-    private const string PsHlsl = @"
-Texture2D<float> Atlas : register(t0);
-SamplerState AtlasSampler : register(s0);
-struct PS_IN { float4 pos : SV_POSITION; float2 uv : TEXCOORD; float4 col : COLOR; };
-float4 PSMain(PS_IN i) : SV_TARGET
-{
-    float coverage = Atlas.Sample(AtlasSampler, i.uv);
-    return float4(i.col.rgb, i.col.a * coverage);
-}
-";
 }

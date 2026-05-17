@@ -23,6 +23,7 @@ Current implementation status:
 | Supported atlas text | ASCII printable characters, single-line `NoWrap`, DirectWrite glyph metrics/raster source |
 | Atlas format | Single `R8_UNORM` alpha atlas |
 | Draw model | D3D12 glyph quads recorded before command-list close/execute |
+| Shader packaging | Embedded DXBC bytecode; no runtime `D3DCompile` dependency in the D3D12 rect or glyph-atlas pass |
 | Alignment | Leading, center, and trailing are supported for no-wrap line widths |
 | Clip | Per-run scissor clip supported for accepted atlas runs |
 | Fallback | Overlay renderer for unsupported/failed atlas frames; fallback reasons are diagnostic output |
@@ -30,13 +31,15 @@ Current implementation status:
 
 Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` with overlay rollback. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
 
+P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list. Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer.
+
 Known limitations:
 
-- The atlas PSO still uses runtime shader compilation through `d3dcompiler_47.dll`. AOT/self-contained publish currently succeeds, but build-time compiled or embedded bytecode is the preferred hardening direction.
+- Shader bytecode is currently embedded inline. A future build-time shader asset pipeline can replace the inline packaging if shader source grows, but the runtime compiler dependency is removed.
 - Fallback is whole-frame fallback. If any text run is unsupported, text composition falls back to overlay for the frame.
 - Atlas eviction is not implemented; AtlasFull fallback is the safety behavior.
 - Complex shaping, fallback font face identity, color glyphs, wrapping, and mixed atlas/overlay composition are deferred.
-- Warm glyph-atlas scroll allocation is still about `6.2 KB/frame`; attribution should precede optimization.
+- Warm glyph-atlas scroll allocation was previously about `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution. Optimization should wait for the attributed evidence rather than guessing.
 
 ## Non-Goals
 

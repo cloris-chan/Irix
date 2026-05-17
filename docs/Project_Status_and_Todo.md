@@ -32,6 +32,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Backend clip | Scissor is the default backend clip mode; `--disable-scissor` / `--clip-mode diagnostic` remain diagnostic rollback paths. |
 | Default renderer baseline | GlyphAtlas + Scissor default baseline enabled. Do not introduce another runtime default switch before shader/resource lifetime and allocation attribution hardening. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
+| Shader packaging | D3D12 rectangle and glyph-atlas passes use embedded DXBC bytecode. Runtime `D3DCompile` / `d3dcompiler_47.dll` is no longer required by renderer source. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
@@ -39,7 +40,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Record struct boundary | Complete for Round 18. Framework/internal primitives, IR, render hot paths, platform types, and PoC backend/diagnostics do not use `record struct`. |
 | Profiler allocation pass | Complete for retained/input first pass. The 2026-05-17 VS profiler GCDump drove targeted cleanup in canonical retained apply, input hit-test routing, input ownership diagnostics, retained metadata projection, and text snapshot comparison. |
 | Allocation baseline | In place for MVU BuildView, diff, retained apply, layout full/dirty, draw command record full/dirty, D3D12 ExecuteCore at 100%/150%, render-request reuse, mock backend frame timing, and FrameDrawingResources warm pool allocation. |
-| Performance micro-optimization | Pre-GA micro-optimization is closed. For glyph-atlas hardening, attribute the current warm scroll allocation around `6.2 KB/frame` before optimizing. |
+| Performance micro-optimization | Pre-GA micro-optimization is closed. `--diagnose-text-cache` now attributes warm glyph-atlas allocation by tree/diff/translate/render stage; optimize from evidence, not guesses. |
 | Private GA | Tagged as `v1.0-private-ga`; `post-ga-renderer-foundation` is the active next branch. This is an internal/private milestone, not a public API freeze. |
 | Docs | Trimmed to canonical docs only; obsolete prep/checkpoint docs deleted. |
 
@@ -215,9 +216,9 @@ Source guards currently block:
 
 | Priority | Work | Boundary |
 |----------|------|----------|
-| P0 | Renderer foundation hardening | GlyphAtlas + Scissor default baseline enabled; do not flip another default. Start with shader bytecode / resource lifetime hardening. |
-| P1 | Remove runtime shader compile | Replace runtime `d3dcompiler_47.dll` / `D3DCompile` dependency with build-time compiled or embedded shader bytecode so AOT/publish no longer depends on a runtime shader compiler. |
-| P1 | Attribute warm glyph atlas allocation | Attribute the warm scroll allocation around `6.2 KB/frame` before attempting allocation cleanup. Measure first; do not blind-optimize. |
+| P0 | Renderer foundation hardening | GlyphAtlas + Scissor default baseline enabled; do not flip another default. Continue resource lifetime hardening from the embedded-shader baseline. |
+| P1 | Shader packaging follow-up | Runtime shader compile is removed. Decide later whether inline embedded DXBC is enough or a build-time shader asset pipeline is worth adding. |
+| P1 | Attribute warm glyph atlas allocation | Run `--diagnose-text-cache` and use tree/diff/translate/render attribution before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
 | P2 | Mixed fallback design | Defer per-run atlas plus per-run overlay fallback until shader/resource lifetime is stable; the current prototype still uses whole-frame fallback. |
 | P2 | Overlay removal gate | Do not remove D3D11On12/D2D overlay until mixed fallback or another safe degradation strategy exists and has smoke evidence. |

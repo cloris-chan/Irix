@@ -143,6 +143,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_embedded_shader_bytecode_decodes_for_packaging_guard()
+    {
+        var lengths = D3D12GlyphAtlasTextRenderer.GetEmbeddedShaderBytecodeLengths();
+
+        Assert.True(lengths.VertexBytes > 0);
+        Assert.True(lengths.PixelBytes > 0);
+    }
+
+    [Fact]
+    public void D3D12_rect_pass_embedded_shader_bytecode_decodes_for_packaging_guard()
+    {
+        var lengths = D3D12Renderer2D.GetEmbeddedShaderBytecodeLengths();
+
+        Assert.True(lengths.VertexBytes > 0);
+        Assert.True(lengths.PixelBytes > 0);
+    }
+
+    [Fact]
     public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
@@ -192,6 +210,22 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("InitializationFailed=1", summary);
         Assert.Contains("initFailurePhase=UploadBuffer", summary);
+    }
+
+    [Fact]
+    public void Text_cache_allocation_attribution_formatter_outputs_stable_stage_fields()
+    {
+        var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(
+            TreeBytes: 300,
+            DiffBytes: 120,
+            TranslateBytes: 600,
+            RenderBytes: 180);
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationAttribution(attribution, frameCount: 3);
+
+        Assert.Equal(
+            "Allocation attribution: tree=300 bytes (100/frame), diff=120 bytes (40/frame), translate=600 bytes (200/frame), render=180 bytes (60/frame)",
+            summary);
     }
 
     [Fact]

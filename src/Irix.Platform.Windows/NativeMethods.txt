@@ -52,7 +52,6 @@ ID3D12Fence
 ID3D12PipelineState
 ID3D12RootSignature
 D3D12SerializeRootSignature
-D3DCompile
 // D3D11On12 / D2D / DirectWrite text overlay
 D3D11On12CreateDevice
 D3D11_CREATE_DEVICE_FLAG

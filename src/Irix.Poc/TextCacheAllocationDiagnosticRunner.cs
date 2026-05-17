@@ -85,6 +85,7 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var poolBefore = FrameDrawingResources.GetPoolDiagnostics();
         var allocatedBefore = GC.GetTotalAllocatedBytes(true);
+        var attribution = default(AllocationAttribution);
         var previousTree = default(VirtualNodeTree);
         var hasPreviousTree = false;
         var activeScale = displayScale;
@@ -100,19 +101,37 @@ internal static class TextCacheAllocationDiagnosticRunner
                 compositor.SetViewport(new PixelRectangle(0, 0, renderer.Width, renderer.Height), activeScale);
             }
 
+            var beforeTree = GC.GetTotalAllocatedBytes(false);
             var nextTree = treeFactory(i, activeScale);
-            using var patch = hasPreviousTree
-                ? VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree)
-                : VirtualNodeDiffer.CreatePatchBatch(default, nextTree);
-            using var batch = translator.Translate(patch);
-            previousTree = nextTree;
-            hasPreviousTree = true;
+            var afterTree = GC.GetTotalAllocatedBytes(false);
+            attribution = attribution.AddTree(afterTree - beforeTree);
 
-            compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
-            if (renderer.IsDeviceRemoved)
+            var beforeDiff = GC.GetTotalAllocatedBytes(false);
+            using (var patch = hasPreviousTree
+                ? VirtualNodeDiffer.CreatePatchBatch(previousTree, nextTree)
+                : VirtualNodeDiffer.CreatePatchBatch(default, nextTree))
             {
-                output.WriteLine($"Scenario {name}: device removed at frame {i}: {renderer.DeviceErrorReason}");
-                break;
+                var afterDiff = GC.GetTotalAllocatedBytes(false);
+                attribution = attribution.AddDiff(afterDiff - beforeDiff);
+
+                var beforeTranslate = GC.GetTotalAllocatedBytes(false);
+                using var batch = translator.Translate(patch);
+                var afterTranslate = GC.GetTotalAllocatedBytes(false);
+                attribution = attribution.AddTranslate(afterTranslate - beforeTranslate);
+
+                previousTree = nextTree;
+                hasPreviousTree = true;
+
+                var beforeRender = GC.GetTotalAllocatedBytes(false);
+                compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
+                var afterRender = GC.GetTotalAllocatedBytes(false);
+                attribution = attribution.AddRender(afterRender - beforeRender);
+
+                if (renderer.IsDeviceRemoved)
+                {
+                    output.WriteLine($"Scenario {name}: device removed at frame {i}: {renderer.DeviceErrorReason}");
+                    break;
+                }
             }
         }
 
@@ -140,9 +159,18 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var allocatedBytes = allocatedAfter - allocatedBefore;
         output.WriteLine($"Allocation: total={allocatedBytes} bytes, perFrame={(frameCount > 0 ? allocatedBytes / frameCount : 0)} bytes");
+        output.WriteLine(FormatAllocationAttribution(attribution, frameCount));
         output.WriteLine($"FrameDrawingResources: rents={poolDelta.RentCount}, created={poolDelta.CreatedCount}, reused={poolDelta.ReusedCount}, returns={poolDelta.ReturnCallCount}, returnedToPool={poolDelta.ReturnedToPoolCount}, retainedSkips={poolDelta.RetainedReturnSkipCount}, duplicateSkips={poolDelta.DuplicateReturnSkipCount}, staleSkips={poolDelta.StaleReturnSkipCount}, overflowDisposals={poolDelta.DisposedOverflowCount}, poolCount={poolDelta.PoolCount}");
         output.WriteLine();
     }
+
+    internal static string FormatAllocationAttribution(AllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return $"Allocation attribution: tree={attribution.TreeBytes} bytes ({PerFrame(attribution.TreeBytes, divisor)}/frame), diff={attribution.DiffBytes} bytes ({PerFrame(attribution.DiffBytes, divisor)}/frame), translate={attribution.TranslateBytes} bytes ({PerFrame(attribution.TranslateBytes, divisor)}/frame), render={attribution.RenderBytes} bytes ({PerFrame(attribution.RenderBytes, divisor)}/frame)";
+    }
+
+    private static long PerFrame(long bytes, int frameCount) => frameCount > 0 ? bytes / frameCount : 0;
 
     private static VirtualNode BuildRoot(VirtualTextArena arena, string text, int scrollY)
     {
@@ -166,5 +194,37 @@ internal static class TextCacheAllocationDiagnosticRunner
         var x = bounds.X + Math.Max((bounds.Width - windowWidth) / 2, 0);
         var y = bounds.Y + Math.Max((bounds.Height - windowHeight) / 2, 0);
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
+    }
+
+    internal readonly struct AllocationAttribution(
+        long TreeBytes,
+        long DiffBytes,
+        long TranslateBytes,
+        long RenderBytes) : IEquatable<AllocationAttribution>
+    {
+        public long TreeBytes { get; } = TreeBytes;
+        public long DiffBytes { get; } = DiffBytes;
+        public long TranslateBytes { get; } = TranslateBytes;
+        public long RenderBytes { get; } = RenderBytes;
+
+        public AllocationAttribution AddTree(long bytes) => new(TreeBytes + bytes, DiffBytes, TranslateBytes, RenderBytes);
+
+        public AllocationAttribution AddDiff(long bytes) => new(TreeBytes, DiffBytes + bytes, TranslateBytes, RenderBytes);
+
+        public AllocationAttribution AddTranslate(long bytes) => new(TreeBytes, DiffBytes, TranslateBytes + bytes, RenderBytes);
+
+        public AllocationAttribution AddRender(long bytes) => new(TreeBytes, DiffBytes, TranslateBytes, RenderBytes + bytes);
+
+        public bool Equals(AllocationAttribution other)
+        {
+            return TreeBytes == other.TreeBytes
+                && DiffBytes == other.DiffBytes
+                && TranslateBytes == other.TranslateBytes
+                && RenderBytes == other.RenderBytes;
+        }
+
+        public override bool Equals(object? obj) => obj is AllocationAttribution other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(TreeBytes, DiffBytes, TranslateBytes, RenderBytes);
     }
 }

@@ -127,27 +127,27 @@ Phase 1 closeout: prototype evidence is captured for default overlay regression,
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
 | D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype with overlay rollback |
-| Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs` | Replace runtime shader compile or make it explicit/fallback-safe; tighten resource lifetime and failure ownership | Next |
-| Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs` / build assets | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | Checklist |
-| Attribute warm glyph atlas allocation | `D3D12GlyphAtlasTextRenderer.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | Checklist |
+| Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Runtime shader compile removed; resource creation and map outputs checked for explicit failure ownership | ✅ First pass done |
+| Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
+| Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | ✅ Attribution added |
 | Mixed fallback design | Renderer design | Design per-run atlas plus per-run overlay fallback so NonAscii/complex runs do not force whole-frame overlay fallback | Deferred |
 | Overlay removal gate | Renderer design / smoke evidence | Do not remove D3D11On12/D2D overlay until mixed fallback or another safe degradation strategy is complete | Deferred |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
 
 Known limitations checklist before expanding text coverage:
 
-- Runtime shader compile still depends on `d3dcompiler_47.dll`; AOT publish passes, but build-time compile or embedded bytecode should be decided before production hardening.
+- Shader bytecode is embedded inline in the renderer sources. Runtime `D3DCompile` / `d3dcompiler_47.dll` dependency is removed; a build-time shader asset pipeline is optional future cleanup if shader source grows.
 - Fallback is still whole-frame fallback. NonAscii, AtlasFull, and other unsupported atlas cases correctly fall back to overlay for the frame.
 - No atlas eviction. AtlasFull fallback is safe; eviction design remains deferred.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
-- Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; attribute this before doing allocation work.
+- Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.
 - Mixed per-run atlas/overlay fallback is a future design item after shader/resource lifetime is stable.
 
 Next hardening checklist:
 
-- Remove runtime shader compile: decide build-time shader compile or embedded bytecode packaging, remove the runtime `D3DCompile` dependency from the default GlyphAtlas path, and keep initialization failure fallback-safe.
-- Resource lifetime hardening: make glyph-atlas D3D12 resource ownership and failure phases explicit enough that partial initialization cannot poison the renderer.
-- Warm allocation attribution: add measurement around the current warm scroll `~6.2 KB/frame` before changing allocation behavior.
+- Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
+- Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases; glyph-atlas initialization failures must remain overlay fallback-safe.
+- Warm allocation attribution: run `--diagnose-text-cache` and optimize only after tree/diff/translate/render attribution identifies the source.
 - Mixed fallback design: specify per-run atlas/overlay ordering, clipping, and sync semantics before implementation.
 - Overlay removal gate: keep D3D11On12/D2D overlay until mixed fallback or an equivalent safe degradation strategy is implemented and smoke-tested.
 
