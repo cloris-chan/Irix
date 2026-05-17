@@ -121,13 +121,17 @@ Non-goals:
 
 ### Batch B: Post-GA text renderer replacement
 
-Phase 1 closeout: opt-in prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA baseline has been switched to default `GlyphAtlas` with `--text-composition overlay` rollback. Do not keep expanding the ASCII prototype surface in the next step; move to renderer-foundation hardening first.
+Phase 1 closeout: prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA baseline has been switched to default `GlyphAtlas` plus default `Scissor`, with `--text-composition overlay`, `--disable-scissor`, and `--clip-mode diagnostic` rollback paths. Do not keep expanding the ASCII prototype surface or flip another runtime default in the next step; move to renderer-foundation hardening first.
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
 | D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype with overlay rollback |
 | Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs` | Replace runtime shader compile or make it explicit/fallback-safe; tighten resource lifetime and failure ownership | Next |
+| Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs` / build assets | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | Checklist |
+| Attribute warm glyph atlas allocation | `D3D12GlyphAtlasTextRenderer.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | Checklist |
+| Mixed fallback design | Renderer design | Design per-run atlas plus per-run overlay fallback so NonAscii/complex runs do not force whole-frame overlay fallback | Deferred |
+| Overlay removal gate | Renderer design / smoke evidence | Do not remove D3D11On12/D2D overlay until mixed fallback or another safe degradation strategy is complete | Deferred |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
 
 Known limitations checklist before expanding text coverage:
@@ -138,6 +142,14 @@ Known limitations checklist before expanding text coverage:
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
 - Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; attribute this before doing allocation work.
 - Mixed per-run atlas/overlay fallback is a future design item after shader/resource lifetime is stable.
+
+Next hardening checklist:
+
+- Remove runtime shader compile: decide build-time shader compile or embedded bytecode packaging, remove the runtime `D3DCompile` dependency from the default GlyphAtlas path, and keep initialization failure fallback-safe.
+- Resource lifetime hardening: make glyph-atlas D3D12 resource ownership and failure phases explicit enough that partial initialization cannot poison the renderer.
+- Warm allocation attribution: add measurement around the current warm scroll `~6.2 KB/frame` before changing allocation behavior.
+- Mixed fallback design: specify per-run atlas/overlay ordering, clipping, and sync semantics before implementation.
+- Overlay removal gate: keep D3D11On12/D2D overlay until mixed fallback or an equivalent safe degradation strategy is implemented and smoke-tested.
 
 ---
 

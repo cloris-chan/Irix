@@ -30,6 +30,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | V1 core | Complete / regression-only. Do not reopen core feature scope for GA cleanup. |
 | Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; D3D11On12/D2D text overlay remains fallback and `--text-composition overlay` rollback. |
 | Backend clip | Scissor is the default backend clip mode; `--disable-scissor` / `--clip-mode diagnostic` remain diagnostic rollback paths. |
+| Default renderer baseline | GlyphAtlas + Scissor default baseline enabled. Do not introduce another runtime default switch before shader/resource lifetime and allocation attribution hardening. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
@@ -129,18 +130,19 @@ Profiler findings intentionally not folded into this pass:
 
 ## Current Verification
 
-Last local verification:
+Latest local default-baseline verification:
 
 ```powershell
-dotnet restore
 dotnet build --no-restore -c Release
 dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance" --verbosity normal
 dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
 dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal
-dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained
+dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3
+dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --text-composition overlay
+dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --diagnose-sync-non-ascii
 ```
 
-Result: Release local CI parity passed: 590 normal tests, 6 D3D12 tests, 6 performance tests, and AOT publish succeeded.
+Result: Release build passed; normal tests `604` passed; D3D12 tests `6` passed; performance tests `6` passed; default GlyphAtlas sync smoke reported `syncWaits=0`; overlay rollback and NonAscii fallback smokes presented normally. The previous phase-one self-contained publish passed and should be rerun with shader/resource lifetime code changes.
 
 Manual smoke status:
 
@@ -213,12 +215,12 @@ Source guards currently block:
 
 | Priority | Work | Boundary |
 |----------|------|----------|
-| P0 | Renderer foundation hardening | Start with shader bytecode / resource lifetime hardening in the opt-in glyph atlas renderer; do not expand complex shaping or eviction first. |
-| P1 | Runtime shader compile decision | Replace runtime `d3dcompiler_47.dll` dependency with build-time or embedded bytecode, or document an explicit fallback-safe runtime strategy. |
-| P1 | Glyph-atlas allocation attribution | Attribute the warm scroll allocation around `6.2 KB/frame` before attempting allocation cleanup. |
-| P1 | D3D12-only glyph atlas prototype | Follow [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md); keep it opt-in and internal until a separate API review. |
+| P0 | Renderer foundation hardening | GlyphAtlas + Scissor default baseline enabled; do not flip another default. Start with shader bytecode / resource lifetime hardening. |
+| P1 | Remove runtime shader compile | Replace runtime `d3dcompiler_47.dll` / `D3DCompile` dependency with build-time compiled or embedded shader bytecode so AOT/publish no longer depends on a runtime shader compiler. |
+| P1 | Attribute warm glyph atlas allocation | Attribute the warm scroll allocation around `6.2 KB/frame` before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
-| P2 | Mixed fallback / eviction planning | Defer mixed per-run atlas/overlay fallback and eviction until shader/resource lifetime is stable. |
+| P2 | Mixed fallback design | Defer per-run atlas plus per-run overlay fallback until shader/resource lifetime is stable; the current prototype still uses whole-frame fallback. |
+| P2 | Overlay removal gate | Do not remove D3D11On12/D2D overlay until mixed fallback or another safe degradation strategy exists and has smoke evidence. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
 
 Do not mix glyph atlas implementation, renderer rewrites, or public API expansion into style/property cleanup.

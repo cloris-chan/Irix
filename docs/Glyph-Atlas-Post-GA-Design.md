@@ -133,7 +133,7 @@ Rules:
 
 ## Fallback Strategy
 
-Direct2D / DirectWrite remains the authoritative fallback. Current opt-in glyph atlas fallback is frame-level: if any text run in the frame is unsupported, the frame uses overlay text composition. A future mixed fallback design should allow accepted ASCII runs to draw through atlas while unsupported runs draw through overlay, but that requires careful ordering, clip, and sync semantics before implementation.
+Direct2D / DirectWrite remains the authoritative fallback. Current default GlyphAtlas fallback is frame-level: if any text run in the frame is unsupported, the frame uses overlay text composition. A future mixed fallback design should allow accepted ASCII runs to draw through atlas while unsupported runs draw through overlay, but that requires careful ordering, clip, and sync semantics before implementation.
 
 Fallback cases:
 

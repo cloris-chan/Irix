@@ -18,14 +18,29 @@ dotnet build --no-restore -c Release
 dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance" --verbosity normal
 dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
 dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal
+```
+
+Copy-paste default and rollback smokes:
+
+```powershell
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --text-composition overlay
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --diagnose-sync-non-ascii
+
 dotnet run --no-build -c Release --project src/Irix.Poc
 dotnet run --no-build -c Release --project src/Irix.Poc -- --disable-scissor
 dotnet run --no-build -c Release --project src/Irix.Poc -- --clip-mode diagnostic
 dotnet run --no-build -c Release --project src/Irix.Poc -- --text-composition overlay
 ```
+
+Expected smoke headers:
+
+| Command | Expected header |
+|---------|-----------------|
+| `dotnet run --no-build -c Release --project src/Irix.Poc` | `Backend clip mode: Scissor`, `Text composition mode: GlyphAtlas`, `Partial apply: ENABLED (default)` |
+| `dotnet run --no-build -c Release --project src/Irix.Poc -- --text-composition overlay` | `Text composition mode: Overlay` |
+| `dotnet run --no-build -c Release --project src/Irix.Poc -- --disable-scissor` | `Backend clip mode: Diagnostic` |
+| `dotnet run --no-build -c Release --project src/Irix.Poc -- --clip-mode diagnostic` | `Backend clip mode: Diagnostic` |
 
 ## Results
 
