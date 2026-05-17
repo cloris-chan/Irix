@@ -28,6 +28,16 @@ Current implementation status:
 | Fallback | Overlay renderer for unsupported/failed atlas frames; fallback reasons are diagnostic output |
 | Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, mixed per-run atlas/overlay composition |
 
+Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
+
+Known limitations:
+
+- The atlas PSO still uses runtime shader compilation through `d3dcompiler_47.dll`. AOT/self-contained publish currently succeeds, but build-time compiled or embedded bytecode is the preferred hardening direction.
+- Fallback is whole-frame fallback. If any text run is unsupported, text composition falls back to overlay for the frame.
+- Atlas eviction is not implemented; AtlasFull fallback is the safety behavior.
+- Complex shaping, fallback font face identity, color glyphs, wrapping, and mixed atlas/overlay composition are deferred.
+- Warm glyph-atlas scroll allocation is still about `6.2 KB/frame`; attribution should precede optimization.
+
 ## Non-Goals
 
 - No implementation before the current GA candidate.

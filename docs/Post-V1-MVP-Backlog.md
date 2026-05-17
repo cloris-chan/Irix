@@ -116,16 +116,28 @@ Non-goals:
 | Command allocator reset failure handling | `D3D12Renderer.cs` | Reset retry or device-lost escalation | ✅ Done |
 | Keep CI green | GitHub Actions / local CI parity | Tests, D3D12 smoke, performance lane, AOT publish stay green | ✅ Done for Private GA |
 | Stop pre-GA performance micro-optimization | `Project_Status_and_Todo.md` | Do not chase the remaining ~2 KB render-request reuse allocation before tag | ✅ Done |
-| Private GA tag | Git | Tag committed snapshot as `v1.0-private-ga`; not a public API freeze | Pending |
-| Next branch | Git | Open `post-ga-renderer-foundation` after tag | Pending |
+| Private GA tag | Git | Tag committed snapshot as `v1.0-private-ga`; not a public API freeze | ✅ Done |
+| Next branch | Git | Open `post-ga-renderer-foundation` after tag | ✅ Done |
 
 ### Batch B: Post-GA text renderer replacement
+
+Phase 1 closeout: opt-in prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. Do not keep expanding the ASCII prototype surface in the next step; move to renderer-foundation hardening first.
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
 | D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Opt-in prototype |
+| Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs` | Replace runtime shader compile or make it explicit/fallback-safe; tighten resource lifetime and failure ownership | Next |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
+
+Known limitations checklist before expanding text coverage:
+
+- Runtime shader compile still depends on `d3dcompiler_47.dll`; AOT publish passes, but build-time compile or embedded bytecode should be decided before production hardening.
+- Fallback is still whole-frame fallback. NonAscii, AtlasFull, and other unsupported atlas cases correctly fall back to overlay for the frame.
+- No atlas eviction. AtlasFull fallback is safe; eviction design remains deferred.
+- No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
+- Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; attribute this before doing allocation work.
+- Mixed per-run atlas/overlay fallback is a future design item after shader/resource lifetime is stable.
 
 ---
 
