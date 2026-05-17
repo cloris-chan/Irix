@@ -147,8 +147,10 @@ public sealed class ProgramDiagnosticsTests
     {
         var lengths = D3D12GlyphAtlasTextRenderer.GetEmbeddedShaderBytecodeLengths();
 
-        Assert.True(lengths.VertexBytes > 0);
-        Assert.True(lengths.PixelBytes > 0);
+        Assert.True(lengths.VertexBytes >= 4);
+        Assert.True(lengths.PixelBytes >= 4);
+        Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.VertexHeader));
+        Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.PixelHeader));
     }
 
     [Fact]
@@ -156,8 +158,10 @@ public sealed class ProgramDiagnosticsTests
     {
         var lengths = D3D12Renderer2D.GetEmbeddedShaderBytecodeLengths();
 
-        Assert.True(lengths.VertexBytes > 0);
-        Assert.True(lengths.PixelBytes > 0);
+        Assert.True(lengths.VertexBytes >= 4);
+        Assert.True(lengths.PixelBytes >= 4);
+        Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.VertexHeader));
+        Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.PixelHeader));
     }
 
     [Fact]
@@ -173,6 +177,7 @@ public sealed class ProgramDiagnosticsTests
             UnsupportedRuns: 1,
             Reasons: default,
             InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 768,
             RasterScratchResizes: 2)
             .WithFallback(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
@@ -185,6 +190,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("fallbacks=2", summary);
         Assert.Contains("NonAscii=1", summary);
         Assert.Contains("initFailurePhase=ShaderCompile", summary);
+        Assert.Contains("recordFailurePhase=None", summary);
+        Assert.Contains("RecordFailed=0", summary);
         Assert.Contains("rasterScratch=768 bytes/2 resizes", summary);
     }
 
@@ -201,6 +208,7 @@ public sealed class ProgramDiagnosticsTests
             UnsupportedRuns: 0,
             Reasons: default,
             InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 0,
             RasterScratchResizes: 0)
             .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed)
@@ -210,6 +218,33 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("InitializationFailed=1", summary);
         Assert.Contains("initFailurePhase=UploadBuffer", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_diagnostics_summary_reports_runtime_record_failure_phase_separately()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
+            .WithRecordFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.Record);
+
+        var summary = diagnostics.FormatSummary();
+
+        Assert.Contains("InitializationFailed=0", summary);
+        Assert.Contains("RecordFailed=1", summary);
+        Assert.Contains("initFailurePhase=None", summary);
+        Assert.Contains("recordFailurePhase=Record", summary);
     }
 
     [Fact]
@@ -241,6 +276,7 @@ public sealed class ProgramDiagnosticsTests
             UnsupportedRuns: 0,
             Reasons: default,
             InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 8192,
             RasterScratchResizes: 4)
             .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.AtlasFull);
@@ -740,6 +776,7 @@ public sealed class ProgramDiagnosticsTests
             UnsupportedRuns: 0,
             Reasons: default,
             InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 512,
             RasterScratchResizes: 2);
 
@@ -775,7 +812,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, uploads=2048 bytes, hits=30, misses=8, fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0], initFailurePhase=None, rasterScratch=512 bytes/2 resizes",
+            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, uploads=2048 bytes, hits=30, misses=8, fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
             "=== Resize diagnostic mode complete ===",
             string.Empty
         ]), writer.ToString());

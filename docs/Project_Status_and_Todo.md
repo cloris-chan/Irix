@@ -143,7 +143,7 @@ dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --diagnose-sync-non-ascii
 ```
 
-Result: Release build passed; normal tests `604` passed; D3D12 tests `6` passed; performance tests `6` passed; default GlyphAtlas sync smoke reported `syncWaits=0`; overlay rollback and NonAscii fallback smokes presented normally. The previous phase-one self-contained publish passed and should be rerun with shader/resource lifetime code changes.
+Result: Release build passed; normal tests `608` passed; D3D12 tests `6` passed; performance tests `6` passed; default GlyphAtlas sync smoke reported `syncWaits=0`; overlay rollback and NonAscii fallback smokes presented normally. Self-contained publish passed after shader packaging removal. Glyph-atlas diagnostics now keep constructor-time `initFailurePhase` separate from runtime `recordFailurePhase`.
 
 Manual smoke status:
 

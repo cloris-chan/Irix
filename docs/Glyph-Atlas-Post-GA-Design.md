@@ -31,7 +31,7 @@ Current implementation status:
 
 Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` with overlay rollback. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
 
-P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list. Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer.
+P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list. Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer. Runtime record/upload/map failures disable the atlas instance and fall back to overlay with `recordFailurePhase` diagnostics; they are not reported as device lost unless the renderer observes an actual device-removed condition.
 
 ## Shader Bytecode Provenance
 
@@ -83,6 +83,12 @@ $fxc = 'C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\fxc.exe'
 ```
 
 After updating embedded blobs, run the shader bytecode decode tests plus D3D12 smoke and publish. The normal test lane contains bytecode decode guards so malformed base64 does not rely on manual smoke to catch packaging errors.
+
+## Failure Diagnostics Contract
+
+`initFailurePhase` is reserved for constructor-time atlas setup failures: DirectWrite factory, font collection, root signature, shader bytecode decode, PSO, atlas texture, upload buffer, descriptor heap, SRV, or vertex buffer creation. These failures prevent atlas creation and fall back to the overlay renderer.
+
+`recordFailurePhase` is reserved for runtime command recording failures after atlas initialization succeeds. Current phases cover generic record failure plus vertex-buffer map and atlas-upload map failures. A runtime record failure disables the current atlas renderer instance and falls back to overlay for subsequent frames without marking the D3D12 device lost by itself.
 
 Known limitations:
 

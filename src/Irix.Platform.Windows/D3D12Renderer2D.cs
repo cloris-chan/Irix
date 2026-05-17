@@ -45,9 +45,13 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         }
     }
 
-    internal static (int VertexBytes, int PixelBytes) GetEmbeddedShaderBytecodeLengths()
+    internal static (int VertexBytes, int PixelBytes, byte[] VertexHeader, byte[] PixelHeader) GetEmbeddedShaderBytecodeLengths()
     {
-        return (VertexShaderBytecode.Length, PixelShaderBytecode.Length);
+        return (
+            VertexShaderBytecode.Length,
+            PixelShaderBytecode.Length,
+            VertexShaderBytecode[..Math.Min(4, VertexShaderBytecode.Length)],
+            PixelShaderBytecode[..Math.Min(4, PixelShaderBytecode.Length)]);
     }
 
     private void CreateRootSignature()
@@ -60,18 +64,27 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         ID3DBlob* err = null;
         try
         {
-            PInvoke.D3D12SerializeRootSignature(desc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err);
-            RequirePointer(sig, "D3D12Renderer2D.D3D12SerializeRootSignature returned a null signature blob.");
-        }
-        catch (COMException ex)
-        {
-            throw WrapD3D12Exception("D3D12Renderer2D.D3D12SerializeRootSignature", ex);
-        }
+            try
+            {
+                PInvoke.D3D12SerializeRootSignature(desc, D3D_ROOT_SIGNATURE_VERSION.D3D_ROOT_SIGNATURE_VERSION_1, &sig, &err);
+            }
+            catch (COMException ex)
+            {
+                throw WrapD3D12Exception("D3D12Renderer2D.D3D12SerializeRootSignature", ex);
+            }
 
-        try
-        {
+            RequirePointer(sig, "D3D12Renderer2D.D3D12SerializeRootSignature returned a null signature blob.");
+
             void* obj = null;
-            _device->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), typeof(ID3D12RootSignature).GUID, out obj);
+            try
+            {
+                _device->CreateRootSignature(0, sig->GetBufferPointer(), sig->GetBufferSize(), typeof(ID3D12RootSignature).GUID, out obj);
+            }
+            catch (COMException ex)
+            {
+                throw WrapD3D12Exception("D3D12Renderer2D.CreateRootSignature", ex);
+            }
+
             if (obj == null)
             {
                 throw new InvalidOperationException("D3D12Renderer2D.CreateRootSignature returned a null root signature.");
@@ -81,7 +94,7 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         }
         finally
         {
-            sig->Release();
+            if (sig != null) sig->Release();
             if (err != null) err->Release();
         }
     }
