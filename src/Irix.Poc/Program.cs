@@ -89,7 +89,7 @@ internal static class Program
 
         // D3D12 rendering path
         var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-        var clipMode = args.Contains("--enable-scissor") ? DrawingBackendClipMode.Scissor : DrawingBackendClipMode.Diagnostic;
+        var clipMode = ParseClipMode(args);
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, clipMode);
         _backendClipMode = d3d12Backend.ClipMode;
         var showDiagnostics = args.Contains("--debug-ui");
@@ -356,7 +356,19 @@ internal static class Program
         {
             "glyph-atlas" or "glyphatlas" or "atlas" => TextCompositionMode.GlyphAtlas,
             "overlay" => TextCompositionMode.Overlay,
-            _ => TextCompositionMode.Overlay
+            _ => TextCompositionMode.GlyphAtlas
+        };
+    }
+
+    internal static DrawingBackendClipMode ParseClipMode(string[] args)
+    {
+        var value = args.SkipWhile(a => a != "--clip-mode").Skip(1).FirstOrDefault();
+        return value?.ToLowerInvariant() switch
+        {
+            "diagnostic" or "diagnostics" => DrawingBackendClipMode.Diagnostic,
+            "scissor" => DrawingBackendClipMode.Scissor,
+            _ when args.Contains("--disable-scissor") => DrawingBackendClipMode.Diagnostic,
+            _ => DrawingBackendClipMode.Scissor
         };
     }
 
@@ -396,7 +408,7 @@ internal static class Program
 
     private static ScrollFramePump? _scrollFramePump;
     private static InputOwnershipState? _inputOwnershipState;
-    private static DrawingBackendClipMode _backendClipMode = DrawingBackendClipMode.Diagnostic;
+    private static DrawingBackendClipMode _backendClipMode = DrawingBackendClipMode.Scissor;
 
     // ── Diagnostic readouts ────────────────────────────────────────────
 

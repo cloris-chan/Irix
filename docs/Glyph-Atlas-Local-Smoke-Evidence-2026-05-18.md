@@ -2,7 +2,7 @@
 
 Branch: `post-ga-renderer-foundation`
 
-Scope: opt-in D3D12 glyph atlas text composition smoke evidence. Public API remains unchanged. Overlay remains the default composition path and DirectWrite remains the shaping/raster source plus overlay fallback.
+Scope: opt-in D3D12 glyph atlas text composition smoke evidence captured before the default switch. Public API remains unchanged. This historical evidence shows the old overlay default plus the glyph-atlas opt-in path; the post-GA baseline now defaults to GlyphAtlas with `--text-composition overlay` rollback.
 
 ## Environment
 
@@ -69,7 +69,7 @@ Validation:
 - performance tests: `6` passed
 - self-contained publish: passed
 
-Sync comparison:
+Sync comparison from the pre-default-switch baseline:
 
 - Default overlay `60 x 1` without `--text-composition`: `Text composition mode: Overlay`, `frameSerial=60`, `presentSerial=60`, `syncWaits=60`; no device lost.
 - Overlay `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; avg sync wait range `1.991ms..2.346ms`; no device lost.
@@ -80,7 +80,7 @@ Sync comparison:
 Default UI smoke:
 
 - Published `Irix.Poc.exe --text-composition glyph-atlas` stayed running for 5 seconds and printed `Text composition mode: GlyphAtlas`, `Display scale: 1.5x1.5`; the process was stopped manually after the smoke window.
-- Published `Irix.Poc.exe` with no `--text-composition` stayed running for 5 seconds and printed `Text composition mode: Overlay`, `Display scale: 1.5x1.5`; the process was stopped manually after the smoke window.
+- Published `Irix.Poc.exe` with no `--text-composition` stayed running for 5 seconds and printed `Text composition mode: Overlay`, `Display scale: 1.5x1.5`; the process was stopped manually after the smoke window. This line is superseded by the later default switch to `GlyphAtlas`.
 
 Resize smoke:
 

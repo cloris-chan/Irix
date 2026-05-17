@@ -68,7 +68,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     internal TextOverlaySyncStrategy TextOverlaySyncStrategy { get; set; } = TextOverlaySyncStrategy.D3D12FenceAfterOverlay;
 
-    internal TextCompositionMode TextCompositionMode { get; set; } = TextCompositionMode.Overlay;
+    internal TextCompositionMode TextCompositionMode { get; set; } = TextCompositionMode.GlyphAtlas;
 
     public D3D12Renderer(nint hwnd, int width, int height)
     {

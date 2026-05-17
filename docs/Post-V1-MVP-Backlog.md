@@ -37,7 +37,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Opt-in prototype foundation | Post-GA; `Overlay` remains default; glyph atlas supports narrow ASCII/NoWrap runs with overlay fallback and local evidence |
+| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation | Post-GA; `GlyphAtlas` is default for the D3D12 PoC path; `Overlay` remains rollback/fallback; glyph atlas supports narrow ASCII/NoWrap runs with local evidence |
 | POST-011 | Resource cache / stable global handles | Not started | D3D12-specific; can align with glyph atlas/resource cache work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -70,7 +70,7 @@ POST-007 scroll ──────> POST-008 settings provider
 
 ## POST-017: D3D12-only Glyph Atlas Text Renderer
 
-Current text composition path:
+Private GA / overlay fallback text composition path:
 
 ```text
 D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present
@@ -82,9 +82,9 @@ Target path:
 D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
 ```
 
-Phase 1 foundation keeps the current overlay path as the default runtime behavior and adds only an internal composition seam. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data; D3D11On12/D2D overlay remains the correctness fallback until the D3D12 atlas pass is complete. This phase does not change public API or `IDrawingBackend.Execute`.
+Phase 1 foundation first kept the overlay path as the default runtime behavior and added only an internal composition seam. After opt-in smoke evidence, the post-GA renderer-foundation baseline now defaults to `GlyphAtlas`; `--text-composition overlay` remains the old overlay rollback, and D3D11On12/D2D overlay remains the correctness fallback when atlas composition cannot handle a frame. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data. This phase does not change public API or `IDrawingBackend.Execute`.
 
-The first atlas execution path is opt-in with `--text-composition glyph-atlas`. It records a D3D12 glyph pass for basic single-line ASCII / `NoWrap` runs, uses an `R8_UNORM` atlas, supports leading/center/trailing alignment and per-run scissor for accepted runs, and falls back to the overlay renderer for unsupported text or atlas initialization/upload failure. Full shaping, wrapping, color glyphs, fallback font identity, eviction, mixed per-run atlas/overlay fallback, and production enablement remain follow-up work.
+The first atlas execution path records a D3D12 glyph pass for basic single-line ASCII / `NoWrap` runs, uses an `R8_UNORM` atlas, supports leading/center/trailing alignment and per-run scissor for accepted runs, and falls back to the overlay renderer for unsupported text or atlas initialization/upload failure. Full shaping, wrapping, color glyphs, fallback font identity, eviction, mixed per-run atlas/overlay fallback, and production enablement remain follow-up work.
 
 | Work item | Scope | Acceptance criteria |
 |-----------|-------|---------------------|
@@ -121,12 +121,12 @@ Non-goals:
 
 ### Batch B: Post-GA text renderer replacement
 
-Phase 1 closeout: opt-in prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. Do not keep expanding the ASCII prototype surface in the next step; move to renderer-foundation hardening first.
+Phase 1 closeout: opt-in prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA baseline has been switched to default `GlyphAtlas` with `--text-composition overlay` rollback. Do not keep expanding the ASCII prototype surface in the next step; move to renderer-foundation hardening first.
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
-| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Opt-in prototype |
+| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype with overlay rollback |
 | Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs` | Replace runtime shader compile or make it explicit/fallback-safe; tighten resource lifetime and failure ownership | Next |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
 

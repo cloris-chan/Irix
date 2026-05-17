@@ -10,12 +10,22 @@ namespace Irix.Core.Tests;
 public sealed class ProgramDiagnosticsTests
 {
     [Fact]
-    public void Text_composition_mode_defaults_to_overlay_and_accepts_glyph_atlas()
+    public void Text_composition_mode_defaults_to_glyph_atlas_and_accepts_overlay_rollback()
     {
-        Assert.Equal(TextCompositionMode.Overlay, Program.ParseTextCompositionMode([]));
+        Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode([]));
         Assert.Equal(TextCompositionMode.Overlay, Program.ParseTextCompositionMode(["--text-composition", "overlay"]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "glyph-atlas"]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "atlas"]));
+    }
+
+    [Fact]
+    public void Clip_mode_defaults_to_scissor_and_accepts_diagnostic_rollback()
+    {
+        Assert.Equal(DrawingBackendClipMode.Scissor, Program.ParseClipMode([]));
+        Assert.Equal(DrawingBackendClipMode.Scissor, Program.ParseClipMode(["--enable-scissor"]));
+        Assert.Equal(DrawingBackendClipMode.Scissor, Program.ParseClipMode(["--clip-mode", "scissor"]));
+        Assert.Equal(DrawingBackendClipMode.Diagnostic, Program.ParseClipMode(["--disable-scissor"]));
+        Assert.Equal(DrawingBackendClipMode.Diagnostic, Program.ParseClipMode(["--clip-mode", "diagnostic"]));
     }
 
     [Fact]
@@ -881,7 +891,7 @@ public sealed class ProgramDiagnosticsTests
             && ResolveNodeText(app._arena, node.Content) == "ScrollY: applied=0 target=0.0 pos=0.00 max=unknown acc=0.000 anim=False pendingPx=0 drained=0 frames=0 waitMs=0.0 dt=0.000 frameQueued=False tickLoop=False"));
         Assert.True(ContainsNode(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
-            && ResolveNodeText(app._arena, node.Content) == "ClipMode: Diagnostic"));
+            && ResolveNodeText(app._arena, node.Content) == "ClipMode: Scissor"));
         Assert.True(ContainsNode(tree.Root.Children, node =>
             node.Kind == VirtualNodeKind.Text
             && ResolveNodeText(app._arena, node.Content) == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly"));

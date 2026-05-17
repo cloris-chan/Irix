@@ -8,18 +8,18 @@ Introduce an explicit glyph atlas/cache after V1 GA only if profiling shows Dire
 
 ## Phase 1 Composition Seam
 
-The first post-GA renderer-foundation change introduces an internal text composition mode seam only. `Overlay` remains the default and preserves the existing `D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present` behavior. `GlyphAtlas` is reserved for a future D3D12 command-list text pass recorded before command-list close/execute; until that pass is implemented, it falls back to the overlay renderer.
+The first post-GA renderer-foundation change introduced an internal text composition mode seam only. After opt-in smoke evidence, the D3D12 PoC baseline now defaults to `GlyphAtlas`; `--text-composition overlay` remains the old overlay rollback and unsupported atlas frames fall back to the overlay renderer. The preserved overlay path is still `D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present`.
 
 DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to remove D3D11On12 / D2D / DirectWrite from final overlay composition, not to remove DirectWrite from text processing. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
 
-The first executable atlas path is intentionally narrow and opt-in. Basic single-line ASCII / `NoWrap` runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. Per-run scissor clipping is supported for accepted runs. Unsupported runs, including complex shaping, non-ASCII fallback faces, wrapping, missing fonts, atlas-full conditions, vertex/batch limits, and initialization/upload failures, must fall back to the existing overlay renderer until the atlas path is correctness-complete for those cases.
+The first executable atlas path is intentionally narrow but default-on in the post-GA renderer-foundation branch. Basic single-line ASCII / `NoWrap` runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. Per-run scissor clipping is supported for accepted runs. Unsupported runs, including complex shaping, non-ASCII fallback faces, wrapping, missing fonts, atlas-full conditions, vertex/batch limits, and initialization/upload failures, must fall back to the existing overlay renderer until the atlas path is correctness-complete for those cases.
 
 Current implementation status:
 
 | Area | Current status |
 |------|----------------|
 | Public API | No change; `IDrawingBackend.Execute` remains unchanged |
-| Default composition | `Overlay`; glyph atlas is opt-in only |
+| Default composition | `GlyphAtlas`; `--text-composition overlay` remains rollback |
 | Supported atlas text | ASCII printable characters, single-line `NoWrap`, DirectWrite glyph metrics/raster source |
 | Atlas format | Single `R8_UNORM` alpha atlas |
 | Draw model | D3D12 glyph quads recorded before command-list close/execute |
@@ -28,7 +28,7 @@ Current implementation status:
 | Fallback | Overlay renderer for unsupported/failed atlas frames; fallback reasons are diagnostic output |
 | Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, mixed per-run atlas/overlay composition |
 
-Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
+Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` with overlay rollback. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
 
 Known limitations:
 

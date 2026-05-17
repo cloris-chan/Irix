@@ -11,7 +11,7 @@ internal static class ResizeDiagnosticRunner
 
     internal static void Run(
         TextWriter output,
-        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        TextCompositionMode textCompositionMode = TextCompositionMode.GlyphAtlas,
         DisplayScale diagnosticScale = default)
     {
         using var platformHost = new WindowsPlatformHost();
@@ -125,7 +125,7 @@ internal static class ResizeDiagnosticRunner
         int swapchainWidth,
         int swapchainHeight,
         ViewportDiagnosticsSnapshot snapshot,
-        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        TextCompositionMode textCompositionMode = TextCompositionMode.GlyphAtlas,
         D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? glyphAtlasDiagnostics = null)
     {
         output.WriteLine("=== D3D12 Resize Diagnostics ===");

@@ -755,7 +755,7 @@ public sealed class CounterInputRouterTests
 
         Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "ScrollY: applied=54"));
         Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=1"));
-        Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "ClipMode: Diagnostic"));
+        Assert.True(ContainsTextStartingWith(app._arena, tree.Root, "ClipMode: Scissor"));
     }
 
     [Fact]

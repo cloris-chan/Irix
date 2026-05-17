@@ -10,7 +10,7 @@ internal static class TextCacheAllocationDiagnosticRunner
     internal static void Run(
         TextWriter output,
         int frameCount = 180,
-        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        TextCompositionMode textCompositionMode = TextCompositionMode.GlyphAtlas,
         DisplayScale diagnosticScale = default)
     {
         using var platformHost = new WindowsPlatformHost();

@@ -129,7 +129,7 @@ internal readonly struct D3D12ExecuteCoreResult(
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
 /// </summary>
-internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Diagnostic) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability, IDeviceRecovery
+internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Scissor) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability, IDeviceRecovery
 {
     private struct ExecuteDiagnosticsAccumulator
     {

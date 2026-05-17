@@ -16,7 +16,7 @@ internal static class SyncDiagnosticRunner
         int frameCount = 300,
         int sampleCount = 1,
         TextOverlaySyncStrategy syncStrategy = TextOverlaySyncStrategy.D3D12FenceAfterOverlay,
-        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay,
+        TextCompositionMode textCompositionMode = TextCompositionMode.GlyphAtlas,
         bool includeNonAsciiText = false)
     {
         using var platformHost = new WindowsPlatformHost();

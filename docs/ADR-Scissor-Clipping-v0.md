@@ -1,14 +1,14 @@
 # ADR: Scissor Clipping v0
 
-Status: Accepted; v0 complete behind explicit switch
+Status: Accepted; v0 complete and default-on
 
 Date: 2026-05-10
 
 ## Context
 
-The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor and Direct2D text clipping are available behind the explicit `--enable-scissor` opt-in mode.
+The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor and Direct2D text clipping are default-on in the post-GA renderer-foundation branch.
 
-Current behavior under `--enable-scissor`: clipped FillRect content is clipped by the D3D12 rasterizer scissor; DrawTextRun content is clipped by a per-run Direct2D axis-aligned clip around `DrawTextLayout`. This v0 path has completed diagnostic and manual validation, but the default PoC path remains `Diagnostic` for one explicit-switch soak round.
+Current default behavior: clipped FillRect content is clipped by the D3D12 rasterizer scissor; DrawTextRun content is clipped by a per-run Direct2D axis-aligned clip around `DrawTextLayout`. `--disable-scissor` and `--clip-mode diagnostic` remain rollback/diagnostic paths. The old `--enable-scissor` switch is retained as a no-op compatibility flag because scissor is already the default.
 
 The current interaction and style preset phase is frozen. Scissor work must not change scroll pumping, input ownership, button visual state, style preset behavior, theme behavior, or retained partial redraw behavior.
 
@@ -22,7 +22,7 @@ Introduce backend clip capability as a diagnostic boundary before implementing G
 | `Diagnostic` | Backend observes/counts clipped commands but renders exactly as before. |
 | `Scissor` | Backend applies backend-native scissor/clipping for supported commands. |
 
-D3D12 defaults to `Diagnostic`: it receives `ClipBounds`, counts clipped commands, and continues rendering existing FillRect/Text paths unchanged. `Scissor` mode is available behind an explicit backend flag and through the PoC `--enable-scissor` switch; it currently applies FillRect scissor and DrawTextRun Direct2D clipping. The normal PoC path still constructs the backend in `Diagnostic` mode; default enablement remains a later decision after the explicit-switch soak round.
+D3D12 defaults to `Scissor`: it applies FillRect scissor and DrawTextRun Direct2D clipping. `Diagnostic` mode remains available through `--disable-scissor` or `--clip-mode diagnostic`; it receives `ClipBounds`, counts clipped commands, and renders without applying backend clipping.
 
 ## Per-command Scissor Shape
 
@@ -88,11 +88,11 @@ Current `--diagnose` smokes switch the backend to `Scissor` for FillRect and tex
 
 - GPU partial redraw.
 - Nested clip stack redesign.
-- Default-enabling `--enable-scissor` during the explicit-switch soak round.
+- Removing the diagnostic rollback path.
 - Theme system.
 - Generic control abstraction.
 - Reworking scroll/input/button/style preset foundations.
 
 ## Follow-up
 
-Before making `--enable-scissor` the default, keep one explicit-switch soak round even though normal UI, `--enable-scissor`, `--debug-ui --enable-scissor`, resize-after-scroll, background hover wheel, and button hover/press/focus have passed manual checks with text clip v0 enabled. During that soak, do not expand the clip scope into nested clip stacks, retained partial redraw, text batching, theme work, or generic control abstraction.
+Default-on closeout: the explicit-switch soak round passed, so Scissor is now the default. Keep `Diagnostic` rollback available while future work avoids expanding the clip scope into nested clip stacks, retained partial redraw, text batching, theme work, or generic control abstraction.

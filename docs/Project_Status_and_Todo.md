@@ -13,6 +13,7 @@
 | [GA-Hardening-Plan.md](GA-Hardening-Plan.md) | Current GA/MVP hardening state, accepted risks, display/stability/performance evidence. |
 | [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md) | Remaining post-GA renderer and framework-promotion backlog. |
 | [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md) | Post-GA D3D12-only glyph atlas text renderer design. |
+| [Post-GA-Default-Baseline-Evidence-2026-05-18.md](Post-GA-Default-Baseline-Evidence-2026-05-18.md) | Local evidence for the post-GA default switch to GlyphAtlas text composition and Scissor clipping. |
 | [ADR-Scissor-Clipping-v0.md](ADR-Scissor-Clipping-v0.md) | Clip/scissor/text-clip v0 decision and frozen behavior. |
 | [LayoutDirtyV1-Design.md](LayoutDirtyV1-Design.md) | Layout dirty classification and StyleOnly planning boundary. |
 | [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md) | Diagnostics snapshot v0 boundary and formatter contract. |
@@ -27,7 +28,8 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Area | Status |
 |------|--------|
 | V1 core | Complete / regression-only. Do not reopen core feature scope for GA cleanup. |
-| Windows backend | D3D12 is the active v1 PoC backend. D3D11On12/D2D text overlay remains the default text path; the post-GA glyph atlas path is opt-in prototype work on `post-ga-renderer-foundation`. |
+| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; D3D11On12/D2D text overlay remains fallback and `--text-composition overlay` rollback. |
+| Backend clip | Scissor is the default backend clip mode; `--disable-scissor` / `--clip-mode diagnostic` remain diagnostic rollback paths. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
