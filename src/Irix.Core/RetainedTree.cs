@@ -84,6 +84,8 @@ public sealed class RetainedTree(VirtualNodeTree tree)
             return new ApplyResult([], prevRoot, prevSnapshot);
         }
 
+        // Legacy manual patch fallback for hand-authored tests/tools. Runtime diff batches
+        // carry HasCanonicalRoot=true and take the scratch-backed canonical path above.
         var dirty = new List<int>();
         var memory = batch.Memory.Span;
         var replacePatches = new Dictionary<int, VirtualNode>();

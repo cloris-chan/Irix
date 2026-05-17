@@ -159,6 +159,26 @@ internal readonly struct LayoutTreeNode(
     public static bool operator !=(LayoutTreeNode left, LayoutTreeNode right) => !left.Equals(right);
 }
 
+internal readonly struct LayoutElementRange(int ElementStart, int ElementCount) : IEquatable<LayoutElementRange>
+{
+    public int ElementStart { get; } = ElementStart;
+    public int ElementCount { get; } = ElementCount;
+
+    public bool Equals(LayoutElementRange other)
+    {
+        return ElementStart == other.ElementStart
+            && ElementCount == other.ElementCount;
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutElementRange other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(ElementStart, ElementCount);
+
+    public static bool operator ==(LayoutElementRange left, LayoutElementRange right) => left.Equals(right);
+
+    public static bool operator !=(LayoutElementRange left, LayoutElementRange right) => !left.Equals(right);
+}
+
 /// <summary>
 /// Maps a single <see cref="LayoutElement"/> index to the range of
 /// <see cref="DrawCommand"/>s it produces. Text/Rectangle → 1 command,

@@ -282,17 +282,20 @@ public readonly struct VirtualNode
             return;
         }
 
-        foreach (var child in children)
+        if (children.Length != 1)
         {
-            if (child.Kind == VirtualNodeKind.Text
-                && child.Content.TryGetText(out var label)
-                && !label.IsNone)
-            {
-                return;
-            }
+            throw new ArgumentException("Button nodes require exactly one explicit text label child.", nameof(children));
         }
 
-        throw new ArgumentException("Button nodes require an explicit text label child.", nameof(children));
+        var child = children[0];
+        if (child.Kind == VirtualNodeKind.Text
+            && child.Content.TryGetText(out var label)
+            && !label.IsNone)
+        {
+            return;
+        }
+
+        throw new ArgumentException("Button nodes require exactly one explicit text label child.", nameof(children));
     }
 
 }

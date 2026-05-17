@@ -108,10 +108,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             _retainedTextSnapshot = textSnapshot;
             _retainedViewport = viewportBounds;
 
-            // Extract MaxScrollY from the first ScrollContainer's diagnostics
-            LastMaxScrollY = _retainedLayoutResult.ScrollDiagnostics.Count > 0
-                ? _retainedLayoutResult.ScrollDiagnostics[0].MaxScrollY
-                : 0;
+            LastMaxScrollY = ResolveRootMaxScrollY(_retainedLayoutResult.ScrollDiagnostics);
         }
 
         var layout = _retainedLayout!;
@@ -182,6 +179,19 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         }
 
         return treeChanged ? LayoutRebuildReason.TreeStructure : LayoutRebuildReason.None;
+    }
+
+    private static double ResolveRootMaxScrollY(IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
+    {
+        foreach (var diagnostic in scrollDiagnostics)
+        {
+            if (diagnostic.DfsIndex == 0)
+            {
+                return diagnostic.MaxScrollY;
+            }
+        }
+
+        return 0;
     }
 
     private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)

@@ -14,6 +14,9 @@ internal readonly struct RenderScratchBuffer
     public ScratchList<LayoutTreeNode> CreateLayoutTreeNodeList(Span<LayoutTreeNode> initialBuffer) =>
         _arena.CreateList(initialBuffer);
 
+    public ScratchList<LayoutElementRange> CreateLayoutElementRangeList(Span<LayoutElementRange> initialBuffer) =>
+        _arena.CreateList(initialBuffer);
+
     public ScratchList<ScrollContainerDiag> CreateScrollContainerDiagList(Span<ScrollContainerDiag> initialBuffer) =>
         _arena.CreateList(initialBuffer);
 

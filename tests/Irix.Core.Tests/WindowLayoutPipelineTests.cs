@@ -1964,6 +1964,22 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void LayoutTree_button_label_child_dirty_maps_to_button_element_range()
+    {
+        var builder = new LayoutTreeBuilder();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
+            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3)));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var result = builder.BuildLayoutTree(root, viewport, [3]);
+
+        Assert.Equal(2, result.Elements.Count);
+        Assert.Single(result.DirtyElementRanges);
+        Assert.Equal((1, 1), result.DirtyElementRanges[0]);
+    }
+
+    [Fact]
     public void LayoutTree_add_remove_child_produces_parent_dirty_range()
     {
         var builder = new LayoutTreeBuilder();
@@ -2245,6 +2261,35 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(0, outer.ClippedElementCount);
         Assert.Equal(2, inner.VisibleElementCount);
         Assert.Equal(1, inner.ClippedElementCount);
+    }
+
+    [Fact]
+    public void RenderPipeline_last_max_scroll_uses_root_scroll_diagnostic()
+    {
+        var pipeline = new RenderPipeline();
+        var nested = VirtualNodeFactory.ScrollContainer(
+            new NodeKey(2),
+            [VirtualNodeProperty.Height(50)],
+            [
+                VirtualNodeBuilder.Text(_arena, "first", new NodeKey(3)),
+                VirtualNodeBuilder.Text(_arena, "second", new NodeKey(4)),
+                VirtualNodeBuilder.Text(_arena, "third", new NodeKey(5))
+            ]);
+        var root = VirtualNodeFactory.ScrollContainer(
+            new NodeKey(1),
+            [VirtualNodeProperty.Height(120)],
+            [nested]);
+        var viewport = new PixelRectangle(0, 0, 960, 200);
+
+        using var frame = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
+
+        var diagnostics = pipeline.LastLayoutResult!.ScrollDiagnostics;
+        Assert.Equal(2, diagnostics.Count);
+        Assert.Equal(1, diagnostics[0].DfsIndex);
+        Assert.Equal(0, diagnostics[1].DfsIndex);
+        var rootDiagnostic = diagnostics.Single(diag => diag.DfsIndex == 0);
+        Assert.Equal(rootDiagnostic.MaxScrollY, pipeline.LastMaxScrollY);
+        Assert.NotEqual(diagnostics[0].MaxScrollY, pipeline.LastMaxScrollY);
     }
 
     [Fact]

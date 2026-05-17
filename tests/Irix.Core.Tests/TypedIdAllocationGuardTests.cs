@@ -338,6 +338,24 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualNode_button_shape_is_exactly_one_text_label_child()
+    {
+        var label = VirtualNodeBuilder.Text(_arena, "label", new NodeKey(11));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Button,
+            children: ReadOnlySpan<VirtualNode>.Empty));
+
+        Assert.Throws<ArgumentException>(() => new VirtualNode(
+            VirtualNodeKind.Button,
+            children:
+            [
+                label,
+                VirtualNodeBuilder.Text(_arena, "extra", new NodeKey(12))
+            ]));
+    }
+
+    [Fact]
     public void VirtualNodePropertySupport_declares_control_support_sets()
     {
         Assert.True(VirtualNodePropertySupport.Supports(VirtualNodeKind.Button, VirtualPropertyKey.Width));
@@ -641,6 +659,7 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("new List<", differSource);
         Assert.Contains("KeyedLinearThreshold", differSource);
         Assert.Contains("CreateNodeKeyIndexMap", differSource);
+        Assert.Contains("Legacy manual patch fallback", retainedTreeSource);
 
         Assert.DoesNotContain("new HashSet<int>", renderPipelineSource);
         Assert.DoesNotContain("HashSet<int>", renderPipelineSource);
@@ -658,6 +677,8 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("Children[]", layoutBuilderSource);
         Assert.DoesNotContain("return [new LayoutTreeNode", layoutBuilderSource);
         Assert.DoesNotContain("children.ToArray()", layoutBuilderSource);
+        Assert.DoesNotContain("CountVirtualNodes", layoutBuilderSource);
+        Assert.Contains("LayoutElementRange", layoutBuilderSource);
         Assert.Contains("subtreeStart", layoutBuilderSource);
         Assert.Contains("subtreeCount", layoutBuilderSource);
         Assert.Contains("AdvanceDirtyCursor", layoutBuilderSource);
@@ -678,7 +699,7 @@ public class TypedIdAllocationGuardTests
 
         var layoutRecursiveSource = ExtractSourceBetween(
             layoutBuilderSource,
-            "private void LayoutNode",
+            "private int LayoutNode",
             "private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges");
         Assert.DoesNotContain("elements.ToArray()", layoutRecursiveSource);
         Assert.DoesNotContain("scrollDiags.ToArray()", layoutRecursiveSource);

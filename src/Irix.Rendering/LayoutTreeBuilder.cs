@@ -35,6 +35,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 {
     private const int InlineLayoutElementCapacity = 32;
     private const int InlineLayoutTreeNodeCapacity = 32;
+    private const int InlineLayoutElementRangeCapacity = 64;
     private const int InlineScrollDiagCapacity = 8;
     private const int InlineDirtyIndexCapacity = 32;
     private const int InlineRangeCapacity = 16;
@@ -54,10 +55,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         var scratch = new RenderScratchBuffer();
         Span<LayoutElement> elementStorage = stackalloc LayoutElement[InlineLayoutElementCapacity];
         Span<LayoutTreeNode> treeNodeStorage = stackalloc LayoutTreeNode[InlineLayoutTreeNodeCapacity];
+        Span<LayoutElementRange> elementRangeStorage = stackalloc LayoutElementRange[InlineLayoutElementRangeCapacity];
         Span<ScrollContainerDiag> scrollDiagStorage = stackalloc ScrollContainerDiag[InlineScrollDiagCapacity];
         var state = new LayoutBuildState(
             scratch.CreateLayoutElementList(elementStorage),
             scratch.CreateLayoutTreeNodeList(treeNodeStorage),
+            scratch.CreateLayoutElementRangeList(elementRangeStorage),
             scratch.CreateScrollContainerDiagList(scrollDiagStorage),
             style);
         try
@@ -65,7 +68,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             state.LayoutRoot(root, viewportBounds);
 
             var dirtyRanges = dirtyNodes is { Count: > 0 }
-                ? CollectDirtyRanges(state.TreeNodes, dirtyNodes, scratch)
+                ? CollectDirtyRanges(state.ElementRanges, dirtyNodes, scratch)
                 : [];
 
             return new LayoutTreeResult(state.ElementsToArray(), state.TreeNodesToArray(), dirtyRanges, state.ScrollDiagnosticsToArray());
@@ -88,6 +91,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     {
         private ScratchList<LayoutElement> _elements;
         private ScratchList<LayoutTreeNode> _treeNodes;
+        private ScratchList<LayoutElementRange> _elementRanges;
         private ScratchList<ScrollContainerDiag> _scrollDiags;
         private readonly LayoutStyle _style;
         private int _cursorY;
@@ -96,11 +100,13 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         public LayoutBuildState(
             ScratchList<LayoutElement> elements,
             ScratchList<LayoutTreeNode> treeNodes,
+            ScratchList<LayoutElementRange> elementRanges,
             ScratchList<ScrollContainerDiag> scrollDiags,
             LayoutStyle style)
         {
             _elements = elements;
             _treeNodes = treeNodes;
+            _elementRanges = elementRanges;
             _scrollDiags = scrollDiags;
             _style = style;
             _cursorY = style.VerticalPadding;
@@ -108,6 +114,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         }
 
         public readonly ReadOnlySpan<LayoutTreeNode> TreeNodes => _treeNodes.Written;
+
+        public readonly ReadOnlySpan<LayoutElementRange> ElementRanges => _elementRanges.Written;
 
         public LayoutElement[] ElementsToArray() => _elements.ToArray();
 
@@ -133,39 +141,37 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         {
             _elements.Dispose();
             _treeNodes.Dispose();
+            _elementRanges.Dispose();
             _scrollDiags.Dispose();
         }
 
-        private void LayoutNode(VirtualNode node, int dfsIndex)
+        private int LayoutNode(VirtualNode node, int dfsIndex)
         {
             switch (node.Kind)
             {
                 case VirtualNodeKind.ScrollContainer:
-                    LayoutScrollContainer(node, dfsIndex);
-                    return;
+                    return LayoutScrollContainer(node, dfsIndex);
 
                 case VirtualNodeKind.Text:
-                    LayoutText(node, dfsIndex);
-                    return;
+                    return LayoutText(node, dfsIndex);
 
                 case VirtualNodeKind.Rectangle:
-                    LayoutRectangle(node, dfsIndex);
-                    return;
+                    return LayoutRectangle(node, dfsIndex);
 
                 case VirtualNodeKind.Button:
-                    LayoutButton(node, dfsIndex);
-                    return;
+                    return LayoutButton(node, dfsIndex);
 
                 default:
-                    return;
+                    RegisterElementRange(dfsIndex, 0, 0);
+                    return 1;
             }
         }
 
-        private void LayoutScrollContainer(VirtualNode node, int dfsIndex)
+        private int LayoutScrollContainer(VirtualNode node, int dfsIndex)
         {
             var treeNodeIndex = _treeNodes.Count;
             _treeNodes.Add(default);
-            var childDfsIndex = dfsIndex + 1;
+            var consumedCount = 1;
             var contentTop = _cursorY;
             var isRootContainer = _ctx.Depth == 0;
             var containerClipLeft = isRootContainer ? 0 : _ctx.Style.HorizontalPadding;
@@ -197,8 +203,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             var subtreeStart = treeNodeIndex + 1;
             foreach (var child in node.Children)
             {
-                LayoutNode(child, childDfsIndex);
-                childDfsIndex += CountVirtualNodes(child);
+                consumedCount += LayoutNode(child, dfsIndex + consumedCount);
             }
 
             var subtreeCount = _treeNodes.Count - subtreeStart;
@@ -244,18 +249,22 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             if (subtreeCount == 0)
             {
                 _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, 0, 0, subtreeStart, 0);
-                return;
+                RegisterElementRange(dfsIndex, 0, 0);
+                return consumedCount;
             }
 
             _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, elementStart, elementCount, subtreeStart, subtreeCount);
+            RegisterElementRange(dfsIndex, elementStart, elementCount);
+            return consumedCount;
         }
 
-        private void LayoutText(VirtualNode node, int dfsIndex)
+        private int LayoutText(VirtualNode node, int dfsIndex)
         {
             var content = GetTextContent(node);
             if (content.IsNone)
             {
-                return;
+                RegisterElementRange(dfsIndex, 0, 0);
+                return 1;
             }
 
             var elementIndex = _elements.Count;
@@ -266,9 +275,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 Text: content));
             _cursorY += _ctx.Style.TextHeight + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Text, elementIndex, 1, 0, 0));
+            RegisterElementRange(dfsIndex, elementIndex, 1);
+            return 1;
         }
 
-        private void LayoutRectangle(VirtualNode node, int dfsIndex)
+        private int LayoutRectangle(VirtualNode node, int dfsIndex)
         {
             var properties = new PropertyReader(node.Properties);
             var rectangleBounds = new PixelRectangle(
@@ -280,9 +291,11 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             _elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: _ctx.ClipBounds));
             _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
+            RegisterElementRange(dfsIndex, elementIndex, 1);
+            return 1;
         }
 
-        private void LayoutButton(VirtualNode node, int dfsIndex)
+        private int LayoutButton(VirtualNode node, int dfsIndex)
         {
             var label = GetButtonLabel(node);
             if (label.IsNone)
@@ -315,6 +328,25 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 ButtonState: buttonState));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
+            RegisterElementRange(dfsIndex, elementIndex, 1);
+
+            var childCount = node.Children.Length;
+            for (var i = 0; i < childCount; i++)
+            {
+                RegisterElementRange(dfsIndex + 1 + i, elementIndex, 1);
+            }
+
+            return 1 + childCount;
+        }
+
+        private void RegisterElementRange(int dfsIndex, int elementStart, int elementCount)
+        {
+            while (_elementRanges.Count <= dfsIndex)
+            {
+                _elementRanges.Add(default);
+            }
+
+            _elementRanges[dfsIndex] = new LayoutElementRange(elementStart, elementCount);
         }
 
         private void OffsetElementY(int elementStart, int elementCount, int offsetY)
@@ -339,7 +371,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     }
 
     private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges(
-        ReadOnlySpan<LayoutTreeNode> treeNodes,
+        ReadOnlySpan<LayoutElementRange> elementRanges,
         IReadOnlyList<int> dirtyIndices,
         RenderScratchBuffer scratch)
     {
@@ -359,7 +391,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             var dirtyCursor = 0;
             try
             {
-                CollectDirtyRangesRecursive(treeNodes, sortedDirty.Written, ref dirtyCursor, ref ranges);
+                CollectDirtyRangesRecursive(elementRanges, sortedDirty.Written, ref dirtyCursor, ref ranges);
                 return MergeDirtyRanges(ref ranges);
             }
             finally
@@ -374,16 +406,17 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     }
 
     private static void CollectDirtyRangesRecursive(
-        ReadOnlySpan<LayoutTreeNode> treeNodes,
+        ReadOnlySpan<LayoutElementRange> elementRanges,
         ReadOnlySpan<int> sortedDirtyIndices,
         ref int dirtyCursor,
         scoped ref ScratchList<(int Start, int Count)> ranges)
     {
-        foreach (var node in treeNodes)
+        for (var dfsIndex = 0; dfsIndex < elementRanges.Length; dfsIndex++)
         {
-            if (AdvanceDirtyCursor(sortedDirtyIndices, ref dirtyCursor, node.DfsIndex) && node.ElementCount > 0)
+            var range = elementRanges[dfsIndex];
+            if (AdvanceDirtyCursor(sortedDirtyIndices, ref dirtyCursor, dfsIndex) && range.ElementCount > 0)
             {
-                ranges.Add((node.ElementStart, node.ElementCount));
+                ranges.Add((range.ElementStart, range.ElementCount));
             }
         }
     }
@@ -450,16 +483,6 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         public static readonly RangeStartComparer Instance = new();
 
         public int Compare((int Start, int Count) x, (int Start, int Count) y) => x.Start.CompareTo(y.Start);
-    }
-
-    private static int CountVirtualNodes(VirtualNode node)
-    {
-        var count = 1;
-        foreach (var child in node.Children)
-        {
-            count += CountVirtualNodes(child);
-        }
-        return count;
     }
 
     private static TextNodeContent GetButtonLabel(VirtualNode node)
