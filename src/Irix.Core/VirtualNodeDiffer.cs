@@ -130,23 +130,13 @@ public static class VirtualNodeDiffer
 
     private static void DiffChildrenByKeyed(ReadOnlySpan<VirtualNode> oldChildren, ReadOnlySpan<VirtualNode> newChildren, int parentIndex, List<VirtualNodePatch> patches, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
-        // Build key → index map for old children
-        var oldKeyMap = new Dictionary<NodeKey, int>(oldChildren.Length);
-        for (var i = 0; i < oldChildren.Length; i++)
-        {
-            if (oldChildren[i].Key != NodeKey.None)
-            {
-                oldKeyMap[oldChildren[i].Key] = i;
-            }
-        }
-
         var childOffset = 0;
         for (var i = 0; i < newChildren.Length; i++)
         {
             var newChild = newChildren[i];
             var childIndex = parentIndex + 1 + childOffset;
 
-            if (newChild.Key != NodeKey.None && oldKeyMap.TryGetValue(newChild.Key, out var oldIdx))
+            if (newChild.Key != NodeKey.None && TryFindChildIndexByKey(oldChildren, newChild.Key, out var oldIdx))
             {
                 // Same key → diff recursively
                 DiffNode(oldChildren[oldIdx], newChild, childIndex, patches, prevSnapshot, nextSnapshot);
@@ -161,20 +151,43 @@ public static class VirtualNodeDiffer
         }
 
         // Remove old children whose keys are not in new
-        var newKeySet = new HashSet<NodeKey>();
-        for (var i = 0; i < newChildren.Length; i++)
-        {
-            if (newChildren[i].Key != NodeKey.None) newKeySet.Add(newChildren[i].Key);
-        }
-
         for (var i = 0; i < oldChildren.Length; i++)
         {
-            if (oldChildren[i].Key != NodeKey.None && !newKeySet.Contains(oldChildren[i].Key))
+            if (oldChildren[i].Key != NodeKey.None && !ContainsChildKey(newChildren, oldChildren[i].Key))
             {
                 patches.Add(new VirtualNodePatch(VirtualNodePatchOperation.Remove, parentIndex + 1 + childOffset, oldChildren[i]));
                 childOffset += CountNodes(oldChildren[i]);
             }
         }
+    }
+
+    private static bool TryFindChildIndexByKey(ReadOnlySpan<VirtualNode> children, NodeKey key, out int index)
+    {
+        // Match the old Dictionary assignment behavior: duplicate keys resolve to the last child.
+        for (var i = children.Length - 1; i >= 0; i--)
+        {
+            if (children[i].Key == key)
+            {
+                index = i;
+                return true;
+            }
+        }
+
+        index = -1;
+        return false;
+    }
+
+    private static bool ContainsChildKey(ReadOnlySpan<VirtualNode> children, NodeKey key)
+    {
+        for (var i = 0; i < children.Length; i++)
+        {
+            if (children[i].Key == key)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int CountNodes(VirtualNode node)

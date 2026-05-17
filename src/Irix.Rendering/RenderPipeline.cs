@@ -185,10 +185,9 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
     private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         var classifications = new List<LayoutDirtyClassification>(dirtyNodes.Count);
-        var seen = new HashSet<int>();
         foreach (var dirtyNode in dirtyNodes)
         {
-            if (!seen.Add(dirtyNode))
+            if (ContainsDfsIndex(classifications, dirtyNode))
             {
                 continue;
             }
@@ -200,6 +199,19 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         }
 
         return classifications;
+    }
+
+    private static bool ContainsDfsIndex(List<LayoutDirtyClassification> classifications, int dfsIndex)
+    {
+        for (var i = 0; i < classifications.Count; i++)
+        {
+            if (classifications[i].DfsIndex == dfsIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static DirtyNodeClassification ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)

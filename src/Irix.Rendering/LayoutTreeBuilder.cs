@@ -63,7 +63,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         var treeNodes = LayoutNode(root, 0, ref cursorY, elements, ref ctx);
 
         var dirtyRanges = dirtyNodes is { Count: > 0 }
-            ? RangeUtils.Merge(CollectDirtyRanges(treeNodes, new HashSet<int>(dirtyNodes)))
+            ? RangeUtils.Merge(CollectDirtyRanges(treeNodes, dirtyNodes))
             : [];
 
         return new LayoutTreeResult(elements, treeNodes, dirtyRanges, scrollDiags);
@@ -247,7 +247,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
     private static List<(int Start, int Count)> CollectDirtyRanges(
         LayoutTreeNode[] treeNodes,
-        HashSet<int> dirtyIndices)
+        IReadOnlyList<int> dirtyIndices)
     {
         var ranges = new List<(int Start, int Count)>();
         CollectDirtyRangesRecursive(treeNodes, dirtyIndices, ranges);
@@ -257,12 +257,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
     private static void CollectDirtyRangesRecursive(
         LayoutTreeNode[] treeNodes,
-        HashSet<int> dirtyIndices,
+        IReadOnlyList<int> dirtyIndices,
         List<(int Start, int Count)> ranges)
     {
         foreach (var node in treeNodes)
         {
-            if (dirtyIndices.Contains(node.DfsIndex))
+            if (ContainsDirtyIndex(dirtyIndices, node.DfsIndex))
             {
                 ranges.Add((node.ElementStart, node.ElementCount));
             }
@@ -272,6 +272,19 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 CollectDirtyRangesRecursive(node.Children, dirtyIndices, ranges);
             }
         }
+    }
+
+    private static bool ContainsDirtyIndex(IReadOnlyList<int> dirtyIndices, int dfsIndex)
+    {
+        for (var i = 0; i < dirtyIndices.Count; i++)
+        {
+            if (dirtyIndices[i] == dfsIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static int CountVirtualNodes(VirtualNode node)

@@ -594,6 +594,26 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Retained_diff_and_dirty_range_hot_paths_do_not_allocate_hash_collections()
+    {
+        var root = FindRepoRoot();
+        var differSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "VirtualNodeDiffer.cs"));
+        var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
+        var layoutBuilderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+
+        Assert.DoesNotContain("new Dictionary<NodeKey", differSource);
+        Assert.DoesNotContain("new HashSet<NodeKey>", differSource);
+        Assert.DoesNotContain("Dictionary<NodeKey", differSource);
+        Assert.DoesNotContain("HashSet<NodeKey>", differSource);
+
+        Assert.DoesNotContain("new HashSet<int>", renderPipelineSource);
+        Assert.DoesNotContain("HashSet<int>", renderPipelineSource);
+
+        Assert.DoesNotContain("new HashSet<int>", layoutBuilderSource);
+        Assert.DoesNotContain("HashSet<int>", layoutBuilderSource);
+    }
+
+    [Fact]
     public void Input_ownership_diagnostics_use_ring_buffer_not_remove_at()
     {
         var root = FindRepoRoot();
