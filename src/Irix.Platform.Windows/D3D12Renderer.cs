@@ -39,6 +39,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
     private D3D12TextRenderer? _textRenderer;
+    private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
     private readonly nint _hwnd;
     private readonly Lock _resizeLock = new();
     private int _width;
@@ -174,9 +175,9 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public int Width => Volatile.Read(ref _width);
     public int Height => Volatile.Read(ref _height);
 
-    public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false);
+    public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false) || (_glyphAtlasTextRenderer?.IsDeviceRemoved ?? false);
 
-    public string? DeviceErrorReason => _deviceErrorReason ?? _textRenderer?.DeviceErrorReason;
+    public string? DeviceErrorReason => _deviceErrorReason ?? _textRenderer?.DeviceErrorReason ?? _glyphAtlasTextRenderer?.DeviceErrorReason;
 
     public event Action? DeviceLost;
 
@@ -185,9 +186,15 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         return _textRenderer?.GetDiagnostics();
     }
 
+    public D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? GetGlyphAtlasTextDiagnostics()
+    {
+        return _glyphAtlasTextRenderer?.GetDiagnostics();
+    }
+
     public void ResetTextDiagnostics()
     {
         _textRenderer?.ResetDiagnostics();
+        _glyphAtlasTextRenderer?.ResetDiagnostics();
     }
 
     /// <summary>Snapshot of frame serial counters for diagnostics.</summary>
@@ -460,6 +467,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
         {
             renderTextWithOverlayFallback = !TryRecordGlyphAtlasTextPass(textRuns, resources);
+            if (_deviceRemoved)
+            {
+                return;
+            }
         }
 
         if (!renderTextWithOverlayFallback)
@@ -487,13 +498,29 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     private bool TryRecordGlyphAtlasTextPass(ReadOnlySpan<D3D12TextRenderer.TextData> textRuns, IFrameResourceResolver resources)
     {
-        _ = textRuns;
-        _ = resources;
+        D3D12GlyphAtlasTextRenderer glyphAtlasTextRenderer;
+        try
+        {
+            glyphAtlasTextRenderer = _glyphAtlasTextRenderer ??= new D3D12GlyphAtlasTextRenderer(_device);
+        }
+        catch (COMException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: 0x{ex.ErrorCode:X8}");
+            return false;
+        }
+        catch (InvalidOperationException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: {ex.Message}");
+            return false;
+        }
 
-        // The D3D12 glyph atlas final-composition pass belongs here, before the
-        // command list is closed/executed. Until the atlas pipeline exists,
-        // preserve the GA overlay behavior by falling back to D3D11On12/D2D.
-        return false;
+        var recorded = glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height);
+        if (!recorded && glyphAtlasTextRenderer.IsDeviceRemoved)
+        {
+            MarkDeviceRemoved(glyphAtlasTextRenderer.DeviceErrorReason ?? "Glyph atlas text pass failed");
+        }
+
+        return recorded;
     }
 
     private bool RenderOverlayTextAndMaybeSync(
@@ -563,9 +590,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     private void HandleDeviceError(Exception? ex, string context = "Unknown")
     {
+        MarkDeviceRemoved(FormatDeviceError(ex, context));
+    }
+
+    private void MarkDeviceRemoved(string reason)
+    {
         if (_deviceRemoved) return;
         _deviceRemoved = true;
-        _deviceErrorReason = FormatDeviceError(ex, context);
+        _deviceErrorReason = reason;
         System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
         DeviceLost?.Invoke();
     }
@@ -709,6 +741,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             _textRenderer?.Dispose();
             _textRenderer = null;
+            _glyphAtlasTextRenderer?.Dispose();
+            _glyphAtlasTextRenderer = null;
             _renderer2D?.Dispose();
             _renderer2D = null;
 
@@ -856,6 +890,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _ = WaitForGpu();
         _textRenderer?.Dispose();
         _textRenderer = null;
+        _glyphAtlasTextRenderer?.Dispose();
+        _glyphAtlasTextRenderer = null;
         _renderer2D?.Dispose();
         _renderer2D = null;
         for (var i = 0; i < FrameCount; i++)

@@ -84,6 +84,8 @@ D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
 
 Phase 1 foundation keeps the current overlay path as the default runtime behavior and adds only an internal composition seam. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data; D3D11On12/D2D overlay remains the correctness fallback until the D3D12 atlas pass is complete. This phase does not change public API or `IDrawingBackend.Execute`.
 
+The first atlas execution path is opt-in with `--text-composition glyph-atlas`. It records a D3D12 glyph pass for basic single-line ASCII runs and falls back to the overlay renderer for unsupported text. Full shaping, wrapping, color glyphs, fallback fonts, clipped text runs, eviction, and production enablement remain follow-up work.
+
 | Work item | Scope | Acceptance criteria |
 |-----------|-------|---------------------|
 | Atlas design | Define glyph key, atlas page size, eviction, scale/DPI keying, color handling, clipping, and upload lifecycle | Design doc approved; no public backend API change |

@@ -48,7 +48,7 @@ internal static class Program
             var syncSampleArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(2).FirstOrDefault();
             if (int.TryParse(syncSampleArg, out var sampleCount) && sampleCount > 0) syncSampleCount = sampleCount;
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            SyncDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, syncFrameCount, syncSampleCount, ParseTextOverlaySyncStrategy(args));
+            SyncDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, syncFrameCount, syncSampleCount, ParseTextOverlaySyncStrategy(args), ParseTextCompositionMode(args));
             return;
         }
 
@@ -77,6 +77,7 @@ internal static class Program
         var syncTextOverlay = !args.Contains("--no-sync-text-overlay");
         d3d12Renderer.SyncTextOverlay = syncTextOverlay;
         d3d12Renderer.TextOverlaySyncStrategy = ParseTextOverlaySyncStrategy(args);
+        d3d12Renderer.TextCompositionMode = ParseTextCompositionMode(args);
         var displayScale = platformHost.Screens[0].Scale.Normalize();
 
         Action<double>? maxScrollYCallback = null;
@@ -182,6 +183,7 @@ internal static class Program
         Console.WriteLine($"Partial apply: {(enablePartialApply ? "ENABLED (default)" : "DISABLED (--no-partial-apply)")}");
         Console.WriteLine($"Sync text overlay: {(syncTextOverlay ? "ENABLED (default)" : "DISABLED (--no-sync-text-overlay)")}");
         Console.WriteLine($"Text overlay sync strategy: {d3d12Renderer.TextOverlaySyncStrategy}");
+        Console.WriteLine($"Text composition mode: {d3d12Renderer.TextCompositionMode}");
         Console.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
 
@@ -324,6 +326,17 @@ internal static class Program
             "d3d11-query" or "d3d11query" => TextOverlaySyncStrategy.D3D11Query,
             "d3d12-fence" or "d3d12fence" or "d3d12-fence-after-overlay" or "d3d12fenceafteroverlay" => TextOverlaySyncStrategy.D3D12FenceAfterOverlay,
             _ => TextOverlaySyncStrategy.D3D12FenceAfterOverlay
+        };
+    }
+
+    internal static TextCompositionMode ParseTextCompositionMode(string[] args)
+    {
+        var value = args.SkipWhile(a => a != "--text-composition").Skip(1).FirstOrDefault();
+        return value?.ToLowerInvariant() switch
+        {
+            "glyph-atlas" or "glyphatlas" or "atlas" => TextCompositionMode.GlyphAtlas,
+            "overlay" => TextCompositionMode.Overlay,
+            _ => TextCompositionMode.Overlay
         };
     }
 

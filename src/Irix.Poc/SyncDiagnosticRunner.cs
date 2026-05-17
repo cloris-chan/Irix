@@ -11,7 +11,12 @@ namespace Irix.Poc;
 /// </summary>
 internal static class SyncDiagnosticRunner
 {
-    internal static void Run(TextWriter output, int frameCount = 300, int sampleCount = 1, TextOverlaySyncStrategy syncStrategy = TextOverlaySyncStrategy.D3D12FenceAfterOverlay)
+    internal static void Run(
+        TextWriter output,
+        int frameCount = 300,
+        int sampleCount = 1,
+        TextOverlaySyncStrategy syncStrategy = TextOverlaySyncStrategy.D3D12FenceAfterOverlay,
+        TextCompositionMode textCompositionMode = TextCompositionMode.Overlay)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
@@ -19,7 +24,8 @@ internal static class SyncDiagnosticRunner
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-    d3d12Renderer.TextOverlaySyncStrategy = syncStrategy;
+        d3d12Renderer.TextOverlaySyncStrategy = syncStrategy;
+        d3d12Renderer.TextCompositionMode = textCompositionMode;
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
         using var compositor = new DrawingBackendCompositor(d3d12Backend);
         compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
@@ -42,6 +48,7 @@ internal static class SyncDiagnosticRunner
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         output.WriteLine($"SyncTextOverlay: {d3d12Renderer.SyncTextOverlay}");
         output.WriteLine($"Text overlay sync strategy: {d3d12Renderer.TextOverlaySyncStrategy}");
+        output.WriteLine($"Text composition mode: {d3d12Renderer.TextCompositionMode}");
         output.WriteLine();
 
         var sampleSummaries = new List<SyncSampleSummary>(sampleCount);
@@ -65,6 +72,12 @@ internal static class SyncDiagnosticRunner
 
         var finalDiag = d3d12Backend.FrameSerialDiagnostics;
         output.WriteLine($"Final: frameSerial={finalDiag.FrameSerial}, presentSerial={finalDiag.PresentSerial}, syncWaits={finalDiag.SyncWaitCount}");
+        var atlasDiag = d3d12Renderer.GetGlyphAtlasTextDiagnostics();
+        if (atlasDiag.HasValue)
+        {
+            var d = atlasDiag.Value;
+            output.WriteLine($"Glyph atlas: cachedGlyphs={d.CachedGlyphs}, drawnGlyphs={d.DrawnGlyphs}, uploads={d.UploadedBytes} bytes, hits={d.CacheHits}, misses={d.CacheMisses}, fallbacks={d.FallbackFrames}, unsupportedRuns={d.UnsupportedRuns}");
+        }
         output.WriteLine("=== Sync diagnostic complete ===");
     }
 
@@ -93,7 +106,7 @@ internal static class SyncDiagnosticRunner
                 [
                     VirtualNodeBuilder.Button(arena, "SyncTest", new NodeKey(2),
                         VirtualNodeProperty.Action(new ActionId(300))),
-                    VirtualNodeBuilder.Text(arena, $"Frame {i} �?sync overhead measurement", new NodeKey(3)),
+                    VirtualNodeBuilder.Text(arena, $"Frame {i} sync overhead measurement", new NodeKey(3)),
                     VirtualNodeBuilder.Button(arena, "Another", new NodeKey(4),
                         VirtualNodeProperty.Action(new ActionId(301))),
                 ]);

@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Platform.Windows;
 using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
@@ -8,6 +9,15 @@ namespace Irix.Core.Tests;
 
 public sealed class ProgramDiagnosticsTests
 {
+    [Fact]
+    public void Text_composition_mode_defaults_to_overlay_and_accepts_glyph_atlas()
+    {
+        Assert.Equal(TextCompositionMode.Overlay, Program.ParseTextCompositionMode([]));
+        Assert.Equal(TextCompositionMode.Overlay, Program.ParseTextCompositionMode(["--text-composition", "overlay"]));
+        Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "glyph-atlas"]));
+        Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "atlas"]));
+    }
+
     #region Scroll Snapshot
 
     [Fact]

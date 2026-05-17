@@ -12,6 +12,8 @@ The first post-GA renderer-foundation change introduces an internal text composi
 
 DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to remove D3D11On12 / D2D / DirectWrite from final overlay composition, not to remove DirectWrite from text processing. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
 
+The first executable atlas path is intentionally narrow and opt-in. Basic single-line ASCII runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. Unsupported runs, including complex shaping, non-ASCII fallback faces, wrapping, and text clips, must fall back to the existing overlay renderer until the atlas path is correctness-complete for those cases.
+
 ## Non-Goals
 
 - No implementation before the current GA candidate.
