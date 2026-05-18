@@ -4,6 +4,26 @@ namespace Irix.Platform.Windows;
 
 internal static class GlyphAtlasTextCompositionHelpers
 {
+    internal static int AppendOverlayFallbackRuns(
+        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        IFrameResourceResolver resources,
+        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns)
+    {
+        var fallbackRunCount = 0;
+        foreach (var textRun in textRuns)
+        {
+            if (!ShouldRenderTextRun(textRun, resources))
+            {
+                continue;
+            }
+
+            overlayFallbackRuns.Add(textRun);
+            fallbackRunCount++;
+        }
+
+        return fallbackRunCount;
+    }
+
     internal static D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason GetUnsupportedReason(
         ReadOnlySpan<char> text,
         TextStyle style)
@@ -22,6 +42,17 @@ internal static class GlyphAtlasTextCompositionHelpers
         }
 
         return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
+    }
+
+    internal static bool ShouldRenderTextRun(D3D12TextRenderer.TextData textRun, IFrameResourceResolver resources)
+    {
+        if (textRun.Width <= 0 || textRun.Height <= 0)
+        {
+            return false;
+        }
+
+        var runResolver = textRun.Resolver ?? resources;
+        return !runResolver.Resolve(textRun.Text).IsEmpty;
     }
 
     internal static float ComputeAlignedPenX(

@@ -180,6 +180,7 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 768,
             RasterScratchResizes: 2)
+            .WithAtlasRuns(7)
             .WithFallback(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
 
@@ -187,6 +188,8 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("cachedGlyphs=12", summary);
         Assert.Contains("uploads=4096 bytes", summary);
+        Assert.Contains("atlasRuns=7", summary);
+        Assert.Contains("overlayFallbackRuns=0", summary);
         Assert.Contains("fallbacks=2", summary);
         Assert.Contains("NonAscii=1", summary);
         Assert.Contains("initFailurePhase=ShaderCompile", summary);
@@ -245,6 +248,53 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("RecordFailed=1", summary);
         Assert.Contains("initFailurePhase=None", summary);
         Assert.Contains("recordFailurePhase=Record", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_fallback_run_list_keeps_only_renderable_runs()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var style = resources.AddTextStyle(TextStyle.Default);
+        var visibleText = resources.AddText("visible");
+        var emptyText = resources.AddText("");
+        resources.Seal();
+        using var fallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
+        var runs = new[]
+        {
+            TextRun(visibleText, style, width: 100, height: 20),
+            TextRun(emptyText, style, width: 100, height: 20),
+            TextRun(visibleText, style, width: 0, height: 20)
+        };
+
+        var count = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(runs, resources, fallbackRuns);
+
+        Assert.Equal(1, count);
+        Assert.Equal(1, fallbackRuns.Count);
+        Assert.Equal(visibleText, fallbackRuns.Span[0].Text);
+    }
+
+    [Fact]
+    public void Glyph_atlas_fallback_diagnostics_count_reasons_per_run()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithFallback(3, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii);
+
+        Assert.Equal(1, diagnostics.FallbackFrames);
+        Assert.Equal(3, diagnostics.UnsupportedRuns);
+        Assert.Equal(3, diagnostics.OverlayFallbackRuns);
+        Assert.Equal(3, diagnostics.Reasons.NonAscii);
     }
 
     [Fact]
@@ -812,7 +862,10 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, uploads=2048 bytes, hits=30, misses=8, fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
+            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, atlasRuns=0, overlayFallbackRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+                + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
+                + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
+                + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
             "=== Resize diagnostic mode complete ===",
             string.Empty
         ]), writer.ToString());
@@ -1018,6 +1071,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     #endregion
+
+    private static D3D12TextRenderer.TextData TextRun(TextSlice text, ResourceHandle style, float width, float height)
+    {
+        return new D3D12TextRenderer.TextData(
+            X: 0,
+            Y: 0,
+            Width: width,
+            Height: height,
+            R: 1,
+            G: 1,
+            B: 1,
+            A: 1,
+            Text: text,
+            Style: style,
+            EffectiveClip: default,
+            ClipEnabled: false,
+            ResolvedStyle: TextStyle.Default);
+    }
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";

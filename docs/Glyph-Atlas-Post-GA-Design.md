@@ -8,7 +8,7 @@ Introduce an explicit glyph atlas/cache after V1 GA only if profiling shows Dire
 
 ## Phase 1 Composition Seam
 
-The first post-GA renderer-foundation change introduced an internal text composition mode seam only. After opt-in smoke evidence, the D3D12 PoC baseline now defaults to `GlyphAtlas`; `--text-composition overlay` remains the old overlay rollback and unsupported atlas frames fall back to the overlay renderer. The preserved overlay path is still `D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present`.
+The first post-GA renderer-foundation change introduced an internal text composition mode seam only. After opt-in smoke evidence, the D3D12 PoC baseline now defaults to `GlyphAtlas`; `--text-composition overlay` remains the old overlay rollback. Mixed fallback v0 keeps accepted atlas runs in the D3D12 text pass and sends unsupported renderable runs to the overlay renderer. Initialization or runtime record failure still falls back through overlay for every renderable text run in that frame. The preserved overlay path is still `D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present`.
 
 DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to remove D3D11On12 / D2D / DirectWrite from final overlay composition, not to remove DirectWrite from text processing. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
 
@@ -26,12 +26,35 @@ Current implementation status:
 | Shader packaging | Embedded DXBC bytecode; no runtime `D3DCompile` dependency in the D3D12 rect or glyph-atlas pass |
 | Alignment | Leading, center, and trailing are supported for no-wrap line widths |
 | Clip | Per-run scissor clip supported for accepted atlas runs |
-| Fallback | Overlay renderer for unsupported/failed atlas frames; fallback reasons are diagnostic output |
-| Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, mixed per-run atlas/overlay composition |
+| Fallback | Overlay renderer for unsupported runs; initialization/record failure falls back all renderable runs for that frame |
+| Mixed ordering | Rect pass -> atlas accepted runs -> overlay fallback runs -> overlay sync when used -> Present |
+| Diagnostics | `AtlasRuns`, `OverlayFallbackRuns`, fallback frames, unsupported runs, and fallback reason counts |
+| Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, command-order-perfect mixed text z-order |
 
 Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` with overlay rollback. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
 
 P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list. Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer. Runtime record/upload/map failures disable the atlas instance and fall back to overlay with `recordFailurePhase` diagnostics; they are not reported as device lost unless the renderer observes an actual device-removed condition.
+
+Mixed fallback v0 update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It fills a caller-owned fallback run list while recording atlas quads for accepted runs. `D3D12Renderer` passes that fallback subset to `D3D12TextRenderer.Render(...)`, so NonAscii no longer forces every text run in the frame through overlay. `IDrawingBackend.Execute` and the public drawing contract remain unchanged.
+
+## Mixed Fallback v0
+
+Frame ordering is fixed:
+
+```text
+D3D12 rect pass -> D3D12 glyph atlas accepted text runs -> D3D11On12 / D2D overlay fallback text runs -> sync if overlay ran -> Present
+```
+
+This preserves the current renderer's broad visual model: rectangles are drawn first, then text is drawn over rectangles. It does not fully preserve original `DrawCommand` order for overlapping text runs split across atlas and overlay. Overlay fallback runs are always drawn after atlas accepted runs, so a fallback run can appear above an atlas run even if the original command order placed it earlier. That is the explicit v0 z-order limitation; removing it would require command-order-aware text pass partitioning or a D3D12-only fallback path, not just a narrower overlay list.
+
+The fallback run list is frame-local and caller-owned. `TryRecord` classifies each renderable text run:
+
+- Accepted ASCII / `NoWrap` runs record atlas vertices and increment `AtlasRuns`.
+- Unsupported runs are appended to the fallback list with a per-run fallback reason.
+- Empty or zero-size text runs are ignored by both atlas and overlay paths.
+- Atlas initialization failure or runtime record failure appends every renderable run to the fallback list for that frame.
+
+`D3D12TextRenderer.Render(...)` remains the overlay drawing primitive, but in `GlyphAtlas` mode it receives only fallback runs. In `Overlay` rollback mode it still receives the full text run span.
 
 ## Shader Bytecode Provenance
 
@@ -93,9 +116,9 @@ After updating embedded blobs, run the shader bytecode decode tests plus D3D12 s
 Known limitations:
 
 - Shader bytecode is currently embedded inline. A future build-time shader asset pipeline can replace the inline packaging if shader source grows, but the runtime compiler dependency is removed.
-- Fallback is whole-frame fallback. If any text run is unsupported, text composition falls back to overlay for the frame.
+- Mixed fallback v0 has text z-order limits: fallback overlay runs draw after atlas runs, regardless of original relative text command order.
 - Atlas eviction is not implemented; AtlasFull fallback is the safety behavior.
-- Complex shaping, fallback font face identity, color glyphs, wrapping, and mixed atlas/overlay composition are deferred.
+- Complex shaping, fallback font face identity, color glyphs, and wrapping are still overlay fallback cases.
 - Warm glyph-atlas scroll allocation was previously about `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution. Optimization should wait for the attributed evidence rather than guessing.
 - Warm allocation follow-up should start with tree construction and translator attribution. Current local evidence attributes the warm scroll sample mostly to tree construction and translation rather than renderer submit.
 
@@ -194,7 +217,7 @@ Rules:
 
 ## Fallback Strategy
 
-Direct2D / DirectWrite remains the authoritative fallback. Current default GlyphAtlas fallback is frame-level: if any text run in the frame is unsupported, the frame uses overlay text composition. A future mixed fallback design should allow accepted ASCII runs to draw through atlas while unsupported runs draw through overlay, but that requires careful ordering, clip, and sync semantics before implementation.
+Direct2D / DirectWrite remains the authoritative fallback. Current default GlyphAtlas fallback is mixed per renderable run: accepted ASCII / `NoWrap` runs draw through the atlas, while unsupported runs draw through overlay. Initialization and runtime record failures remain all-renderable-run overlay fallback for the affected frame because no safe atlas command list should be submitted from a failed record path.
 
 Fallback cases:
 
@@ -204,7 +227,7 @@ Fallback cases:
 - Glyph atlas initialization or upload failure.
 - Debug flag forces Direct2D text for A/B comparison.
 
-Fallback must preserve text/rect synchronization and clip behavior.
+Fallback must preserve text/rect synchronization and clip behavior. Overlay removal is not part of the next commit: D3D11On12 / D2D remains required for NonAscii, complex shaping, wrapping, atlas-full safety, and runtime failure fallback until mixed fallback has smoke evidence across those cases.
 
 ## Open Questions
 

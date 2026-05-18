@@ -41,6 +41,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private D3D12TextRenderer? _textRenderer;
     private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics _glyphAtlasTextDiagnostics;
+    private readonly FrameRenderList<D3D12TextRenderer.TextData> _overlayFallbackTextRuns = new();
     private readonly nint _hwnd;
     private readonly Lock _resizeLock = new();
     private int _width;
@@ -466,9 +467,12 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var textRenderer = _textRenderer;
         var hasText = textRuns.Length > 0 && textRenderer != null;
         var renderTextWithOverlayFallback = hasText;
+        var overlayTextRuns = textRuns;
         if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
         {
-            renderTextWithOverlayFallback = !TryRecordGlyphAtlasTextPass(textRuns, resources);
+            var glyphAtlasRecord = TryRecordGlyphAtlasTextPass(textRuns, resources, _overlayFallbackTextRuns);
+            overlayTextRuns = _overlayFallbackTextRuns.Span;
+            renderTextWithOverlayFallback = glyphAtlasRecord.RequiresOverlayFallback;
             if (_deviceRemoved)
             {
                 return;
@@ -491,14 +495,17 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         if (renderTextWithOverlayFallback)
         {
-            if (!RenderOverlayTextAndMaybeSync(textRenderer!, textRuns, resources)) return;
+            if (!RenderOverlayTextAndMaybeSync(textRenderer!, overlayTextRuns, resources)) return;
         }
 
         if (!Present()) return;
         _ = MoveToNextFrame();
     }
 
-    private bool TryRecordGlyphAtlasTextPass(ReadOnlySpan<D3D12TextRenderer.TextData> textRuns, IFrameResourceResolver resources)
+    private D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult TryRecordGlyphAtlasTextPass(
+        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        IFrameResourceResolver resources,
+        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns)
     {
         D3D12GlyphAtlasTextRenderer glyphAtlasTextRenderer;
         try
@@ -508,24 +515,27 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         catch (D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationException ex)
         {
             System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: {ex.Message}");
+            overlayFallbackRuns.Reset();
+            var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(textRuns, resources, overlayFallbackRuns);
             RecordGlyphAtlasInitializationFallback(
                 ex.Phase == D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile
                     ? D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.CompileFailed
                     : D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed,
-                ex.Phase);
-            return false;
+                ex.Phase,
+                fallbackRunCount);
+            return D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
         }
 
-        var recorded = glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height);
-        return recorded;
+        return glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height, overlayFallbackRuns);
     }
 
     private void RecordGlyphAtlasInitializationFallback(
         D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason reason,
-        D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase phase)
+        D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase phase,
+        int fallbackRunCount)
     {
         _glyphAtlasTextDiagnostics = _glyphAtlasTextDiagnostics
-            .WithFallback(1, reason)
+            .WithFallback(fallbackRunCount, reason)
             .WithInitializationFailure(phase);
     }
 
@@ -898,6 +908,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _textRenderer = null;
         _glyphAtlasTextRenderer?.Dispose();
         _glyphAtlasTextRenderer = null;
+        _overlayFallbackTextRuns.Dispose();
         _renderer2D?.Dispose();
         _renderer2D = null;
         for (var i = 0; i < FrameCount; i++)

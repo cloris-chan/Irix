@@ -74,8 +74,17 @@ Sync comparison from the pre-default-switch baseline:
 - Default overlay `60 x 1` without `--text-composition`: `Text composition mode: Overlay`, `frameSerial=60`, `presentSerial=60`, `syncWaits=60`; no device lost.
 - Overlay `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; avg sync wait range `1.991ms..2.346ms`; no device lost.
 - Glyph atlas `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=0`; `cachedGlyphs=29`, `drawnGlyphs=41070`, `uploads=45568 bytes`, `misses=29`, `fallbacks=0`, all fallback reasons `0`, `initFailurePhase=None`, `rasterScratch=1088 bytes/8 resizes`.
-- Glyph atlas non-ASCII fallback `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; `drawnGlyphs=0`, `uploads=0 bytes`, `fallbacks=900`, `unsupportedRuns=900`, `NonAscii=900`, `initFailurePhase=None`; no device lost.
+- Historical pre-mixed-fallback glyph atlas non-ASCII fallback `300 x 3`: `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; `drawnGlyphs=0`, `uploads=0 bytes`, `fallbacks=900`, `unsupportedRuns=900`, `NonAscii=900`, `initFailurePhase=None`; no device lost. Current mixed fallback v0 evidence is recorded below.
 - Final short glyph atlas smoke `30 x 1`: `frameSerial=30`, `presentSerial=30`, `syncWaits=0`; `cachedGlyphs=29`, `drawnGlyphs=1340`, `uploads=45568 bytes`, `fallbacks=0`, all fallback reasons `0`, `initFailurePhase=None`, `rasterScratch=1088 bytes/8 resizes`.
+
+Mixed fallback v0 smoke:
+
+- Command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 30 1`
+- Default GlyphAtlas ASCII result: `frameSerial=30`, `presentSerial=30`, `syncWaits=0`; `cachedGlyphs=29`, `drawnGlyphs=1340`, `atlasRuns=90`, `overlayFallbackRuns=0`, `uploads=45568 bytes`, `hits=2891`, `misses=29`, `fallbacks=0`, `unsupportedRuns=0`, all fallback reasons `0`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 30 1 --diagnose-sync-non-ascii`
+- Mixed NonAscii result: `frameSerial=30`, `presentSerial=30`, `syncWaits=30`; `cachedGlyphs=12`, `drawnGlyphs=450`, `atlasRuns=60`, `overlayFallbackRuns=30`, `uploads=4608 bytes`, `hits=888`, `misses=12`, `fallbacks=30`, `unsupportedRuns=30`, `NonAscii=30`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Acceptance: NonAscii no longer forces the whole frame through overlay. The two ASCII text runs per frame remained atlas-rendered (`atlasRuns=60` over 30 frames), while only the NonAscii run went through overlay (`overlayFallbackRuns=30`).
+- The NonAscii run still uses overlay, so `syncWaits=30` is expected for this v0; overlay removal remains gated.
 
 Default UI smoke:
 
