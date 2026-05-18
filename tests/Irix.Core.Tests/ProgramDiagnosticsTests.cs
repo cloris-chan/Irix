@@ -298,6 +298,70 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_mixed_fallback_smoke_scene_classifies_expected_runs_and_order_limit()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var commands = GlyphAtlasMixedFallbackDiagnosticRunner.BuildMixedFallbackCommands(resources, frameIndex: 0);
+        resources.Seal();
+
+        var summary = GlyphAtlasMixedFallbackDiagnosticRunner.AnalyzeMixedFallbackScene(commands, resources);
+        var ordering = GlyphAtlasMixedFallbackDiagnosticRunner.BuildOrderingLine(summary);
+
+        Assert.Equal(4, summary.TextRuns);
+        Assert.Equal(2, summary.AtlasCandidateRuns);
+        Assert.Equal(2, summary.OverlayFallbackCandidateRuns);
+        Assert.Equal(2, summary.NonAsciiFallbackRuns);
+        Assert.Equal(1, summary.ClippedAtlasCandidateRuns);
+        Assert.Equal(1, summary.ClippedOverlayFallbackCandidateRuns);
+        Assert.True(summary.HasFallbackBeforeLaterAtlas);
+        Assert.Contains("commands=atlas,fallback,atlas,fallback", ordering);
+        Assert.Contains("zOrderLimit=overlayFallbackRunsDrawAfterAtlas", ordering);
+    }
+
+    [Fact]
+    public void Glyph_atlas_overlay_fallback_subset_preserves_resolver_style_clip_scale_and_color()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var commands = GlyphAtlasMixedFallbackDiagnosticRunner.BuildMixedFallbackCommands(resources, frameIndex: 0);
+        resources.Seal();
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
+        using var fallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
+
+        D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 960, 540),
+            commands,
+            resources,
+            new DisplayScale(1.5f, 1.5f),
+            rects,
+            texts);
+
+        foreach (var textRun in texts.Span)
+        {
+            var text = (textRun.Resolver ?? resources).Resolve(textRun.Text);
+            if (GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, textRun.ResolvedStyle) != D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None)
+            {
+                fallbackRuns.Add(textRun);
+            }
+        }
+
+        Assert.Equal(4, texts.Count);
+        Assert.Equal(2, fallbackRuns.Count);
+        var clippedFallback = fallbackRuns.Span[1];
+        Assert.Equal(texts.Span[3], clippedFallback);
+        Assert.Same(resources, clippedFallback.Resolver);
+        Assert.Equal("裁剪 fallback 000", resources.Resolve(clippedFallback.Text).ToString());
+        Assert.True(clippedFallback.ClipEnabled);
+        Assert.Equal(new DrawRect(36, 264, 168, 39), clippedFallback.EffectiveClip.Bounds);
+        Assert.Equal(33f, clippedFallback.ResolvedStyle.FontSize);
+        Assert.Equal(1f, clippedFallback.R);
+        Assert.Equal(160 / 255f, clippedFallback.G);
+        Assert.Equal(220 / 255f, clippedFallback.B);
+        Assert.Equal(1f, clippedFallback.A);
+    }
+
+    [Fact]
     public void Text_cache_allocation_attribution_formatter_outputs_stable_stage_fields()
     {
         var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(

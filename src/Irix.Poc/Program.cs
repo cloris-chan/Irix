@@ -61,6 +61,20 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-glyph-atlas-mixed-fallback"))
+        {
+            var frameCount = 30;
+            var frameArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-mixed-fallback").Skip(1).FirstOrDefault();
+            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            GlyphAtlasMixedFallbackDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                frameCount,
+                ParseTextCompositionMode(args),
+                ParseDiagnosticScale(args));
+            return;
+        }
+
         if (args.Contains("--diagnose-glyph-atlas-stress"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);

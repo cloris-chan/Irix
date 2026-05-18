@@ -35,7 +35,9 @@ Phase 1 closeout: local evidence has been captured for default overlay regressio
 
 P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list. Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer. Runtime record/upload/map failures disable the atlas instance and fall back to overlay with `recordFailurePhase` diagnostics; they are not reported as device lost unless the renderer observes an actual device-removed condition.
 
-Mixed fallback v0 update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It fills a caller-owned fallback run list while recording atlas quads for accepted runs. `D3D12Renderer` passes that fallback subset to `D3D12TextRenderer.Render(...)`, so NonAscii no longer forces every text run in the frame through overlay. `IDrawingBackend.Execute` and the public drawing contract remain unchanged.
+Mixed fallback v0 update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It fills a caller-owned fallback run list while recording atlas quads for accepted runs.
+`D3D12Renderer` passes that fallback subset to `D3D12TextRenderer.Render(...)`, so NonAscii no longer forces every text run in the frame through overlay.
+`IDrawingBackend.Execute` and the public drawing contract remain unchanged. Expanded 2026-05-19 smoke covers mixed `ASCII / NonAscii / clipped ASCII / clipped NonAscii` frames and default `300 x 3` long sync.
 
 ## Mixed Fallback v0
 
@@ -45,7 +47,11 @@ Frame ordering is fixed:
 D3D12 rect pass -> D3D12 glyph atlas accepted text runs -> D3D11On12 / D2D overlay fallback text runs -> sync if overlay ran -> Present
 ```
 
-This preserves the current renderer's broad visual model: rectangles are drawn first, then text is drawn over rectangles. It does not fully preserve original `DrawCommand` order for overlapping text runs split across atlas and overlay. Overlay fallback runs are always drawn after atlas accepted runs, so a fallback run can appear above an atlas run even if the original command order placed it earlier. That is the explicit v0 z-order limitation; removing it would require command-order-aware text pass partitioning or a D3D12-only fallback path, not just a narrower overlay list.
+This preserves the current renderer's broad visual model: rectangles are drawn first, then text is drawn over rectangles.
+It does not fully preserve original `DrawCommand` order for overlapping text runs split across atlas and overlay.
+Overlay fallback runs are always drawn after atlas accepted runs, so a fallback run can appear above an atlas run even if the original command order placed it earlier.
+The mixed fallback smoke intentionally uses `atlas -> fallback -> atlas -> fallback` text order to keep this limitation visible.
+Removing the limitation would require command-order-aware text pass partitioning or a D3D12-only fallback path, not just a narrower overlay list.
 
 The fallback run list is frame-local and caller-owned. `TryRecord` classifies each renderable text run:
 
@@ -55,6 +61,10 @@ The fallback run list is frame-local and caller-owned. `TryRecord` classifies ea
 - Atlas initialization failure or runtime record failure appends every renderable run to the fallback list for that frame.
 
 `D3D12TextRenderer.Render(...)` remains the overlay drawing primitive, but in `GlyphAtlas` mode it receives only fallback runs. In `Overlay` rollback mode it still receives the full text run span.
+
+Overlay subset correctness depends on preserving the exact `D3D12TextRenderer.TextData` for fallback runs.
+The subset must carry the frame resource resolver, resolved physical `TextStyle`, effective clip, clip enablement, color, and scaled coordinates.
+Current tests pin that contract, and the 150% mixed smoke exercises one clipped atlas run plus one clipped overlay fallback run.
 
 ## Shader Bytecode Provenance
 
@@ -228,6 +238,19 @@ Fallback cases:
 - Debug flag forces Direct2D text for A/B comparison.
 
 Fallback must preserve text/rect synchronization and clip behavior. Overlay removal is not part of the next commit: D3D11On12 / D2D remains required for NonAscii, complex shaping, wrapping, atlas-full safety, and runtime failure fallback until mixed fallback has smoke evidence across those cases.
+
+## Overlay Removal Gate Draft
+
+D3D11On12 / D2D overlay can be deleted only after all of these are true:
+
+- NonAscii, font fallback, wrapping, alignment, color glyphs, clipping, and scale cases have a non-overlay D3D12 text path or an explicitly accepted non-rendering degradation.
+- Atlas-full and eviction behavior are implemented and smoke-tested without needing whole-frame overlay fallback.
+- Mixed fallback no longer depends on overlay for unsupported runs, or command-order-aware D3D12 partitioning proves overlapping atlas/fallback text preserves the intended z-order.
+- Local smoke covers default long `300 x 3`, mixed clipped ASCII/NonAscii, 100% / 150% / 200% scale, resize, and AtlasFull/failure paths with no device lost.
+- Diagnostics still expose accepted text runs, fallback/degradation runs, per-run reasons, sync/present serials, and failure phases after the overlay path is removed.
+- A rollback story exists that does not reintroduce D3D11On12 / D2D as a hidden dependency.
+
+Until that gate is met, the overlay path remains the correctness fallback and `--text-composition overlay` remains the rollback mode.
 
 ## Open Questions
 

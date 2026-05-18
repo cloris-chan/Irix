@@ -84,3 +84,14 @@ Expected smoke headers:
 - Mixed NonAscii short sync smoke: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 30 1 --diagnose-sync-non-ascii` produced `frameSerial=30`, `presentSerial=30`, `syncWaits=30`, `atlasRuns=60`, `overlayFallbackRuns=30`, `fallbacks=30`, `unsupportedRuns=30`, `NonAscii=30`, `initFailurePhase=None`, `recordFailurePhase=None`.
 - Acceptance: mixed NonAscii no longer forces every text run in the frame through overlay. The two ASCII runs per frame stayed on atlas and the one NonAscii run per frame used overlay.
 - Remaining limitation: because overlay still renders the fallback run, the mixed NonAscii smoke still has one sync wait per frame. This is expected until overlay removal has a separate replacement and smoke evidence.
+
+## 2026-05-19 Mixed Fallback Extended Evidence
+
+- Extended mixed command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150`.
+- Scenario order: `ASCII atlas -> NonAscii fallback -> clipped ASCII atlas -> clipped NonAscii fallback`.
+- Result: `frameSerial=30`, `presentSerial=30`, `syncWaits=30`, `atlasRuns=60`, `overlayFallbackRuns=60`, `fallbacks=30`, `unsupportedRuns=60`, `NonAscii=60`, `textClipSkipped=0`, `lastEffectiveTextClip=(36,264,168,39)`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Whole-frame overlay comparison command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150 --text-composition overlay`.
+  It completed with `frameSerial=30`, `presentSerial=30`, `syncWaits=30`, `textClipSkipped=0`, and the same final effective text clip.
+- Default long command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3`.
+  It produced `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `atlasRuns=2700`, `overlayFallbackRuns=0`, `fallbacks=0`, `unsupportedRuns=0`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Z-order limitation remains explicit: mixed fallback draws all overlay fallback runs after atlas accepted runs. The extended smoke does not claim full relative text-command order preservation.

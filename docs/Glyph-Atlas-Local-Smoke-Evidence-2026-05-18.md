@@ -86,6 +86,17 @@ Mixed fallback v0 smoke:
 - Acceptance: NonAscii no longer forces the whole frame through overlay. The two ASCII text runs per frame remained atlas-rendered (`atlasRuns=60` over 30 frames), while only the NonAscii run went through overlay (`overlayFallbackRuns=30`).
 - The NonAscii run still uses overlay, so `syncWaits=30` is expected for this v0; overlay removal remains gated.
 
+Mixed fallback extended smoke follow-up (2026-05-19):
+
+- Command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150`.
+- Scenario: `ASCII atlas -> NonAscii fallback -> clipped ASCII atlas -> clipped NonAscii fallback`.
+- GlyphAtlas result: `frameSerial=30`, `presentSerial=30`, `syncWaits=30`; `atlasRuns=60`, `overlayFallbackRuns=60`, `fallbacks=30`, `unsupportedRuns=60`, `NonAscii=60`, `textClipSkipped=0`, `lastEffectiveTextClip=(36,264,168,39)`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Whole-frame overlay comparison: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150 --text-composition overlay`.
+  It completed with `frameSerial=30`, `presentSerial=30`, `syncWaits=30`, `textClipSkipped=0`, and the same final effective text clip.
+- Default long GlyphAtlas: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3`.
+  It produced `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `atlasRuns=2700`, `overlayFallbackRuns=0`, `fallbacks=0`, `unsupportedRuns=0`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Ordering note: the mixed smoke intentionally includes fallback text before a later atlas text run. Current GlyphAtlas mode still draws all overlay fallback runs after all atlas accepted runs, so this is not full text-command z-order preservation.
+
 Default UI smoke:
 
 - Published `Irix.Poc.exe --text-composition glyph-atlas` stayed running for 5 seconds and printed `Text composition mode: GlyphAtlas`, `Display scale: 1.5x1.5`; the process was stopped manually after the smoke window.
