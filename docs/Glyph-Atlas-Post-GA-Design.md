@@ -38,6 +38,7 @@ P1 hardening update: runtime shader compilation has been removed from the D3D12 
 Mixed fallback v0 update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It fills a caller-owned fallback run list while recording atlas quads for accepted runs.
 `D3D12Renderer` passes that fallback subset to `D3D12TextRenderer.Render(...)`, so NonAscii no longer forces every text run in the frame through overlay.
 `IDrawingBackend.Execute` and the public drawing contract remain unchanged. Expanded 2026-05-19 smoke covers mixed `ASCII / NonAscii / clipped ASCII / clipped NonAscii` frames and default `300 x 3` long sync.
+The same evidence file now includes mixed AtlasFull stress: accepted prefix runs remain on atlas while later AtlasFull and NonAscii runs use overlay fallback. Runtime record-failure behavior is unit-covered as an all-renderable-run fallback with `recordFailurePhase`.
 
 ## Mixed Fallback v0
 
@@ -127,7 +128,7 @@ Known limitations:
 
 - Shader bytecode is currently embedded inline. A future build-time shader asset pipeline can replace the inline packaging if shader source grows, but the runtime compiler dependency is removed.
 - Mixed fallback v0 has text z-order limits: fallback overlay runs draw after atlas runs, regardless of original relative text command order.
-- Atlas eviction is not implemented; AtlasFull fallback is the safety behavior.
+- Atlas eviction is not implemented; mixed AtlasFull fallback is the safety behavior and is smoke-covered for the current no-eviction prototype.
 - Complex shaping, fallback font face identity, color glyphs, and wrapping are still overlay fallback cases.
 - Warm glyph-atlas scroll allocation was previously about `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution. Optimization should wait for the attributed evidence rather than guessing.
 - Warm allocation follow-up should start with tree construction and translator attribution. Current local evidence attributes the warm scroll sample mostly to tree construction and translation rather than renderer submit.
@@ -244,7 +245,7 @@ Fallback must preserve text/rect synchronization and clip behavior. Overlay remo
 D3D11On12 / D2D overlay can be deleted only after all of these are true:
 
 - NonAscii, font fallback, wrapping, alignment, color glyphs, clipping, and scale cases have a non-overlay D3D12 text path or an explicitly accepted non-rendering degradation.
-- Atlas-full and eviction behavior are implemented and smoke-tested without needing whole-frame overlay fallback.
+- Atlas-full and eviction behavior are implemented and smoke-tested without needing whole-frame overlay fallback. Current evidence covers AtlasFull mixed fallback only; eviction remains unimplemented.
 - Mixed fallback no longer depends on overlay for unsupported runs, or command-order-aware D3D12 partitioning proves overlapping atlas/fallback text preserves the intended z-order.
 - Local smoke covers default long `300 x 3`, mixed clipped ASCII/NonAscii, 100% / 150% / 200% scale, resize, and AtlasFull/failure paths with no device lost.
 - Diagnostics still expose accepted text runs, fallback/degradation runs, per-run reasons, sync/present serials, and failure phases after the overlay path is removed.

@@ -94,4 +94,7 @@ Expected smoke headers:
   It completed with `frameSerial=30`, `presentSerial=30`, `syncWaits=30`, `textClipSkipped=0`, and the same final effective text clip.
 - Default long command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3`.
   It produced `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `atlasRuns=2700`, `overlayFallbackRuns=0`, `fallbacks=0`, `unsupportedRuns=0`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Mixed AtlasFull command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-stress --mixed-fallback`.
+  It produced `frameSerial=1`, `presentSerial=1`, `syncWaits=1`, `atlasRuns=5`, `overlayFallbackRuns=30`, `fallbacks=1`, `unsupportedRuns=30`, `AtlasFull=29`, `NonAscii=1`, `RecordFailed=0`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
+- Record-failure contract tests pin all-renderable-run fallback for runtime record failures such as `AtlasUploadMap`; this is unit contract coverage rather than a forced GPU upload-failure smoke.
 - Z-order limitation remains explicit: mixed fallback draws all overlay fallback runs after atlas accepted runs. The extended smoke does not claim full relative text-command order preservation.

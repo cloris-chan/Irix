@@ -410,6 +410,7 @@ public sealed class ProgramDiagnosticsTests
             new DisplayScale(1.5f, 1.5f),
             runCount: 32,
             asciiCharsPerRun: 95,
+            scenarioName: "AtlasFull",
             deviceRemoved: false,
             deviceErrorReason: null,
             frameSerial,
@@ -417,11 +418,80 @@ public sealed class ProgramDiagnosticsTests
 
         var report = writer.ToString();
         Assert.Contains("=== Glyph Atlas Stress Diagnostic ===", report);
+        Assert.Contains("Scenario: AtlasFull", report);
         Assert.Contains("Text composition mode: GlyphAtlas", report);
         Assert.Contains("Device removed: False", report);
         Assert.Contains("Frame serial: frameSerial=1, presentSerial=1, syncWaits=1", report);
         Assert.Contains("AtlasFull=1", report);
         Assert.Contains("=== Glyph atlas stress diagnostic complete ===", report);
+    }
+
+    [Fact]
+    public void Glyph_atlas_mixed_stress_commands_keep_prefix_atlas_candidates_and_trailing_fallback()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var ascii = new string(Enumerable.Range(32, 95).Select(static code => (char)code).ToArray());
+        var commands = GlyphAtlasStressDiagnosticRunner.BuildMixedFallbackStressCommands(resources, ascii, 960, 540);
+        resources.Seal();
+
+        var textCommandCount = commands.Count(static command => command.Kind == DrawCommandKind.DrawTextRun);
+        var firstPrefixReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(
+            resources.Resolve(commands[1].Text),
+            resources.ResolveTextStyle(commands[1].Resource));
+        var secondPrefixReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(
+            resources.Resolve(commands[2].Text),
+            resources.ResolveTextStyle(commands[2].Resource));
+        var trailingReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(
+            resources.Resolve(commands[^1].Text),
+            resources.ResolveTextStyle(commands[^1].Resource));
+
+        Assert.Equal(35, textCommandCount);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, firstPrefixReason);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, secondPrefixReason);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii, trailingReason);
+    }
+
+    [Fact]
+    public void Glyph_atlas_record_failure_contract_falls_back_all_renderable_runs()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var style = resources.AddTextStyle(TextStyle.Default);
+        var visibleA = resources.AddText("visible A");
+        var visibleB = resources.AddText("visible B");
+        var empty = resources.AddText("");
+        resources.Seal();
+        using var fallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
+        var runs = new[]
+        {
+            TextRun(visibleA, style, width: 100, height: 20),
+            TextRun(empty, style, width: 100, height: 20),
+            TextRun(visibleB, style, width: 120, height: 20)
+        };
+
+        var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(runs, resources, fallbackRuns);
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithFallback(fallbackRunCount, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
+            .WithRecordFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.AtlasUploadMap);
+
+        Assert.Equal(2, fallbackRunCount);
+        Assert.Equal(2, fallbackRuns.Count);
+        Assert.Equal(1, diagnostics.FallbackFrames);
+        Assert.Equal(2, diagnostics.UnsupportedRuns);
+        Assert.Equal(2, diagnostics.OverlayFallbackRuns);
+        Assert.Equal(2, diagnostics.Reasons.RecordFailed);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.AtlasUploadMap, diagnostics.RecordFailurePhase);
     }
 
     #region Scroll Snapshot

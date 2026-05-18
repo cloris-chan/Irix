@@ -37,7 +37,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with expanded mixed fallback smoke | Post-GA; `GlyphAtlas` is default for the D3D12 PoC path; `Overlay` remains rollback/fallback; glyph atlas supports narrow ASCII/NoWrap runs with local evidence |
+| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with expanded mixed fallback and mixed AtlasFull smoke | Post-GA; `GlyphAtlas` is default for the D3D12 PoC path; `Overlay` remains rollback/fallback; narrow ASCII/NoWrap runs have local evidence |
 | POST-011 | Resource cache / stable global handles | Not started | D3D12-specific; can align with glyph atlas/resource cache work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -125,7 +125,9 @@ Non-goals:
 
 ### Batch B: Post-GA text renderer replacement
 
-Phase 1 closeout: prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA baseline has been switched to default `GlyphAtlas` plus default `Scissor`, with `--text-composition overlay`, `--disable-scissor`, and `--clip-mode diagnostic` rollback paths. Do not keep expanding the ASCII prototype surface or flip another runtime default in the next step; move to renderer-foundation hardening first.
+Phase 1 closeout: prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, mixed clipped fallback, mixed AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline.
+The post-GA baseline has been switched to default `GlyphAtlas` plus default `Scissor`, with `--text-composition overlay`, `--disable-scissor`, and `--clip-mode diagnostic` rollback paths.
+Do not keep expanding the ASCII prototype surface or flip another runtime default in the next step; move to renderer-foundation hardening first.
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
@@ -144,7 +146,7 @@ Known limitations checklist before expanding text coverage:
 - Glyph-atlas diagnostics distinguish constructor-time `initFailurePhase` from runtime `recordFailurePhase`; runtime record failures disable atlas and fall back to overlay without implying device lost by themselves.
 - Mixed fallback v0 sends unsupported renderable runs to overlay while accepted ASCII / `NoWrap` runs stay on atlas. Initialization and runtime record failure still fall back all renderable runs for the frame.
 - Mixed fallback v0 does not preserve exact relative z-order between overlapping atlas text and overlay fallback text; overlay fallback runs draw above atlas runs.
-- No atlas eviction. AtlasFull fallback is safe; eviction design remains deferred.
+- No atlas eviction. Mixed AtlasFull fallback is safe for the current prototype; eviction design remains deferred.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
 - Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.
 - Overlay removal gate is drafted in `Glyph-Atlas-Post-GA-Design.md`; do not delete D3D11On12/D2D until unsupported text cases, AtlasFull/eviction, z-order, diagnostics, and rollback coverage no longer depend on it.
@@ -154,7 +156,7 @@ Next hardening checklist:
 - Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
 - Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases; glyph-atlas initialization failures must remain overlay fallback-safe.
 - Warm allocation attribution: run `--diagnose-text-cache` and optimize only after tree/diff/translate/render attribution identifies the source.
-- Mixed fallback follow-up: add AtlasFull/eviction and longer failure-path evidence before widening atlas text coverage.
+- Mixed fallback follow-up: AtlasFull and record-failure contract evidence are recorded. Eviction and command-order-perfect fallback remain future design/implementation work before widening atlas text coverage.
 - Overlay removal gate: keep D3D11On12/D2D overlay until the drafted gate is satisfied; this is not a deletion task for the next commit.
 
 ---

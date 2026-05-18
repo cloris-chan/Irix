@@ -10,7 +10,10 @@ dotnet test --no-build -c Release --filter "FullyQualifiedName~ProgramDiagnostic
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150 --text-composition overlay
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3
+dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-stress --mixed-fallback
 ```
+
+Validation result: Release build passed, and `ProgramDiagnosticsTests` passed with `51` tests.
 
 ## Mixed Fallback Scenario
 
@@ -41,6 +44,22 @@ Expected `GlyphAtlas` classification per frame:
 
 The whole-frame overlay comparison command completed the same 30 frames with `syncWaits=30`, `textClipSkipped=0`, and the same final effective text clip. The subset path uses the same `D3D12TextRenderer.Render(...)` primitive but passes only the fallback text runs.
 
+## Mixed AtlasFull Stress
+
+`--diagnose-glyph-atlas-stress --mixed-fallback` builds a single frame with two small ASCII prefix runs, the AtlasFull stress set, and one trailing NonAscii fallback run.
+
+Result:
+
+- `Scenario: MixedAtlasFull`.
+- `frameSerial=1`, `presentSerial=1`, `syncWaits=1`.
+- `atlasRuns=5`, `overlayFallbackRuns=30`, `fallbacks=1`, `unsupportedRuns=30`.
+- Reasons: `AtlasFull=29`, `NonAscii=1`, `RecordFailed=0`.
+- `cachedGlyphs=407`, `drawnGlyphs=306`, `uploads=1041408 bytes`, `hits=316`, `misses=436`.
+- `initFailurePhase=None`, `recordFailurePhase=None`.
+- Device-lost did not occur.
+
+Acceptance: AtlasFull did not force whole-frame overlay fallback. Earlier accepted atlas runs still recorded as atlas runs, while later AtlasFull and NonAscii runs used the overlay fallback subset.
+
 ## Z-Order Limitation
 
 The mixed smoke intentionally has a fallback text run before a later atlas text run in command order. Current `GlyphAtlas` pass order is:
@@ -57,6 +76,13 @@ The added unit coverage checks the fallback subset keeps the original `TextData`
 The 150% mixed smoke exercises the same path with one clipped atlas run and one clipped overlay fallback run.
 
 This is not an automated pixel-equivalence oracle. It verifies that the fallback subset is drawn by the same overlay renderer with the same per-run inputs that whole-frame overlay would use for those fallback runs.
+
+## Failure-Path Contract
+
+The new unit coverage pins the runtime record-failure degradation contract without adding a renderer test hook.
+When a record failure such as `AtlasUploadMap` occurs, the fallback list is every renderable text run in that frame, empty or zero-size text is ignored, diagnostics count `RecordFailed` per fallback run, and `recordFailurePhase` records the failing phase.
+
+This is contract coverage, not a forced GPU upload failure smoke. The real renderer path still owns the failure trigger and disables the atlas instance after a runtime record failure.
 
 ## Default Long Smoke
 

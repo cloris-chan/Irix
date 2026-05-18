@@ -8,8 +8,10 @@ namespace Irix.Poc;
 internal static class GlyphAtlasStressDiagnosticRunner
 {
     private const int RunCount = 32;
+    private const string StandardScenarioName = "AtlasFull";
+    private const string MixedFallbackScenarioName = "MixedAtlasFull";
 
-    internal static void Run(TextWriter output)
+    internal static void Run(TextWriter output, bool mixedFallback = false)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
@@ -24,33 +26,10 @@ internal static class GlyphAtlasStressDiagnosticRunner
         compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
 
         var ascii = new string(Enumerable.Range(32, 95).Select(static code => (char)code).ToArray());
-        var commands = new DrawCommand[RunCount + 1];
-        commands[0] = new DrawCommand(
-            DrawCommandKind.FillRect,
-            Rect: new DrawRect(0, 0, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height),
-            Color: DrawColor.Opaque(18, 18, 18));
-
-        for (var i = 0; i < RunCount; i++)
-        {
-            var fontSize = 48f + i * 4f;
-            var style = new TextStyle(
-                "Segoe UI",
-                fontSize,
-                i % 3 == 0 ? TextFontWeight.Bold : TextFontWeight.Normal,
-                i % 4 == 0 ? TextFontStyle.Italic : TextFontStyle.Normal,
-                TextFontStretch.Normal,
-                TextHorizontalAlignment.Leading,
-                TextVerticalAlignment.Top,
-                TextWrapping.NoWrap);
-            var styleHandle = resources.AddTextStyle(style);
-            var text = resources.AddText(ascii);
-            commands[i + 1] = new DrawCommand(
-                DrawCommandKind.DrawTextRun,
-                Rect: new DrawRect(8, 8 + (i % 6) * 40, 60000, MathF.Ceiling(fontSize * 2.2f)),
-                Resource: styleHandle,
-                Text: text,
-                Color: DrawColor.Opaque(245, 245, 245));
-        }
+        var bounds = window.Region.PhysicalBounds;
+        var commands = mixedFallback
+            ? BuildMixedFallbackStressCommands(resources, ascii, bounds.Width, bounds.Height)
+            : BuildStressCommands(resources, ascii, bounds.Width, bounds.Height);
 
         resources.Seal();
         using var batch = new RenderFrameBatch(
@@ -64,12 +43,32 @@ internal static class GlyphAtlasStressDiagnosticRunner
             d3d12Renderer.TextCompositionMode,
             screen.RefreshRateHz,
             displayScale,
-            RunCount,
+            CountTextRuns(commands),
             ascii.Length,
+            mixedFallback ? MixedFallbackScenarioName : StandardScenarioName,
             d3d12Renderer.IsDeviceRemoved,
             d3d12Renderer.DeviceErrorReason,
             d3d12Backend.FrameSerialDiagnostics,
             d3d12Renderer.GetGlyphAtlasTextDiagnostics());
+    }
+
+    internal static DrawCommand[] BuildStressCommands(FrameDrawingResources resources, string ascii, int width, int height)
+    {
+        var commands = new DrawCommand[RunCount + 1];
+        commands[0] = Background(width, height);
+        AppendStressRuns(commands, startIndex: 1, resources, ascii);
+        return commands;
+    }
+
+    internal static DrawCommand[] BuildMixedFallbackStressCommands(FrameDrawingResources resources, string ascii, int width, int height)
+    {
+        var commands = new DrawCommand[RunCount + 4];
+        commands[0] = Background(width, height);
+        commands[1] = TextRun(resources, "Atlas prefix A", 16, 12, 320, 36, 18, TextFontWeight.Normal, TextFontStyle.Normal, DrawColor.Opaque(220, 244, 255));
+        commands[2] = TextRun(resources, "Atlas prefix B", 16, 52, 320, 36, 20, TextFontWeight.SemiBold, TextFontStyle.Normal, DrawColor.Opaque(180, 220, 255));
+        AppendStressRuns(commands, startIndex: 3, resources, ascii);
+        commands[^1] = TextRun(resources, "AtlasFull 後 fallback", 16, 292, 420, 40, 20, TextFontWeight.Normal, TextFontStyle.Normal, DrawColor.Opaque(255, 210, 160));
+        return commands;
     }
 
     internal static void WriteReport(
@@ -79,12 +78,14 @@ internal static class GlyphAtlasStressDiagnosticRunner
         DisplayScale displayScale,
         int runCount,
         int asciiCharsPerRun,
+        string scenarioName,
         bool deviceRemoved,
         string? deviceErrorReason,
         D3D12Renderer.FrameSerialDiagnostics frameSerialDiagnostics,
         D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? glyphAtlasDiagnostics)
     {
         output.WriteLine("=== Glyph Atlas Stress Diagnostic ===");
+        output.WriteLine($"Scenario: {scenarioName}");
         output.WriteLine($"Text composition mode: {textCompositionMode}");
         output.WriteLine($"Display refresh: {refreshRateHz}Hz");
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
@@ -102,6 +103,78 @@ internal static class GlyphAtlasStressDiagnosticRunner
             output.WriteLine("Glyph atlas: (not initialized)");
         }
         output.WriteLine("=== Glyph atlas stress diagnostic complete ===");
+    }
+
+    private static DrawCommand Background(int width, int height)
+    {
+        return new DrawCommand(
+            DrawCommandKind.FillRect,
+            Rect: new DrawRect(0, 0, width, height),
+            Color: DrawColor.Opaque(18, 18, 18));
+    }
+
+    private static void AppendStressRuns(DrawCommand[] commands, int startIndex, FrameDrawingResources resources, string ascii)
+    {
+        for (var i = 0; i < RunCount; i++)
+        {
+            var fontSize = 48f + i * 4f;
+            commands[startIndex + i] = TextRun(
+                resources,
+                ascii,
+                8,
+                8 + (i % 6) * 40,
+                60000,
+                MathF.Ceiling(fontSize * 2.2f),
+                fontSize,
+                i % 3 == 0 ? TextFontWeight.Bold : TextFontWeight.Normal,
+                i % 4 == 0 ? TextFontStyle.Italic : TextFontStyle.Normal,
+                DrawColor.Opaque(245, 245, 245));
+        }
+    }
+
+    private static DrawCommand TextRun(
+        FrameDrawingResources resources,
+        string text,
+        float x,
+        float y,
+        float width,
+        float height,
+        float fontSize,
+        TextFontWeight fontWeight,
+        TextFontStyle fontStyle,
+        DrawColor color)
+    {
+        var style = new TextStyle(
+            "Segoe UI",
+            fontSize,
+            fontWeight,
+            fontStyle,
+            TextFontStretch.Normal,
+            TextHorizontalAlignment.Leading,
+            TextVerticalAlignment.Top,
+            TextWrapping.NoWrap);
+        var styleHandle = resources.AddTextStyle(style);
+        var textSlice = resources.AddText(text);
+        return new DrawCommand(
+            DrawCommandKind.DrawTextRun,
+            Rect: new DrawRect(x, y, width, height),
+            Resource: styleHandle,
+            Text: textSlice,
+            Color: color);
+    }
+
+    private static int CountTextRuns(ReadOnlySpan<DrawCommand> commands)
+    {
+        var count = 0;
+        foreach (var command in commands)
+        {
+            if (command.Kind == DrawCommandKind.DrawTextRun)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
