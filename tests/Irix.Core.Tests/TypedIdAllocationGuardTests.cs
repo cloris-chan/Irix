@@ -1179,6 +1179,19 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void StyleOnlyPatchPlanDiagnosticSnapshot_uses_typed_case_identifier()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "StyleOnlyPatchPlan.cs"));
+
+        Assert.Contains("internal enum StyleOnlyPatchPlanCase : byte", source);
+        Assert.Contains("StyleOnlyPatchPlanCase Case", source);
+        Assert.Contains("FromPlan(StyleOnlyPatchPlanCase @case", source);
+        Assert.DoesNotContain("string CaseName", source);
+        Assert.DoesNotContain("public string CaseName", source);
+        Assert.DoesNotContain("FromPlan(string caseName", source);
+    }
+
+    [Fact]
     public void Irix_Drawing_TextStyle_uses_value_font_family()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));

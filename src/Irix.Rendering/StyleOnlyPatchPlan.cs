@@ -10,6 +10,12 @@ internal enum StyleOnlyPatchFallbackReason : byte
     HitTargetPatchFailed
 }
 
+internal enum StyleOnlyPatchPlanCase : byte
+{
+    HoverOnly,
+    LayoutAffecting
+}
+
 internal sealed record StyleOnlyPatchPlan(
     bool Eligible,
     StyleOnlyPatchFallbackReason FallbackReason,
@@ -44,24 +50,24 @@ internal sealed record StyleOnlyPatchPlan(
 }
 
 internal readonly struct StyleOnlyPatchPlanDiagnosticSnapshot(
-    string CaseName,
+    StyleOnlyPatchPlanCase Case,
     bool Eligible,
     StyleOnlyPatchFallbackReason FallbackReason,
     IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
     IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
     int HitTargetCount) : IEquatable<StyleOnlyPatchPlanDiagnosticSnapshot>
 {
-    public string CaseName { get; } = CaseName;
+    public StyleOnlyPatchPlanCase Case { get; } = Case;
     public bool Eligible { get; } = Eligible;
     public StyleOnlyPatchFallbackReason FallbackReason { get; } = FallbackReason;
     public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = DirtyElementRanges;
     public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; } = DirtyCommandRanges;
     public int HitTargetCount { get; } = HitTargetCount;
 
-    public static StyleOnlyPatchPlanDiagnosticSnapshot FromPlan(string caseName, StyleOnlyPatchPlan plan)
+    public static StyleOnlyPatchPlanDiagnosticSnapshot FromPlan(StyleOnlyPatchPlanCase @case, StyleOnlyPatchPlan plan)
     {
         return new StyleOnlyPatchPlanDiagnosticSnapshot(
-            caseName,
+            @case,
             plan.Eligible,
             plan.FallbackReason,
             plan.DirtyElementRanges.ToArray(),
@@ -71,7 +77,7 @@ internal readonly struct StyleOnlyPatchPlanDiagnosticSnapshot(
 
     public bool Equals(StyleOnlyPatchPlanDiagnosticSnapshot other)
     {
-        return CaseName == other.CaseName
+        return Case == other.Case
             && Eligible == other.Eligible
             && FallbackReason == other.FallbackReason
             && EqualityComparer<IReadOnlyList<(int Start, int Count)>>.Default.Equals(DirtyElementRanges, other.DirtyElementRanges)
@@ -81,7 +87,7 @@ internal readonly struct StyleOnlyPatchPlanDiagnosticSnapshot(
 
     public override bool Equals(object? obj) => obj is StyleOnlyPatchPlanDiagnosticSnapshot other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(CaseName, Eligible, FallbackReason, DirtyElementRanges, DirtyCommandRanges, HitTargetCount);
+    public override int GetHashCode() => HashCode.Combine(Case, Eligible, FallbackReason, DirtyElementRanges, DirtyCommandRanges, HitTargetCount);
 
     public static bool operator ==(StyleOnlyPatchPlanDiagnosticSnapshot left, StyleOnlyPatchPlanDiagnosticSnapshot right) => left.Equals(right);
 

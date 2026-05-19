@@ -124,7 +124,7 @@ internal static class DiagnosticsFormatter
 
     internal static string BuildStyleOnlyPatchPlanDiagnosticLine(StyleOnlyPatchPlanDiagnosticSnapshot snapshot)
     {
-        return $"styleOnlyPlan {snapshot.CaseName} eligible={snapshot.Eligible} fallback={snapshot.FallbackReason} dirtyElementRanges={FormatRanges(snapshot.DirtyElementRanges)} dirtyCommandRanges={FormatRanges(snapshot.DirtyCommandRanges)} hitTargetCount={snapshot.HitTargetCount}";
+        return $"styleOnlyPlan {snapshot.Case} eligible={snapshot.Eligible} fallback={snapshot.FallbackReason} dirtyElementRanges={FormatRanges(snapshot.DirtyElementRanges)} dirtyCommandRanges={FormatRanges(snapshot.DirtyCommandRanges)} hitTargetCount={snapshot.HitTargetCount}";
     }
 
     internal static string[] BuildInputDiagnosticLines(InputDiagnosticsSnapshot snapshot)

@@ -7,8 +7,8 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
 {
     internal static string[] BuildDiagnosticLines()
     {
-        var hoverOnlySnapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", BuildHoverOnlyStyleOnlyPatchPlan());
-        var layoutAffectingSnapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("layoutAffecting", BuildLayoutAffectingStyleOnlyPatchPlan());
+        var hoverOnlySnapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan(StyleOnlyPatchPlanCase.HoverOnly, BuildHoverOnlyStyleOnlyPatchPlan());
+        var layoutAffectingSnapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan(StyleOnlyPatchPlanCase.LayoutAffecting, BuildLayoutAffectingStyleOnlyPatchPlan());
 
         return [
             "=== StyleOnly Patch Plan Diagnostics ===",

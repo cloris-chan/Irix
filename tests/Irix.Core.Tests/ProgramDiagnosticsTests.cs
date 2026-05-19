@@ -775,9 +775,9 @@ public sealed class ProgramDiagnosticsTests
             [(0, 2)],
             [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(1), new PixelRectangle(0, 0, 960, 540))]);
 
-        var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", plan);
+        var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan(StyleOnlyPatchPlanCase.HoverOnly, plan);
 
-        Assert.Equal("hoverOnly", snapshot.CaseName);
+        Assert.Equal(StyleOnlyPatchPlanCase.HoverOnly, snapshot.Case);
         Assert.True(snapshot.Eligible);
         Assert.Equal(StyleOnlyPatchFallbackReason.None, snapshot.FallbackReason);
         Assert.Equal([(0, 1)], snapshot.DirtyElementRanges);
@@ -792,11 +792,11 @@ public sealed class ProgramDiagnosticsTests
             [(0, 1)],
             [(0, 2)],
             [new HitTestTarget(new PixelRectangle(16, 60, 140, 40), new ActionId(1), new PixelRectangle(0, 0, 960, 540))]);
-        var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan("hoverOnly", plan);
+        var snapshot = StyleOnlyPatchPlanDiagnosticSnapshot.FromPlan(StyleOnlyPatchPlanCase.HoverOnly, plan);
 
         var line = DiagnosticsFormatter.BuildStyleOnlyPatchPlanDiagnosticLine(snapshot);
 
-        Assert.Equal("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", line);
+        Assert.Equal("styleOnlyPlan HoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", line);
     }
 
     [Fact]
@@ -805,8 +805,8 @@ public sealed class ProgramDiagnosticsTests
         var output = string.Join(Environment.NewLine, StyleOnlyPatchPlanSmokeDiagnostics.BuildDiagnosticLines());
 
         Assert.Contains("=== StyleOnly Patch Plan Diagnostics ===", output);
-        Assert.Contains("styleOnlyPlan hoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", output);
-        Assert.Contains("styleOnlyPlan layoutAffecting eligible=False fallback=NotStyleOnly dirtyElementRanges=0:1 dirtyCommandRanges=(none) hitTargetCount=0", output);
+        Assert.Contains("styleOnlyPlan HoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", output);
+        Assert.Contains("styleOnlyPlan LayoutAffecting eligible=False fallback=NotStyleOnly dirtyElementRanges=0:1 dirtyCommandRanges=(none) hitTargetCount=0", output);
     }
 
     #endregion
