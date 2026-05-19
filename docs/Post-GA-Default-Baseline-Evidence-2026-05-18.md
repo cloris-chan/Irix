@@ -72,7 +72,8 @@ Expected smoke headers:
 - Historical pre-mixed-fallback Non-ASCII result: `--diagnose-sync-non-ascii` produced `fallbacks=900`, `unsupportedRuns=900`, `NonAscii=900`, `syncWaits=900`, `initFailurePhase=None`. Current mixed fallback v0 evidence is recorded below.
 - Warm scroll allocation attribution from `--diagnose-text-cache 30`: total `193584 bytes`, `6452 bytes/frame`; attribution `tree=144440 bytes (4814/frame)`, `diff=3752 bytes (125/frame)`, `translate=49200 bytes (1640/frame)`, `render=8200 bytes (273/frame)`.
 - D3D12 failure diagnostics hardening: glyph-atlas initialization failures use `initFailurePhase`; runtime record/upload/map failures now use `recordFailurePhase` and `RecordFailed` fallback reason before overlay fallback. This keeps runtime fallback distinct from constructor-time atlas setup failure.
-- Latest resource/failure hardening validation: Release build passed; normal tests `608` passed; D3D12 tests `6` passed; performance tests `6` passed; self-contained publish passed.
+- D3D12 upload map lifetime hardening: rectangle vertex, glyph vertex, and atlas upload paths now unmap in `finally` after a successful map.
+- Latest resource/failure hardening validation: Release build passed; normal tests `615` passed; D3D12 tests `6` passed; performance tests `6` passed; self-contained publish passed earlier in this evidence trail.
 
 ## Mixed Fallback v0 Evidence
 

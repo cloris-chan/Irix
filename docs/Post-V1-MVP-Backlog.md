@@ -133,7 +133,7 @@ Do not keep expanding the ASCII prototype surface or flip another runtime defaul
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
 | D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype with overlay rollback |
-| Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Runtime shader compile removed; resource creation and map outputs checked for explicit failure ownership; init failures and runtime record failures have separate diagnostics | ✅ First pass done |
+| Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Runtime shader compile removed; failure diagnostics split; successful upload maps unmap in `finally` | ✅ First pass done |
 | Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
 | Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | ✅ Attribution added |
 | Mixed fallback design | Renderer design | Per-run atlas plus per-run overlay fallback so NonAscii/complex runs do not force whole-frame overlay fallback | ✅ v0 implemented; subset parity pinned; z-order limitation documented |
@@ -144,6 +144,7 @@ Known limitations checklist before expanding text coverage:
 
 - Shader bytecode is embedded inline in the renderer sources. Runtime `D3DCompile` / `d3dcompiler_47.dll` dependency is removed; a build-time shader asset pipeline is optional future cleanup if shader source grows.
 - Glyph-atlas diagnostics distinguish constructor-time `initFailurePhase` from runtime `recordFailurePhase`; runtime record failures disable atlas and fall back to overlay without implying device lost by themselves.
+- D3D12 rectangle and glyph-atlas upload map paths unmap in `finally` after a successful map.
 - Mixed fallback v0 sends unsupported renderable runs to overlay while accepted ASCII / `NoWrap` runs stay on atlas. Initialization and runtime record failure still fall back all renderable runs for the frame.
 - Mixed fallback v0 does not preserve exact relative z-order between overlapping atlas text and overlay fallback text; overlay fallback runs draw above atlas runs.
 - No atlas eviction. Mixed AtlasFull fallback is safe for the current prototype; eviction design remains deferred.

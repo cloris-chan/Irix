@@ -222,25 +222,29 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
 
         var verts = new Span<Vertex>(mapped, MaxVerts);
         var count = 0;
-
-        for (var i = 0; i < rects.Length && count + 6 <= MaxVerts; i++)
+        try
         {
-            var r = rects[i];
-            var x1 = (r.X / vpW) * 2f - 1f;
-            var y1 = 1f - (r.Y / vpH) * 2f;
-            var x2 = ((r.X + r.Width) / vpW) * 2f - 1f;
-            var y2 = 1f - ((r.Y + r.Height) / vpH) * 2f;
-            var c = new Vector4(r.R, r.G, r.B, r.A);
+            for (var i = 0; i < rects.Length && count + 6 <= MaxVerts; i++)
+            {
+                var r = rects[i];
+                var x1 = (r.X / vpW) * 2f - 1f;
+                var y1 = 1f - (r.Y / vpH) * 2f;
+                var x2 = ((r.X + r.Width) / vpW) * 2f - 1f;
+                var y2 = 1f - ((r.Y + r.Height) / vpH) * 2f;
+                var c = new Vector4(r.R, r.G, r.B, r.A);
 
-            verts[count++] = new Vertex { Position = new Vector2(x1, y1), Color = c };
-            verts[count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
-            verts[count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
-            verts[count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
-            verts[count++] = new Vertex { Position = new Vector2(x2, y2), Color = c };
-            verts[count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
+                verts[count++] = new Vertex { Position = new Vector2(x1, y1), Color = c };
+                verts[count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
+                verts[count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
+                verts[count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
+                verts[count++] = new Vertex { Position = new Vector2(x2, y2), Color = c };
+                verts[count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
+            }
         }
-
-        _vbuf->Unmap(0, null);
+        finally
+        {
+            _vbuf->Unmap(0, null);
+        }
 
         list->SetPipelineState(_pso);
         list->SetGraphicsRootSignature(_rootSig);

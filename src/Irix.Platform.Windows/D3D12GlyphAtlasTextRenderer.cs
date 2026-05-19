@@ -712,8 +712,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 "D3D12GlyphAtlasTextRenderer.Map(vertex buffer) returned null.");
         }
 
-        vertices.CopyTo(new Span<Vertex>(mapped, MaxGlyphVertices));
-        _vbuf->Unmap(0, null);
+        try
+        {
+            vertices.CopyTo(new Span<Vertex>(mapped, MaxGlyphVertices));
+        }
+        finally
+        {
+            _vbuf->Unmap(0, null);
+        }
     }
 
     private void UploadAtlas(ID3D12GraphicsCommandList* list)
@@ -748,13 +754,19 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 "D3D12GlyphAtlasTextRenderer.Map(atlas upload buffer) returned null.");
         }
 
-        var destination = new Span<byte>(mapped, uploadBytes);
-        for (var row = 0; row < dirtyHeight; row++)
+        try
         {
-            _atlasPixels.AsSpan((_dirtyTop + row) * AtlasRowPitch + _dirtyLeft, dirtyWidth)
-                .CopyTo(destination.Slice(row * uploadRowPitch, dirtyWidth));
+            var destination = new Span<byte>(mapped, uploadBytes);
+            for (var row = 0; row < dirtyHeight; row++)
+            {
+                _atlasPixels.AsSpan((_dirtyTop + row) * AtlasRowPitch + _dirtyLeft, dirtyWidth)
+                    .CopyTo(destination.Slice(row * uploadRowPitch, dirtyWidth));
+            }
         }
-        _atlasUpload->Unmap(0, null);
+        finally
+        {
+            _atlasUpload->Unmap(0, null);
+        }
 
         var toCopyDest = Transition(_atlasTexture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
         list->ResourceBarrier(1, &toCopyDest);

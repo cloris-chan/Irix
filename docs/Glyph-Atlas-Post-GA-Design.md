@@ -33,7 +33,10 @@ Current implementation status:
 
 Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` with overlay rollback. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
 
-P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list. Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer. Runtime record/upload/map failures disable the atlas instance and fall back to overlay with `recordFailurePhase` diagnostics; they are not reported as device lost unless the renderer observes an actual device-removed condition.
+P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list.
+Glyph-atlas initialization failures remain phase-tagged and fall back to the overlay renderer.
+Runtime record/upload/map failures disable the atlas instance and fall back to overlay with `recordFailurePhase` diagnostics; they are not reported as device lost unless the renderer observes an actual device-removed condition.
+D3D12 upload map paths now unmap in `finally` after a successful map, covering rectangle vertices, glyph vertices, and atlas uploads.
 
 Mixed fallback v0 update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It fills a caller-owned fallback run list while recording atlas quads for accepted runs.
 `D3D12Renderer` passes that fallback subset to `D3D12TextRenderer.Render(...)`, so NonAscii no longer forces every text run in the frame through overlay.

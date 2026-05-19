@@ -165,6 +165,18 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void D3D12_upload_map_paths_unmap_in_finally()
+    {
+        var root = FindRepoRoot();
+        var rectSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer2D.cs")));
+        var glyphSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs")));
+
+        Assert.Equal(1, CountOccurrences(rectSource, "finally\n        {\n            _vbuf->Unmap(0, null);\n        }"));
+        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            _vbuf->Unmap(0, null);\n        }"));
+        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            _atlasUpload->Unmap(0, null);\n        }"));
+    }
+
+    [Fact]
     public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
@@ -1243,6 +1255,25 @@ public sealed class ProgramDiagnosticsTests
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
+
+    private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var start = 0;
+        while (true)
+        {
+            var index = text.IndexOf(value, start, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                return count;
+            }
+
+            count++;
+            start = index + value.Length;
+        }
+    }
 
     private static string FindRepoRoot()
     {
