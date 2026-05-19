@@ -15,6 +15,32 @@ internal enum ViewportScaleMode : byte
     PhysicalPixelsV0
 }
 
+internal readonly struct DeviceErrorDiagnostic(string Message) : IEquatable<DeviceErrorDiagnostic>
+{
+    private readonly string _message = Message;
+
+    public static DeviceErrorDiagnostic None { get; } = new("(none)");
+
+    public ReadOnlySpan<char> Message => _message;
+
+    public static DeviceErrorDiagnostic FromNullable(string? message)
+    {
+        return string.IsNullOrWhiteSpace(message) ? None : new DeviceErrorDiagnostic(message);
+    }
+
+    public bool Equals(DeviceErrorDiagnostic other) => _message == other._message;
+
+    public override bool Equals(object? obj) => obj is DeviceErrorDiagnostic other && Equals(other);
+
+    public override int GetHashCode() => _message.GetHashCode();
+
+    public override string ToString() => _message;
+
+    public static bool operator ==(DeviceErrorDiagnostic left, DeviceErrorDiagnostic right) => left.Equals(right);
+
+    public static bool operator !=(DeviceErrorDiagnostic left, DeviceErrorDiagnostic right) => !left.Equals(right);
+}
+
 internal readonly struct BackendClipTextDiagnosticSnapshot(
     DrawingBackendClipMode ClipMode,
     int ClippedCommandCount,
@@ -24,7 +50,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
     EffectiveScissor LastEffectiveTextClip,
     int TextClipSkippedCount,
     bool DeviceRemoved,
-    string DeviceErrorReason) : IEquatable<BackendClipTextDiagnosticSnapshot>
+    DeviceErrorDiagnostic DeviceError) : IEquatable<BackendClipTextDiagnosticSnapshot>
 {
 
     public DrawingBackendClipMode ClipMode { get; } = ClipMode;
@@ -35,7 +61,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
     public EffectiveScissor LastEffectiveTextClip { get; } = LastEffectiveTextClip;
     public int TextClipSkippedCount { get; } = TextClipSkippedCount;
     public bool DeviceRemoved { get; } = DeviceRemoved;
-    public string DeviceErrorReason { get; } = DeviceErrorReason;
+    public DeviceErrorDiagnostic DeviceError { get; } = DeviceError;
 
     public bool GpuScissor => ClipMode == DrawingBackendClipMode.Scissor;
 
@@ -50,7 +76,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
             backend.LastEffectiveTextClip,
             backend.TextClipSkippedCount,
             renderer.IsDeviceRemoved,
-            renderer.DeviceErrorReason ?? "(none)");
+            DeviceErrorDiagnostic.FromNullable(renderer.DeviceErrorReason));
     }
 
     public bool Equals(BackendClipTextDiagnosticSnapshot other)
@@ -63,7 +89,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
             && LastEffectiveTextClip == other.LastEffectiveTextClip
             && TextClipSkippedCount == other.TextClipSkippedCount
             && DeviceRemoved == other.DeviceRemoved
-            && DeviceErrorReason == other.DeviceErrorReason;
+            && DeviceError == other.DeviceError;
     }
 
     public override bool Equals(object? obj) => obj is BackendClipTextDiagnosticSnapshot other && Equals(other);
@@ -79,7 +105,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
         hash.Add(LastEffectiveTextClip);
         hash.Add(TextClipSkippedCount);
         hash.Add(DeviceRemoved);
-        hash.Add(DeviceErrorReason);
+        hash.Add(DeviceError);
         return hash.ToHashCode();
     }
 

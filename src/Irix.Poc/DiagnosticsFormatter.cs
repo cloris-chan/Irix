@@ -10,7 +10,7 @@ internal static class DiagnosticsFormatter
     {
         return [
             $"Device removed: {snapshot.DeviceRemoved}",
-            $"Device error reason: {snapshot.DeviceErrorReason}"
+            $"Device error reason: {snapshot.DeviceError}"
         ];
     }
 

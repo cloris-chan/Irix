@@ -840,7 +840,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(lastEffectiveTextClip, snapshot.LastEffectiveTextClip);
         Assert.Equal(4, snapshot.TextClipSkippedCount);
         Assert.True(snapshot.DeviceRemoved);
-        Assert.Equal("DeviceLost", snapshot.DeviceErrorReason);
+        Assert.Equal(DeviceErrorDiagnostic.FromNullable("DeviceLost"), snapshot.DeviceError);
         Assert.True(snapshot.GpuScissor);
     }
 
@@ -1285,7 +1285,7 @@ public sealed class ProgramDiagnosticsTests
             lastEffectiveTextClip,
             textClipSkippedCount,
             deviceRemoved,
-            deviceErrorReason);
+            DeviceErrorDiagnostic.FromNullable(deviceErrorReason));
     }
 
     private static RenderingPipelineDiagnosticSnapshot CreateRenderingPipelineSnapshot()

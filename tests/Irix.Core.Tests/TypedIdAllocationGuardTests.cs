@@ -1252,6 +1252,17 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Backend_clip_text_diagnostics_wrap_device_error_text()
+    {
+        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+
+        Assert.Contains("internal readonly struct DeviceErrorDiagnostic", snapshotSource);
+        Assert.Contains("DeviceErrorDiagnostic DeviceError", snapshotSource);
+        Assert.DoesNotContain("string DeviceErrorReason", snapshotSource);
+        Assert.DoesNotContain("public string DeviceErrorReason", snapshotSource);
+    }
+
+    [Fact]
     public void Irix_Drawing_TextStyle_uses_value_font_family()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));
