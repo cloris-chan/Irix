@@ -33,23 +33,21 @@ internal static class InputDiagnosticRunner
     internal static InputDiagnosticsSnapshot BuildInputDiagnosticsSnapshot()
     {
         var ownershipState = new InputOwnershipState();
-        var lines = new List<string>();
-        var ownershipLines = new List<string>();
-        var buttonVisualStateLines = new List<string>();
+        var ownershipSteps = new List<InputDiagnosticOwnershipStep>();
+        var buttonStates = new List<InputDiagnosticButtonState>();
 
-        lines.Add("buttonPriorityOrder Pressed > Hovered > Focused > Normal");
-        AddButtonVisualStateLine($"buttonState normal Increment {DiagnosticsFormatter.FormatButtonState(default)}");
-        AddButtonVisualStateLine($"buttonState hovered Increment {DiagnosticsFormatter.FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true))}");
-        AddButtonVisualStateLine($"buttonState pressed Increment {DiagnosticsFormatter.FormatButtonState(new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true))}");
-        AddButtonVisualStateLine($"buttonState focused Increment {DiagnosticsFormatter.FormatButtonState(new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true))}");
+        AddButtonState(InputDiagnosticButtonStateKind.Normal, default);
+        AddButtonState(InputDiagnosticButtonStateKind.Hovered, new ButtonVisualState(IsHovered: true, IsPressed: false, IsFocused: true));
+        AddButtonState(InputDiagnosticButtonStateKind.Pressed, new ButtonVisualState(IsHovered: true, IsPressed: true, IsFocused: true));
+        AddButtonState(InputDiagnosticButtonStateKind.Focused, new ButtonVisualState(IsHovered: false, IsPressed: false, IsFocused: true));
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140),
             ownershipState,
             HitInputDiagnosticTarget,
             out _);
-        AddOwnershipLine($"afterMove {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState afterMove Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
+        AddOwnershipStep(InputDiagnosticOwnershipStepKind.AfterMove);
+        AddDerivedButtonState(InputDiagnosticButtonStateKind.AfterMove, ownershipState.Snapshot);
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -61,16 +59,16 @@ internal static class InputDiagnosticRunner
             ownershipState,
             HitInputDiagnosticTarget,
             out _);
-        AddOwnershipLine($"afterPress {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState afterPress Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
+        AddOwnershipStep(InputDiagnosticOwnershipStepKind.AfterPress);
+        AddDerivedButtonState(InputDiagnosticButtonStateKind.AfterPress, ownershipState.Snapshot);
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 3, X: 32, Y: 200),
             ownershipState,
             HitInputDiagnosticTarget,
             out _);
-        AddOwnershipLine($"duringCaptureMove {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState duringCaptureMove Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
+        AddOwnershipStep(InputDiagnosticOwnershipStepKind.DuringCaptureMove);
+        AddDerivedButtonState(InputDiagnosticButtonStateKind.DuringCaptureMove, ownershipState.Snapshot);
 
         var releaseMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -82,22 +80,22 @@ internal static class InputDiagnosticRunner
             ownershipState,
             HitInputDiagnosticTarget,
             out var releaseMessage);
-        AddOwnershipLine($"releaseOutside mapped={releaseMapped} message={DiagnosticsFormatter.FormatMessage(releaseMessage)} {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState releaseOutside Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
+        AddMappedOwnershipStep(InputDiagnosticOwnershipStepKind.ReleaseOutside, releaseMapped, releaseMessage);
+        AddDerivedButtonState(InputDiagnosticButtonStateKind.ReleaseOutside, ownershipState.Snapshot);
 
         var enterMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 5, X: 0, Y: 0, KeyCode: 0x0D),
             ownershipState,
             HitInputDiagnosticTarget,
             out var enterMessage);
-        AddOwnershipLine($"keyboardEnter mapped={enterMapped} message={DiagnosticsFormatter.FormatMessage(enterMessage)} {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
+        AddMappedOwnershipStep(InputDiagnosticOwnershipStepKind.KeyboardEnter, enterMapped, enterMessage);
 
         var spaceMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 6, X: 0, Y: 0, KeyCode: 0x20),
             ownershipState,
             HitInputDiagnosticTarget,
             out var spaceMessage);
-        AddOwnershipLine($"keyboardSpace mapped={spaceMapped} message={DiagnosticsFormatter.FormatMessage(spaceMessage)} {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
+        AddMappedOwnershipStep(InputDiagnosticOwnershipStepKind.KeyboardSpace, spaceMapped, spaceMessage);
 
         var pressEmptyMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -109,7 +107,7 @@ internal static class InputDiagnosticRunner
             ownershipState,
             HitInputDiagnosticTarget,
             out _);
-        AddOwnershipLine($"pressEmpty mapped={pressEmptyMapped} {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
+        AddMappedOwnershipStep(InputDiagnosticOwnershipStepKind.PressEmpty, pressEmptyMapped);
 
         var releaseEmptyMapped = CounterInputRouter.TryMapInput(
             new RawInputEvent(
@@ -121,43 +119,45 @@ internal static class InputDiagnosticRunner
             ownershipState,
             HitInputDiagnosticTarget,
             out _);
-        AddOwnershipLine($"releaseAfterEmptyPress mapped={releaseEmptyMapped} {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
+        AddMappedOwnershipStep(InputDiagnosticOwnershipStepKind.ReleaseAfterEmptyPress, releaseEmptyMapped);
 
         CounterInputRouter.TryMapInput(
             new RawInputEvent(RawInputEventKind.FocusLost, Timestamp: 9, X: 0, Y: 0),
             ownershipState,
             HitInputDiagnosticTarget,
             out _);
-        AddOwnershipLine($"focusLost {DiagnosticsFormatter.FormatOwnership(ownershipState.Snapshot)}");
-        AddButtonVisualStateLine($"buttonState focusLost Increment {DiagnosticsFormatter.FormatButtonState(CounterApplication.DeriveButtonState(ownershipState.Snapshot, ActionIdRegistry.Increment))}");
-        lines.Add("events:");
-        var eventLines = new List<string>();
-        foreach (var diagnosticEvent in ownershipState.DiagnosticEvents)
+        AddOwnershipStep(InputDiagnosticOwnershipStepKind.FocusLost);
+        AddDerivedButtonState(InputDiagnosticButtonStateKind.FocusLost, ownershipState.Snapshot);
+
+        return new InputDiagnosticsSnapshot(
+            ownershipState.Snapshot,
+            buttonStates.ToArray(),
+            ownershipSteps.ToArray(),
+            ownershipState.DiagnosticEvents.ToArray(),
+            BuildInputDirtyReasonDiagnostics());
+
+        void AddButtonState(InputDiagnosticButtonStateKind kind, ButtonVisualState state)
         {
-            var eventLine = $"  {DiagnosticsFormatter.FormatOwnershipEvent(diagnosticEvent)}";
-            eventLines.Add(eventLine);
-            lines.Add(eventLine);
+            buttonStates.Add(new InputDiagnosticButtonState(kind, ActionIdRegistry.Increment, state));
         }
 
-        var dirtyReasonLines = BuildInputDirtyReasonDiagnosticLines();
-        lines.AddRange(dirtyReasonLines);
-
-        return new InputDiagnosticsSnapshot(ownershipState.Snapshot, lines, ownershipLines, buttonVisualStateLines, eventLines, dirtyReasonLines);
-
-        void AddOwnershipLine(string line)
+        void AddDerivedButtonState(InputDiagnosticButtonStateKind kind, OwnershipSnapshot ownership)
         {
-            ownershipLines.Add(line);
-            lines.Add(line);
+            AddButtonState(kind, CounterApplication.DeriveButtonState(ownership, ActionIdRegistry.Increment));
         }
 
-        void AddButtonVisualStateLine(string line)
+        void AddOwnershipStep(InputDiagnosticOwnershipStepKind kind)
         {
-            buttonVisualStateLines.Add(line);
-            lines.Add(line);
+            ownershipSteps.Add(new InputDiagnosticOwnershipStep(kind, ownershipState.Snapshot));
+        }
+
+        void AddMappedOwnershipStep(InputDiagnosticOwnershipStepKind kind, bool mapped, CounterMessage? message = null)
+        {
+            ownershipSteps.Add(new InputDiagnosticOwnershipStep(kind, ownershipState.Snapshot, HasMappedResult: true, Mapped: mapped, Message: message));
         }
     }
 
-    internal static string[] BuildInputDirtyReasonDiagnosticLines()
+    internal static InputDirtyReasonDiagnostic[] BuildInputDirtyReasonDiagnostics()
     {
         var app = new CounterApplication();
         var ownershipState = new InputOwnershipState();
@@ -174,34 +174,29 @@ internal static class InputDiagnosticRunner
             pipeline.RetainedFrame.Invalidate();
         }
 
-        var lines = new List<string>
-        {
-            "dirtyReasons:"
-        };
-
-        ApplyInput("hoverOnly", new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140));
-        ApplyInput("press", new RawInputEvent(
+        var diagnostics = new InputDirtyReasonDiagnostic[3];
+        diagnostics[0] = ApplyInput(InputDirtyReasonCase.HoverOnly, new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 140));
+        diagnostics[1] = ApplyInput(InputDirtyReasonCase.Press, new RawInputEvent(
             RawInputEventKind.PointerPressed,
             Timestamp: 2,
             X: 32,
             Y: 140,
             Button: PointerButton.Left));
-        ApplyInput("release", new RawInputEvent(
+        diagnostics[2] = ApplyInput(InputDirtyReasonCase.Release, new RawInputEvent(
             RawInputEventKind.PointerReleased,
             Timestamp: 3,
             X: 500,
             Y: 500,
             Button: PointerButton.Left));
 
-        return lines.ToArray();
+        return diagnostics;
 
-        void ApplyInput(string name, RawInputEvent inputEvent)
+        InputDirtyReasonDiagnostic ApplyInput(InputDirtyReasonCase @case, RawInputEvent inputEvent)
         {
             var hitTestResolver = new DelegateActionHitTestResolver(HitDiagnosticTarget);
             if (!Program.TryMapInputForRuntime(inputEvent, ownershipState, hitTestResolver, out var message) || message is null or CounterMessage.WheelRaw)
             {
-                lines.Add($"dirtyReason {name} reason={LayoutRebuildReason.None} classifications=(none)");
-                return;
+                return new InputDirtyReasonDiagnostic(@case, LayoutRebuildReason.None, []);
             }
 
             model = app.Update(model, message).NextModel;
@@ -213,8 +208,8 @@ internal static class InputDiagnosticRunner
             var previousRoot = result.Dirty.Count > 0 ? result.PreviousRoot : default;
             using var frame = pipeline.Build(retainedTree.Tree.Root, viewport, textSnapshot, result.Dirty, prevTextSnapshot, previousRoot);
             pipeline.RetainedFrame.Invalidate();
-            lines.Add($"dirtyReason {name} reason={pipeline.LastLayoutRebuildReason} classifications={DiagnosticsFormatter.FormatLayoutDirtyClassifications(pipeline.LastDirtyClassifications)}");
             currentTree = nextTree;
+            return new InputDirtyReasonDiagnostic(@case, pipeline.LastLayoutRebuildReason, pipeline.LastDirtyClassifications.ToArray());
         }
 
         static ActionId HitDiagnosticTarget(int x, int y)

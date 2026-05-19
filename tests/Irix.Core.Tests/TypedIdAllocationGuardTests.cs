@@ -1234,6 +1234,24 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Input_diagnostics_snapshot_uses_typed_events_not_string_lines()
+    {
+        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+        var runnerSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "InputDiagnosticRunner.cs"));
+
+        Assert.Contains("IReadOnlyList<InputDiagnosticButtonState> ButtonStates", snapshotSource);
+        Assert.Contains("IReadOnlyList<InputDiagnosticOwnershipStep> OwnershipSteps", snapshotSource);
+        Assert.Contains("IReadOnlyList<InputOwnershipEvent> Events", snapshotSource);
+        Assert.Contains("IReadOnlyList<InputDirtyReasonDiagnostic> DirtyReasons", snapshotSource);
+        Assert.DoesNotContain("IReadOnlyList<string> OrderedDiagnosticLines", snapshotSource);
+        Assert.DoesNotContain("IReadOnlyList<string> OwnershipLines", snapshotSource);
+        Assert.DoesNotContain("IReadOnlyList<string> ButtonVisualStateLines", snapshotSource);
+        Assert.DoesNotContain("IReadOnlyList<string> EventLines", snapshotSource);
+        Assert.DoesNotContain("IReadOnlyList<string> DirtyReasonLines", snapshotSource);
+        Assert.DoesNotContain("new List<string>()", runnerSource);
+    }
+
+    [Fact]
     public void Irix_Drawing_TextStyle_uses_value_font_family()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));

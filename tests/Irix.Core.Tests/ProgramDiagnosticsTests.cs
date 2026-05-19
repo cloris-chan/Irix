@@ -720,14 +720,26 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(snapshot.Ownership.CapturedTarget.IsNone);
         Assert.Equal(3, snapshot.Ownership.HoverChangeCount);
         Assert.False(snapshot.Ownership.IsPointerPressed);
-        Assert.Contains("afterMove hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False", snapshot.OwnershipLines);
-        Assert.Contains(snapshot.OwnershipLines, line => line.StartsWith("keyboardEnter mapped=True message=Increment hover=Decrement focus=Increment", StringComparison.Ordinal));
-        Assert.Contains("buttonState normal Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", snapshot.ButtonVisualStateLines);
-        Assert.Contains("buttonState focusLost Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", snapshot.ButtonVisualStateLines);
-        Assert.Contains("  HoverChanged previous=- current=Increment", snapshot.EventLines);
-        Assert.Contains("  FocusChanged previous=Increment current=-", snapshot.EventLines);
-        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly/VisualOnly", snapshot.DirtyReasonLines);
-        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting/TextMeasure,4:StyleOnly/VisualOnly", snapshot.DirtyReasonLines);
+        Assert.Contains(snapshot.OwnershipSteps, step => step.Kind == InputDiagnosticOwnershipStepKind.AfterMove && step.Ownership.HoveredTarget == ActionIdRegistry.Increment);
+        Assert.Contains(snapshot.OwnershipSteps, step => step.Kind == InputDiagnosticOwnershipStepKind.KeyboardEnter && step is { HasMappedResult: true, Mapped: true } && step.Message is CounterMessage.Increment);
+        Assert.Contains(snapshot.ButtonStates, state => state.Kind == InputDiagnosticButtonStateKind.Normal && state.ActionId == ActionIdRegistry.Increment && state.State == default);
+        Assert.Contains(snapshot.ButtonStates, state => state.Kind == InputDiagnosticButtonStateKind.FocusLost && state.ActionId == ActionIdRegistry.Increment && state.State == default);
+        Assert.Contains(snapshot.Events, diagnosticEvent => diagnosticEvent.Kind == InputOwnershipEventKind.HoverChanged && diagnosticEvent.PreviousTarget.IsNone && diagnosticEvent.CurrentTarget == ActionIdRegistry.Increment);
+        Assert.Contains(snapshot.Events, diagnosticEvent => diagnosticEvent.Kind == InputOwnershipEventKind.FocusChanged && diagnosticEvent.PreviousTarget == ActionIdRegistry.Increment && diagnosticEvent.CurrentTarget.IsNone);
+        Assert.Contains(snapshot.DirtyReasons, dirtyReason => dirtyReason.Case == InputDirtyReasonCase.HoverOnly && dirtyReason.Reason == LayoutRebuildReason.StyleOnly);
+        Assert.Contains(snapshot.DirtyReasons, dirtyReason => dirtyReason.Case == InputDirtyReasonCase.Release && dirtyReason.Reason == LayoutRebuildReason.TextSizeAffecting && dirtyReason.Classifications.Count == 2);
+        var ownershipLines = DiagnosticsFormatter.BuildInputOwnershipDiagnosticLines(snapshot);
+        var buttonStateLines = DiagnosticsFormatter.BuildInputButtonStateDiagnosticLines(snapshot);
+        var eventLines = DiagnosticsFormatter.BuildInputEventDiagnosticLines(snapshot);
+        var dirtyReasonLines = DiagnosticsFormatter.BuildInputDirtyReasonDiagnosticLines(snapshot);
+        Assert.Contains("afterMove hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False", ownershipLines);
+        Assert.Contains(ownershipLines, line => line.StartsWith("keyboardEnter mapped=True message=Increment hover=Decrement focus=Increment", StringComparison.Ordinal));
+        Assert.Contains("buttonState normal Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", buttonStateLines);
+        Assert.Contains("buttonState focusLost Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", buttonStateLines);
+        Assert.Contains("  HoverChanged previous=- current=Increment", eventLines);
+        Assert.Contains("  FocusChanged previous=Increment current=-", eventLines);
+        Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly/VisualOnly", dirtyReasonLines);
+        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting/TextMeasure,4:StyleOnly/VisualOnly", dirtyReasonLines);
     }
 
     [Fact]

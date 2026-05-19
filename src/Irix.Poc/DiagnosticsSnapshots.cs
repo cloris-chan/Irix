@@ -334,35 +334,146 @@ internal readonly struct ScrollDiagnosticsSnapshot(
 
 internal readonly struct InputDiagnosticsSnapshot(
     OwnershipSnapshot Ownership,
-    IReadOnlyList<string> OrderedDiagnosticLines,
-    IReadOnlyList<string> OwnershipLines,
-    IReadOnlyList<string> ButtonVisualStateLines,
-    IReadOnlyList<string> EventLines,
-    IReadOnlyList<string> DirtyReasonLines) : IEquatable<InputDiagnosticsSnapshot>
+    IReadOnlyList<InputDiagnosticButtonState> ButtonStates,
+    IReadOnlyList<InputDiagnosticOwnershipStep> OwnershipSteps,
+    IReadOnlyList<InputOwnershipEvent> Events,
+    IReadOnlyList<InputDirtyReasonDiagnostic> DirtyReasons) : IEquatable<InputDiagnosticsSnapshot>
 {
 
     public OwnershipSnapshot Ownership { get; } = Ownership;
-    public IReadOnlyList<string> OrderedDiagnosticLines { get; } = OrderedDiagnosticLines;
-    public IReadOnlyList<string> OwnershipLines { get; } = OwnershipLines;
-    public IReadOnlyList<string> ButtonVisualStateLines { get; } = ButtonVisualStateLines;
-    public IReadOnlyList<string> EventLines { get; } = EventLines;
-    public IReadOnlyList<string> DirtyReasonLines { get; } = DirtyReasonLines;
+    public IReadOnlyList<InputDiagnosticButtonState> ButtonStates { get; } = ButtonStates;
+    public IReadOnlyList<InputDiagnosticOwnershipStep> OwnershipSteps { get; } = OwnershipSteps;
+    public IReadOnlyList<InputOwnershipEvent> Events { get; } = Events;
+    public IReadOnlyList<InputDirtyReasonDiagnostic> DirtyReasons { get; } = DirtyReasons;
 
     public bool Equals(InputDiagnosticsSnapshot other)
     {
         return Ownership == other.Ownership
-            && EqualityComparer<IReadOnlyList<string>>.Default.Equals(OrderedDiagnosticLines, other.OrderedDiagnosticLines)
-            && EqualityComparer<IReadOnlyList<string>>.Default.Equals(OwnershipLines, other.OwnershipLines)
-            && EqualityComparer<IReadOnlyList<string>>.Default.Equals(ButtonVisualStateLines, other.ButtonVisualStateLines)
-            && EqualityComparer<IReadOnlyList<string>>.Default.Equals(EventLines, other.EventLines)
-            && EqualityComparer<IReadOnlyList<string>>.Default.Equals(DirtyReasonLines, other.DirtyReasonLines);
+            && EqualityComparer<IReadOnlyList<InputDiagnosticButtonState>>.Default.Equals(ButtonStates, other.ButtonStates)
+            && EqualityComparer<IReadOnlyList<InputDiagnosticOwnershipStep>>.Default.Equals(OwnershipSteps, other.OwnershipSteps)
+            && EqualityComparer<IReadOnlyList<InputOwnershipEvent>>.Default.Equals(Events, other.Events)
+            && EqualityComparer<IReadOnlyList<InputDirtyReasonDiagnostic>>.Default.Equals(DirtyReasons, other.DirtyReasons);
     }
 
     public override bool Equals(object? obj) => obj is InputDiagnosticsSnapshot other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Ownership, OrderedDiagnosticLines, OwnershipLines, ButtonVisualStateLines, EventLines, DirtyReasonLines);
+    public override int GetHashCode() => HashCode.Combine(Ownership, ButtonStates, OwnershipSteps, Events, DirtyReasons);
 
     public static bool operator ==(InputDiagnosticsSnapshot left, InputDiagnosticsSnapshot right) => left.Equals(right);
 
     public static bool operator !=(InputDiagnosticsSnapshot left, InputDiagnosticsSnapshot right) => !left.Equals(right);
+}
+
+internal enum InputDiagnosticButtonStateKind : byte
+{
+    Normal,
+    Hovered,
+    Pressed,
+    Focused,
+    AfterMove,
+    AfterPress,
+    DuringCaptureMove,
+    ReleaseOutside,
+    FocusLost
+}
+
+internal readonly struct InputDiagnosticButtonState(
+    InputDiagnosticButtonStateKind Kind,
+    ActionId ActionId,
+    ButtonVisualState State) : IEquatable<InputDiagnosticButtonState>
+{
+    public InputDiagnosticButtonStateKind Kind { get; } = Kind;
+    public ActionId ActionId { get; } = ActionId;
+    public ButtonVisualState State { get; } = State;
+
+    public bool Equals(InputDiagnosticButtonState other)
+    {
+        return Kind == other.Kind
+            && ActionId == other.ActionId
+            && State == other.State;
+    }
+
+    public override bool Equals(object? obj) => obj is InputDiagnosticButtonState other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, ActionId, State);
+
+    public static bool operator ==(InputDiagnosticButtonState left, InputDiagnosticButtonState right) => left.Equals(right);
+
+    public static bool operator !=(InputDiagnosticButtonState left, InputDiagnosticButtonState right) => !left.Equals(right);
+}
+
+internal enum InputDiagnosticOwnershipStepKind : byte
+{
+    AfterMove,
+    AfterPress,
+    DuringCaptureMove,
+    ReleaseOutside,
+    KeyboardEnter,
+    KeyboardSpace,
+    PressEmpty,
+    ReleaseAfterEmptyPress,
+    FocusLost
+}
+
+internal readonly struct InputDiagnosticOwnershipStep(
+    InputDiagnosticOwnershipStepKind Kind,
+    OwnershipSnapshot Ownership,
+    bool HasMappedResult = false,
+    bool Mapped = false,
+    CounterMessage? Message = null) : IEquatable<InputDiagnosticOwnershipStep>
+{
+    public InputDiagnosticOwnershipStepKind Kind { get; } = Kind;
+    public OwnershipSnapshot Ownership { get; } = Ownership;
+    public bool HasMappedResult { get; } = HasMappedResult;
+    public bool Mapped { get; } = Mapped;
+    public CounterMessage? Message { get; } = Message;
+
+    public bool Equals(InputDiagnosticOwnershipStep other)
+    {
+        return Kind == other.Kind
+            && Ownership == other.Ownership
+            && HasMappedResult == other.HasMappedResult
+            && Mapped == other.Mapped
+            && EqualityComparer<CounterMessage?>.Default.Equals(Message, other.Message);
+    }
+
+    public override bool Equals(object? obj) => obj is InputDiagnosticOwnershipStep other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, Ownership, HasMappedResult, Mapped, Message);
+
+    public static bool operator ==(InputDiagnosticOwnershipStep left, InputDiagnosticOwnershipStep right) => left.Equals(right);
+
+    public static bool operator !=(InputDiagnosticOwnershipStep left, InputDiagnosticOwnershipStep right) => !left.Equals(right);
+}
+
+internal enum InputDirtyReasonCase : byte
+{
+    HoverOnly,
+    Press,
+    Release
+}
+
+internal readonly struct InputDirtyReasonDiagnostic(
+    InputDirtyReasonCase Case,
+    LayoutRebuildReason Reason,
+    IReadOnlyList<LayoutDirtyClassification> Classifications) : IEquatable<InputDirtyReasonDiagnostic>
+{
+    public InputDirtyReasonCase Case { get; } = Case;
+    public LayoutRebuildReason Reason { get; } = Reason;
+    public IReadOnlyList<LayoutDirtyClassification> Classifications { get; } = Classifications;
+
+    public bool Equals(InputDirtyReasonDiagnostic other)
+    {
+        return Case == other.Case
+            && Reason == other.Reason
+            && EqualityComparer<IReadOnlyList<LayoutDirtyClassification>>.Default.Equals(Classifications, other.Classifications);
+    }
+
+    public override bool Equals(object? obj) => obj is InputDirtyReasonDiagnostic other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Case, Reason, Classifications);
+
+    public static bool operator ==(InputDirtyReasonDiagnostic left, InputDirtyReasonDiagnostic right) => left.Equals(right);
+
+    public static bool operator !=(InputDirtyReasonDiagnostic left, InputDirtyReasonDiagnostic right) => !left.Equals(right);
 }

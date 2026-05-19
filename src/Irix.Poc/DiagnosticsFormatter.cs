@@ -129,11 +129,189 @@ internal static class DiagnosticsFormatter
 
     internal static string[] BuildInputDiagnosticLines(InputDiagnosticsSnapshot snapshot)
     {
-        return [
+        var lines = new List<string>
+        {
             "=== Input Ownership Diagnostics ===",
-            .. snapshot.OrderedDiagnosticLines,
-            "=== Input diagnostic mode complete ==="
-        ];
+            "buttonPriorityOrder Pressed > Hovered > Focused > Normal"
+        };
+
+        foreach (var state in snapshot.ButtonStates)
+        {
+            if (state.Kind is InputDiagnosticButtonStateKind.AfterMove
+                or InputDiagnosticButtonStateKind.AfterPress
+                or InputDiagnosticButtonStateKind.DuringCaptureMove
+                or InputDiagnosticButtonStateKind.ReleaseOutside
+                or InputDiagnosticButtonStateKind.FocusLost)
+            {
+                continue;
+            }
+
+            lines.Add(FormatInputButtonStateLine(state));
+        }
+
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.AfterMove);
+        AppendButtonState(lines, snapshot, InputDiagnosticButtonStateKind.AfterMove);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.AfterPress);
+        AppendButtonState(lines, snapshot, InputDiagnosticButtonStateKind.AfterPress);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.DuringCaptureMove);
+        AppendButtonState(lines, snapshot, InputDiagnosticButtonStateKind.DuringCaptureMove);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.ReleaseOutside);
+        AppendButtonState(lines, snapshot, InputDiagnosticButtonStateKind.ReleaseOutside);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.KeyboardEnter);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.KeyboardSpace);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.PressEmpty);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.ReleaseAfterEmptyPress);
+        AppendOwnershipStep(lines, snapshot, InputDiagnosticOwnershipStepKind.FocusLost);
+        AppendButtonState(lines, snapshot, InputDiagnosticButtonStateKind.FocusLost);
+        lines.Add("events:");
+        foreach (var diagnosticEvent in snapshot.Events)
+        {
+            lines.Add($"  {FormatOwnershipEvent(diagnosticEvent)}");
+        }
+
+        lines.Add("dirtyReasons:");
+        foreach (var dirtyReason in snapshot.DirtyReasons)
+        {
+            lines.Add($"dirtyReason {FormatDirtyReasonCase(dirtyReason.Case)} reason={dirtyReason.Reason} classifications={FormatLayoutDirtyClassifications(dirtyReason.Classifications)}");
+        }
+
+        lines.Add("=== Input diagnostic mode complete ===");
+        return [.. lines];
+    }
+
+    internal static string[] BuildInputOwnershipDiagnosticLines(InputDiagnosticsSnapshot snapshot)
+    {
+        var lines = new string[snapshot.OwnershipSteps.Count];
+        for (var i = 0; i < lines.Length; i++)
+        {
+            lines[i] = FormatInputOwnershipStep(snapshot.OwnershipSteps[i]);
+        }
+
+        return lines;
+    }
+
+    internal static string[] BuildInputButtonStateDiagnosticLines(InputDiagnosticsSnapshot snapshot)
+    {
+        var lines = new string[snapshot.ButtonStates.Count];
+        for (var i = 0; i < lines.Length; i++)
+        {
+            lines[i] = FormatInputButtonStateLine(snapshot.ButtonStates[i]);
+        }
+
+        return lines;
+    }
+
+    internal static string[] BuildInputEventDiagnosticLines(InputDiagnosticsSnapshot snapshot)
+    {
+        var lines = new string[snapshot.Events.Count];
+        for (var i = 0; i < lines.Length; i++)
+        {
+            lines[i] = $"  {FormatOwnershipEvent(snapshot.Events[i])}";
+        }
+
+        return lines;
+    }
+
+    internal static string[] BuildInputDirtyReasonDiagnosticLines(InputDiagnosticsSnapshot snapshot)
+    {
+        var lines = new string[snapshot.DirtyReasons.Count];
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var dirtyReason = snapshot.DirtyReasons[i];
+            lines[i] = $"dirtyReason {FormatDirtyReasonCase(dirtyReason.Case)} reason={dirtyReason.Reason} classifications={FormatLayoutDirtyClassifications(dirtyReason.Classifications)}";
+        }
+
+        return lines;
+    }
+
+    private static void AppendOwnershipStep(List<string> lines, InputDiagnosticsSnapshot snapshot, InputDiagnosticOwnershipStepKind kind)
+    {
+        foreach (var step in snapshot.OwnershipSteps)
+        {
+            if (step.Kind != kind)
+            {
+                continue;
+            }
+
+            lines.Add(FormatInputOwnershipStep(step));
+            return;
+        }
+    }
+
+    private static void AppendButtonState(List<string> lines, InputDiagnosticsSnapshot snapshot, InputDiagnosticButtonStateKind kind)
+    {
+        foreach (var state in snapshot.ButtonStates)
+        {
+            if (state.Kind != kind)
+            {
+                continue;
+            }
+
+            lines.Add(FormatInputButtonStateLine(state));
+            return;
+        }
+    }
+
+    private static string FormatInputButtonStateLine(InputDiagnosticButtonState state)
+    {
+        return $"buttonState {FormatButtonStateKind(state.Kind)} {FormatTarget(state.ActionId)} {FormatButtonState(state.State)}";
+    }
+
+    private static string FormatInputOwnershipStep(InputDiagnosticOwnershipStep step)
+    {
+        var prefix = FormatOwnershipStepKind(step.Kind);
+        if (!step.HasMappedResult)
+        {
+            return $"{prefix} {FormatOwnership(step.Ownership)}";
+        }
+
+        var messageText = step.Message is null ? string.Empty : $" message={FormatMessage(step.Message)}";
+        return $"{prefix} mapped={step.Mapped}{messageText} {FormatOwnership(step.Ownership)}";
+    }
+
+    private static string FormatButtonStateKind(InputDiagnosticButtonStateKind kind)
+    {
+        return kind switch
+        {
+            InputDiagnosticButtonStateKind.Normal => "normal",
+            InputDiagnosticButtonStateKind.Hovered => "hovered",
+            InputDiagnosticButtonStateKind.Pressed => "pressed",
+            InputDiagnosticButtonStateKind.Focused => "focused",
+            InputDiagnosticButtonStateKind.AfterMove => "afterMove",
+            InputDiagnosticButtonStateKind.AfterPress => "afterPress",
+            InputDiagnosticButtonStateKind.DuringCaptureMove => "duringCaptureMove",
+            InputDiagnosticButtonStateKind.ReleaseOutside => "releaseOutside",
+            InputDiagnosticButtonStateKind.FocusLost => "focusLost",
+            _ => kind.ToString()
+        };
+    }
+
+    private static string FormatOwnershipStepKind(InputDiagnosticOwnershipStepKind kind)
+    {
+        return kind switch
+        {
+            InputDiagnosticOwnershipStepKind.AfterMove => "afterMove",
+            InputDiagnosticOwnershipStepKind.AfterPress => "afterPress",
+            InputDiagnosticOwnershipStepKind.DuringCaptureMove => "duringCaptureMove",
+            InputDiagnosticOwnershipStepKind.ReleaseOutside => "releaseOutside",
+            InputDiagnosticOwnershipStepKind.KeyboardEnter => "keyboardEnter",
+            InputDiagnosticOwnershipStepKind.KeyboardSpace => "keyboardSpace",
+            InputDiagnosticOwnershipStepKind.PressEmpty => "pressEmpty",
+            InputDiagnosticOwnershipStepKind.ReleaseAfterEmptyPress => "releaseAfterEmptyPress",
+            InputDiagnosticOwnershipStepKind.FocusLost => "focusLost",
+            _ => kind.ToString()
+        };
+    }
+
+    private static string FormatDirtyReasonCase(InputDirtyReasonCase @case)
+    {
+        return @case switch
+        {
+            InputDirtyReasonCase.HoverOnly => "hoverOnly",
+            InputDirtyReasonCase.Press => "press",
+            InputDirtyReasonCase.Release => "release",
+            _ => @case.ToString()
+        };
     }
 
     internal static string[] BuildStylePresetDiagnosticLines(string presetName, RenderStylePreset preset)
