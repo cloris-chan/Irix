@@ -314,7 +314,7 @@ internal static class DiagnosticsFormatter
         };
     }
 
-    internal static string[] BuildStylePresetDiagnosticLines(string presetName, RenderStylePreset preset)
+    internal static string[] BuildStylePresetDiagnosticLines(RenderStylePresetId presetId, RenderStylePreset preset)
     {
         var layout = preset.Layout;
         var drawing = preset.Drawing;
@@ -322,7 +322,7 @@ internal static class DiagnosticsFormatter
 
         return [
             "=== Style Preset Diagnostics ===",
-            $"stylePreset name={presetName}",
+            $"stylePreset name={FormatStylePresetName(presetId)}",
             $"layoutMetrics horizontalPadding={layout.HorizontalPadding} verticalPadding={layout.VerticalPadding} itemSpacing={layout.ItemSpacing} textHeight={layout.TextHeight} buttonHeight={layout.ButtonHeight} rectangleHeight={layout.RectangleHeight} minimumButtonWidth={layout.MinimumButtonWidth} buttonTextWidthFactor={layout.ButtonTextWidthFactor} buttonHorizontalPadding={layout.ButtonHorizontalPadding}",
             "buttonStateColorPriority Pressed > Hovered > Focused > Normal",
             $"buttonStateColor normal={FormatColor(visualStates.ResolveButtonFillColor(drawing, default))}",
@@ -437,5 +437,12 @@ internal static class DiagnosticsFormatter
     private static string FormatColor(DrawColor color)
     {
         return $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
+    }
+
+    private static string FormatStylePresetName(RenderStylePresetId presetId)
+    {
+        return presetId == RenderStylePresetId.Default
+            ? "RenderStylePreset.Default"
+            : $"RenderStylePreset({presetId.Value})";
     }
 }

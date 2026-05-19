@@ -74,7 +74,7 @@ internal static class FullDiagnosticRunner
             output.WriteLine(line);
         }
         output.WriteLine($"Swapchain size: {d3d12Renderer.Width}x{d3d12Renderer.Height}");
-        foreach (var line in DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default))
+        foreach (var line in DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default))
         {
             output.WriteLine(line);
         }

@@ -908,7 +908,7 @@ public sealed class PartialApplyPreflightTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(1))));
-        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
         using var directBatch = directPipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -927,7 +927,7 @@ public sealed class PartialApplyPreflightTests
         using var feedCompositor = new DrawingBackendCompositor(feedBackend);
         await feedCompositor.RenderAsync(feedBatch, cancellationToken);
         var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var feedActionId);
-        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, feed.LastResult.Kind);
         Assert.Null(feed.SegmentOwnership);
@@ -965,7 +965,7 @@ public sealed class PartialApplyPreflightTests
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(20),
                 VirtualNodeProperty.Action(new ActionId(4)),
                 VirtualNodeProperty.Hovered(true)));
-        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
         using var directFrame1 = directPipeline.Build(retainedRoot, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -991,7 +991,7 @@ public sealed class PartialApplyPreflightTests
         await feedCompositor.RenderAsync(feedFrame1, cancellationToken);
         await feedCompositor.RenderAsync(feedFrame2, cancellationToken);
         var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitTestX, hitTestY, out var feedActionId);
-        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         Assert.Equal(directPipeline.LayoutRebuildCount, feedPipeline.LayoutRebuildCount);
         Assert.Equal(directPipeline.LastViewport, feedPipeline.LastViewport);
@@ -1433,7 +1433,7 @@ public sealed class PartialApplyPreflightTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root = CreateActionButtonRoot(new ActionId(1));
-        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
         using var directFrame = directPipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -1459,7 +1459,7 @@ public sealed class PartialApplyPreflightTests
 
         var result = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), feedPipeline.LastDirtyCommandRanges);
         var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
-        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, result.Kind);
         Assert.Empty(result.Reads);
@@ -1526,7 +1526,7 @@ public sealed class PartialApplyPreflightTests
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(20),
                 VirtualNodeProperty.Action(new ActionId(4)),
                 VirtualNodeProperty.Hovered(true)));
-        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
         using var directFrame1 = directPipeline.Build(retainedRoot, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -1556,7 +1556,7 @@ public sealed class PartialApplyPreflightTests
         var partialResult = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), feedPipeline.LastDirtyCommandRanges);
         var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
         var harnessHit = harness.TryGetActionIdAtLogicalPixel(hitX, hitY, out var harnessActionId);
-        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         Assert.Equal(productionRenderCountAfterFrame1, feedCompositor.RenderCount - 1);
         Assert.Equal(productionRenderCountAfterFrame2, feedCompositor.RenderCount);
@@ -1855,7 +1855,7 @@ public sealed class PartialApplyPreflightTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root = CreateActionButtonRoot(new ActionId(1));
-        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
         using var directFrame = directPipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -1878,7 +1878,7 @@ public sealed class PartialApplyPreflightTests
         await feedCompositor.RenderAsync(feedFrame, feed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
         var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
         var candidateHit = feedCompositor.TryGetCandidateActionIdAtPhysicalPixel(hitX, hitY, out var candidateActionId);
-        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, feedCompositor.LastHandoffResult.Kind);
         Assert.Equal(DrawingBackendCompositorHandoffReason.Disabled, feedCompositor.LastHandoffResult.Reason);
@@ -1912,7 +1912,7 @@ public sealed class PartialApplyPreflightTests
             VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(20),
                 VirtualNodeProperty.Action(new ActionId(4)),
                 VirtualNodeProperty.Hovered(true)));
-        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsBefore = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         var directPipeline = new RenderPipeline();
         using var directFrame1 = directPipeline.Build(retainedRoot, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -1940,7 +1940,7 @@ public sealed class PartialApplyPreflightTests
         var partialResult = feedCompositor.LastHandoffResult;
         var feedHit = feedCompositor.TryGetActionIdAtPhysicalPixel(hitX, hitY, out var feedActionId);
         var candidateHit = feedCompositor.TryGetCandidateActionIdAtPhysicalPixel(hitX, hitY, out var candidateActionId);
-        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var diagnosticsAfter = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         Assert.True(feedCompositor.HasHandoffCandidateHarness);
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, fullResult.Kind);

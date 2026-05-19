@@ -1234,6 +1234,21 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Render_style_preset_diagnostics_use_typed_id_not_string_name()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "RenderStylePreset.cs"));
+        var formatterSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsFormatter.cs"));
+
+        Assert.Contains("internal readonly struct RenderStylePresetId", source);
+        Assert.Contains("RenderStylePresetId Default", source);
+        Assert.Contains("BuildStylePresetDiagnosticLines(RenderStylePresetId presetId, RenderStylePreset preset)", formatterSource);
+        Assert.Contains("FormatStylePresetName(RenderStylePresetId presetId)", formatterSource);
+        Assert.DoesNotContain("const string DefaultName", source);
+        Assert.DoesNotContain("string DefaultName", source);
+        Assert.DoesNotContain("BuildStylePresetDiagnosticLines(string presetName", formatterSource);
+    }
+
+    [Fact]
     public void Input_diagnostics_snapshot_uses_typed_events_not_string_lines()
     {
         var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));

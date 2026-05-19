@@ -763,7 +763,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Diagnose_style_preset_outputs_metrics_and_button_colors()
     {
-        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePreset.DefaultName, RenderStylePreset.Default));
+        var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildStylePresetDiagnosticLines(RenderStylePresetId.Default, RenderStylePreset.Default));
 
         Assert.Contains("=== Style Preset Diagnostics ===", output);
         Assert.Contains("stylePreset name=RenderStylePreset.Default", output);

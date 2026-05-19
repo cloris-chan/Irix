@@ -12,8 +12,6 @@ internal readonly struct RenderStylePreset(
     public DrawingStyle Drawing { get; } = Drawing;
     public ControlVisualStateResolver VisualStates { get; } = VisualStates;
 
-    public const string DefaultName = "RenderStylePreset.Default";
-
     public static RenderStylePreset Default { get; } = new(
         Layout: new LayoutStyle(
             HorizontalPadding: 16,
@@ -51,4 +49,23 @@ internal readonly struct RenderStylePreset(
     public static bool operator ==(RenderStylePreset left, RenderStylePreset right) => left.Equals(right);
 
     public static bool operator !=(RenderStylePreset left, RenderStylePreset right) => !left.Equals(right);
+}
+
+internal readonly struct RenderStylePresetId(byte value) : IEquatable<RenderStylePresetId>
+{
+    public static readonly RenderStylePresetId Default = new(1);
+
+    public byte Value { get; } = value;
+
+    public bool IsDefault => Value == Default.Value;
+
+    public bool Equals(RenderStylePresetId other) => Value == other.Value;
+
+    public override bool Equals(object? obj) => obj is RenderStylePresetId other && Equals(other);
+
+    public override int GetHashCode() => Value.GetHashCode();
+
+    public static bool operator ==(RenderStylePresetId left, RenderStylePresetId right) => left.Equals(right);
+
+    public static bool operator !=(RenderStylePresetId left, RenderStylePresetId right) => !left.Equals(right);
 }
