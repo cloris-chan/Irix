@@ -1,30 +1,31 @@
 namespace Irix.Rendering;
 
+internal enum RetainedRenderFrameHandoffCounterId : byte
+{
+    RenderCount,
+    FullApplyCount,
+    PartialApplyCount,
+    EmptyFrameCount,
+    LastDirtyCommandRanges,
+    LastPartialApplySucceeded
+}
+
 internal readonly struct RetainedRenderFrameHandoffCounterSemantic(
-    string CounterName,
-    string CurrentMeaning,
-    string HandoffRule,
-    string InternalOnlyCounterRule,
+    RetainedRenderFrameHandoffCounterId CounterId,
     bool ExistingCounterBehaviorUnchanged) : IEquatable<RetainedRenderFrameHandoffCounterSemantic>
 {
-    public string CounterName { get; } = CounterName;
-    public string CurrentMeaning { get; } = CurrentMeaning;
-    public string HandoffRule { get; } = HandoffRule;
-    public string InternalOnlyCounterRule { get; } = InternalOnlyCounterRule;
+    public RetainedRenderFrameHandoffCounterId CounterId { get; } = CounterId;
     public bool ExistingCounterBehaviorUnchanged { get; } = ExistingCounterBehaviorUnchanged;
 
     public bool Equals(RetainedRenderFrameHandoffCounterSemantic other)
     {
-        return CounterName == other.CounterName
-            && CurrentMeaning == other.CurrentMeaning
-            && HandoffRule == other.HandoffRule
-            && InternalOnlyCounterRule == other.InternalOnlyCounterRule
+        return CounterId == other.CounterId
             && ExistingCounterBehaviorUnchanged == other.ExistingCounterBehaviorUnchanged;
     }
 
     public override bool Equals(object? obj) => obj is RetainedRenderFrameHandoffCounterSemantic other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(CounterName, CurrentMeaning, HandoffRule, InternalOnlyCounterRule, ExistingCounterBehaviorUnchanged);
+    public override int GetHashCode() => HashCode.Combine(CounterId, ExistingCounterBehaviorUnchanged);
 
     public static bool operator ==(RetainedRenderFrameHandoffCounterSemantic left, RetainedRenderFrameHandoffCounterSemantic right) => left.Equals(right);
 
@@ -35,42 +36,12 @@ internal static class RetainedRenderFrameHandoffCounterSemantics
 {
     public static IReadOnlyList<RetainedRenderFrameHandoffCounterSemantic> All { get; } =
     [
-        new(
-            "RenderCount",
-            "Non-empty frames rendered by DrawingBackendCompositor.",
-            "Selected handoff keeps this as rendered non-empty frame count, independent of how many retained segments execute.",
-            "Segmented owner rehearsals do not increment RenderCount.",
-            true),
-        new(
-            "FullApplyCount",
-            "Renders where DrawingBackendCompositor full-applied its retained frame.",
-            "Selected handoff counts retained-frame fallback/full frames, not retained-frame maintenance applies hidden behind a selected segmented source.",
-            "Secondary owner fallback rehearsal keeps an internal-only fallback counter when it is not the selected source.",
-            true),
-        new(
-            "PartialApplyCount",
-            "Renders where DrawingBackendCompositor partial-applied its retained frame.",
-            "Selected handoff increments this when a fresh accepted segmented owner is the selected render source.",
-            "Secondary owner accepted-partial rehearsal keeps an internal-only partial counter when it is not the selected source.",
-            true),
-        new(
-            "EmptyFrameCount",
-            "Empty batches received by DrawingBackendCompositor.",
-            "Future handoff keeps this tied to empty input batches, not owner rebuilds.",
-            "Secondary owner empty rebuilds do not increment EmptyFrameCount.",
-            true),
-        new(
-            "LastDirtyCommandRanges",
-            "Dirty ranges applied to the current production retained frame.",
-            "Selected handoff keeps disabled mode identical and exposes segment-local dirty ranges only behind the handoff option.",
-            "Segmented owner dirty-range rehearsal uses an internal per-segment plan.",
-            true),
-        new(
-            "LastPartialApplySucceeded",
-            "Whether the last compositor render used production retained-frame partial apply.",
-            "Selected handoff reports segmented partial success when the segmented owner is the selected render source.",
-            "Secondary owner accepted-partial rehearsal remains internal-only until promotion.",
-            true)
+        new(RetainedRenderFrameHandoffCounterId.RenderCount, true),
+        new(RetainedRenderFrameHandoffCounterId.FullApplyCount, true),
+        new(RetainedRenderFrameHandoffCounterId.PartialApplyCount, true),
+        new(RetainedRenderFrameHandoffCounterId.EmptyFrameCount, true),
+        new(RetainedRenderFrameHandoffCounterId.LastDirtyCommandRanges, true),
+        new(RetainedRenderFrameHandoffCounterId.LastPartialApplySucceeded, true)
     ];
 }
 

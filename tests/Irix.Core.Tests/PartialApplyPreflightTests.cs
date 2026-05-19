@@ -1380,15 +1380,11 @@ public sealed class PartialApplyPreflightTests
     public void RetainedRenderFrameHandoffCounterSemantics_describe_selected_render_source_counters()
     {
         var semantics = RetainedRenderFrameHandoffCounterSemantics.All;
+        var expectedIds = Enum.GetValues<RetainedRenderFrameHandoffCounterId>();
 
-        Assert.Equal(6, semantics.Count);
+        Assert.Equal(expectedIds.Length, semantics.Count);
         Assert.All(semantics, semantic => Assert.True(semantic.ExistingCounterBehaviorUnchanged));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "RenderCount" && semantic.HandoffRule.Contains("retained segments"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "FullApplyCount" && semantic.HandoffRule.Contains("selected segmented source"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "PartialApplyCount" && semantic.HandoffRule.Contains("selected render source"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "EmptyFrameCount" && semantic.HandoffRule.Contains("empty input batches"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "LastDirtyCommandRanges" && semantic.HandoffRule.Contains("segment-local dirty ranges"));
-        Assert.Contains(semantics, semantic => semantic.CounterName == "LastPartialApplySucceeded" && semantic.HandoffRule.Contains("selected render source"));
+        Assert.Equal(expectedIds, semantics.Select(semantic => semantic.CounterId).ToArray());
     }
 
     [Fact]
@@ -1575,6 +1571,9 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(feedPipeline.LastDirtyCommandRanges, partialResult.Counters.LastDirtyCommandRanges);
         Assert.True(partialResult.Counters.LastPartialApplySucceeded);
         Assert.All(partialResult.CounterSemantics, semantic => Assert.True(semantic.ExistingCounterBehaviorUnchanged));
+        Assert.Equal(
+            Enum.GetValues<RetainedRenderFrameHandoffCounterId>(),
+            partialResult.CounterSemantics.Select(semantic => semantic.CounterId).ToArray());
         AssertHandoffBackendCallsMatchReads([fullResult, partialResult], harnessBackend);
         AssertDirtyRangePlansMatchBackend([fullResult, partialResult], harnessBackend);
         Assert.True(harnessHit);
