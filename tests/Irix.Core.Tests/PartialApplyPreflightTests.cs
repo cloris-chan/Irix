@@ -9,6 +9,13 @@ namespace Irix.Core.Tests;
 public sealed class PartialApplyPreflightTests
 {
     private readonly VirtualTextArena _arena = new();
+
+    private static DrawingBackendCall BeginFrameCall => DrawingBackendCall.BeginFrame;
+
+    private static DrawingBackendCall ExecuteCall(int commandCount) => DrawingBackendCall.Execute(commandCount);
+
+    private static DrawingBackendCall EndFrameCall => DrawingBackendCall.EndFrame;
+
     [Fact]
     public void SegmentedRetainedFrameReader_reads_old_and_replacement_segments_with_matching_resolvers()
     {
@@ -884,7 +891,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Collection(adapterBackend.ExecuteCalls,
             call => Assert.Same(frame1.Resources, call.Resolver),
             call => Assert.Same(frame2.Resources, call.Resolver));
-        Assert.Equal(["BeginFrame", "Execute:1", "Execute:2", "EndFrame"], adapterBackend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), ExecuteCall(2), EndFrameCall], adapterBackend.Calls);
         Assert.Equal(retainedFrameCommandCount, pipeline.RetainedFrame.CommandCount);
         Assert.Same(retainedFrameResources, pipeline.RetainedFrame.Resources);
         Assert.Equal(retainedDirtyRanges, pipeline.RetainedFrame.DirtyCommandRanges);
@@ -1421,7 +1428,7 @@ public sealed class PartialApplyPreflightTests
             });
         Assert.Equal(0, backend.SetDirtyCommandRangeCount);
         Assert.Empty(backend.DirtyRanges);
-        Assert.Equal(["BeginFrame", "Execute:2", "Execute:3", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(2), ExecuteCall(3), ExecuteCall(1), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -1610,7 +1617,7 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Executed, result.Kind);
         Assert.Single(result.Reads);
-        Assert.Equal(["BeginFrame", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), EndFrameCall], backend.Calls);
         Assert.Equal(1, backend.SetDirtyCommandRangeCount);
         Assert.Single(backend.DirtyRanges);
         Assert.Equal([(0, 1)], backend.DirtyRanges[0]);
@@ -1763,13 +1770,13 @@ public sealed class PartialApplyPreflightTests
         var exception = Assert.Throws<InvalidOperationException>(() => harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), pipeline.LastDirtyCommandRanges));
 
         Assert.Equal("execute failed", exception.Message);
-        var expectedCalls = new List<string> { "BeginFrame" };
+        var expectedCalls = new List<DrawingBackendCall> { BeginFrameCall };
         foreach (var read in harness.LastResult.Reads)
         {
-            expectedCalls.Add($"Execute:{read.Commands.Length}");
+            expectedCalls.Add(ExecuteCall(read.Commands.Length));
         }
 
-        expectedCalls.Add("EndFrame");
+        expectedCalls.Add(EndFrameCall);
         Assert.Equal(expectedCalls, throwingBackend.Calls);
         Assert.Equal(1, throwingBackend.BeginFrameCount);
         Assert.Equal(1, throwingBackend.EndFrameCount);
@@ -1820,7 +1827,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(1, result.Counters.FullApplyCount);
         Assert.Equal(0, result.Counters.PartialApplyCount);
         Assert.False(result.Counters.LastPartialApplySucceeded);
-        Assert.Equal(["BeginFrame", $"Execute:{result.Reads[0].Commands.Length}", "EndFrame"], harnessBackend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(result.Reads[0].Commands.Length), EndFrameCall], harnessBackend.Calls);
         Assert.Equal(1, harnessBackend.SetDirtyCommandRangeCount);
         Assert.True(harnessHit);
         Assert.True(productionHit);
@@ -1953,13 +1960,13 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(1, feedCompositor.FullApplyCount);
         Assert.Equal(1, feedCompositor.PartialApplyCount);
         Assert.True(feedCompositor.LastPartialApplySucceeded);
-        var expectedCalls = new List<string> { "BeginFrame", $"Execute:{feedFrame1.Commands.Count}", "EndFrame", "BeginFrame" };
+        var expectedCalls = new List<DrawingBackendCall> { BeginFrameCall, ExecuteCall(feedFrame1.Commands.Count), EndFrameCall, BeginFrameCall };
         foreach (var read in partialResult.CandidateResult.Reads)
         {
-            expectedCalls.Add($"Execute:{read.Commands.Length}");
+            expectedCalls.Add(ExecuteCall(read.Commands.Length));
         }
 
-        expectedCalls.Add("EndFrame");
+        expectedCalls.Add(EndFrameCall);
         Assert.Equal(expectedCalls, feedBackend.Calls);
         Assert.Equal(1 + partialResult.CandidateResult.Reads.Count, feedBackend.ExecuteCalls.Count);
         var selectedDirtyRanges = feedBackend.DirtyRanges.Skip(1).ToArray();
@@ -2042,7 +2049,7 @@ public sealed class PartialApplyPreflightTests
         Assert.False(compositor.HasHandoffCandidateHarness);
         Assert.False(hit);
         Assert.True(actionId.IsNone);
-        Assert.Equal(["BeginFrame", $"Execute:{frame.Commands.Count}", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(frame.Commands.Count), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -2146,7 +2153,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Rejected, compositor.LastHandoffResult.Kind);
         Assert.Equal(DrawingBackendCompositorHandoffReason.MalformedSegmentCoverage, compositor.LastHandoffResult.Reason);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(["BeginFrame", "Execute:2", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(2), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -2186,7 +2193,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffResultKind.Rejected, compositor.LastHandoffResult.Kind);
         Assert.Equal(DrawingBackendCompositorHandoffReason.DirtyRangeMismatch, compositor.LastHandoffResult.Reason);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(["BeginFrame", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -2219,7 +2226,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffReason.StaleOwner, compositor.LastHandoffResult.Reason);
         Assert.Same(ownerFrame.Resources, compositor.LastHandoffResult.OwnerResult.BatchResources);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(["BeginFrame", $"Execute:{staleFrame.Commands.Count}", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(staleFrame.Commands.Count), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -2304,7 +2311,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowRejected, compositor.LastHandoffResult.OwnerResult.Kind);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Disabled, compositor.LastHandoffResult.CandidateResult.Kind);
         Assert.False(compositor.HasHandoffCandidateHarness);
-        Assert.Equal(["BeginFrame", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -2347,13 +2354,13 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(DrawingBackendCompositorHandoffReason.BackendThrewBeforeCommit, compositor.LastHandoffResult.Reason);
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Executed, compositor.LastHandoffResult.CandidateResult.Kind);
         Assert.True(compositor.HasHandoffCandidateHarness);
-        var expectedCalls = new List<string> { "BeginFrame", $"Execute:{frame1.Commands.Count}", "EndFrame", "BeginFrame" };
+        var expectedCalls = new List<DrawingBackendCall> { BeginFrameCall, ExecuteCall(frame1.Commands.Count), EndFrameCall, BeginFrameCall };
         foreach (var read in compositor.LastHandoffResult.CandidateResult.Reads)
         {
-            expectedCalls.Add($"Execute:{read.Commands.Length}");
+            expectedCalls.Add(ExecuteCall(read.Commands.Length));
         }
 
-        expectedCalls.Add("EndFrame");
+        expectedCalls.Add(EndFrameCall);
         Assert.Equal(expectedCalls, throwingBackend.Calls);
         Assert.Equal(2, throwingBackend.BeginFrameCount);
         Assert.Equal(2, throwingBackend.EndFrameCount);
@@ -2812,7 +2819,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(new ActionId(4), probeResult.HitTest.BeforeActionId);
         Assert.Equal(probeResult.HitTest.BeforeHit, hitBeforeProbe);
         Assert.Equal(probeResult.HitTest.BeforeActionId, actionBeforeProbe);
-        Assert.Equal(["BeginFrame", "Execute:1", "Execute:2", "EndFrame"], probeResult.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), ExecuteCall(2), EndFrameCall], probeResult.Calls);
         Assert.Collection(probeResult.Executions,
             execution =>
             {
@@ -2855,7 +2862,7 @@ public sealed class PartialApplyPreflightTests
         Assert.True(result.HitTestUnchanged);
         Assert.False(result.HitTest.BeforeHit);
         Assert.False(result.HitTest.AfterHit);
-        Assert.Equal(["BeginFrame", "EndFrame"], result.Calls);
+        Assert.Equal([BeginFrameCall, EndFrameCall], result.Calls);
         Assert.Empty(result.Executions);
         Assert.Equal(0, probeBackend.SetDirtyCommandRangeCount);
         Assert.Empty(probeBackend.ExecuteCalls);
@@ -2888,7 +2895,7 @@ public sealed class PartialApplyPreflightTests
         var exception = Assert.Throws<InvalidOperationException>(() => probe.Execute(new FrameContext(100, 100), segments, compositor, 1, 1));
 
         Assert.Equal("execute failed", exception.Message);
-        Assert.Equal(["BeginFrame", "Execute:1", "Execute:1", "EndFrame"], throwingBackend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), ExecuteCall(1), EndFrameCall], throwingBackend.Calls);
         Assert.Equal(1, throwingBackend.BeginFrameCount);
         Assert.Equal(1, throwingBackend.EndFrameCount);
         Assert.Equal(renderCount, compositor.RenderCount);
@@ -2983,7 +2990,7 @@ public sealed class PartialApplyPreflightTests
 
         adapter.Execute(new FrameContext(960, 540), owner.ReadSegments());
 
-        Assert.Equal(["BeginFrame", "Execute:1", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), ExecuteCall(1), EndFrameCall], backend.Calls);
         Assert.Collection(backend.ExecuteCalls,
             call => Assert.Same(oldResolver, call.Resolver),
             call => Assert.Same(replacementResolver, call.Resolver));
@@ -2999,7 +3006,7 @@ public sealed class PartialApplyPreflightTests
         var exception = Assert.Throws<InvalidOperationException>(() => adapter.Execute(new FrameContext(960, 540), owner.ReadSegments()));
 
         Assert.Equal("execute failed", exception.Message);
-        Assert.Equal(["BeginFrame", "Execute:1", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), ExecuteCall(1), EndFrameCall], backend.Calls);
         Assert.Equal(1, backend.BeginFrameCount);
         Assert.Equal(1, backend.EndFrameCount);
     }
@@ -3013,7 +3020,7 @@ public sealed class PartialApplyPreflightTests
 
         adapter.Execute(new FrameContext(960, 540), owner.ReadSegments());
 
-        Assert.Equal(["BeginFrame", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, EndFrameCall], backend.Calls);
         Assert.Empty(backend.ExecuteCalls);
     }
 
@@ -3059,7 +3066,7 @@ public sealed class PartialApplyPreflightTests
 
         adapter.Execute(new FrameContext(320, 240), []);
 
-        Assert.Equal(["BeginFrame", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, EndFrameCall], backend.Calls);
         Assert.Empty(backend.ExecuteCalls);
     }
 
@@ -3081,7 +3088,7 @@ public sealed class PartialApplyPreflightTests
         Assert.Equal(1, backend.BeginFrameCount);
         Assert.Equal(1, backend.EndFrameCount);
         Assert.Equal(2, backend.ExecuteCount);
-        Assert.Equal(["BeginFrame", "Execute:1", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), ExecuteCall(1), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -3096,7 +3103,7 @@ public sealed class PartialApplyPreflightTests
 
         Assert.Equal(0, backend.SetDirtyCommandRangeCount);
         Assert.Single(backend.ExecuteCalls);
-        Assert.Equal(["BeginFrame", "Execute:1", "EndFrame"], backend.Calls);
+        Assert.Equal([BeginFrameCall, ExecuteCall(1), EndFrameCall], backend.Calls);
     }
 
     [Fact]
@@ -3962,7 +3969,7 @@ public sealed class PartialApplyPreflightTests
         IReadOnlyList<RetainedRenderFrameHandoffHarnessResult> results,
         CapturingBackend backend)
     {
-        var expectedCalls = new List<string>();
+        var expectedCalls = new List<DrawingBackendCall>();
         var expectedExecuteCallCount = 0;
         foreach (var result in results)
         {
@@ -3971,14 +3978,14 @@ public sealed class PartialApplyPreflightTests
                 continue;
             }
 
-            expectedCalls.Add("BeginFrame");
+            expectedCalls.Add(BeginFrameCall);
             foreach (var read in result.Reads)
             {
-                expectedCalls.Add($"Execute:{read.Commands.Length}");
+                expectedCalls.Add(ExecuteCall(read.Commands.Length));
                 expectedExecuteCallCount++;
             }
 
-            expectedCalls.Add("EndFrame");
+            expectedCalls.Add(EndFrameCall);
         }
 
         Assert.Equal(expectedCalls, backend.Calls);
@@ -4130,24 +4137,24 @@ public sealed class PartialApplyPreflightTests
         public int BeginFrameCount { get; private set; }
         public int EndFrameCount { get; private set; }
         public List<(int CommandCount, IFrameResourceResolver Resolver)> ExecuteCalls { get; } = [];
-        public List<string> Calls { get; } = [];
+        public List<DrawingBackendCall> Calls { get; } = [];
 
         public void BeginFrame(in FrameContext frameContext)
         {
             BeginFrameCount++;
-            Calls.Add("BeginFrame");
+            Calls.Add(DrawingBackendCall.BeginFrame);
         }
 
         public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
         {
             ExecuteCalls.Add((commands.Length, resources));
-            Calls.Add($"Execute:{commands.Length}");
+            Calls.Add(DrawingBackendCall.Execute(commands.Length));
         }
 
         public void EndFrame()
         {
             EndFrameCount++;
-            Calls.Add("EndFrame");
+            Calls.Add(DrawingBackendCall.EndFrame);
         }
 
         public void Dispose()
@@ -4173,18 +4180,18 @@ public sealed class PartialApplyPreflightTests
         public int BeginFrameCount { get; private set; }
         public int EndFrameCount { get; private set; }
         public int ExecuteCount { get; private set; }
-        public List<string> Calls { get; } = [];
+        public List<DrawingBackendCall> Calls { get; } = [];
 
         public void BeginFrame(in FrameContext frameContext)
         {
             BeginFrameCount++;
-            Calls.Add("BeginFrame");
+            Calls.Add(DrawingBackendCall.BeginFrame);
         }
 
         public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
         {
             ExecuteCount++;
-            Calls.Add($"Execute:{commands.Length}");
+            Calls.Add(DrawingBackendCall.Execute(commands.Length));
             if (ExecuteCount == throwOnExecuteCall)
             {
                 throw new InvalidOperationException("execute failed");
@@ -4194,7 +4201,7 @@ public sealed class PartialApplyPreflightTests
         public void EndFrame()
         {
             EndFrameCount++;
-            Calls.Add("EndFrame");
+            Calls.Add(DrawingBackendCall.EndFrame);
         }
 
         public void Dispose()

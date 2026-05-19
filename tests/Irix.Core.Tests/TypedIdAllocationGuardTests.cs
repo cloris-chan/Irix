@@ -1163,6 +1163,22 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void DrawingBackendCompositorShadowProbe_records_typed_backend_calls()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "DrawingBackendCompositorShadowProbe.cs"));
+
+        Assert.Contains("internal readonly struct DrawingBackendCall", source);
+        Assert.Contains("IReadOnlyList<DrawingBackendCall> Calls", source);
+        Assert.Contains("List<DrawingBackendCall> _calls", source);
+        Assert.Contains("DrawingBackendCall.Execute(commands.Length)", source);
+        Assert.DoesNotContain("IReadOnlyList<string> Calls", source);
+        Assert.DoesNotContain("List<string> _calls", source);
+        Assert.DoesNotContain("_calls.Add(\"BeginFrame\")", source);
+        Assert.DoesNotContain("_calls.Add($\"Execute:{commands.Length}\")", source);
+        Assert.DoesNotContain("_calls.Add(\"EndFrame\")", source);
+    }
+
+    [Fact]
     public void Irix_Drawing_TextStyle_uses_value_font_family()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));

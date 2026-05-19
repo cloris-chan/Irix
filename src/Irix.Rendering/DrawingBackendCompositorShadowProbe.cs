@@ -28,6 +28,36 @@ internal readonly struct DrawingBackendCompositorShadowProbeExecution(
     public static bool operator !=(DrawingBackendCompositorShadowProbeExecution left, DrawingBackendCompositorShadowProbeExecution right) => !left.Equals(right);
 }
 
+internal enum DrawingBackendCallKind : byte
+{
+    BeginFrame,
+    Execute,
+    EndFrame
+}
+
+internal readonly struct DrawingBackendCall(DrawingBackendCallKind Kind, int CommandCount) : IEquatable<DrawingBackendCall>
+{
+    public DrawingBackendCallKind Kind { get; } = Kind;
+
+    public int CommandCount { get; } = CommandCount;
+
+    public static DrawingBackendCall BeginFrame => new(DrawingBackendCallKind.BeginFrame, 0);
+
+    public static DrawingBackendCall Execute(int commandCount) => new(DrawingBackendCallKind.Execute, commandCount);
+
+    public static DrawingBackendCall EndFrame => new(DrawingBackendCallKind.EndFrame, 0);
+
+    public bool Equals(DrawingBackendCall other) => Kind == other.Kind && CommandCount == other.CommandCount;
+
+    public override bool Equals(object? obj) => obj is DrawingBackendCall other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, CommandCount);
+
+    public static bool operator ==(DrawingBackendCall left, DrawingBackendCall right) => left.Equals(right);
+
+    public static bool operator !=(DrawingBackendCall left, DrawingBackendCall right) => !left.Equals(right);
+}
+
 internal readonly struct DrawingBackendCompositorShadowProbeHitTest(
     bool BeforeHit,
     ActionId BeforeActionId,
@@ -61,12 +91,12 @@ internal readonly struct DrawingBackendCompositorShadowProbeHitTest(
 
 internal readonly struct DrawingBackendCompositorShadowProbeResult(
     IReadOnlyList<DrawingBackendCompositorShadowProbeExecution> Executions,
-    IReadOnlyList<string> Calls,
+    IReadOnlyList<DrawingBackendCall> Calls,
     DrawingBackendCompositorShadowProbeHitTest HitTest) : IEquatable<DrawingBackendCompositorShadowProbeResult>
 {
 
     public IReadOnlyList<DrawingBackendCompositorShadowProbeExecution> Executions { get; } = Executions;
-    public IReadOnlyList<string> Calls { get; } = Calls;
+    public IReadOnlyList<DrawingBackendCall> Calls { get; } = Calls;
     public DrawingBackendCompositorShadowProbeHitTest HitTest { get; } = HitTest;
 
     public bool HitTestUnchanged => HitTest.Unchanged;
@@ -74,7 +104,7 @@ internal readonly struct DrawingBackendCompositorShadowProbeResult(
     public bool Equals(DrawingBackendCompositorShadowProbeResult other)
     {
         return EqualityComparer<IReadOnlyList<DrawingBackendCompositorShadowProbeExecution>>.Default.Equals(Executions, other.Executions)
-            && EqualityComparer<IReadOnlyList<string>>.Default.Equals(Calls, other.Calls)
+            && EqualityComparer<IReadOnlyList<DrawingBackendCall>>.Default.Equals(Calls, other.Calls)
             && HitTest == other.HitTest;
     }
 
@@ -110,15 +140,15 @@ internal sealed class DrawingBackendCompositorShadowProbe(IDrawingBackend backen
     private sealed class RecordingBackend(IDrawingBackend inner, IReadOnlyList<SegmentedFrameRead> segments) : IDrawingBackend
     {
         private readonly List<DrawingBackendCompositorShadowProbeExecution> _executions = [];
-        private readonly List<string> _calls = [];
+        private readonly List<DrawingBackendCall> _calls = [];
 
         public IReadOnlyList<DrawingBackendCompositorShadowProbeExecution> Executions => _executions;
 
-        public IReadOnlyList<string> Calls => _calls;
+        public IReadOnlyList<DrawingBackendCall> Calls => _calls;
 
         public void BeginFrame(in FrameContext frameContext)
         {
-            _calls.Add("BeginFrame");
+            _calls.Add(DrawingBackendCall.BeginFrame);
             inner.BeginFrame(frameContext);
         }
 
@@ -127,13 +157,13 @@ internal sealed class DrawingBackendCompositorShadowProbe(IDrawingBackend backen
             var index = _executions.Count;
             var commandStart = index < segments.Count ? segments[index].CommandStart : -1;
             _executions.Add(new DrawingBackendCompositorShadowProbeExecution(commandStart, commands.Length, resources));
-            _calls.Add($"Execute:{commands.Length}");
+            _calls.Add(DrawingBackendCall.Execute(commands.Length));
             inner.Execute(commands, resources);
         }
 
         public void EndFrame()
         {
-            _calls.Add("EndFrame");
+            _calls.Add(DrawingBackendCall.EndFrame);
             inner.EndFrame();
         }
 
