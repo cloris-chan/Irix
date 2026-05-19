@@ -140,17 +140,7 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var allocatedAfter = GC.GetTotalAllocatedBytes(true);
         var poolDelta = FrameDrawingResources.GetPoolDiagnostics().Delta(poolBefore);
-        var textDiagnostics = renderer.GetTextDiagnostics();
-
         output.WriteLine($"--- Scenario: {name} ---");
-        if (textDiagnostics.HasValue)
-        {
-            var d = textDiagnostics.Value;
-            var formatTotal = d.FormatHits + d.FormatMisses;
-            var layoutTotal = d.LayoutHits + d.LayoutMisses;
-            output.WriteLine($"Format cache: hits={d.FormatHits}, misses={d.FormatMisses}, hitRate={(formatTotal > 0 ? 100.0 * d.FormatHits / formatTotal : 0):F1}%, cached={d.CachedFormats}, evictions={d.FormatEvictions}");
-            output.WriteLine($"Layout cache: hits={d.LayoutHits}, misses={d.LayoutMisses}, hitRate={(layoutTotal > 0 ? 100.0 * d.LayoutHits / layoutTotal : 0):F1}%, cached={d.CachedLayouts}, evictions={d.LayoutEvictions}");
-        }
         var glyphAtlasDiagnostics = renderer.GetGlyphAtlasTextDiagnostics();
         if (glyphAtlasDiagnostics.HasValue)
         {

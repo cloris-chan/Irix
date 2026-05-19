@@ -216,7 +216,7 @@ public class DisplayScaleTests
             ClipBounds: new DrawRect(0, 0, 240, 80));
 
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
-        using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
         _ = D3D12DrawingBackend.ExecuteCore(
             DrawingBackendClipMode.Diagnostic,
             new DrawRect(0, 0, 480, 240),

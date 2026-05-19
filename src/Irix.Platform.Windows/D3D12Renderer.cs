@@ -12,7 +12,6 @@ namespace Irix.Platform.Windows;
 
 internal enum TextCompositionMode
 {
-    Overlay,
     GlyphAtlas
 }
 
@@ -38,7 +37,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private ulong[] _fenceValues = new ulong[FrameCount];
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
-    private D3D12TextRenderer? _textRenderer;
     private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics _glyphAtlasTextDiagnostics;
     private readonly nint _hwnd;
@@ -57,16 +55,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private long _presentSerial;
     private long _syncWaitCount;
     private long _syncWaitTicks;
-
-    /// <summary>
-    /// When true, inserts a GPU fence wait after D2D text overlay rendering
-    /// and before Present. Forces all queued GPU work (D3D12 rects + D3D11/D2D text)
-    /// to complete before the swap chain presents. Default: true.
-    /// Disable with --no-sync-text-overlay for performance comparison.
-    /// </summary>
-    public bool SyncTextOverlay { get; set; } = true;
-
-    internal TextOverlaySyncStrategy TextOverlaySyncStrategy { get; set; } = TextOverlaySyncStrategy.D3D12FenceAfterOverlay;
 
     internal TextCompositionMode TextCompositionMode { get; set; } = TextCompositionMode.GlyphAtlas;
 
@@ -104,25 +92,18 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public int Width => Volatile.Read(ref _width);
     public int Height => Volatile.Read(ref _height);
 
-    public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false);
+    public bool IsDeviceRemoved => _deviceRemoved;
 
     public DeviceErrorDiagnostic DeviceError
     {
         get
         {
             if (!_deviceError.IsNone) return _deviceError;
-            var textError = _textRenderer?.DeviceError ?? DeviceErrorDiagnostic.None;
-            if (!textError.IsNone) return textError;
             return _glyphAtlasTextRenderer?.DeviceError ?? DeviceErrorDiagnostic.None;
         }
     }
 
     public event Action? DeviceLost;
-
-    public D3D12TextRenderer.TextRendererDiagnostics? GetTextDiagnostics()
-    {
-        return _textRenderer?.GetDiagnostics();
-    }
 
     public D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? GetGlyphAtlasTextDiagnostics()
     {
@@ -131,7 +112,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public void ResetTextDiagnostics()
     {
-        _textRenderer?.ResetDiagnostics();
         _glyphAtlasTextRenderer?.ResetDiagnostics();
         _glyphAtlasTextDiagnostics = default;
     }
@@ -142,15 +122,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         long PresentSerial,
         long SyncWaitCount,
         long SyncWaitTicks,
-        uint BackBufferIndex,
-        TextOverlaySyncStrategy SyncStrategy) : IEquatable<FrameSerialDiagnostics>
+        uint BackBufferIndex) : IEquatable<FrameSerialDiagnostics>
     {
         public long FrameSerial { get; } = FrameSerial;
         public long PresentSerial { get; } = PresentSerial;
         public long SyncWaitCount { get; } = SyncWaitCount;
         public long SyncWaitTicks { get; } = SyncWaitTicks;
         public uint BackBufferIndex { get; } = BackBufferIndex;
-        public TextOverlaySyncStrategy SyncStrategy { get; } = SyncStrategy;
 
         public double SyncWaitMs => SyncWaitTicks / (double)System.Diagnostics.Stopwatch.Frequency * 1000;
 
@@ -160,13 +138,12 @@ internal sealed unsafe class D3D12Renderer : IDisposable
                 && PresentSerial == other.PresentSerial
                 && SyncWaitCount == other.SyncWaitCount
                 && SyncWaitTicks == other.SyncWaitTicks
-                && BackBufferIndex == other.BackBufferIndex
-                && SyncStrategy == other.SyncStrategy;
+                && BackBufferIndex == other.BackBufferIndex;
         }
 
         public override bool Equals(object? obj) => obj is FrameSerialDiagnostics other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(FrameSerial, PresentSerial, SyncWaitCount, SyncWaitTicks, BackBufferIndex, SyncStrategy);
+        public override int GetHashCode() => HashCode.Combine(FrameSerial, PresentSerial, SyncWaitCount, SyncWaitTicks, BackBufferIndex);
 
         public static bool operator ==(FrameSerialDiagnostics left, FrameSerialDiagnostics right) => left.Equals(right);
 
@@ -180,8 +157,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             Volatile.Read(ref _presentSerial),
             Volatile.Read(ref _syncWaitCount),
             Volatile.Read(ref _syncWaitTicks),
-            _frameIndex,
-            TextOverlaySyncStrategy);
+            _frameIndex);
     }
 
     public bool HasPendingResize
@@ -269,8 +245,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             return false;
         }
 
-        _textRenderer?.ReleaseFrameResourcesForResize();
-
         // Release all back buffer references before ResizeBuffers
         for (var i = 0; i < FrameCount; i++)
         {
@@ -297,7 +271,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             Volatile.Write(ref _width, newWidth);
             Volatile.Write(ref _height, newHeight);
             _frameIndex = _swapChain->GetCurrentBackBufferIndex();
-            _textRenderer?.RecreateFrameResources(_renderTargets);
             return true;
         }
         catch (Exception ex) when (ex is COMException or InvalidOperationException)
@@ -358,11 +331,11 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     }
 
     /// <summary>
-    /// Render colored rectangles with an optional DirectWrite text overlay, then present.
+    /// Render colored rectangles and D3D12 glyph-atlas text, then present.
     /// </summary>
     public void RenderFrame(
         ReadOnlySpan<D3D12Renderer2D.RectData> rects,
-        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        ReadOnlySpan<D3D12TextRun> textRuns,
         IFrameResourceResolver resources,
         float clearR,
         float clearG,
@@ -400,9 +373,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         _renderer2D!.RenderRectangles(_list, rects, width, height);
 
-        var textRenderer = _textRenderer;
         var hasText = textRuns.Length > 0;
-        var renderOverlayText = hasText && TextCompositionMode == TextCompositionMode.Overlay && textRenderer != null;
         if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
         {
             _ = TryRecordGlyphAtlasTextPass(textRuns, resources);
@@ -412,13 +383,9 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             }
         }
 
-        if (!renderOverlayText)
-        {
-            // Transition to present when Direct2D is not handling the wrapped back buffer.
-            barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
-            barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
-            _list->ResourceBarrier(1, &barrier);
-        }
+        barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
+        barrier.Anonymous.Transition.StateAfter = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT;
+        _list->ResourceBarrier(1, &barrier);
 
         _list->Close();
 
@@ -426,17 +393,12 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _queue->ExecuteCommandLists(1, &pList);
         Interlocked.Increment(ref _frameSerial);
 
-        if (renderOverlayText)
-        {
-            if (!RenderOverlayTextAndMaybeSync(textRenderer!, textRuns, resources)) return;
-        }
-
         if (!Present()) return;
         _ = MoveToNextFrame();
     }
 
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult TryRecordGlyphAtlasTextPass(
-        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        ReadOnlySpan<D3D12TextRun> textRuns,
         IFrameResourceResolver resources)
     {
         D3D12GlyphAtlasTextRenderer glyphAtlasTextRenderer;
@@ -468,35 +430,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _glyphAtlasTextDiagnostics = _glyphAtlasTextDiagnostics
             .WithDegradation(degradedRunCount, reason)
             .WithInitializationFailure(phase);
-    }
-
-    private bool RenderOverlayTextAndMaybeSync(
-        D3D12TextRenderer textRenderer,
-        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
-        IFrameResourceResolver resources)
-    {
-        if (!textRenderer.Render(_frameIndex, textRuns, resources))
-        {
-            if (!_deviceRemoved)
-            {
-                _deviceRemoved = true;
-                _deviceError = textRenderer.DeviceError.IsNone
-                    ? DeviceErrorDiagnostic.FromFailure(DeviceErrorSite.TextRendererRender)
-                    : textRenderer.DeviceError;
-                System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceError}");
-                DeviceLost?.Invoke();
-            }
-            return false;
-        }
-
-        // Diagnostic sync: wait for all GPU work (D3D12 rects + D3D11/D2D text)
-        // to complete before presenting. Confirms whether text-lag is a sync issue.
-        if (SyncTextOverlay)
-        {
-            return WaitForTextOverlaySync(textRenderer);
-        }
-
-        return true;
     }
 
     private bool Present()
@@ -563,7 +496,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
         _renderer2D = new D3D12Renderer2D(_device);
-        _textRenderer = new D3D12TextRenderer(_device, _queue, _renderTargets);
     }
 
     private static ID3D12Device* CreateDevice()
@@ -691,7 +623,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     }
 
     /// <summary>
-    /// Check HRESULT from D3D/DXGI/D2D calls that return it directly.
+    /// Check HRESULT from D3D/DXGI calls that return it directly.
     /// Sets _deviceRemoved on any failure.
     /// </summary>
     internal bool SucceededOrMarkDeviceRemoved(HRESULT hr, DeviceErrorSite site)
@@ -725,70 +657,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
     }
 
-    /// <summary>
-    /// Signal the D3D12 command queue and wait for all pending GPU work to complete.
-    /// Used for diagnostic synchronization between D3D12 rect pass and D3D11/D2D text overlay.
-    /// </summary>
-    private bool WaitForQueueIdle()
-    {
-        try
-        {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            var fenceValue = _fenceValues[_frameIndex] + 1;
-            _queue->Signal(_fence, fenceValue);
-            _fence->SetEventOnCompletion(fenceValue, _fenceEvent);
-            PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
-            _fenceValues[_frameIndex] = fenceValue + 1;
-            sw.Stop();
-            RecordSyncWait(sw.ElapsedTicks);
-            return true;
-        }
-        catch (COMException ex)
-        {
-            HandleDeviceError(ex, DeviceErrorSite.WaitForQueueIdle);
-            return false;
-        }
-    }
-
-    private bool WaitForTextOverlaySync(D3D12TextRenderer textRenderer)
-    {
-        return TextOverlaySyncStrategy switch
-        {
-            TextOverlaySyncStrategy.D3D11Query => WaitForD3D11OverlayQuery(textRenderer),
-            _ => WaitForQueueIdle()
-        };
-    }
-
-    private bool WaitForD3D11OverlayQuery(D3D12TextRenderer textRenderer)
-    {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        var completed = textRenderer.WaitForOverlayCompletionQuery();
-        sw.Stop();
-        RecordSyncWait(sw.ElapsedTicks);
-        if (completed)
-        {
-            return true;
-        }
-
-        if (!_deviceRemoved)
-        {
-            _deviceRemoved = true;
-            _deviceError = textRenderer.DeviceError.IsNone
-                ? DeviceErrorDiagnostic.FromFailure(DeviceErrorSite.D3D11OverlayCompletionQuery)
-                : textRenderer.DeviceError;
-            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceError}");
-            DeviceLost?.Invoke();
-        }
-
-        return false;
-    }
-
-    private void RecordSyncWait(long elapsedTicks)
-    {
-        Interlocked.Increment(ref _syncWaitCount);
-        Interlocked.Add(ref _syncWaitTicks, elapsedTicks);
-    }
-
     private void ReleaseDeviceResources(bool waitForGpu)
     {
         if (waitForGpu && _queue != null && _fence != null && _fenceEventOwner is { IsInvalid: false })
@@ -796,8 +664,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             _ = WaitForGpu();
         }
 
-        _textRenderer?.Dispose();
-        _textRenderer = null;
         _glyphAtlasTextRenderer?.Dispose();
         _glyphAtlasTextRenderer = null;
         _renderer2D?.Dispose();

@@ -5,7 +5,7 @@ namespace Irix.Platform.Windows;
 internal static class GlyphAtlasTextCompositionHelpers
 {
     internal static int CountRenderableRuns(
-        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
+        ReadOnlySpan<D3D12TextRun> textRuns,
         IFrameResourceResolver resources)
     {
         var count = 0;
@@ -40,7 +40,7 @@ internal static class GlyphAtlasTextCompositionHelpers
         return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
     }
 
-    internal static bool ShouldRenderTextRun(D3D12TextRenderer.TextData textRun, IFrameResourceResolver resources)
+    internal static bool ShouldRenderTextRun(D3D12TextRun textRun, IFrameResourceResolver resources)
     {
         if (textRun.Width <= 0 || textRun.Height <= 0)
         {

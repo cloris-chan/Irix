@@ -190,7 +190,7 @@ public sealed class D3D12DrawingBackendScissorTests
     public void ExecuteCore_does_not_allocate_command_array_for_scaled_commands(float scaleValue)
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
-        using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
         using var resources = FrameDrawingResources.Rent();
         resources.Seal();
         var commands = new DrawCommand[]
@@ -232,7 +232,7 @@ public sealed class D3D12DrawingBackendScissorTests
         ReadOnlySpan<DrawCommand> commands,
         IFrameResourceResolver resources,
         FrameRenderList<D3D12Renderer2D.RectData> rects,
-        FrameRenderList<D3D12TextRenderer.TextData> texts,
+        FrameRenderList<D3D12TextRun> texts,
         float scaleValue)
     {
         _ = D3D12DrawingBackend.ExecuteCore(

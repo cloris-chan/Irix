@@ -1,16 +1,16 @@
 # Glyph Atlas Post-GA Design
 
-> Design note for issue #2. This is post-GA renderer work. The explicit overlay rollback still uses DirectWrite / Direct2D over D3D11On12, but the default GlyphAtlas path no longer uses that overlay for unsupported text.
+> Design note for issue #2. This is post-GA renderer work. D3D11On12 / Direct2D final text overlay has been removed from the active Windows renderer; DirectWrite remains only as the glyph metrics/raster source for the atlas path.
 
 ## Goal
 
-Introduce an explicit glyph atlas/cache after V1 GA only if profiling shows DirectWrite / Direct2D text rendering is the limiting cost or if a future backend needs portable glyph resources. The design must not change the current `IDrawingBackend` public contract until a separate API review accepts it.
+Introduce an explicit glyph atlas/cache after V1 GA for D3D12 text composition and future portable glyph-resource work. The design must not change the current `IDrawingBackend` public contract until a separate API review accepts it.
 
 ## Phase 1 Composition Seam
 
-The first post-GA renderer-foundation change introduced an internal text composition mode seam only. After opt-in smoke evidence, the D3D12 PoC baseline now defaults to `GlyphAtlas`; `--text-composition overlay` remains the old overlay rollback. The current default path keeps accepted atlas runs in the D3D12 text pass and explicitly degrades unsupported renderable runs instead of sending them through overlay. Initialization or runtime record failure degrades every renderable text run in that frame. The preserved overlay path is reachable only through explicit `Overlay` mode and remains `D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present`.
+The first post-GA renderer-foundation change introduced an internal text composition seam. After opt-in smoke evidence, the D3D12 PoC baseline switched to `GlyphAtlas`, then the D3D11On12 / Direct2D overlay rollback was removed. The current path keeps accepted atlas runs in the D3D12 text pass and explicitly degrades unsupported renderable runs. Initialization or runtime record failure degrades every renderable text run in that frame.
 
-DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to remove D3D11On12 / D2D / DirectWrite from final overlay composition, not to remove DirectWrite from text processing. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
+DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to reduce `DegradedRuns` by adding D3D12 handling for more text cases, not to reintroduce Direct2D final composition. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
 
 The first executable atlas path is intentionally narrow but default-on in the post-GA renderer-foundation branch. Basic single-line ASCII / `NoWrap` runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. Per-run scissor clipping is supported for accepted runs. Unsupported runs, including complex shaping, non-ASCII fallback faces, wrapping, missing fonts, atlas-full conditions, vertex/batch limits, and initialization/upload failures, are counted as explicit degradation in default `GlyphAtlas` mode until the atlas path is correctness-complete for those cases.
 
@@ -19,19 +19,19 @@ Current implementation status:
 | Area | Current status |
 |------|----------------|
 | Public API | No change; `IDrawingBackend.Execute` remains unchanged |
-| Default composition | `GlyphAtlas`; `--text-composition overlay` remains rollback |
+| Default composition | `GlyphAtlas`; removed `Overlay` runtime composition |
 | Supported atlas text | ASCII printable characters, single-line `NoWrap`, DirectWrite glyph metrics/raster source |
 | Atlas format | Single `R8_UNORM` alpha atlas |
 | Draw model | D3D12 glyph quads recorded before command-list close/execute |
 | Shader packaging | Embedded DXBC bytecode; no runtime `D3DCompile` dependency in the D3D12 rect or glyph-atlas pass |
 | Alignment | Leading, center, and trailing are supported for no-wrap line widths |
 | Clip | Per-run scissor clip supported for accepted atlas runs |
-| Fallback | Default `GlyphAtlas` degrades unsupported or failed renderable runs without overlay; `--text-composition overlay` remains explicit rollback |
+| Fallback | Unsupported or failed renderable runs degrade without overlay |
 | Mixed ordering | Rect pass -> atlas accepted runs -> Present; degraded runs are not drawn |
-| Diagnostics | `AtlasRuns`, `OverlayFallbackRuns` for explicit overlay legacy visibility, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
+| Diagnostics | `AtlasRuns`, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
 | Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, and recovery beyond explicit degradation |
 
-Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` with overlay rollback. The next phase should focus on renderer-foundation hardening, especially shader bytecode/resource lifetime, rather than expanding the ASCII prototype surface.
+Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback/degradation, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` without D3D11On12 / Direct2D final composition. The next phase should focus on resource ownership and reducing accepted degradation, rather than expanding the ASCII prototype surface blindly.
 
 P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list.
 Glyph-atlas initialization failures remain phase-tagged and degrade renderable text without invoking overlay.
@@ -39,12 +39,12 @@ Runtime record/upload/map failures disable the atlas instance and degrade render
 D3D12 upload map paths now unmap in `finally` after a successful map, covering rectangle vertices, glyph vertices, and atlas uploads.
 D3D12 swapchain creation now releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery use the same helper.
 D3D12 core device/queue/RTV/command/fence setup is also shared by constructor and recovery, with pointer guards and null-safe cleanup for partial initialization failure.
-D3D12 overlay rollback setup guards D3D11On12/D2D/DirectWrite COM creation and releases DXGI/D2D/frame-wrapping intermediates on constructor or resize recreation failure.
+D3D11On12 / Direct2D overlay renderer sources, sync strategy, native method generation entries, and diagnostics have been removed from the active source tree.
 
 Default degradation update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It records atlas quads for accepted runs and counts unsupported or failed renderable runs as degradation.
-`D3D12Renderer` no longer passes a GlyphAtlas fallback subset to `D3D12TextRenderer.Render(...)`; overlay rendering is reserved for explicit `--text-composition overlay`.
+`D3D12Renderer` no longer passes a GlyphAtlas fallback subset to an overlay renderer; `D3D12TextRun` is the platform text-run IR consumed by the glyph-atlas path.
 `IDrawingBackend.Execute` and the public drawing contract remain unchanged. Expanded 2026-05-19 smoke covers mixed `ASCII / NonAscii / clipped ASCII / clipped NonAscii` frames and default `300 x 3` long sync.
-The same evidence file includes mixed AtlasFull stress from the former overlay fallback behavior. Current unit coverage pins AtlasFull and record-failure diagnostics as `DegradedRuns` with `recordFailurePhase`, and 2026-05-20 short local smoke shows mixed degradation plus MixedAtlasFull with `overlayFallbackRuns=0`, `syncWaits=0`, and nonzero `DegradedRuns`.
+The same evidence file includes mixed AtlasFull stress from the former overlay fallback behavior. Current unit coverage pins AtlasFull and record-failure diagnostics as `DegradedRuns` with `recordFailurePhase`, and 2026-05-20 short local smoke shows mixed degradation plus MixedAtlasFull with `syncWaits=0` and nonzero `DegradedRuns`.
 
 ## Default Degradation Path
 
@@ -66,9 +66,7 @@ Removing the limitation requires D3D12 handling for the unsupported cases or an 
 - Empty or zero-size text runs are ignored by both atlas and degradation counts.
 - Atlas initialization failure or runtime record failure degrades every renderable run for that frame.
 
-`D3D12TextRenderer.Render(...)` remains the explicit overlay rollback drawing primitive and receives the full text run span only in `Overlay` mode.
-
-Overlay subset parity tests remain as rollback coverage only. Default `GlyphAtlas` correctness now depends on degradation diagnostics carrying accepted/degraded run counts, reasons, and failure phases without constructing a D3D11On12 / D2D overlay subset.
+Default `GlyphAtlas` correctness depends on degradation diagnostics carrying accepted/degraded run counts, reasons, and failure phases without constructing a D3D11On12 / D2D overlay subset.
 
 ## Shader Bytecode Provenance
 
@@ -214,7 +212,7 @@ Candidate upload flow:
 3. Pack missing glyphs into atlas pages.
 4. Batch page updates into one upload list per frame.
 5. Draw glyph quads after rectangle pass, using scissor/clip state compatible with current text clipping.
-6. Keep Direct2D overlay as fallback while atlas path is incomplete.
+6. Degrade unsupported text explicitly while atlas coverage is incomplete.
 
 Upload diagnostics must include bytes uploaded per frame and number of new glyph entries.
 
@@ -231,7 +229,7 @@ Rules:
 
 ## Fallback Strategy
 
-Direct2D / DirectWrite remains available only through explicit overlay rollback. Current default GlyphAtlas behavior is mixed per renderable run: accepted ASCII / `NoWrap` runs draw through the atlas, while unsupported or failed runs are explicitly degraded and counted without D3D11On12 / D2D final composition. The active migration target is to replace each degradation case with D3D12 handling where practical and keep only accepted degradation where not. Initialization and runtime record failures currently degrade every renderable run for the affected frame because no safe atlas command list should be submitted from a failed record path.
+DirectWrite remains available as the glyph metrics/raster source. Current default GlyphAtlas behavior is mixed per renderable run: accepted ASCII / `NoWrap` runs draw through the atlas, while unsupported or failed runs are explicitly degraded and counted without D3D11On12 / D2D final composition. The active migration target is to replace each degradation case with D3D12 handling where practical and keep only accepted degradation where not. Initialization and runtime record failures currently degrade every renderable run for the affected frame because no safe atlas command list should be submitted from a failed record path.
 
 Fallback cases:
 
@@ -239,22 +237,20 @@ Fallback cases:
 - Scripts or shaping features not yet covered by the glyph-run conversion.
 - Atlas full and eviction cannot safely free space for the current frame.
 - Glyph atlas initialization or upload failure.
-- `--text-composition overlay` forces Direct2D text for A/B comparison and rollback.
+- Wider text coverage is not yet implemented.
 
-Fallback or degradation must preserve renderer stability, diagnostics, and clip semantics. New work should not add more D3D11On12 / D2D dependency. D3D11On12 / D2D is no longer required by default GlyphAtlas for NonAscii, complex shaping, wrapping, atlas-full safety, or runtime failure fallback; those cases are either handled by D3D12 atlas or reported as degradation.
+Fallback or degradation must preserve renderer stability, diagnostics, and clip semantics. New work must not add D3D11On12 / D2D dependency. NonAscii, complex shaping, wrapping, atlas-full safety, and runtime failure fallback are either handled by D3D12 atlas or reported as degradation.
 
-## Overlay Removal Gate Draft
+## Overlay Removal Status
 
-D3D11On12 / D2D overlay can be deleted only after all of these are true:
+D3D11On12 / D2D overlay deletion is active in the renderer source:
 
-- NonAscii, font fallback, wrapping, alignment, color glyphs, clipping, and scale cases have a non-overlay D3D12 text path or an explicitly accepted non-rendering degradation.
-- Atlas-full and eviction behavior are implemented and smoke-tested without needing whole-frame overlay fallback. Current default behavior degrades AtlasFull; eviction remains unimplemented.
-- Mixed default composition no longer depends on overlay for unsupported runs; remaining work is replacing accepted degradation with D3D12 rendering where required.
-- Local smoke covers default long `300 x 3`, mixed clipped ASCII/NonAscii, 100% / 150% / 200% scale, resize, and AtlasFull/failure paths with no device lost.
-- Diagnostics still expose accepted text runs, fallback/degradation runs, per-run reasons, sync/present serials, and failure phases after the overlay path is removed.
-- A rollback story exists that does not reintroduce D3D11On12 / D2D as a hidden dependency.
+- `D3D12TextRenderer`, `TextOverlaySyncStrategy`, and D3D11 query extensions are removed.
+- `NativeMethods.txt` no longer requests D3D11On12 or Direct2D generation.
+- `TextCompositionMode` has no overlay mode; `--text-composition overlay` parses back to `GlyphAtlas`.
+- Diagnostics expose accepted text runs, degradation runs, per-run reasons, sync/present serials, and failure phases.
 
-Until that gate is met, `--text-composition overlay` remains the explicit rollback mode. The default path should keep reducing `DegradedRuns` without reintroducing D3D11On12 / D2D as a hidden dependency.
+Remaining work is reducing `DegradedRuns` without reintroducing D3D11On12 / D2D as a hidden dependency.
 
 ## Open Questions
 
@@ -262,13 +258,13 @@ Until that gate is met, `--text-composition overlay` remains the explicit rollba
 - Should glyph rasterization use DirectWrite glyph run analysis or a separate rasterizer?
 - What memory budget should be used per monitor/adapter?
 - How should retained frames reference atlas entries across page eviction?
-- Should color glyphs use separate BGRA pages or always fallback to Direct2D initially?
+- Should color glyphs use separate BGRA pages or explicit degradation initially?
 
 ## Acceptance Criteria For A Future Spike
 
 - No public API change without a design review.
-- Text cache diagnostics show reduced overlay cost on the target workload.
+- Text diagnostics show reduced degradation on the target workload.
 - 100% / 150% / 200% scale smokes show no stretched text and correct hit-test/clip behavior.
-- Scroll text remains synchronized at 60Hz with default sync enabled.
+- Scroll text remains synchronized at 60Hz without overlay sync.
 - Atlas eviction cannot produce stale glyphs in retained or partial frames.
-- Direct2D fallback remains available and tested until the removal gate is satisfied; new fallback work should prefer D3D12 handling or explicit degradation.
+- New fallback work should prefer D3D12 handling or explicit degradation.

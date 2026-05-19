@@ -191,7 +191,7 @@ public sealed class PerformanceRegressionTests
             ReleaseRecordResult(warmFullRecord);
             var warmDirtyRecord = recorder.Record(warmDirtyLayout.Elements, warmDirtyLayout.DirtyElementRanges, snapshot);
             using var warmRects = new FrameRenderList<D3D12Renderer2D.RectData>();
-            using var warmTexts = new FrameRenderList<D3D12TextRenderer.TextData>();
+            using var warmTexts = new FrameRenderList<D3D12TextRun>();
             _ = D3D12DrawingBackend.ExecuteCore(
                 DrawingBackendClipMode.Scissor,
                 new DrawRect(0, 0, viewport.Width, viewport.Height),
@@ -275,7 +275,7 @@ public sealed class PerformanceRegressionTests
 
         var executeRecord = recorder.Record(recordDirtyLayout.Elements, recordDirtyLayout.DirtyElementRanges, snapshot);
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
-        using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
         _ = D3D12DrawingBackend.ExecuteCore(
             DrawingBackendClipMode.Scissor,
             new DrawRect(0, 0, viewport.Width, viewport.Height),

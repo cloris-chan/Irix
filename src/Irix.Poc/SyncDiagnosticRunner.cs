@@ -5,9 +5,7 @@ using Irix.Rendering;
 namespace Irix.Poc;
 
 /// <summary>
-/// Measures GPU sync wait overhead during text-overlay rendering.
-/// Renders N frames with text, reports per-frame and aggregate sync wait stats.
-/// Run at different refresh rates to validate sync cost is acceptable.
+/// Renders N text-heavy frames and reports frame serial / residual sync-wait counters.
 /// </summary>
 internal static class SyncDiagnosticRunner
 {
@@ -15,7 +13,6 @@ internal static class SyncDiagnosticRunner
         TextWriter output,
         int frameCount = 300,
         int sampleCount = 1,
-        TextOverlaySyncStrategy syncStrategy = TextOverlaySyncStrategy.D3D12FenceAfterOverlay,
         TextCompositionMode textCompositionMode = TextCompositionMode.GlyphAtlas,
         bool includeNonAsciiText = false)
     {
@@ -25,7 +22,6 @@ internal static class SyncDiagnosticRunner
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(screen));
 
         using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-        d3d12Renderer.TextOverlaySyncStrategy = syncStrategy;
         d3d12Renderer.TextCompositionMode = textCompositionMode;
         using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
         using var compositor = new DrawingBackendCompositor(d3d12Backend);
@@ -47,8 +43,6 @@ internal static class SyncDiagnosticRunner
         output.WriteLine($"Samples: {sampleCount}");
         output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
         output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
-        output.WriteLine($"SyncTextOverlay: {d3d12Renderer.SyncTextOverlay}");
-        output.WriteLine($"Text overlay sync strategy: {d3d12Renderer.TextOverlaySyncStrategy}");
         output.WriteLine($"Text composition mode: {d3d12Renderer.TextCompositionMode}");
         output.WriteLine();
 

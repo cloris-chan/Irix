@@ -57,17 +57,6 @@ internal static class FullDiagnosticRunner
         }
 
         // Dump diagnostics
-        var diag = d3d12Renderer.GetTextDiagnostics();
-        if (diag.HasValue)
-        {
-            var d = diag.Value;
-            output.WriteLine("=== D3D12 Text Renderer Diagnostics ===");
-            output.WriteLine($"Format cache: {d.CachedFormats} entries, {d.FormatHits} hits, {d.FormatMisses} misses, {d.FormatEvictions} evictions");
-            output.WriteLine($"Layout cache: {d.CachedLayouts} entries, {d.LayoutHits} hits, {d.LayoutMisses} misses, {d.LayoutEvictions} evictions");
-            output.WriteLine($"Format hit rate: {(d.FormatHits + d.FormatMisses > 0 ? 100.0 * d.FormatHits / (d.FormatHits + d.FormatMisses) : 0):F1}%");
-            output.WriteLine($"Layout hit rate: {(d.LayoutHits + d.LayoutMisses > 0 ? 100.0 * d.LayoutHits / (d.LayoutHits + d.LayoutMisses) : 0):F1}%");
-        }
-
         var initialBackendSnapshot = BackendClipTextDiagnosticSnapshot.FromBackend(d3d12Backend, d3d12Renderer);
         foreach (var line in DiagnosticsFormatter.BuildBackendDeviceDiagnosticLines(initialBackendSnapshot))
         {
@@ -86,7 +75,6 @@ internal static class FullDiagnosticRunner
 
         var frameSerial = d3d12Backend.FrameSerialDiagnostics;
         output.WriteLine($"Frame serial: rects={frameSerial.FrameSerial}, presents={frameSerial.PresentSerial}");
-        output.WriteLine($"Text overlay sync strategy: {frameSerial.SyncStrategy}");
         output.WriteLine($"Sync wait: count={frameSerial.SyncWaitCount}, total={frameSerial.SyncWaitMs:F2}ms, avg={(frameSerial.SyncWaitCount > 0 ? frameSerial.SyncWaitMs / frameSerial.SyncWaitCount : 0):F2}ms");
         output.WriteLine($"Back buffer index: {frameSerial.BackBufferIndex}");
         output.WriteLine($"Compositor frame time: last={compositor.LastFrameTimeUs}us, avg={compositor.AverageFrameTimeUs}us, max={compositor.MaxFrameTimeUs}us");

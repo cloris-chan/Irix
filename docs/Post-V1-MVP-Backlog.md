@@ -20,7 +20,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | POST-002 | D3D12 segmented ownership | Done for v1 default-on path | Resolver ownership, per-segment execute adapter, and D3D12 smoke validated |
 | POST-003 | Device-lost recovery | Done | `D3D12Renderer.TryRecover()` and compositor `IDeviceRecovery` path test-covered |
 | POST-004 | Platform matrix minimum | Done for available hardware | 60Hz / 120Hz / 240Hz, 100% / 150% / 200% evidence accepted; 144Hz removed from scope because no hardware is available |
-| POST-013 | Sync wait overhead validation | Decision complete | Current `D3D12FenceAfterOverlay` sync wait cost accepted temporarily for correctness; `D3D11Query` remains diagnostic-only; long-term fix moved to POST-017 |
+| POST-013 | Sync wait overhead validation | Retired by overlay removal | D3D11On12/D2D overlay sync path removed; residual sync wait counters remain diagnostic-only |
 | POST-014 | Windows SDK 26100 CI check | Done | CI fails early if .NET 10 or Windows SDK 26100 is absent |
 | POST-015 | Platform matrix CI | Minimal matrix added | Windows 2025 lanes cover tests, headless D3D12, performance baseline, AOT publish |
 | POST-016 | Performance regression CI | Done | Mock backend frame-time baseline + split frame-stage allocation baseline + warm `FrameDrawingResources` allocation baseline; latest local per-stage bytes live in `Project_Status_and_Todo.md` |
@@ -37,7 +37,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with expanded mixed fallback and mixed AtlasFull smoke | Post-GA; `GlyphAtlas` is default for the D3D12 PoC path; `Overlay` remains rollback/fallback while the non-overlay replacement is built; narrow ASCII/NoWrap runs have local evidence |
+| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow ASCII/NoWrap runs have local evidence and unsupported cases degrade |
 | POST-011 | Resource cache / stable global handles | First glyph-atlas entry-handle pass done | D3D12-specific; align with glyph atlas resource ownership and overlay-removal work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -59,8 +59,8 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 ```text
 POST-001..004, POST-013..020 complete ──> v1.0-private-ga tag
 
-Current D3D11On12/D2D overlay accepted temporarily ──> POST-017 D3D12-only glyph atlas text renderer ──> overlay removal
-                                                    └─ POST-011 D3D12 resource cache / stable handles
+POST-017 D3D12-only glyph atlas text renderer ──> reduce DegradedRuns / widen text coverage
+                                             └─ POST-011 D3D12 resource cache / stable handles
 
 POST-005 translator ──> POST-006 public API shaping on top of typed ids/property metadata
 POST-007 scroll ──────> POST-008 settings provider
@@ -70,7 +70,7 @@ POST-007 scroll ──────> POST-008 settings provider
 
 ## POST-017: D3D12-only Glyph Atlas Text Renderer
 
-Private GA / overlay fallback text composition path:
+Retired Private GA overlay fallback text composition path:
 
 ```text
 D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present
@@ -82,11 +82,11 @@ Target path:
 D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
 ```
 
-Phase 1 foundation first kept the overlay path as the default runtime behavior and added only an internal composition seam. After opt-in smoke evidence, the post-GA renderer-foundation baseline now defaults to `GlyphAtlas`; `--text-composition overlay` remains the old overlay rollback, while default GlyphAtlas now degrades unsupported/failure runs instead of invoking D3D11On12/D2D overlay. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data. This phase does not change public API or `IDrawingBackend.Execute`.
+Phase 1 foundation first kept the overlay path as the default runtime behavior and added only an internal composition seam. After opt-in smoke evidence, the post-GA renderer-foundation baseline now defaults to `GlyphAtlas`; the D3D11On12/D2D overlay renderer and explicit overlay mode have now been removed. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data. This phase does not change public API or `IDrawingBackend.Execute`.
 
 The first atlas execution path records a D3D12 glyph pass for basic single-line ASCII / `NoWrap` runs, uses an `R8_UNORM` atlas, and supports leading/center/trailing alignment plus per-run scissor for accepted runs.
 It now uses non-overlay degradation so unsupported renderable text runs do not force either whole-frame overlay or mixed overlay fallback.
-Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, default `300 x 3`, and 2026-05-20 short degradation runs with `overlayFallbackRuns=0`, `syncWaits=0`, and nonzero `DegradedRuns`.
+Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
 Current default GlyphAtlas behavior degrades unsupported and initialization/upload/record-failed renderable text runs without invoking overlay.
 Full shaping, wrapping, color glyphs, fallback font identity, eviction, command-order-perfect mixed text z-order, and production enablement remain follow-up work.
 
@@ -95,8 +95,8 @@ Full shaping, wrapping, color glyphs, fallback font identity, eviction, command-
 | Atlas design | Define glyph key, atlas page size, eviction, scale/DPI keying, color handling, clipping, and upload lifecycle | Design doc approved; no public backend API change |
 | Glyph source | Use DirectWrite only for shaping/raster source if needed; final composition must not use D3D11On12/D2D overlay | Glyph bitmaps can be uploaded to D3D12 textures |
 | D3D12 text pipeline | Add glyph quad generation, atlas SRV, pipeline state, blend state, sampler, and scissor support | Text and rectangles are submitted in one D3D12 synchronization domain |
-| Diagnostics | Report atlas hit/miss/upload counts, `AtlasRuns`, `OverlayFallbackRuns`, `DegradedRuns`, unsupported runs, and per-run fallback/degradation reasons | Diagnostics show whether default composition still depends on degradation or explicit overlay rollback |
-| Migration | Keep current D2D overlay only as explicit rollback while default GlyphAtlas uses D3D12 atlas or degradation | No regression in renderer stability, clipping, scale, scroll sync, hit-test, partial apply |
+| Diagnostics | Report atlas hit/miss/upload counts, `AtlasRuns`, `DegradedRuns`, unsupported runs, and per-run degradation reasons | Diagnostics show whether default composition still depends on degradation |
+| Migration | Keep default GlyphAtlas on D3D12 atlas or explicit degradation without D3D11On12/D2D overlay | No regression in renderer stability, clipping, scale, scroll sync, hit-test, partial apply |
 
 Non-goals:
 
@@ -113,7 +113,7 @@ Non-goals:
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
-| Accept sync wait budget | `GA-Hardening-Plan.md` | `D3D12FenceAfterOverlay` accepted temporarily; `<2ms avg` removed as GA blocker | ✅ Done |
+| Accept sync wait budget | `GA-Hardening-Plan.md` | Historical overlay sync budget accepted for Private GA; overlay path now removed post-GA | ✅ Retired by overlay removal |
 | Remove 144Hz blocker | `GA-Hardening-Plan.md` | 144Hz validation not listed as current GA blocker | ✅ Done |
 | Platform integration checks | `Irix.Poc`, manual smoke | Minimize/restore, occlusion, live DPI, resize + scroll + text sync pass on available hardware | ✅ Done |
 | GPU memory pressure handling | `D3D12Renderer.cs` | Resource creation failures produce typed device diagnostics; no undefined pointer continuation | ✅ Done |
@@ -125,20 +125,20 @@ Non-goals:
 
 ### Batch B: Post-GA text renderer replacement
 
-Phase 1 closeout: prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback, mixed clipped fallback, mixed AtlasFull fallback, resize, 100% / 150% / 200% scale, and warm allocation baseline.
-The post-GA baseline has been switched to default `GlyphAtlas` plus default `Scissor`, with `--text-composition overlay`, `--disable-scissor`, and `--clip-mode diagnostic` rollback paths.
+Phase 1 closeout: prototype evidence is captured for default overlay regression, glyph-atlas ASCII smoke, NonAscii/AtlasFull fallback/degradation, mixed clipped degradation, mixed AtlasFull degradation, resize, 100% / 150% / 200% scale, and warm allocation baseline.
+The post-GA baseline has been switched to default `GlyphAtlas` plus default `Scissor`, with `--disable-scissor` and `--clip-mode diagnostic` rollback paths.
 Do not keep expanding the ASCII prototype surface or flip another runtime default in the next step; move to renderer-foundation hardening first.
 
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
-| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype with overlay rollback |
+| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype; overlay renderer removed |
 | Shader/resource lifetime hardening | Windows D3D12 renderers | Runtime shader compile removed; failure diagnostics split; upload maps, swapchain/overlay intermediates, and core resource init/release paths are guarded | ✅ First pass done |
 | Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
 | Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | ✅ Attribution added |
 | Non-overlay degradation path | Renderer design | Per-run atlas plus explicit degradation so NonAscii/complex/failure cases do not invoke D3D11On12/D2D in default GlyphAtlas | ✅ Default GlyphAtlas no longer records overlay fallback runs |
-| Overlay removal gate | Renderer design / smoke evidence | Remove D3D11On12/D2D only after fallback cases have a non-overlay path or accepted degradation plus smoke coverage | Active migration gate |
-| Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
+| Overlay removal | Renderer design / smoke evidence | Remove D3D11On12/D2D source, native generation, sync strategy, and explicit overlay mode | ✅ Active source removed |
+| Full migration | Glyph-atlas widening | Reduce accepted degradation by adding D3D12 handling | Planned |
 
 Known limitations checklist before expanding text coverage:
 
@@ -147,23 +147,23 @@ Known limitations checklist before expanding text coverage:
 - D3D12 rectangle and glyph-atlas upload map paths unmap in `finally` after a successful map.
 - D3D12 swapchain creation releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery reuse the same helper.
 - D3D12 constructor and recovery share core resource initialization, with pointer guards and null-safe cleanup for partially initialized device resources.
-- D3D12 overlay rollback renderer guards D3D11On12/D2D/DirectWrite creation and releases DXGI/D2D/frame-wrapping intermediates on failure.
+- D3D12 overlay rollback renderer has been removed with its D3D11On12/D2D native generation entries.
 - Default GlyphAtlas degrades unsupported renderable runs while accepted ASCII / `NoWrap` runs stay on atlas. Initialization and runtime record failure degrade all renderable runs for the frame.
 - Default GlyphAtlas no longer has mixed overlay z-order risk because degraded runs are not drawn; replacing degradation with D3D12 rendering remains follow-up work.
 - No atlas eviction. AtlasFull degradation is safe for the current prototype; eviction design remains deferred.
 - Glyph atlas cache entries now have stable value handles and generations internally; eviction is still deferred, but the cache no longer exposes raw entry storage as the lookup identity.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
 - Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.
-- Overlay removal gate is drafted in `Glyph-Atlas-Post-GA-Design.md`; do not delete D3D11On12/D2D until unsupported text cases, AtlasFull/eviction, z-order, diagnostics, and rollback coverage no longer depend on it.
+- Overlay removal is active in source. Do not reintroduce D3D11On12/D2D; widen D3D12 text handling or keep explicit degradation.
 
 Next hardening checklist:
 
 - Resource cache / stable handles: continue POST-011 from glyph entry handles toward atlas page/eviction handles before widening non-overlay text coverage.
 - Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
-- Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases beyond upload-map, swapchain/core initialization, and overlay rollback ownership; glyph-atlas initialization failures must remain degradation-safe.
+- Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases beyond upload-map and swapchain/core initialization; glyph-atlas initialization failures must remain degradation-safe.
 - Warm allocation attribution: run `--diagnose-text-cache` and optimize only after tree/diff/translate/render attribution identifies the source.
 - Degradation follow-up: AtlasFull and record-failure contracts are recorded as degradation. Eviction and D3D12 rendering for currently unsupported text remain future work before widening atlas text coverage.
-- Overlay removal path: do not add new overlay dependencies. Each fallback case should move toward D3D12 handling or an explicit degradation contract.
+- Overlay removal path: D3D11On12/D2D source is gone. Each fallback case should move toward D3D12 handling or an explicit degradation contract.
 
 ---
 
@@ -174,5 +174,5 @@ Next hardening checklist:
 - Not enabling StyleOnly layout skip
 - Not extracting unified diagnostics channel
 - Not requiring 144Hz validation without actual hardware
-- Not replacing D3D11On12/D2D text overlay before current GA/MVP
+- Not reintroducing D3D11On12/D2D text overlay
 - Not introducing Skia

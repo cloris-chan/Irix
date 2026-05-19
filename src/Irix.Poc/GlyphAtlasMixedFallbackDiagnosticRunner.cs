@@ -32,7 +32,6 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
             var commands = BuildMixedFallbackCommands(resources, frameIndex: 0);
             resources.Seal();
             var expected = AnalyzeMixedFallbackScene(commands, resources);
-            var subsetParity = AnalyzeOverlaySubsetInputs(commands, resources, displayScale, viewport);
 
             output.WriteLine("=== Glyph Atlas Mixed Fallback Diagnostic ===");
             output.WriteLine($"Frames: {frameCount}");
@@ -43,16 +42,8 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
                 $"Expected GlyphAtlas per frame: textRuns={expected.TextRuns}, atlasRuns={expected.AtlasCandidateRuns}, "
                 + $"degradedRuns={expected.DegradedCandidateRuns}, NonAscii={expected.NonAsciiFallbackRuns}, "
                 + $"clippedAtlasRuns={expected.ClippedAtlasCandidateRuns}, clippedDegradedRuns={expected.ClippedDegradedCandidateRuns}");
-            output.WriteLine($"Ordering: {BuildOrderingLine(expected, textCompositionMode)}");
-            if (textCompositionMode == TextCompositionMode.GlyphAtlas)
-            {
-                output.WriteLine("Unsupported text degradation: overlay=False resolver=True style=True clip=True scale=True");
-            }
-            else
-            {
-                output.WriteLine("Whole-frame overlay input: resolver=True style=True clip=True scale=True");
-                output.WriteLine($"Overlay subset parity: {subsetParity.FormatSummary()}");
-            }
+            output.WriteLine($"Ordering: {BuildOrderingLine(expected)}");
+            output.WriteLine("Unsupported text degradation: overlay=False resolver=True style=True clip=True scale=True");
             output.WriteLine();
         }
         finally
@@ -175,150 +166,11 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
             hasDegradedBeforeLaterAtlas);
     }
 
-    internal static string BuildOrderingLine(
-        GlyphAtlasMixedFallbackSceneSummary summary,
-        TextCompositionMode textCompositionMode = TextCompositionMode.GlyphAtlas)
+    internal static string BuildOrderingLine(GlyphAtlasMixedFallbackSceneSummary summary)
     {
-        if (textCompositionMode == TextCompositionMode.Overlay)
-        {
-            return "commands=atlas,fallback,atlas,fallback; actualPassOrder=rects,wholeFrameOverlayRuns,present; zOrderLimit=FalseForOverlayRollback";
-        }
-
         return summary.HasDegradedBeforeLaterAtlas
             ? "commands=atlas,degraded,atlas,degraded; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=FalseForDegradedText"
             : "commands=atlasThenDegraded; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=False";
-    }
-
-    internal static GlyphAtlasOverlaySubsetParity AnalyzeOverlaySubsetInputs(
-        ReadOnlySpan<DrawCommand> commands,
-        IFrameResourceResolver resources,
-        DisplayScale scale,
-        DrawRect viewport)
-    {
-        scale = scale.Normalize();
-        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
-        using var wholeFrameTextRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
-        using var overlayFallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
-
-        D3D12DrawingBackend.ExecuteCore(
-            DrawingBackendClipMode.Scissor,
-            viewport,
-            commands,
-            resources,
-            scale,
-            rects,
-            wholeFrameTextRuns);
-
-        AppendUnsupportedOverlayFallbackRuns(wholeFrameTextRuns.Span, resources, overlayFallbackRuns);
-        var fallbackRuns = overlayFallbackRuns.Span;
-        var wholeFrameRuns = wholeFrameTextRuns.Span;
-        var matchesWholeFrame = IsSubsequence(wholeFrameRuns, fallbackRuns);
-        var resolverPreserved = true;
-        var stylePreserved = true;
-        var clipPreserved = true;
-        var scalePreserved = true;
-        var colorPreserved = true;
-
-        foreach (var fallbackRun in fallbackRuns)
-        {
-            if (!TryFindSourceCommand(commands, fallbackRun, out var sourceCommand))
-            {
-                resolverPreserved = false;
-                stylePreserved = false;
-                clipPreserved = false;
-                scalePreserved = false;
-                colorPreserved = false;
-                continue;
-            }
-
-            var scaledCommand = sourceCommand.Scale(scale);
-            var textClipPlan = D3D12DrawingBackend.ResolveTextClip(DrawingBackendClipMode.Scissor, viewport, scaledCommand.ClipBounds);
-            var resolvedStyle = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(resources.ResolveTextStyle(sourceCommand.Resource), scale);
-            resolverPreserved &= ReferenceEquals(fallbackRun.Resolver, resources);
-            stylePreserved &= fallbackRun.Style == sourceCommand.Resource && fallbackRun.ResolvedStyle == resolvedStyle;
-            clipPreserved &= fallbackRun.ClipEnabled == textClipPlan.ClipEnabled && fallbackRun.EffectiveClip == textClipPlan.EffectiveClip;
-            scalePreserved &= fallbackRun.X == scaledCommand.Rect.X
-                && fallbackRun.Y == scaledCommand.Rect.Y
-                && fallbackRun.Width == scaledCommand.Rect.Width
-                && fallbackRun.Height == scaledCommand.Rect.Height;
-            colorPreserved &= fallbackRun.R == scaledCommand.Color.R / 255f
-                && fallbackRun.G == scaledCommand.Color.G / 255f
-                && fallbackRun.B == scaledCommand.Color.B / 255f
-                && fallbackRun.A == scaledCommand.Color.A / 255f;
-        }
-
-        return new GlyphAtlasOverlaySubsetParity(
-            wholeFrameRuns.Length,
-            fallbackRuns.Length,
-            matchesWholeFrame,
-            resolverPreserved,
-            stylePreserved,
-            clipPreserved,
-            scalePreserved,
-            colorPreserved);
-    }
-
-    private static void AppendUnsupportedOverlayFallbackRuns(
-        ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
-        IFrameResourceResolver resources,
-        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns)
-    {
-        foreach (var textRun in textRuns)
-        {
-            var runResolver = textRun.Resolver ?? resources;
-            var text = runResolver.Resolve(textRun.Text);
-            var style = (textRun.ResolvedStyle != default ? textRun.ResolvedStyle : runResolver.ResolveTextStyle(textRun.Style)).Normalize();
-            if (GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style) == D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None)
-            {
-                continue;
-            }
-
-            overlayFallbackRuns.Add(textRun);
-        }
-    }
-
-    private static bool IsSubsequence(
-        ReadOnlySpan<D3D12TextRenderer.TextData> source,
-        ReadOnlySpan<D3D12TextRenderer.TextData> subset)
-    {
-        var sourceIndex = 0;
-        foreach (var item in subset)
-        {
-            var found = false;
-            while (sourceIndex < source.Length)
-            {
-                if (source[sourceIndex++] == item)
-                {
-                    found = true;
-                    break;
-                }
-            }
-
-            if (!found)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool TryFindSourceCommand(
-        ReadOnlySpan<DrawCommand> commands,
-        D3D12TextRenderer.TextData fallbackRun,
-        out DrawCommand sourceCommand)
-    {
-        foreach (var command in commands)
-        {
-            if (command.Kind == DrawCommandKind.DrawTextRun && command.Text == fallbackRun.Text && command.Resource == fallbackRun.Style)
-            {
-                sourceCommand = command;
-                return true;
-            }
-        }
-
-        sourceCommand = default;
-        return false;
     }
 
     private static TextStyle CreateStyle(float fontSize, TextFontWeight weight)
@@ -414,61 +266,4 @@ internal readonly struct GlyphAtlasMixedFallbackSceneSummary(
     public static bool operator ==(GlyphAtlasMixedFallbackSceneSummary left, GlyphAtlasMixedFallbackSceneSummary right) => left.Equals(right);
 
     public static bool operator !=(GlyphAtlasMixedFallbackSceneSummary left, GlyphAtlasMixedFallbackSceneSummary right) => !left.Equals(right);
-}
-
-internal readonly struct GlyphAtlasOverlaySubsetParity(
-    int WholeFrameOverlayRuns,
-    int FallbackSubsetRuns,
-    bool MatchesWholeFrame,
-    bool ResolverPreserved,
-    bool StylePreserved,
-    bool ClipPreserved,
-    bool ScalePreserved,
-    bool ColorPreserved) : IEquatable<GlyphAtlasOverlaySubsetParity>
-{
-    public int WholeFrameOverlayRuns { get; } = WholeFrameOverlayRuns;
-    public int FallbackSubsetRuns { get; } = FallbackSubsetRuns;
-    public bool MatchesWholeFrame { get; } = MatchesWholeFrame;
-    public bool ResolverPreserved { get; } = ResolverPreserved;
-    public bool StylePreserved { get; } = StylePreserved;
-    public bool ClipPreserved { get; } = ClipPreserved;
-    public bool ScalePreserved { get; } = ScalePreserved;
-    public bool ColorPreserved { get; } = ColorPreserved;
-    public bool IsAcceptable => MatchesWholeFrame && ResolverPreserved && StylePreserved && ClipPreserved && ScalePreserved && ColorPreserved;
-
-    public string FormatSummary()
-    {
-        return $"fallbackRuns={FallbackSubsetRuns}, wholeFrameOverlayRuns={WholeFrameOverlayRuns}, matchesWholeFrame={MatchesWholeFrame}, resolver={ResolverPreserved}, style={StylePreserved}, clip={ClipPreserved}, scale={ScalePreserved}, color={ColorPreserved}";
-    }
-
-    public bool Equals(GlyphAtlasOverlaySubsetParity other)
-    {
-        return WholeFrameOverlayRuns == other.WholeFrameOverlayRuns
-            && FallbackSubsetRuns == other.FallbackSubsetRuns
-            && MatchesWholeFrame == other.MatchesWholeFrame
-            && ResolverPreserved == other.ResolverPreserved
-            && StylePreserved == other.StylePreserved
-            && ClipPreserved == other.ClipPreserved
-            && ScalePreserved == other.ScalePreserved
-            && ColorPreserved == other.ColorPreserved;
-    }
-
-    public override bool Equals(object? obj) => obj is GlyphAtlasOverlaySubsetParity other && Equals(other);
-
-    public override int GetHashCode()
-    {
-        return HashCode.Combine(
-            WholeFrameOverlayRuns,
-            FallbackSubsetRuns,
-            MatchesWholeFrame,
-            ResolverPreserved,
-            StylePreserved,
-            ClipPreserved,
-            ScalePreserved,
-            ColorPreserved);
-    }
-
-    public static bool operator ==(GlyphAtlasOverlaySubsetParity left, GlyphAtlasOverlaySubsetParity right) => left.Equals(right);
-
-    public static bool operator !=(GlyphAtlasOverlaySubsetParity left, GlyphAtlasOverlaySubsetParity right) => !left.Equals(right);
 }

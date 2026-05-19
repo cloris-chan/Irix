@@ -10,10 +10,10 @@ namespace Irix.Core.Tests;
 public sealed class ProgramDiagnosticsTests
 {
     [Fact]
-    public void Text_composition_mode_defaults_to_glyph_atlas_and_accepts_overlay_rollback()
+    public void Text_composition_mode_defaults_to_glyph_atlas_and_ignores_removed_overlay()
     {
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode([]));
-        Assert.Equal(TextCompositionMode.Overlay, Program.ParseTextCompositionMode(["--text-composition", "overlay"]));
+        Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "overlay"]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "glyph-atlas"]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "atlas"]));
     }
@@ -208,35 +208,35 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void D3D12_overlay_renderer_initialization_and_frame_wrapping_cleanup_are_guarded()
+    public void D3D12_overlay_renderer_sources_are_removed()
     {
         var root = FindRepoRoot();
-        var textRendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12TextRenderer.cs")));
+        var platformWindows = Path.Combine(root, "src", "Irix.Platform.Windows");
 
-        Assert.Contains("catch\n        {\n            Dispose();\n            throw;\n        }", textRendererSource);
-        Assert.Contains("finally\n            {\n                if (dxgiDevice != null) dxgiDevice->Release();\n            }", textRendererSource);
-        Assert.Contains("finally\n            {\n                if (d2dContextBase != null) d2dContextBase->Release();\n            }", textRendererSource);
-        Assert.Contains("catch\n        {\n            ReleaseFrameResources();\n            throw;\n        }", textRendererSource);
-        Assert.Contains("finally\n                {\n                    if (surface != null) surface->Release();\n                }", textRendererSource);
-        Assert.Contains("_wrappedBackBuffers[index] = wrappedResource;", textRendererSource);
-        Assert.Contains("D3D12TextRenderer.CreateWrappedResource returned a null resource.", textRendererSource);
-        Assert.Contains("D3D12TextRenderer.CreateBitmapFromDxgiSurface returned a null render target.", textRendererSource);
-        Assert.Contains("private static void* RequirePointer(void* pointer, string message)", textRendererSource);
+        Assert.False(File.Exists(Path.Combine(platformWindows, "D3D12TextRenderer.cs")));
+        Assert.False(File.Exists(Path.Combine(platformWindows, "TextOverlaySyncStrategy.cs")));
+        Assert.False(File.Exists(Path.Combine(platformWindows, "D3D11DeviceContextQueryExtensions.cs")));
+
+        foreach (var sourcePath in Directory.EnumerateFiles(platformWindows, "*.cs"))
+        {
+            var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
+            Assert.DoesNotContain("D3D11On12CreateDevice", source);
+            Assert.DoesNotContain("ID3D11On12Device", source);
+            Assert.DoesNotContain("Windows.Win32.Graphics.Direct2D", source);
+            Assert.DoesNotContain("D2D1CreateFactory", source);
+        }
     }
 
     [Fact]
-    public void D3D12_overlay_text_layout_cache_does_not_retain_text_strings()
+    public void D3D12_text_run_ir_does_not_retain_text_strings()
     {
         var root = FindRepoRoot();
-        var textRendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12TextRenderer.cs")));
+        var textRunSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12TextRun.cs")));
 
-        Assert.DoesNotContain("text.ToString()", textRendererSource);
-        Assert.DoesNotContain("SequenceEqual(entry.Text.AsSpan())", textRendererSource);
-        Assert.DoesNotContain("CachedTextLayout(TextLayoutCacheKey key, string text", textRendererSource);
-        Assert.DoesNotContain("public string Text", textRendererSource);
-        Assert.Contains("private readonly Dictionary<TextLayoutCacheKey, CachedTextLayout> _textLayouts", textRendererSource);
-        Assert.Contains("private readonly struct TextLayoutHash(ulong First, ulong Second)", textRendererSource);
-        Assert.Contains("private static TextLayoutHash ComputeTextHash(ReadOnlySpan<char> text)", textRendererSource);
+        Assert.Contains("TextSlice Text", textRunSource);
+        Assert.Contains("public TextSlice Text { get; }", textRunSource);
+        Assert.DoesNotContain("string Text", textRunSource);
+        Assert.DoesNotContain("Text.ToString()", textRunSource);
     }
 
     [Fact]
@@ -281,7 +281,6 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("cachedGlyphs=12", summary);
         Assert.Contains("uploads=4096 bytes", summary);
         Assert.Contains("atlasRuns=7", summary);
-        Assert.Contains("overlayFallbackRuns=0", summary);
         Assert.Contains("degradedRuns=0", summary);
         Assert.Contains("fallbacks=2", summary);
         Assert.Contains("NonAscii=1", summary);
@@ -313,7 +312,6 @@ public sealed class ProgramDiagnosticsTests
         var summary = diagnostics.FormatSummary();
 
         Assert.Contains("InitializationFailed=1", summary);
-        Assert.Contains("overlayFallbackRuns=0", summary);
         Assert.Contains("degradedRuns=1", summary);
         Assert.Contains("initFailurePhase=UploadBuffer", summary);
     }
@@ -341,7 +339,6 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("InitializationFailed=0", summary);
         Assert.Contains("RecordFailed=1", summary);
-        Assert.Contains("overlayFallbackRuns=0", summary);
         Assert.Contains("degradedRuns=1", summary);
         Assert.Contains("initFailurePhase=None", summary);
         Assert.Contains("recordFailurePhase=Record", summary);
@@ -387,7 +384,6 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal(1, diagnostics.FallbackFrames);
         Assert.Equal(3, diagnostics.UnsupportedRuns);
-        Assert.Equal(0, diagnostics.OverlayFallbackRuns);
         Assert.Equal(3, diagnostics.DegradedRuns);
         Assert.Equal(3, diagnostics.Reasons.NonAscii);
     }
@@ -411,66 +407,6 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(summary.HasDegradedBeforeLaterAtlas);
         Assert.Contains("commands=atlas,degraded,atlas,degraded", ordering);
         Assert.Contains("zOrderLimit=FalseForDegradedText", ordering);
-    }
-
-    [Fact]
-    public void Glyph_atlas_overlay_fallback_subset_preserves_resolver_style_clip_scale_and_color()
-    {
-        using var resources = FrameDrawingResources.Rent();
-        var commands = GlyphAtlasMixedFallbackDiagnosticRunner.BuildMixedFallbackCommands(resources, frameIndex: 0);
-        resources.Seal();
-        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
-        using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
-        using var fallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
-        var scale = new DisplayScale(1.5f, 1.5f);
-        var viewport = new DrawRect(0, 0, 960, 540);
-
-        D3D12DrawingBackend.ExecuteCore(
-            DrawingBackendClipMode.Scissor,
-            viewport,
-            commands,
-            resources,
-            scale,
-            rects,
-            texts);
-
-        var parity = GlyphAtlasMixedFallbackDiagnosticRunner.AnalyzeOverlaySubsetInputs(commands, resources, scale, viewport);
-        foreach (var textRun in texts.Span)
-        {
-            var text = (textRun.Resolver ?? resources).Resolve(textRun.Text);
-            if (GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, textRun.ResolvedStyle) != D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None)
-            {
-                fallbackRuns.Add(textRun);
-            }
-        }
-
-        Assert.Equal(4, texts.Count);
-        Assert.Equal(2, fallbackRuns.Count);
-        Assert.Equal(4, parity.WholeFrameOverlayRuns);
-        Assert.Equal(2, parity.FallbackSubsetRuns);
-        Assert.True(parity.MatchesWholeFrame);
-        Assert.True(parity.ResolverPreserved);
-        Assert.True(parity.StylePreserved);
-        Assert.True(parity.ClipPreserved);
-        Assert.True(parity.ScalePreserved);
-        Assert.True(parity.ColorPreserved);
-        Assert.True(parity.IsAcceptable);
-        Assert.Equal(
-            "fallbackRuns=2, wholeFrameOverlayRuns=4, matchesWholeFrame=True, resolver=True, style=True, clip=True, scale=True, color=True",
-            parity.FormatSummary());
-        Assert.Equal(texts.Span[1], fallbackRuns.Span[0]);
-        Assert.Equal(texts.Span[3], fallbackRuns.Span[1]);
-        var clippedFallback = fallbackRuns.Span[1];
-        Assert.Equal(texts.Span[3], clippedFallback);
-        Assert.Same(resources, clippedFallback.Resolver);
-        Assert.Equal("裁剪 fallback 000", resources.Resolve(clippedFallback.Text).ToString());
-        Assert.True(clippedFallback.ClipEnabled);
-        Assert.Equal(new DrawRect(36, 264, 168, 39), clippedFallback.EffectiveClip.Bounds);
-        Assert.Equal(33f, clippedFallback.ResolvedStyle.FontSize);
-        Assert.Equal(1f, clippedFallback.R);
-        Assert.Equal(160 / 255f, clippedFallback.G);
-        Assert.Equal(220 / 255f, clippedFallback.B);
-        Assert.Equal(1f, clippedFallback.A);
     }
 
     [Fact]
@@ -511,8 +447,7 @@ public sealed class ProgramDiagnosticsTests
             PresentSerial: 1,
             SyncWaitCount: 0,
             SyncWaitTicks: 0,
-            BackBufferIndex: 0,
-            SyncStrategy: TextOverlaySyncStrategy.D3D12FenceAfterOverlay);
+            BackBufferIndex: 0);
         var writer = new StringWriter();
 
         GlyphAtlasStressDiagnosticRunner.WriteReport(
@@ -534,7 +469,6 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Text composition mode: GlyphAtlas", report);
         Assert.Contains("Device removed: False", report);
         Assert.Contains("Frame serial: frameSerial=1, presentSerial=1, syncWaits=0", report);
-        Assert.Contains("overlayFallbackRuns=0", report);
         Assert.Contains("degradedRuns=1", report);
         Assert.Contains("AtlasFull=1", report);
         Assert.Contains("=== Glyph atlas stress diagnostic complete ===", report);
@@ -601,7 +535,6 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(2, degradedRunCount);
         Assert.Equal(1, diagnostics.FallbackFrames);
         Assert.Equal(2, diagnostics.UnsupportedRuns);
-        Assert.Equal(0, diagnostics.OverlayFallbackRuns);
         Assert.Equal(2, diagnostics.DegradedRuns);
         Assert.Equal(2, diagnostics.Reasons.RecordFailed);
         Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.AtlasUploadMap, diagnostics.RecordFailurePhase);
@@ -1122,7 +1055,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, atlasRuns=0, overlayFallbackRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
@@ -1332,9 +1265,9 @@ public sealed class ProgramDiagnosticsTests
 
     #endregion
 
-    private static D3D12TextRenderer.TextData TextRun(TextSlice text, ResourceHandle style, float width, float height)
+    private static D3D12TextRun TextRun(TextSlice text, ResourceHandle style, float width, float height)
     {
-        return new D3D12TextRenderer.TextData(
+        return new D3D12TextRun(
             X: 0,
             Y: 0,
             Width: width,

@@ -185,7 +185,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     private readonly D3D12Renderer _renderer = renderer;
     private float _bgR, _bgG, _bgB, _bgA = 1.0f;
     private readonly FrameRenderList<D3D12Renderer2D.RectData> _rects = new();
-    private readonly FrameRenderList<D3D12TextRenderer.TextData> _texts = new();
+    private readonly FrameRenderList<D3D12TextRun> _texts = new();
     private IFrameResourceResolver? _resources;
     private IReadOnlyList<(int Start, int Count)> _dirtyCommandRanges = [];
     private int _clippedCommandCount;
@@ -357,7 +357,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         IFrameResourceResolver resources,
         DisplayScale scale,
         FrameRenderList<D3D12Renderer2D.RectData> rects,
-        FrameRenderList<D3D12TextRenderer.TextData> texts)
+        FrameRenderList<D3D12TextRun> texts)
     {
         scale = scale.Normalize();
         var diagnostics = new ExecuteDiagnosticsAccumulator();
@@ -405,7 +405,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                         break;
                     }
 
-                    texts.Add(new D3D12TextRenderer.TextData(
+                    texts.Add(new D3D12TextRun(
                         command.Rect.X,
                         command.Rect.Y,
                         command.Rect.Width,

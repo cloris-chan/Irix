@@ -29,12 +29,12 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Area | Status |
 |------|--------|
 | V1 core | Complete / regression-only. Do not reopen core feature scope for GA cleanup. |
-| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; accepted atlas runs stay on D3D12 and unsupported/failure runs now degrade without D3D11On12/D2D overlay. `--text-composition overlay` remains explicit rollback while the overlay removal path is finished. |
+| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; accepted atlas runs stay on D3D12 and unsupported/failure runs degrade without D3D11On12/D2D overlay. The D3D11On12/D2D overlay renderer, sync strategy, native generation entries, and explicit overlay mode are removed from active source. |
 | Backend clip | Scissor is the default backend clip mode; `--disable-scissor` / `--clip-mode diagnostic` remain diagnostic rollback paths. |
 | Default renderer baseline | GlyphAtlas + Scissor default baseline enabled. Do not introduce another runtime default switch before shader/resource lifetime and allocation attribution hardening. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Shader packaging | D3D12 rectangle and glyph-atlas passes use embedded DXBC bytecode. Runtime `D3DCompile` / `d3dcompiler_47.dll` is no longer required by renderer source. |
-| Resource lifetime | D3D12 upload maps, swapchain intermediates, and overlay wrapping intermediates release through `finally`. Core device/queue/RTV/command/fence setup is shared by constructor and recovery with pointer guards and constructor-failure cleanup. |
+| Resource lifetime | D3D12 upload maps and swapchain intermediates release through `finally`. Core device/queue/RTV/command/fence setup is shared by constructor and recovery with pointer guards and constructor-failure cleanup. |
 | Resource cache handles | POST-011 first slice done: glyph atlas cache lookup uses stable value handles with generations instead of exposing cached glyph entries directly. Eviction is still deferred. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. Device error diagnostics use typed `DeviceErrorDiagnostic`; text formatting stays at CLI/debug/report output boundaries. |
@@ -142,28 +142,24 @@ dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performanc
 dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
 dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3
-dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --text-composition overlay
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3 --diagnose-sync-non-ascii
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150
-dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150 --text-composition overlay
 ```
 
-Result: Release build passed; normal tests `608` passed; D3D12 tests `6` passed; performance tests `6` passed; default GlyphAtlas sync smoke reported `syncWaits=0`; overlay rollback and NonAscii fallback smokes presented normally. Self-contained publish passed after shader packaging removal. Glyph-atlas diagnostics now keep constructor-time `initFailurePhase` separate from runtime `recordFailurePhase`.
+Result: Release build passed; normal tests `608` passed; D3D12 tests `6` passed; performance tests `6` passed; default GlyphAtlas sync smoke reported `syncWaits=0`; NonAscii degradation smokes presented normally. Self-contained publish passed after shader packaging removal. Glyph-atlas diagnostics now keep constructor-time `initFailurePhase` separate from runtime `recordFailurePhase`.
 
 Mixed fallback v0 update: Release build passed; normal tests `618` passed; D3D12 tests `6` passed; performance tests `6` passed.
-Program diagnostics tests `55` passed. Short default GlyphAtlas smoke reported `atlasRuns=90`, `overlayFallbackRuns=0`, `syncWaits=0`.
-Short NonAscii mixed fallback smoke reported `atlasRuns=60`, `overlayFallbackRuns=30`, `NonAscii=30`, `syncWaits=30`.
+Program diagnostics tests `55` passed. Short default GlyphAtlas smoke reported `atlasRuns=90`, `syncWaits=0`.
+Short NonAscii mixed fallback smoke previously reported overlay fallback before the degradation/removal update; this evidence is historical only.
 
-Mixed fallback extended smoke: `ASCII / NonAscii / clipped ASCII / clipped NonAscii` at 150% scale reported `atlasRuns=60`, `overlayFallbackRuns=60`, `NonAscii=60`, `textClipSkipped=0`, `lastEffectiveTextClip=(36,264,168,39)`, and `syncWaits=30`.
-The same scene in `--text-composition overlay` completed as whole-frame overlay with the same final effective text clip.
-Overlay subset parity reported `fallbackRuns=2`, `wholeFrameOverlayRuns=4`, and resolver/style/clip/scale/color all preserved.
-Default long GlyphAtlas `300 x 3` reported `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `atlasRuns=2700`, and `overlayFallbackRuns=0`.
-Mixed AtlasFull stress reported `atlasRuns=5`, `overlayFallbackRuns=30`, `AtlasFull=29`, `NonAscii=1`, `RecordFailed=0`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
+Mixed fallback extended smoke and overlay subset parity evidence are historical and superseded by explicit degradation.
+Default long GlyphAtlas `300 x 3` reported `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, and `atlasRuns=2700`.
+Mixed AtlasFull stress before overlay deletion is superseded by the 2026-05-20 degradation stress below.
 Record-failure contract tests now pin all-renderable-run fallback with `recordFailurePhase=AtlasUploadMap`; this is unit contract coverage, not a forced GPU upload-failure smoke.
 
-Non-overlay degradation update: default GlyphAtlas no longer records unsupported, AtlasFull, initialization, or runtime record-failed text through D3D11On12 / D2D overlay fallback. Those cases now increment `DegradedRuns` and reason counts, while `--text-composition overlay` remains the explicit rollback path.
-2026-05-20 short mixed degradation smoke at 150% scale reported `frameSerial=3`, `presentSerial=3`, `syncWaits=0`, `atlasRuns=6`, `overlayFallbackRuns=0`, `degradedRuns=6`, `NonAscii=6`, `textClipSkipped=0`, and `lastEffectiveTextClip=(36,264,168,39)`.
-2026-05-20 MixedAtlasFull stress reported `frameSerial=1`, `presentSerial=1`, `syncWaits=0`, `atlasRuns=5`, `overlayFallbackRuns=0`, `degradedRuns=30`, `AtlasFull=29`, `NonAscii=1`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
+Overlay removal update: default GlyphAtlas no longer records unsupported, AtlasFull, initialization, or runtime record-failed text through D3D11On12 / D2D overlay fallback. `D3D12TextRenderer`, `TextOverlaySyncStrategy`, D3D11 query extensions, D3D11On12/D2D native generation entries, and explicit `Overlay` composition mode are removed.
+2026-05-20 short mixed degradation smoke at 150% scale reported `frameSerial=3`, `presentSerial=3`, `syncWaits=0`, `atlasRuns=6`, `degradedRuns=6`, `NonAscii=6`, `textClipSkipped=0`, and `lastEffectiveTextClip=(36,264,168,39)`.
+2026-05-20 MixedAtlasFull stress reported `frameSerial=1`, `presentSerial=1`, `syncWaits=0`, `atlasRuns=5`, `degradedRuns=30`, `AtlasFull=29`, `NonAscii=1`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
 
 Manual smoke status:
 
@@ -242,8 +238,8 @@ Source guards currently block:
 | P1 | Shader packaging follow-up | Runtime shader compile is removed. Decide later whether inline embedded DXBC is enough or a build-time shader asset pipeline is worth adding. |
 | P1 | Attribute warm glyph atlas allocation | Run `--diagnose-text-cache` and use tree/diff/translate/render attribution before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
-| P1 | Degradation smoke evidence | Short mixed and MixedAtlasFull smoke now show `overlayFallbackRuns=0` and nonzero `DegradedRuns`; eviction remains deferred before widening atlas text coverage. |
-| P1 | Overlay removal path | Active migration target. Remove D3D11On12/D2D from final composition as soon as unsupported text, atlas-full/eviction, diagnostics, and rollback have non-overlay behavior or an explicit degradation contract. |
+| P1 | Degradation smoke evidence | Short mixed and MixedAtlasFull smoke now show nonzero `DegradedRuns`; eviction remains deferred before widening atlas text coverage. |
+| P1 | Overlay removal path | Active source removal done. Do not reintroduce D3D11On12/D2D; reduce accepted degradation through D3D12 handling. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
 
 Do not mix glyph atlas implementation, renderer rewrites, or public API expansion into style/property cleanup.

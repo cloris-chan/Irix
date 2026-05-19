@@ -7,9 +7,9 @@ using Xunit;
 namespace Irix.Core.Tests;
 
 /// <summary>
-/// Regression tests for text-overlay synchronization during scrolling.
+/// Regression tests for text and rectangle frame coherence during scrolling.
 /// Ensures rect and text commands arrive in the same frame batch with consistent
-/// positions, which is the prerequisite for GPU-level sync (D3D12Renderer.SyncTextOverlay).
+/// positions before the D3D12 renderer records a frame.
 /// </summary>
 public sealed class ScrollTextSyncTests
 {
@@ -47,8 +47,8 @@ public sealed class ScrollTextSyncTests
         }
 
         // Every frame that had rects must also have had text in the same Execute call.
-        // A frame with rects but no text would indicate the D3D12 rect pass and D2D text
-        // pass are split across frames �?the exact condition that causes text-lag.
+        // A frame with rects but no text would indicate text and geometry were split
+        // across frame batches, the condition that used to cause visible text lag.
         Assert.NotEmpty(backend.FrameSnapshots);
         foreach (var snapshot in backend.FrameSnapshots)
         {
