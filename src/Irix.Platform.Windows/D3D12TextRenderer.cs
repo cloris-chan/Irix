@@ -52,70 +52,92 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
     public D3D12TextRenderer(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12Resource*[] backBuffers)
     {
-        var queues = stackalloc IUnknown*[1];
-        queues[0] = (IUnknown*)commandQueue;
+        try
+        {
+            var queues = stackalloc IUnknown*[1];
+            queues[0] = (IUnknown*)commandQueue;
 
-        var featureLevels = stackalloc D3D_FEATURE_LEVEL[1];
-        featureLevels[0] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0;
+            var featureLevels = stackalloc D3D_FEATURE_LEVEL[1];
+            featureLevels[0] = D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0;
 
-        ID3D11Device* d3d11Device;
-        ID3D11DeviceContext* d3d11Context;
-        var create11Result = PInvoke.D3D11On12CreateDevice(
-            (IUnknown*)d3d12Device,
-            (uint)D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT,
-            featureLevels,
-            1,
-            queues,
-            1,
-            0,
-            &d3d11Device,
-            &d3d11Context,
-            null);
-        create11Result.ThrowOnFailure();
+            ID3D11Device* d3d11Device = null;
+            ID3D11DeviceContext* d3d11Context = null;
+            var create11Result = PInvoke.D3D11On12CreateDevice(
+                (IUnknown*)d3d12Device,
+                (uint)D3D11_CREATE_DEVICE_FLAG.D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+                featureLevels,
+                1,
+                queues,
+                1,
+                0,
+                &d3d11Device,
+                &d3d11Context,
+                null);
+            create11Result.ThrowOnFailure();
 
-        _d3d11Device = d3d11Device;
-        _d3d11Context = d3d11Context;
+            _d3d11Device = (ID3D11Device*)RequirePointer(d3d11Device, "D3D12TextRenderer.D3D11On12CreateDevice returned a null D3D11 device.");
+            _d3d11Context = (ID3D11DeviceContext*)RequirePointer(d3d11Context, "D3D12TextRenderer.D3D11On12CreateDevice returned a null D3D11 context.");
 
-        _d3d11Device->QueryInterface(typeof(ID3D11On12Device).GUID, out var on12DeviceObject).ThrowOnFailure();
-        _d3d11On12Device = (ID3D11On12Device*)on12DeviceObject;
+            _d3d11Device->QueryInterface(typeof(ID3D11On12Device).GUID, out var on12DeviceObject).ThrowOnFailure();
+            _d3d11On12Device = (ID3D11On12Device*)RequirePointer(on12DeviceObject, "D3D12TextRenderer.QueryInterface(ID3D11On12Device) returned null.");
 
-        PInvoke.D2D1CreateFactory(
-            D2D1_FACTORY_TYPE.D2D1_FACTORY_TYPE_SINGLE_THREADED,
-            typeof(ID2D1Factory3).GUID,
-            null,
-            out var d2dFactoryObject).ThrowOnFailure();
-        _d2dFactory = (ID2D1Factory3*)d2dFactoryObject;
+            PInvoke.D2D1CreateFactory(
+                D2D1_FACTORY_TYPE.D2D1_FACTORY_TYPE_SINGLE_THREADED,
+                typeof(ID2D1Factory3).GUID,
+                null,
+                out var d2dFactoryObject).ThrowOnFailure();
+            _d2dFactory = (ID2D1Factory3*)RequirePointer(d2dFactoryObject, "D3D12TextRenderer.D2D1CreateFactory returned a null factory.");
 
-        _d3d11On12Device->QueryInterface(typeof(IDXGIDevice).GUID, out var dxgiDeviceObject).ThrowOnFailure();
-        var dxgiDevice = (IDXGIDevice*)dxgiDeviceObject;
-        ID2D1Device2* d2dDevice;
-        _d2dFactory->CreateDevice(dxgiDevice, &d2dDevice);
-        _d2dDevice = d2dDevice;
-        dxgiDevice->Release();
+            IDXGIDevice* dxgiDevice = null;
+            try
+            {
+                _d3d11On12Device->QueryInterface(typeof(IDXGIDevice).GUID, out var dxgiDeviceObject).ThrowOnFailure();
+                dxgiDevice = (IDXGIDevice*)RequirePointer(dxgiDeviceObject, "D3D12TextRenderer.QueryInterface(IDXGIDevice) returned null.");
+                ID2D1Device2* d2dDevice = null;
+                _d2dFactory->CreateDevice(dxgiDevice, &d2dDevice);
+                _d2dDevice = (ID2D1Device2*)RequirePointer(d2dDevice, "D3D12TextRenderer.CreateDevice returned a null D2D device.");
+            }
+            finally
+            {
+                if (dxgiDevice != null) dxgiDevice->Release();
+            }
 
-        ID2D1DeviceContext* d2dContextBase;
-        _d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS.D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &d2dContextBase);
-        d2dContextBase->QueryInterface(typeof(ID2D1DeviceContext2).GUID, out var d2dContextObject).ThrowOnFailure();
-        _d2dContext = (ID2D1DeviceContext2*)d2dContextObject;
-        d2dContextBase->Release();
+            ID2D1DeviceContext* d2dContextBase = null;
+            try
+            {
+                _d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS.D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &d2dContextBase);
+                RequirePointer(d2dContextBase, "D3D12TextRenderer.CreateDeviceContext returned a null D2D context.");
+                d2dContextBase->QueryInterface(typeof(ID2D1DeviceContext2).GUID, out var d2dContextObject).ThrowOnFailure();
+                _d2dContext = (ID2D1DeviceContext2*)RequirePointer(d2dContextObject, "D3D12TextRenderer.QueryInterface(ID2D1DeviceContext2) returned null.");
+            }
+            finally
+            {
+                if (d2dContextBase != null) d2dContextBase->Release();
+            }
 
-        PInvoke.DWriteCreateFactory(
-            DWRITE_FACTORY_TYPE.DWRITE_FACTORY_TYPE_SHARED,
-            typeof(IDWriteFactory).GUID,
-            out var dwriteFactoryObject).ThrowOnFailure();
-        _dwriteFactory = (IDWriteFactory*)dwriteFactoryObject;
+            PInvoke.DWriteCreateFactory(
+                DWRITE_FACTORY_TYPE.DWRITE_FACTORY_TYPE_SHARED,
+                typeof(IDWriteFactory).GUID,
+                out var dwriteFactoryObject).ThrowOnFailure();
+            _dwriteFactory = (IDWriteFactory*)RequirePointer(dwriteFactoryObject, "D3D12TextRenderer.DWriteCreateFactory returned a null factory.");
 
-        var initialBrushColor = new D2D1_COLOR_F { r = 1, g = 1, b = 1, a = 1 };
-        ID2D1SolidColorBrush* textBrush;
-        _d2dContext->CreateSolidColorBrush(&initialBrushColor, null, &textBrush);
-        _textBrush = textBrush;
+            var initialBrushColor = new D2D1_COLOR_F { r = 1, g = 1, b = 1, a = 1 };
+            ID2D1SolidColorBrush* textBrush = null;
+            _d2dContext->CreateSolidColorBrush(&initialBrushColor, null, &textBrush);
+            _textBrush = (ID2D1SolidColorBrush*)RequirePointer(textBrush, "D3D12TextRenderer.CreateSolidColorBrush returned a null brush.");
 
-        var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
-        ID3D11Query* overlayCompletionQuery;
-        _d3d11Device->CreateQuery(&queryDesc, &overlayCompletionQuery);
-        _overlayCompletionQuery = overlayCompletionQuery;
+            var queryDesc = new D3D11_QUERY_DESC { Query = D3D11_QUERY.D3D11_QUERY_EVENT };
+            ID3D11Query* overlayCompletionQuery = null;
+            _d3d11Device->CreateQuery(&queryDesc, &overlayCompletionQuery);
+            _overlayCompletionQuery = (ID3D11Query*)RequirePointer(overlayCompletionQuery, "D3D12TextRenderer.CreateQuery returned a null overlay completion query.");
 
-        RecreateFrameResources(backBuffers);
+            RecreateFrameResources(backBuffers);
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
     }
 
     public bool IsDeviceRemoved => _deviceRemoved;
@@ -145,24 +167,39 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
             BindFlags = (uint)D3D11_BIND_FLAG.D3D11_BIND_RENDER_TARGET
         };
 
-        for (var index = 0; index < backBuffers.Length; index++)
+        try
         {
-            _d3d11On12Device->CreateWrappedResource(
-                (IUnknown*)backBuffers[index],
-                resourceFlags,
-                D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
-                D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT,
-                typeof(ID3D11Resource).GUID,
-                out var wrappedResourceObject);
-            var wrappedResource = (ID3D11Resource*)wrappedResourceObject;
-            _wrappedBackBuffers[index] = wrappedResource;
+            for (var index = 0; index < backBuffers.Length; index++)
+            {
+                _d3d11On12Device->CreateWrappedResource(
+                    (IUnknown*)backBuffers[index],
+                    resourceFlags,
+                    D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET,
+                    D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PRESENT,
+                    typeof(ID3D11Resource).GUID,
+                    out var wrappedResourceObject);
+                var wrappedResource = (ID3D11Resource*)RequirePointer(wrappedResourceObject, "D3D12TextRenderer.CreateWrappedResource returned a null resource.");
+                _wrappedBackBuffers[index] = wrappedResource;
 
-            wrappedResource->QueryInterface(typeof(IDXGISurface).GUID, out var surfaceObject).ThrowOnFailure();
-            var surface = (IDXGISurface*)surfaceObject;
-            ID2D1Bitmap1* renderTarget;
-            _d2dContext->CreateBitmapFromDxgiSurface(surface, &bitmapProperties, &renderTarget);
-            _renderTargets[index] = renderTarget;
-            surface->Release();
+                IDXGISurface* surface = null;
+                try
+                {
+                    wrappedResource->QueryInterface(typeof(IDXGISurface).GUID, out var surfaceObject).ThrowOnFailure();
+                    surface = (IDXGISurface*)RequirePointer(surfaceObject, "D3D12TextRenderer.QueryInterface(IDXGISurface) returned null.");
+                    ID2D1Bitmap1* renderTarget = null;
+                    _d2dContext->CreateBitmapFromDxgiSurface(surface, &bitmapProperties, &renderTarget);
+                    _renderTargets[index] = (ID2D1Bitmap1*)RequirePointer(renderTarget, "D3D12TextRenderer.CreateBitmapFromDxgiSurface returned a null render target.");
+                }
+                finally
+                {
+                    if (surface != null) surface->Release();
+                }
+            }
+        }
+        catch
+        {
+            ReleaseFrameResources();
+            throw;
         }
     }
 
@@ -317,6 +354,16 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         _deviceRemoved = true;
         _deviceErrorReason = reason;
         System.Diagnostics.Debug.WriteLine($"[D3D12TextRenderer] {reason}");
+    }
+
+    private static void* RequirePointer(void* pointer, string message)
+    {
+        if (pointer == null)
+        {
+            throw new InvalidOperationException(message);
+        }
+
+        return pointer;
     }
 
     private static D2D_RECT_F ToD2DClipRect(EffectiveScissor effectiveClip)

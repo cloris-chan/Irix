@@ -208,6 +208,23 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void D3D12_overlay_renderer_initialization_and_frame_wrapping_cleanup_are_guarded()
+    {
+        var root = FindRepoRoot();
+        var textRendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12TextRenderer.cs")));
+
+        Assert.Contains("catch\n        {\n            Dispose();\n            throw;\n        }", textRendererSource);
+        Assert.Contains("finally\n            {\n                if (dxgiDevice != null) dxgiDevice->Release();\n            }", textRendererSource);
+        Assert.Contains("finally\n            {\n                if (d2dContextBase != null) d2dContextBase->Release();\n            }", textRendererSource);
+        Assert.Contains("catch\n        {\n            ReleaseFrameResources();\n            throw;\n        }", textRendererSource);
+        Assert.Contains("finally\n                {\n                    if (surface != null) surface->Release();\n                }", textRendererSource);
+        Assert.Contains("_wrappedBackBuffers[index] = wrappedResource;", textRendererSource);
+        Assert.Contains("D3D12TextRenderer.CreateWrappedResource returned a null resource.", textRendererSource);
+        Assert.Contains("D3D12TextRenderer.CreateBitmapFromDxgiSurface returned a null render target.", textRendererSource);
+        Assert.Contains("private static void* RequirePointer(void* pointer, string message)", textRendererSource);
+    }
+
+    [Fact]
     public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(

@@ -13,7 +13,7 @@ dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-stress --mixed-fallback
 ```
 
-Validation result: Release build passed, and `ProgramDiagnosticsTests` passed with `54` tests.
+Validation result: Release build passed, and `ProgramDiagnosticsTests` passed with `55` tests.
 
 ## Mixed Fallback Scenario
 
