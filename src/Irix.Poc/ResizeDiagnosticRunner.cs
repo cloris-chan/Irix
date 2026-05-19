@@ -7,8 +7,6 @@ namespace Irix.Poc;
 
 internal static class ResizeDiagnosticRunner
 {
-    private const string ScaleModePhysicalPixelsV0 = "PhysicalPixelsV0";
-
     internal static void Run(
         TextWriter output,
         TextCompositionMode textCompositionMode = TextCompositionMode.GlyphAtlas,
@@ -100,10 +98,10 @@ internal static class ResizeDiagnosticRunner
             lastAppliedPendingResize,
             compositor.RenderCount,
             translator.LayoutRebuildCount,
-            translator.LastLayoutRebuildReason.ToString(),
+            translator.LastLayoutRebuildReason,
             screen.DpiScale,
-            "ProcessDefault",
-            ScaleModePhysicalPixelsV0,
+            ViewportDpiAwareness.ProcessDefault,
+            ViewportScaleMode.PhysicalPixelsV0,
             displayScale,
             logicalViewport);
 

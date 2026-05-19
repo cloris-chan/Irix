@@ -5,6 +5,16 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
+internal enum ViewportDpiAwareness : byte
+{
+    ProcessDefault
+}
+
+internal enum ViewportScaleMode : byte
+{
+    PhysicalPixelsV0
+}
+
 internal readonly struct BackendClipTextDiagnosticSnapshot(
     DrawingBackendClipMode ClipMode,
     int ClippedCommandCount,
@@ -172,10 +182,10 @@ internal readonly struct ViewportDiagnosticsSnapshot(
     PixelRectangle LastAppliedPendingResize,
     long RenderCount,
     long LayoutRebuildCount,
-    string LayoutRebuildReason,
+    LayoutRebuildReason LayoutRebuildReason,
     float ScreenScale,
-    string DpiAwareness,
-    string ScaleMode,
+    ViewportDpiAwareness DpiAwareness,
+    ViewportScaleMode ScaleMode,
     DisplayScale Scale = default,
     PixelRectangle LogicalViewport = default) : IEquatable<ViewportDiagnosticsSnapshot>
 {
@@ -187,10 +197,10 @@ internal readonly struct ViewportDiagnosticsSnapshot(
     public PixelRectangle LastAppliedPendingResize { get; } = LastAppliedPendingResize;
     public long RenderCount { get; } = RenderCount;
     public long LayoutRebuildCount { get; } = LayoutRebuildCount;
-    public string LayoutRebuildReason { get; } = LayoutRebuildReason;
+    public LayoutRebuildReason LayoutRebuildReason { get; } = LayoutRebuildReason;
     public float ScreenScale { get; } = ScreenScale;
-    public string DpiAwareness { get; } = DpiAwareness;
-    public string ScaleMode { get; } = ScaleMode;
+    public ViewportDpiAwareness DpiAwareness { get; } = DpiAwareness;
+    public ViewportScaleMode ScaleMode { get; } = ScaleMode;
     public DisplayScale Scale { get; } = Scale;
     public PixelRectangle LogicalViewport { get; } = LogicalViewport;
 

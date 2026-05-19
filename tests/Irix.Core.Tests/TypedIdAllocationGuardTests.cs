@@ -1203,6 +1203,24 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Viewport_diagnostics_use_typed_scale_and_rebuild_state()
+    {
+        var counterSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
+        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+
+        Assert.Contains("ViewportScaleMode ScaleMode", counterSource);
+        Assert.DoesNotContain("string ScaleMode", counterSource);
+        Assert.Contains("internal enum ViewportDpiAwareness : byte", snapshotSource);
+        Assert.Contains("internal enum ViewportScaleMode : byte", snapshotSource);
+        Assert.Contains("LayoutRebuildReason LayoutRebuildReason", snapshotSource);
+        Assert.Contains("ViewportDpiAwareness DpiAwareness", snapshotSource);
+        Assert.Contains("ViewportScaleMode ScaleMode", snapshotSource);
+        Assert.DoesNotContain("string LayoutRebuildReason", snapshotSource);
+        Assert.DoesNotContain("string DpiAwareness", snapshotSource);
+        Assert.DoesNotContain("string ScaleMode", snapshotSource);
+    }
+
+    [Fact]
     public void Irix_Drawing_TextStyle_uses_value_font_family()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));

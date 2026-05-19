@@ -972,10 +972,10 @@ public sealed class ProgramDiagnosticsTests
             new PixelRectangle(10, 20, 929, 454),
             RenderCount: 80,
             LayoutRebuildCount: 80,
-            LayoutRebuildReason: "ViewportChanged",
+            LayoutRebuildReason: LayoutRebuildReason.ViewportChanged,
             ScreenScale: 1.25f,
-            DpiAwareness: "ProcessDefault",
-            ScaleMode: "PhysicalPixelsV0");
+            DpiAwareness: ViewportDpiAwareness.ProcessDefault,
+            ScaleMode: ViewportScaleMode.PhysicalPixelsV0);
 
         Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.WindowPhysicalBounds);
         Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.RendererSwapchainBounds);
@@ -984,12 +984,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(new PixelRectangle(10, 20, 929, 454), snapshot.LastAppliedPendingResize);
         Assert.Equal(80, snapshot.RenderCount);
         Assert.Equal(80, snapshot.LayoutRebuildCount);
-        Assert.Equal("ViewportChanged", snapshot.LayoutRebuildReason);
+        Assert.Equal(LayoutRebuildReason.ViewportChanged, snapshot.LayoutRebuildReason);
         Assert.True(snapshot.ViewportMatchesRenderer);
         Assert.True(snapshot.LayoutUsesRendererSize);
         Assert.Equal(1.25f, snapshot.ScreenScale);
-        Assert.Equal("ProcessDefault", snapshot.DpiAwareness);
-        Assert.Equal("PhysicalPixelsV0", snapshot.ScaleMode);
+        Assert.Equal(ViewportDpiAwareness.ProcessDefault, snapshot.DpiAwareness);
+        Assert.Equal(ViewportScaleMode.PhysicalPixelsV0, snapshot.ScaleMode);
     }
 
     [Fact]
@@ -1003,10 +1003,10 @@ public sealed class ProgramDiagnosticsTests
             new PixelRectangle(10, 20, 929, 454),
             RenderCount: 80,
             LayoutRebuildCount: 80,
-            LayoutRebuildReason: "ViewportChanged",
+            LayoutRebuildReason: LayoutRebuildReason.ViewportChanged,
             ScreenScale: 1.25f,
-            DpiAwareness: "ProcessDefault",
-            ScaleMode: "PhysicalPixelsV0");
+            DpiAwareness: ViewportDpiAwareness.ProcessDefault,
+            ScaleMode: ViewportScaleMode.PhysicalPixelsV0);
 
         var output = string.Join(Environment.NewLine, DiagnosticsFormatter.BuildResizeViewportDiagnosticLines(snapshot));
 
@@ -1037,10 +1037,10 @@ public sealed class ProgramDiagnosticsTests
             new PixelRectangle(10, 20, 929, 454),
             RenderCount: 80,
             LayoutRebuildCount: 80,
-            LayoutRebuildReason: "ViewportChanged",
+            LayoutRebuildReason: LayoutRebuildReason.ViewportChanged,
             ScreenScale: 1.25f,
-            DpiAwareness: "ProcessDefault",
-            ScaleMode: "PhysicalPixelsV0");
+            DpiAwareness: ViewportDpiAwareness.ProcessDefault,
+            ScaleMode: ViewportScaleMode.PhysicalPixelsV0);
         var writer = new StringWriter();
         var glyphAtlas = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
             CachedGlyphs: 8,
@@ -1107,7 +1107,7 @@ public sealed class ProgramDiagnosticsTests
         var viewport = new CounterViewportDiagnostics(
             new PixelRectangle(0, 0, 929, 454),
             new PixelRectangle(0, 0, 929, 454),
-            "PhysicalPixelsV0");
+            ViewportScaleMode.PhysicalPixelsV0);
         var layout = new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]);
         var input = new OwnershipSnapshot(
             HoveredTarget: new ActionId(1),
@@ -1157,7 +1157,7 @@ public sealed class ProgramDiagnosticsTests
             new CounterViewportDiagnostics(
                 new PixelRectangle(0, 0, 929, 454),
                 new PixelRectangle(0, 0, 929, 454),
-                "PhysicalPixelsV0"),
+                ViewportScaleMode.PhysicalPixelsV0),
             new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]),
             new ScrollDiagnosticsSnapshot(
                 DispatchedFrameCount: 2,
@@ -1200,14 +1200,14 @@ public sealed class ProgramDiagnosticsTests
             new CounterViewportDiagnostics(
                 new PixelRectangle(0, 0, 929, 454),
                 new PixelRectangle(0, 0, 929, 454),
-                "PhysicalPixelsV0"),
+                ViewportScaleMode.PhysicalPixelsV0),
             new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]),
             ScrollState.Default,
             default);
 
         var snapshot = provider.Capture();
 
-        Assert.Equal("PhysicalPixelsV0", snapshot.Viewport.ScaleMode);
+        Assert.Equal(ViewportScaleMode.PhysicalPixelsV0, snapshot.Viewport.ScaleMode);
     }
 
     [Fact]
@@ -1218,7 +1218,7 @@ public sealed class ProgramDiagnosticsTests
             new CounterViewportDiagnostics(
                 new PixelRectangle(0, 0, 929, 454),
                 new PixelRectangle(0, 0, 929, 454),
-                "PhysicalPixelsV0"),
+                ViewportScaleMode.PhysicalPixelsV0),
             new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]));
         var input = new OwnershipSnapshot(
             HoveredTarget: new ActionId(1),

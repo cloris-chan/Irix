@@ -7,8 +7,6 @@ namespace Irix.Poc;
 
 internal static class Program
 {
-    private const string ScaleModePhysicalPixelsV0 = "PhysicalPixelsV0";
-
     public static async Task Main(string[] args)
     {
         if (args.Contains("--diagnose"))
@@ -316,7 +314,7 @@ internal static class Program
             ? rendererViewport
             : new PixelRectangle(0, 0, (int)(rendererViewport.Width / displayScale.ScaleX), (int)(rendererViewport.Height / displayScale.ScaleY));
 
-        return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ScaleModePhysicalPixelsV0, displayScale, logicalViewport);
+        return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ViewportScaleMode.PhysicalPixelsV0, displayScale, logicalViewport);
     }
 
     private static CounterLayoutDiagnostics CreateLayoutDiagnostics(WindowDrawCommandTranslator translator)

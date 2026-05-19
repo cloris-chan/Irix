@@ -7,7 +7,7 @@ namespace Irix.Poc;
 internal readonly record struct CounterViewportDiagnostics(
     PixelRectangle RendererViewport,
     PixelRectangle LayoutViewport,
-    string ScaleMode,
+    ViewportScaleMode ScaleMode,
     DisplayScale Scale = default,
     PixelRectangle LogicalViewport = default);
 
