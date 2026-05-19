@@ -327,16 +327,19 @@ public sealed class ProgramDiagnosticsTests
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
         using var texts = new FrameRenderList<D3D12TextRenderer.TextData>();
         using var fallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
+        var scale = new DisplayScale(1.5f, 1.5f);
+        var viewport = new DrawRect(0, 0, 960, 540);
 
         D3D12DrawingBackend.ExecuteCore(
             DrawingBackendClipMode.Scissor,
-            new DrawRect(0, 0, 960, 540),
+            viewport,
             commands,
             resources,
-            new DisplayScale(1.5f, 1.5f),
+            scale,
             rects,
             texts);
 
+        var parity = GlyphAtlasMixedFallbackDiagnosticRunner.AnalyzeOverlaySubsetInputs(commands, resources, scale, viewport);
         foreach (var textRun in texts.Span)
         {
             var text = (textRun.Resolver ?? resources).Resolve(textRun.Text);
@@ -348,6 +351,20 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal(4, texts.Count);
         Assert.Equal(2, fallbackRuns.Count);
+        Assert.Equal(4, parity.WholeFrameOverlayRuns);
+        Assert.Equal(2, parity.FallbackSubsetRuns);
+        Assert.True(parity.MatchesWholeFrame);
+        Assert.True(parity.ResolverPreserved);
+        Assert.True(parity.StylePreserved);
+        Assert.True(parity.ClipPreserved);
+        Assert.True(parity.ScalePreserved);
+        Assert.True(parity.ColorPreserved);
+        Assert.True(parity.IsAcceptable);
+        Assert.Equal(
+            "fallbackRuns=2, wholeFrameOverlayRuns=4, matchesWholeFrame=True, resolver=True, style=True, clip=True, scale=True, color=True",
+            parity.FormatSummary());
+        Assert.Equal(texts.Span[1], fallbackRuns.Span[0]);
+        Assert.Equal(texts.Span[3], fallbackRuns.Span[1]);
         var clippedFallback = fallbackRuns.Span[1];
         Assert.Equal(texts.Span[3], clippedFallback);
         Assert.Same(resources, clippedFallback.Resolver);

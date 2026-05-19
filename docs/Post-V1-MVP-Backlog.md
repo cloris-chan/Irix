@@ -136,7 +136,7 @@ Do not keep expanding the ASCII prototype surface or flip another runtime defaul
 | Shader/resource lifetime hardening | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Runtime shader compile removed; resource creation and map outputs checked for explicit failure ownership; init failures and runtime record failures have separate diagnostics | ✅ First pass done |
 | Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
 | Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | ✅ Attribution added |
-| Mixed fallback design | Renderer design | Per-run atlas plus per-run overlay fallback so NonAscii/complex runs do not force whole-frame overlay fallback | ✅ v0 implemented; z-order limitation documented |
+| Mixed fallback design | Renderer design | Per-run atlas plus per-run overlay fallback so NonAscii/complex runs do not force whole-frame overlay fallback | ✅ v0 implemented; subset parity pinned; z-order limitation documented |
 | Overlay removal gate | Renderer design / smoke evidence | Do not remove D3D11On12/D2D overlay until all fallback cases have a non-overlay path or accepted degradation plus smoke coverage | Drafted; deletion deferred |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
 
@@ -156,7 +156,7 @@ Next hardening checklist:
 - Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
 - Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases; glyph-atlas initialization failures must remain overlay fallback-safe.
 - Warm allocation attribution: run `--diagnose-text-cache` and optimize only after tree/diff/translate/render attribution identifies the source.
-- Mixed fallback follow-up: AtlasFull and record-failure contract evidence are recorded. Eviction and command-order-perfect fallback remain future design/implementation work before widening atlas text coverage.
+- Mixed fallback follow-up: subset parity, AtlasFull, and record-failure contract evidence are recorded. Eviction and command-order-perfect fallback remain future work before widening atlas text coverage.
 - Overlay removal gate: keep D3D11On12/D2D overlay until the drafted gate is satisfied; this is not a deletion task for the next commit.
 
 ---

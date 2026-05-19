@@ -65,7 +65,7 @@ The fallback run list is frame-local and caller-owned. `TryRecord` classifies ea
 
 Overlay subset correctness depends on preserving the exact `D3D12TextRenderer.TextData` for fallback runs.
 The subset must carry the frame resource resolver, resolved physical `TextStyle`, effective clip, clip enablement, color, and scaled coordinates.
-Current tests pin that contract, and the 150% mixed smoke exercises one clipped atlas run plus one clipped overlay fallback run.
+Current tests pin that contract, and the 150% mixed smoke now prints `Overlay subset parity` with resolver/style/clip/scale/color all preserved.
 
 ## Shader Bytecode Provenance
 

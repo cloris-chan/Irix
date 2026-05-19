@@ -91,6 +91,7 @@ Mixed fallback extended smoke follow-up (2026-05-19):
 - Command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150`.
 - Scenario: `ASCII atlas -> NonAscii fallback -> clipped ASCII atlas -> clipped NonAscii fallback`.
 - GlyphAtlas result: `frameSerial=30`, `presentSerial=30`, `syncWaits=30`; `atlasRuns=60`, `overlayFallbackRuns=60`, `fallbacks=30`, `unsupportedRuns=60`, `NonAscii=60`, `textClipSkipped=0`, `lastEffectiveTextClip=(36,264,168,39)`, `initFailurePhase=None`, `recordFailurePhase=None`.
+- Overlay subset parity: `fallbackRuns=2`, `wholeFrameOverlayRuns=4`, `matchesWholeFrame=True`; resolver/style/clip/scale/color were all preserved.
 - Whole-frame overlay comparison: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-mixed-fallback 30 --diagnose-scale 150 --text-composition overlay`.
   It completed with `frameSerial=30`, `presentSerial=30`, `syncWaits=30`, `textClipSkipped=0`, and the same final effective text clip.
 - Default long GlyphAtlas: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3`.

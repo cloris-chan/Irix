@@ -38,11 +38,13 @@ Expected `GlyphAtlas` classification per frame:
 
 - `frameSerial=30`, `presentSerial=30`, `syncWaits=30`.
 - `atlasRuns=60`, `overlayFallbackRuns=60`, `fallbacks=30`, `unsupportedRuns=60`, `NonAscii=60`.
+- `Overlay subset parity`: `fallbackRuns=2`, `wholeFrameOverlayRuns=4`, `matchesWholeFrame=True`, `resolver=True`, `style=True`, `clip=True`, `scale=True`, `color=True`.
 - `textClipSkipped=0`, `lastEffectiveTextClip=(36,264,168,39)`.
 - `initFailurePhase=None`, `recordFailurePhase=None`.
 - Device-lost did not occur.
 
-The whole-frame overlay comparison command completed the same 30 frames with `syncWaits=30`, `textClipSkipped=0`, and the same final effective text clip. The subset path uses the same `D3D12TextRenderer.Render(...)` primitive but passes only the fallback text runs.
+The whole-frame overlay comparison command completed the same 30 frames with `syncWaits=30`, `textClipSkipped=0`, the same final effective text clip, and the same overlay subset parity line.
+The subset path uses the same `D3D12TextRenderer.Render(...)` primitive but passes only the fallback text runs.
 
 ## Mixed AtlasFull Stress
 
@@ -73,7 +75,7 @@ Therefore the fallback overlay run draws after the later atlas run. This is the 
 ## Overlay Subset Correctness
 
 The added unit coverage checks the fallback subset keeps the original `TextData` fields used by the overlay renderer: frame resource resolver, resolved physical text style, effective clip, clip enablement, color, and scale-adjusted coordinates.
-The 150% mixed smoke exercises the same path with one clipped atlas run and one clipped overlay fallback run.
+The 150% mixed smoke now prints the parity contract directly: two fallback subset runs match their whole-frame overlay inputs out of four text runs, including the clipped fallback run.
 
 This is not an automated pixel-equivalence oracle. It verifies that the fallback subset is drawn by the same overlay renderer with the same per-run inputs that whole-frame overlay would use for those fallback runs.
 

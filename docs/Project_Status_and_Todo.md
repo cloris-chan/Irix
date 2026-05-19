@@ -154,6 +154,7 @@ Short NonAscii mixed fallback smoke reported `atlasRuns=60`, `overlayFallbackRun
 
 Mixed fallback extended smoke: `ASCII / NonAscii / clipped ASCII / clipped NonAscii` at 150% scale reported `atlasRuns=60`, `overlayFallbackRuns=60`, `NonAscii=60`, `textClipSkipped=0`, `lastEffectiveTextClip=(36,264,168,39)`, and `syncWaits=30`.
 The same scene in `--text-composition overlay` completed as whole-frame overlay with the same final effective text clip.
+Overlay subset parity reported `fallbackRuns=2`, `wholeFrameOverlayRuns=4`, and resolver/style/clip/scale/color all preserved.
 Default long GlyphAtlas `300 x 3` reported `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `atlasRuns=2700`, and `overlayFallbackRuns=0`.
 Mixed AtlasFull stress reported `atlasRuns=5`, `overlayFallbackRuns=30`, `AtlasFull=29`, `NonAscii=1`, `RecordFailed=0`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
 Record-failure contract tests now pin all-renderable-run fallback with `recordFailurePhase=AtlasUploadMap`; this is unit contract coverage, not a forced GPU upload-failure smoke.
@@ -233,7 +234,7 @@ Source guards currently block:
 | P1 | Shader packaging follow-up | Runtime shader compile is removed. Decide later whether inline embedded DXBC is enough or a build-time shader asset pipeline is worth adding. |
 | P1 | Attribute warm glyph atlas allocation | Run `--diagnose-text-cache` and use tree/diff/translate/render attribution before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
-| P1 | Mixed fallback extended smoke evidence | Mixed ASCII/NonAscii/clipped, mixed AtlasFull, record-failure contract, and default long smoke are recorded. Eviction remains deferred before widening atlas text coverage. |
+| P1 | Mixed fallback extended smoke evidence | Mixed ASCII/NonAscii/clipped, overlay subset parity, mixed AtlasFull, record-failure contract, and default long smoke are recorded. Eviction remains deferred before widening atlas text coverage. |
 | P2 | Overlay removal gate | Draft gate is documented. Do not remove D3D11On12/D2D overlay until unsupported text, z-order, diagnostics, and rollback requirements no longer depend on it. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
 
