@@ -31,10 +31,10 @@ internal sealed class WindowsPlatformWindow(
 
     public nint Handle => _window.Handle;
 
-    public void SetContentElements(IReadOnlyList<WindowContentElement> elements)
+    public void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
-        _platformThread.Invoke(() => _window.SetContentElements(elements));
+        _platformThread.Invoke(() => _window.SetContentElements(elements, textResolver));
     }
 
     public void Show()

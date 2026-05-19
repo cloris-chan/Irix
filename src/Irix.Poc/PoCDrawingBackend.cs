@@ -11,10 +11,12 @@ namespace Irix.Poc;
 internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
 {
     private List<WindowContentElement>? _pendingElements;
+    private readonly FrameTextArena _pendingTextArena = new();
 
     public void BeginFrame(in FrameContext frameContext)
     {
         _pendingElements = [];
+        _pendingTextArena.Reset();
     }
 
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
@@ -31,11 +33,10 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
                         BackgroundColor: ToWindowColor(command.Color)));
                     break;
                 case DrawCommandKind.DrawTextRun:
-                    var text = ResolveText(resources, command.Text);
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
-                        text,
+                        CopyText(resources, command.Text),
                         ForegroundColor: ToWindowColor(command.Color)));
                     break;
             }
@@ -44,18 +45,20 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
 
     public void EndFrame()
     {
-        window.SetContentElements(_pendingElements ?? []);
+        _pendingTextArena.Seal();
+        window.SetContentElements(_pendingElements ?? [], _pendingTextArena);
         _pendingElements = null;
     }
 
     public void Dispose()
     {
+        _pendingTextArena.Dispose();
     }
 
-    private static string ResolveText(IFrameResourceResolver resources, TextSlice text)
+    private TextSlice CopyText(IFrameResourceResolver resources, TextSlice text)
     {
         var span = resources.Resolve(text);
-        return span.IsEmpty ? string.Empty : span.ToString();
+        return span.IsEmpty ? default : _pendingTextArena.Add(span);
     }
 
     private static PixelRectangle ToPixelRectangle(DrawRect rect) =>

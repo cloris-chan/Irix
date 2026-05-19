@@ -24,6 +24,7 @@ internal sealed class WindowsNativeWindow : INativeWindow
     private readonly nint _titlePointer;
     private readonly HWND _windowHandle;
     private readonly int _ownerThreadId;
+    private readonly FrameTextArena _contentTextArena = new();
 
     private WindowContentElement[] _contentElements = [];
     private bool _isDisposed;
@@ -105,11 +106,19 @@ internal sealed class WindowsNativeWindow : INativeWindow
 
     public unsafe nint Handle => (nint)_windowHandle.Value;
 
-    public void SetContentElements(IReadOnlyList<WindowContentElement> elements)
+    public void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
         EnsureAccess();
-        _contentElements = [.. elements];
+        _contentTextArena.Reset();
+        var copied = new WindowContentElement[elements.Count];
+        for (var index = 0; index < elements.Count; index++)
+        {
+            copied[index] = CopyElementText(elements[index], textResolver);
+        }
+
+        _contentTextArena.Seal();
+        _contentElements = copied;
         PInvoke.InvalidateRect(_windowHandle, null, true);
     }
 
@@ -160,6 +169,7 @@ internal sealed class WindowsNativeWindow : INativeWindow
 
         UnregisterWindowClass();
         Marshal.FreeHGlobal(_titlePointer);
+        _contentTextArena.Dispose();
         _isDisposed = true;
     }
 
@@ -272,7 +282,12 @@ internal sealed class WindowsNativeWindow : INativeWindow
         return new LRESULT(0);
     }
 
-    private static unsafe void DrawElement(HDC deviceContext, WindowContentElement element)
+    private unsafe void DrawElement(HDC deviceContext, WindowContentElement element)
+    {
+        DrawElement(deviceContext, element, _contentTextArena);
+    }
+
+    private static unsafe void DrawElement(HDC deviceContext, WindowContentElement element, ITextResolver textResolver)
     {
         var bounds = ToRect(element.Bounds);
 
@@ -292,7 +307,7 @@ internal sealed class WindowsNativeWindow : INativeWindow
                 DrawText(
                     deviceContext,
                     inner,
-                    element.Text,
+                    textResolver.Resolve(element.Text),
                     element.ForegroundColor,
                     DRAW_TEXT_FORMAT.DT_CENTER | DRAW_TEXT_FORMAT.DT_VCENTER | DRAW_TEXT_FORMAT.DT_SINGLELINE | DRAW_TEXT_FORMAT.DT_NOPREFIX);
                 return;
@@ -300,7 +315,7 @@ internal sealed class WindowsNativeWindow : INativeWindow
                 DrawText(
                     deviceContext,
                     bounds,
-                    element.Text,
+                    textResolver.Resolve(element.Text),
                     element.ForegroundColor,
                     DRAW_TEXT_FORMAT.DT_LEFT | DRAW_TEXT_FORMAT.DT_TOP | DRAW_TEXT_FORMAT.DT_WORDBREAK | DRAW_TEXT_FORMAT.DT_NOPREFIX);
                 return;
@@ -309,9 +324,9 @@ internal sealed class WindowsNativeWindow : INativeWindow
         }
     }
 
-    private static unsafe void DrawText(HDC deviceContext, RECT bounds, string? text, WindowColor color, DRAW_TEXT_FORMAT format)
+    private static unsafe void DrawText(HDC deviceContext, RECT bounds, ReadOnlySpan<char> text, WindowColor color, DRAW_TEXT_FORMAT format)
     {
-        if (string.IsNullOrEmpty(text))
+        if (text.IsEmpty)
         {
             return;
         }
@@ -323,6 +338,34 @@ internal sealed class WindowsNativeWindow : INativeWindow
         {
             _ = PInvoke.DrawText(deviceContext, new PCWSTR(textPointer), text.Length, &bounds, format);
         }
+    }
+
+    private WindowContentElement CopyElementText(WindowContentElement element, ITextResolver textResolver)
+    {
+        if ((element.Kind != WindowContentElementKind.Text && element.Kind != WindowContentElementKind.Button) || !element.Text.IsValid)
+        {
+            return element;
+        }
+
+        var text = textResolver.Resolve(element.Text);
+        if (text.IsEmpty)
+        {
+            return new WindowContentElement(
+                element.Kind,
+                element.Bounds,
+                default,
+                element.ForegroundColor,
+                element.BackgroundColor,
+                element.BorderColor);
+        }
+
+        return new WindowContentElement(
+            element.Kind,
+            element.Bounds,
+            _contentTextArena.Add(text),
+            element.ForegroundColor,
+            element.BackgroundColor,
+            element.BorderColor);
     }
 
     private static unsafe void FillRectangle(HDC deviceContext, RECT bounds, WindowColor color)

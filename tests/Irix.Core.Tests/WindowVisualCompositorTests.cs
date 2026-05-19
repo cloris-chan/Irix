@@ -123,6 +123,7 @@ public sealed class WindowVisualCompositorTests
     private sealed class FakeWindow(ScreenRegion region) : INativeWindow
     {
         public IReadOnlyList<WindowContentElement> LastElements { get; private set; } = [];
+        public ITextResolver LastTextResolver { get; private set; } = FrameTextArena.Empty;
 
         public string Title => "Test";
 
@@ -140,9 +141,10 @@ public sealed class WindowVisualCompositorTests
         {
         }
 
-        public void SetContentElements(IReadOnlyList<WindowContentElement> elements)
+        public void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver)
         {
             LastElements = [.. elements];
+            LastTextResolver = textResolver;
         }
 
         public void Show()

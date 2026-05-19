@@ -13,7 +13,7 @@ internal sealed class WindowBackend
     {
         if (commands.Length == 0)
         {
-            return new WindowBackendRenderResult([], []);
+            return new WindowBackendRenderResult([], [], resources);
         }
 
         var elements = new List<WindowContentElement>();
@@ -35,7 +35,7 @@ internal sealed class WindowBackend
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Button,
                         buttonBounds,
-                        button.Label,
+                        button.Text,
                         ForegroundColor: button.TextColor,
                         BackgroundColor: ToWindowColor(command.Color),
                         BorderColor: WindowColor.Opaque(24, 48, 96)));
@@ -47,20 +47,19 @@ internal sealed class WindowBackend
                         BackgroundColor: ToWindowColor(command.Color)));
                     break;
                 case DrawCommandKind.DrawTextRun:
-                    var text = ResolveText(resources, command.Text);
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
-                        text,
+                        command.Text,
                         ForegroundColor: ToWindowColor(command.Color)));
                     break;
             }
         }
 
-        return new WindowBackendRenderResult([.. elements], [.. hitTargets]);
+        return new WindowBackendRenderResult([.. elements], [.. hitTargets], resources);
     }
 
-    private static ButtonPresentation TryConsumeButtonPresentation(
+    private ButtonPresentation TryConsumeButtonPresentation(
         ReadOnlySpan<DrawCommand> commands,
         int startIndex,
         PixelRectangle bounds,
@@ -74,20 +73,11 @@ internal sealed class WindowBackend
                 && ToPixelRectangle(candidate.Rect) == bounds)
             {
                 consumedTextIndices.Add(index);
-                var text = ResolveText(resources, candidate.Text);
-                return new ButtonPresentation(
-                    string.IsNullOrWhiteSpace(text) ? "Button" : text,
-                    ToWindowColor(candidate.Color));
+                return new ButtonPresentation(candidate.Text, ToWindowColor(candidate.Color));
             }
         }
 
-        return new ButtonPresentation("Button", WindowColor.Opaque(255, 255, 255));
-    }
-
-    private static string ResolveText(IFrameResourceResolver resources, TextSlice text)
-    {
-        var span = resources.Resolve(text);
-        return span.IsEmpty ? string.Empty : span.ToString();
+        return new ButtonPresentation(default, WindowColor.Opaque(255, 255, 255));
     }
 
     private static bool TryGetHitTarget(IReadOnlyList<HitTestTarget> hitTargets, PixelRectangle bounds, out HitTestTarget hitTarget)
@@ -117,20 +107,20 @@ internal sealed class WindowBackend
 
     private static WindowColor ToWindowColor(DrawColor color) => new(color.A, color.R, color.G, color.B);
 
-    private readonly struct ButtonPresentation(string Label, WindowColor TextColor) : IEquatable<ButtonPresentation>
+    private readonly struct ButtonPresentation(TextSlice Text, WindowColor TextColor) : IEquatable<ButtonPresentation>
     {
-        public string Label { get; } = Label;
+        public TextSlice Text { get; } = Text;
         public WindowColor TextColor { get; } = TextColor;
 
         public bool Equals(ButtonPresentation other)
         {
-            return Label == other.Label
+            return Text == other.Text
                 && TextColor == other.TextColor;
         }
 
         public override bool Equals(object? obj) => obj is ButtonPresentation other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(Label, TextColor);
+        public override int GetHashCode() => HashCode.Combine(Text, TextColor);
 
         public static bool operator ==(ButtonPresentation left, ButtonPresentation right) => left.Equals(right);
 

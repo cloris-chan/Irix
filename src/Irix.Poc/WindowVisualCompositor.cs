@@ -1,3 +1,4 @@
+using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
 
@@ -13,7 +14,7 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
     {
         if (renderFrameBatch.Commands.Count == 0)
         {
-            window.SetContentElements([]);
+            window.SetContentElements([], FrameDrawingResources.Empty);
 
             lock (_hitTargetsLock)
             {
@@ -27,7 +28,7 @@ internal sealed class WindowVisualCompositor(INativeWindow window) : ICompositor
             renderFrameBatch.Commands.Memory.Span[..renderFrameBatch.Commands.Count],
             renderFrameBatch.HitTargets,
             renderFrameBatch.Resources);
-        window.SetContentElements(result.Elements);
+        window.SetContentElements(result.Elements, result.TextResolver);
 
         lock (_hitTargetsLock)
         {

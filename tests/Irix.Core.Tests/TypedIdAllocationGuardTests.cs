@@ -236,6 +236,12 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void WindowContentElement_has_no_managed_references()
+    {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<WindowContentElement>());
+    }
+
+    [Fact]
     public void VirtualPropertyKey_does_not_define_primitive_ToString_formatter()
     {
         var toString = typeof(VirtualPropertyKey).GetMethod(nameof(ToString), Type.EmptyTypes);
@@ -1167,6 +1173,19 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("public string FontFamily", source);
         Assert.DoesNotContain("string.IsNullOrWhiteSpace(FontFamily)", source);
         Assert.DoesNotContain("FontFamily: \"", source);
+    }
+
+    [Fact]
+    public void Irix_Platform_WindowContentElement_uses_text_slice_boundary()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Platform", "PlatformAbstractions.cs"));
+
+        Assert.Contains("TextSlice Text = default", source);
+        Assert.Contains("public TextSlice Text", source);
+        Assert.Contains("void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver)", source);
+        Assert.DoesNotContain("string? Text", source);
+        Assert.DoesNotContain("string Text", source);
+        Assert.DoesNotContain("public string Text", source);
     }
 
     // ── Allocation baseline: layout + record hot path ────────────

@@ -50,18 +50,20 @@ public sealed class WindowBackendTests
             WindowContentElementKind.Rectangle,
             new PixelRectangle(16, 60, 220, 48),
             BackgroundColor: WindowColor.Opaque(72, 72, 72)), result.Elements[0]);
-        Assert.Equal(new WindowContentElement(
-            WindowContentElementKind.Button,
-            new PixelRectangle(16, 120, 140, 40),
-            "Increment",
-            ForegroundColor: WindowColor.Opaque(255, 255, 255),
-            BackgroundColor: WindowColor.Opaque(52, 120, 246),
-            BorderColor: WindowColor.Opaque(24, 48, 96)), result.Elements[1]);
-        Assert.Equal(new WindowContentElement(
-            WindowContentElementKind.Text,
-            new PixelRectangle(16, 16, 928, 32),
-            "Count: 0",
-            ForegroundColor: WindowColor.Opaque(255, 255, 255)), result.Elements[2]);
+
+        var button = result.Elements[1];
+        Assert.Equal(WindowContentElementKind.Button, button.Kind);
+        Assert.Equal(new PixelRectangle(16, 120, 140, 40), button.Bounds);
+        Assert.Equal("Increment", result.TextResolver.Resolve(button.Text).ToString());
+        Assert.Equal(WindowColor.Opaque(255, 255, 255), button.ForegroundColor);
+        Assert.Equal(WindowColor.Opaque(52, 120, 246), button.BackgroundColor);
+        Assert.Equal(WindowColor.Opaque(24, 48, 96), button.BorderColor);
+
+        var text = result.Elements[2];
+        Assert.Equal(WindowContentElementKind.Text, text.Kind);
+        Assert.Equal(new PixelRectangle(16, 16, 928, 32), text.Bounds);
+        Assert.Equal("Count: 0", result.TextResolver.Resolve(text.Text).ToString());
+        Assert.Equal(WindowColor.Opaque(255, 255, 255), text.ForegroundColor);
 
         Assert.Single(result.HitTargets);
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), result.HitTargets[0].Bounds);

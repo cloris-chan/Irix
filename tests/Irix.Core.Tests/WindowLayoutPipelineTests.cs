@@ -1425,7 +1425,7 @@ public sealed class WindowLayoutPipelineTests
         {
         }
 
-        public void SetContentElements(IReadOnlyList<WindowContentElement> elements)
+        public void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver)
         {
         }
 

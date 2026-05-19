@@ -35,7 +35,7 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(2, window.LastElements.Count);
         Assert.Equal(WindowContentElementKind.Rectangle, window.LastElements[0].Kind);
         Assert.Equal(WindowContentElementKind.Text, window.LastElements[1].Kind);
-        Assert.Equal("Hello", window.LastElements[1].Text);
+        Assert.Equal("Hello", window.LastTextResolver.Resolve(window.LastElements[1].Text).ToString());
     }
 
     [Fact]
@@ -496,6 +496,7 @@ public sealed class DrawingBackendCompositorTests
     private sealed class FakeWindow : INativeWindow
     {
         public IReadOnlyList<WindowContentElement> LastElements { get; private set; } = [];
+        public ITextResolver LastTextResolver { get; private set; } = FrameTextArena.Empty;
 
         public string Title => "Test";
 
@@ -507,7 +508,11 @@ public sealed class DrawingBackendCompositorTests
 
         public void Dispose() { }
         public void RunMessageLoop() { }
-        public void SetContentElements(IReadOnlyList<WindowContentElement> elements) => LastElements = elements;
+        public void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver)
+        {
+            LastElements = elements;
+            LastTextResolver = textResolver;
+        }
         public void Show() { }
         public event Action<int, int>? SizeChanged { add { } remove { } }
         public event Action<DisplayScale>? DpiChanged { add { } remove { } }

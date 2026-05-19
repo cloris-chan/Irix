@@ -153,7 +153,7 @@ public readonly struct RawInputEvent(
 public readonly struct WindowContentElement(
     WindowContentElementKind Kind,
     PixelRectangle Bounds,
-    string? Text = null,
+    TextSlice Text = default,
     WindowColor ForegroundColor = default,
     WindowColor BackgroundColor = default,
     WindowColor BorderColor = default) : IEquatable<WindowContentElement>
@@ -161,7 +161,7 @@ public readonly struct WindowContentElement(
 
     public WindowContentElementKind Kind { get; } = Kind;
     public PixelRectangle Bounds { get; } = Bounds;
-    public string? Text { get; } = Text;
+    public TextSlice Text { get; } = Text;
     public WindowColor ForegroundColor { get; } = ForegroundColor;
     public WindowColor BackgroundColor { get; } = BackgroundColor;
     public WindowColor BorderColor { get; } = BorderColor;
@@ -195,7 +195,7 @@ public interface INativeWindow : IDisposable
 
     nint Handle { get; }
 
-    void SetContentElements(IReadOnlyList<WindowContentElement> elements);
+    void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver);
 
     void Show();
 
