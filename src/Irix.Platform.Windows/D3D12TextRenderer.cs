@@ -32,7 +32,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private readonly IDWriteFactory* _dwriteFactory;
     private readonly Dictionary<TextStyle, CachedTextFormat> _textFormats = [];
     private readonly Queue<CachedTextFormat> _textFormatOrder = [];
-    private readonly Dictionary<TextLayoutCacheKey, List<CachedTextLayout>> _textLayouts = [];
+    private readonly Dictionary<TextLayoutCacheKey, CachedTextLayout> _textLayouts = [];
     private readonly Queue<CachedTextLayout> _textLayoutOrder = [];
     private readonly ID2D1SolidColorBrush* _textBrush;
     private readonly ID3D11Query* _overlayCompletionQuery;
@@ -381,29 +381,17 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private IDWriteTextLayout* GetTextLayout(ReadOnlySpan<char> text, TextStyle style, float width, float height)
     {
         var key = new TextLayoutCacheKey(ComputeTextHash(text), text.Length, style, width, height);
-        if (_textLayouts.TryGetValue(key, out var entries))
+        if (_textLayouts.TryGetValue(key, out var cached))
         {
-            foreach (var entry in entries)
-            {
-                if (text.SequenceEqual(entry.Text.AsSpan()))
-                {
-                    _diagnosticLayoutHits++;
-                    return (IDWriteTextLayout*)entry.Layout;
-                }
-            }
+            _diagnosticLayoutHits++;
+            return (IDWriteTextLayout*)cached.Layout;
         }
 
         _diagnosticLayoutMisses++;
 
         var layout = CreateTextLayout(text, style, width, height);
-        var cached = new CachedTextLayout(key, text.ToString(), (nint)layout);
-        if (entries == null)
-        {
-            entries = [];
-            _textLayouts.Add(key, entries);
-        }
-
-        entries.Add(cached);
+        cached = new CachedTextLayout(key, (nint)layout);
+        _textLayouts.Add(key, cached);
         _textLayoutOrder.Enqueue(cached);
 
         if (_textLayoutOrder.Count > MaxCachedTextLayouts)
@@ -486,13 +474,10 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private void EvictOldestTextLayout()
     {
         var entry = _textLayoutOrder.Dequeue();
-        if (_textLayouts.TryGetValue(entry.Key, out var entries))
+        if (_textLayouts.TryGetValue(entry.Key, out var currentEntry)
+            && ReferenceEquals(entry, currentEntry))
         {
-            entries.Remove(entry);
-            if (entries.Count == 0)
-            {
-                _textLayouts.Remove(entry.Key);
-            }
+            _textLayouts.Remove(entry.Key);
         }
 
         ((IDWriteTextLayout*)entry.Layout)->Release();
@@ -513,19 +498,24 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         _textFormats.Clear();
     }
 
-    private static ulong ComputeTextHash(ReadOnlySpan<char> text)
+    private static TextLayoutHash ComputeTextHash(ReadOnlySpan<char> text)
     {
-        const ulong offsetBasis = 14695981039346656037;
-        const ulong prime = 1099511628211;
+        const ulong offsetBasis = 14695981039346656037UL;
+        const ulong prime = 1099511628211UL;
 
-        var hash = offsetBasis;
-        foreach (var character in text)
+        var first = offsetBasis;
+        var second = 0x9E3779B97F4A7C15UL ^ (uint)text.Length;
+        for (var index = 0; index < text.Length; index++)
         {
-            hash ^= character;
-            hash *= prime;
+            var character = text[index];
+            first ^= character;
+            first *= prime;
+
+            second ^= ((ulong)character << ((index & 3) << 4)) + 0x9E3779B97F4A7C15UL + (second << 6) + (second >> 2);
+            second = ((second << 27) | (second >> 37)) * 0x3C79AC492BA7B653UL + 0x1C69B3F74AC4AE35UL;
         }
 
-        return hash;
+        return new TextLayoutHash(first, second);
     }
 
     private static DWRITE_FONT_WEIGHT ToDirectWriteFontWeight(TextFontWeight fontWeight)
@@ -791,14 +781,30 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         public nint Format { get; } = format;
     }
 
+    private readonly struct TextLayoutHash(ulong First, ulong Second) : IEquatable<TextLayoutHash>
+    {
+        public ulong First { get; } = First;
+        public ulong Second { get; } = Second;
+
+        public bool Equals(TextLayoutHash other) => First == other.First && Second == other.Second;
+
+        public override bool Equals(object? obj) => obj is TextLayoutHash other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(First, Second);
+
+        public static bool operator ==(TextLayoutHash left, TextLayoutHash right) => left.Equals(right);
+
+        public static bool operator !=(TextLayoutHash left, TextLayoutHash right) => !left.Equals(right);
+    }
+
     private readonly struct TextLayoutCacheKey(
-        ulong TextHash,
+        TextLayoutHash TextHash,
         int TextLength,
         TextStyle Style,
         float Width,
         float Height) : IEquatable<TextLayoutCacheKey>
     {
-        public ulong TextHash { get; } = TextHash;
+        public TextLayoutHash TextHash { get; } = TextHash;
         public int TextLength { get; } = TextLength;
         public TextStyle Style { get; } = Style;
         public float Width { get; } = Width;
@@ -822,11 +828,9 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         public static bool operator !=(TextLayoutCacheKey left, TextLayoutCacheKey right) => !left.Equals(right);
     }
 
-    private sealed class CachedTextLayout(TextLayoutCacheKey key, string text, nint layout)
+    private sealed class CachedTextLayout(TextLayoutCacheKey key, nint layout)
     {
         public TextLayoutCacheKey Key { get; } = key;
-
-        public string Text { get; } = text;
 
         public nint Layout { get; } = layout;
     }

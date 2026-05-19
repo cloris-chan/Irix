@@ -225,6 +225,21 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void D3D12_overlay_text_layout_cache_does_not_retain_text_strings()
+    {
+        var root = FindRepoRoot();
+        var textRendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12TextRenderer.cs")));
+
+        Assert.DoesNotContain("text.ToString()", textRendererSource);
+        Assert.DoesNotContain("SequenceEqual(entry.Text.AsSpan())", textRendererSource);
+        Assert.DoesNotContain("CachedTextLayout(TextLayoutCacheKey key, string text", textRendererSource);
+        Assert.DoesNotContain("public string Text", textRendererSource);
+        Assert.Contains("private readonly Dictionary<TextLayoutCacheKey, CachedTextLayout> _textLayouts", textRendererSource);
+        Assert.Contains("private readonly struct TextLayoutHash(ulong First, ulong Second)", textRendererSource);
+        Assert.Contains("private static TextLayoutHash ComputeTextHash(ReadOnlySpan<char> text)", textRendererSource);
+    }
+
+    [Fact]
     public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
