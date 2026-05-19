@@ -129,10 +129,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
         IFrameResourceResolver resources,
         int viewportWidth,
-        int viewportHeight,
-        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns)
+        int viewportHeight)
     {
-        overlayFallbackRuns.Reset();
         if (textRuns.Length == 0)
         {
             return GlyphAtlasRecordResult.Empty;
@@ -140,24 +138,24 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         if (_disabled)
         {
-            var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(textRuns, resources, overlayFallbackRuns);
-            if (fallbackRunCount > 0)
+            var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(textRuns, resources);
+            if (degradedRunCount > 0)
             {
-                RecordFallback(fallbackRunCount, GlyphAtlasFallbackReason.RecordFailed);
+                RecordDegradation(degradedRunCount, GlyphAtlasFallbackReason.RecordFailed);
             }
 
-            return GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
+            return GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
         }
 
         try
         {
-            var frame = BuildFrame(textRuns, resources, viewportWidth, viewportHeight, overlayFallbackRuns);
+            var frame = BuildFrame(textRuns, resources, viewportWidth, viewportHeight);
 
             if (frame.VertexCount == 0)
             {
                 _diagnostics = _diagnostics.WithAtlasRuns(frame.AtlasRunCount);
-                RecordFallback(frame.OverlayFallbackRunCount, frame.FallbackReasons);
-                return new GlyphAtlasRecordResult(true, frame.AtlasRunCount, frame.OverlayFallbackRunCount);
+                RecordDegradation(frame.DegradedRunCount, frame.DegradationReasons);
+                return new GlyphAtlasRecordResult(true, frame.AtlasRunCount, frame.DegradedRunCount);
             }
 
             UploadVertices(_vertices.AsSpan(0, frame.VertexCount));
@@ -171,41 +169,38 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             _diagnostics = _diagnostics
                 .WithDrawnGlyphs(frame.VertexCount / 6)
                 .WithAtlasRuns(frame.AtlasRunCount);
-            RecordFallback(frame.OverlayFallbackRunCount, frame.FallbackReasons);
-            return new GlyphAtlasRecordResult(true, frame.AtlasRunCount, frame.OverlayFallbackRunCount);
+            RecordDegradation(frame.DegradedRunCount, frame.DegradationReasons);
+            return new GlyphAtlasRecordResult(true, frame.AtlasRunCount, frame.DegradedRunCount);
         }
         catch (GlyphAtlasRecordException ex)
         {
-            overlayFallbackRuns.Reset();
-            var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(textRuns, resources, overlayFallbackRuns);
-            DisableGlyphAtlasFallback(
+            var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(textRuns, resources);
+            DisableGlyphAtlasDegradation(
                 GlyphAtlasFallbackReason.RecordFailed,
                 ex.Phase,
                 DeviceErrorDiagnostic.FromException(DeviceErrorSite.GlyphAtlasRecord, ex.InnerException),
-                fallbackRunCount);
-            return GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
+                degradedRunCount);
+            return GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
         }
         catch (COMException ex)
         {
-            overlayFallbackRuns.Reset();
-            var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(textRuns, resources, overlayFallbackRuns);
-            DisableGlyphAtlasFallback(
+            var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(textRuns, resources);
+            DisableGlyphAtlasDegradation(
                 GlyphAtlasFallbackReason.RecordFailed,
                 GlyphAtlasRecordFailurePhase.Record,
                 DeviceErrorDiagnostic.FromComException(DeviceErrorSite.GlyphAtlasRecord, ex.ErrorCode),
-                fallbackRunCount);
-            return GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
+                degradedRunCount);
+            return GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
         }
         catch (InvalidOperationException)
         {
-            overlayFallbackRuns.Reset();
-            var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(textRuns, resources, overlayFallbackRuns);
-            DisableGlyphAtlasFallback(
+            var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(textRuns, resources);
+            DisableGlyphAtlasDegradation(
                 GlyphAtlasFallbackReason.RecordFailed,
                 GlyphAtlasRecordFailurePhase.Record,
                 DeviceErrorDiagnostic.FromInvalidOperation(DeviceErrorSite.GlyphAtlasRecord),
-                fallbackRunCount);
-            return GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
+                degradedRunCount);
+            return GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
         }
     }
 
@@ -213,14 +208,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
         IFrameResourceResolver resources,
         int viewportWidth,
-        int viewportHeight,
-        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns)
+        int viewportHeight)
     {
         var vertexCount = 0;
         var batchCount = 0;
         var atlasRunCount = 0;
-        var overlayFallbackRunCount = 0;
-        var fallbackReasons = default(GlyphAtlasFallbackReasonCounts);
+        var degradedRunCount = 0;
+        var degradationReasons = default(GlyphAtlasFallbackReasonCounts);
 
         foreach (var textRun in textRuns)
         {
@@ -235,33 +229,33 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var unsupportedReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
-                AddOverlayFallbackRun(textRun, unsupportedReason, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
             if (!TryGetFontFace(style, out var fontFace))
             {
-                AddOverlayFallbackRun(textRun, GlyphAtlasFallbackReason.FontMissing, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                AddDegradedRun(GlyphAtlasFallbackReason.FontMissing, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
             var baselineY = ComputeBaselineY(textRun, style, fontFace.Metrics);
             if (!TextMetricsFit(textRun, fontFace.Metrics, style.FontSize))
             {
-                AddOverlayFallbackRun(textRun, GlyphAtlasFallbackReason.Clip, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                AddDegradedRun(GlyphAtlasFallbackReason.Clip, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
             var lineWidth = ComputeLineWidth(text, fontFace, style, out unsupportedReason);
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
-                AddOverlayFallbackRun(textRun, unsupportedReason, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
             if (lineWidth > textRun.Width)
             {
-                AddOverlayFallbackRun(textRun, GlyphAtlasFallbackReason.Clip, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                AddDegradedRun(GlyphAtlasFallbackReason.Clip, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
@@ -270,7 +264,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
             if (scissor.IsEmpty)
             {
-                AddOverlayFallbackRun(textRun, GlyphAtlasFallbackReason.Clip, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                AddDegradedRun(GlyphAtlasFallbackReason.Clip, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
@@ -311,7 +305,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
                 vertexCount = batchStart;
-                AddOverlayFallbackRun(textRun, unsupportedReason, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
@@ -320,7 +314,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 if (batchCount >= MaxGlyphDrawBatches)
                 {
                     vertexCount = batchStart;
-                    AddOverlayFallbackRun(textRun, GlyphAtlasFallbackReason.BatchLimit, overlayFallbackRuns, ref overlayFallbackRunCount, ref fallbackReasons);
+                    AddDegradedRun(GlyphAtlasFallbackReason.BatchLimit, ref degradedRunCount, ref degradationReasons);
                     continue;
                 }
 
@@ -330,19 +324,16 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             atlasRunCount++;
         }
 
-        return new GlyphFrame(vertexCount, batchCount, atlasRunCount, overlayFallbackRunCount, fallbackReasons);
+        return new GlyphFrame(vertexCount, batchCount, atlasRunCount, degradedRunCount, degradationReasons);
     }
 
-    private static void AddOverlayFallbackRun(
-        D3D12TextRenderer.TextData textRun,
+    private static void AddDegradedRun(
         GlyphAtlasFallbackReason reason,
-        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns,
-        ref int overlayFallbackRunCount,
-        ref GlyphAtlasFallbackReasonCounts fallbackReasons)
+        ref int degradedRunCount,
+        ref GlyphAtlasFallbackReasonCounts degradationReasons)
     {
-        overlayFallbackRuns.Add(textRun);
-        overlayFallbackRunCount++;
-        fallbackReasons = fallbackReasons.With(reason);
+        degradedRunCount++;
+        degradationReasons = degradationReasons.With(reason);
     }
 
     private static bool TextMetricsFit(D3D12TextRenderer.TextData textRun, DWRITE_FONT_METRICS metrics, float emSize)
@@ -1234,32 +1225,32 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _vbv.StrideInBytes = (uint)sizeof(Vertex);
     }
 
-    private void RecordFallback(int unsupportedRuns, GlyphAtlasFallbackReasonCounts reasons)
+    private void RecordDegradation(int unsupportedRuns, GlyphAtlasFallbackReasonCounts reasons)
     {
         if (unsupportedRuns > 0)
         {
-            _diagnostics = _diagnostics.WithFallback(unsupportedRuns, reasons);
+            _diagnostics = _diagnostics.WithDegradation(unsupportedRuns, reasons);
         }
     }
 
-    private void RecordFallback(int unsupportedRuns, GlyphAtlasFallbackReason reason)
+    private void RecordDegradation(int unsupportedRuns, GlyphAtlasFallbackReason reason)
     {
         if (unsupportedRuns > 0)
         {
-            _diagnostics = _diagnostics.WithFallback(unsupportedRuns, reason);
+            _diagnostics = _diagnostics.WithDegradation(unsupportedRuns, reason);
         }
     }
 
-    private void DisableGlyphAtlasFallback(
+    private void DisableGlyphAtlasDegradation(
         GlyphAtlasFallbackReason reason,
         GlyphAtlasRecordFailurePhase phase,
         DeviceErrorDiagnostic diagnostic,
-        int fallbackRunCount)
+        int degradedRunCount)
     {
         _disabled = true;
         _deviceError = diagnostic.IsNone ? DeviceErrorDiagnostic.FromFailure(DeviceErrorSite.GlyphAtlasRecord) : diagnostic;
         _diagnostics = _diagnostics
-            .WithFallback(fallbackRunCount, reason)
+            .WithDegradation(degradedRunCount, reason)
             .WithRecordFailure(phase);
         System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] {_deviceError}");
     }
@@ -1357,27 +1348,26 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public Vector4 Color;
     }
 
-    public readonly struct GlyphAtlasRecordResult(bool Recorded, int AtlasRuns, int OverlayFallbackRuns) : IEquatable<GlyphAtlasRecordResult>
+    public readonly struct GlyphAtlasRecordResult(bool Recorded, int AtlasRuns, int DegradedRuns) : IEquatable<GlyphAtlasRecordResult>
     {
         public bool Recorded { get; } = Recorded;
         public int AtlasRuns { get; } = AtlasRuns;
-        public int OverlayFallbackRuns { get; } = OverlayFallbackRuns;
-        public bool RequiresOverlayFallback => OverlayFallbackRuns > 0;
+        public int DegradedRuns { get; } = DegradedRuns;
 
         public static GlyphAtlasRecordResult Empty => new(true, 0, 0);
 
-        public static GlyphAtlasRecordResult FallbackOnly(int overlayFallbackRuns) => new(false, 0, overlayFallbackRuns);
+        public static GlyphAtlasRecordResult DegradedOnly(int degradedRuns) => new(false, 0, degradedRuns);
 
         public bool Equals(GlyphAtlasRecordResult other)
         {
             return Recorded == other.Recorded
                 && AtlasRuns == other.AtlasRuns
-                && OverlayFallbackRuns == other.OverlayFallbackRuns;
+                && DegradedRuns == other.DegradedRuns;
         }
 
         public override bool Equals(object? obj) => obj is GlyphAtlasRecordResult other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(Recorded, AtlasRuns, OverlayFallbackRuns);
+        public override int GetHashCode() => HashCode.Combine(Recorded, AtlasRuns, DegradedRuns);
 
         public static bool operator ==(GlyphAtlasRecordResult left, GlyphAtlasRecordResult right) => left.Equals(right);
 
@@ -1388,14 +1378,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int VertexCount,
         int BatchCount,
         int AtlasRunCount,
-        int OverlayFallbackRunCount,
-        GlyphAtlasFallbackReasonCounts FallbackReasons)
+        int DegradedRunCount,
+        GlyphAtlasFallbackReasonCounts DegradationReasons)
     {
         public int VertexCount { get; } = VertexCount;
         public int BatchCount { get; } = BatchCount;
         public int AtlasRunCount { get; } = AtlasRunCount;
-        public int OverlayFallbackRunCount { get; } = OverlayFallbackRunCount;
-        public GlyphAtlasFallbackReasonCounts FallbackReasons { get; } = FallbackReasons;
+        public int DegradedRunCount { get; } = DegradedRunCount;
+        public GlyphAtlasFallbackReasonCounts DegradationReasons { get; } = DegradationReasons;
     }
 
     private readonly struct GlyphDrawBatch(int StartVertex, int VertexCount, IntegerScissorRect Scissor)
@@ -1654,7 +1644,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int RasterScratchBytes,
         int RasterScratchResizes,
         int AtlasRuns = 0,
-        int OverlayFallbackRuns = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
+        int OverlayFallbackRuns = 0,
+        int DegradedRuns = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
     {
         public int CachedGlyphs { get; } = CachedGlyphs;
         public long UploadedBytes { get; } = UploadedBytes;
@@ -1665,6 +1656,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int UnsupportedRuns { get; } = UnsupportedRuns;
         public int AtlasRuns { get; } = AtlasRuns;
         public int OverlayFallbackRuns { get; } = OverlayFallbackRuns;
+        public int DegradedRuns { get; } = DegradedRuns;
         public GlyphAtlasFallbackReasonCounts Reasons { get; } = Reasons;
         public GlyphAtlasInitializationPhase InitializationFailurePhase { get; } = InitializationFailurePhase;
         public GlyphAtlasRecordFailurePhase RecordFailurePhase { get; } = RecordFailurePhase;
@@ -1672,33 +1664,33 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int RasterScratchResizes { get; } = RasterScratchResizes;
 
         public GlyphAtlasTextRendererDiagnostics WithCachedGlyphs(int cachedGlyphs) =>
-            new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns);
+            new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheHit() =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheMiss() =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithDrawnGlyphs(int glyphs) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasRuns(int atlasRuns) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns + atlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns + atlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithUploadedBytes(long bytes) =>
-            new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRasterScratch(int bytes, int resizes) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, bytes, resizes, AtlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, bytes, resizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithInitializationFailure(GlyphAtlasInitializationPhase phase) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, phase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, phase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRecordFailure(GlyphAtlasRecordFailurePhase phase) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, phase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, phase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, OverlayFallbackRuns, DegradedRuns);
 
-        public GlyphAtlasTextRendererDiagnostics WithFallback(int unsupportedRuns, GlyphAtlasFallbackReason reason)
+        public GlyphAtlasTextRendererDiagnostics WithDegradation(int unsupportedRuns, GlyphAtlasFallbackReason reason)
         {
             var reasons = default(GlyphAtlasFallbackReasonCounts);
             if (reason != GlyphAtlasFallbackReason.None)
@@ -1710,10 +1702,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 }
             }
 
-            return WithFallback(unsupportedRuns, reasons);
+            return WithDegradation(unsupportedRuns, reasons);
         }
 
-        public GlyphAtlasTextRendererDiagnostics WithFallback(int unsupportedRuns, GlyphAtlasFallbackReasonCounts reasons)
+        public GlyphAtlasTextRendererDiagnostics WithDegradation(int unsupportedRuns, GlyphAtlasFallbackReasonCounts reasons)
         {
             return new GlyphAtlasTextRendererDiagnostics(
                 CachedGlyphs,
@@ -1729,12 +1721,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasRuns,
-                OverlayFallbackRuns + unsupportedRuns);
+                OverlayFallbackRuns,
+                DegradedRuns + unsupportedRuns);
         }
 
         public string FormatSummary()
         {
-            return $"cachedGlyphs={CachedGlyphs}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, overlayFallbackRuns={OverlayFallbackRuns}, "
+            return $"cachedGlyphs={CachedGlyphs}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, overlayFallbackRuns={OverlayFallbackRuns}, degradedRuns={DegradedRuns}, "
                 + $"uploads={UploadedBytes} bytes, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
         }
@@ -1750,6 +1743,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && UnsupportedRuns == other.UnsupportedRuns
                 && AtlasRuns == other.AtlasRuns
                 && OverlayFallbackRuns == other.OverlayFallbackRuns
+                && DegradedRuns == other.DegradedRuns
                 && Reasons.Equals(other.Reasons)
                 && InitializationFailurePhase == other.InitializationFailurePhase
                 && RecordFailurePhase == other.RecordFailurePhase
@@ -1771,6 +1765,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(UnsupportedRuns);
             hash.Add(AtlasRuns);
             hash.Add(OverlayFallbackRuns);
+            hash.Add(DegradedRuns);
             hash.Add(Reasons);
             hash.Add(InitializationFailurePhase);
             hash.Add(RecordFailurePhase);

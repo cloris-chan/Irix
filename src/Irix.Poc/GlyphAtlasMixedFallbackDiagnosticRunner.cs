@@ -41,13 +41,18 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(
                 $"Expected GlyphAtlas per frame: textRuns={expected.TextRuns}, atlasRuns={expected.AtlasCandidateRuns}, "
-                + $"overlayFallbackRuns={expected.OverlayFallbackCandidateRuns}, NonAscii={expected.NonAsciiFallbackRuns}, "
-                + $"clippedAtlasRuns={expected.ClippedAtlasCandidateRuns}, clippedOverlayFallbackRuns={expected.ClippedOverlayFallbackCandidateRuns}");
+                + $"degradedRuns={expected.DegradedCandidateRuns}, NonAscii={expected.NonAsciiFallbackRuns}, "
+                + $"clippedAtlasRuns={expected.ClippedAtlasCandidateRuns}, clippedDegradedRuns={expected.ClippedDegradedCandidateRuns}");
             output.WriteLine($"Ordering: {BuildOrderingLine(expected, textCompositionMode)}");
-            output.WriteLine(textCompositionMode == TextCompositionMode.GlyphAtlas
-                ? "Overlay subset input: resolver=True style=True clip=True scale=True"
-                : "Whole-frame overlay input: resolver=True style=True clip=True scale=True");
-            output.WriteLine($"Overlay subset parity: {subsetParity.FormatSummary()}");
+            if (textCompositionMode == TextCompositionMode.GlyphAtlas)
+            {
+                output.WriteLine("Unsupported text degradation: overlay=False resolver=True style=True clip=True scale=True");
+            }
+            else
+            {
+                output.WriteLine("Whole-frame overlay input: resolver=True style=True clip=True scale=True");
+                output.WriteLine($"Overlay subset parity: {subsetParity.FormatSummary()}");
+            }
             output.WriteLine();
         }
         finally
@@ -117,12 +122,12 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
     {
         var textRuns = 0;
         var atlasCandidateRuns = 0;
-        var overlayFallbackCandidateRuns = 0;
+        var degradedCandidateRuns = 0;
         var nonAsciiFallbackRuns = 0;
         var clippedAtlasCandidateRuns = 0;
-        var clippedOverlayFallbackCandidateRuns = 0;
-        var sawFallback = false;
-        var hasFallbackBeforeLaterAtlas = false;
+        var clippedDegradedCandidateRuns = 0;
+        var sawDegraded = false;
+        var hasDegradedBeforeLaterAtlas = false;
 
         foreach (var command in commands)
         {
@@ -143,31 +148,31 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
                     clippedAtlasCandidateRuns++;
                 }
 
-                hasFallbackBeforeLaterAtlas |= sawFallback;
+                hasDegradedBeforeLaterAtlas |= sawDegraded;
                 continue;
             }
 
-            overlayFallbackCandidateRuns++;
+            degradedCandidateRuns++;
             if (reason.HasFlag(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii))
             {
                 nonAsciiFallbackRuns++;
             }
             if (hasClip)
             {
-                clippedOverlayFallbackCandidateRuns++;
+                clippedDegradedCandidateRuns++;
             }
 
-            sawFallback = true;
+            sawDegraded = true;
         }
 
         return new GlyphAtlasMixedFallbackSceneSummary(
             textRuns,
             atlasCandidateRuns,
-            overlayFallbackCandidateRuns,
+            degradedCandidateRuns,
             nonAsciiFallbackRuns,
             clippedAtlasCandidateRuns,
-            clippedOverlayFallbackCandidateRuns,
-            hasFallbackBeforeLaterAtlas);
+            clippedDegradedCandidateRuns,
+            hasDegradedBeforeLaterAtlas);
     }
 
     internal static string BuildOrderingLine(
@@ -179,9 +184,9 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
             return "commands=atlas,fallback,atlas,fallback; actualPassOrder=rects,wholeFrameOverlayRuns,present; zOrderLimit=FalseForOverlayRollback";
         }
 
-        return summary.HasFallbackBeforeLaterAtlas
-            ? "commands=atlas,fallback,atlas,fallback; actualPassOrder=rects,atlasAcceptedRuns,overlayFallbackRuns,present; zOrderLimit=overlayFallbackRunsDrawAfterAtlas"
-            : "commands=atlasThenFallback; actualPassOrder=rects,atlasAcceptedRuns,overlayFallbackRuns,present; zOrderLimit=False";
+        return summary.HasDegradedBeforeLaterAtlas
+            ? "commands=atlas,degraded,atlas,degraded; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=FalseForDegradedText"
+            : "commands=atlasThenDegraded; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=False";
     }
 
     internal static GlyphAtlasOverlaySubsetParity AnalyzeOverlaySubsetInputs(
@@ -367,29 +372,29 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
 internal readonly struct GlyphAtlasMixedFallbackSceneSummary(
     int TextRuns,
     int AtlasCandidateRuns,
-    int OverlayFallbackCandidateRuns,
+    int DegradedCandidateRuns,
     int NonAsciiFallbackRuns,
     int ClippedAtlasCandidateRuns,
-    int ClippedOverlayFallbackCandidateRuns,
-    bool HasFallbackBeforeLaterAtlas) : IEquatable<GlyphAtlasMixedFallbackSceneSummary>
+    int ClippedDegradedCandidateRuns,
+    bool HasDegradedBeforeLaterAtlas) : IEquatable<GlyphAtlasMixedFallbackSceneSummary>
 {
     public int TextRuns { get; } = TextRuns;
     public int AtlasCandidateRuns { get; } = AtlasCandidateRuns;
-    public int OverlayFallbackCandidateRuns { get; } = OverlayFallbackCandidateRuns;
+    public int DegradedCandidateRuns { get; } = DegradedCandidateRuns;
     public int NonAsciiFallbackRuns { get; } = NonAsciiFallbackRuns;
     public int ClippedAtlasCandidateRuns { get; } = ClippedAtlasCandidateRuns;
-    public int ClippedOverlayFallbackCandidateRuns { get; } = ClippedOverlayFallbackCandidateRuns;
-    public bool HasFallbackBeforeLaterAtlas { get; } = HasFallbackBeforeLaterAtlas;
+    public int ClippedDegradedCandidateRuns { get; } = ClippedDegradedCandidateRuns;
+    public bool HasDegradedBeforeLaterAtlas { get; } = HasDegradedBeforeLaterAtlas;
 
     public bool Equals(GlyphAtlasMixedFallbackSceneSummary other)
     {
         return TextRuns == other.TextRuns
             && AtlasCandidateRuns == other.AtlasCandidateRuns
-            && OverlayFallbackCandidateRuns == other.OverlayFallbackCandidateRuns
+            && DegradedCandidateRuns == other.DegradedCandidateRuns
             && NonAsciiFallbackRuns == other.NonAsciiFallbackRuns
             && ClippedAtlasCandidateRuns == other.ClippedAtlasCandidateRuns
-            && ClippedOverlayFallbackCandidateRuns == other.ClippedOverlayFallbackCandidateRuns
-            && HasFallbackBeforeLaterAtlas == other.HasFallbackBeforeLaterAtlas;
+            && ClippedDegradedCandidateRuns == other.ClippedDegradedCandidateRuns
+            && HasDegradedBeforeLaterAtlas == other.HasDegradedBeforeLaterAtlas;
     }
 
     public override bool Equals(object? obj) => obj is GlyphAtlasMixedFallbackSceneSummary other && Equals(other);
@@ -399,11 +404,11 @@ internal readonly struct GlyphAtlasMixedFallbackSceneSummary(
         return HashCode.Combine(
             TextRuns,
             AtlasCandidateRuns,
-            OverlayFallbackCandidateRuns,
+            DegradedCandidateRuns,
             NonAsciiFallbackRuns,
             ClippedAtlasCandidateRuns,
-            ClippedOverlayFallbackCandidateRuns,
-            HasFallbackBeforeLaterAtlas);
+            ClippedDegradedCandidateRuns,
+            HasDegradedBeforeLaterAtlas);
     }
 
     public static bool operator ==(GlyphAtlasMixedFallbackSceneSummary left, GlyphAtlasMixedFallbackSceneSummary right) => left.Equals(right);

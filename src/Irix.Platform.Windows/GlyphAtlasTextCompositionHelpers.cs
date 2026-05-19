@@ -4,24 +4,20 @@ namespace Irix.Platform.Windows;
 
 internal static class GlyphAtlasTextCompositionHelpers
 {
-    internal static int AppendOverlayFallbackRuns(
+    internal static int CountRenderableRuns(
         ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
-        IFrameResourceResolver resources,
-        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns)
+        IFrameResourceResolver resources)
     {
-        var fallbackRunCount = 0;
+        var count = 0;
         foreach (var textRun in textRuns)
         {
-            if (!ShouldRenderTextRun(textRun, resources))
+            if (ShouldRenderTextRun(textRun, resources))
             {
-                continue;
+                count++;
             }
-
-            overlayFallbackRuns.Add(textRun);
-            fallbackRunCount++;
         }
 
-        return fallbackRunCount;
+        return count;
     }
 
     internal static D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason GetUnsupportedReason(

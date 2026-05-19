@@ -273,7 +273,7 @@ public sealed class ProgramDiagnosticsTests
             RasterScratchBytes: 768,
             RasterScratchResizes: 2)
             .WithAtlasRuns(7)
-            .WithFallback(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
+            .WithDegradation(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
 
         var summary = diagnostics.FormatSummary();
@@ -282,6 +282,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("uploads=4096 bytes", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("overlayFallbackRuns=0", summary);
+        Assert.Contains("degradedRuns=0", summary);
         Assert.Contains("fallbacks=2", summary);
         Assert.Contains("NonAscii=1", summary);
         Assert.Contains("initFailurePhase=ShaderCompile", summary);
@@ -306,12 +307,14 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 0,
             RasterScratchResizes: 0)
-            .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed)
+            .WithDegradation(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.UploadBuffer);
 
         var summary = diagnostics.FormatSummary();
 
         Assert.Contains("InitializationFailed=1", summary);
+        Assert.Contains("overlayFallbackRuns=0", summary);
+        Assert.Contains("degradedRuns=1", summary);
         Assert.Contains("initFailurePhase=UploadBuffer", summary);
     }
 
@@ -331,26 +334,27 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 0,
             RasterScratchResizes: 0)
-            .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
+            .WithDegradation(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
             .WithRecordFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.Record);
 
         var summary = diagnostics.FormatSummary();
 
         Assert.Contains("InitializationFailed=0", summary);
         Assert.Contains("RecordFailed=1", summary);
+        Assert.Contains("overlayFallbackRuns=0", summary);
+        Assert.Contains("degradedRuns=1", summary);
         Assert.Contains("initFailurePhase=None", summary);
         Assert.Contains("recordFailurePhase=Record", summary);
     }
 
     [Fact]
-    public void Glyph_atlas_fallback_run_list_keeps_only_renderable_runs()
+    public void Glyph_atlas_renderable_run_counter_skips_empty_and_zero_size_runs()
     {
         using var resources = FrameDrawingResources.Rent();
         var style = resources.AddTextStyle(TextStyle.Default);
         var visibleText = resources.AddText("visible");
         var emptyText = resources.AddText("");
         resources.Seal();
-        using var fallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
         var runs = new[]
         {
             TextRun(visibleText, style, width: 100, height: 20),
@@ -358,15 +362,13 @@ public sealed class ProgramDiagnosticsTests
             TextRun(visibleText, style, width: 0, height: 20)
         };
 
-        var count = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(runs, resources, fallbackRuns);
+        var count = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(runs, resources);
 
         Assert.Equal(1, count);
-        Assert.Equal(1, fallbackRuns.Count);
-        Assert.Equal(visibleText, fallbackRuns.Span[0].Text);
     }
 
     [Fact]
-    public void Glyph_atlas_fallback_diagnostics_count_reasons_per_run()
+    public void Glyph_atlas_degradation_diagnostics_count_reasons_per_run()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
             CachedGlyphs: 0,
@@ -381,11 +383,12 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 0,
             RasterScratchResizes: 0)
-            .WithFallback(3, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii);
+            .WithDegradation(3, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii);
 
         Assert.Equal(1, diagnostics.FallbackFrames);
         Assert.Equal(3, diagnostics.UnsupportedRuns);
-        Assert.Equal(3, diagnostics.OverlayFallbackRuns);
+        Assert.Equal(0, diagnostics.OverlayFallbackRuns);
+        Assert.Equal(3, diagnostics.DegradedRuns);
         Assert.Equal(3, diagnostics.Reasons.NonAscii);
     }
 
@@ -401,13 +404,13 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal(4, summary.TextRuns);
         Assert.Equal(2, summary.AtlasCandidateRuns);
-        Assert.Equal(2, summary.OverlayFallbackCandidateRuns);
+        Assert.Equal(2, summary.DegradedCandidateRuns);
         Assert.Equal(2, summary.NonAsciiFallbackRuns);
         Assert.Equal(1, summary.ClippedAtlasCandidateRuns);
-        Assert.Equal(1, summary.ClippedOverlayFallbackCandidateRuns);
-        Assert.True(summary.HasFallbackBeforeLaterAtlas);
-        Assert.Contains("commands=atlas,fallback,atlas,fallback", ordering);
-        Assert.Contains("zOrderLimit=overlayFallbackRunsDrawAfterAtlas", ordering);
+        Assert.Equal(1, summary.ClippedDegradedCandidateRuns);
+        Assert.True(summary.HasDegradedBeforeLaterAtlas);
+        Assert.Contains("commands=atlas,degraded,atlas,degraded", ordering);
+        Assert.Contains("zOrderLimit=FalseForDegradedText", ordering);
     }
 
     [Fact]
@@ -502,11 +505,11 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 8192,
             RasterScratchResizes: 4)
-            .WithFallback(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.AtlasFull);
+            .WithDegradation(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.AtlasFull);
         var frameSerial = new D3D12Renderer.FrameSerialDiagnostics(
             FrameSerial: 1,
             PresentSerial: 1,
-            SyncWaitCount: 1,
+            SyncWaitCount: 0,
             SyncWaitTicks: 0,
             BackBufferIndex: 0,
             SyncStrategy: TextOverlaySyncStrategy.D3D12FenceAfterOverlay);
@@ -530,7 +533,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Scenario: AtlasFull", report);
         Assert.Contains("Text composition mode: GlyphAtlas", report);
         Assert.Contains("Device removed: False", report);
-        Assert.Contains("Frame serial: frameSerial=1, presentSerial=1, syncWaits=1", report);
+        Assert.Contains("Frame serial: frameSerial=1, presentSerial=1, syncWaits=0", report);
+        Assert.Contains("overlayFallbackRuns=0", report);
+        Assert.Contains("degradedRuns=1", report);
         Assert.Contains("AtlasFull=1", report);
         Assert.Contains("=== Glyph atlas stress diagnostic complete ===", report);
     }
@@ -561,7 +566,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Glyph_atlas_record_failure_contract_falls_back_all_renderable_runs()
+    public void Glyph_atlas_record_failure_contract_degrades_all_renderable_runs()
     {
         using var resources = FrameDrawingResources.Rent();
         var style = resources.AddTextStyle(TextStyle.Default);
@@ -569,7 +574,6 @@ public sealed class ProgramDiagnosticsTests
         var visibleB = resources.AddText("visible B");
         var empty = resources.AddText("");
         resources.Seal();
-        using var fallbackRuns = new FrameRenderList<D3D12TextRenderer.TextData>();
         var runs = new[]
         {
             TextRun(visibleA, style, width: 100, height: 20),
@@ -577,7 +581,7 @@ public sealed class ProgramDiagnosticsTests
             TextRun(visibleB, style, width: 120, height: 20)
         };
 
-        var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(runs, resources, fallbackRuns);
+        var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(runs, resources);
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
             CachedGlyphs: 0,
             UploadedBytes: 0,
@@ -591,14 +595,14 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 0,
             RasterScratchResizes: 0)
-            .WithFallback(fallbackRunCount, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
+            .WithDegradation(degradedRunCount, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
             .WithRecordFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.AtlasUploadMap);
 
-        Assert.Equal(2, fallbackRunCount);
-        Assert.Equal(2, fallbackRuns.Count);
+        Assert.Equal(2, degradedRunCount);
         Assert.Equal(1, diagnostics.FallbackFrames);
         Assert.Equal(2, diagnostics.UnsupportedRuns);
-        Assert.Equal(2, diagnostics.OverlayFallbackRuns);
+        Assert.Equal(0, diagnostics.OverlayFallbackRuns);
+        Assert.Equal(2, diagnostics.DegradedRuns);
         Assert.Equal(2, diagnostics.Reasons.RecordFailed);
         Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.AtlasUploadMap, diagnostics.RecordFailurePhase);
     }
@@ -1118,7 +1122,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, atlasRuns=0, overlayFallbackRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, atlasRuns=0, overlayFallbackRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

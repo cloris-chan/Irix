@@ -29,7 +29,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Area | Status |
 |------|--------|
 | V1 core | Complete / regression-only. Do not reopen core feature scope for GA cleanup. |
-| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; mixed fallback v0 keeps accepted atlas runs on D3D12 and sends unsupported runs to D3D11On12/D2D overlay. `--text-composition overlay` remains rollback while the overlay removal path is built. |
+| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; accepted atlas runs stay on D3D12 and unsupported/failure runs now degrade without D3D11On12/D2D overlay. `--text-composition overlay` remains explicit rollback while the overlay removal path is finished. |
 | Backend clip | Scissor is the default backend clip mode; `--disable-scissor` / `--clip-mode diagnostic` remain diagnostic rollback paths. |
 | Default renderer baseline | GlyphAtlas + Scissor default baseline enabled. Do not introduce another runtime default switch before shader/resource lifetime and allocation attribution hardening. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
@@ -161,6 +161,10 @@ Default long GlyphAtlas `300 x 3` reported `frameSerial=900`, `presentSerial=900
 Mixed AtlasFull stress reported `atlasRuns=5`, `overlayFallbackRuns=30`, `AtlasFull=29`, `NonAscii=1`, `RecordFailed=0`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
 Record-failure contract tests now pin all-renderable-run fallback with `recordFailurePhase=AtlasUploadMap`; this is unit contract coverage, not a forced GPU upload-failure smoke.
 
+Non-overlay degradation update: default GlyphAtlas no longer records unsupported, AtlasFull, initialization, or runtime record-failed text through D3D11On12 / D2D overlay fallback. Those cases now increment `DegradedRuns` and reason counts, while `--text-composition overlay` remains the explicit rollback path.
+2026-05-20 short mixed degradation smoke at 150% scale reported `frameSerial=3`, `presentSerial=3`, `syncWaits=0`, `atlasRuns=6`, `overlayFallbackRuns=0`, `degradedRuns=6`, `NonAscii=6`, `textClipSkipped=0`, and `lastEffectiveTextClip=(36,264,168,39)`.
+2026-05-20 MixedAtlasFull stress reported `frameSerial=1`, `presentSerial=1`, `syncWaits=0`, `atlasRuns=5`, `overlayFallbackRuns=0`, `degradedRuns=30`, `AtlasFull=29`, `NonAscii=1`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
+
 Manual smoke status:
 
 | Smoke | Status |
@@ -234,11 +238,11 @@ Source guards currently block:
 | Priority | Work | Boundary |
 |----------|------|----------|
 | P0 | Renderer foundation hardening | GlyphAtlas + Scissor default baseline enabled; do not flip another default. Continue resource lifetime hardening from the embedded-shader baseline. |
-| P1 | Resource cache / stable global handles | Continue POST-011 from glyph atlas entry handles toward atlas page/eviction handles and non-overlay fallback handling. |
+| P1 | Resource cache / stable global handles | Continue POST-011 from glyph atlas entry handles toward atlas page/eviction handles before widening non-overlay text coverage. |
 | P1 | Shader packaging follow-up | Runtime shader compile is removed. Decide later whether inline embedded DXBC is enough or a build-time shader asset pipeline is worth adding. |
 | P1 | Attribute warm glyph atlas allocation | Run `--diagnose-text-cache` and use tree/diff/translate/render attribution before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
-| P1 | Mixed fallback extended smoke evidence | Mixed ASCII/NonAscii/clipped, overlay subset parity, mixed AtlasFull, record-failure contract, and default long smoke are recorded. Eviction remains deferred before widening atlas text coverage. |
+| P1 | Degradation smoke evidence | Short mixed and MixedAtlasFull smoke now show `overlayFallbackRuns=0` and nonzero `DegradedRuns`; eviction remains deferred before widening atlas text coverage. |
 | P1 | Overlay removal path | Active migration target. Remove D3D11On12/D2D from final composition as soon as unsupported text, atlas-full/eviction, diagnostics, and rollback have non-overlay behavior or an explicit degradation contract. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
 

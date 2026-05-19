@@ -41,7 +41,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private D3D12TextRenderer? _textRenderer;
     private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics _glyphAtlasTextDiagnostics;
-    private readonly FrameRenderList<D3D12TextRenderer.TextData> _overlayFallbackTextRuns = new();
     private readonly nint _hwnd;
     private readonly Lock _resizeLock = new();
     private int _width;
@@ -402,21 +401,18 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _renderer2D!.RenderRectangles(_list, rects, width, height);
 
         var textRenderer = _textRenderer;
-        var hasText = textRuns.Length > 0 && textRenderer != null;
-        var renderTextWithOverlayFallback = hasText;
-        var overlayTextRuns = textRuns;
+        var hasText = textRuns.Length > 0;
+        var renderOverlayText = hasText && TextCompositionMode == TextCompositionMode.Overlay && textRenderer != null;
         if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
         {
-            var glyphAtlasRecord = TryRecordGlyphAtlasTextPass(textRuns, resources, _overlayFallbackTextRuns);
-            overlayTextRuns = _overlayFallbackTextRuns.Span;
-            renderTextWithOverlayFallback = glyphAtlasRecord.RequiresOverlayFallback;
+            _ = TryRecordGlyphAtlasTextPass(textRuns, resources);
             if (_deviceRemoved)
             {
                 return;
             }
         }
 
-        if (!renderTextWithOverlayFallback)
+        if (!renderOverlayText)
         {
             // Transition to present when Direct2D is not handling the wrapped back buffer.
             barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -430,9 +426,9 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _queue->ExecuteCommandLists(1, &pList);
         Interlocked.Increment(ref _frameSerial);
 
-        if (renderTextWithOverlayFallback)
+        if (renderOverlayText)
         {
-            if (!RenderOverlayTextAndMaybeSync(textRenderer!, overlayTextRuns, resources)) return;
+            if (!RenderOverlayTextAndMaybeSync(textRenderer!, textRuns, resources)) return;
         }
 
         if (!Present()) return;
@@ -441,8 +437,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult TryRecordGlyphAtlasTextPass(
         ReadOnlySpan<D3D12TextRenderer.TextData> textRuns,
-        IFrameResourceResolver resources,
-        FrameRenderList<D3D12TextRenderer.TextData> overlayFallbackRuns)
+        IFrameResourceResolver resources)
     {
         D3D12GlyphAtlasTextRenderer glyphAtlasTextRenderer;
         try
@@ -451,28 +446,27 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, falling back to overlay: {ex.Message}");
-            overlayFallbackRuns.Reset();
-            var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(textRuns, resources, overlayFallbackRuns);
-            RecordGlyphAtlasInitializationFallback(
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, degrading text without overlay: {ex.Message}");
+            var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(textRuns, resources);
+            RecordGlyphAtlasInitializationDegradation(
                 ex.Phase == D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile
                     ? D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.CompileFailed
                     : D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.InitializationFailed,
                 ex.Phase,
-                fallbackRunCount);
-            return D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
+                degradedRunCount);
+            return D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
         }
 
-        return glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height, overlayFallbackRuns);
+        return glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height);
     }
 
-    private void RecordGlyphAtlasInitializationFallback(
+    private void RecordGlyphAtlasInitializationDegradation(
         D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason reason,
         D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase phase,
-        int fallbackRunCount)
+        int degradedRunCount)
     {
         _glyphAtlasTextDiagnostics = _glyphAtlasTextDiagnostics
-            .WithFallback(fallbackRunCount, reason)
+            .WithDegradation(degradedRunCount, reason)
             .WithInitializationFailure(phase);
     }
 
@@ -893,7 +887,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         if (_disposed) return;
         ReleaseDeviceResources(waitForGpu: true);
-        _overlayFallbackTextRuns.Dispose();
         _disposed = true;
     }
 }
