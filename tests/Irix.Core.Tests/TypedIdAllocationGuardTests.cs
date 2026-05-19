@@ -1221,6 +1221,19 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Scroll_feedback_uses_typed_container_id()
+    {
+        var feedbackSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "ScrollFeedback.cs"));
+        var translatorSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "WindowDrawCommandTranslator.cs"));
+
+        Assert.Contains("internal readonly struct ScrollContainerId", feedbackSource);
+        Assert.Contains("ScrollContainerId ContainerId", feedbackSource);
+        Assert.DoesNotContain("string ContainerId", feedbackSource);
+        Assert.Contains("new ScrollContainerId(diagnostics.DfsIndex)", translatorSource);
+        Assert.DoesNotContain("ContainerId: $\"dfs:{diagnostics.DfsIndex}\"", translatorSource);
+    }
+
+    [Fact]
     public void Irix_Drawing_TextStyle_uses_value_font_family()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));

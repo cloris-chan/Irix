@@ -1698,7 +1698,7 @@ public sealed class WindowLayoutPipelineTests
 
         Assert.True(callbackMaxScrollY.HasValue);
         var metrics = Assert.Single(translator.LastScrollFeedback.Containers);
-        Assert.Equal("dfs:0", metrics.ContainerId);
+        Assert.Equal(new ScrollContainerId(0), metrics.ContainerId);
         Assert.Equal(100.0, metrics.ViewportExtent);
         Assert.True(metrics.ContentExtent > metrics.ViewportExtent);
         Assert.Equal(translator.LastMaxScrollY, metrics.MaxScrollY);

@@ -121,7 +121,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         {
             var diagnostics = layoutResult.ScrollDiagnostics[index];
             containers[index] = new ScrollContainerMetrics(
-                ContainerId: $"dfs:{diagnostics.DfsIndex}",
+                ContainerId: new ScrollContainerId(diagnostics.DfsIndex),
                 ViewportExtent: diagnostics.VisibleHeight,
                 ContentExtent: diagnostics.ContentHeight,
                 MaxScrollY: diagnostics.MaxScrollY);
