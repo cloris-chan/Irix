@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Irix.Drawing;
+using Irix.Platform;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -22,7 +23,6 @@ internal enum TextCompositionMode
 internal sealed unsafe class D3D12Renderer : IDisposable
 {
     private const int FrameCount = 2;
-    private const int EOutOfMemory = unchecked((int)0x8007000E);
 
     private ID3D12Device* _device;
     private ID3D12CommandQueue* _queue;
@@ -48,7 +48,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private int _height;
     private bool _disposed;
     private bool _deviceRemoved;
-    private string? _deviceErrorReason;
+    private DeviceErrorDiagnostic _deviceError = DeviceErrorDiagnostic.None;
     private int _pendingWidth;
     private int _pendingHeight;
     private bool _pendingResize;
@@ -107,7 +107,16 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     public bool IsDeviceRemoved => _deviceRemoved || (_textRenderer?.IsDeviceRemoved ?? false);
 
-    public string? DeviceErrorReason => _deviceErrorReason ?? _textRenderer?.DeviceErrorReason;
+    public DeviceErrorDiagnostic DeviceError
+    {
+        get
+        {
+            if (!_deviceError.IsNone) return _deviceError;
+            var textError = _textRenderer?.DeviceError ?? DeviceErrorDiagnostic.None;
+            if (!textError.IsNone) return textError;
+            return _glyphAtlasTextRenderer?.DeviceError ?? DeviceErrorDiagnostic.None;
+        }
+    }
 
     public event Action? DeviceLost;
 
@@ -294,7 +303,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (Exception ex) when (ex is COMException or InvalidOperationException)
         {
-            HandleDeviceError(ex, "Resize resource recreation");
+            HandleDeviceError(ex, DeviceErrorSite.ResizeResourceRecreation);
             return false;
         }
     }
@@ -306,7 +315,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         if (!WaitForGpu()) return false;
         if (TryResetFrameCommands(out var retryResetError)) return true;
 
-        HandleDeviceError(retryResetError ?? firstResetError, "BeginFrame command reset");
+        HandleDeviceError(retryResetError ?? firstResetError, DeviceErrorSite.BeginFrameCommandReset);
         return false;
     }
 
@@ -477,8 +486,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             if (!_deviceRemoved)
             {
                 _deviceRemoved = true;
-                _deviceErrorReason = textRenderer.DeviceErrorReason ?? "TextRenderer render failed";
-                System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+                _deviceError = textRenderer.DeviceError.IsNone
+                    ? DeviceErrorDiagnostic.FromFailure(DeviceErrorSite.TextRendererRender)
+                    : textRenderer.DeviceError;
+                System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceError}");
                 DeviceLost?.Invoke();
             }
             return false;
@@ -504,7 +515,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (COMException ex)
         {
-            HandleDeviceError(ex, "Present");
+            HandleDeviceError(ex, DeviceErrorSite.Present);
             return false;
         }
     }
@@ -527,34 +538,23 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (COMException ex)
         {
-            HandleDeviceError(ex, "MoveToNextFrame");
+            HandleDeviceError(ex, DeviceErrorSite.MoveToNextFrame);
             return false;
         }
     }
 
-    private void HandleDeviceError(Exception? ex, string context = "Unknown")
+    private void HandleDeviceError(Exception? ex, DeviceErrorSite site)
     {
-        MarkDeviceRemoved(FormatDeviceError(ex, context));
+        MarkDeviceRemoved(DeviceErrorDiagnostic.FromException(site, ex));
     }
 
-    private void MarkDeviceRemoved(string reason)
+    private void MarkDeviceRemoved(DeviceErrorDiagnostic reason)
     {
         if (_deviceRemoved) return;
         _deviceRemoved = true;
-        _deviceErrorReason = reason;
-        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+        _deviceError = reason;
+        System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceError}");
         DeviceLost?.Invoke();
-    }
-
-    private static string FormatDeviceError(Exception? ex, string context)
-    {
-        return ex switch
-        {
-            COMException { ErrorCode: EOutOfMemory } comException => $"{context}: E_OUTOFMEMORY (0x{comException.ErrorCode:X8})",
-            COMException comException => $"{context}: COMException 0x{comException.ErrorCode:X8}",
-            null => $"{context}: unknown device error",
-            _ => $"{context}: {ex.GetType().Name}: {ex.Message}"
-        };
     }
 
     private void InitializeDeviceResources(int width, int height)
@@ -700,14 +700,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     /// Check HRESULT from D3D/DXGI/D2D calls that return it directly.
     /// Sets _deviceRemoved on any failure.
     /// </summary>
-    internal bool SucceededOrMarkDeviceRemoved(HRESULT hr, string context)
+    internal bool SucceededOrMarkDeviceRemoved(HRESULT hr, DeviceErrorSite site)
     {
         if (hr.Succeeded) return true;
         if (!_deviceRemoved)
         {
             _deviceRemoved = true;
-            _deviceErrorReason = $"{context}: HRESULT 0x{unchecked((uint)hr.Value):X8}";
-            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+            _deviceError = DeviceErrorDiagnostic.FromHResult(site, hr.Value);
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceError}");
             DeviceLost?.Invoke();
         }
         return false;
@@ -726,7 +726,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (COMException ex)
         {
-            HandleDeviceError(ex, "WaitForGpu");
+            HandleDeviceError(ex, DeviceErrorSite.WaitForGpu);
             return false;
         }
     }
@@ -751,7 +751,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (COMException ex)
         {
-            HandleDeviceError(ex, "WaitForQueueIdle");
+            HandleDeviceError(ex, DeviceErrorSite.WaitForQueueIdle);
             return false;
         }
     }
@@ -779,8 +779,10 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         if (!_deviceRemoved)
         {
             _deviceRemoved = true;
-            _deviceErrorReason = textRenderer.DeviceErrorReason ?? "D3D11 overlay completion query failed";
-            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+            _deviceError = textRenderer.DeviceError.IsNone
+                ? DeviceErrorDiagnostic.FromFailure(DeviceErrorSite.D3D11OverlayCompletionQuery)
+                : textRenderer.DeviceError;
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceError}");
             DeviceLost?.Invoke();
         }
 
@@ -867,7 +869,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
             // Reset device-lost state
             _deviceRemoved = false;
-            _deviceErrorReason = null;
+            _deviceError = DeviceErrorDiagnostic.None;
             _pendingResize = false;
             _frameSerial = 0;
             _presentSerial = 0;
@@ -881,8 +883,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             ReleaseDeviceResources(waitForGpu: false);
             _deviceRemoved = true;
-            _deviceErrorReason = FormatDeviceError(ex, "Recovery reinitialize");
-            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
+            _deviceError = DeviceErrorDiagnostic.FromException(DeviceErrorSite.RecoveryReinitialize, ex);
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceError}");
             return false;
         }
     }

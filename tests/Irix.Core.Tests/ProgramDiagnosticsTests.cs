@@ -504,7 +504,7 @@ public sealed class ProgramDiagnosticsTests
             asciiCharsPerRun: 95,
             scenarioName: "AtlasFull",
             deviceRemoved: false,
-            deviceErrorReason: null,
+            deviceError: DeviceErrorDiagnostic.None,
             frameSerial,
             glyphAtlas);
 
@@ -830,7 +830,8 @@ public sealed class ProgramDiagnosticsTests
     {
         var lastEffectiveScissor = new EffectiveScissor(new DrawRect(32, 32, 80, 40), false);
         var lastEffectiveTextClip = new EffectiveScissor(new DrawRect(0, 0, 960, 20), false);
-        var snapshot = CreateBackendClipTextSnapshot(3, 1, 2, lastEffectiveScissor, lastEffectiveTextClip, textClipSkippedCount: 4, deviceRemoved: true, deviceErrorReason: "DeviceLost");
+        var deviceError = DeviceErrorDiagnostic.FromFailure(DeviceErrorSite.Present);
+        var snapshot = CreateBackendClipTextSnapshot(3, 1, 2, lastEffectiveScissor, lastEffectiveTextClip, textClipSkippedCount: 4, deviceRemoved: true, deviceError: deviceError);
 
         Assert.Equal(DrawingBackendClipMode.Scissor, snapshot.ClipMode);
         Assert.Equal(3, snapshot.ClippedCommandCount);
@@ -840,7 +841,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(lastEffectiveTextClip, snapshot.LastEffectiveTextClip);
         Assert.Equal(4, snapshot.TextClipSkippedCount);
         Assert.True(snapshot.DeviceRemoved);
-        Assert.Equal(DeviceErrorDiagnostic.FromNullable("DeviceLost"), snapshot.DeviceError);
+        Assert.Equal(deviceError, snapshot.DeviceError);
         Assert.True(snapshot.GpuScissor);
     }
 
@@ -1071,7 +1072,7 @@ public sealed class ProgramDiagnosticsTests
         ResizeDiagnosticRunner.WriteReport(
             writer,
             deviceRemoved: false,
-            deviceErrorReason: null,
+            deviceError: DeviceErrorDiagnostic.None,
             swapchainWidth: 929,
             swapchainHeight: 454,
             snapshot,
@@ -1274,7 +1275,7 @@ public sealed class ProgramDiagnosticsTests
         EffectiveScissor lastEffectiveTextClip,
         int textClipSkippedCount = 0,
         bool deviceRemoved = false,
-        string deviceErrorReason = "(none)")
+        DeviceErrorDiagnostic deviceError = default)
     {
         return new BackendClipTextDiagnosticSnapshot(
             DrawingBackendClipMode.Scissor,
@@ -1285,7 +1286,7 @@ public sealed class ProgramDiagnosticsTests
             lastEffectiveTextClip,
             textClipSkippedCount,
             deviceRemoved,
-            DeviceErrorDiagnostic.FromNullable(deviceErrorReason));
+            deviceError);
     }
 
     private static RenderingPipelineDiagnosticSnapshot CreateRenderingPipelineSnapshot()

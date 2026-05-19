@@ -108,7 +108,7 @@ internal static class ResizeDiagnosticRunner
         WriteReport(
             output,
             d3d12Renderer.IsDeviceRemoved,
-            d3d12Renderer.DeviceErrorReason,
+            d3d12Renderer.DeviceError,
             d3d12Renderer.Width,
             d3d12Renderer.Height,
             snapshot,
@@ -119,7 +119,7 @@ internal static class ResizeDiagnosticRunner
     internal static void WriteReport(
         TextWriter output,
         bool deviceRemoved,
-        string? deviceErrorReason,
+        DeviceErrorDiagnostic deviceError,
         int swapchainWidth,
         int swapchainHeight,
         ViewportDiagnosticsSnapshot snapshot,
@@ -128,7 +128,7 @@ internal static class ResizeDiagnosticRunner
     {
         output.WriteLine("=== D3D12 Resize Diagnostics ===");
         output.WriteLine($"Device removed: {deviceRemoved}");
-        output.WriteLine($"Device error reason: {deviceErrorReason ?? "(none)"}");
+        output.WriteLine($"Device error reason: {deviceError}");
         output.WriteLine($"Swapchain size: {swapchainWidth}x{swapchainHeight}");
         output.WriteLine($"Text composition mode: {textCompositionMode}");
         foreach (var line in DiagnosticsFormatter.BuildResizeViewportDiagnosticLines(snapshot))

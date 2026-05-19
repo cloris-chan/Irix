@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Irix.Drawing;
+using Irix.Platform;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct2D;
@@ -48,7 +49,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private int _diagnosticFormatEvictions;
     private int _diagnosticLayoutEvictions;
     private bool _deviceRemoved;
-    private string? _deviceErrorReason;
+    private DeviceErrorDiagnostic _deviceError = DeviceErrorDiagnostic.None;
 
     public D3D12TextRenderer(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue, ID3D12Resource*[] backBuffers)
     {
@@ -141,7 +142,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     }
 
     public bool IsDeviceRemoved => _deviceRemoved;
-    public string? DeviceErrorReason => _deviceErrorReason;
+    public DeviceErrorDiagnostic DeviceError => _deviceError;
 
     public void RecreateFrameResources(ID3D12Resource*[] backBuffers)
     {
@@ -285,14 +286,14 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
                 _d3d11Context->Flush();
             }
 
-            if (!SucceededOrMarkDeviceRemoved(endDrawResult, "EndDraw"))
+            if (!SucceededOrMarkDeviceRemoved(endDrawResult, DeviceErrorSite.TextRendererRender))
             {
                 return false;
             }
         }
         catch (COMException ex)
         {
-            MarkDeviceRemoved($"TextRenderer COMException: 0x{ex.ErrorCode:X8}");
+            MarkDeviceRemoved(DeviceErrorDiagnostic.FromComException(DeviceErrorSite.TextRendererRender, ex.ErrorCode));
             return false;
         }
 
@@ -327,7 +328,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
                 if (result.Value < 0)
                 {
-                    return SucceededOrMarkDeviceRemoved(result, "D3D11 overlay completion query");
+                    return SucceededOrMarkDeviceRemoved(result, DeviceErrorSite.D3D11OverlayCompletionQuery);
                 }
 
                 Thread.Yield();
@@ -335,24 +336,24 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
         }
         catch (COMException ex)
         {
-            MarkDeviceRemoved($"D3D11 overlay completion query COMException: 0x{ex.ErrorCode:X8}");
+            MarkDeviceRemoved(DeviceErrorDiagnostic.FromComException(DeviceErrorSite.D3D11OverlayCompletionQuery, ex.ErrorCode));
             return false;
         }
     }
 
-    private bool SucceededOrMarkDeviceRemoved(HRESULT hr, string context)
+    private bool SucceededOrMarkDeviceRemoved(HRESULT hr, DeviceErrorSite site)
     {
         if (hr.Succeeded) return true;
         _deviceRemoved = true;
-        _deviceErrorReason = $"{context}: HRESULT 0x{unchecked((uint)hr.Value):X8}";
-        System.Diagnostics.Debug.WriteLine($"[D3D12TextRenderer] {_deviceErrorReason}");
+        _deviceError = DeviceErrorDiagnostic.FromHResult(site, hr.Value);
+        System.Diagnostics.Debug.WriteLine($"[D3D12TextRenderer] {_deviceError}");
         return false;
     }
 
-    private void MarkDeviceRemoved(string reason)
+    private void MarkDeviceRemoved(DeviceErrorDiagnostic reason)
     {
         _deviceRemoved = true;
-        _deviceErrorReason = reason;
+        _deviceError = reason;
         System.Diagnostics.Debug.WriteLine($"[D3D12TextRenderer] {reason}");
     }
 

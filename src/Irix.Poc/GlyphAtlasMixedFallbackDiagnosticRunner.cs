@@ -73,7 +73,7 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
 
             if (d3d12Renderer.IsDeviceRemoved)
             {
-                output.WriteLine($"Device removed at frame {i}: {d3d12Renderer.DeviceErrorReason}");
+                output.WriteLine($"Device removed at frame {i}: {d3d12Renderer.DeviceError}");
                 break;
             }
         }

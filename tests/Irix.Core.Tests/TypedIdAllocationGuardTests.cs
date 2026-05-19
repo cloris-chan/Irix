@@ -1287,14 +1287,27 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
-    public void Backend_clip_text_diagnostics_wrap_device_error_text()
+    public void Backend_clip_text_diagnostics_use_platform_device_error_value()
     {
-        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+        var root = FindRepoRoot();
+        var snapshotSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+        var diagnosticSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Platform", "DeviceErrorDiagnostic.cs"));
+        var platformWindowsSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Platform.Windows"), "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
+        var pocSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Poc"), "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
 
-        Assert.Contains("internal readonly struct DeviceErrorDiagnostic", snapshotSource);
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DeviceErrorDiagnostic>());
+        Assert.Contains("internal readonly struct DeviceErrorDiagnostic", diagnosticSource);
+        Assert.Contains("DeviceErrorSite Site", diagnosticSource);
+        Assert.Contains("DeviceErrorKind Kind", diagnosticSource);
         Assert.Contains("DeviceErrorDiagnostic DeviceError", snapshotSource);
+        Assert.DoesNotContain("FromMessage", diagnosticSource);
+        Assert.DoesNotContain("FromNullable", diagnosticSource);
+        Assert.DoesNotContain("string? Message", diagnosticSource);
+        Assert.DoesNotContain("private readonly string", diagnosticSource);
         Assert.DoesNotContain("string DeviceErrorReason", snapshotSource);
         Assert.DoesNotContain("public string DeviceErrorReason", snapshotSource);
+        Assert.DoesNotContain("DeviceErrorReason", platformWindowsSource);
+        Assert.DoesNotContain("DeviceErrorReason", pocSource);
     }
 
     [Fact]

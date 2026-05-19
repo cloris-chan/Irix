@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Irix.Drawing;
+using Irix.Platform;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D;
@@ -57,7 +58,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private int _dirtyBottom;
     private bool _disposed;
     private bool _disabled;
-    private string? _deviceErrorReason;
+    private DeviceErrorDiagnostic _deviceError = DeviceErrorDiagnostic.None;
     private GlyphAtlasTextRendererDiagnostics _diagnostics;
 
     public D3D12GlyphAtlasTextRenderer(ID3D12Device* device)
@@ -95,7 +96,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     }
 
     public bool IsDisabled => _disabled;
-    public string? DeviceErrorReason => _deviceErrorReason;
+    public DeviceErrorDiagnostic DeviceError => _deviceError;
 
     public GlyphAtlasTextRendererDiagnostics GetDiagnostics()
     {
@@ -179,7 +180,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             DisableGlyphAtlasFallback(
                 GlyphAtlasFallbackReason.RecordFailed,
                 ex.Phase,
-                ex.Message,
+                DeviceErrorDiagnostic.FromException(DeviceErrorSite.GlyphAtlasRecord, ex.InnerException),
                 fallbackRunCount);
             return GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
         }
@@ -190,18 +191,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             DisableGlyphAtlasFallback(
                 GlyphAtlasFallbackReason.RecordFailed,
                 GlyphAtlasRecordFailurePhase.Record,
-                $"D3D12GlyphAtlasTextRenderer.TryRecord failed: 0x{unchecked((uint)ex.ErrorCode):X8}",
+                DeviceErrorDiagnostic.FromComException(DeviceErrorSite.GlyphAtlasRecord, ex.ErrorCode),
                 fallbackRunCount);
             return GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
             overlayFallbackRuns.Reset();
             var fallbackRunCount = GlyphAtlasTextCompositionHelpers.AppendOverlayFallbackRuns(textRuns, resources, overlayFallbackRuns);
             DisableGlyphAtlasFallback(
                 GlyphAtlasFallbackReason.RecordFailed,
                 GlyphAtlasRecordFailurePhase.Record,
-                $"D3D12GlyphAtlasTextRenderer.TryRecord failed: {ex.Message}",
+                DeviceErrorDiagnostic.FromInvalidOperation(DeviceErrorSite.GlyphAtlasRecord),
                 fallbackRunCount);
             return GlyphAtlasRecordResult.FallbackOnly(fallbackRunCount);
         }
@@ -1231,15 +1232,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private void DisableGlyphAtlasFallback(
         GlyphAtlasFallbackReason reason,
         GlyphAtlasRecordFailurePhase phase,
-        string message,
+        DeviceErrorDiagnostic diagnostic,
         int fallbackRunCount)
     {
         _disabled = true;
-        _deviceErrorReason = message;
+        _deviceError = diagnostic.IsNone ? DeviceErrorDiagnostic.FromFailure(DeviceErrorSite.GlyphAtlasRecord) : diagnostic;
         _diagnostics = _diagnostics
             .WithFallback(fallbackRunCount, reason)
             .WithRecordFailure(phase);
-        System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] {message}");
+        System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] {_deviceError}");
     }
 
     private static COMException WrapD3D12Exception(string context, COMException ex)

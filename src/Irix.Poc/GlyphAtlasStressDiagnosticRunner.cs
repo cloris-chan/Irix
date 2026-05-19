@@ -47,7 +47,7 @@ internal static class GlyphAtlasStressDiagnosticRunner
             ascii.Length,
             mixedFallback ? MixedFallbackScenarioName : StandardScenarioName,
             d3d12Renderer.IsDeviceRemoved,
-            d3d12Renderer.DeviceErrorReason,
+            d3d12Renderer.DeviceError,
             d3d12Backend.FrameSerialDiagnostics,
             d3d12Renderer.GetGlyphAtlasTextDiagnostics());
     }
@@ -80,7 +80,7 @@ internal static class GlyphAtlasStressDiagnosticRunner
         int asciiCharsPerRun,
         string scenarioName,
         bool deviceRemoved,
-        string? deviceErrorReason,
+        DeviceErrorDiagnostic deviceError,
         D3D12Renderer.FrameSerialDiagnostics frameSerialDiagnostics,
         D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? glyphAtlasDiagnostics)
     {
@@ -92,7 +92,7 @@ internal static class GlyphAtlasStressDiagnosticRunner
         output.WriteLine($"Runs: {runCount}");
         output.WriteLine($"ASCII chars per run: {asciiCharsPerRun}");
         output.WriteLine($"Device removed: {deviceRemoved}");
-        output.WriteLine($"Device error reason: {deviceErrorReason ?? "(none)"}");
+        output.WriteLine($"Device error reason: {deviceError}");
         output.WriteLine($"Frame serial: frameSerial={frameSerialDiagnostics.FrameSerial}, presentSerial={frameSerialDiagnostics.PresentSerial}, syncWaits={frameSerialDiagnostics.SyncWaitCount}");
         if (glyphAtlasDiagnostics.HasValue)
         {

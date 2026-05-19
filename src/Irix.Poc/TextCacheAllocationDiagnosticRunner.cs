@@ -129,7 +129,7 @@ internal static class TextCacheAllocationDiagnosticRunner
 
                 if (renderer.IsDeviceRemoved)
                 {
-                    output.WriteLine($"Scenario {name}: device removed at frame {i}: {renderer.DeviceErrorReason}");
+                    output.WriteLine($"Scenario {name}: device removed at frame {i}: {renderer.DeviceError}");
                     break;
                 }
             }

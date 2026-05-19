@@ -15,32 +15,6 @@ internal enum ViewportScaleMode : byte
     PhysicalPixelsV0
 }
 
-internal readonly struct DeviceErrorDiagnostic(string Message) : IEquatable<DeviceErrorDiagnostic>
-{
-    private readonly string _message = Message;
-
-    public static DeviceErrorDiagnostic None { get; } = new("(none)");
-
-    public ReadOnlySpan<char> Message => _message;
-
-    public static DeviceErrorDiagnostic FromNullable(string? message)
-    {
-        return string.IsNullOrWhiteSpace(message) ? None : new DeviceErrorDiagnostic(message);
-    }
-
-    public bool Equals(DeviceErrorDiagnostic other) => _message == other._message;
-
-    public override bool Equals(object? obj) => obj is DeviceErrorDiagnostic other && Equals(other);
-
-    public override int GetHashCode() => _message.GetHashCode();
-
-    public override string ToString() => _message;
-
-    public static bool operator ==(DeviceErrorDiagnostic left, DeviceErrorDiagnostic right) => left.Equals(right);
-
-    public static bool operator !=(DeviceErrorDiagnostic left, DeviceErrorDiagnostic right) => !left.Equals(right);
-}
-
 internal readonly struct BackendClipTextDiagnosticSnapshot(
     DrawingBackendClipMode ClipMode,
     int ClippedCommandCount,
@@ -76,7 +50,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
             backend.LastEffectiveTextClip,
             backend.TextClipSkippedCount,
             renderer.IsDeviceRemoved,
-            DeviceErrorDiagnostic.FromNullable(renderer.DeviceErrorReason));
+            renderer.DeviceError);
     }
 
     public bool Equals(BackendClipTextDiagnosticSnapshot other)

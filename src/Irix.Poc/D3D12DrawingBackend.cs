@@ -319,7 +319,8 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         _frameContext = new FrameContext(frameContext.Width, frameContext.Height, frameContext.Scale.Normalize(), frameContext.Timestamp);
         if (!_renderer.BeginFrame())
         {
-            throw new InvalidOperationException($"D3D12 begin frame failed: {_renderer.DeviceErrorReason ?? "unknown device error"}");
+            var deviceError = _renderer.DeviceError;
+            throw new InvalidOperationException($"D3D12 begin frame failed: {(deviceError.IsNone ? "unknown device error" : deviceError.ToString())}");
         }
 
         _rects.Reset();
