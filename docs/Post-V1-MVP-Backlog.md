@@ -38,7 +38,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
 | POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with expanded mixed fallback and mixed AtlasFull smoke | Post-GA; `GlyphAtlas` is default for the D3D12 PoC path; `Overlay` remains rollback/fallback while the non-overlay replacement is built; narrow ASCII/NoWrap runs have local evidence |
-| POST-011 | Resource cache / stable global handles | Active next step | D3D12-specific; align with glyph atlas resource ownership and overlay-removal work |
+| POST-011 | Resource cache / stable global handles | First glyph-atlas entry-handle pass done | D3D12-specific; align with glyph atlas resource ownership and overlay-removal work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
 
@@ -151,6 +151,7 @@ Known limitations checklist before expanding text coverage:
 - Mixed fallback v0 sends unsupported renderable runs to overlay while accepted ASCII / `NoWrap` runs stay on atlas. Initialization and runtime record failure still fall back all renderable runs for the frame.
 - Mixed fallback v0 does not preserve exact relative z-order between overlapping atlas text and overlay fallback text; overlay fallback runs draw above atlas runs.
 - No atlas eviction. Mixed AtlasFull fallback is safe for the current prototype; eviction design remains deferred.
+- Glyph atlas cache entries now have stable value handles and generations internally; eviction is still deferred, but the cache no longer exposes raw entry storage as the lookup identity.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
 - Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.
 - Overlay removal gate is drafted in `Glyph-Atlas-Post-GA-Design.md`; do not delete D3D11On12/D2D until unsupported text cases, AtlasFull/eviction, z-order, diagnostics, and rollback coverage no longer depend on it.

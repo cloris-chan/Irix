@@ -47,7 +47,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly Vertex[] _vertices = new Vertex[MaxGlyphVertices];
     private readonly GlyphDrawBatch[] _batches = new GlyphDrawBatch[MaxGlyphDrawBatches];
     private readonly Dictionary<FontFaceKey, CachedFontFace> _fontFaces = [];
-    private readonly Dictionary<GlyphKey, GlyphEntry> _glyphs = [];
+    private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs = [];
+    private readonly List<GlyphEntry> _glyphEntries = new(512);
     private int _nextX = AtlasPadding;
     private int _nextY = AtlasPadding;
     private int _rowHeight;
@@ -101,14 +102,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     public GlyphAtlasTextRendererDiagnostics GetDiagnostics()
     {
         return _diagnostics
-            .WithCachedGlyphs(_glyphs.Count)
+            .WithCachedGlyphs(_glyphEntries.Count)
             .WithRasterScratch(_clearTypeScratch.Length + _grayscaleScratch.Length, _rasterScratchResizeCount);
     }
 
     public void ResetDiagnostics()
     {
         _diagnostics = new GlyphAtlasTextRendererDiagnostics(
-            _glyphs.Count,
+            _glyphEntries.Count,
             UploadedBytes: 0,
             DrawnGlyphs: 0,
             CacheHits: 0,
@@ -431,7 +432,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         unsupportedReason = GlyphAtlasFallbackReason.None;
         var key = new GlyphKey(fontFace.Key, character);
-        if (_glyphs.TryGetValue(key, out glyph))
+        if (_glyphs.TryGetValue(key, out var handle) && TryResolveGlyph(handle, out glyph))
         {
             _diagnostics = _diagnostics.WithCacheHit();
             return true;
@@ -443,9 +444,29 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        _glyphs.Add(key, glyph);
-        _diagnostics = _diagnostics.WithCachedGlyphs(_glyphs.Count);
+        handle = AddGlyphEntry(glyph);
+        _glyphs[key] = handle;
+        _diagnostics = _diagnostics.WithCachedGlyphs(_glyphEntries.Count);
         return true;
+    }
+
+    private GlyphAtlasEntryHandle AddGlyphEntry(in GlyphEntry entry)
+    {
+        var handle = new GlyphAtlasEntryHandle(_glyphEntries.Count, 1);
+        _glyphEntries.Add(entry.WithGeneration(handle.Generation));
+        return handle;
+    }
+
+    private bool TryResolveGlyph(GlyphAtlasEntryHandle handle, out GlyphEntry entry)
+    {
+        if (handle.IsNone || (uint)handle.Index >= (uint)_glyphEntries.Count)
+        {
+            entry = default;
+            return false;
+        }
+
+        entry = _glyphEntries[handle.Index];
+        return entry.Generation == handle.Generation;
     }
 
     private bool RasterizeGlyph(
@@ -1576,6 +1597,23 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public override int GetHashCode() => HashCode.Combine(FontFace, Character);
     }
 
+    private readonly struct GlyphAtlasEntryHandle(int Index, int Generation) : IEquatable<GlyphAtlasEntryHandle>
+    {
+        public int Index { get; } = Index;
+        public int Generation { get; } = Generation;
+        public bool IsNone => Generation == 0;
+
+        public bool Equals(GlyphAtlasEntryHandle other) => Index == other.Index && Generation == other.Generation;
+
+        public override bool Equals(object? obj) => obj is GlyphAtlasEntryHandle other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Index, Generation);
+
+        public static bool operator ==(GlyphAtlasEntryHandle left, GlyphAtlasEntryHandle right) => left.Equals(right);
+
+        public static bool operator !=(GlyphAtlasEntryHandle left, GlyphAtlasEntryHandle right) => !left.Equals(right);
+    }
+
     private readonly struct GlyphEntry(
         float Width,
         float Height,
@@ -1585,7 +1623,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         float U1,
         float V1,
         float U2,
-        float V2)
+        float V2,
+        int Generation = 0)
     {
         public float Width { get; } = Width;
         public float Height { get; } = Height;
@@ -1596,6 +1635,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public float V1 { get; } = V1;
         public float U2 { get; } = U2;
         public float V2 { get; } = V2;
+        public int Generation { get; } = Generation;
+
+        public GlyphEntry WithGeneration(int generation) => new(Width, Height, OffsetX, OffsetY, Advance, U1, V1, U2, V2, generation);
     }
 
     public readonly struct GlyphAtlasTextRendererDiagnostics(

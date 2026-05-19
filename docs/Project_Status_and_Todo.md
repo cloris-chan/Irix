@@ -35,6 +35,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Shader packaging | D3D12 rectangle and glyph-atlas passes use embedded DXBC bytecode. Runtime `D3DCompile` / `d3dcompiler_47.dll` is no longer required by renderer source. |
 | Resource lifetime | D3D12 upload maps, swapchain intermediates, and overlay wrapping intermediates release through `finally`. Core device/queue/RTV/command/fence setup is shared by constructor and recovery with pointer guards and constructor-failure cleanup. |
+| Resource cache handles | POST-011 first slice done: glyph atlas cache lookup uses stable value handles with generations instead of exposing cached glyph entries directly. Eviction is still deferred. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. Device error diagnostics use typed `DeviceErrorDiagnostic`; text formatting stays at CLI/debug/report output boundaries. |
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
@@ -233,7 +234,7 @@ Source guards currently block:
 | Priority | Work | Boundary |
 |----------|------|----------|
 | P0 | Renderer foundation hardening | GlyphAtlas + Scissor default baseline enabled; do not flip another default. Continue resource lifetime hardening from the embedded-shader baseline. |
-| P1 | Resource cache / stable global handles | Start POST-011 in the D3D12 renderer line so glyph atlas resources can survive frames and move toward non-overlay fallback handling. |
+| P1 | Resource cache / stable global handles | Continue POST-011 from glyph atlas entry handles toward atlas page/eviction handles and non-overlay fallback handling. |
 | P1 | Shader packaging follow-up | Runtime shader compile is removed. Decide later whether inline embedded DXBC is enough or a build-time shader asset pipeline is worth adding. |
 | P1 | Attribute warm glyph atlas allocation | Run `--diagnose-text-cache` and use tree/diff/translate/render attribution before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |

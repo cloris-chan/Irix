@@ -240,6 +240,23 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_cache_uses_stable_entry_handles()
+    {
+        var root = FindRepoRoot();
+        var glyphSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs")));
+
+        Assert.Contains("private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs", glyphSource);
+        Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
+        Assert.Contains("private readonly struct GlyphAtlasEntryHandle(int Index, int Generation)", glyphSource);
+        Assert.Contains("private GlyphAtlasEntryHandle AddGlyphEntry(in GlyphEntry entry)", glyphSource);
+        Assert.Contains("private bool TryResolveGlyph(GlyphAtlasEntryHandle handle, out GlyphEntry entry)", glyphSource);
+        Assert.Contains("entry.Generation == handle.Generation", glyphSource);
+        Assert.Contains("_glyphs[key] = handle;", glyphSource);
+        Assert.DoesNotContain("Dictionary<GlyphKey, GlyphEntry> _glyphs", glyphSource);
+        Assert.DoesNotContain("_glyphs.Add(key, glyph)", glyphSource);
+    }
+
+    [Fact]
     public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
