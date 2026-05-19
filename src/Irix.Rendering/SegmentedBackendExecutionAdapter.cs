@@ -9,16 +9,35 @@ internal enum SegmentedBackendExecutionStrategy : byte
     ResourceRebase
 }
 
+internal enum SegmentedBackendExecutionRationale : byte
+{
+    SmallestShapeThatPreservesCurrentLocalResourceHandles
+}
+
+internal enum SegmentedBackendExecutionContractImpact : byte
+{
+    ExistingIDrawingBackendExecuteSignatureRemainsUnchanged
+}
+
+[Flags]
+internal enum SegmentedBackendExecutionBlockedAlternative : byte
+{
+    None = 0,
+    CompositeResolverNeedsSegmentMetadata = 1 << 0,
+    ResourceRebaseNeedsTextStyleCopyingAndCommandRewriting = 1 << 1,
+    StableGlobalHandlesRemainDeferred = 1 << 2
+}
+
 internal readonly struct SegmentedBackendExecutionAdapterDecision(
     SegmentedBackendExecutionStrategy PreferredStrategy,
-    string Rationale,
-    string BackendContractImpact,
-    string BlockedAlternatives) : IEquatable<SegmentedBackendExecutionAdapterDecision>
+    SegmentedBackendExecutionRationale Rationale,
+    SegmentedBackendExecutionContractImpact BackendContractImpact,
+    SegmentedBackendExecutionBlockedAlternative BlockedAlternatives) : IEquatable<SegmentedBackendExecutionAdapterDecision>
 {
     public SegmentedBackendExecutionStrategy PreferredStrategy { get; } = PreferredStrategy;
-    public string Rationale { get; } = Rationale;
-    public string BackendContractImpact { get; } = BackendContractImpact;
-    public string BlockedAlternatives { get; } = BlockedAlternatives;
+    public SegmentedBackendExecutionRationale Rationale { get; } = Rationale;
+    public SegmentedBackendExecutionContractImpact BackendContractImpact { get; } = BackendContractImpact;
+    public SegmentedBackendExecutionBlockedAlternative BlockedAlternatives { get; } = BlockedAlternatives;
 
     public bool Equals(SegmentedBackendExecutionAdapterDecision other)
     {
@@ -41,9 +60,11 @@ internal static class SegmentedBackendExecutionAdapterDesign
 {
     public static SegmentedBackendExecutionAdapterDecision Preferred { get; } = new(
         SegmentedBackendExecutionStrategy.PerSegmentExecute,
-        "Execute each retained resource segment with its owning resolver; this is the smallest shape that preserves current local resource handles.",
-        "No IDrawingBackend.Execute signature change; an adapter would call the existing Execute once per contiguous resource segment.",
-        "Composite resolver cannot identify a command's resource owner without segment metadata; resource rebase requires text/style copying and command rewriting; stable global handles remain postponed.");
+        SegmentedBackendExecutionRationale.SmallestShapeThatPreservesCurrentLocalResourceHandles,
+        SegmentedBackendExecutionContractImpact.ExistingIDrawingBackendExecuteSignatureRemainsUnchanged,
+        SegmentedBackendExecutionBlockedAlternative.CompositeResolverNeedsSegmentMetadata
+        | SegmentedBackendExecutionBlockedAlternative.ResourceRebaseNeedsTextStyleCopyingAndCommandRewriting
+        | SegmentedBackendExecutionBlockedAlternative.StableGlobalHandlesRemainDeferred);
 }
 
 internal sealed class SegmentedBackendExecutionAdapter(IDrawingBackend backend)

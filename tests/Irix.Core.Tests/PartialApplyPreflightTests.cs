@@ -3041,8 +3041,17 @@ public sealed class PartialApplyPreflightTests
             ]);
 
         Assert.Equal(SegmentedBackendExecutionStrategy.PerSegmentExecute, decision.PreferredStrategy);
-        Assert.Contains("No IDrawingBackend.Execute signature change", decision.BackendContractImpact);
-        Assert.Contains("stable global handles remain postponed", decision.BlockedAlternatives);
+        Assert.Equal(
+            SegmentedBackendExecutionRationale.SmallestShapeThatPreservesCurrentLocalResourceHandles,
+            decision.Rationale);
+        Assert.Equal(
+            SegmentedBackendExecutionContractImpact.ExistingIDrawingBackendExecuteSignatureRemainsUnchanged,
+            decision.BackendContractImpact);
+        Assert.Equal(
+            SegmentedBackendExecutionBlockedAlternative.CompositeResolverNeedsSegmentMetadata
+                | SegmentedBackendExecutionBlockedAlternative.ResourceRebaseNeedsTextStyleCopyingAndCommandRewriting
+                | SegmentedBackendExecutionBlockedAlternative.StableGlobalHandlesRemainDeferred,
+            decision.BlockedAlternatives);
         Assert.Equal(1, backend.BeginFrameCount);
         Assert.Equal(1, backend.EndFrameCount);
         Assert.Collection(backend.ExecuteCalls,
