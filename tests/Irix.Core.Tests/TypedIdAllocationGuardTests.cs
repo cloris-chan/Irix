@@ -669,6 +669,26 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Framework_internal_hot_path_sources_do_not_define_string_state_members()
+    {
+        var root = FindRepoRoot();
+        var sourceDirs = new[]
+        {
+            Path.Combine(root, "src", "Irix.Core"),
+            Path.Combine(root, "src", "Irix.Drawing"),
+            Path.Combine(root, "src", "Irix.Rendering")
+        };
+
+        foreach (var file in sourceDirs.SelectMany(dir => Directory.GetFiles(dir, "*.cs", SearchOption.AllDirectories)))
+        {
+            foreach (var line in File.ReadLines(file))
+            {
+                Assert.DoesNotMatch(StringStateMemberPattern(), line);
+            }
+        }
+    }
+
+    [Fact]
     public void Poc_record_structs_are_limited_to_mvu_authoring_state_files()
     {
         var pocDir = Path.Combine(FindRepoRoot(), "src", "Irix.Poc");
@@ -1346,6 +1366,8 @@ public class TypedIdAllocationGuardTests
     }
 
     private static string RecordStructPattern() => @"\b(?:readonly\s+record\s+struct|record\s+readonly\s+struct|record\s+struct)\b";
+
+    private static string StringStateMemberPattern() => @"^\s*(?:public|internal|protected|private)\s+(?:static\s+)?(?:(?:readonly|const)\s+)?string\??\s+[A-Za-z_][A-Za-z0-9_]*\s*(?:\{|[=;]|=>)";
 
     private static string FindRepoRoot()
     {
