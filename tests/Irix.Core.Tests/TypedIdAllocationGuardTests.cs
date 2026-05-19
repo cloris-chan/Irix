@@ -1192,6 +1192,17 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void CounterLayoutDiagnostics_uses_typed_dirty_classifications()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
+
+        Assert.Contains("internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiagnostics>", source);
+        Assert.Contains("IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications", source);
+        Assert.DoesNotContain("string LastDirtyClassifications", source);
+        Assert.DoesNotContain("new CounterLayoutDiagnostics(long LayoutRebuildCount, LayoutRebuildReason LastLayoutRebuildReason, string LastDirtyClassifications)", source);
+    }
+
+    [Fact]
     public void Irix_Drawing_TextStyle_uses_value_font_family()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));

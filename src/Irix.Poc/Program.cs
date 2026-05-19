@@ -321,7 +321,7 @@ internal static class Program
 
     private static CounterLayoutDiagnostics CreateLayoutDiagnostics(WindowDrawCommandTranslator translator)
     {
-        return new CounterLayoutDiagnostics(translator.LayoutRebuildCount, translator.LastLayoutRebuildReason, DiagnosticsFormatter.FormatLayoutDirtyClassifications(translator.LastDirtyClassifications));
+        return new CounterLayoutDiagnostics(translator.LayoutRebuildCount, translator.LastLayoutRebuildReason, translator.LastDirtyClassifications);
     }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)

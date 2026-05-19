@@ -1,4 +1,5 @@
 using Irix.Platform;
+using Irix.Rendering;
 
 namespace Irix.Poc;
 
@@ -36,7 +37,7 @@ internal static class DebugDiagnosticsFormatter
     internal static string FormatLayoutDirtyDiagnosticRow(DebugUiDiagnosticsSnapshot snapshot)
     {
         var layout = snapshot.Layout;
-        return $"LayoutDirty: layoutRebuildCount={layout.LayoutRebuildCount} LastLayoutRebuildReason={layout.LastLayoutRebuildReason} LastDirtyClassifications={layout.LastDirtyClassifications}";
+        return $"LayoutDirty: layoutRebuildCount={layout.LayoutRebuildCount} LastLayoutRebuildReason={layout.LastLayoutRebuildReason} LastDirtyClassifications={FormatLayoutDirtyClassificationSummary(layout.LastDirtyClassifications)}";
     }
 
     private static string FormatTarget(ActionId target)
@@ -47,5 +48,22 @@ internal static class DebugDiagnosticsFormatter
     private static string FormatSize(PixelRectangle rectangle)
     {
         return $"{rectangle.Width}x{rectangle.Height}";
+    }
+
+    private static string FormatLayoutDirtyClassificationSummary(IReadOnlyList<LayoutDirtyClassification> classifications)
+    {
+        if (classifications.Count == 0)
+        {
+            return "(none)";
+        }
+
+        var parts = new string[classifications.Count];
+        for (var i = 0; i < classifications.Count; i++)
+        {
+            var classification = classifications[i];
+            parts[i] = $"{classification.DfsIndex}:{classification.Reason}";
+        }
+
+        return string.Join(",", parts);
     }
 }

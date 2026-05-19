@@ -11,9 +11,78 @@ internal readonly record struct CounterViewportDiagnostics(
     DisplayScale Scale = default,
     PixelRectangle LogicalViewport = default);
 
-internal readonly record struct CounterLayoutDiagnostics(long LayoutRebuildCount, LayoutRebuildReason LastLayoutRebuildReason, string LastDirtyClassifications)
+internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiagnostics>
 {
-    public static CounterLayoutDiagnostics Empty => new(0, LayoutRebuildReason.None, "(none)");
+    public CounterLayoutDiagnostics(
+        long layoutRebuildCount,
+        LayoutRebuildReason lastLayoutRebuildReason,
+        IReadOnlyList<LayoutDirtyClassification> lastDirtyClassifications)
+    {
+        LayoutRebuildCount = layoutRebuildCount;
+        LastLayoutRebuildReason = lastLayoutRebuildReason;
+        LastDirtyClassifications = lastDirtyClassifications.Count == 0 ? [] : lastDirtyClassifications.ToArray();
+    }
+
+    public long LayoutRebuildCount { get; }
+    public LayoutRebuildReason LastLayoutRebuildReason { get; }
+    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; }
+
+    public static CounterLayoutDiagnostics Empty => new(0, LayoutRebuildReason.None, []);
+
+    public bool Equals(CounterLayoutDiagnostics other)
+    {
+        return LayoutRebuildCount == other.LayoutRebuildCount
+            && LastLayoutRebuildReason == other.LastLayoutRebuildReason
+            && LayoutDirtyClassificationsEqual(LastDirtyClassifications, other.LastDirtyClassifications);
+    }
+
+    public override bool Equals(object? obj) => obj is CounterLayoutDiagnostics other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(LayoutRebuildCount);
+        hash.Add(LastLayoutRebuildReason);
+        AddLayoutDirtyClassificationsHash(ref hash, LastDirtyClassifications);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(CounterLayoutDiagnostics left, CounterLayoutDiagnostics right) => left.Equals(right);
+
+    public static bool operator !=(CounterLayoutDiagnostics left, CounterLayoutDiagnostics right) => !left.Equals(right);
+
+    private static bool LayoutDirtyClassificationsEqual(
+        IReadOnlyList<LayoutDirtyClassification> left,
+        IReadOnlyList<LayoutDirtyClassification> right)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return true;
+        }
+
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void AddLayoutDirtyClassificationsHash(ref HashCode hash, IReadOnlyList<LayoutDirtyClassification> classifications)
+    {
+        for (var i = 0; i < classifications.Count; i++)
+        {
+            hash.Add(classifications[i]);
+        }
+    }
 }
 
 internal sealed record CounterModel(int Count, ScrollState Scroll, OwnershipSnapshot InputOwnership, CounterViewportDiagnostics ViewportDiagnostics, CounterLayoutDiagnostics LayoutDiagnostics);

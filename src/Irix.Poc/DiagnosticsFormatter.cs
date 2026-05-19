@@ -161,7 +161,14 @@ internal static class DiagnosticsFormatter
             return "(none)";
         }
 
-        return string.Join(",", classifications.Select(classification => $"{classification.DfsIndex}:{classification.Reason}/{classification.InvalidationKind}"));
+        var parts = new string[classifications.Count];
+        for (var i = 0; i < classifications.Count; i++)
+        {
+            var classification = classifications[i];
+            parts[i] = $"{classification.DfsIndex}:{classification.Reason}/{classification.InvalidationKind}";
+        }
+
+        return string.Join(",", parts);
     }
 
     internal static string FormatOwnership(OwnershipSnapshot snapshot)

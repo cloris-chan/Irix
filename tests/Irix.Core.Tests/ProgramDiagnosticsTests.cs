@@ -1108,7 +1108,7 @@ public sealed class ProgramDiagnosticsTests
             new PixelRectangle(0, 0, 929, 454),
             new PixelRectangle(0, 0, 929, 454),
             "PhysicalPixelsV0");
-        var layout = new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly");
+        var layout = new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]);
         var input = new OwnershipSnapshot(
             HoveredTarget: new ActionId(1),
             FocusedTarget: new ActionId(1),
@@ -1158,7 +1158,7 @@ public sealed class ProgramDiagnosticsTests
                 new PixelRectangle(0, 0, 929, 454),
                 new PixelRectangle(0, 0, 929, 454),
                 "PhysicalPixelsV0"),
-            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"),
+            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]),
             new ScrollDiagnosticsSnapshot(
                 DispatchedFrameCount: 2,
                 RenderWaitMs: 12.25,
@@ -1201,7 +1201,7 @@ public sealed class ProgramDiagnosticsTests
                 new PixelRectangle(0, 0, 929, 454),
                 new PixelRectangle(0, 0, 929, 454),
                 "PhysicalPixelsV0"),
-            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"),
+            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]),
             ScrollState.Default,
             default);
 
@@ -1219,7 +1219,7 @@ public sealed class ProgramDiagnosticsTests
                 new PixelRectangle(0, 0, 929, 454),
                 new PixelRectangle(0, 0, 929, 454),
                 "PhysicalPixelsV0"),
-            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, "0:LayoutAffecting,3:StyleOnly"));
+            new CounterLayoutDiagnostics(12, LayoutRebuildReason.LayoutAffecting, [new LayoutDirtyClassification(0, LayoutRebuildReason.LayoutAffecting), new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly)]));
         var input = new OwnershipSnapshot(
             HoveredTarget: new ActionId(1),
             FocusedTarget: new ActionId(1),
