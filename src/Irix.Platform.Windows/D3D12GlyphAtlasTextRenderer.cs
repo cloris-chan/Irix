@@ -390,10 +390,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         try
         {
-            _fontCollection->FindFamilyName(style.FontFamily, out var familyIndex, out var exists);
+            _fontCollection->FindFamilyName(ToDirectWriteFontFamily(style.FontFamily), out var familyIndex, out var exists);
             if (!exists)
             {
-                _fontCollection->FindFamilyName(TextStyle.Default.FontFamily, out familyIndex, out exists);
+                _fontCollection->FindFamilyName(ToDirectWriteFontFamily(TextStyle.Default.FontFamily), out familyIndex, out exists);
                 if (!exists)
                 {
                     return false;
@@ -1295,6 +1295,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return DWRITE_FONT_STRETCH.DWRITE_FONT_STRETCH_NORMAL;
     }
 
+    private static string ToDirectWriteFontFamily(TextFontFamily fontFamily)
+    {
+        return fontFamily switch
+        {
+            TextFontFamily.SegoeUi => "Segoe UI",
+            _ => "Segoe UI"
+        };
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -1525,9 +1534,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    private readonly struct FontFaceKey(string Family, TextFontWeight Weight, TextFontStyle Style, TextFontStretch Stretch, float EmSize) : IEquatable<FontFaceKey>
+    private readonly struct FontFaceKey(TextFontFamily Family, TextFontWeight Weight, TextFontStyle Style, TextFontStretch Stretch, float EmSize) : IEquatable<FontFaceKey>
     {
-        public string Family { get; } = Family;
+        public TextFontFamily Family { get; } = Family;
         public TextFontWeight Weight { get; } = Weight;
         public TextFontStyle Style { get; } = Style;
         public TextFontStretch Stretch { get; } = Stretch;

@@ -434,7 +434,7 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
 
         IDWriteTextFormat* createdFormat;
         _dwriteFactory->CreateTextFormat(
-            style.FontFamily,
+            ToDirectWriteFontFamily(style.FontFamily),
             null,
             ToDirectWriteFontWeight(style.FontWeight),
             ToDirectWriteFontStyle(style.FontStyle),
@@ -541,6 +541,15 @@ internal sealed unsafe class D3D12TextRenderer : IDisposable
     private static DWRITE_FONT_STRETCH ToDirectWriteFontStretch(TextFontStretch fontStretch)
     {
         return DWRITE_FONT_STRETCH.DWRITE_FONT_STRETCH_NORMAL;
+    }
+
+    private static string ToDirectWriteFontFamily(TextFontFamily fontFamily)
+    {
+        return fontFamily switch
+        {
+            TextFontFamily.SegoeUi => "Segoe UI",
+            _ => "Segoe UI"
+        };
     }
 
     private static DWRITE_TEXT_ALIGNMENT ToDirectWriteTextAlignment(TextHorizontalAlignment alignment)

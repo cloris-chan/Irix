@@ -203,7 +203,7 @@ public class DisplayScaleTests
         var scale = new DisplayScale(scaleValue, scaleValue);
 
         using var resources = FrameDrawingResources.Rent();
-        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var style = new TextStyle(TextFontFamily.SegoeUi, 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
         var handle = resources.AddTextStyle(style);
         var text = resources.AddText("Hello");
         resources.Seal();
@@ -296,9 +296,9 @@ public class DisplayScaleTests
         var scale = new DisplayScale(scaleValue, scaleValue);
 
         using var resources = FrameDrawingResources.Rent();
-        var headingStyle = new TextStyle("Segoe UI", 24f, TextFontWeight.Bold, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
-        var bodyStyle = new TextStyle("Segoe UI", 14f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Top, TextWrapping.Wrap);
-        var buttonStyle = new TextStyle("Segoe UI", 16f, TextFontWeight.SemiBold, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Center, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var headingStyle = new TextStyle(TextFontFamily.SegoeUi, 24f, TextFontWeight.Bold, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var bodyStyle = new TextStyle(TextFontFamily.SegoeUi, 14f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Top, TextWrapping.Wrap);
+        var buttonStyle = new TextStyle(TextFontFamily.SegoeUi, 16f, TextFontWeight.SemiBold, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Center, TextVerticalAlignment.Center, TextWrapping.NoWrap);
 
         var headingHandle = resources.AddTextStyle(headingStyle);
         var bodyHandle = resources.AddTextStyle(bodyStyle);
@@ -320,7 +320,7 @@ public class DisplayScaleTests
     [Fact]
     public void D3D12_text_style_uses_y_scale_for_asymmetric_display_scale()
     {
-        var style = new TextStyle("Segoe UI", 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
+        var style = new TextStyle(TextFontFamily.SegoeUi, 16f, TextFontWeight.Normal, TextFontStyle.Normal, TextFontStretch.Normal, TextHorizontalAlignment.Leading, TextVerticalAlignment.Center, TextWrapping.NoWrap);
         var scaled = D3D12DrawingBackend.ScaleTextStyleToPhysicalPixels(style, new DisplayScale(1.5f, 2.0f));
 
         Assert.Equal(32f, scaled.FontSize);

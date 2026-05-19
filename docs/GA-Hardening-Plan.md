@@ -116,7 +116,7 @@ The render hot path (`RenderPipeline.Build`, `DrawCommandRecorder`, `DrawingBack
 |------|--------|--------|
 | DrawCommand text content | Compliant | `TextSlice` over frame-local pooled `char[]` arena; zero string allocation |
 | VirtualNode text content | Compliant | `TextNodeContent` indexes `VirtualTextArena`; layout/draw resolves through `TextBufferSnapshot.ResolveRequired` |
-| TextStyle.FontFamily | Compliant | String flows through but is not allocated per frame; set once at style creation |
+| TextStyle.FontFamily | Compliant | `TextFontFamily` is a value enum in `Irix.Drawing`; Windows backends map it to DirectWrite family names only at the native API boundary |
 | Layout rebuild reason | Compliant | `LayoutRebuildReason` is already a `byte` enum |
 | Dirty classification | Compliant | Property changes accumulate `PropertyChangeSet` and classify through `StyleEffect` / `InvalidationKind`; no string property-name set |
 | Property name lookup | Compliant | `VirtualPropertyKey` is a pure value key; public keys come from static readonly fields and metadata |
@@ -124,7 +124,7 @@ The render hot path (`RenderPipeline.Build`, `DrawCommandRecorder`, `DrawingBack
 | Style/property string values | Compliant by exclusion | No public `FontFamily` string property, no `PropertyValue.Text`, no string hex color path |
 | Diagnostics output | Exempt | Diagnostic strings are not on the per-frame render path |
 
-Source guards cover primitive `ActionId.ToString()`, primitive `VirtualPropertyKey.ToString()`, missing property metadata, key/value mismatches, global layout key reintroduction, and style string value factories. Future allocation work should measure and tighten baselines without reopening string style keys.
+Source guards cover primitive `ActionId.ToString()`, primitive `VirtualPropertyKey.ToString()`, missing property metadata, key/value mismatches, global layout key reintroduction, `TextStyle` managed-reference regressions, and style string value factories. Future allocation work should measure and tighten baselines without reopening string style keys.
 
 ---
 

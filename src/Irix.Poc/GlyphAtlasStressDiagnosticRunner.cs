@@ -145,7 +145,7 @@ internal static class GlyphAtlasStressDiagnosticRunner
         DrawColor color)
     {
         var style = new TextStyle(
-            "Segoe UI",
+            TextFontFamily.SegoeUi,
             fontSize,
             fontWeight,
             fontStyle,

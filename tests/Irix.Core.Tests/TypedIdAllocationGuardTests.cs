@@ -230,6 +230,12 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void TextStyle_has_no_managed_references()
+    {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<TextStyle>());
+    }
+
+    [Fact]
     public void VirtualPropertyKey_does_not_define_primitive_ToString_formatter()
     {
         var toString = typeof(VirtualPropertyKey).GetMethod(nameof(ToString), Type.EmptyTypes);
@@ -1147,6 +1153,20 @@ public class TypedIdAllocationGuardTests
             Assert.DoesNotContain("string? Text", content);
             Assert.DoesNotContain("string Text", content);
         }
+    }
+
+    [Fact]
+    public void Irix_Drawing_TextStyle_uses_value_font_family()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));
+
+        Assert.Contains("public enum TextFontFamily : byte", source);
+        Assert.Contains("TextFontFamily FontFamily", source);
+        Assert.Contains("public TextFontFamily FontFamily", source);
+        Assert.DoesNotContain("string FontFamily", source);
+        Assert.DoesNotContain("public string FontFamily", source);
+        Assert.DoesNotContain("string.IsNullOrWhiteSpace(FontFamily)", source);
+        Assert.DoesNotContain("FontFamily: \"", source);
     }
 
     // ── Allocation baseline: layout + record hot path ────────────

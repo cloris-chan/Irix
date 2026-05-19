@@ -43,6 +43,12 @@ public enum TextFontStretch : byte
     Normal
 }
 
+public enum TextFontFamily : byte
+{
+    Default,
+    SegoeUi
+}
+
 public enum TextHorizontalAlignment : byte
 {
     Leading,
@@ -64,7 +70,7 @@ public enum TextWrapping : byte
 }
 
 public readonly struct TextStyle(
-    string FontFamily,
+    TextFontFamily FontFamily,
     float FontSize,
     TextFontWeight FontWeight,
     TextFontStyle FontStyle,
@@ -74,7 +80,7 @@ public readonly struct TextStyle(
     TextWrapping Wrapping) : IEquatable<TextStyle>
 {
 
-    public string FontFamily { get; } = FontFamily;
+    public TextFontFamily FontFamily { get; } = FontFamily;
     public float FontSize { get; } = FontSize;
     public TextFontWeight FontWeight { get; } = FontWeight;
     public TextFontStyle FontStyle { get; } = FontStyle;
@@ -84,7 +90,7 @@ public readonly struct TextStyle(
     public TextWrapping Wrapping { get; } = Wrapping;
 
     public static TextStyle Default => new(
-        FontFamily: "Segoe UI",
+        FontFamily: TextFontFamily.SegoeUi,
         FontSize: 16,
         FontWeight: TextFontWeight.Normal,
         FontStyle: TextFontStyle.Normal,
@@ -97,7 +103,7 @@ public readonly struct TextStyle(
     {
         var defaultStyle = Default;
         return new TextStyle(
-            string.IsNullOrWhiteSpace(FontFamily) ? defaultStyle.FontFamily : FontFamily,
+            FontFamily == TextFontFamily.Default ? defaultStyle.FontFamily : FontFamily,
             FontSize > 0 && float.IsFinite(FontSize) ? FontSize : defaultStyle.FontSize,
             FontWeight,
             FontStyle,
