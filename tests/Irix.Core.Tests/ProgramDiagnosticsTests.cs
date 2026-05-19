@@ -177,6 +177,19 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void D3D12_swapchain_intermediate_com_objects_release_in_finally()
+    {
+        var root = FindRepoRoot();
+        var rendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer.cs")));
+
+        Assert.Equal(1, CountOccurrences(rendererSource, "factory->CreateSwapChainForHwnd("));
+        Assert.Equal(1, CountOccurrences(rendererSource, "sc1->QueryInterface(typeof(IDXGISwapChain3).GUID"));
+        Assert.Contains("IDXGIFactory4* factory = null;", rendererSource);
+        Assert.Contains("IDXGISwapChain1* sc1 = null;", rendererSource);
+        Assert.Contains("finally\n        {\n            if (sc1 != null) sc1->Release();\n            if (factory != null) factory->Release();\n        }", rendererSource);
+    }
+
+    [Fact]
     public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(

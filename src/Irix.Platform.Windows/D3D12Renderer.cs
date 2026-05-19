@@ -89,10 +89,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             }
         }
 
-        // DXGI factory
-        PInvoke.CreateDXGIFactory1(typeof(IDXGIFactory4).GUID, out var factoryObj);
-        var factory = (IDXGIFactory4*)factoryObj;
-
         // D3D12 device
         PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj);
         _device = (ID3D12Device*)deviceObj;
@@ -102,24 +98,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _device->CreateCommandQueue(qd, typeof(ID3D12CommandQueue).GUID, out var queueObj);
         _queue = (ID3D12CommandQueue*)queueObj;
 
-        // Swap chain
-        var sd = new DXGI_SWAP_CHAIN_DESC1
-        {
-            Width = (uint)width,
-            Height = (uint)height,
-            Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
-            BufferUsage = DXGI_USAGE.DXGI_USAGE_RENDER_TARGET_OUTPUT,
-            BufferCount = FrameCount,
-            Scaling = DXGI_SCALING.DXGI_SCALING_NONE,
-            SwapEffect = DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD
-        };
-        IDXGISwapChain1* sc1;
-        factory->CreateSwapChainForHwnd((global::Windows.Win32.System.Com.IUnknown*)_queue, new HWND(hwnd), &sd, null, null, &sc1);
-        sc1->QueryInterface(typeof(IDXGISwapChain3).GUID, out var sc3Obj);
-        _swapChain = (IDXGISwapChain3*)sc3Obj;
-        sc1->Release();
-        factory->Release();
+        _swapChain = CreateSwapChain(hwnd, width, height);
 
         // RTV heap
         var hd = new D3D12_DESCRIPTOR_HEAP_DESC
@@ -629,6 +608,50 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         };
     }
 
+    private IDXGISwapChain3* CreateSwapChain(nint hwnd, int width, int height)
+    {
+        IDXGIFactory4* factory = null;
+        IDXGISwapChain1* sc1 = null;
+        try
+        {
+            PInvoke.CreateDXGIFactory1(typeof(IDXGIFactory4).GUID, out var factoryObj).ThrowOnFailure();
+            factory = (IDXGIFactory4*)RequirePointer(factoryObj, "D3D12Renderer.CreateDXGIFactory1 returned a null factory.");
+
+            var sd = new DXGI_SWAP_CHAIN_DESC1
+            {
+                Width = (uint)width,
+                Height = (uint)height,
+                Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
+                SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
+                BufferUsage = DXGI_USAGE.DXGI_USAGE_RENDER_TARGET_OUTPUT,
+                BufferCount = FrameCount,
+                Scaling = DXGI_SCALING.DXGI_SCALING_NONE,
+                SwapEffect = DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD
+            };
+
+            factory->CreateSwapChainForHwnd((global::Windows.Win32.System.Com.IUnknown*)_queue, new HWND(hwnd), &sd, null, null, &sc1);
+            RequirePointer(sc1, "D3D12Renderer.CreateSwapChainForHwnd returned a null swap chain.");
+
+            sc1->QueryInterface(typeof(IDXGISwapChain3).GUID, out var sc3Obj).ThrowOnFailure();
+            return (IDXGISwapChain3*)RequirePointer(sc3Obj, "D3D12Renderer.QueryInterface(IDXGISwapChain3) returned a null swap chain.");
+        }
+        finally
+        {
+            if (sc1 != null) sc1->Release();
+            if (factory != null) factory->Release();
+        }
+    }
+
+    private static void* RequirePointer(void* pointer, string message)
+    {
+        if (pointer == null)
+        {
+            throw new InvalidOperationException(message);
+        }
+
+        return pointer;
+    }
+
     private bool TryResetFrameCommands(out COMException? error)
     {
         try
@@ -798,10 +821,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             var width = Volatile.Read(ref _width);
             var height = Volatile.Read(ref _height);
 
-            // DXGI factory
-            PInvoke.CreateDXGIFactory1(typeof(IDXGIFactory4).GUID, out var factoryObj);
-            var factory = (IDXGIFactory4*)factoryObj;
-
             // D3D12 device
             PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj);
             _device = (ID3D12Device*)deviceObj;
@@ -811,24 +830,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             _device->CreateCommandQueue(qd, typeof(ID3D12CommandQueue).GUID, out var queueObj);
             _queue = (ID3D12CommandQueue*)queueObj;
 
-            // Swap chain
-            var sd = new DXGI_SWAP_CHAIN_DESC1
-            {
-                Width = (uint)width,
-                Height = (uint)height,
-                Format = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM,
-                SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
-                BufferUsage = DXGI_USAGE.DXGI_USAGE_RENDER_TARGET_OUTPUT,
-                BufferCount = FrameCount,
-                Scaling = DXGI_SCALING.DXGI_SCALING_NONE,
-                SwapEffect = DXGI_SWAP_EFFECT.DXGI_SWAP_EFFECT_FLIP_DISCARD
-            };
-            IDXGISwapChain1* sc1;
-            factory->CreateSwapChainForHwnd((global::Windows.Win32.System.Com.IUnknown*)_queue, new HWND(_hwnd), &sd, null, null, &sc1);
-            sc1->QueryInterface(typeof(IDXGISwapChain3).GUID, out var sc3Obj);
-            _swapChain = (IDXGISwapChain3*)sc3Obj;
-            sc1->Release();
-            factory->Release();
+            _swapChain = CreateSwapChain(_hwnd, width, height);
 
             // RTV heap
             var hd = new D3D12_DESCRIPTOR_HEAP_DESC
