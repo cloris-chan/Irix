@@ -173,7 +173,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal(1, CountOccurrences(rectSource, "finally\n        {\n            _vbuf->Unmap(0, null);\n        }"));
         Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            _vbuf->Unmap(0, null);\n        }"));
-        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            _atlasUpload->Unmap(0, null);\n        }"));
+        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            page.Upload->Unmap(0, null);\n        }"));
     }
 
     [Fact]
@@ -247,13 +247,22 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs", glyphSource);
         Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
+        Assert.Contains("private readonly List<GlyphAtlasPage> _atlasPages = new(1);", glyphSource);
+        Assert.Contains("private GlyphAtlasPageHandle _activeAtlasPage;", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasEntryHandle(int Index, int Generation)", glyphSource);
+        Assert.Contains("private readonly struct GlyphAtlasPageHandle(int Index, int Generation)", glyphSource);
+        Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
         Assert.Contains("private GlyphAtlasEntryHandle AddGlyphEntry(in GlyphEntry entry)", glyphSource);
         Assert.Contains("private bool TryResolveGlyph(GlyphAtlasEntryHandle handle, out GlyphEntry entry)", glyphSource);
-        Assert.Contains("entry.Generation == handle.Generation", glyphSource);
+        Assert.Contains("private GlyphAtlasPageHandle AddAtlasPage(ID3D12Resource* texture, ID3D12Resource* upload)", glyphSource);
+        Assert.Contains("private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle,", glyphSource);
+        Assert.Contains("entry.Generation == handle.Generation && TryResolveAtlasPage(entry.Page", glyphSource);
+        Assert.Contains("GlyphAtlasPageHandle Page", glyphSource);
         Assert.Contains("_glyphs[key] = handle;", glyphSource);
         Assert.DoesNotContain("Dictionary<GlyphKey, GlyphEntry> _glyphs", glyphSource);
         Assert.DoesNotContain("_glyphs.Add(key, glyph)", glyphSource);
+        Assert.DoesNotContain("private ID3D12Resource* _atlasTexture", glyphSource);
+        Assert.DoesNotContain("private ID3D12Resource* _atlasUpload", glyphSource);
     }
 
     [Fact]
@@ -273,12 +282,14 @@ public sealed class ProgramDiagnosticsTests
             RasterScratchBytes: 768,
             RasterScratchResizes: 2)
             .WithAtlasRuns(7)
+            .WithAtlasPages(1)
             .WithDegradation(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
 
         var summary = diagnostics.FormatSummary();
 
         Assert.Contains("cachedGlyphs=12", summary);
+        Assert.Contains("atlasPages=1", summary);
         Assert.Contains("uploads=4096 bytes", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("degradedRuns=0", summary);
@@ -1021,7 +1032,8 @@ public sealed class ProgramDiagnosticsTests
             InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 512,
-            RasterScratchResizes: 2);
+            RasterScratchResizes: 2,
+            AtlasPages: 1);
 
         ResizeDiagnosticRunner.WriteReport(
             writer,
@@ -1055,7 +1067,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

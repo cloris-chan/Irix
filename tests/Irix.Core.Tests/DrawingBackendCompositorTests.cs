@@ -319,13 +319,12 @@ public sealed class DrawingBackendCompositorTests
             []);
 
         await compositor.RenderAsync(frame1, cancellationToken);
-        frame1.Dispose();
 
         Assert.Equal(1, backend.ExecuteCount);
         Assert.Single(backend.ReceivedDirtyRanges);
         Assert.Empty(backend.ReceivedDirtyRanges[0]); // no dirty ranges on initial frame
 
-        // Frame 2: same resources + dirty ranges �?partial apply
+        // Frame 2: same resources + dirty ranges; keep frame1 alive until frame2 is retained.
         using var frame2 = new RenderFrameBatch(
             new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
             [
@@ -337,6 +336,7 @@ public sealed class DrawingBackendCompositorTests
 
         await compositor.RenderAsync(frame2, cancellationToken);
         frame2.Dispose();
+        frame1.Dispose();
 
         Assert.Equal(2, backend.ExecuteCount);
         Assert.Equal(2, backend.ReceivedDirtyRanges.Count);

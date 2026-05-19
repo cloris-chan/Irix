@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Irix.Drawing;
@@ -17,6 +18,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int AtlasWidth = 1024;
     private const int AtlasHeight = 1024;
     private const int AtlasPadding = 1;
+    private const int AtlasPixelBytes = AtlasRowPitch * AtlasHeight;
     private const int MaxGlyphQuads = 4096;
     private const int MaxGlyphVertices = MaxGlyphQuads * 6;
     private const int MaxGlyphDrawBatches = 1024;
@@ -34,13 +36,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private ID3D12RootSignature* _rootSig;
     private ID3D12PipelineState* _pso;
     private ID3D12DescriptorHeap* _srvHeap;
-    private ID3D12Resource* _atlasTexture;
-    private ID3D12Resource* _atlasUpload;
     private ID3D12Resource* _vbuf;
     private D3D12_VERTEX_BUFFER_VIEW _vbv;
     private byte[] _vertexShaderBytecode = [];
     private byte[] _pixelShaderBytecode = [];
-    private readonly byte[] _atlasPixels = new byte[AtlasRowPitch * AtlasHeight];
     private byte[] _clearTypeScratch = [];
     private byte[] _grayscaleScratch = [];
     private int _rasterScratchResizeCount;
@@ -49,14 +48,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly Dictionary<FontFaceKey, CachedFontFace> _fontFaces = [];
     private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs = [];
     private readonly List<GlyphEntry> _glyphEntries = new(512);
-    private int _nextX = AtlasPadding;
-    private int _nextY = AtlasPadding;
-    private int _rowHeight;
-    private bool _atlasDirty;
-    private int _dirtyLeft = AtlasWidth;
-    private int _dirtyTop = AtlasHeight;
-    private int _dirtyRight;
-    private int _dirtyBottom;
+    private readonly List<GlyphAtlasPage> _atlasPages = new(1);
+    private GlyphAtlasPageHandle _activeAtlasPage;
     private bool _disposed;
     private bool _disabled;
     private DeviceErrorDiagnostic _deviceError = DeviceErrorDiagnostic.None;
@@ -103,6 +96,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         return _diagnostics
             .WithCachedGlyphs(_glyphEntries.Count)
+            .WithAtlasPages(_atlasPages.Count)
             .WithRasterScratch(_clearTypeScratch.Length + _grayscaleScratch.Length, _rasterScratchResizeCount);
     }
 
@@ -120,7 +114,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             InitializationFailurePhase: GlyphAtlasInitializationPhase.None,
             RecordFailurePhase: GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: _clearTypeScratch.Length + _grayscaleScratch.Length,
-            RasterScratchResizes: 0);
+            RasterScratchResizes: 0,
+            AtlasPages: _atlasPages.Count);
         _rasterScratchResizeCount = 0;
     }
 
@@ -160,9 +155,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             UploadVertices(_vertices.AsSpan(0, frame.VertexCount));
 
-            if (_atlasDirty)
+            var activePage = RequireActiveAtlasPage();
+            if (activePage.IsDirty)
             {
-                UploadAtlas(list);
+                UploadAtlas(list, activePage);
             }
 
             DrawGlyphs(list, frame, viewportWidth, viewportHeight);
@@ -457,7 +453,36 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         entry = _glyphEntries[handle.Index];
-        return entry.Generation == handle.Generation;
+        return entry.Generation == handle.Generation && TryResolveAtlasPage(entry.Page, out _);
+    }
+
+    private GlyphAtlasPageHandle AddAtlasPage(ID3D12Resource* texture, ID3D12Resource* upload)
+    {
+        var handle = new GlyphAtlasPageHandle(_atlasPages.Count, 1);
+        _atlasPages.Add(new GlyphAtlasPage(handle, texture, upload, new byte[AtlasPixelBytes]));
+        return handle;
+    }
+
+    private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle, [NotNullWhen(true)] out GlyphAtlasPage? page)
+    {
+        if (handle.IsNone || (uint)handle.Index >= (uint)_atlasPages.Count)
+        {
+            page = null;
+            return false;
+        }
+
+        page = _atlasPages[handle.Index];
+        return page.Generation == handle.Generation;
+    }
+
+    private GlyphAtlasPage RequireActiveAtlasPage()
+    {
+        if (!TryResolveAtlasPage(_activeAtlasPage, out var page))
+        {
+            throw new InvalidOperationException("Glyph atlas active page handle is invalid.");
+        }
+
+        return page;
     }
 
     private bool RasterizeGlyph(
@@ -510,9 +535,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_TYPE.DWRITE_TEXTURE_CLEARTYPE_3x1, out var bounds);
             var width = bounds.right - bounds.left;
             var height = bounds.bottom - bounds.top;
+            var atlasPage = RequireActiveAtlasPage();
             if (width <= 0 || height <= 0)
             {
-                entry = new GlyphEntry(0, 0, 0, 0, advances[0], 0, 0, 0, 0);
+                entry = new GlyphEntry(0, 0, 0, 0, advances[0], 0, 0, 0, 0, atlasPage.Handle);
                 return true;
             }
 
@@ -527,13 +553,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 grayscale[i] = (byte)((clearType[source] + clearType[source + 1] + clearType[source + 2]) / 3);
             }
 
-            if (!TryAllocateGlyph(width, height, out var atlasX, out var atlasY))
+            if (!TryAllocateGlyph(atlasPage, width, height, out var atlasX, out var atlasY))
             {
                 unsupportedReason = GlyphAtlasFallbackReason.AtlasFull;
                 return false;
             }
 
-            CopyGlyphToAtlas(grayscale, width, height, atlasX, atlasY);
+            CopyGlyphToAtlas(atlasPage, grayscale, width, height, atlasX, atlasY);
             var u1 = atlasX / (float)AtlasWidth;
             var v1 = atlasY / (float)AtlasHeight;
             var u2 = (atlasX + width) / (float)AtlasWidth;
@@ -547,8 +573,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 u1,
                 v1,
                 u2,
-                v2);
-            MarkAtlasDirty(atlasX, atlasY, width, height);
+                v2,
+                atlasPage.Handle);
+            MarkAtlasDirty(atlasPage, atlasX, atlasY, width, height);
             return true;
         }
         finally
@@ -588,7 +615,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return glyphMetrics[0].advanceWidth * emSize / fontFace.Metrics.designUnitsPerEm;
     }
 
-    private bool TryAllocateGlyph(int width, int height, out int x, out int y)
+    private static bool TryAllocateGlyph(GlyphAtlasPage page, int width, int height, out int x, out int y)
     {
         x = 0;
         y = 0;
@@ -597,59 +624,59 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        if (_nextX + width + AtlasPadding > AtlasWidth)
+        if (page.NextX + width + AtlasPadding > AtlasWidth)
         {
-            _nextX = AtlasPadding;
-            _nextY += _rowHeight + AtlasPadding;
-            _rowHeight = 0;
+            page.NextX = AtlasPadding;
+            page.NextY += page.RowHeight + AtlasPadding;
+            page.RowHeight = 0;
         }
 
-        if (_nextY + height + AtlasPadding > AtlasHeight)
+        if (page.NextY + height + AtlasPadding > AtlasHeight)
         {
             return false;
         }
 
-        x = _nextX;
-        y = _nextY;
-        _nextX += width + AtlasPadding;
-        _rowHeight = Math.Max(_rowHeight, height);
+        x = page.NextX;
+        y = page.NextY;
+        page.NextX += width + AtlasPadding;
+        page.RowHeight = Math.Max(page.RowHeight, height);
         return true;
     }
 
-    private void CopyGlyphToAtlas(ReadOnlySpan<byte> glyphPixels, int width, int height, int atlasX, int atlasY)
+    private static void CopyGlyphToAtlas(GlyphAtlasPage page, ReadOnlySpan<byte> glyphPixels, int width, int height, int atlasX, int atlasY)
     {
         for (var row = 0; row < height; row++)
         {
-            glyphPixels.Slice(row * width, width).CopyTo(_atlasPixels.AsSpan((atlasY + row) * AtlasRowPitch + atlasX, width));
+            glyphPixels.Slice(row * width, width).CopyTo(page.Pixels.AsSpan((atlasY + row) * AtlasRowPitch + atlasX, width));
         }
     }
 
-    private void MarkAtlasDirty(int x, int y, int width, int height)
+    private static void MarkAtlasDirty(GlyphAtlasPage page, int x, int y, int width, int height)
     {
         var dirtyRect = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
-            _atlasDirty,
-            _dirtyLeft,
-            _dirtyTop,
-            _dirtyRight,
-            _dirtyBottom,
+            page.IsDirty,
+            page.DirtyLeft,
+            page.DirtyTop,
+            page.DirtyRight,
+            page.DirtyBottom,
             x,
             y,
             width,
             height);
-        _atlasDirty = dirtyRect.HasDirtyRect;
-        _dirtyLeft = dirtyRect.Left;
-        _dirtyTop = dirtyRect.Top;
-        _dirtyRight = dirtyRect.Right;
-        _dirtyBottom = dirtyRect.Bottom;
+        page.IsDirty = dirtyRect.HasDirtyRect;
+        page.DirtyLeft = dirtyRect.Left;
+        page.DirtyTop = dirtyRect.Top;
+        page.DirtyRight = dirtyRect.Right;
+        page.DirtyBottom = dirtyRect.Bottom;
     }
 
-    private void ResetAtlasDirtyRect()
+    private static void ResetAtlasDirtyRect(GlyphAtlasPage page)
     {
-        _atlasDirty = false;
-        _dirtyLeft = AtlasWidth;
-        _dirtyTop = AtlasHeight;
-        _dirtyRight = 0;
-        _dirtyBottom = 0;
+        page.IsDirty = false;
+        page.DirtyLeft = AtlasWidth;
+        page.DirtyTop = AtlasHeight;
+        page.DirtyRight = 0;
+        page.DirtyBottom = 0;
     }
 
     private static float ComputeBaselineY(D3D12TextRun textRun, TextStyle style, DWRITE_FONT_METRICS metrics)
@@ -735,13 +762,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    private void UploadAtlas(ID3D12GraphicsCommandList* list)
+    private void UploadAtlas(ID3D12GraphicsCommandList* list, GlyphAtlasPage page)
     {
-        var dirtyWidth = _dirtyRight - _dirtyLeft;
-        var dirtyHeight = _dirtyBottom - _dirtyTop;
+        var dirtyWidth = page.DirtyRight - page.DirtyLeft;
+        var dirtyHeight = page.DirtyBottom - page.DirtyTop;
         if (dirtyWidth <= 0 || dirtyHeight <= 0)
         {
-            ResetAtlasDirtyRect();
+            ResetAtlasDirtyRect(page);
             return;
         }
 
@@ -750,7 +777,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         void* mapped = null;
         try
         {
-            _atlasUpload->Map(0, null, &mapped);
+            page.Upload->Map(0, null, &mapped);
         }
         catch (COMException ex)
         {
@@ -772,21 +799,21 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var destination = new Span<byte>(mapped, uploadBytes);
             for (var row = 0; row < dirtyHeight; row++)
             {
-                _atlasPixels.AsSpan((_dirtyTop + row) * AtlasRowPitch + _dirtyLeft, dirtyWidth)
+                page.Pixels.AsSpan((page.DirtyTop + row) * AtlasRowPitch + page.DirtyLeft, dirtyWidth)
                     .CopyTo(destination.Slice(row * uploadRowPitch, dirtyWidth));
             }
         }
         finally
         {
-            _atlasUpload->Unmap(0, null);
+            page.Upload->Unmap(0, null);
         }
 
-        var toCopyDest = Transition(_atlasTexture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
+        var toCopyDest = Transition(page.Texture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
         list->ResourceBarrier(1, &toCopyDest);
 
         var src = new D3D12_TEXTURE_COPY_LOCATION
         {
-            pResource = _atlasUpload,
+            pResource = page.Upload,
             Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT
         };
         src.Anonymous.PlacedFootprint = new D3D12_PLACED_SUBRESOURCE_FOOTPRINT
@@ -804,16 +831,16 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         var dst = new D3D12_TEXTURE_COPY_LOCATION
         {
-            pResource = _atlasTexture,
+            pResource = page.Texture,
             Type = D3D12_TEXTURE_COPY_TYPE.D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX
         };
         dst.Anonymous.SubresourceIndex = 0;
-        list->CopyTextureRegion(dst, (uint)_dirtyLeft, (uint)_dirtyTop, 0, src, null);
+        list->CopyTextureRegion(dst, (uint)page.DirtyLeft, (uint)page.DirtyTop, 0, src, null);
 
-        var toShaderResource = Transition(_atlasTexture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        var toShaderResource = Transition(page.Texture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         list->ResourceBarrier(1, &toShaderResource);
 
-        ResetAtlasDirtyRect();
+        ResetAtlasDirtyRect(page);
         _diagnostics = _diagnostics.WithUploadedBytes(uploadBytes);
     }
 
@@ -1067,121 +1094,135 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void CreateAtlasResources()
     {
-        var defaultHeap = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT };
-        var textureDesc = new D3D12_RESOURCE_DESC
+        ID3D12Resource* atlasTexture = null;
+        ID3D12Resource* atlasUpload = null;
+        try
         {
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
-            Width = AtlasWidth,
-            Height = AtlasHeight,
-            DepthOrArraySize = 1,
-            MipLevels = 1,
-            Format = DXGI_FORMAT.DXGI_FORMAT_R8_UNORM,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN
-        };
+            var defaultHeap = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT };
+            var textureDesc = new D3D12_RESOURCE_DESC
+            {
+                Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_TEXTURE2D,
+                Width = AtlasWidth,
+                Height = AtlasHeight,
+                DepthOrArraySize = 1,
+                MipLevels = 1,
+                Format = DXGI_FORMAT.DXGI_FORMAT_R8_UNORM,
+                SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
+                Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_UNKNOWN
+            };
 
-        RunInitializationPhase(GlyphAtlasInitializationPhase.AtlasTexture, () =>
+            RunInitializationPhase(GlyphAtlasInitializationPhase.AtlasTexture, () =>
+            {
+                void* textureObj = null;
+                try
+                {
+                    _device->CreateCommittedResource(
+                        defaultHeap,
+                        D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+                        textureDesc,
+                        D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+                        null,
+                        typeof(ID3D12Resource).GUID,
+                        out textureObj);
+                }
+                catch (COMException ex)
+                {
+                    throw WrapD3D12Exception("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas texture)", ex);
+                }
+
+                if (textureObj == null)
+                {
+                    throw new InvalidOperationException("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas texture) returned a null resource.");
+                }
+
+                atlasTexture = (ID3D12Resource*)textureObj;
+            });
+
+            var uploadHeap = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD };
+            var uploadDesc = new D3D12_RESOURCE_DESC
+            {
+                Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
+                Width = AtlasPixelBytes,
+                Height = 1,
+                DepthOrArraySize = 1,
+                MipLevels = 1,
+                SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
+                Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR
+            };
+            RunInitializationPhase(GlyphAtlasInitializationPhase.UploadBuffer, () =>
+            {
+                void* uploadObj = null;
+                try
+                {
+                    _device->CreateCommittedResource(
+                        uploadHeap,
+                        D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+                        uploadDesc,
+                        D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+                        null,
+                        typeof(ID3D12Resource).GUID,
+                        out uploadObj);
+                }
+                catch (COMException ex)
+                {
+                    throw WrapD3D12Exception("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas upload buffer)", ex);
+                }
+
+                if (uploadObj == null)
+                {
+                    throw new InvalidOperationException("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas upload buffer) returned a null resource.");
+                }
+
+                atlasUpload = (ID3D12Resource*)uploadObj;
+            });
+
+            var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC
+            {
+                NumDescriptors = 1,
+                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
+            };
+            RunInitializationPhase(GlyphAtlasInitializationPhase.DescriptorHeap, () =>
+            {
+                void* heapObj = null;
+                try
+                {
+                    _device->CreateDescriptorHeap(heapDesc, typeof(ID3D12DescriptorHeap).GUID, out heapObj);
+                }
+                catch (COMException ex)
+                {
+                    throw WrapD3D12Exception("D3D12GlyphAtlasTextRenderer.CreateDescriptorHeap(SRV)", ex);
+                }
+
+                if (heapObj == null)
+                {
+                    throw new InvalidOperationException("D3D12GlyphAtlasTextRenderer.CreateDescriptorHeap(SRV) returned a null heap.");
+                }
+
+                _srvHeap = (ID3D12DescriptorHeap*)heapObj;
+            });
+
+            var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC
+            {
+                Format = DXGI_FORMAT.DXGI_FORMAT_R8_UNORM,
+                ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D,
+                Shader4ComponentMapping = Shader4ComponentMapping
+            };
+            srvDesc.Anonymous.Texture2D.MipLevels = 1;
+            RunInitializationPhase(GlyphAtlasInitializationPhase.ShaderResourceView, () =>
+            {
+                _device->CreateShaderResourceView(atlasTexture, srvDesc, _srvHeap->GetCPUDescriptorHandleForHeapStart());
+            });
+
+            _activeAtlasPage = AddAtlasPage(atlasTexture, atlasUpload);
+            atlasTexture = null;
+            atlasUpload = null;
+        }
+        finally
         {
-            void* textureObj = null;
-            try
-            {
-                _device->CreateCommittedResource(
-                    defaultHeap,
-                    D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-                    textureDesc,
-                    D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
-                    null,
-                    typeof(ID3D12Resource).GUID,
-                    out textureObj);
-            }
-            catch (COMException ex)
-            {
-                throw WrapD3D12Exception("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas texture)", ex);
-            }
-
-            if (textureObj == null)
-            {
-                throw new InvalidOperationException("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas texture) returned a null resource.");
-            }
-
-            _atlasTexture = (ID3D12Resource*)textureObj;
-        });
-
-        var uploadHeap = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD };
-        var uploadDesc = new D3D12_RESOURCE_DESC
-        {
-            Dimension = D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER,
-            Width = (ulong)_atlasPixels.Length,
-            Height = 1,
-            DepthOrArraySize = 1,
-            MipLevels = 1,
-            SampleDesc = new DXGI_SAMPLE_DESC { Count = 1 },
-            Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR
-        };
-        RunInitializationPhase(GlyphAtlasInitializationPhase.UploadBuffer, () =>
-        {
-            void* uploadObj = null;
-            try
-            {
-                _device->CreateCommittedResource(
-                    uploadHeap,
-                    D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-                    uploadDesc,
-                    D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-                    null,
-                    typeof(ID3D12Resource).GUID,
-                    out uploadObj);
-            }
-            catch (COMException ex)
-            {
-                throw WrapD3D12Exception("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas upload buffer)", ex);
-            }
-
-            if (uploadObj == null)
-            {
-                throw new InvalidOperationException("D3D12GlyphAtlasTextRenderer.CreateCommittedResource(atlas upload buffer) returned a null resource.");
-            }
-
-            _atlasUpload = (ID3D12Resource*)uploadObj;
-        });
-
-        var heapDesc = new D3D12_DESCRIPTOR_HEAP_DESC
-        {
-            NumDescriptors = 1,
-            Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
-            Flags = D3D12_DESCRIPTOR_HEAP_FLAGS.D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE
-        };
-        RunInitializationPhase(GlyphAtlasInitializationPhase.DescriptorHeap, () =>
-        {
-            void* heapObj = null;
-            try
-            {
-                _device->CreateDescriptorHeap(heapDesc, typeof(ID3D12DescriptorHeap).GUID, out heapObj);
-            }
-            catch (COMException ex)
-            {
-                throw WrapD3D12Exception("D3D12GlyphAtlasTextRenderer.CreateDescriptorHeap(SRV)", ex);
-            }
-
-            if (heapObj == null)
-            {
-                throw new InvalidOperationException("D3D12GlyphAtlasTextRenderer.CreateDescriptorHeap(SRV) returned a null heap.");
-            }
-
-            _srvHeap = (ID3D12DescriptorHeap*)heapObj;
-        });
-
-        var srvDesc = new D3D12_SHADER_RESOURCE_VIEW_DESC
-        {
-            Format = DXGI_FORMAT.DXGI_FORMAT_R8_UNORM,
-            ViewDimension = D3D12_SRV_DIMENSION.D3D12_SRV_DIMENSION_TEXTURE2D,
-            Shader4ComponentMapping = Shader4ComponentMapping
-        };
-        srvDesc.Anonymous.Texture2D.MipLevels = 1;
-        RunInitializationPhase(GlyphAtlasInitializationPhase.ShaderResourceView, () =>
-        {
-            _device->CreateShaderResourceView(_atlasTexture, srvDesc, _srvHeap->GetCPUDescriptorHandleForHeapStart());
-        });
+            if (atlasUpload != null) atlasUpload->Release();
+            if (atlasTexture != null) atlasTexture->Release();
+        }
     }
 
     private void CreateVertexBuffer()
@@ -1329,9 +1370,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             fontFace.Face->Release();
         }
 
+        for (var i = 0; i < _atlasPages.Count; i++)
+        {
+            _atlasPages[i].Release();
+        }
+        _atlasPages.Clear();
+
         if (_vbuf != null) _vbuf->Release();
-        if (_atlasUpload != null) _atlasUpload->Release();
-        if (_atlasTexture != null) _atlasTexture->Release();
         if (_srvHeap != null) _srvHeap->Release();
         if (_pso != null) _pso->Release();
         if (_rootSig != null) _rootSig->Release();
@@ -1587,6 +1632,56 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public override int GetHashCode() => HashCode.Combine(FontFace, Character);
     }
 
+    private readonly struct GlyphAtlasPageHandle(int Index, int Generation) : IEquatable<GlyphAtlasPageHandle>
+    {
+        public int Index { get; } = Index;
+        public int Generation { get; } = Generation;
+        public bool IsNone => Generation == 0;
+
+        public bool Equals(GlyphAtlasPageHandle other) => Index == other.Index && Generation == other.Generation;
+
+        public override bool Equals(object? obj) => obj is GlyphAtlasPageHandle other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Index, Generation);
+
+        public static bool operator ==(GlyphAtlasPageHandle left, GlyphAtlasPageHandle right) => left.Equals(right);
+
+        public static bool operator !=(GlyphAtlasPageHandle left, GlyphAtlasPageHandle right) => !left.Equals(right);
+    }
+
+    private sealed unsafe class GlyphAtlasPage(GlyphAtlasPageHandle handle, ID3D12Resource* texture, ID3D12Resource* upload, byte[] pixels)
+    {
+        private bool _released;
+
+        public GlyphAtlasPageHandle Handle { get; } = handle;
+        public int Generation => Handle.Generation;
+        public ID3D12Resource* Texture { get; private set; } = texture;
+        public ID3D12Resource* Upload { get; private set; } = upload;
+        public byte[] Pixels { get; } = pixels;
+        public int NextX { get; set; } = AtlasPadding;
+        public int NextY { get; set; } = AtlasPadding;
+        public int RowHeight { get; set; }
+        public bool IsDirty { get; set; }
+        public int DirtyLeft { get; set; } = AtlasWidth;
+        public int DirtyTop { get; set; } = AtlasHeight;
+        public int DirtyRight { get; set; }
+        public int DirtyBottom { get; set; }
+
+        public void Release()
+        {
+            if (_released)
+            {
+                return;
+            }
+
+            if (Upload != null) Upload->Release();
+            if (Texture != null) Texture->Release();
+            Upload = null;
+            Texture = null;
+            _released = true;
+        }
+    }
+
     private readonly struct GlyphAtlasEntryHandle(int Index, int Generation) : IEquatable<GlyphAtlasEntryHandle>
     {
         public int Index { get; } = Index;
@@ -1614,6 +1709,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         float V1,
         float U2,
         float V2,
+        GlyphAtlasPageHandle Page,
         int Generation = 0)
     {
         public float Width { get; } = Width;
@@ -1625,9 +1721,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public float V1 { get; } = V1;
         public float U2 { get; } = U2;
         public float V2 { get; } = V2;
+        public GlyphAtlasPageHandle Page { get; } = Page;
         public int Generation { get; } = Generation;
 
-        public GlyphEntry WithGeneration(int generation) => new(Width, Height, OffsetX, OffsetY, Advance, U1, V1, U2, V2, generation);
+        public GlyphEntry WithGeneration(int generation) => new(Width, Height, OffsetX, OffsetY, Advance, U1, V1, U2, V2, Page, generation);
     }
 
     public readonly struct GlyphAtlasTextRendererDiagnostics(
@@ -1643,6 +1740,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         GlyphAtlasRecordFailurePhase RecordFailurePhase,
         int RasterScratchBytes,
         int RasterScratchResizes,
+        int AtlasPages = 0,
         int AtlasRuns = 0,
         int DegradedRuns = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
     {
@@ -1653,6 +1751,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int CacheMisses { get; } = CacheMisses;
         public int FallbackFrames { get; } = FallbackFrames;
         public int UnsupportedRuns { get; } = UnsupportedRuns;
+        public int AtlasPages { get; } = AtlasPages;
         public int AtlasRuns { get; } = AtlasRuns;
         public int DegradedRuns { get; } = DegradedRuns;
         public GlyphAtlasFallbackReasonCounts Reasons { get; } = Reasons;
@@ -1662,31 +1761,34 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int RasterScratchResizes { get; } = RasterScratchResizes;
 
         public GlyphAtlasTextRendererDiagnostics WithCachedGlyphs(int cachedGlyphs) =>
-            new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, DegradedRuns);
+            new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheHit() =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheMiss() =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithDrawnGlyphs(int glyphs) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasPages(int atlasPages) =>
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, atlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasRuns(int atlasRuns) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns + atlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns + atlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithUploadedBytes(long bytes) =>
-            new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRasterScratch(int bytes, int resizes) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, bytes, resizes, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, bytes, resizes, AtlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithInitializationFailure(GlyphAtlasInitializationPhase phase) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, phase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, phase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRecordFailure(GlyphAtlasRecordFailurePhase phase) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, phase, RasterScratchBytes, RasterScratchResizes, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, phase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithDegradation(int unsupportedRuns, GlyphAtlasFallbackReason reason)
         {
@@ -1718,13 +1820,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RecordFailurePhase,
                 RasterScratchBytes,
                 RasterScratchResizes,
+                AtlasPages,
                 AtlasRuns,
                 DegradedRuns + unsupportedRuns);
         }
 
         public string FormatSummary()
         {
-            return $"cachedGlyphs={CachedGlyphs}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
+            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
                 + $"uploads={UploadedBytes} bytes, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
         }
@@ -1738,6 +1841,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && CacheMisses == other.CacheMisses
                 && FallbackFrames == other.FallbackFrames
                 && UnsupportedRuns == other.UnsupportedRuns
+                && AtlasPages == other.AtlasPages
                 && AtlasRuns == other.AtlasRuns
                 && DegradedRuns == other.DegradedRuns
                 && Reasons.Equals(other.Reasons)
@@ -1759,6 +1863,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(CacheMisses);
             hash.Add(FallbackFrames);
             hash.Add(UnsupportedRuns);
+            hash.Add(AtlasPages);
             hash.Add(AtlasRuns);
             hash.Add(DegradedRuns);
             hash.Add(Reasons);

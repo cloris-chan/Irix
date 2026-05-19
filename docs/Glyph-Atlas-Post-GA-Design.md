@@ -28,10 +28,12 @@ Current implementation status:
 | Clip | Per-run scissor clip supported for accepted atlas runs |
 | Fallback | Unsupported or failed renderable runs degrade without overlay |
 | Mixed ordering | Rect pass -> atlas accepted runs -> Present; degraded runs are not drawn |
-| Diagnostics | `AtlasRuns`, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
+| Diagnostics | `atlasPages`, `AtlasRuns`, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
 | Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, and recovery beyond explicit degradation |
 
 Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback/degradation, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` without D3D11On12 / Direct2D final composition. The next phase should focus on resource ownership and reducing accepted degradation, rather than expanding the ASCII prototype surface blindly.
+
+POST-011 resource-handle update: glyph cache entries and the current single atlas page are now referenced through stable value handles with generations. Glyph entries bind to an atlas page handle, and page-owned texture/upload/pixel/packing state replaces naked renderer-level atlas resource fields. Eviction and multi-page reuse remain deferred, but their stale-handle boundary is now explicit.
 
 P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list.
 Glyph-atlas initialization failures remain phase-tagged and degrade renderable text without invoking overlay.
@@ -248,7 +250,7 @@ D3D11On12 / D2D overlay deletion is active in the renderer source:
 - `D3D12TextRenderer`, `TextOverlaySyncStrategy`, and D3D11 query extensions are removed.
 - `NativeMethods.txt` no longer requests D3D11On12 or Direct2D generation.
 - `TextCompositionMode` has no overlay mode; `--text-composition overlay` parses back to `GlyphAtlas`.
-- Diagnostics expose accepted text runs, degradation runs, per-run reasons, sync/present serials, and failure phases.
+- Diagnostics expose `atlasPages`, accepted text runs, degradation runs, per-run reasons, sync/present serials, and failure phases.
 
 Remaining work is reducing `DegradedRuns` without reintroducing D3D11On12 / D2D as a hidden dependency.
 
