@@ -14,11 +14,17 @@ public sealed class ConsoleCompositor(TextWriter writer) : ICompositor
         for (var index = 0; index < renderFrameBatch.Commands.Count; index++)
         {
             var command = renderFrameBatch.Commands.Memory.Span[index];
-            var text = command.Kind == DrawCommandKind.DrawTextRun
-                ? renderFrameBatch.Resources.Resolve(command.Text).ToString()
-                : null;
-            writer.WriteLine(
-                $"[Compositor] Command={command.Kind} Rect=({command.Rect.X}, {command.Rect.Y}, {command.Rect.Width}, {command.Rect.Height}) Text={text ?? "<none>"}");
+            writer.Write($"[Compositor] Command={command.Kind} Rect=({command.Rect.X}, {command.Rect.Y}, {command.Rect.Width}, {command.Rect.Height}) Text=");
+            if (command.Kind == DrawCommandKind.DrawTextRun)
+            {
+                writer.Write(renderFrameBatch.Resources.Resolve(command.Text));
+            }
+            else
+            {
+                writer.Write("<none>");
+            }
+
+            writer.WriteLine();
         }
 
         return ValueTask.CompletedTask;

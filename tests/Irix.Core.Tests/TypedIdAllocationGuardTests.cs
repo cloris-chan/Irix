@@ -1158,6 +1158,7 @@ public class TypedIdAllocationGuardTests
             Assert.DoesNotContain("ResolveString", content);
             Assert.DoesNotContain("string? Text", content);
             Assert.DoesNotContain("string Text", content);
+            Assert.DoesNotContain("Resolve(command.Text).ToString()", content);
         }
     }
 
