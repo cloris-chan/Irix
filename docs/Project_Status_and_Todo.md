@@ -1,7 +1,7 @@
 # Irix Project Status
 
 > Current developer handoff note for the Irix Windows PoC.
-> Last verified: 2026-05-19.
+> Last verified: 2026-05-20.
 
 ---
 
@@ -29,14 +29,14 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Area | Status |
 |------|--------|
 | V1 core | Complete / regression-only. Do not reopen core feature scope for GA cleanup. |
-| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; mixed fallback v0 keeps accepted atlas runs on D3D12 and sends unsupported runs to D3D11On12/D2D overlay. `--text-composition overlay` remains rollback. |
+| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; mixed fallback v0 keeps accepted atlas runs on D3D12 and sends unsupported runs to D3D11On12/D2D overlay. `--text-composition overlay` remains rollback while the overlay removal path is built. |
 | Backend clip | Scissor is the default backend clip mode; `--disable-scissor` / `--clip-mode diagnostic` remain diagnostic rollback paths. |
 | Default renderer baseline | GlyphAtlas + Scissor default baseline enabled. Do not introduce another runtime default switch before shader/resource lifetime and allocation attribution hardening. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Shader packaging | D3D12 rectangle and glyph-atlas passes use embedded DXBC bytecode. Runtime `D3DCompile` / `d3dcompiler_47.dll` is no longer required by renderer source. |
 | Resource lifetime | D3D12 upload maps, swapchain intermediates, and overlay wrapping intermediates release through `finally`. Core device/queue/RTV/command/fence setup is shared by constructor and recovery with pointer guards and constructor-failure cleanup. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
-| Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
+| Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. Device error diagnostics use typed `DeviceErrorDiagnostic`; text formatting stays at CLI/debug/report output boundaries. |
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
 | Ref struct boundary | Complete for Round 16. `ref struct` is limited to synchronous builders/readers/layout context; retained IR and batches stay ordinary storable types. |
 | Record struct boundary | Complete for Round 18. Framework/internal primitives, IR, render hot paths, platform types, and PoC backend/diagnostics do not use `record struct`. |
@@ -224,6 +224,7 @@ Source guards currently block:
 - Reference-equality `VirtualNode` semantics.
 - Ref struct leakage into batch/retained state sources.
 - Framework/backend `record struct` and framework record `with` syntax outside MVU authoring state exceptions.
+- Device error diagnostic regression back to retained `string` state in platform/PoC paths.
 
 ---
 
@@ -232,11 +233,12 @@ Source guards currently block:
 | Priority | Work | Boundary |
 |----------|------|----------|
 | P0 | Renderer foundation hardening | GlyphAtlas + Scissor default baseline enabled; do not flip another default. Continue resource lifetime hardening from the embedded-shader baseline. |
+| P1 | Resource cache / stable global handles | Start POST-011 in the D3D12 renderer line so glyph atlas resources can survive frames and move toward non-overlay fallback handling. |
 | P1 | Shader packaging follow-up | Runtime shader compile is removed. Decide later whether inline embedded DXBC is enough or a build-time shader asset pipeline is worth adding. |
 | P1 | Attribute warm glyph atlas allocation | Run `--diagnose-text-cache` and use tree/diff/translate/render attribution before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |
 | P1 | Mixed fallback extended smoke evidence | Mixed ASCII/NonAscii/clipped, overlay subset parity, mixed AtlasFull, record-failure contract, and default long smoke are recorded. Eviction remains deferred before widening atlas text coverage. |
-| P2 | Overlay removal gate | Draft gate is documented. Do not remove D3D11On12/D2D overlay until unsupported text, z-order, diagnostics, and rollback requirements no longer depend on it. |
+| P1 | Overlay removal path | Active migration target. Remove D3D11On12/D2D from final composition as soon as unsupported text, atlas-full/eviction, diagnostics, and rollback have non-overlay behavior or an explicit degradation contract. |
 | P2 | StyleOnly layout skip | Future fast path only; current layout still rebuilds. |
 
 Do not mix glyph atlas implementation, renderer rewrites, or public API expansion into style/property cleanup.

@@ -23,10 +23,10 @@
 
 | Item | Current state | Required for GA | Priority |
 |------|--------------|----------------|----------|
-| Device-lost detection | `_deviceRemoved` flag + `DeviceErrorReason` string + `DeviceLost` event | Already done | — |
+| Device-lost detection | `_deviceRemoved` flag + typed `DeviceErrorDiagnostic` value + `DeviceLost` event; diagnostic text is formatted only at reporting/output boundaries | Already done | — |
 | Device-lost recovery | `D3D12Renderer.TryRecover()` reconstructs all GPU resources; compositor catches backend exceptions, checks `IDeviceRecovery`, attempts recovery; tests cover recovery succeeds/fails | Already done | — |
 | Device-removed during segmented frame | Compositor catches exceptions in standard and handoff paths; recovery attempted through `IDeviceRecovery` | Already done | — |
-| GPU memory pressure | Runtime resize/recovery resource recreation failures surface explicit device error reasons, including `E_OUTOFMEMORY` | Accepted for current GA/MVP; no silent fail or undefined pointer continuation | — |
+| GPU memory pressure | Runtime resize/recovery resource recreation failures surface typed device diagnostics, including `E_OUTOFMEMORY` | Accepted for current GA/MVP; no silent fail or undefined pointer continuation | — |
 | Command allocator reset failure | `BeginFrame` command allocator/list reset retries once after `WaitForGpu`; persistent failure escalates through device-lost/recovery | Already done | — |
 
 ---
@@ -71,7 +71,7 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Performance regression CI | `Category=Performance` covers mock backend frame timing, warm `FrameDrawingResources`, split frame-stage allocation baseline, and D3D12 `ExecuteCore` 100% / 150% scale allocation guards. Latest local per-stage byte output is tracked in `Project_Status_and_Todo.md`. | Already done | — |
 | Text cache hit rate in steady state | `scripts/ga-baseline.ps1 -Mode TextCache` validates static, scroll, and scale-change phases; current-machine 100% / 150% / 200% runs remain healthy | Already done for current machine | — |
 | DrawCommand recording allocation | `stackalloc` + `ArrayPool`; record full/dirty stages are covered by the split allocation baseline, with warm `FrameDrawingResources` guarded in CI | Keep performance lane green | P2 |
-| Hot-path string allocation | Round 13/14 complete (2026-05-16): text content uses `TextNodeContent` / `TextBufferSnapshot` plus frame-local `TextSlice`; `ActionId`, `TargetId`, `ElementId`, and `NodeKey` are typed value ids; style/property changes use `VirtualPropertyKey` and metadata effects instead of string property names. `VirtualPropertyKey` has no public constructor and no primitive `ToString()`. Diagnostics strings remain exempt. | Keep source guards green; next work is allocation baseline tightening, not string-key redesign | P2 |
+| Hot-path string allocation | Round 13/14 complete (2026-05-16): text content uses `TextNodeContent` / `TextBufferSnapshot` plus frame-local `TextSlice`; `ActionId`, `TargetId`, `ElementId`, and `NodeKey` are typed value ids; style/property changes use `VirtualPropertyKey` and metadata effects instead of string property names. `VirtualPropertyKey` has no public constructor and no primitive `ToString()`. Device error state uses typed `DeviceErrorDiagnostic`; diagnostic text is produced only by CLI/debug/report formatting boundaries. | Keep source guards green; next work is allocation baseline tightening, not string-key redesign | P2 |
 | Sync wait overhead | Current default `D3D12FenceAfterOverlay` is correctness-preserving but can exceed the old provisional `<2ms avg` target. `D3D11Query` was correctness-clean but refresh-rate dependent and therefore diagnostic-only. | Accepted temporarily for GA/MVP; long-term fix is D3D12-only glyph atlas text renderer | — |
 
 ### Sync Wait Evidence and Decision (2026-05-13)
@@ -213,7 +213,7 @@ Non-goals for this GA batch:
 | Item | Status |
 |------|--------|
 | Sync wait cost | Accepted for Private GA. `D3D12FenceAfterOverlay` remains the default because correctness and no text lag win over the old provisional `<2ms avg` target. |
-| D3D12-only text | Not implemented in this GA. The current D3D11On12/D2D/DirectWrite overlay remains the v1 text path. |
+| D3D12-only text | Post-GA default GlyphAtlas path is active for supported runs. D3D11On12/D2D/DirectWrite overlay remains only for rollback and unsupported/failure fallback until the removal gate is satisfied. |
 | Glyph atlas | Post-GA renderer foundation work. It must stay internal unless a later API review explicitly exposes anything. |
 | 144Hz validation | Removed from the current evidence matrix because there is no 144Hz hardware in the environment. 60Hz / 120Hz / 240Hz coverage is accepted for this Private GA. |
 | Public API stability | Not frozen. The repository is private and this tag is an internal architecture milestone. |

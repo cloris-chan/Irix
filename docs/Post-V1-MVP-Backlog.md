@@ -30,15 +30,15 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
 | POST-018 | Platform integration checks | Done for current hardware | Minimize/restore, occlusion, live DPI change, resize, scroll, click, default, and rollback smokes passed |
-| POST-019 | GPU memory pressure handling | Done for V1 scope | Runtime resource recreation failures surface explicit device error reasons, including `E_OUTOFMEMORY`; no full GPU memory manager |
+| POST-019 | GPU memory pressure handling | Done for V1 scope | Runtime resource recreation failures surface typed device diagnostics, including `E_OUTOFMEMORY`; no full GPU memory manager |
 | POST-020 | Command allocator reset failure handling | Done | Retry once after `WaitForGpu`, then escalate to device-lost/recovery |
 
 ### P1/P2 — Post-GA Renderer Architecture
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with expanded mixed fallback and mixed AtlasFull smoke | Post-GA; `GlyphAtlas` is default for the D3D12 PoC path; `Overlay` remains rollback/fallback; narrow ASCII/NoWrap runs have local evidence |
-| POST-011 | Resource cache / stable global handles | Not started | D3D12-specific; can align with glyph atlas/resource cache work |
+| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with expanded mixed fallback and mixed AtlasFull smoke | Post-GA; `GlyphAtlas` is default for the D3D12 PoC path; `Overlay` remains rollback/fallback while the non-overlay replacement is built; narrow ASCII/NoWrap runs have local evidence |
+| POST-011 | Resource cache / stable global handles | Active next step | D3D12-specific; align with glyph atlas resource ownership and overlay-removal work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
 
@@ -59,7 +59,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 ```text
 POST-001..004, POST-013..020 complete ──> v1.0-private-ga tag
 
-Current D3D11On12/D2D overlay accepted temporarily ──> POST-017 D3D12-only glyph atlas text renderer
+Current D3D11On12/D2D overlay accepted temporarily ──> POST-017 D3D12-only glyph atlas text renderer ──> overlay removal
                                                     └─ POST-011 D3D12 resource cache / stable handles
 
 POST-005 translator ──> POST-006 public API shaping on top of typed ids/property metadata
@@ -116,7 +116,7 @@ Non-goals:
 | Accept sync wait budget | `GA-Hardening-Plan.md` | `D3D12FenceAfterOverlay` accepted temporarily; `<2ms avg` removed as GA blocker | ✅ Done |
 | Remove 144Hz blocker | `GA-Hardening-Plan.md` | 144Hz validation not listed as current GA blocker | ✅ Done |
 | Platform integration checks | `Irix.Poc`, manual smoke | Minimize/restore, occlusion, live DPI, resize + scroll + text sync pass on available hardware | ✅ Done |
-| GPU memory pressure handling | `D3D12Renderer.cs` | Resource creation failures produce explicit device error reasons; no undefined pointer continuation | ✅ Done |
+| GPU memory pressure handling | `D3D12Renderer.cs` | Resource creation failures produce typed device diagnostics; no undefined pointer continuation | ✅ Done |
 | Command allocator reset failure handling | `D3D12Renderer.cs` | Reset retry or device-lost escalation | ✅ Done |
 | Keep CI green | GitHub Actions / local CI parity | Tests, D3D12 smoke, performance lane, AOT publish stay green | ✅ Done for Private GA |
 | Stop pre-GA performance micro-optimization | `Project_Status_and_Todo.md` | Do not chase the remaining ~2 KB render-request reuse allocation before tag | ✅ Done |
@@ -137,7 +137,7 @@ Do not keep expanding the ASCII prototype surface or flip another runtime defaul
 | Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
 | Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | ✅ Attribution added |
 | Mixed fallback design | Renderer design | Per-run atlas plus per-run overlay fallback so NonAscii/complex runs do not force whole-frame overlay fallback | ✅ v0 implemented; subset parity pinned; z-order limitation documented |
-| Overlay removal gate | Renderer design / smoke evidence | Do not remove D3D11On12/D2D overlay until all fallback cases have a non-overlay path or accepted degradation plus smoke coverage | Drafted; deletion deferred |
+| Overlay removal gate | Renderer design / smoke evidence | Remove D3D11On12/D2D only after fallback cases have a non-overlay path or accepted degradation plus smoke coverage | Active migration gate |
 | Full migration | `D3D12TextRenderer` replacement path | D2D overlay no longer needed for final composition | Planned |
 
 Known limitations checklist before expanding text coverage:
@@ -157,11 +157,12 @@ Known limitations checklist before expanding text coverage:
 
 Next hardening checklist:
 
+- Resource cache / stable handles: start POST-011 in the glyph-atlas renderer so cached resources have explicit value handles and generations before eviction or non-overlay fallback expands.
 - Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
 - Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases beyond upload-map, swapchain/core initialization, and overlay fallback ownership; glyph-atlas initialization failures must remain overlay fallback-safe.
 - Warm allocation attribution: run `--diagnose-text-cache` and optimize only after tree/diff/translate/render attribution identifies the source.
 - Mixed fallback follow-up: subset parity, AtlasFull, and record-failure contract evidence are recorded. Eviction and command-order-perfect fallback remain future work before widening atlas text coverage.
-- Overlay removal gate: keep D3D11On12/D2D overlay until the drafted gate is satisfied; this is not a deletion task for the next commit.
+- Overlay removal path: do not add new overlay dependencies. Each fallback case should move toward D3D12 handling or an explicit degradation contract.
 
 ---
 
