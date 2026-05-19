@@ -27,15 +27,15 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private ID3D12Device* _device;
     private ID3D12CommandQueue* _queue;
     private IDXGISwapChain3* _swapChain;
-    private ID3D12Resource*[] _renderTargets;
+    private ID3D12Resource*[] _renderTargets = new ID3D12Resource*[FrameCount];
     private ID3D12DescriptorHeap* _rtvHeap;
     private uint _rtvSize;
-    private ID3D12CommandAllocator*[] _allocators;
+    private ID3D12CommandAllocator*[] _allocators = new ID3D12CommandAllocator*[FrameCount];
     private ID3D12GraphicsCommandList* _list;
     private ID3D12Fence* _fence;
     private SafeHandle? _fenceEventOwner;
     private HANDLE _fenceEvent;
-    private ulong[] _fenceValues;
+    private ulong[] _fenceValues = new ulong[FrameCount];
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
     private D3D12TextRenderer? _textRenderer;
@@ -89,66 +89,15 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             }
         }
 
-        // D3D12 device
-        PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj);
-        _device = (ID3D12Device*)deviceObj;
-
-        // Command queue
-        var qd = new D3D12_COMMAND_QUEUE_DESC { Type = D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT };
-        _device->CreateCommandQueue(qd, typeof(ID3D12CommandQueue).GUID, out var queueObj);
-        _queue = (ID3D12CommandQueue*)queueObj;
-
-        _swapChain = CreateSwapChain(hwnd, width, height);
-
-        // RTV heap
-        var hd = new D3D12_DESCRIPTOR_HEAP_DESC
+        try
         {
-            NumDescriptors = FrameCount,
-            Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
-        };
-        _device->CreateDescriptorHeap(hd, typeof(ID3D12DescriptorHeap).GUID, out var heapObj);
-        _rtvHeap = (ID3D12DescriptorHeap*)heapObj;
-        _rtvSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-        // Render targets
-        _renderTargets = new ID3D12Resource*[FrameCount];
-        var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
-        for (var i = 0; i < FrameCount; i++)
-        {
-            _swapChain->GetBuffer((uint)i, typeof(ID3D12Resource).GUID, out var resObj);
-            _renderTargets[i] = (ID3D12Resource*)resObj;
-            _device->CreateRenderTargetView(_renderTargets[i], null, rtv);
-            rtv.ptr += _rtvSize;
+            InitializeDeviceResources(width, height);
         }
-
-        // Command allocators
-        _allocators = new ID3D12CommandAllocator*[FrameCount];
-        for (var i = 0; i < FrameCount; i++)
+        catch
         {
-            _device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, typeof(ID3D12CommandAllocator).GUID, out var allocObj);
-            _allocators[i] = (ID3D12CommandAllocator*)allocObj;
+            ReleaseDeviceResources(waitForGpu: false);
+            throw;
         }
-
-        // Command list
-        _device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, _allocators[0], null, typeof(ID3D12GraphicsCommandList).GUID, out var listObj);
-        _list = (ID3D12GraphicsCommandList*)listObj;
-        _list->Close();
-
-        // Fence
-        _device->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, typeof(ID3D12Fence).GUID, out var fenceObj);
-        _fence = (ID3D12Fence*)fenceObj;
-        _fenceValues = new ulong[FrameCount];
-        _fenceEventOwner = PInvoke.CreateEvent(null, false, false, null);
-        if (_fenceEventOwner.IsInvalid)
-        {
-            throw new InvalidOperationException("Failed to create the D3D12 fence event.");
-        }
-
-        _fenceEvent = new HANDLE(_fenceEventOwner.DangerousGetHandle());
-
-        _frameIndex = _swapChain->GetCurrentBackBufferIndex();
-        _renderer2D = new D3D12Renderer2D(_device);
-        _textRenderer = new D3D12TextRenderer(_device, _queue, _renderTargets);
     }
 
     public D3D12Renderer2D Renderer2D => _renderer2D!;
@@ -608,6 +557,34 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         };
     }
 
+    private void InitializeDeviceResources(int width, int height)
+    {
+        _device = CreateDevice();
+        _queue = CreateCommandQueue();
+        _swapChain = CreateSwapChain(_hwnd, width, height);
+        CreateRenderTargetHeap();
+        CreateRenderTargets();
+        CreateFrameCommands();
+        CreateFenceResources();
+
+        _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+        _renderer2D = new D3D12Renderer2D(_device);
+        _textRenderer = new D3D12TextRenderer(_device, _queue, _renderTargets);
+    }
+
+    private static ID3D12Device* CreateDevice()
+    {
+        PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj).ThrowOnFailure();
+        return (ID3D12Device*)RequirePointer(deviceObj, "D3D12Renderer.D3D12CreateDevice returned a null device.");
+    }
+
+    private ID3D12CommandQueue* CreateCommandQueue()
+    {
+        var qd = new D3D12_COMMAND_QUEUE_DESC { Type = D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT };
+        _device->CreateCommandQueue(qd, typeof(ID3D12CommandQueue).GUID, out var queueObj);
+        return (ID3D12CommandQueue*)RequirePointer(queueObj, "D3D12Renderer.CreateCommandQueue returned a null queue.");
+    }
+
     private IDXGISwapChain3* CreateSwapChain(nint hwnd, int width, int height)
     {
         IDXGIFactory4* factory = null;
@@ -640,6 +617,57 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             if (sc1 != null) sc1->Release();
             if (factory != null) factory->Release();
         }
+    }
+
+    private void CreateRenderTargetHeap()
+    {
+        var hd = new D3D12_DESCRIPTOR_HEAP_DESC
+        {
+            NumDescriptors = FrameCount,
+            Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
+        };
+        _device->CreateDescriptorHeap(hd, typeof(ID3D12DescriptorHeap).GUID, out var heapObj);
+        _rtvHeap = (ID3D12DescriptorHeap*)RequirePointer(heapObj, "D3D12Renderer.CreateDescriptorHeap(RTV) returned a null heap.");
+        _rtvSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    }
+
+    private void CreateRenderTargets()
+    {
+        var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
+        for (var i = 0; i < FrameCount; i++)
+        {
+            _swapChain->GetBuffer((uint)i, typeof(ID3D12Resource).GUID, out var resObj);
+            _renderTargets[i] = (ID3D12Resource*)RequirePointer(resObj, "D3D12Renderer.GetBuffer returned a null render target.");
+            _device->CreateRenderTargetView(_renderTargets[i], null, rtv);
+            rtv.ptr += _rtvSize;
+        }
+    }
+
+    private void CreateFrameCommands()
+    {
+        for (var i = 0; i < FrameCount; i++)
+        {
+            _device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, typeof(ID3D12CommandAllocator).GUID, out var allocObj);
+            _allocators[i] = (ID3D12CommandAllocator*)RequirePointer(allocObj, "D3D12Renderer.CreateCommandAllocator returned a null allocator.");
+        }
+
+        _device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, _allocators[0], null, typeof(ID3D12GraphicsCommandList).GUID, out var listObj);
+        _list = (ID3D12GraphicsCommandList*)RequirePointer(listObj, "D3D12Renderer.CreateCommandList returned a null command list.");
+        _list->Close();
+    }
+
+    private void CreateFenceResources()
+    {
+        _device->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, typeof(ID3D12Fence).GUID, out var fenceObj);
+        _fence = (ID3D12Fence*)RequirePointer(fenceObj, "D3D12Renderer.CreateFence returned a null fence.");
+        _fenceValues = new ulong[FrameCount];
+        _fenceEventOwner = PInvoke.CreateEvent(null, false, false, null);
+        if (_fenceEventOwner.IsInvalid)
+        {
+            throw new InvalidOperationException("D3D12Renderer.CreateEvent returned an invalid fence event.");
+        }
+
+        _fenceEvent = new HANDLE(_fenceEventOwner.DangerousGetHandle());
     }
 
     private static void* RequirePointer(void* pointer, string message)
@@ -765,6 +793,50 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         Interlocked.Add(ref _syncWaitTicks, elapsedTicks);
     }
 
+    private void ReleaseDeviceResources(bool waitForGpu)
+    {
+        if (waitForGpu && _queue != null && _fence != null && _fenceEventOwner is { IsInvalid: false })
+        {
+            _ = WaitForGpu();
+        }
+
+        _textRenderer?.Dispose();
+        _textRenderer = null;
+        _glyphAtlasTextRenderer?.Dispose();
+        _glyphAtlasTextRenderer = null;
+        _renderer2D?.Dispose();
+        _renderer2D = null;
+
+        for (var i = 0; i < FrameCount; i++)
+        {
+            if (_renderTargets[i] != null)
+            {
+                _renderTargets[i]->Release();
+                _renderTargets[i] = null;
+            }
+
+            if (_allocators[i] != null)
+            {
+                _allocators[i]->Release();
+                _allocators[i] = null;
+            }
+        }
+
+        if (_list != null) { _list->Release(); _list = null; }
+        if (_rtvHeap != null) { _rtvHeap->Release(); _rtvHeap = null; }
+        if (_fence != null) { _fence->Release(); _fence = null; }
+        _fenceEventOwner?.Dispose();
+        _fenceEventOwner = null;
+        _fenceEvent = default;
+        if (_swapChain != null) { _swapChain->Release(); _swapChain = null; }
+        if (_queue != null) { _queue->Release(); _queue = null; }
+        if (_device != null) { _device->Release(); _device = null; }
+
+        _rtvSize = 0;
+        _frameIndex = 0;
+        for (var i = 0; i < FrameCount; i++) _fenceValues[i] = 0;
+    }
+
     /// <summary>
     /// Attempt to recover from device-lost by releasing all GPU resources
     /// and reinitializing from scratch. Returns true if recovery succeeds.
@@ -778,36 +850,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         // Phase 1: Release all GPU resources (same order as Dispose, but don't set _disposed)
         try
         {
-            _textRenderer?.Dispose();
-            _textRenderer = null;
-            _glyphAtlasTextRenderer?.Dispose();
-            _glyphAtlasTextRenderer = null;
-            _renderer2D?.Dispose();
-            _renderer2D = null;
-
-            for (var i = 0; i < FrameCount; i++)
-            {
-                if (_renderTargets[i] != null)
-                {
-                    _renderTargets[i]->Release();
-                    _renderTargets[i] = null;
-                }
-                if (_allocators[i] != null)
-                {
-                    _allocators[i]->Release();
-                    _allocators[i] = null;
-                }
-            }
-
-            if (_list != null) { _list->Release(); _list = null; }
-            if (_rtvHeap != null) { _rtvHeap->Release(); _rtvHeap = null; }
-            if (_fence != null) { _fence->Release(); _fence = null; }
-            _fenceEventOwner?.Dispose();
-            _fenceEventOwner = null;
-            _fenceEvent = default;
-            if (_swapChain != null) { _swapChain->Release(); _swapChain = null; }
-            if (_queue != null) { _queue->Release(); _queue = null; }
-            if (_device != null) { _device->Release(); _device = null; }
+            ReleaseDeviceResources(waitForGpu: false);
         }
         catch (Exception ex)
         {
@@ -820,66 +863,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             var width = Volatile.Read(ref _width);
             var height = Volatile.Read(ref _height);
-
-            // D3D12 device
-            PInvoke.D3D12CreateDevice(null, D3D_FEATURE_LEVEL.D3D_FEATURE_LEVEL_11_0, typeof(ID3D12Device).GUID, out var deviceObj);
-            _device = (ID3D12Device*)deviceObj;
-
-            // Command queue
-            var qd = new D3D12_COMMAND_QUEUE_DESC { Type = D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT };
-            _device->CreateCommandQueue(qd, typeof(ID3D12CommandQueue).GUID, out var queueObj);
-            _queue = (ID3D12CommandQueue*)queueObj;
-
-            _swapChain = CreateSwapChain(_hwnd, width, height);
-
-            // RTV heap
-            var hd = new D3D12_DESCRIPTOR_HEAP_DESC
-            {
-                NumDescriptors = FrameCount,
-                Type = D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV
-            };
-            _device->CreateDescriptorHeap(hd, typeof(ID3D12DescriptorHeap).GUID, out var heapObj);
-            _rtvHeap = (ID3D12DescriptorHeap*)heapObj;
-            _rtvSize = _device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-
-            // Render targets
-            _renderTargets = new ID3D12Resource*[FrameCount];
-            var rtv = _rtvHeap->GetCPUDescriptorHandleForHeapStart();
-            for (var i = 0; i < FrameCount; i++)
-            {
-                _swapChain->GetBuffer((uint)i, typeof(ID3D12Resource).GUID, out var resObj);
-                _renderTargets[i] = (ID3D12Resource*)resObj;
-                _device->CreateRenderTargetView(_renderTargets[i], null, rtv);
-                rtv.ptr += _rtvSize;
-            }
-
-            // Command allocators
-            _allocators = new ID3D12CommandAllocator*[FrameCount];
-            for (var i = 0; i < FrameCount; i++)
-            {
-                _device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, typeof(ID3D12CommandAllocator).GUID, out var allocObj);
-                _allocators[i] = (ID3D12CommandAllocator*)allocObj;
-            }
-
-            // Command list
-            _device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE.D3D12_COMMAND_LIST_TYPE_DIRECT, _allocators[0], null, typeof(ID3D12GraphicsCommandList).GUID, out var listObj);
-            _list = (ID3D12GraphicsCommandList*)listObj;
-            _list->Close();
-
-            // Fence
-            _device->CreateFence(0, D3D12_FENCE_FLAGS.D3D12_FENCE_FLAG_NONE, typeof(ID3D12Fence).GUID, out var fenceObj);
-            _fence = (ID3D12Fence*)fenceObj;
-            _fenceValues = new ulong[FrameCount];
-            _fenceEventOwner = PInvoke.CreateEvent(null, false, false, null);
-            if (_fenceEventOwner.IsInvalid)
-            {
-                throw new InvalidOperationException("Failed to create the D3D12 fence event during recovery.");
-            }
-            _fenceEvent = new HANDLE(_fenceEventOwner.DangerousGetHandle());
-
-            _frameIndex = _swapChain->GetCurrentBackBufferIndex();
-            _renderer2D = new D3D12Renderer2D(_device);
-            _textRenderer = new D3D12TextRenderer(_device, _queue, _renderTargets);
+            InitializeDeviceResources(width, height);
 
             // Reset device-lost state
             _deviceRemoved = false;
@@ -895,6 +879,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (Exception ex)
         {
+            ReleaseDeviceResources(waitForGpu: false);
             _deviceRemoved = true;
             _deviceErrorReason = FormatDeviceError(ex, "Recovery reinitialize");
             System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] {_deviceErrorReason}");
@@ -905,35 +890,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        _ = WaitForGpu();
-        _textRenderer?.Dispose();
-        _textRenderer = null;
-        _glyphAtlasTextRenderer?.Dispose();
-        _glyphAtlasTextRenderer = null;
+        ReleaseDeviceResources(waitForGpu: true);
         _overlayFallbackTextRuns.Dispose();
-        _renderer2D?.Dispose();
-        _renderer2D = null;
-        for (var i = 0; i < FrameCount; i++)
-        {
-            if (_renderTargets[i] != null)
-            {
-                _renderTargets[i]->Release();
-            }
-
-            if (_allocators[i] != null)
-            {
-                _allocators[i]->Release();
-            }
-        }
-        _list->Release();
-        _rtvHeap->Release();
-        _fence->Release();
-        _fenceEventOwner?.Dispose();
-        _fenceEventOwner = null;
-        _fenceEvent = default;
-        _swapChain->Release();
-        _queue->Release();
-        _device->Release();
         _disposed = true;
     }
 }

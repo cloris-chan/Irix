@@ -74,7 +74,8 @@ Expected smoke headers:
 - D3D12 failure diagnostics hardening: glyph-atlas initialization failures use `initFailurePhase`; runtime record/upload/map failures now use `recordFailurePhase` and `RecordFailed` fallback reason before overlay fallback. This keeps runtime fallback distinct from constructor-time atlas setup failure.
 - D3D12 upload map lifetime hardening: rectangle vertex, glyph vertex, and atlas upload paths now unmap in `finally` after a successful map.
 - D3D12 swapchain lifetime hardening: swapchain creation now releases the DXGI factory and intermediate `IDXGISwapChain1` through `finally` after querying `IDXGISwapChain3`.
-- Latest resource/failure hardening validation: Release build passed; normal tests `616` passed; D3D12 tests `6` passed; performance tests `6` passed; self-contained publish passed earlier in this evidence trail.
+- D3D12 core resource initialization hardening: constructor and recovery now share device/queue/RTV/command/fence setup, guard created COM pointers, and release partially initialized resources if construction fails.
+- Latest resource/failure hardening validation: Release build passed; normal tests `617` passed; D3D12 tests `6` passed; performance tests `6` passed; self-contained publish passed earlier in this evidence trail.
 
 ## Mixed Fallback v0 Evidence
 

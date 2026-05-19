@@ -190,6 +190,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void D3D12_core_resource_creation_uses_shared_guarded_path()
+    {
+        var root = FindRepoRoot();
+        var rendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer.cs")));
+
+        Assert.Equal(1, CountOccurrences(rendererSource, "PInvoke.D3D12CreateDevice("));
+        Assert.Equal(1, CountOccurrences(rendererSource, "_device->CreateCommandQueue("));
+        Assert.Equal(1, CountOccurrences(rendererSource, "_device->CreateDescriptorHeap("));
+        Assert.Equal(1, CountOccurrences(rendererSource, "_device->CreateCommandList("));
+        Assert.Equal(1, CountOccurrences(rendererSource, "_device->CreateFence("));
+        Assert.Contains("catch\n        {\n            ReleaseDeviceResources(waitForGpu: false);\n            throw;\n        }", rendererSource);
+        Assert.Contains("catch (Exception ex)\n        {\n            ReleaseDeviceResources(waitForGpu: false);\n            _deviceRemoved = true;", rendererSource);
+        Assert.Contains("ReleaseDeviceResources(waitForGpu: true);", rendererSource);
+        Assert.Contains("return (ID3D12Device*)RequirePointer(deviceObj, \"D3D12Renderer.D3D12CreateDevice returned a null device.\");", rendererSource);
+        Assert.Contains("_list = (ID3D12GraphicsCommandList*)RequirePointer(listObj, \"D3D12Renderer.CreateCommandList returned a null command list.\");", rendererSource);
+    }
+
+    [Fact]
     public void Glyph_atlas_diagnostics_summary_includes_reasons_init_phase_and_scratch()
     {
         var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(

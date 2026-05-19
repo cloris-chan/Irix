@@ -34,7 +34,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Default renderer baseline | GlyphAtlas + Scissor default baseline enabled. Do not introduce another runtime default switch before shader/resource lifetime and allocation attribution hardening. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Shader packaging | D3D12 rectangle and glyph-atlas passes use embedded DXBC bytecode. Runtime `D3DCompile` / `d3dcompiler_47.dll` is no longer required by renderer source. |
-| Resource lifetime | D3D12 upload map paths unmap in `finally` after a successful map for rectangle vertices, glyph vertices, and atlas uploads. Swapchain factory/intermediate COM objects release through the same `finally` pattern. |
+| Resource lifetime | D3D12 upload maps and swapchain intermediates release through `finally`. Core device/queue/RTV/command/fence setup is shared by constructor and recovery with pointer guards and constructor-failure cleanup. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. |
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
@@ -149,8 +149,8 @@ dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atla
 
 Result: Release build passed; normal tests `608` passed; D3D12 tests `6` passed; performance tests `6` passed; default GlyphAtlas sync smoke reported `syncWaits=0`; overlay rollback and NonAscii fallback smokes presented normally. Self-contained publish passed after shader packaging removal. Glyph-atlas diagnostics now keep constructor-time `initFailurePhase` separate from runtime `recordFailurePhase`.
 
-Mixed fallback v0 update: Release build passed; normal tests `616` passed; D3D12 tests `6` passed; performance tests `6` passed.
-Program diagnostics tests `53` passed. Short default GlyphAtlas smoke reported `atlasRuns=90`, `overlayFallbackRuns=0`, `syncWaits=0`.
+Mixed fallback v0 update: Release build passed; normal tests `617` passed; D3D12 tests `6` passed; performance tests `6` passed.
+Program diagnostics tests `54` passed. Short default GlyphAtlas smoke reported `atlasRuns=90`, `overlayFallbackRuns=0`, `syncWaits=0`.
 Short NonAscii mixed fallback smoke reported `atlasRuns=60`, `overlayFallbackRuns=30`, `NonAscii=30`, `syncWaits=30`.
 
 Mixed fallback extended smoke: `ASCII / NonAscii / clipped ASCII / clipped NonAscii` at 150% scale reported `atlasRuns=60`, `overlayFallbackRuns=60`, `NonAscii=60`, `textClipSkipped=0`, `lastEffectiveTextClip=(36,264,168,39)`, and `syncWaits=30`.
