@@ -662,7 +662,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         if (!TryResolveAtlasPage(_activeAtlasPage, out var page))
         {
-            throw new InvalidOperationException("Glyph atlas active page handle is invalid.");
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.Record,
+                "D3D12GlyphAtlasTextRenderer.RequireActiveAtlasPage found a stale active glyph atlas page handle.");
         }
 
         return page;
@@ -782,7 +784,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         if (!TryResolveAtlasPage(request.Page, out var page))
         {
-            throw new InvalidOperationException("Glyph atlas pending page reuse handle is stale.");
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.Record,
+                "D3D12GlyphAtlasTextRenderer.ApplyPendingAtlasPageEviction found a stale pending glyph atlas page reuse handle.");
         }
 
         return page;

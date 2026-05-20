@@ -144,6 +144,7 @@ Known limitations checklist before expanding text coverage:
 
 - Shader bytecode is embedded inline in the renderer sources. Runtime `D3DCompile` / `d3dcompiler_47.dll` dependency is removed; a build-time shader asset pipeline is optional future cleanup if shader source grows.
 - Glyph-atlas diagnostics distinguish constructor-time `initFailurePhase` from runtime `recordFailurePhase`; runtime record failures disable atlas and degrade renderable text without implying device lost by themselves.
+- Stale glyph-atlas page handles in active-page, pending-reuse, and draw-batch resolution classify as runtime record failures.
 - D3D12 rectangle and glyph-atlas upload map paths unmap in `finally` after a successful map.
 - D3D12 rectangle vertex, glyph vertex, and per-page atlas upload resources are frame-slot owned. `BeginFrame` no longer performs a coarse last-submitted-frame upload wait; normal swapchain backbuffer fence ownership protects the upload slot before it is reused.
 - D3D12 swapchain creation releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery reuse the same helper.

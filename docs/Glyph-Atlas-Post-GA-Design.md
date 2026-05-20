@@ -127,6 +127,7 @@ After updating embedded blobs, run the shader bytecode decode tests plus D3D12 s
 `initFailurePhase` is reserved for constructor-time atlas setup failures: DirectWrite factory, font collection, root signature, shader bytecode decode, PSO, atlas texture, upload buffer, descriptor heap, SRV, or vertex buffer creation. These failures prevent atlas creation and degrade renderable text without invoking overlay.
 
 `recordFailurePhase` is reserved for runtime command recording failures after atlas initialization succeeds. Current phases cover generic record failure plus vertex-buffer map and atlas-upload map failures. A runtime record failure disables the current atlas renderer instance and degrades renderable text for subsequent frames without marking the D3D12 device lost by itself.
+Stale atlas page handles in active-page, pending-reuse, or draw-batch resolution are classified as generic record failures rather than leaking ordinary invalid-operation exceptions.
 
 Known limitations:
 

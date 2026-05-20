@@ -533,7 +533,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private static bool CanAllocateGlyph(GlyphAtlasPage page, int width, int height)", glyphSource);
         Assert.Contains("private void ScheduleAtlasPageReuse(long recordSerial)", glyphSource);
         Assert.Contains("_pendingAtlasPageReuse = new GlyphAtlasPageReuseRequest(SelectOldestAtlasPageHandle(), recordSerial);", glyphSource);
-        Assert.Contains("throw new InvalidOperationException(\"Glyph atlas pending page reuse handle is stale.\");", glyphSource);
+        Assert.Contains("D3D12GlyphAtlasTextRenderer.RequireActiveAtlasPage found a stale active glyph atlas page handle.", glyphSource);
+        Assert.Contains("D3D12GlyphAtlasTextRenderer.ApplyPendingAtlasPageEviction found a stale pending glyph atlas page reuse handle.", glyphSource);
+        Assert.Contains("D3D12GlyphAtlasTextRenderer.DrawGlyphs found a stale glyph atlas page handle.", glyphSource);
+        Assert.DoesNotContain("Glyph atlas active page handle is invalid.", glyphSource);
+        Assert.DoesNotContain("Glyph atlas pending page reuse handle is stale.", glyphSource);
         Assert.Contains("public GlyphAtlasPageHandle NextGeneration()", glyphSource);
         Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CreatePageReuseResetState(AtlasWidth, AtlasHeight, AtlasPadding)", glyphSource);
