@@ -35,7 +35,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |
 | Shader packaging | D3D12 rectangle and glyph-atlas passes use embedded DXBC bytecode. Runtime `D3DCompile` / `d3dcompiler_47.dll` is no longer required by renderer source. |
 | Resource lifetime | D3D12 upload maps and swapchain intermediates release through `finally`. Core device/queue/RTV/command/fence setup is shared by constructor and recovery with pointer guards and constructor-failure cleanup. |
-| Resource cache handles | POST-011 entry/page handle slices done: glyph atlas cache lookup uses stable value handles with generations, glyph entries and draw batches bind to stable atlas page handles, page-owned texture/upload/SRV state replaces renderer-level atlas fields, cache touches carry a monotonic atlas record serial, a bounded four-page atlas pool switches pages on allocation pressure, AtlasFull schedules next-frame cold-page reuse with a generation bump, and diagnostics expose page usage/fragmentation plus page age. Explicit eviction budgets are still deferred. |
+| Resource cache handles | POST-011 entry/page handle slices done: glyph atlas cache lookup uses stable value handles with generations, glyph entries and draw batches bind to stable atlas page handles, page-owned texture/upload/SRV state replaces renderer-level atlas fields, cache touches carry a monotonic atlas record serial, a bounded four-page atlas pool switches pages on allocation pressure, AtlasFull schedules next-frame cold-page reuse with a generation bump, and diagnostics expose page budget/capacity, page usage/fragmentation, and page age. Retained-frame-safe eviction policy is still deferred. |
 | Display scale | Complete / regression-only for current evidence: 100%, 150%, 200%; 60Hz, 120Hz, 240Hz. |
 | Text/value IR | Complete. `VirtualNode -> LayoutElement -> DrawCommandRecorder` uses `TextNodeContent` and `TextBufferSnapshot.ResolveRequired`; no string text property path. Device error diagnostics use typed `DeviceErrorDiagnostic`; text formatting stays at CLI/debug/report output boundaries. |
 | Style/property model | Complete after Round 15 cleanup. Public authoring uses one typed property helper surface. Metadata/support/diagnostics remain internal. |
@@ -149,7 +149,7 @@ dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atla
 Result: Release build passed; normal tests `608` passed; D3D12 tests `6` passed; performance tests `6` passed; default GlyphAtlas sync smoke reported `syncWaits=0`; NonAscii degradation smokes presented normally. Self-contained publish passed after shader packaging removal. Glyph-atlas diagnostics now keep constructor-time `initFailurePhase` separate from runtime `recordFailurePhase`.
 
 Mixed fallback v0 update: Release build passed; normal tests `618` passed; D3D12 tests `6` passed; performance tests `6` passed.
-Program diagnostics tests `55` passed. Short default GlyphAtlas smoke reported `atlasRuns=90`, `syncWaits=0`.
+Program diagnostics tests `57` passed. Short default GlyphAtlas smoke reported `atlasRuns=90`, `syncWaits=0`.
 Short NonAscii mixed fallback smoke previously reported overlay fallback before the degradation/removal update; this evidence is historical only.
 
 Mixed fallback extended smoke and overlay subset parity evidence are historical and superseded by explicit degradation.
@@ -158,10 +158,10 @@ Mixed AtlasFull stress before overlay deletion is superseded by the 2026-05-20 d
 Record-failure contract tests now pin all-renderable-run fallback with `recordFailurePhase=AtlasUploadMap`; this is unit contract coverage, not a forced GPU upload-failure smoke.
 
 Overlay removal update: default GlyphAtlas no longer records unsupported, AtlasFull, initialization, or runtime record-failed text through D3D11On12 / D2D overlay fallback. `D3D12TextRenderer`, `TextOverlaySyncStrategy`, D3D11 query extensions, D3D11On12/D2D native generation entries, and explicit `Overlay` composition mode are removed.
-2026-05-20 short mixed degradation smoke at 150% scale reported `frameSerial=3`, `presentSerial=3`, `syncWaits=0`, `atlasRuns=6`, `degradedRuns=6`, `NonAscii=6`, `textClipSkipped=0`, and `lastEffectiveTextClip=(36,264,168,39)`.
-2026-05-20 MixedAtlasFull stress reported `frameSerial=1`, `presentSerial=1`, `syncWaits=0`, `atlasRuns=5`, `degradedRuns=30`, `AtlasFull=29`, `NonAscii=1`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
+2026-05-20 short mixed degradation smoke at 150% scale reported `frameSerial=3`, `presentSerial=3`, `syncWaits=0`, `atlasRuns=6`, `degradedRuns=6`, `atlasPages=4`, `atlasBudgetPages=4`, `atlasCapacity=4194304 px`, `NonAscii=6`, `textClipSkipped=0`, and `lastEffectiveTextClip=(36,264,168,39)`.
+2026-05-20 MixedAtlasFull stress after the four-page pool reported `frameSerial=1`, `presentSerial=1`, `syncWaits=0`, `atlasRuns=11`, `degradedRuns=24`, `atlasPages=4`, `atlasBudgetPages=4`, `atlasCapacity=4194304 px`, `atlasEvictions=0`, `cachedGlyphs=990`, `atlasUsed=2860342 px`, `atlasFragmented=1280000 px`, `AtlasFull=23`, `NonAscii=1`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
 2026-05-20 mixed degradation smoke also reported page usage `atlasUsed=4461 px`, `atlasFragmented=1125 px`.
-2026-05-20 MixedAtlasFullReuse stress after the four-page pool reported `frameSerial=2`, `presentSerial=2`, `syncWaits=0`, `atlasRuns=13`, `degradedRuns=24`, `atlasPages=4`, `atlasEvictions=1`, `cachedGlyphs=628`, `atlasUsed=2153953 px`, `atlasFragmented=950441 px`, `atlasOldestPageAge=1`, `AtlasFull=23`, `NonAscii=1`, and no device removal. The eviction is the next-frame cold-page reset/reuse path, not same-frame LRU.
+2026-05-20 MixedAtlasFullReuse stress after the four-page pool reported `frameSerial=2`, `presentSerial=2`, `syncWaits=0`, `atlasRuns=13`, `degradedRuns=24`, `atlasPages=4`, `atlasBudgetPages=4`, `atlasCapacity=4194304 px`, `atlasEvictions=1`, `cachedGlyphs=628`, `atlasUsed=2153953 px`, `atlasFragmented=950441 px`, `atlasOldestPageAge=1`, `AtlasFull=23`, `NonAscii=1`, and no device removal. The eviction is the next-frame cold-page reset/reuse path, not same-frame LRU.
 
 Manual smoke status:
 
@@ -236,7 +236,7 @@ Source guards currently block:
 | Priority | Work | Boundary |
 |----------|------|----------|
 | P0 | Renderer foundation hardening | GlyphAtlas + Scissor default baseline enabled; do not flip another default. Continue resource lifetime hardening from the embedded-shader baseline. |
-| P1 | Resource cache / stable global handles | Continue POST-011 from the bounded four-page pool toward explicit eviction budgets and generation-safe retained references before widening non-overlay text coverage. |
+| P1 | Resource cache / stable global handles | Continue POST-011 from the bounded four-page pool and explicit budget diagnostics toward generation-safe retained references before widening non-overlay text coverage. |
 | P1 | Shader packaging follow-up | Runtime shader compile is removed. Decide later whether inline embedded DXBC is enough or a build-time shader asset pipeline is worth adding. |
 | P1 | Attribute warm glyph atlas allocation | Run `--diagnose-text-cache` and use tree/diff/translate/render attribution before attempting allocation cleanup. Measure first; do not blind-optimize. |
 | P1 | Framework promotion review | Translator/scroll/settings promotion only after a concrete contract is written in the main design/backlog docs. |

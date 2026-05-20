@@ -38,7 +38,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
 | POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow ASCII/NoWrap runs have local evidence and unsupported cases degrade |
-| POST-011 | Resource cache / stable global handles | Entry/page handles, four-page atlas pool, page-owned SRV resources, next-frame cold-page reuse, page usage diagnostics, and atlas touch serials done | D3D12-specific; align with glyph atlas resource ownership and eviction work |
+| POST-011 | Resource cache / stable global handles | Entry/page handles, four-page atlas pool, explicit atlas budget diagnostics, page-owned SRV resources, next-frame cold-page reuse, page usage diagnostics, and atlas touch serials done | D3D12-specific; align with glyph atlas resource ownership and retained-frame-safe eviction work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
 
@@ -152,14 +152,14 @@ Known limitations checklist before expanding text coverage:
 - Default GlyphAtlas no longer has mixed overlay z-order risk because degraded runs are not drawn; replacing degradation with D3D12 rendering remains follow-up work.
 - No same-frame atlas eviction. AtlasFull degradation is safe for the current prototype; it schedules a next-frame cold-page reset/reuse so accepted runs in the current frame cannot sample recycled regions.
 - Glyph atlas cache entries, draw batches, and atlas pages now have stable value handles and generations internally; page-owned texture/upload/SRV resources replace renderer-level atlas resource fields. Cache hits and new glyph rasterizations touch glyph entries/pages with a monotonic atlas record serial. The renderer preallocates a four-page atlas pool, switches pages when the active page is full, splits draw batches on page changes, and removes only entries from a reused page.
-- Glyph atlas diagnostics report page count, next-frame reuse count, used glyph bitmap pixels, a shelf fragmentation estimate, atlas record serial, and oldest/newest page age metrics for future page-size and LRU decisions.
+- Glyph atlas diagnostics report page count, fixed page budget, page dimensions, total atlas pixel capacity, next-frame reuse count, used glyph bitmap pixels, a shelf fragmentation estimate, atlas record serial, and oldest/newest page age metrics for future page-size and LRU decisions.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
 - Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.
 - Overlay removal is active in source. Do not reintroduce D3D11On12/D2D; widen D3D12 text handling or keep explicit degradation.
 
 Next hardening checklist:
 
-- Resource cache / stable handles: continue POST-011 from the bounded four-page pool toward explicit eviction budgets and generation-safe retained references before widening non-overlay text coverage.
+- Resource cache / stable handles: continue POST-011 from the bounded four-page pool and explicit budget diagnostics toward generation-safe retained references before widening non-overlay text coverage.
 - Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
 - Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases beyond upload-map and swapchain/core initialization; glyph-atlas initialization failures must remain degradation-safe.
 - Warm allocation attribution: run `--diagnose-text-cache` and optimize only after tree/diff/translate/render attribution identifies the source.

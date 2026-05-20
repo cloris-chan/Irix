@@ -28,12 +28,12 @@ Current implementation status:
 | Clip | Per-run scissor clip supported for accepted atlas runs |
 | Fallback | Unsupported or failed renderable runs degrade without overlay |
 | Mixed ordering | Rect pass -> atlas accepted runs -> Present; degraded runs are not drawn |
-| Diagnostics | `atlasPages`, `atlasEvictions`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page age metrics, `AtlasRuns`, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
+| Diagnostics | `atlasPages`, `atlasBudgetPages`, `atlasPage`, `atlasCapacity`, `atlasEvictions`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page age metrics, `AtlasRuns`, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
 | Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, and recovery beyond explicit degradation |
 
 Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback/degradation, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` without D3D11On12 / Direct2D final composition. The next phase should focus on resource ownership and reducing accepted degradation, rather than expanding the ASCII prototype surface blindly.
 
-POST-011 resource-handle update: glyph cache entries and atlas pages are now referenced through stable value handles with generations. Glyph entries and draw batches bind to atlas page handles, page-owned texture/upload/SRV/pixel/packing state replaces naked renderer-level atlas resource fields, and glyph/page cache touches carry a monotonic atlas record serial. The renderer preallocates a bounded four-page atlas pool and switches to a cold page when the active page cannot fit a glyph. When all pages are full, AtlasFull schedules a next-frame cold-page reset/reuse with a page generation bump so current-frame accepted glyph quads cannot sample recycled regions.
+POST-011 resource-handle update: glyph cache entries and atlas pages are now referenced through stable value handles with generations. Glyph entries and draw batches bind to atlas page handles, page-owned texture/upload/SRV/pixel/packing state replaces naked renderer-level atlas resource fields, and glyph/page cache touches carry a monotonic atlas record serial. The renderer preallocates a bounded four-page 1024x1024 atlas pool, exposes the fixed page budget and total pixel capacity in diagnostics, and switches to a cold page when the active page cannot fit a glyph. When all pages are full, AtlasFull schedules a next-frame cold-page reset/reuse with a page generation bump so current-frame accepted glyph quads cannot sample recycled regions.
 
 P1 hardening update: runtime shader compilation has been removed from the D3D12 rectangle pass and glyph-atlas pass. Both use embedded DXBC bytecode, and `D3DCompile` / `d3dcompiler_47.dll` are no longer part of the renderer source generation list.
 Glyph-atlas initialization failures remain phase-tagged and degrade renderable text without invoking overlay.
@@ -194,7 +194,7 @@ Rules:
 
 Current POST-011 implementation is a conservative bounded multi-page subset of this policy: glyph allocation may switch among four precreated pages, draw batches split on page changes, AtlasFull marks the coldest page for reuse when every page is full, the current frame continues with explicit `AtlasFull` degradation, and the next glyph pass removes only entries from the reused page, bumps that page generation, marks the full page dirty, and uploads the reused page before drawing new accepted runs.
 
-Page diagnostics now expose used glyph bitmap pixels, a shelf-allocation fragmentation estimate, the atlas record serial, and oldest/newest page age metrics. These are observation fields for deciding page size, multi-page thresholds, and LRU policy; they do not change current draw or degradation behavior.
+Page diagnostics now expose the fixed page budget, page dimensions, total atlas pixel capacity, used glyph bitmap pixels, a shelf-allocation fragmentation estimate, the atlas record serial, and oldest/newest page age metrics. These are observation fields for deciding page size, multi-page thresholds, and LRU policy; they do not change current draw or degradation behavior.
 
 ## DPI And Scale
 
@@ -254,7 +254,7 @@ D3D11On12 / D2D overlay deletion is active in the renderer source:
 - `D3D12TextRenderer`, `TextOverlaySyncStrategy`, and D3D11 query extensions are removed.
 - `NativeMethods.txt` no longer requests D3D11On12 or Direct2D generation.
 - `TextCompositionMode` has no overlay mode; `--text-composition overlay` parses back to `GlyphAtlas`.
-- Diagnostics expose `atlasPages`, `atlasEvictions`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page ages, accepted text runs, degradation runs, per-run reasons, sync/present serials, and failure phases.
+- Diagnostics expose `atlasPages`, `atlasBudgetPages`, `atlasPage`, `atlasCapacity`, `atlasEvictions`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page ages, accepted text runs, degradation runs, per-run reasons, sync/present serials, and failure phases.
 
 Remaining work is reducing `DegradedRuns` without reintroducing D3D11On12 / D2D as a hidden dependency.
 
@@ -262,7 +262,7 @@ Remaining work is reducing `DegradedRuns` without reintroducing D3D11On12 / D2D 
 
 - Should first implementation be alpha-mask atlas or signed-distance-field atlas?
 - Should glyph rasterization use DirectWrite glyph run analysis or a separate rasterizer?
-- What memory budget should be used per monitor/adapter?
+- Should the current fixed four-page 1024x1024 atlas budget become adapter/monitor dependent?
 - How should retained frames reference atlas entries across page eviction?
 - Should color glyphs use separate BGRA pages or explicit degradation initially?
 

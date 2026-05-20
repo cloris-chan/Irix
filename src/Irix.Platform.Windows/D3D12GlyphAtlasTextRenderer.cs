@@ -18,12 +18,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int AtlasWidth = 1024;
     private const int AtlasHeight = 1024;
     private const int AtlasPadding = 1;
-    private const int AtlasPixelBytes = AtlasRowPitch * AtlasHeight;
     private const int MaxAtlasPages = 4;
+    private const int AtlasPagePixels = AtlasWidth * AtlasHeight;
+    private const int AtlasBudgetPixels = MaxAtlasPages * AtlasPagePixels;
     private const int MaxGlyphQuads = 4096;
     private const int MaxGlyphVertices = MaxGlyphQuads * 6;
     private const int MaxGlyphDrawBatches = 1024;
     private const int AtlasRowPitch = 1024;
+    private const int AtlasPixelBytes = AtlasRowPitch * AtlasHeight;
     private const int TextureDataPitchAlignment = 256;
     private const uint Shader4ComponentMapping = 0u | (1u << 3) | (2u << 6) | (3u << 9) | (1u << 12);
     private const string VertexShaderBytecodeBase64 =
@@ -2109,6 +2111,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int FallbackFrames { get; } = FallbackFrames;
         public int UnsupportedRuns { get; } = UnsupportedRuns;
         public int AtlasPages { get; } = AtlasPages;
+        public int AtlasBudgetPages => MaxAtlasPages;
+        public int AtlasPageWidth => AtlasWidth;
+        public int AtlasPageHeight => AtlasHeight;
+        public int AtlasCapacityPixels => AtlasBudgetPixels;
         public int AtlasEvictions { get; } = AtlasEvictions;
         public int AtlasUsedPixels { get; } = AtlasUsedPixels;
         public int AtlasFragmentedPixels { get; } = AtlasFragmentedPixels;
@@ -2478,7 +2484,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         public string FormatSummary()
         {
-            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasEvictions={AtlasEvictions}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
+            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasEvictions={AtlasEvictions}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
                 + $"atlasRecordSerial={AtlasRecordSerial}, atlasOldestPageAge={AtlasOldestPageAge}, atlasNewestPageAge={AtlasNewestPageAge}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
                 + $"uploads={UploadedBytes} bytes, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
