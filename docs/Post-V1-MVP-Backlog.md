@@ -37,7 +37,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow ASCII runs, including explicit line breaks and minimal space wrapping, have local evidence and unsupported cases degrade |
+| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow ASCII runs, including explicit line breaks, tab spacing, and minimal whitespace wrapping, have local evidence and unsupported cases degrade |
 | POST-011 | Resource cache / stable global handles | Entry/page handles, four-page atlas pool, explicit atlas budget diagnostics, page-owned SRV resources, record-serial-gated next-frame cold-page reuse, page usage diagnostics, and atlas touch serials done | D3D12-specific; align with glyph atlas resource ownership and retained-frame-safe eviction work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -84,9 +84,9 @@ D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
 
 Phase 1 foundation first kept the overlay path as the default runtime behavior and added only an internal composition seam. After opt-in smoke evidence, the post-GA renderer-foundation baseline now defaults to `GlyphAtlas`; the D3D11On12/D2D overlay renderer and explicit overlay mode have now been removed. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data. This phase does not change public API or `IDrawingBackend.Execute`.
 
-The first atlas execution path records a D3D12 glyph pass for basic ASCII runs, uses an `R8_UNORM` atlas, and supports leading/center/trailing alignment plus per-run scissor for accepted runs. `NoWrap` clips over-wide line segments and accepts explicit CR/LF line breaks; `Wrap` accepts minimal ASCII space-based multi-line layout when every word and line stack fits.
+The first atlas execution path records a D3D12 glyph pass for basic ASCII runs, uses an `R8_UNORM` atlas, and supports leading/center/trailing alignment plus per-run scissor for accepted runs. `NoWrap` clips over-wide line segments and accepts explicit CR/LF line breaks plus tab spacing; `Wrap` accepts minimal ASCII whitespace-based multi-line layout when every word and line stack fits.
 It now uses non-overlay degradation so unsupported renderable text runs do not force either whole-frame overlay or mixed overlay fallback.
-Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, explicit ASCII line breaks, minimal ASCII wrap acceptance plus hard-wrap degradation, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
+Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, explicit ASCII line breaks, ASCII tab spacing, minimal ASCII wrap acceptance plus hard-wrap degradation, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
 Current default GlyphAtlas behavior degrades unsupported and initialization/upload/record-failed renderable text runs without invoking overlay.
 Full shaping, hyphenation/complex wrapping, color glyphs, fallback font identity, eviction, command-order-perfect mixed text z-order, and production enablement remain follow-up work.
 
@@ -149,7 +149,7 @@ Known limitations checklist before expanding text coverage:
 - D3D12 swapchain creation releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery reuse the same helper.
 - D3D12 constructor and recovery share core resource initialization, with pointer guards and null-safe cleanup for partially initialized device resources.
 - D3D12 overlay rollback renderer has been removed with its D3D11On12/D2D native generation entries.
-- Default GlyphAtlas degrades unsupported renderable runs while accepted ASCII runs stay on atlas. Explicit CR/LF line breaks are supported; minimal `Wrap` support breaks at spaces only; initialization and runtime record failure degrade all renderable runs for the frame.
+- Default GlyphAtlas degrades unsupported renderable runs while accepted ASCII runs stay on atlas. Explicit CR/LF line breaks and tab spacing are supported; minimal `Wrap` support breaks at ASCII spaces/tabs only; initialization and runtime record failure degrade all renderable runs for the frame.
 - Default GlyphAtlas no longer has mixed overlay z-order risk because degraded runs are not drawn; replacing degradation with D3D12 rendering remains follow-up work.
 - No same-frame atlas eviction. AtlasFull degradation is safe for the current prototype; it schedules a record-serial-gated next-frame cold-page reset/reuse request so accepted runs in the current frame cannot sample recycled regions.
 - Glyph atlas cache entries, draw batches, and atlas pages now have stable value handles and generations internally; page-owned texture/upload/SRV resources replace renderer-level atlas resource fields. Cache hits and new glyph rasterizations touch glyph entries/pages with a monotonic atlas record serial. The renderer preallocates a four-page atlas pool, switches pages when the active page is full, splits draw batches on page changes, records page reuse requests with the triggering atlas record serial, and removes only entries from a reused page after the request becomes applicable on a later record.

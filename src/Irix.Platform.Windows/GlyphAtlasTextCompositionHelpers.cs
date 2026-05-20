@@ -4,6 +4,8 @@ namespace Irix.Platform.Windows;
 
 internal static class GlyphAtlasTextCompositionHelpers
 {
+    internal const int TabAdvanceSpaceCount = 4;
+
     internal static int CountRenderableRuns(
         ReadOnlySpan<D3D12TextRun> textRuns,
         IFrameResourceResolver resources)
@@ -26,7 +28,7 @@ internal static class GlyphAtlasTextCompositionHelpers
     {
         foreach (var character in text)
         {
-            if (character is > '~' || (character < ' ' && character is not '\r' and not '\n'))
+            if (character is > '~' || (character < ' ' && character is not '\r' and not '\n' and not '\t'))
             {
                 return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii;
             }
@@ -88,7 +90,7 @@ internal static class GlyphAtlasTextCompositionHelpers
                 continue;
             }
 
-            while (index < text.Length && text[index] == ' ')
+            while (index < text.Length && IsWrapWhitespace(text[index]))
             {
                 index++;
             }
@@ -116,7 +118,7 @@ internal static class GlyphAtlasTextCompositionHelpers
                 {
                     var explicitLineEnd = i;
                     var resolvedLineWidth = lineWidth;
-                    while (explicitLineEnd > lineStart && text[explicitLineEnd - 1] == ' ')
+                    while (explicitLineEnd > lineStart && IsWrapWhitespace(text[explicitLineEnd - 1]))
                     {
                         explicitLineEnd--;
                         resolvedLineWidth -= advances[explicitLineEnd];
@@ -127,7 +129,7 @@ internal static class GlyphAtlasTextCompositionHelpers
                     goto NextLine;
                 }
 
-                if (text[i] == ' ' && i > lineStart && text[i - 1] != ' ')
+                if (IsWrapWhitespace(text[i]) && i > lineStart && !IsWrapWhitespace(text[i - 1]))
                 {
                     breakIndex = i;
                     breakWidth = lineWidth;
@@ -150,7 +152,7 @@ internal static class GlyphAtlasTextCompositionHelpers
             }
 
             var lineEnd = text.Length;
-            while (lineEnd > lineStart && text[lineEnd - 1] == ' ')
+            while (lineEnd > lineStart && IsWrapWhitespace(text[lineEnd - 1]))
             {
                 lineEnd--;
                 lineWidth -= advances[lineEnd];
@@ -180,6 +182,10 @@ internal static class GlyphAtlasTextCompositionHelpers
     {
         return !text.IsEmpty && text[^1] is '\r' or '\n';
     }
+
+    internal static bool IsTab(char character) => character == '\t';
+
+    internal static bool IsWrapWhitespace(char character) => character is ' ' or '\t';
 
     internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
     {

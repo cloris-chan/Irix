@@ -299,8 +299,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
                 for (var glyphIndex = line.Start; glyphIndex < line.End; glyphIndex++)
                 {
-                    if (GlyphAtlasTextCompositionHelpers.IsLineBreak(text, glyphIndex, out _))
+                    if (GlyphAtlasTextCompositionHelpers.IsLineBreak(text, glyphIndex, out _) || GlyphAtlasTextCompositionHelpers.IsTab(text[glyphIndex]))
                     {
+                        penX += _layoutAdvanceScratch[glyphIndex];
                         continue;
                     }
 
@@ -402,6 +403,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         var glyphs = _layoutGlyphScratch.AsSpan(0, text.Length);
         var advances = _layoutAdvanceScratch.AsSpan(0, text.Length);
+        var spaceAdvance = 0f;
+        var hasSpaceAdvance = false;
         for (var i = 0; i < text.Length; i++)
         {
             if (GlyphAtlasTextCompositionHelpers.IsLineBreak(text, i, out var lineBreakWidth))
@@ -415,6 +418,25 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     advances[i] = 0;
                 }
 
+                continue;
+            }
+
+            if (GlyphAtlasTextCompositionHelpers.IsTab(text[i]))
+            {
+                if (!hasSpaceAdvance)
+                {
+                    if (!TryMeasureCharacterAdvance(fontFace, style.FontSize, ' ', out spaceAdvance))
+                    {
+                        lineCount = 0;
+                        unsupportedReason = GlyphAtlasFallbackReason.FontMissing;
+                        return false;
+                    }
+
+                    hasSpaceAdvance = true;
+                }
+
+                glyphs[i] = default;
+                advances[i] = spaceAdvance * GlyphAtlasTextCompositionHelpers.TabAdvanceSpaceCount;
                 continue;
             }
 
@@ -435,6 +457,25 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             lines: _layoutLineScratch.AsSpan(0, text.Length + 1),
             out lineCount);
         return unsupportedReason == GlyphAtlasFallbackReason.None;
+    }
+
+    private static bool TryMeasureCharacterAdvance(
+        CachedFontFace fontFace,
+        float emSize,
+        char character,
+        out float advance)
+    {
+        advance = 0;
+        var codePoint = (uint)character;
+        var glyphIndex = stackalloc ushort[1];
+        fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
+        if (glyphIndex[0] == 0 && character != ' ')
+        {
+            return false;
+        }
+
+        advance = ComputeGlyphAdvance(fontFace, emSize, glyphIndex[0]);
+        return true;
     }
 
     private static void AddDegradedRun(

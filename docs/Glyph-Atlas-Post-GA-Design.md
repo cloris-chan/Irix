@@ -12,7 +12,7 @@ The first post-GA renderer-foundation change introduced an internal text composi
 
 DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to reduce `DegradedRuns` by adding D3D12 handling for more text cases, not to reintroduce Direct2D final composition. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
 
-The first executable atlas path is intentionally narrow but default-on in the post-GA renderer-foundation branch. Basic ASCII runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. `NoWrap` still clips over-wide line segments; explicit CR/LF creates multiple line segments. `Wrap` supports minimal ASCII space-based multi-line layout when every word and the resulting line stack fit the run bounds. Per-run scissor clipping is supported for accepted runs. Unsupported runs, including complex shaping, non-ASCII fallback faces, hard wrapping cases, missing fonts, atlas-full conditions, vertex/batch limits, and initialization/upload failures, are counted as explicit degradation in default `GlyphAtlas` mode until the atlas path is correctness-complete for those cases.
+The first executable atlas path is intentionally narrow but default-on in the post-GA renderer-foundation branch. Basic ASCII runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute. `NoWrap` still clips over-wide line segments; explicit CR/LF creates multiple line segments. ASCII tab is treated as a fixed four-space advance control token and is not rasterized as a glyph. `Wrap` supports minimal ASCII whitespace-based multi-line layout when every word and the resulting line stack fit the run bounds. Per-run scissor clipping is supported for accepted runs. Unsupported runs, including complex shaping, non-ASCII fallback faces, hard wrapping cases, missing fonts, atlas-full conditions, vertex/batch limits, and initialization/upload failures, are counted as explicit degradation in default `GlyphAtlas` mode until the atlas path is correctness-complete for those cases.
 
 Current implementation status:
 
@@ -20,7 +20,7 @@ Current implementation status:
 |------|----------------|
 | Public API | No change; `IDrawingBackend.Execute` remains unchanged |
 | Default composition | `GlyphAtlas`; removed `Overlay` runtime composition |
-| Supported atlas text | ASCII printable characters, explicit CR/LF line breaks, no-wrap line segments that fit, minimal `Wrap` runs that can break at spaces, DirectWrite glyph metrics/raster source |
+| Supported atlas text | ASCII printable characters, explicit CR/LF line breaks, ASCII tab as four-space advance, no-wrap line segments that fit, minimal `Wrap` runs that can break at whitespace, DirectWrite glyph metrics/raster source |
 | Atlas format | Single `R8_UNORM` alpha atlas |
 | Draw model | D3D12 glyph quads recorded before command-list close/execute |
 | Shader packaging | Embedded DXBC bytecode; no runtime `D3DCompile` dependency in the D3D12 rect or glyph-atlas pass |
@@ -64,7 +64,7 @@ Removing the limitation requires D3D12 handling for the unsupported cases or an 
 
 `TryRecord` classifies each renderable text run:
 
-- Accepted ASCII no-wrap runs, explicit-line-break runs, and space-wrapped ASCII runs record atlas vertices and increment `AtlasRuns`.
+- Accepted ASCII no-wrap runs, explicit-line-break/tab runs, and whitespace-wrapped ASCII runs record atlas vertices and increment `AtlasRuns`.
 - Unsupported runs increment `DegradedRuns` with a per-run reason.
 - Empty or zero-size text runs are ignored by both atlas and degradation counts.
 - Atlas initialization failure or runtime record failure degrades every renderable run for that frame.
@@ -133,7 +133,7 @@ Known limitations:
 - Shader bytecode is currently embedded inline. A future build-time shader asset pipeline can replace the inline packaging if shader source grows, but the runtime compiler dependency is removed.
 - Default GlyphAtlas has explicit text degradation limits: unsupported runs are not drawn until they get D3D12 handling or an accepted product degradation contract.
 - Atlas eviction is not implemented; AtlasFull degradation is the safety behavior for the current no-eviction prototype.
-- Complex shaping, fallback font face identity, color glyphs, and wrapping beyond ASCII explicit breaks / space breaks are still degradation cases.
+- Complex shaping, fallback font face identity, color glyphs, and wrapping beyond ASCII explicit breaks / whitespace breaks are still degradation cases.
 - Warm glyph-atlas scroll allocation was previously about `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution. Optimization should wait for the attributed evidence rather than guessing.
 - Warm allocation follow-up should start with tree construction and translator attribution. Current local evidence attributes the warm scroll sample mostly to tree construction and translation rather than renderer submit.
 
@@ -237,7 +237,7 @@ Rules:
 
 ## Fallback Strategy
 
-DirectWrite remains available as the glyph metrics/raster source. Current default GlyphAtlas behavior is mixed per renderable run: accepted ASCII runs, including explicit line breaks and minimal space-wrapped lines, draw through the atlas, while unsupported or failed runs are explicitly degraded and counted without D3D11On12 / D2D final composition. The active migration target is to replace each degradation case with D3D12 handling where practical and keep only accepted degradation where not. Initialization and runtime record failures currently degrade every renderable run for the affected frame because no safe atlas command list should be submitted from a failed record path.
+DirectWrite remains available as the glyph metrics/raster source. Current default GlyphAtlas behavior is mixed per renderable run: accepted ASCII runs, including explicit line breaks, tab spacing, and minimal whitespace-wrapped lines, draw through the atlas, while unsupported or failed runs are explicitly degraded and counted without D3D11On12 / D2D final composition. The active migration target is to replace each degradation case with D3D12 handling where practical and keep only accepted degradation where not. Initialization and runtime record failures currently degrade every renderable run for the affected frame because no safe atlas command list should be submitted from a failed record path.
 
 Fallback cases:
 
