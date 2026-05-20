@@ -36,7 +36,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private SafeHandle? _fenceEventOwner;
     private HANDLE _fenceEvent;
     private ulong[] _fenceValues = new ulong[FrameCount];
-    private ulong _lastSubmittedFrameFenceValue;
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
     private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
@@ -285,7 +284,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public bool BeginFrame()
     {
         if (_deviceRemoved) return false;
-        if (!WaitForReusableUploadResources()) return false;
         if (TryResetFrameCommands(out var firstResetError)) return true;
         if (!WaitForGpu()) return false;
         if (TryResetFrameCommands(out var retryResetError)) return true;
@@ -374,12 +372,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var scissor = new RECT { right = width, bottom = height };
         _list->RSSetScissorRects(1, &scissor);
 
-        _renderer2D!.RenderRectangles(_list, rects, width, height);
+        var frameResourceIndex = (int)_frameIndex;
+        _renderer2D!.RenderRectangles(_list, rects, width, height, frameResourceIndex);
 
         var hasText = textRuns.Length > 0;
         if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
         {
-            _ = TryRecordGlyphAtlasTextPass(textRuns, resources);
+            _ = TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex);
             if (_deviceRemoved)
             {
                 return;
@@ -402,7 +401,8 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult TryRecordGlyphAtlasTextPass(
         ReadOnlySpan<D3D12TextRun> textRuns,
-        IFrameResourceResolver resources)
+        IFrameResourceResolver resources,
+        int frameResourceIndex)
     {
         D3D12GlyphAtlasTextRenderer glyphAtlasTextRenderer;
         try
@@ -422,7 +422,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             return D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
         }
 
-        return glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height);
+        return glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height, frameResourceIndex);
     }
 
     private void RecordGlyphAtlasInitializationDegradation(
@@ -456,7 +456,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             var fence = _fenceValues[_frameIndex];
             _queue->Signal(_fence, fence);
-            _lastSubmittedFrameFenceValue = fence;
             _frameIndex = _swapChain->GetCurrentBackBufferIndex();
             if (!WaitForFence(_fenceValues[_frameIndex], DeviceErrorSite.MoveToNextFrame, countSyncWait: false))
             {
@@ -604,7 +603,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         for (var i = 0; i < FrameCount; i++) _fenceValues[i] = 0;
         _fenceValues[_frameIndex] = 1;
-        _lastSubmittedFrameFenceValue = 0;
     }
 
     private static void* RequirePointer(void* pointer, string message)
@@ -656,7 +654,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             var fence = _fenceValues[_frameIndex];
             _queue->Signal(_fence, fence);
-            _lastSubmittedFrameFenceValue = fence;
             if (!WaitForFence(fence, DeviceErrorSite.WaitForGpu, countSyncWait: true))
             {
                 return false;
@@ -670,12 +667,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             HandleDeviceError(ex, DeviceErrorSite.WaitForGpu);
             return false;
         }
-    }
-
-    private bool WaitForReusableUploadResources()
-    {
-        var fenceValue = _lastSubmittedFrameFenceValue;
-        return fenceValue == 0 || WaitForFence(fenceValue, DeviceErrorSite.ReusableUploadResourceWait, countSyncWait: true);
     }
 
     private bool WaitForFence(ulong fenceValue, DeviceErrorSite site, bool countSyncWait)
@@ -745,7 +736,6 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         _rtvSize = 0;
         _frameIndex = 0;
-        _lastSubmittedFrameFenceValue = 0;
         for (var i = 0; i < FrameCount; i++) _fenceValues[i] = 0;
     }
 

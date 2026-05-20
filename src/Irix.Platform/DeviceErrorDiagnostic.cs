@@ -10,7 +10,6 @@ internal enum DeviceErrorSite : byte
     Present,
     MoveToNextFrame,
     WaitForGpu,
-    ReusableUploadResourceWait,
     RecoveryReinitialize,
     GlyphAtlasInitialization,
     GlyphAtlasRecord
@@ -114,7 +113,6 @@ internal readonly struct DeviceErrorDiagnostic : IEquatable<DeviceErrorDiagnosti
             DeviceErrorSite.Present => "Present",
             DeviceErrorSite.MoveToNextFrame => "MoveToNextFrame",
             DeviceErrorSite.WaitForGpu => "WaitForGpu",
-            DeviceErrorSite.ReusableUploadResourceWait => "Reusable upload resource wait",
             DeviceErrorSite.RecoveryReinitialize => "Recovery reinitialize",
             DeviceErrorSite.GlyphAtlasInitialization => "Glyph atlas initialization",
             DeviceErrorSite.GlyphAtlasRecord => "Glyph atlas record",

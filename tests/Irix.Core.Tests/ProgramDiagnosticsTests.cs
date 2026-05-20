@@ -171,22 +171,41 @@ public sealed class ProgramDiagnosticsTests
         var rectSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer2D.cs")));
         var glyphSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs")));
 
-        Assert.Equal(1, CountOccurrences(rectSource, "finally\n        {\n            _vbuf->Unmap(0, null);\n        }"));
-        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            _vbuf->Unmap(0, null);\n        }"));
-        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            page.Upload->Unmap(0, null);\n        }"));
+        Assert.Equal(1, CountOccurrences(rectSource, "finally\n        {\n            vbuf->Unmap(0, null);\n        }"));
+        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            vbuf->Unmap(0, null);\n        }"));
+        Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            upload->Unmap(0, null);\n        }"));
     }
 
     [Fact]
-    public void D3D12_reusable_upload_resources_wait_on_last_submitted_fence_before_recording()
+    public void D3D12_upload_resources_are_frame_slot_owned()
     {
         var root = FindRepoRoot();
         var rendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer.cs")));
+        var rectSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer2D.cs")));
+        var glyphSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs")));
 
-        Assert.Contains("private ulong _lastSubmittedFrameFenceValue;", rendererSource);
-        Assert.Contains("if (!WaitForReusableUploadResources()) return false;\n        if (TryResetFrameCommands", rendererSource);
-        Assert.Equal(2, CountOccurrences(rendererSource, "_lastSubmittedFrameFenceValue = fence;"));
-        Assert.Contains("private bool WaitForReusableUploadResources()", rendererSource);
-        Assert.Contains("WaitForFence(fenceValue, DeviceErrorSite.ReusableUploadResourceWait, countSyncWait: true)", rendererSource);
+        Assert.Contains("var frameResourceIndex = (int)_frameIndex;", rendererSource);
+        Assert.Contains("RenderRectangles(_list, rects, width, height, frameResourceIndex)", rendererSource);
+        Assert.Contains("TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex)", rendererSource);
+        Assert.DoesNotContain("WaitForReusableUploadResources", rendererSource);
+        Assert.DoesNotContain("ReusableUploadResourceWait", rendererSource);
+
+        Assert.Contains("private const int UploadFrameCount = 2;", rectSource);
+        Assert.Contains("private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];", rectSource);
+        Assert.Contains("private readonly D3D12_VERTEX_BUFFER_VIEW[] _vbvs = new D3D12_VERTEX_BUFFER_VIEW[UploadFrameCount];", rectSource);
+        Assert.Contains("private void CreateVertexBuffers()", rectSource);
+        Assert.Contains("var uploadSlot = frameResourceIndex % UploadFrameCount;", rectSource);
+        Assert.Contains("var vbuf = _vbufs[uploadSlot];", rectSource);
+        Assert.Contains("var vbv = _vbvs[uploadSlot];", rectSource);
+
+        Assert.Contains("private const int UploadFrameCount = 2;", glyphSource);
+        Assert.Contains("private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];", glyphSource);
+        Assert.Contains("private readonly D3D12_VERTEX_BUFFER_VIEW[] _vbvs = new D3D12_VERTEX_BUFFER_VIEW[UploadFrameCount];", glyphSource);
+        Assert.Contains("private void CreateVertexBuffers()", glyphSource);
+        Assert.Contains("int frameResourceIndex)", glyphSource);
+        Assert.Contains("var upload = page.Uploads[uploadSlot];", glyphSource);
+        Assert.Contains("public ID3D12Resource*[] Uploads { get; } = uploads;", glyphSource);
+        Assert.DoesNotContain("public ID3D12Resource* Upload", glyphSource);
     }
 
     [Fact]
@@ -280,7 +299,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("page.Touch(recordSerial);", glyphSource);
         Assert.Contains("entry = entry.WithLastUsedSerial(recordSerial);", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle AddAtlasPage(", glyphSource);
-        Assert.Contains("ID3D12DescriptorHeap* srvHeap, D3D12_RESOURCE_STATES textureState)", glyphSource);
+        Assert.Contains("ID3D12Resource*[] uploads, ID3D12DescriptorHeap* srvHeap, D3D12_RESOURCE_STATES textureState)", glyphSource);
         Assert.Contains("private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle,", glyphSource);
         Assert.Contains("entry.Generation != handle.Generation || !TryResolveAtlasPage(entry.Page, out var page)", glyphSource);
         Assert.Contains("GlyphAtlasPageHandle Page", glyphSource);
@@ -291,6 +310,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private GlyphAtlasPage ResolveDrawBatchPage(GlyphAtlasPageHandle pageHandle)", glyphSource);
         Assert.Contains("var page = ResolveDrawBatchPage(batch.Page);", glyphSource);
         Assert.Contains("public ID3D12DescriptorHeap* SrvHeap { get; private set; }", glyphSource);
+        Assert.Contains("public ID3D12Resource*[] Uploads { get; } = uploads;", glyphSource);
         Assert.Contains("list->SetGraphicsRootDescriptorTable(0, page.SrvHeap->GetGPUDescriptorHandleForHeapStart());", glyphSource);
         Assert.Contains("D3D12_RESOURCE_STATES textureState", glyphSource);
         Assert.Contains("private D3D12_RESOURCE_STATES _textureState = textureState;", glyphSource);

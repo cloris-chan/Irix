@@ -16,6 +16,7 @@ namespace Irix.Platform.Windows;
 /// </summary>
 internal sealed unsafe class D3D12Renderer2D : IDisposable
 {
+    private const int UploadFrameCount = 2;
     private static readonly byte[] VertexShaderBytecode = Convert.FromBase64String(
         "RFhCQ75/+kn3zuYAeIeJeqg0Y2YBAAAAdAIAAAUAAAA0AAAAoAAAAPAAAABEAQAA2AEAAFJERUZkAAAAAAAAAAAAAAAAAAAAPAAAAAAF/v8AAQAAPAAAAFJEMTE8AAAAGAAAACAAAAAoAAAAJAAAAAwAAAAAAAAATWljcm9zb2Z0IChSKSBITFNMIFNoYWRlciBDb21waWxlciAxMC4xAElTR05IAAAAAgAAAAgAAAA4AAAAAAAAAAAAAAADAAAAAAAAAAMDAABBAAAAAAAAAAAAAAADAAAAAQAAAA8PAABQT1NJVElPTgBDT0xPUgCrT1NHTkwAAAACAAAACAAAADgAAAAAAAAAAQAAAAMAAAAAAAAADwAAAEQAAAAAAAAAAAAAAAMAAAABAAAADwAAAFNWX1BPU0lUSU9OAENPTE9SAKurU0hFWIwAAABQAAEAIwAAAGoIAAFfAAADMhAQAAAAAABfAAAD8hAQAAEAAABnAAAE8iAQAAAAAAABAAAAZQAAA/IgEAABAAAANgAABTIgEAAAAAAARhAQAAAAAAA2AAAIwiAQAAAAAAACQAAAAAAAAAAAAAAAAAAAAACAPzYAAAXyIBAAAQAAAEYeEAABAAAAPgAAAVNUQVSUAAAABAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==");
     private static readonly byte[] PixelShaderBytecode = Convert.FromBase64String(
@@ -24,8 +25,8 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
     private readonly ID3D12Device* _device;
     private ID3D12RootSignature* _rootSig;
     private ID3D12PipelineState* _pso;
-    private ID3D12Resource* _vbuf;
-    private D3D12_VERTEX_BUFFER_VIEW _vbv;
+    private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];
+    private readonly D3D12_VERTEX_BUFFER_VIEW[] _vbvs = new D3D12_VERTEX_BUFFER_VIEW[UploadFrameCount];
     private const int MaxVerts = 6 * 1024; // 1024 quads
     private bool _disposed;
 
@@ -36,7 +37,7 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         {
             CreateRootSignature();
             CreatePSO();
-            CreateVertexBuffer();
+            CreateVertexBuffers();
         }
         catch
         {
@@ -155,7 +156,7 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         }
     }
 
-    private void CreateVertexBuffer()
+    private void CreateVertexBuffers()
     {
         var heapProps = new D3D12_HEAP_PROPERTIES { Type = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD };
         var resDesc = new D3D12_RESOURCE_DESC
@@ -169,46 +170,55 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
             Layout = D3D12_TEXTURE_LAYOUT.D3D12_TEXTURE_LAYOUT_ROW_MAJOR
         };
 
-        void* resObj = null;
-        try
+        for (var i = 0; i < UploadFrameCount; i++)
         {
-            _device->CreateCommittedResource(
-                heapProps,
-                D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
-                resDesc,
-                D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
-                null,
-                typeof(ID3D12Resource).GUID,
-                out resObj);
-        }
-        catch (COMException ex)
-        {
-            throw WrapD3D12Exception("D3D12Renderer2D.CreateCommittedResource(vertex buffer)", ex);
-        }
+            void* resObj = null;
+            try
+            {
+                _device->CreateCommittedResource(
+                    heapProps,
+                    D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
+                    resDesc,
+                    D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_GENERIC_READ,
+                    null,
+                    typeof(ID3D12Resource).GUID,
+                    out resObj);
+            }
+            catch (COMException ex)
+            {
+                throw WrapD3D12Exception("D3D12Renderer2D.CreateCommittedResource(vertex buffer)", ex);
+            }
 
-        if (resObj == null)
-        {
-            throw new InvalidOperationException("D3D12Renderer2D.CreateCommittedResource(vertex buffer) returned a null resource.");
-        }
+            if (resObj == null)
+            {
+                throw new InvalidOperationException("D3D12Renderer2D.CreateCommittedResource(vertex buffer) returned a null resource.");
+            }
 
-        _vbuf = (ID3D12Resource*)resObj;
-        _vbv.BufferLocation = _vbuf->GetGPUVirtualAddress();
-        _vbv.SizeInBytes = (uint)(MaxVerts * sizeof(Vertex));
-        _vbv.StrideInBytes = (uint)sizeof(Vertex);
+            var vbuf = (ID3D12Resource*)resObj;
+            _vbufs[i] = vbuf;
+            _vbvs[i] = new D3D12_VERTEX_BUFFER_VIEW
+            {
+                BufferLocation = vbuf->GetGPUVirtualAddress(),
+                SizeInBytes = (uint)(MaxVerts * sizeof(Vertex)),
+                StrideInBytes = (uint)sizeof(Vertex)
+            };
+        }
     }
 
     /// <summary>
     /// Render colored rectangles. Returns the number of quads drawn.
     /// Coordinates are in screen pixels, converted to NDC internally.
     /// </summary>
-    public int RenderRectangles(ID3D12GraphicsCommandList* list, ReadOnlySpan<RectData> rects, float vpW, float vpH)
+    public int RenderRectangles(ID3D12GraphicsCommandList* list, ReadOnlySpan<RectData> rects, float vpW, float vpH, int frameResourceIndex)
     {
         if (rects.Length == 0) return 0;
 
+        var uploadSlot = frameResourceIndex % UploadFrameCount;
+        var vbuf = _vbufs[uploadSlot];
         void* mapped = null;
         try
         {
-            _vbuf->Map(0, null, &mapped);
+            vbuf->Map(0, null, &mapped);
         }
         catch (COMException ex)
         {
@@ -243,13 +253,13 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         }
         finally
         {
-            _vbuf->Unmap(0, null);
+            vbuf->Unmap(0, null);
         }
 
         list->SetPipelineState(_pso);
         list->SetGraphicsRootSignature(_rootSig);
         list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-        var vbv = _vbv;
+        var vbv = _vbvs[uploadSlot];
         list->IASetVertexBuffers(0, 1, &vbv);
         var rectCount = count / 6;
         var runStart = 0;
@@ -288,7 +298,15 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
     public void Dispose()
     {
         if (_disposed) return;
-        if (_vbuf != null) _vbuf->Release();
+        for (var i = 0; i < _vbufs.Length; i++)
+        {
+            if (_vbufs[i] != null)
+            {
+                _vbufs[i]->Release();
+                _vbufs[i] = null;
+            }
+        }
+
         if (_pso != null) _pso->Release();
         if (_rootSig != null) _rootSig->Release();
         _disposed = true;

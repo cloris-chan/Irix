@@ -41,7 +41,7 @@ Runtime record/upload/map failures disable the atlas instance and degrade render
 D3D12 upload map paths now unmap in `finally` after a successful map, covering rectangle vertices, glyph vertices, and atlas uploads.
 D3D12 swapchain creation now releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery use the same helper.
 D3D12 core device/queue/RTV/command/fence setup is also shared by constructor and recovery, with pointer guards and null-safe cleanup for partial initialization failure.
-D3D12 `BeginFrame` now waits for the last submitted frame fence before recording into reusable global upload resources. This covers the current global rectangle vertex upload, glyph vertex upload, and glyph page upload resources until those are replaced with retained-frame-safe resource rings or per-frame ownership. The wait is observable through sync diagnostics only when the fence has not already completed.
+D3D12 rectangle vertex, glyph vertex, and per-page atlas upload resources are now frame-slot owned. `BeginFrame` no longer needs a coarse last-submitted-frame upload wait; normal swapchain frame-slot fencing protects each upload resource before reuse.
 D3D11On12 / Direct2D overlay renderer sources, sync strategy, native method generation entries, and diagnostics have been removed from the active source tree.
 
 Default degradation update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It records atlas quads for accepted runs and counts unsupported or failed renderable runs as degradation.
@@ -211,7 +211,7 @@ Rules:
 ## Upload Path
 
 The first spike should avoid per-glyph GPU synchronization.
-Current renderer-foundation code still uses global reusable upload resources and protects them with a last-submitted-frame fence wait at `BeginFrame`. A future upload ring should replace that coarse resource-reuse guard with per-frame/per-page ownership so uploads can overlap safely without mapping memory still referenced by the GPU.
+Current renderer-foundation code uses frame-slot upload resources for rectangle vertices, glyph vertices, and per-page atlas texture uploads. A future upload allocator can still compact this into a shared ring, but it must preserve per-frame ownership so uploads do not map memory still referenced by the GPU.
 
 Candidate upload flow:
 
