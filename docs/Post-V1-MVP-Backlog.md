@@ -95,7 +95,7 @@ Full shaping, wrapping, color glyphs, fallback font identity, eviction, command-
 | Atlas design | Define glyph key, atlas page size, eviction, scale/DPI keying, color handling, clipping, and upload lifecycle | Design doc approved; no public backend API change |
 | Glyph source | Use DirectWrite only for shaping/raster source if needed; final composition must not use D3D11On12/D2D overlay | Glyph bitmaps can be uploaded to D3D12 textures |
 | D3D12 text pipeline | Add glyph quad generation, atlas SRV, pipeline state, blend state, sampler, and scissor support | Text and rectangles are submitted in one D3D12 synchronization domain |
-| Diagnostics | Report atlas hit/miss/upload counts, `AtlasRuns`, `DegradedRuns`, unsupported runs, and per-run degradation reasons | Diagnostics show whether default composition still depends on degradation |
+| Diagnostics | Report atlas hit/miss/upload bytes/new glyph counts, `AtlasRuns`, `DegradedRuns`, unsupported runs, and per-run degradation reasons | Diagnostics show whether default composition still depends on degradation |
 | Migration | Keep default GlyphAtlas on D3D12 atlas or explicit degradation without D3D11On12/D2D overlay | No regression in renderer stability, clipping, scale, scroll sync, hit-test, partial apply |
 
 Non-goals:
@@ -153,7 +153,7 @@ Known limitations checklist before expanding text coverage:
 - Default GlyphAtlas no longer has mixed overlay z-order risk because degraded runs are not drawn; replacing degradation with D3D12 rendering remains follow-up work.
 - No same-frame atlas eviction. AtlasFull degradation is safe for the current prototype; it schedules a record-serial-gated next-frame cold-page reset/reuse request so accepted runs in the current frame cannot sample recycled regions.
 - Glyph atlas cache entries, draw batches, and atlas pages now have stable value handles and generations internally; page-owned texture/upload/SRV resources replace renderer-level atlas resource fields. Cache hits and new glyph rasterizations touch glyph entries/pages with a monotonic atlas record serial. The renderer preallocates a four-page atlas pool, switches pages when the active page is full, splits draw batches on page changes, records page reuse requests with the triggering atlas record serial, and removes only entries from a reused page after the request becomes applicable on a later record.
-- Glyph atlas diagnostics report page count, fixed page budget, page dimensions, total atlas pixel capacity, completed and pending next-frame reuse counts, used glyph bitmap pixels, a shelf fragmentation estimate, atlas record serial, and oldest/newest page age metrics for future page-size and LRU decisions.
+- Glyph atlas diagnostics report page count, fixed page budget, page dimensions, total atlas pixel capacity, completed and pending next-frame reuse counts, used glyph bitmap pixels, a shelf fragmentation estimate, atlas record serial, oldest/newest page age metrics, upload bytes, and uploaded glyph count for future page-size, LRU, and upload policy decisions.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
 - Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.
 - Overlay removal is active in source. Do not reintroduce D3D11On12/D2D; widen D3D12 text handling or keep explicit degradation.

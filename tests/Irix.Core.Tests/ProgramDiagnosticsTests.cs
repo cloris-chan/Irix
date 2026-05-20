@@ -382,6 +382,8 @@ public sealed class ProgramDiagnosticsTests
             .WithAtlasPages(1)
             .WithAtlasEviction()
             .WithAtlasPageUsage(2048, 512)
+            .WithUploadedGlyph()
+            .WithUploadedGlyph()
             .WithDegradation(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
 
@@ -400,6 +402,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("atlasOldestPageAge=0", summary);
         Assert.Contains("atlasNewestPageAge=0", summary);
         Assert.Contains("uploads=4096 bytes", summary);
+        Assert.Contains("uploadedGlyphs=2", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("degradedRuns=0", summary);
         Assert.Contains("fallbacks=2", summary);
@@ -1201,7 +1204,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

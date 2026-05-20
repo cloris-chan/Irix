@@ -163,6 +163,7 @@ Overlay removal update: default GlyphAtlas no longer records unsupported, AtlasF
 2026-05-20 mixed degradation smoke also reported page usage `atlasUsed=4461 px`, `atlasFragmented=1125 px`.
 2026-05-20 MixedAtlasFullReuse stress after the four-page pool reported `frameSerial=2`, `presentSerial=2`, `syncWaits=0`, `atlasRuns=13`, `degradedRuns=24`, `atlasPages=4`, `atlasBudgetPages=4`, `atlasCapacity=4194304 px`, `atlasEvictions=1`, `atlasPendingPageReuses=0`, `cachedGlyphs=628`, `atlasUsed=2153953 px`, `atlasFragmented=950441 px`, `atlasOldestPageAge=1`, `AtlasFull=23`, `NonAscii=1`, and no device removal. The eviction is the record-serial-gated next-frame cold-page reset/reuse path, not same-frame LRU.
 2026-05-20 frame-slot upload ownership update: Release build passed; all tests `646` passed; program diagnostics tests `58` passed. Short default GlyphAtlas sync smoke reported `frameSerial=30`, `presentSerial=30`, `syncWaits=0`, avg/p95 sync wait `0.000ms`, `atlasRuns=90`, and no device removal. Short mixed degradation and MixedAtlasFull / MixedAtlasFullReuse stress also remained `syncWaits=0`. Rectangle vertex, glyph vertex, and per-page atlas upload buffers now rotate by backbuffer frame slot instead of using a last-submitted-frame upload fence at `BeginFrame`.
+Glyph atlas upload diagnostics now expose `uploadedGlyphs` separately from cache misses so upload policy can distinguish actual new atlas entries from failed misses and degradation.
 
 Manual smoke status:
 
