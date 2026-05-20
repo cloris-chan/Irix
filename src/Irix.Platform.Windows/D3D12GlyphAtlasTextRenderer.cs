@@ -167,7 +167,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         try
         {
             var recordSerial = ++_glyphRecordSerial;
-            ApplyPendingAtlasPageEviction(recordSerial);
+            ApplyPendingAtlasPageEviction(recordSerial, oldestRetainedRecordSerial: recordSerial);
             var frame = BuildFrame(textRuns, resources, viewportWidth, viewportHeight, recordSerial);
 
             if (frame.VertexCount == 0)
@@ -762,9 +762,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return new GlyphAtlasPageUsage(usedPixels, fragmentedPixels, oldestPageAge, newestPageAge);
     }
 
-    private void ApplyPendingAtlasPageEviction(long recordSerial)
+    private void ApplyPendingAtlasPageEviction(long recordSerial, long oldestRetainedRecordSerial)
     {
-        if (!_pendingAtlasPageReuse.CanApply(recordSerial))
+        if (!_pendingAtlasPageReuse.CanApply(recordSerial, oldestRetainedRecordSerial))
         {
             return;
         }
@@ -2117,8 +2117,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public long RequestedRecordSerial { get; } = RequestedRecordSerial;
         public bool IsNone => Page.IsNone;
 
-        public bool CanApply(long recordSerial) =>
-            GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(!IsNone, RequestedRecordSerial, recordSerial);
+        public bool CanApply(long recordSerial, long oldestRetainedRecordSerial) =>
+            GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(!IsNone, RequestedRecordSerial, recordSerial, oldestRetainedRecordSerial);
     }
 
     private sealed unsafe class GlyphAtlasPage(

@@ -187,9 +187,15 @@ internal static class GlyphAtlasTextCompositionHelpers
 
     internal static bool IsWrapWhitespace(char character) => character is ' ' or '\t';
 
-    internal static bool CanApplyAtlasPageReuseRequest(bool hasPendingRequest, long requestedRecordSerial, long currentRecordSerial)
+    internal static bool CanApplyAtlasPageReuseRequest(
+        bool hasPendingRequest,
+        long requestedRecordSerial,
+        long currentRecordSerial,
+        long oldestRetainedRecordSerial)
     {
-        return hasPendingRequest && currentRecordSerial > requestedRecordSerial;
+        return hasPendingRequest
+            && currentRecordSerial > requestedRecordSerial
+            && oldestRetainedRecordSerial > requestedRecordSerial;
     }
 
     internal static bool ShouldClearGlyphForReusedPage(bool isLiveGlyph, int glyphPageIndex, int glyphPageGeneration, int reusedPageIndex, int reusedPageGeneration)
