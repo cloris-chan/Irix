@@ -228,6 +228,11 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasSrvHeap;
     }
 
+    internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
+    {
+        return hasVertexUploadBuffer;
+    }
+
     internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
     {
         if ((uint)index >= (uint)text.Length)

@@ -1109,6 +1109,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         var uploadSlot = frameResourceIndex % UploadFrameCount;
         var vbuf = _vbufs[uploadSlot];
+        if (!GlyphAtlasTextCompositionHelpers.HasGlyphVertexUploadResource(vbuf != null))
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.VertexBufferMap,
+                "D3D12GlyphAtlasTextRenderer.UploadVertices found a missing vertex upload buffer.");
+        }
+
         void* mapped = null;
         try
         {
