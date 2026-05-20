@@ -177,6 +177,19 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void D3D12_reusable_upload_resources_wait_on_last_submitted_fence_before_recording()
+    {
+        var root = FindRepoRoot();
+        var rendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer.cs")));
+
+        Assert.Contains("private ulong _lastSubmittedFrameFenceValue;", rendererSource);
+        Assert.Contains("if (!WaitForReusableUploadResources()) return false;\n        if (TryResetFrameCommands", rendererSource);
+        Assert.Equal(2, CountOccurrences(rendererSource, "_lastSubmittedFrameFenceValue = fence;"));
+        Assert.Contains("private bool WaitForReusableUploadResources()", rendererSource);
+        Assert.Contains("WaitForFence(fenceValue, DeviceErrorSite.ReusableUploadResourceWait, countSyncWait: true)", rendererSource);
+    }
+
+    [Fact]
     public void D3D12_swapchain_intermediate_com_objects_release_in_finally()
     {
         var root = FindRepoRoot();

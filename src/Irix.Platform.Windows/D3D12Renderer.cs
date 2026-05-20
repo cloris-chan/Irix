@@ -22,6 +22,7 @@ internal enum TextCompositionMode
 internal sealed unsafe class D3D12Renderer : IDisposable
 {
     private const int FrameCount = 2;
+    private const uint InfiniteWaitMilliseconds = 0xFFFFFFFF;
 
     private ID3D12Device* _device;
     private ID3D12CommandQueue* _queue;
@@ -35,6 +36,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private SafeHandle? _fenceEventOwner;
     private HANDLE _fenceEvent;
     private ulong[] _fenceValues = new ulong[FrameCount];
+    private ulong _lastSubmittedFrameFenceValue;
     private uint _frameIndex;
     private D3D12Renderer2D? _renderer2D;
     private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
@@ -283,6 +285,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     public bool BeginFrame()
     {
         if (_deviceRemoved) return false;
+        if (!WaitForReusableUploadResources()) return false;
         if (TryResetFrameCommands(out var firstResetError)) return true;
         if (!WaitForGpu()) return false;
         if (TryResetFrameCommands(out var retryResetError)) return true;
@@ -453,11 +456,11 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             var fence = _fenceValues[_frameIndex];
             _queue->Signal(_fence, fence);
+            _lastSubmittedFrameFenceValue = fence;
             _frameIndex = _swapChain->GetCurrentBackBufferIndex();
-            if (_fence->GetCompletedValue() < _fenceValues[_frameIndex])
+            if (!WaitForFence(_fenceValues[_frameIndex], DeviceErrorSite.MoveToNextFrame, countSyncWait: false))
             {
-                _fence->SetEventOnCompletion(_fenceValues[_frameIndex], _fenceEvent);
-                PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
+                return false;
             }
 
             _fenceValues[_frameIndex] = fence + 1;
@@ -495,6 +498,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         CreateFenceResources();
 
         _frameIndex = _swapChain->GetCurrentBackBufferIndex();
+        InitializeFrameFenceValues();
         _renderer2D = new D3D12Renderer2D(_device);
     }
 
@@ -596,6 +600,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _fenceEvent = new HANDLE(_fenceEventOwner.DangerousGetHandle());
     }
 
+    private void InitializeFrameFenceValues()
+    {
+        for (var i = 0; i < FrameCount; i++) _fenceValues[i] = 0;
+        _fenceValues[_frameIndex] = 1;
+        _lastSubmittedFrameFenceValue = 0;
+    }
+
     private static void* RequirePointer(void* pointer, string message)
     {
         if (pointer == null)
@@ -645,8 +656,12 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         {
             var fence = _fenceValues[_frameIndex];
             _queue->Signal(_fence, fence);
-            _fence->SetEventOnCompletion(fence, _fenceEvent);
-            PInvoke.WaitForSingleObject(_fenceEvent, 0xFFFFFFFF);
+            _lastSubmittedFrameFenceValue = fence;
+            if (!WaitForFence(fence, DeviceErrorSite.WaitForGpu, countSyncWait: true))
+            {
+                return false;
+            }
+
             for (var i = 0; i < FrameCount; i++) _fenceValues[i] = fence + 1;
             return true;
         }
@@ -655,6 +670,40 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             HandleDeviceError(ex, DeviceErrorSite.WaitForGpu);
             return false;
         }
+    }
+
+    private bool WaitForReusableUploadResources()
+    {
+        var fenceValue = _lastSubmittedFrameFenceValue;
+        return fenceValue == 0 || WaitForFence(fenceValue, DeviceErrorSite.ReusableUploadResourceWait, countSyncWait: true);
+    }
+
+    private bool WaitForFence(ulong fenceValue, DeviceErrorSite site, bool countSyncWait)
+    {
+        if (fenceValue == 0 || _fence->GetCompletedValue() >= fenceValue)
+        {
+            return true;
+        }
+
+        var start = countSyncWait ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
+        try
+        {
+            _fence->SetEventOnCompletion(fenceValue, _fenceEvent);
+            PInvoke.WaitForSingleObject(_fenceEvent, InfiniteWaitMilliseconds);
+        }
+        catch (COMException ex)
+        {
+            HandleDeviceError(ex, site);
+            return false;
+        }
+
+        if (countSyncWait)
+        {
+            Interlocked.Increment(ref _syncWaitCount);
+            Interlocked.Add(ref _syncWaitTicks, System.Diagnostics.Stopwatch.GetTimestamp() - start);
+        }
+
+        return true;
     }
 
     private void ReleaseDeviceResources(bool waitForGpu)
@@ -696,6 +745,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         _rtvSize = 0;
         _frameIndex = 0;
+        _lastSubmittedFrameFenceValue = 0;
         for (var i = 0; i < FrameCount; i++) _fenceValues[i] = 0;
     }
 
