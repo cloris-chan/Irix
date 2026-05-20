@@ -47,8 +47,14 @@ public sealed class ProgramDiagnosticsTests
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 測試".AsSpan(), TextStyle.Default));
         Assert.Equal(
-            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Line\nBreak".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Line\r\nBreak".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Tab\tBreak".AsSpan(), TextStyle.Default));
 
         var wrappingStyle = new TextStyle(
             TextStyle.Default.FontFamily,
@@ -131,6 +137,68 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(new GlyphAtlasLayoutLine(0, 2, 20), lines[0]);
         Assert.Equal(new GlyphAtlasLayoutLine(4, 6, 20), lines[1]);
         Assert.Equal(new GlyphAtlasLayoutLine(7, 8, 10), lines[2]);
+    }
+
+    [Fact]
+    public void Glyph_atlas_line_planner_breaks_explicit_ascii_lines()
+    {
+        Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[4];
+        Span<float> advances = [10, 10, 0, 10, 10, 0, 0, 10];
+
+        var reason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            "AB\nCD\r\nE".AsSpan(),
+            advances,
+            maxLineWidth: 100,
+            TextWrapping.NoWrap,
+            lines,
+            out var lineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, reason);
+        Assert.Equal(3, lineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, 2, 20), lines[0]);
+        Assert.Equal(new GlyphAtlasLayoutLine(3, 5, 20), lines[1]);
+        Assert.Equal(new GlyphAtlasLayoutLine(7, 8, 10), lines[2]);
+    }
+
+    [Fact]
+    public void Glyph_atlas_line_planner_counts_trailing_explicit_line_break()
+    {
+        Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[3];
+        Span<float> advances = [10, 0];
+
+        var reason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            "A\n".AsSpan(),
+            advances,
+            maxLineWidth: 100,
+            TextWrapping.NoWrap,
+            lines,
+            out var lineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, reason);
+        Assert.Equal(2, lineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, 1, 10), lines[0]);
+        Assert.Equal(new GlyphAtlasLayoutLine(2, 2, 0), lines[1]);
+    }
+
+    [Fact]
+    public void Glyph_atlas_line_planner_allows_one_more_line_than_text_length()
+    {
+        Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[3];
+        Span<float> advances = [0, 0];
+
+        var reason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            "\n\n".AsSpan(),
+            advances,
+            maxLineWidth: 100,
+            TextWrapping.NoWrap,
+            lines,
+            out var lineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, reason);
+        Assert.Equal(3, lineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, 0, 0), lines[0]);
+        Assert.Equal(new GlyphAtlasLayoutLine(1, 1, 0), lines[1]);
+        Assert.Equal(new GlyphAtlasLayoutLine(2, 2, 0), lines[2]);
     }
 
     [Fact]
@@ -611,13 +679,13 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(4, summary.TextRuns);
-        Assert.Equal(2, summary.AtlasCandidateRuns);
+        Assert.Equal(5, summary.TextRuns);
+        Assert.Equal(3, summary.AtlasCandidateRuns);
         Assert.Equal(2, summary.DegradedCandidateRuns);
         Assert.Equal(1, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(1, summary.WrappingFallbackRuns);
         Assert.Equal(1, summary.NonAsciiFallbackRuns);
-        Assert.Contains("atlasRuns=2", expectedLine);
+        Assert.Contains("atlasRuns=3", expectedLine);
         Assert.Contains("degradedRuns=2", expectedLine);
         Assert.Contains("wrappedAtlasRuns=1", expectedLine);
         Assert.Contains("Wrapping=1", expectedLine);

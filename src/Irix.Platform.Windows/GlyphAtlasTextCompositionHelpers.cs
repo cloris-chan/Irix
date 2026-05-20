@@ -26,7 +26,7 @@ internal static class GlyphAtlasTextCompositionHelpers
     {
         foreach (var character in text)
         {
-            if (character is < ' ' or > '~')
+            if (character is > '~' || (character < ' ' && character is not '\r' and not '\n'))
             {
                 return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii;
             }
@@ -54,27 +54,40 @@ internal static class GlyphAtlasTextCompositionHelpers
             throw new ArgumentException("Glyph atlas line planner scratch is too small.");
         }
 
-        if (wrapping == TextWrapping.NoWrap)
-        {
-            var lineWidth = 0f;
-            for (var i = 0; i < text.Length; i++)
-            {
-                lineWidth += advances[i];
-            }
-
-            if (lineWidth > maxLineWidth)
-            {
-                return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Clip;
-            }
-
-            lines[0] = new GlyphAtlasLayoutLine(0, text.Length, lineWidth);
-            lineCount = 1;
-            return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
-        }
-
         var index = 0;
         while (index < text.Length)
         {
+            if (IsLineBreak(text, index, out var lineBreakWidth))
+            {
+                AppendLine(lines, ref lineCount, index, index, 0);
+                index += lineBreakWidth;
+                continue;
+            }
+
+            if (wrapping == TextWrapping.NoWrap)
+            {
+                var noWrapLineStart = index;
+                var noWrapLineWidth = 0f;
+                while (index < text.Length && !IsLineBreak(text, index, out lineBreakWidth))
+                {
+                    noWrapLineWidth += advances[index];
+                    if (noWrapLineWidth > maxLineWidth)
+                    {
+                        return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Clip;
+                    }
+
+                    index++;
+                }
+
+                AppendLine(lines, ref lineCount, noWrapLineStart, index, noWrapLineWidth);
+                if (index < text.Length && IsLineBreak(text, index, out lineBreakWidth))
+                {
+                    index += lineBreakWidth;
+                }
+
+                continue;
+            }
+
             while (index < text.Length && text[index] == ' ')
             {
                 index++;
@@ -85,6 +98,13 @@ internal static class GlyphAtlasTextCompositionHelpers
                 break;
             }
 
+            if (IsLineBreak(text, index, out lineBreakWidth))
+            {
+                AppendLine(lines, ref lineCount, index, index, 0);
+                index += lineBreakWidth;
+                continue;
+            }
+
             var lineStart = index;
             var lineWidth = 0f;
             var breakIndex = -1;
@@ -92,6 +112,21 @@ internal static class GlyphAtlasTextCompositionHelpers
 
             for (var i = lineStart; i < text.Length; i++)
             {
+                if (IsLineBreak(text, i, out var explicitBreakWidth))
+                {
+                    var explicitLineEnd = i;
+                    var resolvedLineWidth = lineWidth;
+                    while (explicitLineEnd > lineStart && text[explicitLineEnd - 1] == ' ')
+                    {
+                        explicitLineEnd--;
+                        resolvedLineWidth -= advances[explicitLineEnd];
+                    }
+
+                    AppendLine(lines, ref lineCount, lineStart, explicitLineEnd, resolvedLineWidth);
+                    index = i + explicitBreakWidth;
+                    goto NextLine;
+                }
+
                 if (text[i] == ' ' && i > lineStart && text[i - 1] != ' ')
                 {
                     breakIndex = i;
@@ -133,8 +168,41 @@ internal static class GlyphAtlasTextCompositionHelpers
             lines[0] = new GlyphAtlasLayoutLine(0, 0, 0);
             lineCount = 1;
         }
+        else if (EndsWithLineBreak(text))
+        {
+            AppendLine(lines, ref lineCount, text.Length, text.Length, 0);
+        }
 
         return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
+    }
+
+    private static bool EndsWithLineBreak(ReadOnlySpan<char> text)
+    {
+        return !text.IsEmpty && text[^1] is '\r' or '\n';
+    }
+
+    internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
+    {
+        if ((uint)index >= (uint)text.Length)
+        {
+            width = 0;
+            return false;
+        }
+
+        if (text[index] == '\r')
+        {
+            width = index + 1 < text.Length && text[index + 1] == '\n' ? 2 : 1;
+            return true;
+        }
+
+        if (text[index] == '\n')
+        {
+            width = 1;
+            return true;
+        }
+
+        width = 0;
+        return false;
     }
 
     private static void AppendLine(

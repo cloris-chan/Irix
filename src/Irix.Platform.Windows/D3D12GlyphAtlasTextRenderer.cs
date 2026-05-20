@@ -299,6 +299,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
                 for (var glyphIndex = line.Start; glyphIndex < line.End; glyphIndex++)
                 {
+                    if (GlyphAtlasTextCompositionHelpers.IsLineBreak(text, glyphIndex, out _))
+                    {
+                        continue;
+                    }
+
                     var glyph = _layoutGlyphScratch[glyphIndex];
                     if (penX + glyph.Advance > maxX)
                     {
@@ -378,11 +383,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void EnsureLayoutScratch(int textLength)
     {
-        if (_layoutGlyphScratch.Length < textLength)
+        if (_layoutGlyphScratch.Length < textLength || _layoutLineScratch.Length < textLength + 1)
         {
             _layoutGlyphScratch = new GlyphEntry[textLength];
             _layoutAdvanceScratch = new float[textLength];
-            _layoutLineScratch = new GlyphAtlasLayoutLine[textLength];
+            _layoutLineScratch = new GlyphAtlasLayoutLine[textLength + 1];
         }
     }
 
@@ -399,6 +404,20 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var advances = _layoutAdvanceScratch.AsSpan(0, text.Length);
         for (var i = 0; i < text.Length; i++)
         {
+            if (GlyphAtlasTextCompositionHelpers.IsLineBreak(text, i, out var lineBreakWidth))
+            {
+                glyphs[i] = default;
+                advances[i] = 0;
+                if (lineBreakWidth == 2)
+                {
+                    i++;
+                    glyphs[i] = default;
+                    advances[i] = 0;
+                }
+
+                continue;
+            }
+
             if (!TryGetGlyph(fontFace, style, text[i], recordSerial, out glyphs[i], out unsupportedReason))
             {
                 lineCount = 0;
@@ -413,7 +432,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             advances,
             maxLineWidth,
             wrapping: style.Wrapping,
-            lines: _layoutLineScratch.AsSpan(0, text.Length),
+            lines: _layoutLineScratch.AsSpan(0, text.Length + 1),
             out lineCount);
         return unsupportedReason == GlyphAtlasFallbackReason.None;
     }
