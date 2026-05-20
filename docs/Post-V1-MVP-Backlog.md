@@ -38,7 +38,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
 | POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow ASCII/NoWrap runs have local evidence and unsupported cases degrade |
-| POST-011 | Resource cache / stable global handles | Entry/page handles, next-frame single-page reuse, and page usage diagnostics done | D3D12-specific; align with glyph atlas resource ownership and eviction work |
+| POST-011 | Resource cache / stable global handles | Entry/page handles, page-owned SRV resources, next-frame single-page reuse, and page usage diagnostics done | D3D12-specific; align with glyph atlas resource ownership and eviction work |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
 
@@ -151,7 +151,7 @@ Known limitations checklist before expanding text coverage:
 - Default GlyphAtlas degrades unsupported renderable runs while accepted ASCII / `NoWrap` runs stay on atlas. Initialization and runtime record failure degrade all renderable runs for the frame.
 - Default GlyphAtlas no longer has mixed overlay z-order risk because degraded runs are not drawn; replacing degradation with D3D12 rendering remains follow-up work.
 - No same-frame atlas eviction. AtlasFull degradation is safe for the current prototype; it schedules a next-frame reset/reuse of the single page so accepted runs in the current frame cannot sample recycled regions.
-- Glyph atlas cache entries and the current single atlas page now have stable value handles and generations internally; next-frame page reuse bumps the page generation and clears entry lookup state, but multi-page LRU eviction remains deferred.
+- Glyph atlas cache entries, draw batches, and the current single atlas page now have stable value handles and generations internally; page-owned texture/upload/SRV resources replace renderer-level atlas resource fields. Next-frame page reuse bumps the page generation and clears entry lookup state, but multi-page LRU eviction remains deferred.
 - Glyph atlas diagnostics report page count, next-frame reuse count, used glyph bitmap pixels, and a shelf fragmentation estimate for future page-size and LRU decisions.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or wrapping support in the atlas path.
 - Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.

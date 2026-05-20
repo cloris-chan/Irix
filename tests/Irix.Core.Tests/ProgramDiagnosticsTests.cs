@@ -255,10 +255,17 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
         Assert.Contains("private GlyphAtlasEntryHandle AddGlyphEntry(in GlyphEntry entry)", glyphSource);
         Assert.Contains("private bool TryResolveGlyph(GlyphAtlasEntryHandle handle, out GlyphEntry entry)", glyphSource);
-        Assert.Contains("private GlyphAtlasPageHandle AddAtlasPage(ID3D12Resource* texture, ID3D12Resource* upload)", glyphSource);
+        Assert.Contains("private GlyphAtlasPageHandle AddAtlasPage(", glyphSource);
+        Assert.Contains("ID3D12DescriptorHeap* srvHeap)", glyphSource);
         Assert.Contains("private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle,", glyphSource);
         Assert.Contains("entry.Generation == handle.Generation && TryResolveAtlasPage(entry.Page", glyphSource);
         Assert.Contains("GlyphAtlasPageHandle Page", glyphSource);
+        Assert.Contains("private readonly struct GlyphDrawBatch(int StartVertex, int VertexCount, IntegerScissorRect Scissor, GlyphAtlasPageHandle Page)", glyphSource);
+        Assert.Contains("_batches[batchCount++] = new GlyphDrawBatch(batchStart, vertexCount - batchStart, scissor, batchPage);", glyphSource);
+        Assert.Contains("private GlyphAtlasPage ResolveDrawBatchPage(GlyphAtlasPageHandle pageHandle)", glyphSource);
+        Assert.Contains("var page = ResolveDrawBatchPage(batch.Page);", glyphSource);
+        Assert.Contains("public ID3D12DescriptorHeap* SrvHeap { get; private set; }", glyphSource);
+        Assert.Contains("list->SetGraphicsRootDescriptorTable(0, page.SrvHeap->GetGPUDescriptorHandleForHeapStart());", glyphSource);
         Assert.Contains("private void ApplyPendingAtlasPageEviction()", glyphSource);
         Assert.Contains("_activeAtlasPage = page.ResetForReuse();", glyphSource);
         Assert.Contains("_glyphs.Clear();", glyphSource);
@@ -280,6 +287,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("_glyphs.Add(key, glyph)", glyphSource);
         Assert.DoesNotContain("private ID3D12Resource* _atlasTexture", glyphSource);
         Assert.DoesNotContain("private ID3D12Resource* _atlasUpload", glyphSource);
+        Assert.DoesNotContain("private ID3D12DescriptorHeap* _srvHeap", glyphSource);
     }
 
     [Fact]
