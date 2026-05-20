@@ -267,7 +267,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("page.Touch(recordSerial);", glyphSource);
         Assert.Contains("entry = entry.WithLastUsedSerial(recordSerial);", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle AddAtlasPage(", glyphSource);
-        Assert.Contains("ID3D12DescriptorHeap* srvHeap)", glyphSource);
+        Assert.Contains("ID3D12DescriptorHeap* srvHeap, D3D12_RESOURCE_STATES textureState)", glyphSource);
         Assert.Contains("private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle,", glyphSource);
         Assert.Contains("entry.Generation != handle.Generation || !TryResolveAtlasPage(entry.Page, out var page)", glyphSource);
         Assert.Contains("GlyphAtlasPageHandle Page", glyphSource);
@@ -279,6 +279,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("var page = ResolveDrawBatchPage(batch.Page);", glyphSource);
         Assert.Contains("public ID3D12DescriptorHeap* SrvHeap { get; private set; }", glyphSource);
         Assert.Contains("list->SetGraphicsRootDescriptorTable(0, page.SrvHeap->GetGPUDescriptorHandleForHeapStart());", glyphSource);
+        Assert.Contains("D3D12_RESOURCE_STATES textureState", glyphSource);
+        Assert.Contains("private D3D12_RESOURCE_STATES _textureState = textureState;", glyphSource);
+        Assert.Contains("public D3D12_RESOURCE_BARRIER TransitionTexture(D3D12_RESOURCE_STATES after)", glyphSource);
+        Assert.Contains("var barrier = Transition(Texture, _textureState, after);", glyphSource);
+        Assert.Contains("_textureState = after;", glyphSource);
+        Assert.Contains("var toCopyDest = page.TransitionTexture(D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);", glyphSource);
+        Assert.Contains("var toShaderResource = page.TransitionTexture(D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);", glyphSource);
         Assert.Contains("ApplyPendingAtlasPageEviction(recordSerial);", glyphSource);
         Assert.Contains("private void ApplyPendingAtlasPageEviction(long recordSerial)", glyphSource);
         Assert.Contains("if (!_pendingAtlasPageReuse.CanApply(recordSerial))", glyphSource);
@@ -317,6 +324,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("private ID3D12Resource* _atlasTexture", glyphSource);
         Assert.DoesNotContain("private ID3D12Resource* _atlasUpload", glyphSource);
         Assert.DoesNotContain("private ID3D12DescriptorHeap* _srvHeap", glyphSource);
+        Assert.DoesNotContain("Transition(page.Texture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST)", glyphSource);
     }
 
     [Fact]

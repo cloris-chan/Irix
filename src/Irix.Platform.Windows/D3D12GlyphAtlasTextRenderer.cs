@@ -542,7 +542,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
-    private GlyphAtlasPageHandle AddAtlasPage(ID3D12Resource* texture, ID3D12Resource* upload, ID3D12DescriptorHeap* srvHeap)
+    private GlyphAtlasPageHandle AddAtlasPage(ID3D12Resource* texture, ID3D12Resource* upload, ID3D12DescriptorHeap* srvHeap, D3D12_RESOURCE_STATES textureState)
     {
         if (_atlasPages.Count >= MaxAtlasPages)
         {
@@ -550,7 +550,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         var handle = new GlyphAtlasPageHandle(_atlasPages.Count, 1);
-        _atlasPages.Add(new GlyphAtlasPage(handle, texture, upload, srvHeap, new byte[AtlasPixelBytes]));
+        _atlasPages.Add(new GlyphAtlasPage(handle, texture, upload, srvHeap, textureState, new byte[AtlasPixelBytes]));
         return handle;
     }
 
@@ -1077,7 +1077,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             page.Upload->Unmap(0, null);
         }
 
-        var toCopyDest = Transition(page.Texture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
+        var toCopyDest = page.TransitionTexture(D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST);
         list->ResourceBarrier(1, &toCopyDest);
 
         var src = new D3D12_TEXTURE_COPY_LOCATION
@@ -1106,7 +1106,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         dst.Anonymous.SubresourceIndex = 0;
         list->CopyTextureRegion(dst, (uint)page.DirtyLeft, (uint)page.DirtyTop, 0, src, null);
 
-        var toShaderResource = Transition(page.Texture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        var toShaderResource = page.TransitionTexture(D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         list->ResourceBarrier(1, &toShaderResource);
 
         ResetAtlasDirtyRect(page);
@@ -1509,7 +1509,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 _device->CreateShaderResourceView(atlasTexture, srvDesc, srvHeap->GetCPUDescriptorHandleForHeapStart());
             });
 
-            var page = AddAtlasPage(atlasTexture, atlasUpload, srvHeap);
+            var page = AddAtlasPage(atlasTexture, atlasUpload, srvHeap, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
             atlasTexture = null;
             atlasUpload = null;
             srvHeap = null;
@@ -1967,9 +1967,16 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public bool CanApply(long recordSerial) => !IsNone && recordSerial > RequestedRecordSerial;
     }
 
-    private sealed unsafe class GlyphAtlasPage(GlyphAtlasPageHandle handle, ID3D12Resource* texture, ID3D12Resource* upload, ID3D12DescriptorHeap* srvHeap, byte[] pixels)
+    private sealed unsafe class GlyphAtlasPage(
+        GlyphAtlasPageHandle handle,
+        ID3D12Resource* texture,
+        ID3D12Resource* upload,
+        ID3D12DescriptorHeap* srvHeap,
+        D3D12_RESOURCE_STATES textureState,
+        byte[] pixels)
     {
         private GlyphAtlasPageHandle _handle = handle;
+        private D3D12_RESOURCE_STATES _textureState = textureState;
         private bool _released;
 
         public GlyphAtlasPageHandle Handle => _handle;
@@ -1989,6 +1996,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int UsedPixels { get; set; }
         public int AllocatedPixels { get; set; }
         public long LastUsedSerial { get; private set; }
+
+        public D3D12_RESOURCE_BARRIER TransitionTexture(D3D12_RESOURCE_STATES after)
+        {
+            var barrier = Transition(Texture, _textureState, after);
+            _textureState = after;
+            return barrier;
+        }
 
         public void Touch(long serial)
         {
