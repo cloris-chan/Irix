@@ -234,6 +234,11 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasSrvHeap;
     }
 
+    internal static bool HasGlyphPipelineResources(bool hasPipelineState, bool hasRootSignature)
+    {
+        return hasPipelineState && hasRootSignature;
+    }
+
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;

@@ -1239,6 +1239,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void DrawGlyphs(ID3D12GraphicsCommandList* list, GlyphFrame frame, int viewportWidth, int viewportHeight, int frameResourceIndex)
     {
+        if (!GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null, _rootSig != null))
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.Record,
+                "D3D12GlyphAtlasTextRenderer.DrawGlyphs found a missing pipeline state or root signature.");
+        }
+
         var viewport = new D3D12_VIEWPORT { Width = viewportWidth, Height = viewportHeight, MaxDepth = 1.0f };
         list->RSSetViewports(1, &viewport);
 
