@@ -213,6 +213,11 @@ internal static class GlyphAtlasTextCompositionHelpers
             LastUsedSerial: 0);
     }
 
+    internal static bool ShouldSelectOlderAtlasPage(long selectedLastUsedSerial, long candidateLastUsedSerial)
+    {
+        return candidateLastUsedSerial < selectedLastUsedSerial;
+    }
+
     internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
     {
         if ((uint)index >= (uint)text.Length)

@@ -275,6 +275,15 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_page_selection_prefers_strictly_older_pages()
+    {
+        Assert.True(GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(long.MaxValue, candidateLastUsedSerial: 12));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(selectedLastUsedSerial: 12, candidateLastUsedSerial: 3));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(selectedLastUsedSerial: 12, candidateLastUsedSerial: 12));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(selectedLastUsedSerial: 12, candidateLastUsedSerial: 30));
+    }
+
+    [Fact]
     public void Glyph_atlas_dirty_rect_merges_new_glyph_bounds()
     {
         var first = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
@@ -520,6 +529,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("_freeGlyphEntryIndices.Add(i);", glyphSource);
         Assert.Contains("private GlyphAtlasPage? SelectWritableAtlasPage(int width, int height, long recordSerial)", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle SelectOldestAtlasPageHandle()", glyphSource);
+        Assert.Equal(2, CountOccurrences(glyphSource, "GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage("));
         Assert.Contains("private static bool CanAllocateGlyph(GlyphAtlasPage page, int width, int height)", glyphSource);
         Assert.Contains("private void ScheduleAtlasPageReuse(long recordSerial)", glyphSource);
         Assert.Contains("_pendingAtlasPageReuse = new GlyphAtlasPageReuseRequest(SelectOldestAtlasPageHandle(), recordSerial);", glyphSource);

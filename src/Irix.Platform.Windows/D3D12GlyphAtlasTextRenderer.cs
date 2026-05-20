@@ -691,7 +691,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 continue;
             }
 
-            if (page.LastUsedSerial < selectedLastUsedSerial)
+            if (GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(selectedLastUsedSerial, page.LastUsedSerial))
             {
                 selectedIndex = i;
                 selectedLastUsedSerial = page.LastUsedSerial;
@@ -726,7 +726,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         for (var i = 0; i < _atlasPages.Count; i++)
         {
             var page = _atlasPages[i];
-            if (page.LastUsedSerial < selectedLastUsedSerial)
+            if (GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(selectedLastUsedSerial, page.LastUsedSerial))
             {
                 selected = page.Handle;
                 selectedLastUsedSerial = page.LastUsedSerial;
