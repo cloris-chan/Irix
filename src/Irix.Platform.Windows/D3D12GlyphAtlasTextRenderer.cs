@@ -799,7 +799,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 continue;
             }
 
-            if (entry.Page == pageHandle)
+            if (GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(
+                entry.IsLive,
+                entry.Page.Index,
+                entry.Page.Generation,
+                pageHandle.Index,
+                pageHandle.Generation))
             {
                 _glyphs.Remove(entry.Key);
                 _glyphEntries[i] = entry.Clear();

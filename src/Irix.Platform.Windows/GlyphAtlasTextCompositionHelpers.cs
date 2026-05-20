@@ -192,6 +192,11 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasPendingRequest && currentRecordSerial > requestedRecordSerial;
     }
 
+    internal static bool ShouldClearGlyphForReusedPage(bool isLiveGlyph, int glyphPageIndex, int glyphPageGeneration, int reusedPageIndex, int reusedPageGeneration)
+    {
+        return isLiveGlyph && glyphPageIndex == reusedPageIndex && glyphPageGeneration == reusedPageGeneration;
+    }
+
     internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
     {
         if ((uint)index >= (uint)text.Length)

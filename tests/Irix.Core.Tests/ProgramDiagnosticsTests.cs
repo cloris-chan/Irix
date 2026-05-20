@@ -248,6 +248,15 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_page_reuse_clears_only_live_entries_from_matching_generation()
+    {
+        Assert.False(GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(false, glyphPageIndex: 2, glyphPageGeneration: 4, reusedPageIndex: 2, reusedPageGeneration: 4));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(true, glyphPageIndex: 2, glyphPageGeneration: 3, reusedPageIndex: 2, reusedPageGeneration: 4));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(true, glyphPageIndex: 1, glyphPageGeneration: 4, reusedPageIndex: 2, reusedPageGeneration: 4));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(true, glyphPageIndex: 2, glyphPageGeneration: 4, reusedPageIndex: 2, reusedPageGeneration: 4));
+    }
+
+    [Fact]
     public void Glyph_atlas_dirty_rect_merges_new_glyph_bounds()
     {
         var first = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
@@ -489,6 +498,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("if (!_pendingAtlasPageReuse.CanApply(recordSerial))", glyphSource);
         Assert.Contains("var reusedPage = page.Handle;", glyphSource);
         Assert.Contains("RemoveGlyphsForReusedPage(reusedPage);", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(", glyphSource);
         Assert.Contains("_freeGlyphEntryIndices.Add(i);", glyphSource);
         Assert.Contains("private GlyphAtlasPage? SelectWritableAtlasPage(int width, int height, long recordSerial)", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle SelectOldestAtlasPageHandle()", glyphSource);
