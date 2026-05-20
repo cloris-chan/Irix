@@ -19,6 +19,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int AtlasHeight = 1024;
     private const int AtlasPadding = 1;
     private const int AtlasPixelBytes = AtlasRowPitch * AtlasHeight;
+    private const int MaxAtlasPages = 4;
     private const int MaxGlyphQuads = 4096;
     private const int MaxGlyphVertices = MaxGlyphQuads * 6;
     private const int MaxGlyphDrawBatches = 1024;
@@ -47,8 +48,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly Dictionary<FontFaceKey, CachedFontFace> _fontFaces = [];
     private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs = [];
     private readonly List<GlyphEntry> _glyphEntries = new(512);
-    private readonly List<GlyphAtlasPage> _atlasPages = new(1);
+    private readonly List<int> _freeGlyphEntryIndices = new(128);
+    private readonly List<GlyphAtlasPage> _atlasPages = new(MaxAtlasPages);
     private GlyphAtlasPageHandle _activeAtlasPage;
+    private GlyphAtlasPageHandle _pendingAtlasPageReuse;
+    private int _cachedGlyphCount;
     private long _glyphRecordSerial;
     private bool _pendingAtlasPageEviction;
     private bool _disposed;
@@ -97,7 +101,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         var pageUsage = GetAtlasPageUsage();
         return _diagnostics
-            .WithCachedGlyphs(_glyphEntries.Count)
+            .WithCachedGlyphs(_cachedGlyphCount)
             .WithAtlasPages(_atlasPages.Count)
             .WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)
             .WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge)
@@ -108,7 +112,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         var pageUsage = GetAtlasPageUsage();
         _diagnostics = new GlyphAtlasTextRendererDiagnostics(
-            _glyphEntries.Count,
+            _cachedGlyphCount,
             UploadedBytes: 0,
             DrawnGlyphs: 0,
             CacheHits: 0,
@@ -167,10 +171,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             UploadVertices(_vertices.AsSpan(0, frame.VertexCount));
 
-            var activePage = RequireActiveAtlasPage();
-            if (activePage.IsDirty)
+            for (var i = 0; i < _atlasPages.Count; i++)
             {
-                UploadAtlas(list, activePage);
+                var page = _atlasPages[i];
+                if (page.IsDirty)
+                {
+                    UploadAtlas(list, page);
+                }
             }
 
             DrawGlyphs(list, frame, viewportWidth, viewportHeight);
@@ -279,6 +286,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             var color = new Vector4(textRun.R, textRun.G, textRun.B, textRun.A);
             var batchStart = vertexCount;
+            var batchSegmentStart = vertexCount;
             var batchPage = default(GlyphAtlasPageHandle);
 
             foreach (var character in text)
@@ -302,8 +310,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     }
                     else if (batchPage != glyph.Page)
                     {
-                        unsupportedReason = GlyphAtlasFallbackReason.AtlasFull;
-                        break;
+                        if (!TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
+                        {
+                            unsupportedReason = GlyphAtlasFallbackReason.BatchLimit;
+                            break;
+                        }
+
+                        batchSegmentStart = vertexCount;
+                        batchPage = glyph.Page;
                     }
 
                     if (vertexCount + 6 > MaxGlyphVertices)
@@ -325,20 +339,25 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
                 vertexCount = batchStart;
+                while (batchCount > 0 && _batches[batchCount - 1].StartVertex >= batchStart)
+                {
+                    batchCount--;
+                }
+
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
-            if (vertexCount > batchStart)
+            if (vertexCount > batchSegmentStart && !TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
             {
-                if (batchCount >= MaxGlyphDrawBatches)
+                vertexCount = batchStart;
+                while (batchCount > 0 && _batches[batchCount - 1].StartVertex >= batchStart)
                 {
-                    vertexCount = batchStart;
-                    AddDegradedRun(GlyphAtlasFallbackReason.BatchLimit, ref degradedRunCount, ref degradationReasons);
-                    continue;
+                    batchCount--;
                 }
 
-                _batches[batchCount++] = new GlyphDrawBatch(batchStart, vertexCount - batchStart, scissor, batchPage);
+                AddDegradedRun(GlyphAtlasFallbackReason.BatchLimit, ref degradedRunCount, ref degradationReasons);
+                continue;
             }
 
             atlasRunCount++;
@@ -354,6 +373,27 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         degradedRunCount++;
         degradationReasons = degradationReasons.With(reason);
+    }
+
+    private bool TryAppendDrawBatch(
+        ref int batchCount,
+        ref int vertexCount,
+        int batchStart,
+        IntegerScissorRect scissor,
+        GlyphAtlasPageHandle page)
+    {
+        if (vertexCount == batchStart)
+        {
+            return true;
+        }
+
+        if (batchCount >= MaxGlyphDrawBatches || page.IsNone)
+        {
+            return false;
+        }
+
+        _batches[batchCount++] = new GlyphDrawBatch(batchStart, vertexCount - batchStart, scissor, page);
+        return true;
     }
 
     private static bool TextMetricsFit(D3D12TextRun textRun, DWRITE_FONT_METRICS metrics, float emSize)
@@ -451,19 +491,31 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         _diagnostics = _diagnostics.WithCacheMiss();
-        if (!RasterizeGlyph(fontFace, style.FontSize, character, recordSerial, out glyph, out unsupportedReason))
+        if (!RasterizeGlyph(key, fontFace, style.FontSize, character, recordSerial, out glyph, out unsupportedReason))
         {
             return false;
         }
 
         handle = AddGlyphEntry(glyph);
         _glyphs[key] = handle;
-        _diagnostics = _diagnostics.WithCachedGlyphs(_glyphEntries.Count);
+        _cachedGlyphCount++;
+        _diagnostics = _diagnostics.WithCachedGlyphs(_cachedGlyphCount);
         return true;
     }
 
     private GlyphAtlasEntryHandle AddGlyphEntry(in GlyphEntry entry)
     {
+        if (_freeGlyphEntryIndices.Count > 0)
+        {
+            var freeIndex = _freeGlyphEntryIndices.Count - 1;
+            var entryIndex = _freeGlyphEntryIndices[freeIndex];
+            _freeGlyphEntryIndices.RemoveAt(freeIndex);
+            var generation = checked(_glyphEntries[entryIndex].Generation + 1);
+            var reusedHandle = new GlyphAtlasEntryHandle(entryIndex, generation);
+            _glyphEntries[entryIndex] = entry.WithGeneration(generation);
+            return reusedHandle;
+        }
+
         var handle = new GlyphAtlasEntryHandle(_glyphEntries.Count, 1);
         _glyphEntries.Add(entry.WithGeneration(handle.Generation));
         return handle;
@@ -478,7 +530,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         entry = _glyphEntries[handle.Index];
-        if (entry.Generation != handle.Generation || !TryResolveAtlasPage(entry.Page, out var page))
+        if (!entry.IsLive || entry.Generation != handle.Generation || !TryResolveAtlasPage(entry.Page, out var page))
         {
             return false;
         }
@@ -491,6 +543,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private GlyphAtlasPageHandle AddAtlasPage(ID3D12Resource* texture, ID3D12Resource* upload, ID3D12DescriptorHeap* srvHeap)
     {
+        if (_atlasPages.Count >= MaxAtlasPages)
+        {
+            throw new InvalidOperationException("Glyph atlas page pool exceeded its fixed capacity.");
+        }
+
         var handle = new GlyphAtlasPageHandle(_atlasPages.Count, 1);
         _atlasPages.Add(new GlyphAtlasPage(handle, texture, upload, srvHeap, new byte[AtlasPixelBytes]));
         return handle;
@@ -516,6 +573,65 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         return page;
+    }
+
+    private GlyphAtlasPage? SelectWritableAtlasPage(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return RequireActiveAtlasPage();
+        }
+
+        var activePage = RequireActiveAtlasPage();
+        if (CanAllocateGlyph(activePage, width, height))
+        {
+            return activePage;
+        }
+
+        var selectedIndex = -1;
+        var selectedLastUsedSerial = long.MaxValue;
+        for (var i = 0; i < _atlasPages.Count; i++)
+        {
+            var page = _atlasPages[i];
+            if (page.Handle == activePage.Handle || !CanAllocateGlyph(page, width, height))
+            {
+                continue;
+            }
+
+            if (page.LastUsedSerial < selectedLastUsedSerial)
+            {
+                selectedIndex = i;
+                selectedLastUsedSerial = page.LastUsedSerial;
+            }
+        }
+
+        if (selectedIndex >= 0)
+        {
+            var page = _atlasPages[selectedIndex];
+            _activeAtlasPage = page.Handle;
+            return page;
+        }
+
+        _pendingAtlasPageReuse = SelectOldestAtlasPageHandle();
+        _pendingAtlasPageEviction = true;
+        return null;
+    }
+
+    private GlyphAtlasPageHandle SelectOldestAtlasPageHandle()
+    {
+        var selected = default(GlyphAtlasPageHandle);
+        var selectedLastUsedSerial = long.MaxValue;
+        for (var i = 0; i < _atlasPages.Count; i++)
+        {
+            var page = _atlasPages[i];
+            if (page.LastUsedSerial < selectedLastUsedSerial)
+            {
+                selected = page.Handle;
+                selectedLastUsedSerial = page.LastUsedSerial;
+            }
+        }
+
+        return selected;
     }
 
     private GlyphAtlasPageUsage GetAtlasPageUsage()
@@ -549,19 +665,55 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return;
         }
 
-        var page = RequireActiveAtlasPage();
+        var page = RequireReuseAtlasPage();
+        var reusedPage = page.Handle;
         _activeAtlasPage = page.ResetForReuse();
-        _glyphs.Clear();
-        _glyphEntries.Clear();
+        RemoveGlyphsForReusedPage(reusedPage);
+        _pendingAtlasPageReuse = default;
         _pendingAtlasPageEviction = false;
         _diagnostics = _diagnostics
-            .WithCachedGlyphs(0)
+            .WithCachedGlyphs(_cachedGlyphCount)
             .WithAtlasPages(_atlasPages.Count)
-            .WithAtlasPageUsage(0, 0)
             .WithAtlasEviction();
     }
 
+    private GlyphAtlasPage RequireReuseAtlasPage()
+    {
+        if (!TryResolveAtlasPage(_pendingAtlasPageReuse, out var page))
+        {
+            page = RequireActiveAtlasPage();
+        }
+
+        return page;
+    }
+
+    private void RemoveGlyphsForReusedPage(GlyphAtlasPageHandle pageHandle)
+    {
+        var cachedGlyphCount = 0;
+        for (var i = 0; i < _glyphEntries.Count; i++)
+        {
+            var entry = _glyphEntries[i];
+            if (!entry.IsLive)
+            {
+                continue;
+            }
+
+            if (entry.Page == pageHandle)
+            {
+                _glyphs.Remove(entry.Key);
+                _glyphEntries[i] = entry.Clear();
+                _freeGlyphEntryIndices.Add(i);
+                continue;
+            }
+
+            cachedGlyphCount++;
+        }
+
+        _cachedGlyphCount = cachedGlyphCount;
+    }
+
     private bool RasterizeGlyph(
+        GlyphKey key,
         CachedFontFace fontFace,
         float emSize,
         char character,
@@ -612,11 +764,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_TYPE.DWRITE_TEXTURE_CLEARTYPE_3x1, out var bounds);
             var width = bounds.right - bounds.left;
             var height = bounds.bottom - bounds.top;
-            var atlasPage = RequireActiveAtlasPage();
+            var atlasPage = SelectWritableAtlasPage(width, height);
+            if (atlasPage is null)
+            {
+                unsupportedReason = GlyphAtlasFallbackReason.AtlasFull;
+                return false;
+            }
+
             if (width <= 0 || height <= 0)
             {
                 atlasPage.Touch(recordSerial);
-                entry = new GlyphEntry(0, 0, 0, 0, advances[0], 0, 0, 0, 0, atlasPage.Handle, LastUsedSerial: recordSerial);
+                entry = new GlyphEntry(key, 0, 0, 0, 0, advances[0], 0, 0, 0, 0, atlasPage.Handle, LastUsedSerial: recordSerial);
                 return true;
             }
 
@@ -633,7 +791,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             if (!TryAllocateGlyph(atlasPage, width, height, out var atlasX, out var atlasY))
             {
-                _pendingAtlasPageEviction = true;
                 unsupportedReason = GlyphAtlasFallbackReason.AtlasFull;
                 return false;
             }
@@ -645,6 +802,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var u2 = (atlasX + width) / (float)AtlasWidth;
             var v2 = (atlasY + height) / (float)AtlasHeight;
             entry = new GlyphEntry(
+                key,
                 width,
                 height,
                 bounds.left,
@@ -696,11 +854,30 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return glyphMetrics[0].advanceWidth * emSize / fontFace.Metrics.designUnitsPerEm;
     }
 
+    private static bool CanAllocateGlyph(GlyphAtlasPage page, int width, int height)
+    {
+        if (width + AtlasPadding * 2 > AtlasWidth || height + AtlasPadding * 2 > AtlasHeight)
+        {
+            return false;
+        }
+
+        var nextX = page.NextX;
+        var nextY = page.NextY;
+        var rowHeight = page.RowHeight;
+        if (nextX + width + AtlasPadding > AtlasWidth)
+        {
+            nextX = AtlasPadding;
+            nextY += rowHeight + AtlasPadding;
+        }
+
+        return nextY + height + AtlasPadding <= AtlasHeight;
+    }
+
     private static bool TryAllocateGlyph(GlyphAtlasPage page, int width, int height, out int x, out int y)
     {
         x = 0;
         y = 0;
-        if (width + AtlasPadding * 2 > AtlasWidth || height + AtlasPadding * 2 > AtlasHeight)
+        if (!CanAllocateGlyph(page, width, height))
         {
             return false;
         }
@@ -1190,6 +1367,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void CreateAtlasResources()
     {
+        for (var i = 0; i < MaxAtlasPages; i++)
+        {
+            var page = CreateAtlasPageResources();
+            if (i == 0)
+            {
+                _activeAtlasPage = page;
+            }
+        }
+    }
+
+    private GlyphAtlasPageHandle CreateAtlasPageResources()
+    {
         ID3D12Resource* atlasTexture = null;
         ID3D12Resource* atlasUpload = null;
         ID3D12DescriptorHeap* srvHeap = null;
@@ -1311,10 +1500,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 _device->CreateShaderResourceView(atlasTexture, srvDesc, srvHeap->GetCPUDescriptorHandleForHeapStart());
             });
 
-            _activeAtlasPage = AddAtlasPage(atlasTexture, atlasUpload, srvHeap);
+            var page = AddAtlasPage(atlasTexture, atlasUpload, srvHeap);
             atlasTexture = null;
             atlasUpload = null;
             srvHeap = null;
+            return page;
         }
         finally
         {
@@ -1852,6 +2042,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     }
 
     private readonly struct GlyphEntry(
+        GlyphKey Key,
         float Width,
         float Height,
         float OffsetX,
@@ -1865,6 +2056,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int Generation = 0,
         long LastUsedSerial = 0)
     {
+        public GlyphKey Key { get; } = Key;
         public float Width { get; } = Width;
         public float Height { get; } = Height;
         public float OffsetX { get; } = OffsetX;
@@ -1877,10 +2069,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public GlyphAtlasPageHandle Page { get; } = Page;
         public int Generation { get; } = Generation;
         public long LastUsedSerial { get; } = LastUsedSerial;
+        public bool IsLive => LastUsedSerial > 0;
 
-        public GlyphEntry WithGeneration(int generation) => new(Width, Height, OffsetX, OffsetY, Advance, U1, V1, U2, V2, Page, generation, LastUsedSerial);
+        public GlyphEntry WithGeneration(int generation) => new(Key, Width, Height, OffsetX, OffsetY, Advance, U1, V1, U2, V2, Page, generation, LastUsedSerial);
 
-        public GlyphEntry WithLastUsedSerial(long serial) => new(Width, Height, OffsetX, OffsetY, Advance, U1, V1, U2, V2, Page, Generation, serial);
+        public GlyphEntry WithLastUsedSerial(long serial) => new(Key, Width, Height, OffsetX, OffsetY, Advance, U1, V1, U2, V2, Page, Generation, serial);
+
+        public GlyphEntry Clear() => new(Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, Page, Generation, 0);
     }
 
     public readonly struct GlyphAtlasTextRendererDiagnostics(
