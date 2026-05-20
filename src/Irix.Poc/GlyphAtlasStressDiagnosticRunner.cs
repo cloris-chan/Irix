@@ -10,8 +10,9 @@ internal static class GlyphAtlasStressDiagnosticRunner
     private const int RunCount = 32;
     private const string StandardScenarioName = "AtlasFull";
     private const string MixedFallbackScenarioName = "MixedAtlasFull";
+    private const string ReuseScenarioName = "MixedAtlasFullReuse";
 
-    internal static void Run(TextWriter output, bool mixedFallback = false)
+    internal static void Run(TextWriter output, bool mixedFallback = false, bool reusePage = false)
     {
         using var platformHost = new WindowsPlatformHost();
         var screen = platformHost.Screens[0];
@@ -38,14 +39,28 @@ internal static class GlyphAtlasStressDiagnosticRunner
             resources);
         compositor.RenderAsync(batch).AsTask().GetAwaiter().GetResult();
 
+        var renderedRunCount = CountTextRuns(commands);
+        if (reusePage)
+        {
+            var reuseResources = FrameDrawingResources.Rent();
+            var reuseCommands = BuildReuseCommands(reuseResources, bounds.Width, bounds.Height);
+            reuseResources.Seal();
+            using var reuseBatch = new RenderFrameBatch(
+                new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(reuseCommands), reuseCommands.Length),
+                [],
+                reuseResources);
+            compositor.RenderAsync(reuseBatch).AsTask().GetAwaiter().GetResult();
+            renderedRunCount += CountTextRuns(reuseCommands);
+        }
+
         WriteReport(
             output,
             d3d12Renderer.TextCompositionMode,
             screen.RefreshRateHz,
             displayScale,
-            CountTextRuns(commands),
+            renderedRunCount,
             ascii.Length,
-            mixedFallback ? MixedFallbackScenarioName : StandardScenarioName,
+            reusePage ? ReuseScenarioName : mixedFallback ? MixedFallbackScenarioName : StandardScenarioName,
             d3d12Renderer.IsDeviceRemoved,
             d3d12Renderer.DeviceError,
             d3d12Backend.FrameSerialDiagnostics,
@@ -69,6 +84,16 @@ internal static class GlyphAtlasStressDiagnosticRunner
         AppendStressRuns(commands, startIndex: 3, resources, ascii);
         commands[^1] = TextRun(resources, "AtlasFull 後 fallback", 16, 292, 420, 40, 20, TextFontWeight.Normal, TextFontStyle.Normal, DrawColor.Opaque(255, 210, 160));
         return commands;
+    }
+
+    internal static DrawCommand[] BuildReuseCommands(FrameDrawingResources resources, int width, int height)
+    {
+        return
+        [
+            Background(width, height),
+            TextRun(resources, "Atlas reuse A", 16, 18, 260, 36, 20, TextFontWeight.Normal, TextFontStyle.Normal, DrawColor.Opaque(210, 245, 225)),
+            TextRun(resources, "Atlas reuse B", 16, 58, 260, 36, 20, TextFontWeight.SemiBold, TextFontStyle.Normal, DrawColor.Opaque(190, 230, 255))
+        ];
     }
 
     internal static void WriteReport(

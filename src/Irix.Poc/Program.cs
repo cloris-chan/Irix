@@ -75,7 +75,10 @@ internal static class Program
         if (args.Contains("--diagnose-glyph-atlas-stress"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasStressDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, args.Contains("--mixed-fallback"));
+            GlyphAtlasStressDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                args.Contains("--mixed-fallback"),
+                args.Contains("--reuse-page"));
             return;
         }
 

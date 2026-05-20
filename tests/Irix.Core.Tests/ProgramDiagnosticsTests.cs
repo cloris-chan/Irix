@@ -249,6 +249,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
         Assert.Contains("private readonly List<GlyphAtlasPage> _atlasPages = new(1);", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle _activeAtlasPage;", glyphSource);
+        Assert.Contains("private bool _pendingAtlasPageEviction;", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasEntryHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
@@ -258,6 +259,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle,", glyphSource);
         Assert.Contains("entry.Generation == handle.Generation && TryResolveAtlasPage(entry.Page", glyphSource);
         Assert.Contains("GlyphAtlasPageHandle Page", glyphSource);
+        Assert.Contains("private void ApplyPendingAtlasPageEviction()", glyphSource);
+        Assert.Contains("_activeAtlasPage = page.ResetForReuse();", glyphSource);
+        Assert.Contains("_glyphs.Clear();", glyphSource);
+        Assert.Contains("_glyphEntries.Clear();", glyphSource);
+        Assert.Contains("_pendingAtlasPageEviction = true;", glyphSource);
+        Assert.Contains("public GlyphAtlasPageHandle NextGeneration()", glyphSource);
+        Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
+        Assert.Contains(".WithAtlasEviction()", glyphSource);
         Assert.Contains("_glyphs[key] = handle;", glyphSource);
         Assert.DoesNotContain("Dictionary<GlyphKey, GlyphEntry> _glyphs", glyphSource);
         Assert.DoesNotContain("_glyphs.Add(key, glyph)", glyphSource);
@@ -283,6 +292,7 @@ public sealed class ProgramDiagnosticsTests
             RasterScratchResizes: 2)
             .WithAtlasRuns(7)
             .WithAtlasPages(1)
+            .WithAtlasEviction()
             .WithDegradation(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
 
@@ -290,6 +300,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("cachedGlyphs=12", summary);
         Assert.Contains("atlasPages=1", summary);
+        Assert.Contains("atlasEvictions=1", summary);
         Assert.Contains("uploads=4096 bytes", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("degradedRuns=0", summary);
@@ -508,6 +519,26 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, firstPrefixReason);
         Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, secondPrefixReason);
         Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii, trailingReason);
+    }
+
+    [Fact]
+    public void Glyph_atlas_reuse_stress_commands_are_atlas_candidates()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var commands = GlyphAtlasStressDiagnosticRunner.BuildReuseCommands(resources, 960, 540);
+        resources.Seal();
+
+        var textCommandCount = commands.Count(static command => command.Kind == DrawCommandKind.DrawTextRun);
+        var firstReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(
+            resources.Resolve(commands[1].Text),
+            resources.ResolveTextStyle(commands[1].Resource));
+        var secondReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(
+            resources.Resolve(commands[2].Text),
+            resources.ResolveTextStyle(commands[2].Resource));
+
+        Assert.Equal(2, textCommandCount);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, firstReason);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, secondReason);
     }
 
     [Fact]
@@ -1033,7 +1064,8 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 512,
             RasterScratchResizes: 2,
-            AtlasPages: 1);
+            AtlasPages: 1,
+            AtlasEvictions: 0);
 
         ResizeDiagnosticRunner.WriteReport(
             writer,
@@ -1067,7 +1099,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasEvictions=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

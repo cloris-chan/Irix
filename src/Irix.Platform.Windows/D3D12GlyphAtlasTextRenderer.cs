@@ -50,6 +50,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly List<GlyphEntry> _glyphEntries = new(512);
     private readonly List<GlyphAtlasPage> _atlasPages = new(1);
     private GlyphAtlasPageHandle _activeAtlasPage;
+    private bool _pendingAtlasPageEviction;
     private bool _disposed;
     private bool _disabled;
     private DeviceErrorDiagnostic _deviceError = DeviceErrorDiagnostic.None;
@@ -144,6 +145,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         try
         {
+            ApplyPendingAtlasPageEviction();
             var frame = BuildFrame(textRuns, resources, viewportWidth, viewportHeight);
 
             if (frame.VertexCount == 0)
@@ -485,6 +487,24 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return page;
     }
 
+    private void ApplyPendingAtlasPageEviction()
+    {
+        if (!_pendingAtlasPageEviction)
+        {
+            return;
+        }
+
+        var page = RequireActiveAtlasPage();
+        _activeAtlasPage = page.ResetForReuse();
+        _glyphs.Clear();
+        _glyphEntries.Clear();
+        _pendingAtlasPageEviction = false;
+        _diagnostics = _diagnostics
+            .WithCachedGlyphs(0)
+            .WithAtlasPages(_atlasPages.Count)
+            .WithAtlasEviction();
+    }
+
     private bool RasterizeGlyph(
         CachedFontFace fontFace,
         float emSize,
@@ -555,6 +575,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             if (!TryAllocateGlyph(atlasPage, width, height, out var atlasX, out var atlasY))
             {
+                _pendingAtlasPageEviction = true;
                 unsupportedReason = GlyphAtlasFallbackReason.AtlasFull;
                 return false;
             }
@@ -1638,6 +1659,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int Generation { get; } = Generation;
         public bool IsNone => Generation == 0;
 
+        public GlyphAtlasPageHandle NextGeneration() => new(Index, checked(Generation + 1));
+
         public bool Equals(GlyphAtlasPageHandle other) => Index == other.Index && Generation == other.Generation;
 
         public override bool Equals(object? obj) => obj is GlyphAtlasPageHandle other && Equals(other);
@@ -1651,9 +1674,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private sealed unsafe class GlyphAtlasPage(GlyphAtlasPageHandle handle, ID3D12Resource* texture, ID3D12Resource* upload, byte[] pixels)
     {
+        private GlyphAtlasPageHandle _handle = handle;
         private bool _released;
 
-        public GlyphAtlasPageHandle Handle { get; } = handle;
+        public GlyphAtlasPageHandle Handle => _handle;
         public int Generation => Handle.Generation;
         public ID3D12Resource* Texture { get; private set; } = texture;
         public ID3D12Resource* Upload { get; private set; } = upload;
@@ -1666,6 +1690,21 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int DirtyTop { get; set; } = AtlasHeight;
         public int DirtyRight { get; set; }
         public int DirtyBottom { get; set; }
+
+        public GlyphAtlasPageHandle ResetForReuse()
+        {
+            _handle = _handle.NextGeneration();
+            Array.Clear(Pixels);
+            NextX = AtlasPadding;
+            NextY = AtlasPadding;
+            RowHeight = 0;
+            IsDirty = true;
+            DirtyLeft = 0;
+            DirtyTop = 0;
+            DirtyRight = AtlasWidth;
+            DirtyBottom = AtlasHeight;
+            return _handle;
+        }
 
         public void Release()
         {
@@ -1741,6 +1780,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int RasterScratchBytes,
         int RasterScratchResizes,
         int AtlasPages = 0,
+        int AtlasEvictions = 0,
         int AtlasRuns = 0,
         int DegradedRuns = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
     {
@@ -1752,6 +1792,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int FallbackFrames { get; } = FallbackFrames;
         public int UnsupportedRuns { get; } = UnsupportedRuns;
         public int AtlasPages { get; } = AtlasPages;
+        public int AtlasEvictions { get; } = AtlasEvictions;
         public int AtlasRuns { get; } = AtlasRuns;
         public int DegradedRuns { get; } = DegradedRuns;
         public GlyphAtlasFallbackReasonCounts Reasons { get; } = Reasons;
@@ -1761,34 +1802,37 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int RasterScratchResizes { get; } = RasterScratchResizes;
 
         public GlyphAtlasTextRendererDiagnostics WithCachedGlyphs(int cachedGlyphs) =>
-            new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(cachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheHit() =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits + 1, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheMiss() =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses + 1, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithDrawnGlyphs(int glyphs) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs + glyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPages(int atlasPages) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, atlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, atlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasEviction() =>
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions + 1, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasRuns(int atlasRuns) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns + atlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns + atlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithUploadedBytes(long bytes) =>
-            new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes + bytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRasterScratch(int bytes, int resizes) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, bytes, resizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, RecordFailurePhase, bytes, resizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithInitializationFailure(GlyphAtlasInitializationPhase phase) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, phase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, phase, RecordFailurePhase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRecordFailure(GlyphAtlasRecordFailurePhase phase) =>
-            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, phase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasRuns, DegradedRuns);
+            new(CachedGlyphs, UploadedBytes, DrawnGlyphs, CacheHits, CacheMisses, FallbackFrames, UnsupportedRuns, Reasons, InitializationFailurePhase, phase, RasterScratchBytes, RasterScratchResizes, AtlasPages, AtlasEvictions, AtlasRuns, DegradedRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithDegradation(int unsupportedRuns, GlyphAtlasFallbackReason reason)
         {
@@ -1821,13 +1865,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasEvictions,
                 AtlasRuns,
                 DegradedRuns + unsupportedRuns);
         }
 
         public string FormatSummary()
         {
-            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
+            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasEvictions={AtlasEvictions}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
                 + $"uploads={UploadedBytes} bytes, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
         }
@@ -1842,6 +1887,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && FallbackFrames == other.FallbackFrames
                 && UnsupportedRuns == other.UnsupportedRuns
                 && AtlasPages == other.AtlasPages
+                && AtlasEvictions == other.AtlasEvictions
                 && AtlasRuns == other.AtlasRuns
                 && DegradedRuns == other.DegradedRuns
                 && Reasons.Equals(other.Reasons)
@@ -1864,6 +1910,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(FallbackFrames);
             hash.Add(UnsupportedRuns);
             hash.Add(AtlasPages);
+            hash.Add(AtlasEvictions);
             hash.Add(AtlasRuns);
             hash.Add(DegradedRuns);
             hash.Add(Reasons);
