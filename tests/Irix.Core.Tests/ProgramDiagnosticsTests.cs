@@ -38,7 +38,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Glyph_atlas_fallback_classifier_accepts_ascii_nowrap_and_rejects_known_unsupported_runs()
+    public void Glyph_atlas_fallback_classifier_accepts_single_line_ascii_and_rejects_known_unsupported_runs()
     {
         Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
@@ -60,7 +60,7 @@ public sealed class ProgramDiagnosticsTests
             TextStyle.Default.VerticalAlignment,
             TextWrapping.Wrap);
         Assert.Equal(
-            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Wrapping,
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 123".AsSpan(), wrappingStyle));
     }
 

@@ -24,11 +24,6 @@ internal static class GlyphAtlasTextCompositionHelpers
         ReadOnlySpan<char> text,
         TextStyle style)
     {
-        if (style.Wrapping != TextWrapping.NoWrap)
-        {
-            return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Wrapping;
-        }
-
         foreach (var character in text)
         {
             if (character is < ' ' or > '~')

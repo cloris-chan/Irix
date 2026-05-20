@@ -276,7 +276,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             if (lineWidth > textRun.Width)
             {
-                AddDegradedRun(GlyphAtlasFallbackReason.Clip, ref degradedRunCount, ref degradationReasons);
+                AddDegradedRun(style.Wrapping == TextWrapping.NoWrap ? GlyphAtlasFallbackReason.Clip : GlyphAtlasFallbackReason.Wrapping, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
