@@ -187,6 +187,11 @@ internal static class GlyphAtlasTextCompositionHelpers
 
     internal static bool IsWrapWhitespace(char character) => character is ' ' or '\t';
 
+    internal static bool CanApplyAtlasPageReuseRequest(bool hasPendingRequest, long requestedRecordSerial, long currentRecordSerial)
+    {
+        return hasPendingRequest && currentRecordSerial > requestedRecordSerial;
+    }
+
     internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
     {
         if ((uint)index >= (uint)text.Length)

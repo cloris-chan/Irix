@@ -2087,7 +2087,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public long RequestedRecordSerial { get; } = RequestedRecordSerial;
         public bool IsNone => Page.IsNone;
 
-        public bool CanApply(long recordSerial) => !IsNone && recordSerial > RequestedRecordSerial;
+        public bool CanApply(long recordSerial) =>
+            GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(!IsNone, RequestedRecordSerial, recordSerial);
     }
 
     private sealed unsafe class GlyphAtlasPage(

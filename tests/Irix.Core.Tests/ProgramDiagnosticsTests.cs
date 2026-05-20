@@ -240,6 +240,14 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_page_reuse_request_cannot_apply_until_later_record()
+    {
+        Assert.False(GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(false, requestedRecordSerial: 7, currentRecordSerial: 8));
+        Assert.False(GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(true, requestedRecordSerial: 7, currentRecordSerial: 7));
+        Assert.True(GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(true, requestedRecordSerial: 7, currentRecordSerial: 8));
+    }
+
+    [Fact]
     public void Glyph_atlas_dirty_rect_merges_new_glyph_bounds()
     {
         var first = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
@@ -447,7 +455,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly struct GlyphAtlasEntryHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageReuseRequest(GlyphAtlasPageHandle Page, long RequestedRecordSerial)", glyphSource);
-        Assert.Contains("public bool CanApply(long recordSerial) => !IsNone && recordSerial > RequestedRecordSerial;", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(!IsNone, RequestedRecordSerial, recordSerial)", glyphSource);
         Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
         Assert.Contains("private GlyphAtlasEntryHandle AddGlyphEntry(in GlyphEntry entry)", glyphSource);
         Assert.Contains("_freeGlyphEntryIndices.RemoveAt(freeIndex);", glyphSource);
