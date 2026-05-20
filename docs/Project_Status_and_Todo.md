@@ -166,6 +166,7 @@ Overlay removal update: default GlyphAtlas no longer records unsupported, AtlasF
 Glyph atlas upload diagnostics now expose `uploadedGlyphs` separately from cache misses so upload policy can distinguish actual new atlas entries from failed misses and degradation.
 Glyph atlas `Wrap` now has minimal ASCII space-based multi-line support in the D3D12 path. `NoWrap` remains single-line; words that cannot fit, non-ASCII text, complex shaping, and over-height line stacks still degrade explicitly without D3D11On12 / D2D fallback.
 2026-05-20 wrap-layout update: Release build passed; all tests `649` passed; program diagnostics tests `61` passed. Short default GlyphAtlas sync smoke stayed at `syncWaits=0`, `atlasRuns=90`, `degradedRuns=0`, `uploadedGlyphs=29`. Short mixed degradation stayed at `syncWaits=0`, `atlasRuns=6`, `degradedRuns=6`, `NonAscii=6`. MixedAtlasFull / MixedAtlasFullReuse stress stayed at `syncWaits=0` with the same four-page AtlasFull and next-frame reuse behavior as the frame-slot upload baseline.
+2026-05-20 wrap smoke update: Release build passed; all tests `650` passed; program diagnostics tests `62` passed. `--diagnose-glyph-atlas-wrap 3 --diagnose-scale 150` reported expected per-frame `textRuns=4`, `atlasRuns=2`, `degradedRuns=2`, `wrappedAtlasRuns=1`, `Wrapping=1`, `NonAscii=1`; final diagnostics were `frameSerial=3`, `presentSerial=3`, `syncWaits=0`, `atlasRuns=6`, `degradedRuns=6`, `Wrapping=3`, `NonAscii=3`, and `uploadedGlyphs=22`.
 
 Manual smoke status:
 

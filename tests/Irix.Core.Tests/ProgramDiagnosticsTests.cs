@@ -602,6 +602,29 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_wrap_smoke_scene_classifies_space_wrap_and_explicit_degradation()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var commands = GlyphAtlasWrapDiagnosticRunner.BuildWrapCommands(resources, frameIndex: 0);
+        resources.Seal();
+
+        var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
+        var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
+
+        Assert.Equal(4, summary.TextRuns);
+        Assert.Equal(2, summary.AtlasCandidateRuns);
+        Assert.Equal(2, summary.DegradedCandidateRuns);
+        Assert.Equal(1, summary.WrappedAtlasCandidateRuns);
+        Assert.Equal(1, summary.WrappingFallbackRuns);
+        Assert.Equal(1, summary.NonAsciiFallbackRuns);
+        Assert.Contains("atlasRuns=2", expectedLine);
+        Assert.Contains("degradedRuns=2", expectedLine);
+        Assert.Contains("wrappedAtlasRuns=1", expectedLine);
+        Assert.Contains("Wrapping=1", expectedLine);
+        Assert.Contains("NonAscii=1", expectedLine);
+    }
+
+    [Fact]
     public void Text_cache_allocation_attribution_formatter_outputs_stable_stage_fields()
     {
         var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(

@@ -86,7 +86,7 @@ Phase 1 foundation first kept the overlay path as the default runtime behavior a
 
 The first atlas execution path records a D3D12 glyph pass for basic ASCII runs, uses an `R8_UNORM` atlas, and supports leading/center/trailing alignment plus per-run scissor for accepted runs. `NoWrap` remains single-line and width-bounded; `Wrap` now accepts minimal ASCII space-based multi-line layout when every word and line stack fits.
 It now uses non-overlay degradation so unsupported renderable text runs do not force either whole-frame overlay or mixed overlay fallback.
-Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
+Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, minimal ASCII wrap acceptance plus hard-wrap degradation, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
 Current default GlyphAtlas behavior degrades unsupported and initialization/upload/record-failed renderable text runs without invoking overlay.
 Full shaping, hyphenation/complex wrapping, color glyphs, fallback font identity, eviction, command-order-perfect mixed text z-order, and production enablement remain follow-up work.
 
