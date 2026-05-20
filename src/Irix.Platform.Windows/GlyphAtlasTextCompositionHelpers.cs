@@ -35,6 +35,123 @@ internal static class GlyphAtlasTextCompositionHelpers
         return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
     }
 
+    internal static D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason PlanLines(
+        ReadOnlySpan<char> text,
+        ReadOnlySpan<float> advances,
+        float maxLineWidth,
+        TextWrapping wrapping,
+        Span<GlyphAtlasLayoutLine> lines,
+        out int lineCount)
+    {
+        lineCount = 0;
+        if (text.IsEmpty)
+        {
+            return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
+        }
+
+        if (advances.Length < text.Length || lines.Length == 0)
+        {
+            throw new ArgumentException("Glyph atlas line planner scratch is too small.");
+        }
+
+        if (wrapping == TextWrapping.NoWrap)
+        {
+            var lineWidth = 0f;
+            for (var i = 0; i < text.Length; i++)
+            {
+                lineWidth += advances[i];
+            }
+
+            if (lineWidth > maxLineWidth)
+            {
+                return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Clip;
+            }
+
+            lines[0] = new GlyphAtlasLayoutLine(0, text.Length, lineWidth);
+            lineCount = 1;
+            return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
+        }
+
+        var index = 0;
+        while (index < text.Length)
+        {
+            while (index < text.Length && text[index] == ' ')
+            {
+                index++;
+            }
+
+            if (index >= text.Length)
+            {
+                break;
+            }
+
+            var lineStart = index;
+            var lineWidth = 0f;
+            var breakIndex = -1;
+            var breakWidth = 0f;
+
+            for (var i = lineStart; i < text.Length; i++)
+            {
+                if (text[i] == ' ' && i > lineStart && text[i - 1] != ' ')
+                {
+                    breakIndex = i;
+                    breakWidth = lineWidth;
+                }
+
+                var nextWidth = lineWidth + advances[i];
+                if (nextWidth > maxLineWidth)
+                {
+                    if (breakIndex >= lineStart)
+                    {
+                        AppendLine(lines, ref lineCount, lineStart, breakIndex, breakWidth);
+                        index = breakIndex + 1;
+                        goto NextLine;
+                    }
+
+                    return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Wrapping;
+                }
+
+                lineWidth = nextWidth;
+            }
+
+            var lineEnd = text.Length;
+            while (lineEnd > lineStart && text[lineEnd - 1] == ' ')
+            {
+                lineEnd--;
+                lineWidth -= advances[lineEnd];
+            }
+
+            AppendLine(lines, ref lineCount, lineStart, lineEnd, lineWidth);
+            index = text.Length;
+
+        NextLine:
+            continue;
+        }
+
+        if (lineCount == 0)
+        {
+            lines[0] = new GlyphAtlasLayoutLine(0, 0, 0);
+            lineCount = 1;
+        }
+
+        return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
+    }
+
+    private static void AppendLine(
+        Span<GlyphAtlasLayoutLine> lines,
+        ref int lineCount,
+        int start,
+        int end,
+        float width)
+    {
+        if ((uint)lineCount >= (uint)lines.Length)
+        {
+            throw new ArgumentException("Glyph atlas line planner scratch is too small.");
+        }
+
+        lines[lineCount++] = new GlyphAtlasLayoutLine(start, end, width);
+    }
+
     internal static bool ShouldRenderTextRun(D3D12TextRun textRun, IFrameResourceResolver resources)
     {
         if (textRun.Width <= 0 || textRun.Height <= 0)
@@ -97,6 +214,28 @@ internal static class GlyphAtlasTextCompositionHelpers
             ? initializationException
             : new D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationException(phase, exception);
     }
+}
+
+internal readonly struct GlyphAtlasLayoutLine(int Start, int End, float Width) : IEquatable<GlyphAtlasLayoutLine>
+{
+    public int Start { get; } = Start;
+    public int End { get; } = End;
+    public float Width { get; } = Width;
+
+    public bool Equals(GlyphAtlasLayoutLine other)
+    {
+        return Start == other.Start
+            && End == other.End
+            && Width.Equals(other.Width);
+    }
+
+    public override bool Equals(object? obj) => obj is GlyphAtlasLayoutLine other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Start, End, Width);
+
+    public static bool operator ==(GlyphAtlasLayoutLine left, GlyphAtlasLayoutLine right) => left.Equals(right);
+
+    public static bool operator !=(GlyphAtlasLayoutLine left, GlyphAtlasLayoutLine right) => !left.Equals(right);
 }
 
 internal readonly struct GlyphAtlasDirtyRect(

@@ -83,6 +83,75 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_line_planner_keeps_no_wrap_as_single_line_or_clip()
+    {
+        Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[2];
+        Span<float> advances = [10, 12, 8];
+
+        var acceptedReason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            "ABC".AsSpan(),
+            advances,
+            maxLineWidth: 30,
+            TextWrapping.NoWrap,
+            lines,
+            out var acceptedLineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, acceptedReason);
+        Assert.Equal(1, acceptedLineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, 3, 30), lines[0]);
+
+        var clippedReason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            "ABC".AsSpan(),
+            advances,
+            maxLineWidth: 29,
+            TextWrapping.NoWrap,
+            lines,
+            out var clippedLineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Clip, clippedReason);
+        Assert.Equal(0, clippedLineCount);
+    }
+
+    [Fact]
+    public void Glyph_atlas_line_planner_wraps_ascii_at_spaces()
+    {
+        Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[4];
+        Span<float> advances = [10, 10, 5, 5, 10, 10, 5, 10];
+
+        var reason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            "AB  CD E".AsSpan(),
+            advances,
+            maxLineWidth: 25,
+            TextWrapping.Wrap,
+            lines,
+            out var lineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, reason);
+        Assert.Equal(3, lineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, 2, 20), lines[0]);
+        Assert.Equal(new GlyphAtlasLayoutLine(4, 6, 20), lines[1]);
+        Assert.Equal(new GlyphAtlasLayoutLine(7, 8, 10), lines[2]);
+    }
+
+    [Fact]
+    public void Glyph_atlas_line_planner_degrades_wrap_when_word_cannot_fit()
+    {
+        Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[2];
+        Span<float> advances = [10, 10, 5, 10];
+
+        var reason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            "AB C".AsSpan(),
+            advances,
+            maxLineWidth: 15,
+            TextWrapping.Wrap,
+            lines,
+            out var lineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Wrapping, reason);
+        Assert.Equal(0, lineCount);
+    }
+
+    [Fact]
     public void Glyph_atlas_dirty_rect_merges_new_glyph_bounds()
     {
         var first = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(

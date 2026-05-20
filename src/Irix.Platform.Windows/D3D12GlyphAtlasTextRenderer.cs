@@ -48,6 +48,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private int _rasterScratchResizeCount;
     private readonly Vertex[] _vertices = new Vertex[MaxGlyphVertices];
     private readonly GlyphDrawBatch[] _batches = new GlyphDrawBatch[MaxGlyphDrawBatches];
+    private GlyphEntry[] _layoutGlyphScratch = [];
+    private float[] _layoutAdvanceScratch = [];
+    private GlyphAtlasLayoutLine[] _layoutLineScratch = [];
     private readonly Dictionary<FontFaceKey, CachedFontFace> _fontFaces = [];
     private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs = [];
     private readonly List<GlyphEntry> _glyphEntries = new(512);
@@ -260,28 +263,21 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 continue;
             }
 
-            var baselineY = ComputeBaselineY(textRun, style, fontFace.Metrics);
-            if (!TextMetricsFit(textRun, fontFace.Metrics, style.FontSize))
-            {
-                AddDegradedRun(GlyphAtlasFallbackReason.Clip, ref degradedRunCount, ref degradationReasons);
-                continue;
-            }
-
-            var lineWidth = ComputeLineWidth(text, fontFace, style, recordSerial, out unsupportedReason);
-            if (unsupportedReason != GlyphAtlasFallbackReason.None)
+            EnsureLayoutScratch(text.Length);
+            if (!TryBuildLineLayout(text, fontFace, style, textRun.Width, recordSerial, out var lineCount, out unsupportedReason))
             {
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
-            if (lineWidth > textRun.Width)
+            var lineHeight = ComputeLineHeight(fontFace.Metrics, style.FontSize);
+            if (!TextMetricsFit(textRun, lineHeight, lineCount))
             {
                 AddDegradedRun(style.Wrapping == TextWrapping.NoWrap ? GlyphAtlasFallbackReason.Clip : GlyphAtlasFallbackReason.Wrapping, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
-            var penX = GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(textRun.X, textRun.Width, style.HorizontalAlignment, lineWidth);
-            var maxX = textRun.X + textRun.Width;
+            var firstBaselineY = ComputeFirstBaselineY(textRun, style, fontFace.Metrics, lineHeight, lineCount);
             var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
             if (scissor.IsEmpty)
             {
@@ -293,52 +289,61 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var batchStart = vertexCount;
             var batchSegmentStart = vertexCount;
             var batchPage = default(GlyphAtlasPageHandle);
+            var maxX = textRun.X + textRun.Width;
 
-            foreach (var character in text)
+            for (var lineIndex = 0; lineIndex < lineCount; lineIndex++)
             {
-                if (!TryGetGlyph(fontFace, style, character, recordSerial, out var glyph, out unsupportedReason))
+                var line = _layoutLineScratch[lineIndex];
+                var penX = GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(textRun.X, textRun.Width, style.HorizontalAlignment, line.Width);
+                var baselineY = firstBaselineY + lineIndex * lineHeight;
+
+                for (var glyphIndex = line.Start; glyphIndex < line.End; glyphIndex++)
                 {
-                    break;
-                }
-
-                if (penX + glyph.Advance > maxX)
-                {
-                    unsupportedReason = GlyphAtlasFallbackReason.Clip;
-                    break;
-                }
-
-                if (glyph.Width > 0 && glyph.Height > 0)
-                {
-                    if (batchPage.IsNone)
+                    var glyph = _layoutGlyphScratch[glyphIndex];
+                    if (penX + glyph.Advance > maxX)
                     {
-                        batchPage = glyph.Page;
-                    }
-                    else if (batchPage != glyph.Page)
-                    {
-                        if (!TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
-                        {
-                            unsupportedReason = GlyphAtlasFallbackReason.BatchLimit;
-                            break;
-                        }
-
-                        batchSegmentStart = vertexCount;
-                        batchPage = glyph.Page;
-                    }
-
-                    if (vertexCount + 6 > MaxGlyphVertices)
-                    {
-                        unsupportedReason = GlyphAtlasFallbackReason.VertexLimit;
+                        unsupportedReason = GlyphAtlasFallbackReason.Clip;
                         break;
                     }
 
-                    var x1 = penX + glyph.OffsetX;
-                    var y1 = baselineY + glyph.OffsetY;
-                    var x2 = x1 + glyph.Width;
-                    var y2 = y1 + glyph.Height;
-                    AppendQuad(_vertices, ref vertexCount, x1, y1, x2, y2, glyph, color, viewportWidth, viewportHeight);
+                    if (glyph.Width > 0 && glyph.Height > 0)
+                    {
+                        if (batchPage.IsNone)
+                        {
+                            batchPage = glyph.Page;
+                        }
+                        else if (batchPage != glyph.Page)
+                        {
+                            if (!TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
+                            {
+                                unsupportedReason = GlyphAtlasFallbackReason.BatchLimit;
+                                break;
+                            }
+
+                            batchSegmentStart = vertexCount;
+                            batchPage = glyph.Page;
+                        }
+
+                        if (vertexCount + 6 > MaxGlyphVertices)
+                        {
+                            unsupportedReason = GlyphAtlasFallbackReason.VertexLimit;
+                            break;
+                        }
+
+                        var x1 = penX + glyph.OffsetX;
+                        var y1 = baselineY + glyph.OffsetY;
+                        var x2 = x1 + glyph.Width;
+                        var y2 = y1 + glyph.Height;
+                        AppendQuad(_vertices, ref vertexCount, x1, y1, x2, y2, glyph, color, viewportWidth, viewportHeight);
+                    }
+
+                    penX += glyph.Advance;
                 }
 
-                penX += glyph.Advance;
+                if (unsupportedReason != GlyphAtlasFallbackReason.None)
+                {
+                    break;
+                }
             }
 
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
@@ -371,6 +376,48 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return new GlyphFrame(vertexCount, batchCount, atlasRunCount, degradedRunCount, degradationReasons);
     }
 
+    private void EnsureLayoutScratch(int textLength)
+    {
+        if (_layoutGlyphScratch.Length < textLength)
+        {
+            _layoutGlyphScratch = new GlyphEntry[textLength];
+            _layoutAdvanceScratch = new float[textLength];
+            _layoutLineScratch = new GlyphAtlasLayoutLine[textLength];
+        }
+    }
+
+    private bool TryBuildLineLayout(
+        ReadOnlySpan<char> text,
+        CachedFontFace fontFace,
+        TextStyle style,
+        float maxLineWidth,
+        long recordSerial,
+        out int lineCount,
+        out GlyphAtlasFallbackReason unsupportedReason)
+    {
+        var glyphs = _layoutGlyphScratch.AsSpan(0, text.Length);
+        var advances = _layoutAdvanceScratch.AsSpan(0, text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (!TryGetGlyph(fontFace, style, text[i], recordSerial, out glyphs[i], out unsupportedReason))
+            {
+                lineCount = 0;
+                return false;
+            }
+
+            advances[i] = glyphs[i].Advance;
+        }
+
+        unsupportedReason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            text,
+            advances,
+            maxLineWidth,
+            wrapping: style.Wrapping,
+            lines: _layoutLineScratch.AsSpan(0, text.Length),
+            out lineCount);
+        return unsupportedReason == GlyphAtlasFallbackReason.None;
+    }
+
     private static void AddDegradedRun(
         GlyphAtlasFallbackReason reason,
         ref int degradedRunCount,
@@ -401,28 +448,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
-    private static bool TextMetricsFit(D3D12TextRun textRun, DWRITE_FONT_METRICS metrics, float emSize)
-    {
-        var scale = emSize / metrics.designUnitsPerEm;
-        return (metrics.ascent + metrics.descent) * scale <= textRun.Height;
-    }
-
-    private float ComputeLineWidth(ReadOnlySpan<char> text, CachedFontFace fontFace, TextStyle style, long recordSerial, out GlyphAtlasFallbackReason unsupportedReason)
-    {
-        var width = 0f;
-        foreach (var character in text)
-        {
-            if (!TryGetGlyph(fontFace, style, character, recordSerial, out var glyph, out unsupportedReason))
-            {
-                return 0;
-            }
-
-            width += glyph.Advance;
-        }
-
-        unsupportedReason = GlyphAtlasFallbackReason.None;
-        return width;
-    }
+    private static bool TextMetricsFit(D3D12TextRun textRun, float lineHeight, int lineCount) => lineHeight * lineCount <= textRun.Height;
 
     private static IntegerScissorRect ResolveRunScissor(D3D12TextRun textRun, int viewportWidth, int viewportHeight)
     {
@@ -954,17 +980,22 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         page.DirtyBottom = 0;
     }
 
-    private static float ComputeBaselineY(D3D12TextRun textRun, TextStyle style, DWRITE_FONT_METRICS metrics)
+    private static float ComputeLineHeight(DWRITE_FONT_METRICS metrics, float emSize)
+    {
+        var scale = emSize / metrics.designUnitsPerEm;
+        return (metrics.ascent + metrics.descent) * scale;
+    }
+
+    private static float ComputeFirstBaselineY(D3D12TextRun textRun, TextStyle style, DWRITE_FONT_METRICS metrics, float lineHeight, int lineCount)
     {
         var emSize = style.FontSize;
         var scale = emSize / metrics.designUnitsPerEm;
         var ascent = metrics.ascent * scale;
-        var descent = metrics.descent * scale;
-        var textHeight = ascent + descent;
+        var textHeight = lineHeight * lineCount;
         return textRun.Y + style.VerticalAlignment switch
         {
             TextVerticalAlignment.Top => ascent,
-            TextVerticalAlignment.Bottom => Math.Max(ascent, textRun.Height - descent),
+            TextVerticalAlignment.Bottom => Math.Max(ascent, textRun.Height - textHeight + ascent),
             _ => ((textRun.Height - textHeight) * 0.5f) + ascent
         };
     }
