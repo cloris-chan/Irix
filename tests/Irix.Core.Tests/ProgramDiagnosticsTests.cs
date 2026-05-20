@@ -310,10 +310,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly struct GlyphAtlasPageUsage(int UsedPixels, int FragmentedPixels, long OldestPageAge, long NewestPageAge)", glyphSource);
         Assert.Contains(".WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)", glyphSource);
         Assert.Contains(".WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge)", glyphSource);
+        Assert.Contains(".WithAtlasPendingPageReuse(_pendingAtlasPageReuse.IsNone ? 0 : 1)", glyphSource);
         Assert.Contains("public int AtlasBudgetPages => MaxAtlasPages;", glyphSource);
         Assert.Contains("public int AtlasPageWidth => AtlasWidth;", glyphSource);
         Assert.Contains("public int AtlasPageHeight => AtlasHeight;", glyphSource);
         Assert.Contains("public int AtlasCapacityPixels => AtlasBudgetPixels;", glyphSource);
+        Assert.Contains("public int AtlasPendingPageReuses { get; } = AtlasPendingPageReuses;", glyphSource);
         Assert.Contains("public GlyphEntry WithLastUsedSerial(long serial)", glyphSource);
         Assert.Contains("page.UsedPixels = checked(page.UsedPixels + width * height);", glyphSource);
         Assert.Contains("page.AllocatedPixels = Math.Max(page.AllocatedPixels, page.ComputeAllocatedPixels());", glyphSource);
@@ -358,6 +360,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("atlasPage=1024x1024", summary);
         Assert.Contains("atlasCapacity=4194304 px", summary);
         Assert.Contains("atlasEvictions=1", summary);
+        Assert.Contains("atlasPendingPageReuses=0", summary);
         Assert.Contains("atlasUsed=2048 px", summary);
         Assert.Contains("atlasFragmented=512 px", summary);
         Assert.Contains("atlasRecordSerial=0", summary);
@@ -1165,7 +1168,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

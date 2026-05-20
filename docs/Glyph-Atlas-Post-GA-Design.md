@@ -28,7 +28,7 @@ Current implementation status:
 | Clip | Per-run scissor clip supported for accepted atlas runs |
 | Fallback | Unsupported or failed renderable runs degrade without overlay |
 | Mixed ordering | Rect pass -> atlas accepted runs -> Present; degraded runs are not drawn |
-| Diagnostics | `atlasPages`, `atlasBudgetPages`, `atlasPage`, `atlasCapacity`, `atlasEvictions`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page age metrics, `AtlasRuns`, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
+| Diagnostics | `atlasPages`, `atlasBudgetPages`, `atlasPage`, `atlasCapacity`, `atlasEvictions`, `atlasPendingPageReuses`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page age metrics, `AtlasRuns`, `DegradedRuns`, fallback/degradation frames, unsupported runs, and reason counts |
 | Not implemented | Non-ASCII shaping, fallback font identity, color glyphs, wrapping, eviction, and recovery beyond explicit degradation |
 
 Phase 1 closeout: local evidence has been captured for default overlay regression, opt-in glyph-atlas ASCII smoke, NonAscii and AtlasFull fallback/degradation, resize, 100% / 150% / 200% scale, and warm allocation baseline. The post-GA default baseline is now `GlyphAtlas` without D3D11On12 / Direct2D final composition. The next phase should focus on resource ownership and reducing accepted degradation, rather than expanding the ASCII prototype surface blindly.
@@ -254,7 +254,7 @@ D3D11On12 / D2D overlay deletion is active in the renderer source:
 - `D3D12TextRenderer`, `TextOverlaySyncStrategy`, and D3D11 query extensions are removed.
 - `NativeMethods.txt` no longer requests D3D11On12 or Direct2D generation.
 - `TextCompositionMode` has no overlay mode; `--text-composition overlay` parses back to `GlyphAtlas`.
-- Diagnostics expose `atlasPages`, `atlasBudgetPages`, `atlasPage`, `atlasCapacity`, `atlasEvictions`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page ages, accepted text runs, degradation runs, per-run reasons, sync/present serials, and failure phases.
+- Diagnostics expose `atlasPages`, `atlasBudgetPages`, `atlasPage`, `atlasCapacity`, `atlasEvictions`, `atlasPendingPageReuses`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page ages, accepted text runs, degradation runs, per-run reasons, sync/present serials, and failure phases.
 
 Remaining work is reducing `DegradedRuns` without reintroducing D3D11On12 / D2D as a hidden dependency.
 
