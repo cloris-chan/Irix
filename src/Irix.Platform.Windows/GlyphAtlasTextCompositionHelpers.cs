@@ -218,6 +218,16 @@ internal static class GlyphAtlasTextCompositionHelpers
         return candidateLastUsedSerial < selectedLastUsedSerial;
     }
 
+    internal static bool HasAtlasUploadResources(bool hasTexture, bool hasUpload)
+    {
+        return hasTexture && hasUpload;
+    }
+
+    internal static bool HasAtlasDrawResources(bool hasSrvHeap)
+    {
+        return hasSrvHeap;
+    }
+
     internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
     {
         if ((uint)index >= (uint)text.Length)

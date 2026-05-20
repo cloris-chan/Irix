@@ -42,6 +42,7 @@ D3D12 upload map paths now unmap in `finally` after a successful map, covering r
 D3D12 swapchain creation now releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery use the same helper.
 D3D12 core device/queue/RTV/command/fence setup is also shared by constructor and recovery, with pointer guards and null-safe cleanup for partial initialization failure.
 D3D12 rectangle vertex, glyph vertex, and per-page atlas upload resources are now frame-slot owned. `BeginFrame` no longer needs a coarse last-submitted-frame upload wait; normal swapchain frame-slot fencing protects each upload resource before reuse.
+Glyph-atlas record-time page resource guards classify missing atlas texture/upload/SRV resources as typed record failures instead of allowing null GPU resource binding.
 D3D11On12 / Direct2D overlay renderer sources, sync strategy, native method generation entries, and diagnostics have been removed from the active source tree.
 
 Default degradation update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It records atlas quads for accepted runs and counts unsupported or failed renderable runs as degradation.

@@ -1151,6 +1151,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         var uploadSlot = frameResourceIndex % UploadFrameCount;
         var upload = page.Uploads[uploadSlot];
+        if (!GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(page.Texture != null, upload != null))
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.AtlasUploadMap,
+                "D3D12GlyphAtlasTextRenderer.UploadAtlas found a missing atlas texture or upload buffer.");
+        }
+
         var uploadRowPitch = AlignUp(dirtyWidth, TextureDataPitchAlignment);
         var uploadBytes = uploadRowPitch * dirtyHeight;
         void* mapped = null;
@@ -1239,6 +1246,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var batch = _batches[i];
             var page = ResolveDrawBatchPage(batch.Page);
             var heap = page.SrvHeap;
+            if (!GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.Record,
+                    "D3D12GlyphAtlasTextRenderer.DrawGlyphs found a missing atlas SRV heap.");
+            }
+
             list->SetDescriptorHeaps(1, &heap);
             list->SetGraphicsRootDescriptorTable(0, page.SrvHeap->GetGPUDescriptorHandleForHeapStart());
             var scissor = ToRect(batch.Scissor);

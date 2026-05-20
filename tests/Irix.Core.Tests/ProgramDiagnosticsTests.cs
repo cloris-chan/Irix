@@ -284,6 +284,16 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_record_resource_guards_require_gpu_resources()
+    {
+        Assert.True(GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(hasTexture: true, hasUpload: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(hasTexture: false, hasUpload: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(hasTexture: true, hasUpload: false));
+        Assert.True(GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(hasSrvHeap: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(hasSrvHeap: false));
+    }
+
+    [Fact]
     public void Glyph_atlas_dirty_rect_merges_new_glyph_bounds()
     {
         var first = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
@@ -541,6 +551,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public GlyphAtlasPageHandle NextGeneration()", glyphSource);
         Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CreatePageReuseResetState(AtlasWidth, AtlasHeight, AtlasPadding)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(page.Texture != null, upload != null)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null)", glyphSource);
         Assert.Contains("public int UsedPixels { get; set; }", glyphSource);
         Assert.Contains("public int AllocatedPixels { get; set; }", glyphSource);
         Assert.Contains("public long LastUsedSerial { get; private set; }", glyphSource);
