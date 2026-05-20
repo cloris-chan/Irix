@@ -249,16 +249,19 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
         Assert.Contains("private readonly List<GlyphAtlasPage> _atlasPages = new(1);", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle _activeAtlasPage;", glyphSource);
+        Assert.Contains("private long _glyphRecordSerial;", glyphSource);
         Assert.Contains("private bool _pendingAtlasPageEviction;", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasEntryHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
         Assert.Contains("private GlyphAtlasEntryHandle AddGlyphEntry(in GlyphEntry entry)", glyphSource);
-        Assert.Contains("private bool TryResolveGlyph(GlyphAtlasEntryHandle handle, out GlyphEntry entry)", glyphSource);
+        Assert.Contains("private bool TryResolveGlyph(GlyphAtlasEntryHandle handle, long recordSerial, out GlyphEntry entry)", glyphSource);
+        Assert.Contains("page.Touch(recordSerial);", glyphSource);
+        Assert.Contains("entry = entry.WithLastUsedSerial(recordSerial);", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle AddAtlasPage(", glyphSource);
         Assert.Contains("ID3D12DescriptorHeap* srvHeap)", glyphSource);
         Assert.Contains("private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle,", glyphSource);
-        Assert.Contains("entry.Generation == handle.Generation && TryResolveAtlasPage(entry.Page", glyphSource);
+        Assert.Contains("entry.Generation != handle.Generation || !TryResolveAtlasPage(entry.Page, out var page)", glyphSource);
         Assert.Contains("GlyphAtlasPageHandle Page", glyphSource);
         Assert.Contains("private readonly struct GlyphDrawBatch(int StartVertex, int VertexCount, IntegerScissorRect Scissor, GlyphAtlasPageHandle Page)", glyphSource);
         Assert.Contains("_batches[batchCount++] = new GlyphDrawBatch(batchStart, vertexCount - batchStart, scissor, batchPage);", glyphSource);
@@ -275,10 +278,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
         Assert.Contains("public int UsedPixels { get; set; }", glyphSource);
         Assert.Contains("public int AllocatedPixels { get; set; }", glyphSource);
+        Assert.Contains("public long LastUsedSerial { get; private set; }", glyphSource);
+        Assert.Contains("public void Touch(long serial)", glyphSource);
         Assert.Contains("public int ComputeAllocatedPixels()", glyphSource);
         Assert.Contains("private GlyphAtlasPageUsage GetAtlasPageUsage()", glyphSource);
-        Assert.Contains("private readonly struct GlyphAtlasPageUsage(int UsedPixels, int FragmentedPixels)", glyphSource);
+        Assert.Contains("private readonly struct GlyphAtlasPageUsage(int UsedPixels, int FragmentedPixels, long OldestPageAge, long NewestPageAge)", glyphSource);
         Assert.Contains(".WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)", glyphSource);
+        Assert.Contains(".WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge)", glyphSource);
+        Assert.Contains("public GlyphEntry WithLastUsedSerial(long serial)", glyphSource);
         Assert.Contains("page.UsedPixels = checked(page.UsedPixels + width * height);", glyphSource);
         Assert.Contains("page.AllocatedPixels = Math.Max(page.AllocatedPixels, page.ComputeAllocatedPixels());", glyphSource);
         Assert.Contains(".WithAtlasEviction()", glyphSource);
@@ -320,6 +327,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("atlasEvictions=1", summary);
         Assert.Contains("atlasUsed=2048 px", summary);
         Assert.Contains("atlasFragmented=512 px", summary);
+        Assert.Contains("atlasRecordSerial=0", summary);
+        Assert.Contains("atlasOldestPageAge=0", summary);
+        Assert.Contains("atlasNewestPageAge=0", summary);
         Assert.Contains("uploads=4096 bytes", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("degradedRuns=0", summary);
@@ -1120,7 +1130,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasEvictions=0, atlasUsed=0 px, atlasFragmented=0 px, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasEvictions=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
