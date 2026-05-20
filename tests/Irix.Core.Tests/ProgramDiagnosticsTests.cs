@@ -266,6 +266,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("_pendingAtlasPageEviction = true;", glyphSource);
         Assert.Contains("public GlyphAtlasPageHandle NextGeneration()", glyphSource);
         Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
+        Assert.Contains("public int UsedPixels { get; set; }", glyphSource);
+        Assert.Contains("public int AllocatedPixels { get; set; }", glyphSource);
+        Assert.Contains("public int ComputeAllocatedPixels()", glyphSource);
+        Assert.Contains("private GlyphAtlasPageUsage GetAtlasPageUsage()", glyphSource);
+        Assert.Contains("private readonly struct GlyphAtlasPageUsage(int UsedPixels, int FragmentedPixels)", glyphSource);
+        Assert.Contains(".WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)", glyphSource);
+        Assert.Contains("page.UsedPixels = checked(page.UsedPixels + width * height);", glyphSource);
+        Assert.Contains("page.AllocatedPixels = Math.Max(page.AllocatedPixels, page.ComputeAllocatedPixels());", glyphSource);
         Assert.Contains(".WithAtlasEviction()", glyphSource);
         Assert.Contains("_glyphs[key] = handle;", glyphSource);
         Assert.DoesNotContain("Dictionary<GlyphKey, GlyphEntry> _glyphs", glyphSource);
@@ -293,6 +301,7 @@ public sealed class ProgramDiagnosticsTests
             .WithAtlasRuns(7)
             .WithAtlasPages(1)
             .WithAtlasEviction()
+            .WithAtlasPageUsage(2048, 512)
             .WithDegradation(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
 
@@ -301,6 +310,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("cachedGlyphs=12", summary);
         Assert.Contains("atlasPages=1", summary);
         Assert.Contains("atlasEvictions=1", summary);
+        Assert.Contains("atlasUsed=2048 px", summary);
+        Assert.Contains("atlasFragmented=512 px", summary);
         Assert.Contains("uploads=4096 bytes", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("degradedRuns=0", summary);
@@ -1065,7 +1076,9 @@ public sealed class ProgramDiagnosticsTests
             RasterScratchBytes: 512,
             RasterScratchResizes: 2,
             AtlasPages: 1,
-            AtlasEvictions: 0);
+            AtlasEvictions: 0,
+            AtlasUsedPixels: 0,
+            AtlasFragmentedPixels: 0);
 
         ResizeDiagnosticRunner.WriteReport(
             writer,
@@ -1099,7 +1112,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasEvictions=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasEvictions=0, atlasUsed=0 px, atlasFragmented=0 px, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
