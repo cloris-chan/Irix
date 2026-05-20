@@ -257,6 +257,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_page_reuse_reset_marks_full_page_dirty_and_clears_usage()
+    {
+        var reset = GlyphAtlasTextCompositionHelpers.CreatePageReuseResetState(atlasWidth: 1024, atlasHeight: 1024, atlasPadding: 1);
+
+        Assert.Equal(1, reset.NextX);
+        Assert.Equal(1, reset.NextY);
+        Assert.Equal(0, reset.RowHeight);
+        Assert.True(reset.IsDirty);
+        Assert.Equal(0, reset.DirtyLeft);
+        Assert.Equal(0, reset.DirtyTop);
+        Assert.Equal(1024, reset.DirtyRight);
+        Assert.Equal(1024, reset.DirtyBottom);
+        Assert.Equal(0, reset.UsedPixels);
+        Assert.Equal(0, reset.AllocatedPixels);
+        Assert.Equal(0, reset.LastUsedSerial);
+    }
+
+    [Fact]
     public void Glyph_atlas_dirty_rect_merges_new_glyph_bounds()
     {
         var first = GlyphAtlasTextCompositionHelpers.MergeDirtyRect(
@@ -508,6 +526,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("throw new InvalidOperationException(\"Glyph atlas pending page reuse handle is stale.\");", glyphSource);
         Assert.Contains("public GlyphAtlasPageHandle NextGeneration()", glyphSource);
         Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.CreatePageReuseResetState(AtlasWidth, AtlasHeight, AtlasPadding)", glyphSource);
         Assert.Contains("public int UsedPixels { get; set; }", glyphSource);
         Assert.Contains("public int AllocatedPixels { get; set; }", glyphSource);
         Assert.Contains("public long LastUsedSerial { get; private set; }", glyphSource);

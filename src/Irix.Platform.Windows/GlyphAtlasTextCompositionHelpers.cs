@@ -197,6 +197,22 @@ internal static class GlyphAtlasTextCompositionHelpers
         return isLiveGlyph && glyphPageIndex == reusedPageIndex && glyphPageGeneration == reusedPageGeneration;
     }
 
+    internal static GlyphAtlasPageReuseResetState CreatePageReuseResetState(int atlasWidth, int atlasHeight, int atlasPadding)
+    {
+        return new GlyphAtlasPageReuseResetState(
+            NextX: atlasPadding,
+            NextY: atlasPadding,
+            RowHeight: 0,
+            IsDirty: true,
+            DirtyLeft: 0,
+            DirtyTop: 0,
+            DirtyRight: atlasWidth,
+            DirtyBottom: atlasHeight,
+            UsedPixels: 0,
+            AllocatedPixels: 0,
+            LastUsedSerial: 0);
+    }
+
     internal static bool IsLineBreak(ReadOnlySpan<char> text, int index, out int width)
     {
         if ((uint)index >= (uint)text.Length)
@@ -351,4 +367,68 @@ internal readonly struct GlyphAtlasDirtyRect(
     public static bool operator ==(GlyphAtlasDirtyRect left, GlyphAtlasDirtyRect right) => left.Equals(right);
 
     public static bool operator !=(GlyphAtlasDirtyRect left, GlyphAtlasDirtyRect right) => !left.Equals(right);
+}
+
+internal readonly struct GlyphAtlasPageReuseResetState(
+    int NextX,
+    int NextY,
+    int RowHeight,
+    bool IsDirty,
+    int DirtyLeft,
+    int DirtyTop,
+    int DirtyRight,
+    int DirtyBottom,
+    int UsedPixels,
+    int AllocatedPixels,
+    long LastUsedSerial) : IEquatable<GlyphAtlasPageReuseResetState>
+{
+    public int NextX { get; } = NextX;
+    public int NextY { get; } = NextY;
+    public int RowHeight { get; } = RowHeight;
+    public bool IsDirty { get; } = IsDirty;
+    public int DirtyLeft { get; } = DirtyLeft;
+    public int DirtyTop { get; } = DirtyTop;
+    public int DirtyRight { get; } = DirtyRight;
+    public int DirtyBottom { get; } = DirtyBottom;
+    public int UsedPixels { get; } = UsedPixels;
+    public int AllocatedPixels { get; } = AllocatedPixels;
+    public long LastUsedSerial { get; } = LastUsedSerial;
+
+    public bool Equals(GlyphAtlasPageReuseResetState other)
+    {
+        return NextX == other.NextX
+            && NextY == other.NextY
+            && RowHeight == other.RowHeight
+            && IsDirty == other.IsDirty
+            && DirtyLeft == other.DirtyLeft
+            && DirtyTop == other.DirtyTop
+            && DirtyRight == other.DirtyRight
+            && DirtyBottom == other.DirtyBottom
+            && UsedPixels == other.UsedPixels
+            && AllocatedPixels == other.AllocatedPixels
+            && LastUsedSerial == other.LastUsedSerial;
+    }
+
+    public override bool Equals(object? obj) => obj is GlyphAtlasPageReuseResetState other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(NextX);
+        hash.Add(NextY);
+        hash.Add(RowHeight);
+        hash.Add(IsDirty);
+        hash.Add(DirtyLeft);
+        hash.Add(DirtyTop);
+        hash.Add(DirtyRight);
+        hash.Add(DirtyBottom);
+        hash.Add(UsedPixels);
+        hash.Add(AllocatedPixels);
+        hash.Add(LastUsedSerial);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(GlyphAtlasPageReuseResetState left, GlyphAtlasPageReuseResetState right) => left.Equals(right);
+
+    public static bool operator !=(GlyphAtlasPageReuseResetState left, GlyphAtlasPageReuseResetState right) => !left.Equals(right);
 }

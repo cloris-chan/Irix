@@ -193,7 +193,7 @@ Rules:
 - Evict cold pages first; pin fallback/system UI glyph pages only if profiling proves churn.
 - Emit diagnostics: page count, used pixels, fragmentation estimate, page age, upload bytes/frame, evictions/frame, misses/frame.
 
-Current POST-011 implementation is a conservative bounded multi-page subset of this policy: glyph allocation may switch among four precreated pages, draw batches split on page changes, AtlasFull marks the coldest page for reuse with a record-serial-gated request when every page is full, the current frame continues with explicit `AtlasFull` degradation, and a later glyph pass removes only live entries from the exact reused page generation, bumps that page generation, marks the full page dirty, and uploads the reused page before drawing new accepted runs.
+Current POST-011 implementation is a conservative bounded multi-page subset of this policy: glyph allocation may switch among four precreated pages, draw batches split on page changes, AtlasFull marks the coldest page for reuse with a record-serial-gated request when every page is full, the current frame continues with explicit `AtlasFull` degradation, and a later glyph pass removes only live entries from the exact reused page generation, bumps that page generation, resets packing/usage, marks the full page dirty, and uploads the reused page before drawing new accepted runs.
 
 Page diagnostics now expose the fixed page budget, page dimensions, total atlas pixel capacity, used glyph bitmap pixels, a shelf-allocation fragmentation estimate, the atlas record serial, and oldest/newest page age metrics. These are observation fields for deciding page size, multi-page thresholds, and LRU policy; they do not change current draw or degradation behavior.
 

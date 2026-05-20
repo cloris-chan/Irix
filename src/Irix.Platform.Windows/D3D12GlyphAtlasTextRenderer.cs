@@ -2142,17 +2142,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             _handle = _handle.NextGeneration();
             Array.Clear(Pixels);
-            NextX = AtlasPadding;
-            NextY = AtlasPadding;
-            RowHeight = 0;
-            IsDirty = true;
-            DirtyLeft = 0;
-            DirtyTop = 0;
-            DirtyRight = AtlasWidth;
-            DirtyBottom = AtlasHeight;
-            UsedPixels = 0;
-            AllocatedPixels = 0;
-            LastUsedSerial = 0;
+            var resetState = GlyphAtlasTextCompositionHelpers.CreatePageReuseResetState(AtlasWidth, AtlasHeight, AtlasPadding);
+            NextX = resetState.NextX;
+            NextY = resetState.NextY;
+            RowHeight = resetState.RowHeight;
+            IsDirty = resetState.IsDirty;
+            DirtyLeft = resetState.DirtyLeft;
+            DirtyTop = resetState.DirtyTop;
+            DirtyRight = resetState.DirtyRight;
+            DirtyBottom = resetState.DirtyBottom;
+            UsedPixels = resetState.UsedPixels;
+            AllocatedPixels = resetState.AllocatedPixels;
+            LastUsedSerial = resetState.LastUsedSerial;
             return _handle;
         }
 
