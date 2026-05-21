@@ -614,10 +614,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)", glyphSource);
-        Assert.Contains("TryProbeColorGlyphLayers(shapedRun, out _);", glyphSource);
+        Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
+        Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
+        Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
+        Assert.Contains("GlyphAtom.ColorLayer(glyphIndex)", glyphSource);
+        Assert.Contains("public static GlyphAtom ColorLayer(ushort glyphIndex)", glyphSource);
         Assert.Contains("_dwriteFactory2->TranslateColorGlyphRun(", glyphSource);
         Assert.Contains("IDWriteColorGlyphRunEnumerator* colorLayers", glyphSource);
         Assert.Contains("DWRITE_COLOR_GLYPH_RUN* colorGlyphRun", glyphSource);
+        Assert.Contains("ResolveColorGlyphLayerColor(colorGlyphRun->runColor, colorGlyphRun->paletteIndex, currentBrush)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.IsTab(text[position])", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.IsWrapWhitespace(text[position])", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.PlanLines(", glyphSource);
@@ -1024,19 +1029,19 @@ public sealed class ProgramDiagnosticsTests
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
         Assert.Equal(9, summary.TextRuns);
-        Assert.Equal(6, summary.AtlasCandidateRuns);
-        Assert.Equal(3, summary.DegradedCandidateRuns);
+        Assert.Equal(7, summary.AtlasCandidateRuns);
+        Assert.Equal(2, summary.DegradedCandidateRuns);
         Assert.Equal(2, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(1, summary.WrappingFallbackRuns);
-        Assert.Equal(2, summary.NonAsciiFallbackRuns);
-        Assert.Equal(1, summary.ColorGlyphFallbackRuns);
+        Assert.Equal(1, summary.NonAsciiFallbackRuns);
+        Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(1, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=6", expectedLine);
-        Assert.Contains("degradedRuns=3", expectedLine);
+        Assert.Contains("atlasRuns=7", expectedLine);
+        Assert.Contains("degradedRuns=2", expectedLine);
         Assert.Contains("wrappedAtlasRuns=2", expectedLine);
         Assert.Contains("Wrapping=1", expectedLine);
-        Assert.Contains("NonAscii=2", expectedLine);
-        Assert.Contains("ColorGlyph=1", expectedLine);
+        Assert.Contains("NonAscii=1", expectedLine);
+        Assert.Contains("ColorGlyph=0", expectedLine);
         Assert.Contains("ComplexScript=1", expectedLine);
     }
 

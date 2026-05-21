@@ -206,9 +206,8 @@ internal static class GlyphAtlasWrapDiagnosticRunner
 
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style, float width)
     {
-        return !GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)
-            && !GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)
-            && ContainsCombiningMark(text)
+        return !GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)
+            && (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text) || ContainsCombiningMark(text))
             && (style.Wrapping == TextWrapping.NoWrap || (style.Wrapping == TextWrapping.Wrap && width >= 96 && ContainsWrapWhitespace(text)));
     }
 
