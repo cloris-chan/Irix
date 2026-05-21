@@ -624,6 +624,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("var fontFace = baseFontFace;", glyphSource);
         Assert.Contains("TryBuildShapedAtlasRun(text, textRun, style, shapedRun", glyphSource);
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
+        Assert.Contains("private bool TryAppendShapedSegment(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)", glyphSource);
         Assert.Contains("_textAnalyzer->AnalyzeScript(", glyphSource);
@@ -633,8 +634,16 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private byte[] _shapeBidiLevelScratch = [];", glyphSource);
         Assert.Contains("private bool HasRightToLeftBidiLevel(int textStart, int textLength)", glyphSource);
         Assert.Contains("private bool TryGetUniformBidiLevel(int textStart, int textLength, out byte bidiLevel)", glyphSource);
+        Assert.Contains("private void PromoteRtlSpanBaseLevel(ReadOnlySpan<char> text, int textStart, int textLength)", glyphSource);
+        Assert.Contains("private static bool IsRtlOnlyStrongSpan(ReadOnlySpan<char> text)", glyphSource);
+        Assert.Contains("private static DWRITE_READING_DIRECTION DetermineParagraphReadingDirection(ReadOnlySpan<char> text)", glyphSource);
+        Assert.Contains("public DWRITE_READING_DIRECTION ReadingDirection;", glyphSource);
         Assert.Contains("public byte BidiLevel { get; } = BidiLevel;", glyphSource);
         Assert.Contains("public bool IsRightToLeft => (BidiLevel & 1) != 0;", glyphSource);
+        Assert.Contains("private readonly struct ShapedGlyphLine(int SegmentStart, int SegmentCount, int GlyphStart, int GlyphCount, float Width, byte BidiLevel)", glyphSource);
+        Assert.Contains("if (line.IsRightToLeft)", glyphSource);
+        Assert.Contains("bidiLevel = shapedSegment.BidiLevel", glyphSource);
+        Assert.Contains("hasGlyphSegment && allGlyphSegmentsRightToLeft ? (byte)1 : (byte)0", glyphSource);
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
         Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
@@ -1049,17 +1058,17 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(10, summary.TextRuns);
-        Assert.Equal(10, summary.AtlasCandidateRuns);
+        Assert.Equal(11, summary.TextRuns);
+        Assert.Equal(11, summary.AtlasCandidateRuns);
         Assert.Equal(0, summary.DegradedCandidateRuns);
-        Assert.Equal(3, summary.WrappedAtlasCandidateRuns);
+        Assert.Equal(4, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(0, summary.WrappingFallbackRuns);
         Assert.Equal(0, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(0, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=10", expectedLine);
+        Assert.Contains("atlasRuns=11", expectedLine);
         Assert.Contains("degradedRuns=0", expectedLine);
-        Assert.Contains("wrappedAtlasRuns=3", expectedLine);
+        Assert.Contains("wrappedAtlasRuns=4", expectedLine);
         Assert.Contains("Wrapping=0", expectedLine);
         Assert.Contains("NonAscii=0", expectedLine);
         Assert.Contains("ColorGlyph=0", expectedLine);
