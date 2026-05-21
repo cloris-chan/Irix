@@ -53,6 +53,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private DWRITE_SHAPING_GLYPH_PROPERTIES[] _shapeGlyphPropsScratch = [];
     private float[] _shapeAdvanceScratch = [];
     private DWRITE_GLYPH_OFFSET[] _shapeOffsetScratch = [];
+    private ShapedGlyph[] _shapedGlyphScratch = [];
     private int _shapeScratchResizeCount;
     private readonly Vertex[] _vertices = new Vertex[MaxGlyphVertices];
     private readonly GlyphDrawBatch[] _batches = new GlyphDrawBatch[MaxGlyphDrawBatches];
@@ -283,9 +284,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var unsupportedReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
-                if (unsupportedReason == GlyphAtlasFallbackReason.NonAscii && TryProbeShapedRun(text, style, out var shapedGlyphCount))
+                if (unsupportedReason == GlyphAtlasFallbackReason.NonAscii && TryProbeShapedRun(text, style, out var shapedRun))
                 {
-                    _diagnostics = _diagnostics.WithShapedGlyphProbe(shapedGlyphCount);
+                    _diagnostics = _diagnostics.WithShapedGlyphProbe(shapedRun.GlyphCount);
                 }
 
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
@@ -1048,9 +1049,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
-    private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out int glyphCount)
+    private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out ShapedGlyphRun shapedRun)
     {
-        glyphCount = 0;
+        shapedRun = default;
         if (text.IsEmpty || text.Length > ushort.MaxValue)
         {
             return false;
@@ -1145,8 +1146,26 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 }
             }
 
-            glyphCount = (int)actualGlyphCount;
+            ProjectShapedGlyphs((int)actualGlyphCount);
+            shapedRun = new ShapedGlyphRun(
+                fontFace,
+                _shapedGlyphScratch.AsSpan(0, (int)actualGlyphCount),
+                _shapeClusterScratch.AsSpan(0, text.Length),
+                text.Length);
             return true;
+        }
+    }
+
+    private void ProjectShapedGlyphs(int glyphCount)
+    {
+        var glyphs = _shapedGlyphScratch.AsSpan(0, glyphCount);
+        var glyphIndices = _shapeGlyphScratch.AsSpan(0, glyphCount);
+        var glyphProps = _shapeGlyphPropsScratch.AsSpan(0, glyphCount);
+        var advances = _shapeAdvanceScratch.AsSpan(0, glyphCount);
+        var offsets = _shapeOffsetScratch.AsSpan(0, glyphCount);
+        for (var i = 0; i < glyphCount; i++)
+        {
+            glyphs[i] = ShapedGlyph.FromDirectWrite(glyphIndices[i], advances[i], offsets[i], glyphProps[i]);
         }
     }
 
@@ -1166,6 +1185,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             _shapeGlyphPropsScratch = new DWRITE_SHAPING_GLYPH_PROPERTIES[glyphCapacity];
             _shapeAdvanceScratch = new float[glyphCapacity];
             _shapeOffsetScratch = new DWRITE_GLYPH_OFFSET[glyphCapacity];
+            _shapedGlyphScratch = new ShapedGlyph[glyphCapacity];
             resized = true;
         }
 
@@ -1183,7 +1203,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             + _shapeGlyphScratch.Length * sizeof(ushort)
             + _shapeGlyphPropsScratch.Length * sizeof(DWRITE_SHAPING_GLYPH_PROPERTIES)
             + _shapeAdvanceScratch.Length * sizeof(float)
-            + _shapeOffsetScratch.Length * sizeof(DWRITE_GLYPH_OFFSET));
+            + _shapeOffsetScratch.Length * sizeof(DWRITE_GLYPH_OFFSET)
+            + _shapedGlyphScratch.Length * sizeof(ShapedGlyph));
     }
 
     private Span<byte> RentClearTypeScratch(int byteCount)
@@ -2348,6 +2369,51 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public FontFaceKey Key { get; } = key;
         public IDWriteFontFace* Face { get; } = face;
         public DWRITE_FONT_METRICS Metrics { get; } = metrics;
+    }
+
+    private readonly struct ShapedGlyph(
+        ushort GlyphIndex,
+        float Advance,
+        float AdvanceOffset,
+        float AscenderOffset,
+        bool IsClusterStart,
+        bool IsDiacritic,
+        bool IsZeroWidthSpace)
+    {
+        public ushort GlyphIndex { get; } = GlyphIndex;
+        public float Advance { get; } = Advance;
+        public float AdvanceOffset { get; } = AdvanceOffset;
+        public float AscenderOffset { get; } = AscenderOffset;
+        public bool IsClusterStart { get; } = IsClusterStart;
+        public bool IsDiacritic { get; } = IsDiacritic;
+        public bool IsZeroWidthSpace { get; } = IsZeroWidthSpace;
+
+        public static ShapedGlyph FromDirectWrite(
+            ushort glyphIndex,
+            float advance,
+            DWRITE_GLYPH_OFFSET offset,
+            DWRITE_SHAPING_GLYPH_PROPERTIES properties) =>
+            new(
+                glyphIndex,
+                advance,
+                offset.advanceOffset,
+                offset.ascenderOffset,
+                properties.isClusterStart,
+                properties.isDiacritic,
+                properties.isZeroWidthSpace);
+    }
+
+    private readonly ref struct ShapedGlyphRun(
+        CachedFontFace FontFace,
+        ReadOnlySpan<ShapedGlyph> Glyphs,
+        ReadOnlySpan<ushort> ClusterMap,
+        int TextLength)
+    {
+        public CachedFontFace FontFace { get; } = FontFace;
+        public ReadOnlySpan<ShapedGlyph> Glyphs { get; } = Glyphs;
+        public ReadOnlySpan<ushort> ClusterMap { get; } = ClusterMap;
+        public int TextLength { get; } = TextLength;
+        public int GlyphCount => Glyphs.Length;
     }
 
     private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex) : IEquatable<GlyphAtom>
