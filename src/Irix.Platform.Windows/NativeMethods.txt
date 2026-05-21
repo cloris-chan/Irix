@@ -55,6 +55,8 @@ D3D12SerializeRootSignature
 // DirectWrite glyph raster source
 DWriteCreateFactory
 IDWriteFactory
+IDWriteFactory2
+IDWriteFontFallback
 // DXGI
 CreateDXGIFactory1
 IDXGISwapChain3

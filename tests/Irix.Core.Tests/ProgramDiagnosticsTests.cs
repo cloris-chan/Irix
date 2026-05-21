@@ -567,15 +567,22 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex, byte Flags)", glyphSource);
         Assert.Contains("public static GlyphAtom SimpleCodePoint(uint codePoint, ushort glyphIndex)", glyphSource);
         Assert.Contains("public static GlyphAtom ShapedPlacement(ushort glyphIndex, bool isDiacritic, bool isZeroWidthSpace)", glyphSource);
-        Assert.Contains("private readonly struct GlyphKey(FontFaceKey FontFace, GlyphAtom Glyph)", glyphSource);
+        Assert.Contains("private readonly struct FontFaceIdentity(int Value)", glyphSource);
+        Assert.Contains("private readonly struct GlyphKey(FontFaceIdentity FontFace, float EmSize, GlyphAtom Glyph)", glyphSource);
         Assert.Contains("private static bool TryMapCharacterToSimpleGlyph(CachedFontFace fontFace, char character, out GlyphAtom glyph)", glyphSource);
         Assert.Contains("GlyphAtom.SimpleCodePoint(codePoint, glyphIndex[0])", glyphSource);
         Assert.Contains("private IDWriteTextAnalyzer* _textAnalyzer;", glyphSource);
+        Assert.Contains("private IDWriteFontFallback* _fontFallback;", glyphSource);
         Assert.Contains("GlyphAtlasInitializationPhase.TextAnalyzer", glyphSource);
+        Assert.Contains("GlyphAtlasInitializationPhase.FontFallback", glyphSource);
         Assert.Contains("_dwriteFactory->CreateTextAnalyzer(&textAnalyzer);", glyphSource);
+        Assert.Contains("factory2->GetSystemFontFallback(&fontFallback);", glyphSource);
         Assert.Contains("_textAnalyzer = textAnalyzer;", glyphSource);
         Assert.Contains("private ShapedGlyph[] _shapedGlyphScratch = [];", glyphSource);
         Assert.Contains("private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out ShapedGlyphRun shapedRun)", glyphSource);
+        Assert.Contains("private bool TryGetSingleFallbackFontFace(ReadOnlySpan<char> text, TextStyle style, out CachedFontFace fontFace, out float fontScale)", glyphSource);
+        Assert.Contains("private bool TryGetCachedFallbackFontFace(IDWriteFont* font, out CachedFontFace fontFace)", glyphSource);
+        Assert.Contains("_fontFallback->MapCharacters(", glyphSource);
         Assert.Contains("TryBuildShapedAtlasRun(text, textRun, style, shapedRun", glyphSource);
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text)", glyphSource);
@@ -599,6 +606,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("properties.isDiacritic", glyphSource);
         Assert.Contains("properties.isZeroWidthSpace", glyphSource);
         Assert.Contains("private readonly ref struct ShapedGlyphRun(", glyphSource);
+        Assert.Contains("float FontEmSize", glyphSource);
         Assert.Contains("ReadOnlySpan<ShapedGlyph> Glyphs", glyphSource);
         Assert.Contains("ReadOnlySpan<ushort> ClusterMap", glyphSource);
         Assert.Contains("public int GlyphCount => Glyphs.Length;", glyphSource);
@@ -607,6 +615,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("string Text", glyphSource);
         Assert.DoesNotContain("string SourceText", glyphSource);
         Assert.Contains("Shape probe font lookup skipped", glyphSource);
+        Assert.Contains("Shape probe font fallback skipped", glyphSource);
         Assert.Contains("Shape probe GetGlyphs failed", glyphSource);
         Assert.Contains("Shape probe GetGlyphPlacements failed", glyphSource);
         Assert.Contains("public int ShapedProbeRuns { get; } = ShapedProbeRuns;", glyphSource);
@@ -939,14 +948,14 @@ public sealed class ProgramDiagnosticsTests
         var ordering = GlyphAtlasMixedFallbackDiagnosticRunner.BuildOrderingLine(summary);
 
         Assert.Equal(4, summary.TextRuns);
-        Assert.Equal(2, summary.AtlasCandidateRuns);
-        Assert.Equal(2, summary.DegradedCandidateRuns);
-        Assert.Equal(2, summary.NonAsciiFallbackRuns);
-        Assert.Equal(1, summary.ClippedAtlasCandidateRuns);
-        Assert.Equal(1, summary.ClippedDegradedCandidateRuns);
-        Assert.True(summary.HasDegradedBeforeLaterAtlas);
-        Assert.Contains("commands=atlas,degraded,atlas,degraded", ordering);
-        Assert.Contains("zOrderLimit=FalseForDegradedText", ordering);
+        Assert.Equal(4, summary.AtlasCandidateRuns);
+        Assert.Equal(0, summary.DegradedCandidateRuns);
+        Assert.Equal(0, summary.NonAsciiFallbackRuns);
+        Assert.Equal(2, summary.ClippedAtlasCandidateRuns);
+        Assert.Equal(0, summary.ClippedDegradedCandidateRuns);
+        Assert.False(summary.HasDegradedBeforeLaterAtlas);
+        Assert.Contains("commands=atlasOnly", ordering);
+        Assert.Contains("zOrderLimit=False", ordering);
     }
 
     [Fact]

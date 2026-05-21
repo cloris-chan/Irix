@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Irix.Drawing;
 using Irix.Platform;
@@ -15,6 +16,7 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 {
+    private static readonly Guid IUnknownGuid = new(0x00000000, 0x0000, 0x0000, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46);
     private const int UploadFrameCount = 2;
     private const int AtlasWidth = 1024;
     private const int AtlasHeight = 1024;
@@ -38,6 +40,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private IDWriteFactory* _dwriteFactory;
     private IDWriteFontCollection* _fontCollection;
     private IDWriteTextAnalyzer* _textAnalyzer;
+    private IDWriteFontFallback* _fontFallback;
     private ID3D12RootSignature* _rootSig;
     private ID3D12PipelineState* _pso;
     private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];
@@ -61,6 +64,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private float[] _layoutAdvanceScratch = [];
     private GlyphAtlasLayoutLine[] _layoutLineScratch = [];
     private readonly Dictionary<FontFaceKey, CachedFontFace> _fontFaces = [];
+    private readonly Dictionary<nint, CachedFontFace> _fallbackFontFaces = [];
     private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs = [];
     private readonly List<GlyphEntry> _glyphEntries = new(512);
     private readonly List<int> _freeGlyphEntryIndices = new(128);
@@ -68,6 +72,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private GlyphAtlasPageHandle _activeAtlasPage;
     private GlyphAtlasPageReuseRequest _pendingAtlasPageReuse;
     private int _cachedGlyphCount;
+    private int _nextFontFaceIdentity = 1;
     private long _glyphRecordSerial;
     private bool _disposed;
     private bool _disabled;
@@ -99,6 +104,21 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 IDWriteTextAnalyzer* textAnalyzer;
                 _dwriteFactory->CreateTextAnalyzer(&textAnalyzer);
                 _textAnalyzer = textAnalyzer;
+            });
+            RunInitializationPhase(GlyphAtlasInitializationPhase.FontFallback, () =>
+            {
+                IDWriteFactory2* factory2 = null;
+                try
+                {
+                    _dwriteFactory->QueryInterface<IDWriteFactory2>(out factory2).ThrowOnFailure();
+                    IDWriteFontFallback* fontFallback;
+                    factory2->GetSystemFontFallback(&fontFallback);
+                    _fontFallback = fontFallback;
+                }
+                finally
+                {
+                    if (factory2 != null) factory2->Release();
+                }
             });
 
             RunInitializationPhase(GlyphAtlasInitializationPhase.RootSignature, CreateRootSignature);
@@ -318,7 +338,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 continue;
             }
 
-            var firstBaselineY = ComputeFirstBaselineY(textRun, style, fontFace.Metrics, lineHeight, lineCount);
+            var firstBaselineY = ComputeFirstBaselineY(textRun, style, fontFace.Metrics, style.FontSize, lineHeight, lineCount);
             var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
             if (scissor.IsEmpty)
             {
@@ -526,7 +546,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        var lineHeight = ComputeLineHeight(shapedRun.FontFace.Metrics, style.FontSize);
+        var lineHeight = ComputeLineHeight(shapedRun.FontFace.Metrics, shapedRun.FontEmSize);
         if (!TextMetricsFit(textRun, lineHeight, 1))
         {
             unsupportedReason = GlyphAtlasFallbackReason.Clip;
@@ -540,7 +560,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        var firstBaselineY = ComputeFirstBaselineY(textRun, style, shapedRun.FontFace.Metrics, lineHeight, 1);
+        var firstBaselineY = ComputeFirstBaselineY(textRun, style, shapedRun.FontFace.Metrics, shapedRun.FontEmSize, lineHeight, 1);
         var color = new Vector4(textRun.R, textRun.G, textRun.B, textRun.A);
         var batchStart = vertexCount;
         var batchSegmentStart = vertexCount;
@@ -549,7 +569,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         foreach (ref readonly var shapedGlyph in shapedRun.Glyphs)
         {
-            if (!TryGetShapedGlyph(shapedRun.FontFace, style, shapedGlyph, recordSerial, out var glyph, out unsupportedReason))
+            if (!TryGetShapedGlyph(shapedRun.FontFace, shapedRun.FontEmSize, shapedGlyph, recordSerial, out var glyph, out unsupportedReason))
             {
                 break;
             }
@@ -732,7 +752,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             face->GetMetrics(out var metrics);
-            fontFace = new CachedFontFace(key, face, metrics);
+            fontFace = new CachedFontFace(new FontFaceIdentity(_nextFontFaceIdentity++), face, metrics);
             _fontFaces.Add(key, fontFace);
             face = null;
             return true;
@@ -768,7 +788,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        var key = new GlyphKey(fontFace.Key, glyphAtom);
+        var key = new GlyphKey(fontFace.Identity, style.FontSize, glyphAtom);
         if (_glyphs.TryGetValue(key, out var handle) && TryResolveGlyph(handle, recordSerial, out glyph))
         {
             _diagnostics = _diagnostics.WithCacheHit();
@@ -792,7 +812,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private bool TryGetShapedGlyph(
         CachedFontFace fontFace,
-        TextStyle style,
+        float fontEmSize,
         in ShapedGlyph shapedGlyph,
         long recordSerial,
         out GlyphEntry glyph,
@@ -803,7 +823,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             shapedGlyph.GlyphIndex,
             shapedGlyph.IsDiacritic,
             shapedGlyph.IsZeroWidthSpace);
-        var key = new GlyphKey(fontFace.Key, glyphAtom);
+        var key = new GlyphKey(fontFace.Identity, fontEmSize, glyphAtom);
         if (_glyphs.TryGetValue(key, out var handle) && TryResolveGlyph(handle, recordSerial, out glyph))
         {
             _diagnostics = _diagnostics.WithCacheHit();
@@ -811,7 +831,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         _diagnostics = _diagnostics.WithCacheMiss();
-        if (!RasterizeGlyph(key, fontFace, style.FontSize, shapedGlyph, recordSerial, out glyph, out unsupportedReason))
+        if (!RasterizeGlyph(key, fontFace, fontEmSize, shapedGlyph, recordSerial, out glyph, out unsupportedReason))
         {
             return false;
         }
@@ -1238,6 +1258,26 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
+        if (!TryShapeRunWithFont(text, fontFace, style.FontSize, out shapedRun))
+        {
+            return false;
+        }
+
+        if (!shapedRun.HasMissingGlyph()
+            || !TryGetSingleFallbackFontFace(text, style, out var fallbackFontFace, out var fallbackScale)
+            || !TryShapeRunWithFont(text, fallbackFontFace, style.FontSize * fallbackScale, out var fallbackRun)
+            || fallbackRun.HasMissingGlyph())
+        {
+            return true;
+        }
+
+        shapedRun = fallbackRun;
+        return true;
+    }
+
+    private bool TryShapeRunWithFont(ReadOnlySpan<char> text, CachedFontFace fontFace, float fontEmSize, out ShapedGlyphRun shapedRun)
+    {
+        shapedRun = default;
         var maxGlyphCount = GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(text.Length);
         EnsureShapeScratch(text.Length, maxGlyphCount);
         var scriptAnalysis = new DWRITE_SCRIPT_ANALYSIS();
@@ -1295,7 +1335,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         glyphProps,
                         actualGlyphCount,
                         fontFace.Face,
-                        style.FontSize,
+                        fontEmSize,
                         false,
                         false,
                         &scriptAnalysis,
@@ -1316,11 +1356,245 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             ProjectShapedGlyphs((int)actualGlyphCount);
             shapedRun = new ShapedGlyphRun(
                 fontFace,
+                fontEmSize,
                 _shapedGlyphScratch.AsSpan(0, (int)actualGlyphCount),
                 _shapeClusterScratch.AsSpan(0, text.Length),
                 text.Length);
             return true;
         }
+    }
+
+    private bool TryGetSingleFallbackFontFace(ReadOnlySpan<char> text, TextStyle style, out CachedFontFace fontFace, out float fontScale)
+    {
+        fontFace = default!;
+        fontScale = 1;
+        if (_fontFallback == null || text.IsEmpty || text.Length > ushort.MaxValue)
+        {
+            return false;
+        }
+
+        IDWriteFont* mappedFont = null;
+        try
+        {
+            fixed (char* textPtr = text)
+            fixed (char* baseFamilyName = ToDirectWriteFontFamily(style.FontFamily))
+            {
+                var locale = stackalloc char[6];
+                locale[0] = 'e';
+                locale[1] = 'n';
+                locale[2] = '-';
+                locale[3] = 'u';
+                locale[4] = 's';
+                locale[5] = '\0';
+
+                var vtbl = stackalloc void*[8];
+                vtbl[0] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, Guid*, void**, HRESULT>)&TextAnalysisSourceQueryInterface;
+                vtbl[1] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint>)&TextAnalysisSourceAddRef;
+                vtbl[2] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint>)&TextAnalysisSourceRelease;
+                vtbl[3] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, ushort**, uint*, HRESULT>)&TextAnalysisSourceGetTextAtPosition;
+                vtbl[4] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, ushort**, uint*, HRESULT>)&TextAnalysisSourceGetTextBeforePosition;
+                vtbl[5] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, DWRITE_READING_DIRECTION>)&TextAnalysisSourceGetParagraphReadingDirection;
+                vtbl[6] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, uint*, ushort**, HRESULT>)&TextAnalysisSourceGetLocaleName;
+                vtbl[7] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, uint*, IDWriteNumberSubstitution**, HRESULT>)&TextAnalysisSourceGetNumberSubstitution;
+
+                var source = new TextAnalysisSourceShim
+                {
+                    Vtbl = vtbl,
+                    RefCount = 1,
+                    Text = textPtr,
+                    TextLength = (uint)text.Length,
+                    Locale = locale
+                };
+                var mappedLength = 0u;
+                var scale = 1f;
+                _fontFallback->MapCharacters(
+                    (IDWriteTextAnalysisSource*)&source,
+                    0,
+                    (uint)text.Length,
+                    _fontCollection,
+                    new PCWSTR(baseFamilyName),
+                    ToDirectWriteFontWeight(style.FontWeight),
+                    ToDirectWriteFontStyle(style.FontStyle),
+                    ToDirectWriteFontStretch(style.FontStretch),
+                    &mappedLength,
+                    &mappedFont,
+                    &scale);
+
+                if (mappedLength != text.Length || mappedFont == null || scale <= 0)
+                {
+                    return false;
+                }
+
+                fontScale = scale;
+            }
+
+            return TryGetCachedFallbackFontFace(mappedFont, out fontFace);
+        }
+        catch (COMException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Shape probe font fallback failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+            return false;
+        }
+        catch (GlyphAtlasRecordException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Shape probe font fallback skipped: {ex.Phase}");
+            return false;
+        }
+        finally
+        {
+            if (mappedFont != null) mappedFont->Release();
+        }
+    }
+
+    private bool TryGetCachedFallbackFontFace(IDWriteFont* font, out CachedFontFace fontFace)
+    {
+        fontFace = default!;
+        IDWriteFontFace* face = null;
+        IUnknown* identity = null;
+        try
+        {
+            var iid = IUnknownGuid;
+            void* identityObject = null;
+            font->QueryInterface(&iid, &identityObject).ThrowOnFailure();
+            identity = (IUnknown*)identityObject;
+            var key = (nint)identity;
+            if (_fallbackFontFaces.TryGetValue(key, out fontFace!))
+            {
+                identity->Release();
+                identity = null;
+                return true;
+            }
+
+            font->CreateFontFace(&face);
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(face != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.DirectWrite,
+                    "D3D12GlyphAtlasTextRenderer.TryGetCachedFallbackFontFace found a missing DirectWrite font face.");
+            }
+
+            face->GetMetrics(out var metrics);
+            fontFace = new CachedFontFace(new FontFaceIdentity(_nextFontFaceIdentity++), face, metrics, identity);
+            _fallbackFontFaces.Add(key, fontFace);
+            face = null;
+            identity = null;
+            return true;
+        }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.TryGetCachedFallbackFontFace",
+                ex);
+        }
+        finally
+        {
+            if (face != null) face->Release();
+            if (identity != null) identity->Release();
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSourceQueryInterface(TextAnalysisSourceShim* source, Guid* riid, void** ppvObject)
+    {
+        if (ppvObject == null)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        var iUnknown = IUnknownGuid;
+        if (riid != null && (*riid == iUnknown || *riid == IDWriteTextAnalysisSource.IID_Guid))
+        {
+            *ppvObject = source;
+            source->RefCount++;
+            return (HRESULT)0;
+        }
+
+        *ppvObject = null;
+        return (HRESULT)unchecked((int)0x80004002);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static uint TextAnalysisSourceAddRef(TextAnalysisSourceShim* source) => (uint)++source->RefCount;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static uint TextAnalysisSourceRelease(TextAnalysisSourceShim* source)
+    {
+        if (source->RefCount > 0)
+        {
+            source->RefCount--;
+        }
+
+        return (uint)source->RefCount;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSourceGetTextAtPosition(TextAnalysisSourceShim* source, uint textPosition, ushort** textString, uint* textLength)
+    {
+        if (textString == null || textLength == null)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        if (textPosition >= source->TextLength)
+        {
+            *textString = null;
+            *textLength = 0;
+            return (HRESULT)0;
+        }
+
+        *textString = (ushort*)(source->Text + textPosition);
+        *textLength = source->TextLength - textPosition;
+        return (HRESULT)0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSourceGetTextBeforePosition(TextAnalysisSourceShim* source, uint textPosition, ushort** textString, uint* textLength)
+    {
+        if (textString == null || textLength == null)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        if (textPosition == 0 || textPosition > source->TextLength)
+        {
+            *textString = null;
+            *textLength = 0;
+            return (HRESULT)0;
+        }
+
+        *textString = (ushort*)source->Text;
+        *textLength = textPosition;
+        return (HRESULT)0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static DWRITE_READING_DIRECTION TextAnalysisSourceGetParagraphReadingDirection(TextAnalysisSourceShim* source) => DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSourceGetLocaleName(TextAnalysisSourceShim* source, uint textPosition, uint* textLength, ushort** localeName)
+    {
+        if (textLength == null || localeName == null)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        *textLength = textPosition < source->TextLength ? source->TextLength - textPosition : 0;
+        *localeName = (ushort*)source->Locale;
+        return (HRESULT)0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSourceGetNumberSubstitution(TextAnalysisSourceShim* source, uint textPosition, uint* textLength, IDWriteNumberSubstitution** numberSubstitution)
+    {
+        if (textLength == null || numberSubstitution == null)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        *textLength = textPosition < source->TextLength ? source->TextLength - textPosition : 0;
+        *numberSubstitution = null;
+        return (HRESULT)0;
     }
 
     private void ProjectShapedGlyphs(int glyphCount)
@@ -1507,9 +1781,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return (metrics.ascent + metrics.descent) * scale;
     }
 
-    private static float ComputeFirstBaselineY(D3D12TextRun textRun, TextStyle style, DWRITE_FONT_METRICS metrics, float lineHeight, int lineCount)
+    private static float ComputeFirstBaselineY(D3D12TextRun textRun, TextStyle style, DWRITE_FONT_METRICS metrics, float emSize, float lineHeight, int lineCount)
     {
-        var emSize = style.FontSize;
         var scale = emSize / metrics.designUnitsPerEm;
         var ascent = metrics.ascent * scale;
         var textHeight = lineHeight * lineCount;
@@ -2270,7 +2543,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         foreach (var fontFace in _fontFaces.Values)
         {
-            fontFace.Face->Release();
+            fontFace.Release();
+        }
+
+        foreach (var fontFace in _fallbackFontFaces.Values)
+        {
+            fontFace.Release();
         }
 
         for (var i = 0; i < _atlasPages.Count; i++)
@@ -2289,6 +2567,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
         if (_pso != null) _pso->Release();
         if (_rootSig != null) _rootSig->Release();
+        if (_fontFallback != null) _fontFallback->Release();
         if (_textAnalyzer != null) _textAnalyzer->Release();
         if (_fontCollection != null) _fontCollection->Release();
         if (_dwriteFactory != null) _dwriteFactory->Release();
@@ -2301,6 +2580,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public Vector2 Position;
         public Vector2 TexCoord;
         public Vector4 Color;
+    }
+
+    private struct TextAnalysisSourceShim
+    {
+        public void** Vtbl;
+        public int RefCount;
+        public char* Text;
+        public uint TextLength;
+        public char* Locale;
     }
 
     public readonly struct GlyphAtlasRecordResult(bool Recorded, int AtlasRuns, int DegradedRuns) : IEquatable<GlyphAtlasRecordResult>
@@ -2357,6 +2645,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         DirectWriteFactory,
         FontCollection,
         TextAnalyzer,
+        FontFallback,
         RootSignature,
         ShaderCompile,
         PSO,
@@ -2531,11 +2820,36 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public override int GetHashCode() => HashCode.Combine(Family, Weight, Style, Stretch, EmSize);
     }
 
-    private sealed class CachedFontFace(FontFaceKey key, IDWriteFontFace* face, DWRITE_FONT_METRICS metrics)
+    private readonly struct FontFaceIdentity(int Value) : IEquatable<FontFaceIdentity>
     {
-        public FontFaceKey Key { get; } = key;
+        public int Value { get; } = Value;
+
+        public bool Equals(FontFaceIdentity other) => Value == other.Value;
+
+        public override bool Equals(object? obj) => obj is FontFaceIdentity other && Equals(other);
+
+        public override int GetHashCode() => Value;
+    }
+
+    private sealed class CachedFontFace(FontFaceIdentity identity, IDWriteFontFace* face, DWRITE_FONT_METRICS metrics, IUnknown* fontIdentity = null)
+    {
+        public FontFaceIdentity Identity { get; } = identity;
         public IDWriteFontFace* Face { get; } = face;
         public DWRITE_FONT_METRICS Metrics { get; } = metrics;
+        private IUnknown* FontIdentity { get; } = fontIdentity;
+
+        public void Release()
+        {
+            if (Face != null)
+            {
+                Face->Release();
+            }
+
+            if (FontIdentity != null)
+            {
+                FontIdentity->Release();
+            }
+        }
     }
 
     private readonly struct ShapedGlyph(
@@ -2574,11 +2888,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private readonly ref struct ShapedGlyphRun(
         CachedFontFace FontFace,
+        float FontEmSize,
         ReadOnlySpan<ShapedGlyph> Glyphs,
         ReadOnlySpan<ushort> ClusterMap,
         int TextLength)
     {
         public CachedFontFace FontFace { get; } = FontFace;
+        public float FontEmSize { get; } = FontEmSize;
         public ReadOnlySpan<ShapedGlyph> Glyphs { get; } = Glyphs;
         public ReadOnlySpan<ushort> ClusterMap { get; } = ClusterMap;
         public int TextLength { get; } = TextLength;
@@ -2636,16 +2952,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public override int GetHashCode() => HashCode.Combine(Kind, CodePoint, GlyphIndex, Flags);
     }
 
-    private readonly struct GlyphKey(FontFaceKey FontFace, GlyphAtom Glyph) : IEquatable<GlyphKey>
+    private readonly struct GlyphKey(FontFaceIdentity FontFace, float EmSize, GlyphAtom Glyph) : IEquatable<GlyphKey>
     {
-        public FontFaceKey FontFace { get; } = FontFace;
+        public FontFaceIdentity FontFace { get; } = FontFace;
+        public float EmSize { get; } = EmSize;
         public GlyphAtom Glyph { get; } = Glyph;
 
-        public bool Equals(GlyphKey other) => FontFace.Equals(other.FontFace) && Glyph.Equals(other.Glyph);
+        public bool Equals(GlyphKey other) => FontFace.Equals(other.FontFace) && EmSize.Equals(other.EmSize) && Glyph.Equals(other.Glyph);
 
         public override bool Equals(object? obj) => obj is GlyphKey other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(FontFace, Glyph);
+        public override int GetHashCode() => HashCode.Combine(FontFace, EmSize, Glyph);
     }
 
     private readonly struct GlyphAtlasPageHandle(int Index, int Generation) : IEquatable<GlyphAtlasPageHandle>

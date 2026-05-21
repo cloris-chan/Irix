@@ -12,9 +12,9 @@
 | Partial apply | Default-on; `--no-partial-apply` remains rollback. |
 | Display scale | Complete / regression-only; 100% / 150% / 200% local evidence accepted. |
 | Refresh matrix | GA evidence is limited to actually available local modes: 60Hz / 120Hz / 240Hz. 144Hz validation is removed from GA scope because no 144Hz hardware is available in the current environment. |
-| Text overlay sync | Keep `SyncTextOverlay=true` and default `D3D12FenceAfterOverlay`. `D3D11Query` remains diagnostic-only. |
-| Sync wait budget | Temporarily accepted for GA/MVP correctness. The current wait cost is documented and no longer blocks GA by itself. |
-| Long-term text renderer direction | Replace the current D3D12 + D3D11On12 + D2D/DirectWrite overlay with a D3D12-only text path using an internal glyph atlas, similar in spirit to Impeller-style glyph atlas rendering. |
+| Text overlay sync | Historical private-GA decision only. On `post-ga-renderer-foundation`, the D3D11On12/D2D overlay and overlay sync path are removed from active source. |
+| Sync wait budget | Closed for the active post-GA renderer path: accepted glyph-atlas text stays in the D3D12 command stream; unsupported text explicitly degrades instead of invoking overlay sync. |
+| Long-term text renderer direction | Active post-GA path: D3D12-only glyph atlas text rendering, with DirectWrite retained only for shaping, metrics, and glyph bitmap source. |
 | Release scope | Private GA only. `v1.0-private-ga` is an internal milestone and is not a public API freeze. |
 
 ---
@@ -57,7 +57,7 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Resize stress test | Scale consistency, extreme sizes, runtime scale change, 1000 rapid resizes | Already done | — |
 | Concurrent input + render | Sequential scroll render, ScrollFramePump dispatch, rapid coalescing, thread-safe AddPendingPixels, multi-cycle render | Already done | — |
 | Exception recovery | Compositor catches backend exceptions; `IDeviceRecovery` interface; recovery success/fail tests | Already done | — |
-| D2D text overlay sync under scroll | Default-on sync after D2D text overlay and before `Present`; `--no-sync-text-overlay` remains diagnostic only | Already done | — |
+| D2D text overlay sync under scroll | Historical private-GA state. Active post-GA renderer source removed D3D11On12/D2D overlay composition and its sync strategy. | Superseded | — |
 | Startup / resize background flicker | Fixed 2026-05-14: `DrawCommandBatch.Memory` now exposes only logical `Count`, preventing pooled backing-buffer tail data from being retained as random `FillRect` commands | Already done | — |
 
 ---
@@ -130,13 +130,13 @@ Source guards cover primitive `ActionId.ToString()`, primitive `VirtualPropertyK
 
 ## Future Renderer Work: D3D12-only Glyph Atlas Text Renderer
 
-Current text path:
+Historical private-GA text path:
 
 ```text
 D3D12 rect pass -> D3D11On12 / D2D / DirectWrite overlay -> sync wait -> Present
 ```
 
-Accepted future direction:
+Active post-GA text path:
 
 ```text
 D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
@@ -148,7 +148,7 @@ D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
 | CPU glyph raster source | Use DirectWrite only for glyph shaping/raster source if needed; do not use D3D11On12/D2D overlay for final composition | Glyph bitmaps uploadable to D3D12 atlas | P1 post-GA/MVP |
 | D3D12 text pass | Render text quads from atlas in the same D3D12 frame path as rectangles | Text and rects are in the same D3D12 synchronization domain | P1 post-GA/MVP |
 | Cache diagnostics | Track atlas hits/misses, uploads, evictions, bytes, and frame upload cost | Diagnostics comparable to current text-cache baseline | P2 |
-| Migration guard | Keep current D2D overlay path until atlas path passes correctness and baseline smokes | No regression in text quality, clipping, scale, hit-test, scroll sync | P1 post-GA/MVP |
+| Migration guard | Do not reintroduce D3D11On12/D2D final composition; reduce explicit `DegradedRuns` by adding D3D12 atlas handling | No D3D11On12/D2D source generation entries; diagnostics distinguish accepted atlas runs from degraded runs | P1 post-GA/MVP |
 
 Non-goals for this GA batch:
 
@@ -212,8 +212,8 @@ Non-goals for this GA batch:
 
 | Item | Status |
 |------|--------|
-| Sync wait cost | Accepted for Private GA. `D3D12FenceAfterOverlay` remains the default because correctness and no text lag win over the old provisional `<2ms avg` target. |
-| D3D12-only text | Post-GA default GlyphAtlas path is active for supported runs. D3D11On12/D2D/DirectWrite overlay remains only for rollback and unsupported/failure fallback until the removal gate is satisfied. |
+| Sync wait cost | Historical Private GA constraint. Active post-GA GlyphAtlas smokes report `syncWaits=0` because there is no overlay pass to synchronize. |
+| D3D12-only text | Post-GA default GlyphAtlas path is active for supported runs. D3D11On12/D2D overlay final composition is removed; unsupported/failure cases are explicit degradation until covered by D3D12 atlas handling. |
 | Glyph atlas | Post-GA renderer foundation work. It must stay internal unless a later API review explicitly exposes anything. |
 | 144Hz validation | Removed from the current evidence matrix because there is no 144Hz hardware in the environment. 60Hz / 120Hz / 240Hz coverage is accepted for this Private GA. |
 | Public API stability | Not frozen. The repository is private and this tag is an internal architecture milestone. |

@@ -93,9 +93,9 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
         var clippedFallbackStyle = resources.AddTextStyle(CreateStyle(22, TextFontWeight.Normal));
 
         var ascii = resources.AddText($"ASCII atlas {frameIndex:D3}");
-        var nonAscii = resources.AddText($"Fallback 測試 {frameIndex:D3}");
+        var nonAscii = resources.AddText("測試");
         var clippedAscii = resources.AddText($"Clipped ASCII {frameIndex:D3}");
-        var clippedNonAscii = resources.AddText($"裁剪 fallback {frameIndex:D3}");
+        var clippedNonAscii = resources.AddText("裁剪");
 
         return
         [
@@ -179,7 +179,7 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
         return GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style).HasFlag(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             && style.Wrapping == TextWrapping.NoWrap
             && !GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text)
-            && ContainsCombiningMark(text);
+            && (ContainsCombiningMark(text) || ContainsCjk(text));
     }
 
     private static bool ContainsCombiningMark(ReadOnlySpan<char> text)
@@ -187,6 +187,19 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
         foreach (var character in text)
         {
             if (character is >= '\u0300' and <= '\u036F')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsCjk(ReadOnlySpan<char> text)
+    {
+        foreach (var character in text)
+        {
+            if (character is >= '\u3400' and <= '\u4DBF' or >= '\u4E00' and <= '\u9FFF' or >= '\uF900' and <= '\uFAFF')
             {
                 return true;
             }
