@@ -614,10 +614,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, float maxLineWidth, bool requiresColorGlyph, out ShapedGlyphRun shapedRun, out GlyphAtlasFallbackReason unsupportedReason)", glyphSource);
         Assert.Contains("private bool TryShapeTextRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryShapeTextSpan(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
+        Assert.Contains("private bool TryShapeBidiLevelRuns(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
+        Assert.Contains("private bool TryShapeUniformBidiTextSpan(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, byte bidiLevel, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryAppendShapedControlSegment(TextStyle style, CachedFontFace baseFontFace, int textStart, int glyphStart, ref int segmentCount, int spaceCount)", glyphSource);
         Assert.Contains("private bool TryShapeSegmentedFallbackRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryAssignShapedTextAdvances(int textStart, int textLength, int glyphStart, int glyphCount)", glyphSource);
         Assert.Contains("private bool TryBuildShapedLinesFromLayout(int segmentCount, int plannedLineCount, out int lineCount)", glyphSource);
+        Assert.Contains("private void ApplyShapedLineVisualOrder(int segmentStart, int segmentCount)", glyphSource);
+        Assert.Contains("private void ReverseShapedSegments(int start, int end)", glyphSource);
         Assert.Contains("TryShapeTextSegment(", glyphSource);
         Assert.Contains("private bool TryGetCachedFallbackFontFace(IDWriteFont* font, out CachedFontFace fontFace)", glyphSource);
         Assert.Contains("_fontFallback->MapCharacters(", glyphSource);
@@ -643,7 +647,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly struct ShapedGlyphLine(int SegmentStart, int SegmentCount, int GlyphStart, int GlyphCount, float Width, byte BidiLevel)", glyphSource);
         Assert.Contains("if (line.IsRightToLeft)", glyphSource);
         Assert.Contains("bidiLevel = shapedSegment.BidiLevel", glyphSource);
-        Assert.Contains("hasGlyphSegment && allGlyphSegmentsRightToLeft ? (byte)1 : (byte)0", glyphSource);
+        Assert.Contains("return TryShapeBidiLevelRuns(text, textStart, textLength, style, baseFontFace, ref glyphStart, ref segmentCount);", glyphSource);
+        Assert.Contains("ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount);", glyphSource);
+        Assert.Contains("ReverseShapedSegments(reverseStart, index - 1);", glyphSource);
+        Assert.Contains("var lineIsRightToLeft = hasGlyphSegment && allGlyphSegmentsRightToLeft;", glyphSource);
+        Assert.Contains("lineIsRightToLeft ? (byte)1 : (byte)0", glyphSource);
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
         Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
@@ -1058,15 +1066,15 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(11, summary.TextRuns);
-        Assert.Equal(11, summary.AtlasCandidateRuns);
+        Assert.Equal(12, summary.TextRuns);
+        Assert.Equal(12, summary.AtlasCandidateRuns);
         Assert.Equal(0, summary.DegradedCandidateRuns);
         Assert.Equal(4, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(0, summary.WrappingFallbackRuns);
         Assert.Equal(0, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(0, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=11", expectedLine);
+        Assert.Contains("atlasRuns=12", expectedLine);
         Assert.Contains("degradedRuns=0", expectedLine);
         Assert.Contains("wrappedAtlasRuns=4", expectedLine);
         Assert.Contains("Wrapping=0", expectedLine);

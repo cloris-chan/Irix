@@ -1924,9 +1924,36 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         PromoteRtlSpanBaseLevel(text, textStart, textLength);
         if (!TryGetUniformBidiLevel(textStart, textLength, out var bidiLevel))
         {
-            return false;
+            return TryShapeBidiLevelRuns(text, textStart, textLength, style, baseFontFace, ref glyphStart, ref segmentCount);
         }
 
+        return TryShapeUniformBidiTextSpan(text, textStart, textLength, style, baseFontFace, bidiLevel, ref glyphStart, ref segmentCount);
+    }
+
+    private bool TryShapeBidiLevelRuns(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)
+    {
+        var textEnd = textStart + textLength;
+        var position = textStart;
+        while (position < textEnd)
+        {
+            var runStart = position;
+            var bidiLevel = _shapeBidiLevelScratch[position++];
+            while (position < textEnd && _shapeBidiLevelScratch[position] == bidiLevel)
+            {
+                position++;
+            }
+
+            if (!TryShapeUniformBidiTextSpan(text, runStart, position - runStart, style, baseFontFace, bidiLevel, ref glyphStart, ref segmentCount))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool TryShapeUniformBidiTextSpan(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, byte bidiLevel, ref int glyphStart, ref int segmentCount)
+    {
         var range = text.Slice(textStart, textLength);
         var initialGlyphStart = glyphStart;
         if (!TryShapeTextSegment(range, baseFontFace, style.FontSize, textStart, initialGlyphStart, _shapeScriptScratch[textStart], bidiLevel, out var glyphCount))
@@ -2421,16 +2448,84 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 segmentIndex++;
             }
 
+            var lineSegmentCount = segmentIndex - lineSegmentStart;
+            var lineIsRightToLeft = hasGlyphSegment && allGlyphSegmentsRightToLeft;
+            if (!lineIsRightToLeft)
+            {
+                ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount);
+            }
+
             _shapedLineScratch[lineCount++] = new ShapedGlyphLine(
                 lineSegmentStart,
-                segmentIndex - lineSegmentStart,
+                lineSegmentCount,
                 lineGlyphStart,
                 lineGlyphEnd - lineGlyphStart,
                 plannedLine.Width,
-                hasGlyphSegment && allGlyphSegmentsRightToLeft ? (byte)1 : (byte)0);
+                lineIsRightToLeft ? (byte)1 : (byte)0);
         }
 
         return true;
+    }
+
+    private void ApplyShapedLineVisualOrder(int segmentStart, int segmentCount)
+    {
+        if (segmentCount <= 1)
+        {
+            return;
+        }
+
+        var segmentEnd = segmentStart + segmentCount;
+        var maxLevel = 0;
+        var lowestOddLevel = int.MaxValue;
+        for (var i = segmentStart; i < segmentEnd; i++)
+        {
+            var level = _shapedSegmentScratch[i].BidiLevel;
+            maxLevel = Math.Max(maxLevel, level);
+            if ((level & 1) != 0)
+            {
+                lowestOddLevel = Math.Min(lowestOddLevel, level);
+            }
+        }
+
+        if (maxLevel == 0)
+        {
+            return;
+        }
+
+        if (lowestOddLevel == int.MaxValue)
+        {
+            lowestOddLevel = (maxLevel & 1) == 0 ? maxLevel - 1 : maxLevel;
+        }
+
+        for (var level = maxLevel; level >= lowestOddLevel; level--)
+        {
+            var index = segmentStart;
+            while (index < segmentEnd)
+            {
+                while (index < segmentEnd && _shapedSegmentScratch[index].BidiLevel < level)
+                {
+                    index++;
+                }
+
+                var reverseStart = index;
+                while (index < segmentEnd && _shapedSegmentScratch[index].BidiLevel >= level)
+                {
+                    index++;
+                }
+
+                ReverseShapedSegments(reverseStart, index - 1);
+            }
+        }
+    }
+
+    private void ReverseShapedSegments(int start, int end)
+    {
+        while (start < end)
+        {
+            (_shapedSegmentScratch[start], _shapedSegmentScratch[end]) = (_shapedSegmentScratch[end], _shapedSegmentScratch[start]);
+            start++;
+            end--;
+        }
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
