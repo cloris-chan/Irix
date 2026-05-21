@@ -577,7 +577,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(2, CountOccurrences(glyphSource, "GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage("));
         Assert.Contains("private static bool CanAllocateGlyph(GlyphAtlasPage page, int width, int height)", glyphSource);
         Assert.Contains("private void ScheduleAtlasPageReuse(long recordSerial)", glyphSource);
-        Assert.Contains("_pendingAtlasPageReuse = new GlyphAtlasPageReuseRequest(SelectOldestAtlasPageHandle(), recordSerial);", glyphSource);
+        Assert.Contains("var page = SelectOldestAtlasPageHandle();", glyphSource);
+        Assert.Contains("_pendingAtlasPageReuse = new GlyphAtlasPageReuseRequest(page, recordSerial);", glyphSource);
+        Assert.Contains("_diagnostics = _diagnostics.WithAtlasPageReuseRequest();", glyphSource);
+        Assert.Contains("_diagnostics = _diagnostics.WithAtlasFullWithoutPageReuse();", glyphSource);
         Assert.Contains("D3D12GlyphAtlasTextRenderer.RequireActiveAtlasPage found a stale active glyph atlas page handle.", glyphSource);
         Assert.Contains("D3D12GlyphAtlasTextRenderer.ApplyPendingAtlasPageEviction found a stale pending glyph atlas page reuse handle.", glyphSource);
         Assert.Contains("D3D12GlyphAtlasTextRenderer.DrawGlyphs found a stale glyph atlas page handle.", glyphSource);
@@ -615,6 +618,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public int AtlasPageHeight => AtlasHeight;", glyphSource);
         Assert.Contains("public int AtlasCapacityPixels => AtlasBudgetPixels;", glyphSource);
         Assert.Contains("public int AtlasPendingPageReuses { get; } = AtlasPendingPageReuses;", glyphSource);
+        Assert.Contains("public int AtlasPageReuseRequests { get; } = AtlasPageReuseRequests;", glyphSource);
+        Assert.Contains("public int AtlasFullWithoutPageReuse { get; } = AtlasFullWithoutPageReuse;", glyphSource);
         Assert.Contains("public GlyphEntry WithLastUsedSerial(long serial)", glyphSource);
         Assert.Contains("page.UsedPixels = checked(page.UsedPixels + width * height);", glyphSource);
         Assert.Contains("page.AllocatedPixels = Math.Max(page.AllocatedPixels, page.ComputeAllocatedPixels());", glyphSource);
@@ -647,6 +652,8 @@ public sealed class ProgramDiagnosticsTests
             .WithAtlasRuns(7)
             .WithAtlasPages(1)
             .WithAtlasEviction()
+            .WithAtlasPageReuseRequest()
+            .WithAtlasFullWithoutPageReuse()
             .WithAtlasPageUsage(2048, 512)
             .WithUploadedGlyph()
             .WithUploadedGlyph()
@@ -662,6 +669,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("atlasCapacity=4194304 px", summary);
         Assert.Contains("atlasEvictions=1", summary);
         Assert.Contains("atlasPendingPageReuses=0", summary);
+        Assert.Contains("atlasPageReuseRequests=1", summary);
+        Assert.Contains("atlasFullWithoutPageReuse=1", summary);
         Assert.Contains("atlasUsed=2048 px", summary);
         Assert.Contains("atlasFragmented=512 px", summary);
         Assert.Contains("atlasRecordSerial=0", summary);
@@ -1519,7 +1528,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
