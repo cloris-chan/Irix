@@ -77,6 +77,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u0394'));
         Assert.True(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u0416'));
         Assert.False(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u0301'));
+        Assert.Equal(16, GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(0));
+        Assert.Equal(17, GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(1));
+        Assert.Equal(40, GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(16));
 
         var wrappingStyle = new TextStyle(
             TextStyle.Default.FontFamily,
@@ -335,9 +338,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(hasPipelineState: true, hasRootSignature: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(hasCommandList: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(hasCommandList: false));
-        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: false, hasFontCollection: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: false));
+        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: true, hasTextAnalyzer: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: false, hasFontCollection: true, hasTextAnalyzer: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: false, hasTextAnalyzer: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: true, hasTextAnalyzer: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(hasFontFamily: true));
@@ -562,6 +566,24 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly struct GlyphKey(FontFaceKey FontFace, GlyphAtom Glyph)", glyphSource);
         Assert.Contains("private static bool TryMapCharacterToSimpleGlyph(CachedFontFace fontFace, char character, out GlyphAtom glyph)", glyphSource);
         Assert.Contains("GlyphAtom.SimpleCodePoint(codePoint, glyphIndex[0])", glyphSource);
+        Assert.Contains("private IDWriteTextAnalyzer* _textAnalyzer;", glyphSource);
+        Assert.Contains("GlyphAtlasInitializationPhase.TextAnalyzer", glyphSource);
+        Assert.Contains("_dwriteFactory->CreateTextAnalyzer(&textAnalyzer);", glyphSource);
+        Assert.Contains("_textAnalyzer = textAnalyzer;", glyphSource);
+        Assert.Contains("private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out int glyphCount)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(text.Length)", glyphSource);
+        Assert.Contains("fixed (char* textPtr = text)", glyphSource);
+        Assert.Contains("_textAnalyzer->GetGlyphs(", glyphSource);
+        Assert.Contains("new PCWSTR(textPtr)", glyphSource);
+        Assert.Contains("_textAnalyzer->GetGlyphPlacements(", glyphSource);
+        Assert.Contains("_diagnostics = _diagnostics.WithShapedGlyphProbe(shapedGlyphCount);", glyphSource);
+        Assert.Contains("Shape probe font lookup skipped", glyphSource);
+        Assert.Contains("Shape probe GetGlyphs failed", glyphSource);
+        Assert.Contains("Shape probe GetGlyphPlacements failed", glyphSource);
+        Assert.Contains("public int ShapedProbeRuns { get; } = ShapedProbeRuns;", glyphSource);
+        Assert.Contains("public int ShapedProbeGlyphs { get; } = ShapedProbeGlyphs;", glyphSource);
+        Assert.Contains("public GlyphAtlasTextRendererDiagnostics WithShapedGlyphProbe(int glyphCount)", glyphSource);
+        Assert.Contains("shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageReuseRequest(GlyphAtlasPageHandle Page, long RequestedRecordSerial)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(!IsNone, RequestedRecordSerial, recordSerial, oldestRetainedRecordSerial)", glyphSource);
         Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
@@ -617,7 +639,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CreatePageReuseResetState(AtlasWidth, AtlasHeight, AtlasPadding)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(list != null)", glyphSource);
-        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null, _textAnalyzer != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(fontFace.Face != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(family != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontResource(font != null)", glyphSource);
@@ -628,6 +650,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null, _rootSig != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null)", glyphSource);
         Assert.Contains("DirectWrite,", glyphSource);
+        Assert.Contains("TextAnalyzer,", glyphSource);
         Assert.Contains("CommandList,", glyphSource);
         Assert.Contains("AtlasPage,", glyphSource);
         Assert.Contains("Pipeline,", glyphSource);
@@ -714,6 +737,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("atlasNewestPageAge=0", summary);
         Assert.Contains("uploads=4096 bytes", summary);
         Assert.Contains("uploadedGlyphs=2", summary);
+        Assert.Contains("shapedProbeRuns=0", summary);
+        Assert.Contains("shapedProbeGlyphs=0", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("degradedRuns=0", summary);
         Assert.Contains("fallbacks=2", summary);
@@ -1646,7 +1671,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

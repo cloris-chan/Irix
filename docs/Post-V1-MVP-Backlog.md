@@ -37,7 +37,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow ASCII runs, including explicit line breaks, tab spacing, and minimal whitespace wrapping, have local evidence and unsupported cases degrade |
+| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed; shaped-run probe added, shaped atlas drawing still pending | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow simple runs have local evidence, unsupported cases degrade, and DirectWrite shaping is currently diagnostic-only |
 | POST-011 | Resource cache / stable global handles | Entry/page handles, four-page atlas pool, explicit atlas budget diagnostics, page-owned SRV resources, retained-floor-gated next-record cold-page reuse, page usage diagnostics, and atlas touch serials done | D3D12-specific; continue from retained-safe page reuse toward full LRU/entry-level eviction only after resource lifetime remains stable |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -87,8 +87,8 @@ Phase 1 foundation first kept the overlay path as the default runtime behavior a
 The first atlas execution path records a D3D12 glyph pass for ASCII plus simple Latin Extended / Greek / Cyrillic BMP runs, uses an `R8_UNORM` atlas, and supports leading/center/trailing alignment plus per-run scissor for accepted runs. `NoWrap` clips over-wide line segments and accepts explicit CR/LF line breaks plus tab spacing; `Wrap` accepts minimal whitespace-based multi-line layout when every word and line stack fits.
 It now uses non-overlay degradation so unsupported renderable text runs do not force either whole-frame overlay or mixed overlay fallback.
 Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, explicit ASCII line breaks, ASCII tab spacing, simple BMP atlas acceptance, minimal wrap acceptance plus hard-wrap degradation, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
-Current default GlyphAtlas behavior degrades unsupported and initialization/upload/record-failed renderable text runs without invoking overlay.
-Full shaping, hyphenation/complex wrapping, color glyphs, fallback font identity, eviction, command-order-perfect mixed text z-order, and production enablement remain follow-up work.
+Current default GlyphAtlas behavior degrades unsupported and initialization/upload/record-failed renderable text runs without invoking overlay. `IDWriteTextAnalyzer` is now created for the atlas path and probes `NonAscii` degraded runs through pointer-based `GetGlyphs` / `GetGlyphPlacements`, reporting shaped probe counts without retaining source strings.
+Drawing shaped runs from atlas, hyphenation/complex wrapping, color glyphs, fallback font identity, eviction, command-order-perfect mixed text z-order, and production enablement remain follow-up work.
 
 | Work item | Scope | Acceptance criteria |
 |-----------|-------|---------------------|
@@ -155,7 +155,7 @@ Known limitations checklist before expanding text coverage:
 - No same-frame atlas eviction. AtlasFull degradation is safe for the current prototype; it schedules a tested record-serial- and retained-floor-gated next-record cold-page reset/reuse request so accepted runs retained from the triggering record cannot sample recycled regions.
 - Glyph atlas cache entries, draw batches, and atlas pages now have stable value handles and generations internally; page-owned texture/upload/SRV resources replace renderer-level atlas resource fields. Cache hits and new glyph rasterizations touch glyph entries/pages with a monotonic atlas record serial. The renderer preallocates a four-page atlas pool, switches pages when the active page is full, uses strict-oldest cold-page selection, splits draw batches on page changes, records page reuse requests with the triggering atlas record serial, generation-guards reused-page cache cleanup after the request becomes applicable on a later record whose retained-frame floor has advanced beyond the triggering record, and resets reused pages to a full-page dirty upload state.
 - Glyph atlas diagnostics report page count, fixed page budget, page dimensions, total atlas pixel capacity, completed and pending next-frame reuse counts, scheduled page reuse requests, hard AtlasFull-without-reuse counts, used glyph bitmap pixels, a shelf fragmentation estimate, atlas record serial, oldest/newest page age metrics, upload bytes, and uploaded glyph count for future page-size, LRU, and upload policy decisions.
-- No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or complex wrapping support in the atlas path.
+- No shaped-run atlas drawing, fallback font identity, color glyphs, SDF/MSDF, or complex wrapping support in the atlas path. DirectWrite shaping is probe-only diagnostics today.
 - Warm glyph-atlas scroll allocation was previously documented at roughly `6.2 KB/frame`; corrected frame-scoped `--diagnose-text-cache 30` now reports the scroll sample at roughly `2.8 KB/frame` with tree/diff/translate/render attribution. Use that evidence before doing allocation work.
 - Overlay removal is active in source. Do not reintroduce D3D11On12/D2D; widen D3D12 text handling or keep explicit degradation.
 

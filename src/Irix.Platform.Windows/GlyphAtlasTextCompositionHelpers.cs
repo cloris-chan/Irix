@@ -252,9 +252,9 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasCommandList;
     }
 
-    internal static bool HasGlyphDirectWriteResources(bool hasFactory, bool hasFontCollection)
+    internal static bool HasGlyphDirectWriteResources(bool hasFactory, bool hasFontCollection, bool hasTextAnalyzer)
     {
-        return hasFactory && hasFontCollection;
+        return hasFactory && hasFontCollection && hasTextAnalyzer;
     }
 
     internal static bool HasGlyphFontFaceResource(bool hasFontFace)
@@ -275,6 +275,11 @@ internal static class GlyphAtlasTextCompositionHelpers
     internal static bool HasGlyphRunAnalysisResource(bool hasGlyphRunAnalysis)
     {
         return hasGlyphRunAnalysis;
+    }
+
+    internal static int EstimateShapedGlyphCapacity(int textLength)
+    {
+        return checked(textLength + (textLength >> 1) + 16);
     }
 
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)

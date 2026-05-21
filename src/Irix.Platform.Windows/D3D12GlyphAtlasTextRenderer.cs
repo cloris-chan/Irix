@@ -37,6 +37,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly ID3D12Device* _device;
     private IDWriteFactory* _dwriteFactory;
     private IDWriteFontCollection* _fontCollection;
+    private IDWriteTextAnalyzer* _textAnalyzer;
     private ID3D12RootSignature* _rootSig;
     private ID3D12PipelineState* _pso;
     private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];
@@ -46,6 +47,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private byte[] _clearTypeScratch = [];
     private byte[] _grayscaleScratch = [];
     private int _rasterScratchResizeCount;
+    private ushort[] _shapeClusterScratch = [];
+    private DWRITE_SHAPING_TEXT_PROPERTIES[] _shapeTextPropsScratch = [];
+    private ushort[] _shapeGlyphScratch = [];
+    private DWRITE_SHAPING_GLYPH_PROPERTIES[] _shapeGlyphPropsScratch = [];
+    private float[] _shapeAdvanceScratch = [];
+    private DWRITE_GLYPH_OFFSET[] _shapeOffsetScratch = [];
+    private int _shapeScratchResizeCount;
     private readonly Vertex[] _vertices = new Vertex[MaxGlyphVertices];
     private readonly GlyphDrawBatch[] _batches = new GlyphDrawBatch[MaxGlyphDrawBatches];
     private GlyphEntry[] _layoutGlyphScratch = [];
@@ -85,6 +93,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 _dwriteFactory->GetSystemFontCollection(&fontCollection, false);
                 _fontCollection = fontCollection;
             });
+            RunInitializationPhase(GlyphAtlasInitializationPhase.TextAnalyzer, () =>
+            {
+                IDWriteTextAnalyzer* textAnalyzer;
+                _dwriteFactory->CreateTextAnalyzer(&textAnalyzer);
+                _textAnalyzer = textAnalyzer;
+            });
 
             RunInitializationPhase(GlyphAtlasInitializationPhase.RootSignature, CreateRootSignature);
             RunInitializationPhase(GlyphAtlasInitializationPhase.ShaderCompile, LoadEmbeddedShaderBytecode);
@@ -111,7 +125,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             .WithAtlasPendingPageReuse(_pendingAtlasPageReuse.IsNone ? 0 : 1)
             .WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)
             .WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge)
-            .WithRasterScratch(_clearTypeScratch.Length + _grayscaleScratch.Length, _rasterScratchResizeCount);
+            .WithRasterScratch(
+                _clearTypeScratch.Length + _grayscaleScratch.Length + GetShapeScratchByteCount(),
+                _rasterScratchResizeCount + _shapeScratchResizeCount);
     }
 
     public void ResetDiagnostics()
@@ -173,7 +189,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     "D3D12GlyphAtlasTextRenderer.TryRecord found a missing command list.");
             }
 
-            if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null))
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null, _textAnalyzer != null))
             {
                 throw CreateRecordException(
                     GlyphAtlasRecordFailurePhase.DirectWrite,
@@ -267,6 +283,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var unsupportedReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
+                if (unsupportedReason == GlyphAtlasFallbackReason.NonAscii && TryProbeShapedRun(text, style, out var shapedGlyphCount))
+                {
+                    _diagnostics = _diagnostics.WithShapedGlyphProbe(shapedGlyphCount);
+                }
+
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
@@ -1025,6 +1046,144 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         glyph = GlyphAtom.SimpleCodePoint(codePoint, glyphIndex[0]);
         return true;
+    }
+
+    private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out int glyphCount)
+    {
+        glyphCount = 0;
+        if (text.IsEmpty || text.Length > ushort.MaxValue)
+        {
+            return false;
+        }
+
+        CachedFontFace fontFace;
+        try
+        {
+            if (!TryGetFontFace(style, out fontFace))
+            {
+                return false;
+            }
+        }
+        catch (GlyphAtlasRecordException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Shape probe font lookup skipped: {ex.Phase}");
+            return false;
+        }
+
+        var maxGlyphCount = GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(text.Length);
+        EnsureShapeScratch(text.Length, maxGlyphCount);
+        var scriptAnalysis = new DWRITE_SCRIPT_ANALYSIS();
+
+        fixed (char* textPtr = text)
+        fixed (ushort* clusterMap = _shapeClusterScratch)
+        fixed (DWRITE_SHAPING_TEXT_PROPERTIES* textProps = _shapeTextPropsScratch)
+        fixed (ushort* glyphIndices = _shapeGlyphScratch)
+        fixed (DWRITE_SHAPING_GLYPH_PROPERTIES* glyphProps = _shapeGlyphPropsScratch)
+        {
+            uint actualGlyphCount;
+            try
+            {
+                _textAnalyzer->GetGlyphs(
+                    new PCWSTR(textPtr),
+                    (uint)text.Length,
+                    fontFace.Face,
+                    false,
+                    false,
+                    &scriptAnalysis,
+                    default,
+                    null,
+                    null,
+                    null,
+                    0,
+                    (uint)_shapeGlyphScratch.Length,
+                    clusterMap,
+                    textProps,
+                    glyphIndices,
+                    glyphProps,
+                    &actualGlyphCount);
+            }
+            catch (COMException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Shape probe GetGlyphs failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+                return false;
+            }
+
+            if (actualGlyphCount == 0 || actualGlyphCount > _shapeGlyphScratch.Length)
+            {
+                return false;
+            }
+
+            fixed (float* advances = _shapeAdvanceScratch)
+            fixed (DWRITE_GLYPH_OFFSET* offsets = _shapeOffsetScratch)
+            {
+                try
+                {
+                    _textAnalyzer->GetGlyphPlacements(
+                        new PCWSTR(textPtr),
+                        clusterMap,
+                        textProps,
+                        (uint)text.Length,
+                        glyphIndices,
+                        glyphProps,
+                        actualGlyphCount,
+                        fontFace.Face,
+                        style.FontSize,
+                        false,
+                        false,
+                        &scriptAnalysis,
+                        default,
+                        null,
+                        null,
+                        0,
+                        advances,
+                        offsets);
+                }
+                catch (COMException ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Shape probe GetGlyphPlacements failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+                    return false;
+                }
+            }
+
+            glyphCount = (int)actualGlyphCount;
+            return true;
+        }
+    }
+
+    private void EnsureShapeScratch(int textLength, int glyphCapacity)
+    {
+        var resized = false;
+        if (_shapeClusterScratch.Length < textLength)
+        {
+            _shapeClusterScratch = new ushort[textLength];
+            _shapeTextPropsScratch = new DWRITE_SHAPING_TEXT_PROPERTIES[textLength];
+            resized = true;
+        }
+
+        if (_shapeGlyphScratch.Length < glyphCapacity)
+        {
+            _shapeGlyphScratch = new ushort[glyphCapacity];
+            _shapeGlyphPropsScratch = new DWRITE_SHAPING_GLYPH_PROPERTIES[glyphCapacity];
+            _shapeAdvanceScratch = new float[glyphCapacity];
+            _shapeOffsetScratch = new DWRITE_GLYPH_OFFSET[glyphCapacity];
+            resized = true;
+        }
+
+        if (resized)
+        {
+            _shapeScratchResizeCount++;
+        }
+    }
+
+    private int GetShapeScratchByteCount()
+    {
+        return checked(
+            _shapeClusterScratch.Length * sizeof(ushort)
+            + _shapeTextPropsScratch.Length * sizeof(DWRITE_SHAPING_TEXT_PROPERTIES)
+            + _shapeGlyphScratch.Length * sizeof(ushort)
+            + _shapeGlyphPropsScratch.Length * sizeof(DWRITE_SHAPING_GLYPH_PROPERTIES)
+            + _shapeAdvanceScratch.Length * sizeof(float)
+            + _shapeOffsetScratch.Length * sizeof(DWRITE_GLYPH_OFFSET));
     }
 
     private Span<byte> RentClearTypeScratch(int byteCount)
@@ -1942,6 +2101,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
         if (_pso != null) _pso->Release();
         if (_rootSig != null) _rootSig->Release();
+        if (_textAnalyzer != null) _textAnalyzer->Release();
         if (_fontCollection != null) _fontCollection->Release();
         if (_dwriteFactory != null) _dwriteFactory->Release();
         _disposed = true;
@@ -2008,6 +2168,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         None,
         DirectWriteFactory,
         FontCollection,
+        TextAnalyzer,
         RootSignature,
         ShaderCompile,
         PSO,
@@ -2431,7 +2592,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int AtlasFullWithoutPageReuse = 0,
         int AtlasRuns = 0,
         int DegradedRuns = 0,
-        int UploadedGlyphs = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
+        int UploadedGlyphs = 0,
+        int ShapedProbeRuns = 0,
+        int ShapedProbeGlyphs = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
     {
         public int CachedGlyphs { get; } = CachedGlyphs;
         public long UploadedBytes { get; } = UploadedBytes;
@@ -2440,6 +2603,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int CacheMisses { get; } = CacheMisses;
         public int FallbackFrames { get; } = FallbackFrames;
         public int UnsupportedRuns { get; } = UnsupportedRuns;
+        public int ShapedProbeRuns { get; } = ShapedProbeRuns;
+        public int ShapedProbeGlyphs { get; } = ShapedProbeGlyphs;
         public int AtlasPages { get; } = AtlasPages;
         public int AtlasBudgetPages => MaxAtlasPages;
         public int AtlasPageWidth => AtlasWidth;
@@ -2489,7 +2654,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheHit() =>
             new(
@@ -2517,7 +2684,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheMiss() =>
             new(
@@ -2545,7 +2714,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithDrawnGlyphs(int glyphs) =>
             new(
@@ -2573,7 +2744,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPages(int atlasPages) =>
             new(
@@ -2601,7 +2774,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasEviction() =>
             new(
@@ -2629,7 +2804,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPendingPageReuse(int pendingPageReuses) =>
             new(
@@ -2657,7 +2834,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPageReuseRequest() =>
             new(
@@ -2685,7 +2864,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasFullWithoutPageReuse() =>
             new(
@@ -2713,7 +2894,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse + 1,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPageUsage(int usedPixels, int fragmentedPixels) =>
             new(
@@ -2741,7 +2924,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasTouchMetrics(long recordSerial, long oldestPageAge, long newestPageAge) =>
             new(
@@ -2769,7 +2954,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasRuns(int atlasRuns) =>
             new(
@@ -2797,7 +2984,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns + atlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithUploadedBytes(long bytes) =>
             new(
@@ -2825,7 +3014,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithUploadedGlyph() =>
             new(
@@ -2853,7 +3044,39 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs + 1);
+                UploadedGlyphs + 1,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
+
+        public GlyphAtlasTextRendererDiagnostics WithShapedGlyphProbe(int glyphCount) =>
+            new(
+                CachedGlyphs,
+                UploadedBytes,
+                DrawnGlyphs,
+                CacheHits,
+                CacheMisses,
+                FallbackFrames,
+                UnsupportedRuns,
+                Reasons,
+                InitializationFailurePhase,
+                RecordFailurePhase,
+                RasterScratchBytes,
+                RasterScratchResizes,
+                AtlasPages,
+                AtlasEvictions,
+                AtlasUsedPixels,
+                AtlasFragmentedPixels,
+                AtlasRecordSerial,
+                AtlasOldestPageAge,
+                AtlasNewestPageAge,
+                AtlasPendingPageReuses,
+                AtlasPageReuseRequests,
+                AtlasFullWithoutPageReuse,
+                AtlasRuns,
+                DegradedRuns,
+                UploadedGlyphs,
+                ShapedProbeRuns + 1,
+                ShapedProbeGlyphs + glyphCount);
 
         public GlyphAtlasTextRendererDiagnostics WithRasterScratch(int bytes, int resizes) =>
             new(
@@ -2881,7 +3104,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithInitializationFailure(GlyphAtlasInitializationPhase phase) =>
             new(
@@ -2909,7 +3134,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithRecordFailure(GlyphAtlasRecordFailurePhase phase) =>
             new(
@@ -2937,7 +3164,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
 
         public GlyphAtlasTextRendererDiagnostics WithDegradation(int unsupportedRuns, GlyphAtlasFallbackReason reason)
         {
@@ -2981,14 +3210,16 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns + unsupportedRuns,
-                UploadedGlyphs);
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs);
         }
 
         public string FormatSummary()
         {
             return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasEvictions={AtlasEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
                 + $"atlasRecordSerial={AtlasRecordSerial}, atlasOldestPageAge={AtlasOldestPageAge}, atlasNewestPageAge={AtlasNewestPageAge}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
-                + $"uploads={UploadedBytes} bytes, uploadedGlyphs={UploadedGlyphs}, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
+                + $"uploads={UploadedBytes} bytes, uploadedGlyphs={UploadedGlyphs}, shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
         }
 
@@ -3014,6 +3245,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && AtlasRuns == other.AtlasRuns
                 && DegradedRuns == other.DegradedRuns
                 && UploadedGlyphs == other.UploadedGlyphs
+                && ShapedProbeRuns == other.ShapedProbeRuns
+                && ShapedProbeGlyphs == other.ShapedProbeGlyphs
                 && Reasons.Equals(other.Reasons)
                 && InitializationFailurePhase == other.InitializationFailurePhase
                 && RecordFailurePhase == other.RecordFailurePhase
@@ -3046,6 +3279,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(AtlasRuns);
             hash.Add(DegradedRuns);
             hash.Add(UploadedGlyphs);
+            hash.Add(ShapedProbeRuns);
+            hash.Add(ShapedProbeGlyphs);
             hash.Add(Reasons);
             hash.Add(InitializationFailurePhase);
             hash.Add(RecordFailurePhase);
