@@ -239,6 +239,11 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasPipelineState && hasRootSignature;
     }
 
+    internal static bool HasGlyphRecordCommandList(bool hasCommandList)
+    {
+        return hasCommandList;
+    }
+
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;

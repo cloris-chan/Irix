@@ -166,6 +166,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         try
         {
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(list != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.Record,
+                    "D3D12GlyphAtlasTextRenderer.TryRecord found a missing command list.");
+            }
+
             var recordSerial = ++_glyphRecordSerial;
             ApplyPendingAtlasPageEviction(recordSerial, oldestRetainedRecordSerial: recordSerial);
             var frame = BuildFrame(textRuns, resources, viewportWidth, viewportHeight, recordSerial);
