@@ -10,12 +10,13 @@ namespace Irix.Core.Tests;
 public sealed class ProgramDiagnosticsTests
 {
     [Fact]
-    public void Text_composition_mode_defaults_to_glyph_atlas_and_ignores_removed_overlay()
+    public void Text_composition_mode_defaults_to_glyph_atlas_and_rejects_removed_overlay()
     {
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode([]));
-        Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "overlay"]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "glyph-atlas"]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "atlas"]));
+        var ex = Assert.Throws<ArgumentException>(() => Program.ParseTextCompositionMode(["--text-composition", "overlay"]));
+        Assert.Contains("GlyphAtlas is the only active text composition mode", ex.Message);
     }
 
     [Fact]
@@ -549,6 +550,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("ID2D", nativeMethods);
         Assert.Contains("IDWriteColorGlyphRunEnumerator", nativeMethods);
         Assert.Contains("IDWriteTextAnalysisSink", nativeMethods);
+
+        var gaBaseline = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "ga-baseline.ps1")));
+        Assert.DoesNotContain("text-overlay-sync-strategy", gaBaseline);
+        Assert.DoesNotContain("D3D12FenceAfterOverlay", gaBaseline);
+        Assert.DoesNotContain("D3D11Query", gaBaseline);
+        Assert.DoesNotContain("SyncStrategy", gaBaseline);
     }
 
     [Fact]

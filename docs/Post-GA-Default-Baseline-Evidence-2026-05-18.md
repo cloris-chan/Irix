@@ -2,7 +2,7 @@
 
 Branch: `post-ga-renderer-foundation`
 
-Scope: default baseline switch evidence for `GlyphAtlas` text composition and `Scissor` backend clipping. Public API remains unchanged. `--text-composition overlay` remains the overlay rollback; `--disable-scissor` and `--clip-mode diagnostic` remain clip rollback/diagnostic paths. Partial apply remains default-on with `--no-partial-apply` rollback. `SyncTextOverlay` remains enabled for overlay fallback correctness.
+Scope: historical default baseline switch evidence for `GlyphAtlas` text composition and `Scissor` backend clipping. This checkpoint predates D3D11On12/D2D overlay removal. The active branch now rejects `--text-composition overlay` and has no `SyncTextOverlay` control surface; overlay commands/results below are retained only as checkpoint evidence.
 
 ## Environment
 
@@ -20,7 +20,7 @@ dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
 dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal
 ```
 
-Copy-paste default and rollback smokes:
+Historical default and rollback smokes captured for this checkpoint:
 
 ```powershell
 dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-sync 300 3
@@ -33,7 +33,7 @@ dotnet run --no-build -c Release --project src/Irix.Poc -- --clip-mode diagnosti
 dotnet run --no-build -c Release --project src/Irix.Poc -- --text-composition overlay
 ```
 
-Expected smoke headers:
+Historical expected smoke headers:
 
 | Command | Expected header |
 |---------|-----------------|
@@ -49,17 +49,17 @@ Expected smoke headers:
 - D3D12 tests: `6` passed.
 - Performance tests: `6` passed.
 - Default sync diagnostic: `Text composition mode: GlyphAtlas`, `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `fallbacks=0`, all fallback reasons `0`, `initFailurePhase=None`.
-- Overlay rollback sync diagnostic: `Text composition mode: Overlay`, `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; no device lost.
+- Historical overlay rollback sync diagnostic: `Text composition mode: Overlay`, `frameSerial=900`, `presentSerial=900`, `syncWaits=900`; no device lost.
 - Historical pre-mixed-fallback Non-ASCII default diagnostic: `Text composition mode: GlyphAtlas`, `frameSerial=900`, `presentSerial=900`, `syncWaits=900`, `fallbacks=900`, `unsupportedRuns=900`, `NonAscii=900`, `initFailurePhase=None`; no device lost.
 - Default UI smoke stayed running for 5 seconds before manual stop and printed `Backend clip mode: Scissor`, `Partial apply: ENABLED (default)`, `Sync text overlay: ENABLED (default)`, and `Text composition mode: GlyphAtlas`.
 - `--disable-scissor` UI smoke stayed running for 5 seconds before manual stop and printed `Backend clip mode: Diagnostic`.
 - `--clip-mode diagnostic` UI smoke stayed running for 5 seconds before manual stop and printed `Backend clip mode: Diagnostic`.
-- `--text-composition overlay` UI smoke stayed running for 5 seconds before manual stop and printed `Text composition mode: Overlay`.
+- Historical `--text-composition overlay` UI smoke stayed running for 5 seconds before manual stop and printed `Text composition mode: Overlay`.
 
 ## Baseline Notes
 
 - The default ASCII path now avoids overlay sync waits.
-- Overlay sync is still required and enabled for fallback frames.
+- Overlay sync was still required and enabled for fallback frames at this checkpoint; it is removed on the active branch.
 - `GlyphAtlas` remains a prototype renderer path with no eviction, no complex shaping, and the historical warm scroll allocation in this evidence file was around `6.2 KB/frame`. Runtime shader compile has since been removed in favor of embedded DXBC bytecode, `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution, a 2026-05-21 frame-scoped diagnostic correction reports the scroll sample around `2.8 KB/frame`, and mixed fallback v0 has superseded the whole-frame fallback behavior recorded earlier in this evidence file.
 - `Scissor` is the default backend clip mode; `Diagnostic` remains available for rollback and A/B diagnostics.
 
@@ -68,7 +68,7 @@ Expected smoke headers:
 - Runtime shader compile removal: D3D12 rectangle and glyph-atlas passes now use embedded DXBC bytecode; `D3DCompile` is removed from renderer source generation.
 - Self-contained publish after shader packaging removal: `dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained` passed.
 - Default GlyphAtlas sync smoke after embedded bytecode fix: `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `fallbacks=0`, `initFailurePhase=None`.
-- Overlay rollback sync smoke remains available: `--text-composition overlay` produced `frameSerial=900`, `presentSerial=900`, `syncWaits=900`.
+- Historical overlay rollback sync smoke at this checkpoint: `--text-composition overlay` produced `frameSerial=900`, `presentSerial=900`, `syncWaits=900`. The active branch now rejects that CLI mode.
 - Historical pre-mixed-fallback Non-ASCII result: `--diagnose-sync-non-ascii` produced `fallbacks=900`, `unsupportedRuns=900`, `NonAscii=900`, `syncWaits=900`, `initFailurePhase=None`. Current mixed fallback v0 evidence is recorded below.
 - Historical warm scroll allocation attribution from `--diagnose-text-cache 30`: total `193584 bytes`, `6452 bytes/frame`; attribution `tree=144440 bytes (4814/frame)`, `diff=3752 bytes (125/frame)`, `translate=49200 bytes (1640/frame)`, `render=8200 bytes (273/frame)`. This used the old diagnostic runner before its per-frame `VirtualTextArena.BeginFrame()` correction.
 - D3D12 failure diagnostics hardening: glyph-atlas initialization failures use `initFailurePhase`; runtime record/upload/map failures now use `recordFailurePhase` and `RecordFailed` fallback reason before overlay fallback. This keeps runtime fallback distinct from constructor-time atlas setup failure.
@@ -102,4 +102,4 @@ Expected smoke headers:
 - Mixed AtlasFull command: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-stress --mixed-fallback`.
   It produced `frameSerial=1`, `presentSerial=1`, `syncWaits=1`, `atlasRuns=5`, `overlayFallbackRuns=30`, `fallbacks=1`, `unsupportedRuns=30`, `AtlasFull=29`, `NonAscii=1`, `RecordFailed=0`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
 - Record-failure contract tests pin all-renderable-run fallback for runtime record failures such as `AtlasUploadMap`; this is unit contract coverage rather than a forced GPU upload-failure smoke.
-- Z-order limitation remains explicit: mixed fallback draws all overlay fallback runs after atlas accepted runs. The extended smoke does not claim full relative text-command order preservation.
+- Z-order limitation at this checkpoint was explicit: mixed fallback drew all overlay fallback runs after atlas accepted runs. The extended smoke did not claim full relative text-command order preservation.

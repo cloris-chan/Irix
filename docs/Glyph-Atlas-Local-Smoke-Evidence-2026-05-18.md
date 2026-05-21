@@ -2,7 +2,7 @@
 
 Branch: `post-ga-renderer-foundation`
 
-Scope: opt-in D3D12 glyph atlas text composition smoke evidence captured before the default switch. Public API remains unchanged. This historical evidence shows the old overlay default plus the glyph-atlas opt-in path; the post-GA baseline now defaults to GlyphAtlas with `--text-composition overlay` rollback.
+Scope: opt-in D3D12 glyph atlas text composition smoke evidence captured before the default switch. This historical evidence shows the old overlay default plus the glyph-atlas opt-in path; the active branch now defaults to GlyphAtlas and rejects `--text-composition overlay`.
 
 ## Environment
 
@@ -50,7 +50,7 @@ Notes:
 
 ## Expected Evidence To Preserve
 
-- Overlay sync path reports `syncWaits=900` for `300 x 3` and uses `Text composition mode: Overlay`.
+- Historical overlay sync path reported `syncWaits=900` for `300 x 3` and used `Text composition mode: Overlay`.
 - Glyph atlas ASCII path reports `syncWaits=0`, `fallbacks=0`, nonzero `drawnGlyphs`, and fallback reasons all zero.
 - Non-ASCII glyph atlas smoke reports safe overlay fallback, `fallbacks=5`, `unsupportedRuns=5`, and `NonAscii=5`; no device lost.
 - Resize glyph atlas smoke reports `Device removed: False` and a `Glyph atlas:` diagnostics line.
@@ -99,7 +99,7 @@ Mixed fallback extended smoke follow-up (2026-05-19):
 - Mixed AtlasFull: `dotnet run --no-build -c Release --project src/Irix.Poc -- --diagnose-glyph-atlas-stress --mixed-fallback`.
   It produced `frameSerial=1`, `presentSerial=1`, `syncWaits=1`, `atlasRuns=5`, `overlayFallbackRuns=30`, `fallbacks=1`, `unsupportedRuns=30`, `AtlasFull=29`, `NonAscii=1`, `RecordFailed=0`, `initFailurePhase=None`, `recordFailurePhase=None`, and no device removal.
 - Record-failure contract tests pin all-renderable-run fallback with `recordFailurePhase=AtlasUploadMap`; this is unit coverage, not a forced GPU upload-failure smoke.
-- Ordering note: the mixed smoke intentionally includes fallback text before a later atlas text run. Current GlyphAtlas mode still draws all overlay fallback runs after all atlas accepted runs, so this is not full text-command z-order preservation.
+- Ordering note: the mixed smoke intentionally included fallback text before a later atlas text run. At this checkpoint GlyphAtlas drew all overlay fallback runs after all atlas accepted runs, so this was not full text-command z-order preservation.
 
 Default UI smoke:
 

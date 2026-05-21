@@ -364,10 +364,15 @@ internal static class Program
     internal static TextCompositionMode ParseTextCompositionMode(string[] args)
     {
         var value = args.SkipWhile(a => a != "--text-composition").Skip(1).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return TextCompositionMode.GlyphAtlas;
+        }
+
         return value?.ToLowerInvariant() switch
         {
             "glyph-atlas" or "glyphatlas" or "atlas" => TextCompositionMode.GlyphAtlas,
-            _ => TextCompositionMode.GlyphAtlas
+            _ => throw new ArgumentException($"Unsupported text composition mode '{value}'. GlyphAtlas is the only active text composition mode.")
         };
     }
 

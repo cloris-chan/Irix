@@ -4,7 +4,7 @@
 
 Tag: `v1.0-private-ga`
 Date: 2026-05-17
-Scope: private repository, Windows PoC, D3D12 backend with D3D11On12/D2D/DirectWrite text overlay.
+Scope: private repository, Windows PoC, D3D12 backend with D3D11On12/D2D/DirectWrite text overlay at the tag. The active post-GA branch has since removed that overlay path.
 
 ---
 
@@ -57,8 +57,8 @@ Refresh evidence for this milestone is 60Hz / 120Hz / 240Hz. 144Hz is removed fr
 
 | Item | Private GA decision |
 |------|---------------------|
-| Sync wait | Accepted temporarily. `D3D12FenceAfterOverlay` remains default to preserve text/rect synchronization. |
-| Text renderer | Current D3D11On12/D2D/DirectWrite overlay remains in place. |
+| Sync wait | Accepted temporarily for the tag. `D3D12FenceAfterOverlay` was the private-GA default to preserve text/rect synchronization. |
+| Text renderer | The D3D11On12/D2D/DirectWrite overlay remained in place for this tag only; post-GA active source has removed it. |
 | Glyph atlas | Post-GA renderer foundation work, not part of this tag. |
 | Public API | Not frozen. Repository is private and incompatible cleanup remains allowed. |
 | Performance micro-optimization | Stop before tag. Do not chase the remaining ~2 KB render-request reuse allocation in this milestone. |

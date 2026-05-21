@@ -6,9 +6,9 @@ Date: 2026-05-10
 
 ## Context
 
-The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor and Direct2D text clipping are default-on in the post-GA renderer-foundation branch.
+The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor and D3D12 GlyphAtlas text clipping are default-on in the post-GA renderer-foundation branch.
 
-Current default behavior: clipped FillRect content is clipped by the D3D12 rasterizer scissor; DrawTextRun content is clipped by a per-run Direct2D axis-aligned clip around `DrawTextLayout`. `--disable-scissor` and `--clip-mode diagnostic` remain rollback/diagnostic paths. The old `--enable-scissor` switch is retained as a no-op compatibility flag because scissor is already the default.
+Current default behavior: clipped FillRect content is clipped by the D3D12 rasterizer scissor; accepted DrawTextRun content is clipped in the D3D12 GlyphAtlas text pass, and unsupported text degrades explicitly without D3D11On12/D2D fallback. `--disable-scissor` and `--clip-mode diagnostic` remain rollback/diagnostic paths. The old `--enable-scissor` switch is retained as a no-op compatibility flag because scissor is already the default.
 
 The current interaction and style preset phase is frozen. Scissor work must not change scroll pumping, input ownership, button visual state, style preset behavior, theme behavior, or retained partial redraw behavior.
 
@@ -22,7 +22,7 @@ Introduce backend clip capability as a diagnostic boundary before implementing G
 | `Diagnostic` | Backend observes/counts clipped commands but renders exactly as before. |
 | `Scissor` | Backend applies backend-native scissor/clipping for supported commands. |
 
-D3D12 defaults to `Scissor`: it applies FillRect scissor and DrawTextRun Direct2D clipping. `Diagnostic` mode remains available through `--disable-scissor` or `--clip-mode diagnostic`; it receives `ClipBounds`, counts clipped commands, and renders without applying backend clipping.
+D3D12 defaults to `Scissor`: it applies FillRect scissor and DrawTextRun GlyphAtlas clipping for accepted text runs. `Diagnostic` mode remains available through `--disable-scissor` or `--clip-mode diagnostic`; it receives `ClipBounds`, counts clipped commands, and renders without applying backend clipping.
 
 ## Per-command Scissor Shape
 
@@ -48,7 +48,9 @@ Batching by clip is allowed only as a run-length optimization over already order
 
 Global grouping by clip is not allowed because it can change visual stacking once overlapping commands exist.
 
-## D2D Text Clip v0
+## Historical D2D Text Clip v0
+
+This section records the removed overlay implementation. It is superseded by D3D12 GlyphAtlas text clipping and must not be treated as current renderer behavior.
 
 Text is drawn through the Direct2D/DirectWrite overlay path after D3D12 rectangles. D3D12 rasterizer scissor does not automatically clip these D2D overlay draw calls, so text clipping uses a separate Direct2D clip scope.
 

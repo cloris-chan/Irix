@@ -137,7 +137,7 @@ Do not keep expanding the ASCII prototype surface or flip another runtime defaul
 | Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
 | Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the corrected frame-scoped warm scroll allocation before optimizing | ✅ Attribution added; latest scroll sample about `2.8 KB/frame` |
 | Non-overlay degradation path | Renderer design | Per-run atlas plus explicit degradation so NonAscii/complex/failure cases do not invoke D3D11On12/D2D in default GlyphAtlas | ✅ Default GlyphAtlas no longer records overlay fallback runs |
-| Overlay removal | Renderer design / smoke evidence | Remove D3D11On12/D2D source, native generation, sync strategy, and explicit overlay mode | ✅ Active source removed |
+| Overlay removal | Renderer design / smoke evidence | Remove D3D11On12/D2D source, native generation, sync strategy, explicit overlay mode, and legacy CLI alias | ✅ Active source removed; `--text-composition overlay` is rejected |
 | Full migration | Glyph-atlas widening | Reduce accepted degradation by adding D3D12 handling | Planned |
 
 Known limitations checklist before expanding text coverage:
@@ -149,7 +149,7 @@ Known limitations checklist before expanding text coverage:
 - D3D12 rectangle vertex, glyph vertex, and per-page atlas upload resources are frame-slot owned. `BeginFrame` no longer performs a coarse last-submitted-frame upload wait; normal swapchain backbuffer fence ownership protects the upload slot before it is reused.
 - D3D12 swapchain creation releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery reuse the same helper.
 - D3D12 constructor and recovery share core resource initialization, with pointer guards and null-safe cleanup for partially initialized device resources.
-- D3D12 overlay rollback renderer has been removed with its D3D11On12/D2D native generation entries.
+- D3D12 overlay rollback renderer has been removed with its D3D11On12/D2D native generation entries, and `--text-composition overlay` is rejected instead of mapped to a fallback.
 - Default GlyphAtlas degrades unsupported renderable runs while accepted ASCII/simple BMP/shaped fallback-face runs stay on atlas. Explicit CR/LF line breaks and tab spacing are supported; minimal `Wrap` support breaks at ASCII spaces/tabs only; initialization and runtime record failure degrade all renderable runs for the frame.
 - Default GlyphAtlas no longer has mixed overlay z-order risk because degraded runs are not drawn; replacing degradation with D3D12 rendering remains follow-up work.
 - No same-frame atlas eviction. AtlasFull degradation is safe for the current prototype; it schedules a tested record-serial- and retained-floor-gated next-record cold-page reset/reuse request so accepted runs retained from the triggering record cannot sample recycled regions.
@@ -157,7 +157,7 @@ Known limitations checklist before expanding text coverage:
 - Glyph atlas diagnostics report page count, fixed page budget, page dimensions, total atlas pixel capacity, completed and pending next-frame reuse counts, scheduled page reuse requests, hard AtlasFull-without-reuse counts, used glyph bitmap pixels, a shelf fragmentation estimate, atlas record serial, oldest/newest page age metrics, upload bytes, uploaded glyph count, and split color/complex degradation reasons for future page-size, LRU, and unsupported-text policy decisions.
 - SDF/MSDF, color bitmap/SVG glyph formats beyond DirectWrite color-run layers, full BiDi visual reordering, and RTL wrapping remain outside the atlas path. Surrogate pairs and variation selectors now shape far enough to draw DirectWrite color layers through D3D12 when available; complex-script candidates run through DirectWrite script/bidi analysis, even-level LTR runs are accepted, and odd-level `NoWrap` segments draw from the segment's right edge when the shaped span has a uniform bidi level. Shaped drawing covers nonzero glyph runs with DirectWrite fallback-face segmentation, explicit line spans, tab control advances, minimal whitespace wrapping when DirectWrite cluster maps are monotonic enough to project per-character advances, unbreakable wrap-word scissor clipping, LTR complex-script runs, single-level RTL `NoWrap` runs, and COLR-style layer runs returned by `TranslateColorGlyphRun`.
 - Warm glyph-atlas scroll allocation was previously documented at roughly `6.2 KB/frame`; corrected frame-scoped `--diagnose-text-cache 30` now reports the scroll sample at roughly `2.8 KB/frame` with tree/diff/translate/render attribution. Use that evidence before doing allocation work.
-- Overlay removal is active in source. Do not reintroduce D3D11On12/D2D; widen D3D12 text handling or keep explicit degradation.
+- Overlay removal is active in source. Do not reintroduce D3D11On12/D2D or a hidden overlay CLI alias; widen D3D12 text handling or keep explicit degradation.
 
 Next hardening checklist:
 

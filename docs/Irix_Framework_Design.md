@@ -377,7 +377,7 @@ public interface IDrawingBackend : IDisposable
 
 原因如下：
 
-1. DirectWrite / Direct2D 在 Windows 文本 shaping、glyph rasterization 和 D3D 互操作上足够成熟，适合作为 PoC 文本路径。
+1. DirectWrite 在 Windows 文本 shaping、metrics 和 glyph rasterization 上足够成熟，适合作为 Windows PoC 的文本源；Direct2D/D3D11On12 overlay 曾用于 private-GA bootstrap，post-GA 已从 active renderer 移除。
 2. 当前项目的核心风险首先在窗口、调度、布局、Patch、输入与渲染闭环，而不是 2D 栅格化算法本身。
 3. 如果现在直接做类似 `Flutter Impeller` 的自研 Drawing Engine，会把图形 API、路径 tessellation、文本 shaping、缓存策略、AA、资源生命周期等风险一次性叠满。
 
@@ -390,7 +390,7 @@ public interface IDrawingBackend : IDisposable
 
 因此更合理的路线不是“继续深绑某个绘制库”，而是：
 
-- v1：`DrawCommand` + D3D12 backend；Windows 文本 PoC 通过 DirectWrite / Direct2D overlay 完成
+- v1：`DrawCommand` + D3D12 backend；Windows 文本 PoC 起步时通过 DirectWrite / Direct2D overlay 完成，post-GA 路径已迁移为 D3D12 GlyphAtlas，DirectWrite 仅保留为 shaping / metrics / glyph raster source
 - v1.x：补齐文本缓存、画刷缓存、命令录制和局部重绘基线
 - v2：如果第三方绘制实现或平台文本栈在性能模型、资源模型、可诊断性上持续成为瓶颈，再评估自研 `Irix.Drawing` 引擎
 
@@ -509,17 +509,17 @@ VirtualNode
 
 `VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> WindowBackend`
 
-**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已支持合并式显式重绘请求。Button visual state v0 已通过 `OwnershipSnapshot` 派生 `IsHovered` / `IsPressed` / `IsFocused`，并在 layout/recording 层用现有 `DrawCommand.Color` 选择 style token，不扩展 backend 接口。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + DirectWrite 文本）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013），并通过 `CsWin32RunAsBuildTask=true` 生成实体 `obj` 编译输入，同时排除 CsWin32 analyzer/source-generator 资产，避免编辑器依赖易失效的 Roslyn 虚拟生成文档。
+**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已支持合并式显式重绘请求。Button visual state v0 已通过 `OwnershipSnapshot` 派生 `IsHovered` / `IsPressed` / `IsFocused`，并在 layout/recording 层用现有 `DrawCommand.Color` 选择 style token，不扩展 backend 接口。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + D3D12 GlyphAtlas 文本；DirectWrite 仅作文本源）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013），并通过 `CsWin32RunAsBuildTask=true` 生成实体 `obj` 编译输入，同时排除 CsWin32 analyzer/source-generator 资产，避免编辑器依赖易失效的 Roslyn 虚拟生成文档。
 
-**下一步：** V1 MVP/GA candidate 不再新增 renderer 功能。显式 glyph atlas/cache 仅作为 post-GA 设计项推进（若后续脱离 DirectWrite 或需要跨 backend glyph 资源复用）；当前 Windows 文本路径继续委托 DirectWrite / Direct2D。
+**下一步：** V1 MVP/GA candidate 不再新增 renderer 功能。Post-GA renderer-foundation 已默认使用 D3D12 GlyphAtlas，后续只扩大 D3D12 文本覆盖或保留显式 degradation；不要恢复 Direct2D/D3D11On12 final composition。
 
 #### 5.2.9 文本、路径与图片的资源策略
 
 自研 Drawing 层最容易失控的地方通常不是矩形，而是文本和路径。因此 v1 建议明确分层：
 
-- 文本 shaping 与 glyph rasterization：Windows PoC 暂时委托给 DirectWrite / Direct2D。
+- 文本 shaping 与 glyph rasterization：Windows PoC 委托给 DirectWrite；最终合成在 D3D12 GlyphAtlas 中完成，不走 Direct2D/D3D11On12 overlay。
 - 文本格式资源：`TextStyle` 通过 `ResourceHandle` 引用，Windows backend 缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`。当前 layout cache 以文本 hash、长度、样式与布局尺寸为 key，并保存文本副本用于 hash collision 验证；动画尺寸频繁变化时可能产生 layout churn，但缓存上限控制了资源风险。
-- 显式 glyph cache：当前尚未实现跨 backend glyph atlas/cache，Windows PoC 继续委托 DirectWrite 内部 glyph rasterization/cache；post-GA 设计见 `Glyph-Atlas-Post-GA-Design.md`。
+- 显式 glyph cache：Windows PoC 已有 D3D12 GlyphAtlas/cache；跨 backend glyph 资源复用仍是后续设计，post-GA 细节见 `Glyph-Atlas-Post-GA-Design.md`。
 - 复杂路径栅格化：后续可委托给 `Skia` backend adapter 或自研路径模块，当前不急于实现。
 - 图片解码与上传：使用独立资源接口封装，避免与 backend 紧耦合。
 
@@ -1471,9 +1471,9 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | **MVVM Bridge** | 轻量编译期 MVVM authoring layer，非运行时 | §9.1 |
 | **IXAML** | Irix 的声明式 UI DSL，仅编译期解析 | §9.1.3 |
 | **D3D12** | Direct3D 12，v1 唯一图形后端 | §5.2.2 |
-| **D3D11On12** | Direct3D 11-on-12 interop layer，用于让 Direct2D/DirectWrite 叠加到 D3D12 back buffer | §5.2.8 |
-| **DirectWrite** | Windows 文本 shaping / layout / rasterization API，当前 PoC 文本路径使用 | §5.2.9 |
-| **Direct2D** | Windows 2D 绘制 API，当前通过 D3D11On12 承接 DirectWrite 文本绘制 | §5.2.9 |
+| **D3D11On12** | Direct3D 11-on-12 interop layer；曾用于 private-GA Direct2D overlay，post-GA active renderer 已移除 | §5.2.8 |
+| **DirectWrite** | Windows 文本 shaping / metrics / glyph rasterization API，当前作为 D3D12 GlyphAtlas 的文本源使用 | §5.2.9 |
+| **Direct2D** | Windows 2D 绘制 API；曾通过 D3D11On12 承接 DirectWrite overlay，post-GA active renderer 不再用于 final text composition | §5.2.9 |
 | **CsWin32** | Win32 API 的 C# 源码生成器；当前 Windows 平台项目以 build task 模式生成实体 `obj/.../Generated/CsWin32/Windows.Win32.NativeMethods.g.cs` | 项目约定 |
 
 ---
@@ -1497,7 +1497,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 | ADR-011 | DrawCommand 不内联文本，通过 TextSlice 并行传递 | §5.2.6 | ✅ 已确认 | DrawCommand 保持纯值类型，可序列化/可记录/可回放；ResourceHandle 回归资源引用职责 |
 | ADR-012 | PatchBatch 携带 Root 属性，消费者直接使用 | §7.2 | ✅ 已确认 | 消除从 Memory 反推根节点的 hack，为未来增量 patch 铺路 |
 | ADR-013 | D3D12 互操作使用 CsWin32 生成的裸指针 COM 包装 | §5.2.2 | ✅ 已确认 | 消除手写 vtable 偏移和 GUID 错误；`allowMarshaling: false` 保持 AOT 兼容；使用 `CsWin32RunAsBuildTask=true` 生成实体中间文件，并排除 CsWin32 analyzer/source-generator 资产，减少 Roslyn source-generated 虚拟文档失效噪音 |
-| ADR-014 | Windows PoC 文本渲染使用 DirectWrite / Direct2D over D3D11On12 | §5.2.8 / §5.2.9 | ✅ 已确认 | 复用 Windows 成熟文本栈，避免 PoC 阶段手写 glyph rasterization 或提前引入 Skia |
+| ADR-014 | Windows PoC 文本渲染曾使用 DirectWrite / Direct2D over D3D11On12 | §5.2.8 / §5.2.9 | ✅ private-GA 已确认；post-GA 已替换 | 复用 Windows 成熟文本栈完成 PoC；active renderer 已迁移为 D3D12 GlyphAtlas，DirectWrite 仅保留为文本源 |
 | ADR-015 | 文本内容使用 frame-local arena + slice，而非无边界全局字符串池 | §5.2.4 / §5.2.9 | ✅ 已确认 | 避免动态文本泄漏和复杂全局生命周期；全局化优先留给 TextStyle、glyph/shaping cache |
 | ADR-016 | TextStyle 使用 ResourceHandle 并由 backend 缓存原生文本资源 | §5.2.4 / §5.2.9 | ✅ 已确认 | DrawCommand 保持纯值；DirectWrite backend 复用 bounded TextFormat/TextLayout，显式 glyph atlas 后置 |
 | ADR-017 | 跨帧 partial rendering 需要稳定的资源快照，v1 不实现 | §7.3 | 📝 设计草案 | 当前 TextSlice 引用 frame-local arena，跨帧 partial 需要：(1) 稳定 text handle 不随 arena reset 失效；(2) resource snapshot 保留旧帧 TextSlice 可解析；或 (3) per-frame full resources + command-level diff。v1 保持 full apply，partial 仅限同 frame scope pilot |

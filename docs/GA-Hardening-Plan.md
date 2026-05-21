@@ -72,17 +72,18 @@ Windows version boundary: Irix v1 Windows PoC targets Windows SDK 10.0.26100.0 t
 | Text cache hit rate in steady state | `scripts/ga-baseline.ps1 -Mode TextCache` validates static, scroll, and scale-change phases; current-machine 100% / 150% / 200% runs remain healthy | Already done for current machine | — |
 | DrawCommand recording allocation | `stackalloc` + `ArrayPool`; record full/dirty stages are covered by the split allocation baseline, with warm `FrameDrawingResources` guarded in CI | Keep performance lane green | P2 |
 | Hot-path string allocation | Round 13/14 complete (2026-05-16): text content uses `TextNodeContent` / `TextBufferSnapshot` plus frame-local `TextSlice`; `ActionId`, `TargetId`, `ElementId`, and `NodeKey` are typed value ids; style/property changes use `VirtualPropertyKey` and metadata effects instead of string property names. `VirtualPropertyKey` has no public constructor and no primitive `ToString()`. Device error state uses typed `DeviceErrorDiagnostic`; diagnostic text is produced only by CLI/debug/report formatting boundaries. | Keep source guards green; next work is allocation baseline tightening, not string-key redesign | P2 |
-| Sync wait overhead | Current default `D3D12FenceAfterOverlay` is correctness-preserving but can exceed the old provisional `<2ms avg` target. `D3D11Query` was correctness-clean but refresh-rate dependent and therefore diagnostic-only. | Accepted temporarily for GA/MVP; long-term fix is D3D12-only glyph atlas text renderer | — |
+| Sync wait overhead | Historical private-GA overlay measurement only. Active post-GA GlyphAtlas has no D3D11On12/D2D overlay sync strategy, and `scripts/ga-baseline.ps1` no longer accepts strategy switches. | Closed by the D3D12-only GlyphAtlas default; residual sync wait counters should remain zero unless a future non-overlay wait is added | — |
 
-### Sync Wait Evidence and Decision (2026-05-13)
+### Historical Sync Wait Evidence and Decision (2026-05-13)
+
+This section is retained as private-GA evidence only. The active post-GA runner no longer accepts `-SyncStrategy`, and the PoC CLI no longer exposes overlay sync switches.
 
 Canonical local runner:
 
 ```powershell
-.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 60Hz -ScalePercent 150 -SyncStrategy D3D12FenceAfterOverlay
-.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150 -SyncStrategy D3D12FenceAfterOverlay
-.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 240Hz -ScalePercent 150 -SyncStrategy D3D12FenceAfterOverlay
-.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150 -SyncStrategy D3D11Query
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 60Hz -ScalePercent 150
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 120Hz -ScalePercent 150
+.\scripts\ga-baseline.ps1 -Mode Sync -Frames 300 -Samples 3 -RefreshLabel 240Hz -ScalePercent 150
 ```
 
 | Refresh | Scale | Runtime | Strategy | Avg sync wait | P95 sync wait | Max sync wait | Waits >2ms | Manual smoke |
@@ -99,14 +100,13 @@ Canonical local runner:
 Interpretation:
 
 - The old provisional `<2ms avg` target is no longer a GA blocker.
-- Correctness has priority: 60Hz text lag must not return.
-- `D3D11Query` proves the overlay can be waited from the D3D11 side, but it is not stable enough to become the default because it regresses 120Hz on this machine and still misses 2ms at 60Hz.
-- `D3D12FenceAfterOverlay` remains default because it is the current correctness control.
-- The accepted long-term path is not further tuning D3D11On12/D2D overlay synchronization. The long-term fix is a D3D12-only glyph atlas text renderer that removes the D3D11On12 + D2D/DirectWrite overlay path.
+- Correctness had priority for the private-GA overlay path: 60Hz text lag could not return while the overlay existed.
+- `D3D11Query` and `D3D12FenceAfterOverlay` are historical measurements, not active configuration names.
+- The accepted post-GA path is not further tuning D3D11On12/D2D overlay synchronization. The active fix is D3D12-only GlyphAtlas text rendering with explicit degradation for unsupported cases.
 
-### Text Overlay Sync Correctness Invariant
+### Historical Text Overlay Sync Correctness Invariant
 
-The 60Hz text-lag regression must not return. `D3D12Renderer.SyncTextOverlay` remains `true` by default, and `--no-sync-text-overlay` is only an A/B diagnostic escape hatch. Irix must not disable default synchronization to hit a performance number.
+The 60Hz text-lag regression was tied to the removed D3D11On12/D2D overlay path. Current post-GA invariant: accepted GlyphAtlas text remains in the D3D12 command stream, unsupported text degrades explicitly, and there is no active `SyncTextOverlay` / `--no-sync-text-overlay` control surface.
 
 ### Render-Core No-String Allocation Invariant
 
@@ -188,7 +188,7 @@ Non-goals for this GA batch:
 
 ## GA Readiness Assessment
 
-**Current state:** PoC V1 core architecture-complete and tagged as `v1.0-private-ga`. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, D2D text overlay synchronization, platform integration smokes, GPU resource failure handling, and command allocator reset guards are complete. Sync wait cost is accepted temporarily as a correctness-first tradeoff; the long-term performance fix is a D3D12-only glyph atlas text renderer. This is not a public API freeze.
+**Current state:** PoC V1 core architecture-complete and tagged as `v1.0-private-ga`. Windows version boundary centralized: Target SDK 26100, runtime minimum 15063. Display scale pipeline is complete and hand-tested at 100% / 150% / 200%. Device-lost recovery, soak, resize stress, frame-time profiling, D3D12 smoke tests, concurrent input/render validation, performance CI, historical D2D text overlay synchronization evidence, platform integration smokes, GPU resource failure handling, and command allocator reset guards are complete. Active post-GA text rendering is D3D12 GlyphAtlas-only with explicit degradation for unsupported cases. This is not a public API freeze.
 
 **Minimum GA checklist:**
 
@@ -201,7 +201,7 @@ Non-goals for this GA batch:
 7. ~~Concurrent input + render~~ — Done
 8. ~~Windows SDK 26100 CI check~~ — Done
 9. ~~Performance regression CI baseline~~ — Done
-10. ~~Sync wait budget decision~~ — Done: accepted temporarily; future D3D12-only glyph atlas renderer planned
+10. ~~Sync wait budget decision~~ — Done for private GA; superseded by active D3D12-only GlyphAtlas renderer
 11. ~~Platform integration smokes~~ — Done: minimize/restore, occlusion, resize, scroll/click, rollback, startup scale, runtime scale switch
 12. ~~GPU memory pressure graceful path~~ — Done for V1 scope: explicit resource creation failure reasons, including `E_OUTOFMEMORY`
 13. ~~Command allocator reset failure guard~~ — Done: retry once after GPU wait, then device-lost escalation

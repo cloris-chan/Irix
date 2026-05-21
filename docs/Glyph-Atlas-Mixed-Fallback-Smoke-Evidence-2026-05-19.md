@@ -1,6 +1,6 @@
 # Glyph Atlas Mixed Fallback Smoke Evidence - 2026-05-19
 
-Scope: follow-up evidence for mixed glyph-atlas / overlay fallback behavior after `b80965b`. Public API remains unchanged. `--text-composition overlay` remains the whole-frame overlay rollback.
+Scope: historical follow-up evidence for mixed glyph-atlas / overlay fallback behavior after `b80965b`, captured before D3D11On12/D2D overlay removal. The active branch now rejects `--text-composition overlay`; overlay commands/results in this file are retained only as checkpoint evidence.
 
 ## Commands
 
@@ -70,11 +70,11 @@ The mixed smoke intentionally has a fallback text run before a later atlas text 
 rects -> atlas accepted text runs -> overlay fallback text runs -> present
 ```
 
-Therefore the fallback overlay run draws after the later atlas run. This is the current v0 limitation and is not full text-command z-order preservation. The overlay rollback path is still whole-frame overlay and does not have this mixed atlas/fallback z-order split.
+Therefore the fallback overlay run drew after the later atlas run at this checkpoint. That was the v0 limitation and was not full text-command z-order preservation. The overlay rollback path was later removed rather than kept as a current workaround.
 
 ## Overlay Subset Correctness
 
-The added unit coverage checks the fallback subset keeps the original `TextData` fields used by the overlay renderer: frame resource resolver, resolved physical text style, effective clip, clip enablement, color, and scale-adjusted coordinates.
+The historical unit coverage checked that the fallback subset kept the original `TextData` fields used by the overlay renderer: frame resource resolver, resolved physical text style, effective clip, clip enablement, color, and scale-adjusted coordinates.
 The 150% mixed smoke now prints the parity contract directly: two fallback subset runs match their whole-frame overlay inputs out of four text runs, including the clipped fallback run.
 
 This is not an automated pixel-equivalence oracle. It verifies that the fallback subset is drawn by the same overlay renderer with the same per-run inputs that whole-frame overlay would use for those fallback runs.
