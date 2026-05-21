@@ -295,6 +295,19 @@ internal static class GlyphAtlasTextCompositionHelpers
         return false;
     }
 
+    internal static bool ContainsSurrogateOrVariationSelector(ReadOnlySpan<char> text)
+    {
+        foreach (var character in text)
+        {
+            if (char.IsSurrogate(character) || character is >= '\uFE00' and <= '\uFE0F')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;

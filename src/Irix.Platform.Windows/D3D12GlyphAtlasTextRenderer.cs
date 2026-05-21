@@ -1283,6 +1283,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
+        if (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text))
+        {
+            return false;
+        }
+
         CachedFontFace fontFace;
         try
         {
