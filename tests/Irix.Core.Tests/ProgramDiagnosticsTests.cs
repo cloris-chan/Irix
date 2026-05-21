@@ -347,10 +347,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(hasPipelineState: true, hasRootSignature: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(hasCommandList: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(hasCommandList: false));
-        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: true, hasTextAnalyzer: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: false, hasFontCollection: true, hasTextAnalyzer: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: false, hasTextAnalyzer: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: true, hasTextAnalyzer: false));
+        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: true, hasFontCollection: true, hasTextAnalyzer: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: false, hasFactory2: true, hasFontCollection: true, hasTextAnalyzer: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: false, hasFontCollection: true, hasTextAnalyzer: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: true, hasFontCollection: false, hasTextAnalyzer: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: true, hasFontCollection: true, hasTextAnalyzer: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(hasFontFamily: true));
@@ -538,6 +539,11 @@ public sealed class ProgramDiagnosticsTests
             Assert.DoesNotContain("Windows.Win32.Graphics.Direct2D", source);
             Assert.DoesNotContain("D2D1CreateFactory", source);
         }
+
+        var nativeMethods = NormalizeLineEndings(File.ReadAllText(Path.Combine(platformWindows, "NativeMethods.txt")));
+        Assert.DoesNotContain("D3D11On12", nativeMethods);
+        Assert.DoesNotContain("ID2D", nativeMethods);
+        Assert.Contains("IDWriteColorGlyphRunEnumerator", nativeMethods);
     }
 
     [Fact]
@@ -579,10 +585,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtom.SimpleCodePoint(codePoint, glyphIndex[0])", glyphSource);
         Assert.Contains("private IDWriteTextAnalyzer* _textAnalyzer;", glyphSource);
         Assert.Contains("private IDWriteFontFallback* _fontFallback;", glyphSource);
+        Assert.Contains("private IDWriteFactory2* _dwriteFactory2;", glyphSource);
         Assert.Contains("GlyphAtlasInitializationPhase.TextAnalyzer", glyphSource);
         Assert.Contains("GlyphAtlasInitializationPhase.FontFallback", glyphSource);
         Assert.Contains("_dwriteFactory->CreateTextAnalyzer(&textAnalyzer);", glyphSource);
-        Assert.Contains("factory2->GetSystemFontFallback(&fontFallback);", glyphSource);
+        Assert.Contains("_dwriteFactory->QueryInterface<IDWriteFactory2>(out var factory2).ThrowOnFailure();", glyphSource);
+        Assert.Contains("_dwriteFactory2->GetSystemFontFallback(&fontFallback);", glyphSource);
         Assert.Contains("_textAnalyzer = textAnalyzer;", glyphSource);
         Assert.Contains("private ShapedGlyph[] _shapedGlyphScratch = [];", glyphSource);
         Assert.Contains("private ShapedGlyphSegment[] _shapedSegmentScratch = [];", glyphSource);
@@ -591,7 +599,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private float[] _shapedTextAdvanceScratch = [];", glyphSource);
         Assert.Contains("private const int MaxShapedRunSegments = 64;", glyphSource);
         Assert.Contains("private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, float maxLineWidth, out ShapedGlyphRun shapedRun, out GlyphAtlasFallbackReason unsupportedReason)", glyphSource);
-        Assert.Contains("private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, float maxLineWidth, out ShapedGlyphRun shapedRun, out GlyphAtlasFallbackReason unsupportedReason)", glyphSource);
+        Assert.Contains("private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, float maxLineWidth, bool requiresColorGlyph, out ShapedGlyphRun shapedRun, out GlyphAtlasFallbackReason unsupportedReason)", glyphSource);
         Assert.Contains("private bool TryShapeTextRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryShapeTextSpan(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryAppendShapedControlSegment(TextStyle style, CachedFontFace baseFontFace, int textStart, int glyphStart, ref int segmentCount, int spaceCount)", glyphSource);
@@ -606,6 +614,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)", glyphSource);
+        Assert.Contains("TryProbeColorGlyphLayers(shapedRun, out _);", glyphSource);
+        Assert.Contains("_dwriteFactory2->TranslateColorGlyphRun(", glyphSource);
+        Assert.Contains("IDWriteColorGlyphRunEnumerator* colorLayers", glyphSource);
+        Assert.Contains("DWRITE_COLOR_GLYPH_RUN* colorGlyphRun", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.IsTab(text[position])", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.IsWrapWhitespace(text[position])", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.PlanLines(", glyphSource);
@@ -639,6 +651,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public float ControlAdvance { get; } = ControlAdvance;", glyphSource);
         Assert.Contains("private readonly ref struct ShapedGlyphRun(", glyphSource);
         Assert.Contains("float FontEmSize", glyphSource);
+        Assert.Contains("public bool RequiresColorGlyph { get; } = RequiresColorGlyph;", glyphSource);
         Assert.Contains("ReadOnlySpan<ShapedGlyph> Glyphs", glyphSource);
         Assert.Contains("ReadOnlySpan<ShapedGlyphSegment> Segments", glyphSource);
         Assert.Contains("ReadOnlySpan<ShapedGlyphLine> Lines", glyphSource);
@@ -714,7 +727,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public GlyphAtlasPageHandle ResetForReuse()", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CreatePageReuseResetState(AtlasWidth, AtlasHeight, AtlasPadding)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(list != null)", glyphSource);
-        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null, _textAnalyzer != null)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _dwriteFactory2 != null, _fontCollection != null, _textAnalyzer != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(fontFace.Face != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(family != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontResource(font != null)", glyphSource);

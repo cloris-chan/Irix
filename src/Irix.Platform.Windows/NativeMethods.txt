@@ -57,6 +57,7 @@ DWriteCreateFactory
 IDWriteFactory
 IDWriteFactory2
 IDWriteFontFallback
+IDWriteColorGlyphRunEnumerator
 // DXGI
 CreateDXGIFactory1
 IDXGISwapChain3

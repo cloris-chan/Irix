@@ -28,6 +28,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int MaxGlyphVertices = MaxGlyphQuads * 6;
     private const int MaxGlyphDrawBatches = 1024;
     private const int MaxShapedRunSegments = 64;
+    private const int DWriteNoColorHResult = unchecked((int)0x8898500C);
     private const int AtlasRowPitch = 1024;
     private const int AtlasPixelBytes = AtlasRowPitch * AtlasHeight;
     private const int TextureDataPitchAlignment = 256;
@@ -39,6 +40,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private readonly ID3D12Device* _device;
     private IDWriteFactory* _dwriteFactory;
+    private IDWriteFactory2* _dwriteFactory2;
     private IDWriteFontCollection* _fontCollection;
     private IDWriteTextAnalyzer* _textAnalyzer;
     private IDWriteFontFallback* _fontFallback;
@@ -112,18 +114,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             });
             RunInitializationPhase(GlyphAtlasInitializationPhase.FontFallback, () =>
             {
-                IDWriteFactory2* factory2 = null;
-                try
-                {
-                    _dwriteFactory->QueryInterface<IDWriteFactory2>(out factory2).ThrowOnFailure();
-                    IDWriteFontFallback* fontFallback;
-                    factory2->GetSystemFontFallback(&fontFallback);
-                    _fontFallback = fontFallback;
-                }
-                finally
-                {
-                    if (factory2 != null) factory2->Release();
-                }
+                _dwriteFactory->QueryInterface<IDWriteFactory2>(out var factory2).ThrowOnFailure();
+                _dwriteFactory2 = factory2;
+                IDWriteFontFallback* fontFallback;
+                _dwriteFactory2->GetSystemFontFallback(&fontFallback);
+                _fontFallback = fontFallback;
             });
 
             RunInitializationPhase(GlyphAtlasInitializationPhase.RootSignature, CreateRootSignature);
@@ -215,7 +210,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     "D3D12GlyphAtlasTextRenderer.TryRecord found a missing command list.");
             }
 
-            if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null, _textAnalyzer != null))
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _dwriteFactory2 != null, _fontCollection != null, _textAnalyzer != null))
             {
                 throw CreateRecordException(
                     GlyphAtlasRecordFailurePhase.DirectWrite,
@@ -546,7 +541,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         unsupportedReason = GlyphAtlasFallbackReason.None;
         if (shapedRun.LineCount == 0 || shapedRun.HasMissingGlyph())
         {
-            unsupportedReason = GlyphAtlasFallbackReason.NonAscii;
+            unsupportedReason = shapedRun.RequiresColorGlyph ? GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph : GlyphAtlasFallbackReason.NonAscii;
             return false;
         }
 
@@ -576,6 +571,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var batchStart = vertexCount;
         var batchSegmentStart = vertexCount;
         var batchPage = default(GlyphAtlasPageHandle);
+
+        if (shapedRun.RequiresColorGlyph)
+        {
+            TryProbeColorGlyphLayers(shapedRun, out _);
+            unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
+            return false;
+        }
 
         for (var lineIndex = 0; lineIndex < shapedRun.LineCount; lineIndex++)
         {
@@ -670,6 +672,116 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         return true;
+    }
+
+    private bool TryProbeColorGlyphLayers(ShapedGlyphRun shapedRun, out int layerCount)
+    {
+        layerCount = 0;
+        if (_dwriteFactory2 == null)
+        {
+            return false;
+        }
+
+        foreach (ref readonly var shapedSegment in shapedRun.Segments)
+        {
+            if (shapedSegment.GlyphCount == 0)
+            {
+                continue;
+            }
+
+            if (TryProbeColorGlyphLayers(shapedSegment, out var segmentLayerCount))
+            {
+                layerCount += segmentLayerCount;
+            }
+        }
+
+        return layerCount > 0;
+    }
+
+    private bool TryProbeColorGlyphLayers(ShapedGlyphSegment shapedSegment, out int layerCount)
+    {
+        layerCount = 0;
+        if (_dwriteFactory2 == null || shapedSegment.FontFace.Face == null || shapedSegment.GlyphCount == 0)
+        {
+            return false;
+        }
+
+        fixed (ushort* glyphIndicesBase = _shapeGlyphScratch)
+        fixed (float* advancesBase = _shapeAdvanceScratch)
+        fixed (DWRITE_GLYPH_OFFSET* offsetsBase = _shapeOffsetScratch)
+        {
+            var glyphRun = new DWRITE_GLYPH_RUN
+            {
+                fontFace = shapedSegment.FontFace.Face,
+                fontEmSize = shapedSegment.FontEmSize,
+                glyphCount = (uint)shapedSegment.GlyphCount,
+                glyphIndices = glyphIndicesBase + shapedSegment.GlyphStart,
+                glyphAdvances = advancesBase + shapedSegment.GlyphStart,
+                glyphOffsets = offsetsBase + shapedSegment.GlyphStart,
+                isSideways = false,
+                bidiLevel = 0
+            };
+
+            IDWriteColorGlyphRunEnumerator* colorLayers = null;
+            try
+            {
+                _dwriteFactory2->TranslateColorGlyphRun(
+                    0,
+                    0,
+                    &glyphRun,
+                    null,
+                    DWRITE_MEASURING_MODE.DWRITE_MEASURING_MODE_NATURAL,
+                    null,
+                    0,
+                    &colorLayers);
+            }
+            catch (COMException ex) when (ex.ErrorCode == DWriteNoColorHResult)
+            {
+                return false;
+            }
+            catch (COMException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Color glyph probe failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+                return false;
+            }
+
+            if (colorLayers == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                while (true)
+                {
+                    BOOL hasRun;
+                    colorLayers->MoveNext(&hasRun);
+                    if (!hasRun)
+                    {
+                        break;
+                    }
+
+                    DWRITE_COLOR_GLYPH_RUN* colorGlyphRun;
+                    colorLayers->GetCurrentRun(&colorGlyphRun);
+                    if (colorGlyphRun != null && colorGlyphRun->glyphRun.glyphCount > 0)
+                    {
+                        layerCount++;
+                    }
+                }
+            }
+            catch (COMException ex)
+            {
+                layerCount = 0;
+                System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Color glyph layer enumeration failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+                return false;
+            }
+            finally
+            {
+                colorLayers->Release();
+            }
+
+            return layerCount > 0;
+        }
     }
 
     private static bool TryMeasureCharacterAdvance(
@@ -1283,18 +1395,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        if (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text))
-        {
-            unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
-            return false;
-        }
-
         if (GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
         {
             unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ComplexScript;
             return false;
         }
 
+        var requiresColorGlyph = GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text);
         CachedFontFace fontFace;
         try
         {
@@ -1310,10 +1417,20 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        return TryShapeRun(text, style, fontFace, maxLineWidth, out shapedRun, out unsupportedReason);
+        if (!TryShapeRun(text, style, fontFace, maxLineWidth, requiresColorGlyph, out shapedRun, out unsupportedReason))
+        {
+            if (requiresColorGlyph)
+            {
+                unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
+            }
+
+            return false;
+        }
+
+        return true;
     }
 
-    private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, float maxLineWidth, out ShapedGlyphRun shapedRun, out GlyphAtlasFallbackReason unsupportedReason)
+    private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, float maxLineWidth, bool requiresColorGlyph, out ShapedGlyphRun shapedRun, out GlyphAtlasFallbackReason unsupportedReason)
     {
         shapedRun = default;
         unsupportedReason = GlyphAtlasFallbackReason.NonAscii;
@@ -1374,7 +1491,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             _shapedSegmentScratch.AsSpan(0, segmentCount),
             _shapedLineScratch.AsSpan(0, lineCount),
             _shapeClusterScratch.AsSpan(0, text.Length),
-            text.Length);
+            text.Length,
+            requiresColorGlyph);
         return true;
     }
 
@@ -2969,6 +3087,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (_fontFallback != null) _fontFallback->Release();
         if (_textAnalyzer != null) _textAnalyzer->Release();
         if (_fontCollection != null) _fontCollection->Release();
+        if (_dwriteFactory2 != null) _dwriteFactory2->Release();
         if (_dwriteFactory != null) _dwriteFactory->Release();
         _disposed = true;
     }
@@ -3340,13 +3459,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         ReadOnlySpan<ShapedGlyphSegment> Segments,
         ReadOnlySpan<ShapedGlyphLine> Lines,
         ReadOnlySpan<ushort> ClusterMap,
-        int TextLength)
+        int TextLength,
+        bool RequiresColorGlyph)
     {
         public ReadOnlySpan<ShapedGlyph> Glyphs { get; } = Glyphs;
         public ReadOnlySpan<ShapedGlyphSegment> Segments { get; } = Segments;
         public ReadOnlySpan<ShapedGlyphLine> Lines { get; } = Lines;
         public ReadOnlySpan<ushort> ClusterMap { get; } = ClusterMap;
         public int TextLength { get; } = TextLength;
+        public bool RequiresColorGlyph { get; } = RequiresColorGlyph;
         public int GlyphCount => Glyphs.Length;
         public int LineCount => Lines.Length;
 
