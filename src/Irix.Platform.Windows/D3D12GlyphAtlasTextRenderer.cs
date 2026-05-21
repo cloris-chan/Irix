@@ -287,6 +287,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 if (unsupportedReason == GlyphAtlasFallbackReason.NonAscii && TryProbeShapedRun(text, style, out var shapedRun))
                 {
                     _diagnostics = _diagnostics.WithShapedGlyphProbe(shapedRun.GlyphCount);
+                    if (TryBuildShapedAtlasRun(text, textRun, style, shapedRun, viewportWidth, viewportHeight, recordSerial, ref vertexCount, ref batchCount, out unsupportedReason))
+                    {
+                        atlasRunCount++;
+                        continue;
+                    }
                 }
 
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
@@ -495,6 +500,120 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return unsupportedReason == GlyphAtlasFallbackReason.None;
     }
 
+    private bool TryBuildShapedAtlasRun(
+        ReadOnlySpan<char> text,
+        D3D12TextRun textRun,
+        TextStyle style,
+        ShapedGlyphRun shapedRun,
+        int viewportWidth,
+        int viewportHeight,
+        long recordSerial,
+        ref int vertexCount,
+        ref int batchCount,
+        out GlyphAtlasFallbackReason unsupportedReason)
+    {
+        unsupportedReason = GlyphAtlasFallbackReason.None;
+        if (style.Wrapping != TextWrapping.NoWrap || shapedRun.GlyphCount == 0 || GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text) || shapedRun.HasMissingGlyph())
+        {
+            unsupportedReason = GlyphAtlasFallbackReason.NonAscii;
+            return false;
+        }
+
+        var totalAdvance = shapedRun.ComputeAdvance();
+        if (totalAdvance > textRun.Width)
+        {
+            unsupportedReason = GlyphAtlasFallbackReason.Clip;
+            return false;
+        }
+
+        var lineHeight = ComputeLineHeight(shapedRun.FontFace.Metrics, style.FontSize);
+        if (!TextMetricsFit(textRun, lineHeight, 1))
+        {
+            unsupportedReason = GlyphAtlasFallbackReason.Clip;
+            return false;
+        }
+
+        var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
+        if (scissor.IsEmpty)
+        {
+            unsupportedReason = GlyphAtlasFallbackReason.Clip;
+            return false;
+        }
+
+        var firstBaselineY = ComputeFirstBaselineY(textRun, style, shapedRun.FontFace.Metrics, lineHeight, 1);
+        var color = new Vector4(textRun.R, textRun.G, textRun.B, textRun.A);
+        var batchStart = vertexCount;
+        var batchSegmentStart = vertexCount;
+        var batchPage = default(GlyphAtlasPageHandle);
+        var penX = GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(textRun.X, textRun.Width, style.HorizontalAlignment, totalAdvance);
+
+        foreach (ref readonly var shapedGlyph in shapedRun.Glyphs)
+        {
+            if (!TryGetShapedGlyph(shapedRun.FontFace, style, shapedGlyph, recordSerial, out var glyph, out unsupportedReason))
+            {
+                break;
+            }
+
+            if (glyph.Width > 0 && glyph.Height > 0)
+            {
+                if (batchPage.IsNone)
+                {
+                    batchPage = glyph.Page;
+                }
+                else if (batchPage != glyph.Page)
+                {
+                    if (!TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
+                    {
+                        unsupportedReason = GlyphAtlasFallbackReason.BatchLimit;
+                        break;
+                    }
+
+                    batchSegmentStart = vertexCount;
+                    batchPage = glyph.Page;
+                }
+
+                if (vertexCount + 6 > MaxGlyphVertices)
+                {
+                    unsupportedReason = GlyphAtlasFallbackReason.VertexLimit;
+                    break;
+                }
+
+                var x1 = penX + glyph.OffsetX + shapedGlyph.AdvanceOffset;
+                var y1 = firstBaselineY + glyph.OffsetY - shapedGlyph.AscenderOffset;
+                var x2 = x1 + glyph.Width;
+                var y2 = y1 + glyph.Height;
+                AppendQuad(_vertices, ref vertexCount, x1, y1, x2, y2, glyph, color, viewportWidth, viewportHeight);
+            }
+
+            penX += shapedGlyph.Advance;
+        }
+
+        if (unsupportedReason != GlyphAtlasFallbackReason.None)
+        {
+            vertexCount = batchStart;
+            while (batchCount > 0 && _batches[batchCount - 1].StartVertex >= batchStart)
+            {
+                batchCount--;
+            }
+
+            return false;
+        }
+
+        if (vertexCount > batchSegmentStart && !TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
+        {
+            vertexCount = batchStart;
+            while (batchCount > 0 && _batches[batchCount - 1].StartVertex >= batchStart)
+            {
+                batchCount--;
+            }
+
+            unsupportedReason = GlyphAtlasFallbackReason.BatchLimit;
+            return false;
+        }
+
+        return true;
+    }
+
     private static bool TryMeasureCharacterAdvance(
         CachedFontFace fontFace,
         float emSize,
@@ -658,6 +777,41 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         _diagnostics = _diagnostics.WithCacheMiss();
         if (!RasterizeGlyph(key, fontFace, style.FontSize, glyphAtom, recordSerial, out glyph, out unsupportedReason))
+        {
+            return false;
+        }
+
+        handle = AddGlyphEntry(glyph);
+        _glyphs[key] = handle;
+        _cachedGlyphCount++;
+        _diagnostics = _diagnostics
+            .WithCachedGlyphs(_cachedGlyphCount)
+            .WithUploadedGlyph();
+        return true;
+    }
+
+    private bool TryGetShapedGlyph(
+        CachedFontFace fontFace,
+        TextStyle style,
+        in ShapedGlyph shapedGlyph,
+        long recordSerial,
+        out GlyphEntry glyph,
+        out GlyphAtlasFallbackReason unsupportedReason)
+    {
+        unsupportedReason = GlyphAtlasFallbackReason.None;
+        var glyphAtom = GlyphAtom.ShapedPlacement(
+            shapedGlyph.GlyphIndex,
+            shapedGlyph.IsDiacritic,
+            shapedGlyph.IsZeroWidthSpace);
+        var key = new GlyphKey(fontFace.Key, glyphAtom);
+        if (_glyphs.TryGetValue(key, out var handle) && TryResolveGlyph(handle, recordSerial, out glyph))
+        {
+            _diagnostics = _diagnostics.WithCacheHit();
+            return true;
+        }
+
+        _diagnostics = _diagnostics.WithCacheMiss();
+        if (!RasterizeGlyph(key, fontFace, style.FontSize, shapedGlyph, recordSerial, out glyph, out unsupportedReason))
         {
             return false;
         }
@@ -914,12 +1068,25 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         out GlyphEntry entry,
         out GlyphAtlasFallbackReason unsupportedReason)
     {
+        var shapedGlyph = ShapedGlyph.Simple(glyphAtom.GlyphIndex, ComputeGlyphAdvance(fontFace, emSize, glyphAtom.GlyphIndex));
+        return RasterizeGlyph(key, fontFace, emSize, shapedGlyph, recordSerial, out entry, out unsupportedReason);
+    }
+
+    private bool RasterizeGlyph(
+        GlyphKey key,
+        CachedFontFace fontFace,
+        float emSize,
+        ShapedGlyph shapedGlyph,
+        long recordSerial,
+        out GlyphEntry entry,
+        out GlyphAtlasFallbackReason unsupportedReason)
+    {
         entry = default;
         unsupportedReason = GlyphAtlasFallbackReason.None;
         var glyphIndex = stackalloc ushort[1];
-        glyphIndex[0] = glyphAtom.GlyphIndex;
+        glyphIndex[0] = shapedGlyph.GlyphIndex;
         var advances = stackalloc float[1];
-        advances[0] = ComputeGlyphAdvance(fontFace, emSize, glyphAtom.GlyphIndex);
+        advances[0] = shapedGlyph.Advance;
 
         var offsets = stackalloc DWRITE_GLYPH_OFFSET[1];
         var run = new DWRITE_GLYPH_RUN
@@ -2388,6 +2555,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public bool IsDiacritic { get; } = IsDiacritic;
         public bool IsZeroWidthSpace { get; } = IsZeroWidthSpace;
 
+        public static ShapedGlyph Simple(ushort glyphIndex, float advance) => new(glyphIndex, advance, 0, 0, IsClusterStart: true, IsDiacritic: false, IsZeroWidthSpace: false);
+
         public static ShapedGlyph FromDirectWrite(
             ushort glyphIndex,
             float advance,
@@ -2414,23 +2583,57 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public ReadOnlySpan<ushort> ClusterMap { get; } = ClusterMap;
         public int TextLength { get; } = TextLength;
         public int GlyphCount => Glyphs.Length;
+
+        public float ComputeAdvance()
+        {
+            var width = 0f;
+            foreach (ref readonly var glyph in Glyphs)
+            {
+                width += glyph.Advance;
+            }
+
+            return width;
+        }
+
+        public bool HasMissingGlyph()
+        {
+            foreach (ref readonly var glyph in Glyphs)
+            {
+                if (glyph.GlyphIndex == 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
-    private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex) : IEquatable<GlyphAtom>
+    private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex, byte Flags) : IEquatable<GlyphAtom>
     {
         private const byte SimpleCodePointKind = 1;
+        private const byte ShapedPlacementKind = 2;
+        private const byte DiacriticFlag = 1 << 0;
+        private const byte ZeroWidthSpaceFlag = 1 << 1;
 
         public byte Kind { get; } = Kind;
         public uint CodePoint { get; } = CodePoint;
         public ushort GlyphIndex { get; } = GlyphIndex;
+        public byte Flags { get; } = Flags;
 
-        public static GlyphAtom SimpleCodePoint(uint codePoint, ushort glyphIndex) => new(SimpleCodePointKind, codePoint, glyphIndex);
+        public static GlyphAtom SimpleCodePoint(uint codePoint, ushort glyphIndex) => new(SimpleCodePointKind, codePoint, glyphIndex, Flags: 0);
 
-        public bool Equals(GlyphAtom other) => Kind == other.Kind && CodePoint == other.CodePoint && GlyphIndex == other.GlyphIndex;
+        public static GlyphAtom ShapedPlacement(ushort glyphIndex, bool isDiacritic, bool isZeroWidthSpace)
+        {
+            var flags = (byte)((isDiacritic ? DiacriticFlag : 0) | (isZeroWidthSpace ? ZeroWidthSpaceFlag : 0));
+            return new GlyphAtom(ShapedPlacementKind, 0, glyphIndex, flags);
+        }
+
+        public bool Equals(GlyphAtom other) => Kind == other.Kind && CodePoint == other.CodePoint && GlyphIndex == other.GlyphIndex && Flags == other.Flags;
 
         public override bool Equals(object? obj) => obj is GlyphAtom other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(Kind, CodePoint, GlyphIndex);
+        public override int GetHashCode() => HashCode.Combine(Kind, CodePoint, GlyphIndex, Flags);
     }
 
     private readonly struct GlyphKey(FontFaceKey FontFace, GlyphAtom Glyph) : IEquatable<GlyphKey>

@@ -282,6 +282,19 @@ internal static class GlyphAtlasTextCompositionHelpers
         return checked(textLength + (textLength >> 1) + 16);
     }
 
+    internal static bool ContainsLineBreakOrTab(ReadOnlySpan<char> text)
+    {
+        foreach (var character in text)
+        {
+            if (character is '\r' or '\n' or '\t')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;

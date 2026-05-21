@@ -129,9 +129,10 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
 
             textRuns++;
             var style = resources.ResolveTextStyle(command.Resource).Normalize();
-            var reason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(resources.Resolve(command.Text), style);
+            var text = resources.Resolve(command.Text);
+            var reason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             var hasClip = command.ClipBounds.Width > 0 && command.ClipBounds.Height > 0;
-            if (reason == D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None)
+            if (reason == D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None || CanShapeAsSingleAtlasRun(text, style))
             {
                 atlasCandidateRuns++;
                 if (hasClip)
@@ -170,7 +171,28 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
     {
         return summary.HasDegradedBeforeLaterAtlas
             ? "commands=atlas,degraded,atlas,degraded; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=FalseForDegradedText"
-            : "commands=atlasThenDegraded; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=False";
+            : "commands=atlasOnly; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=False";
+    }
+
+    private static bool CanShapeAsSingleAtlasRun(ReadOnlySpan<char> text, TextStyle style)
+    {
+        return GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style).HasFlag(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
+            && style.Wrapping == TextWrapping.NoWrap
+            && !GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text)
+            && ContainsCombiningMark(text);
+    }
+
+    private static bool ContainsCombiningMark(ReadOnlySpan<char> text)
+    {
+        foreach (var character in text)
+        {
+            if (character is >= '\u0300' and <= '\u036F')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static TextStyle CreateStyle(float fontSize, TextFontWeight weight)

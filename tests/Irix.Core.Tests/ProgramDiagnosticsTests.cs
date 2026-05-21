@@ -80,6 +80,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(16, GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(0));
         Assert.Equal(17, GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(1));
         Assert.Equal(40, GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(16));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("shape".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("line\nbreak".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("tab\tbreak".AsSpan()));
 
         var wrappingStyle = new TextStyle(
             TextStyle.Default.FontFamily,
@@ -561,8 +564,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private long _glyphRecordSerial;", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasEntryHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageHandle(int Index, int Generation)", glyphSource);
-        Assert.Contains("private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex)", glyphSource);
+        Assert.Contains("private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex, byte Flags)", glyphSource);
         Assert.Contains("public static GlyphAtom SimpleCodePoint(uint codePoint, ushort glyphIndex)", glyphSource);
+        Assert.Contains("public static GlyphAtom ShapedPlacement(ushort glyphIndex, bool isDiacritic, bool isZeroWidthSpace)", glyphSource);
         Assert.Contains("private readonly struct GlyphKey(FontFaceKey FontFace, GlyphAtom Glyph)", glyphSource);
         Assert.Contains("private static bool TryMapCharacterToSimpleGlyph(CachedFontFace fontFace, char character, out GlyphAtom glyph)", glyphSource);
         Assert.Contains("GlyphAtom.SimpleCodePoint(codePoint, glyphIndex[0])", glyphSource);
@@ -572,6 +576,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("_textAnalyzer = textAnalyzer;", glyphSource);
         Assert.Contains("private ShapedGlyph[] _shapedGlyphScratch = [];", glyphSource);
         Assert.Contains("private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out ShapedGlyphRun shapedRun)", glyphSource);
+        Assert.Contains("TryBuildShapedAtlasRun(text, textRun, style, shapedRun", glyphSource);
+        Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text)", glyphSource);
+        Assert.Contains("shapedRun.HasMissingGlyph()", glyphSource);
+        Assert.Contains("private bool TryGetShapedGlyph(", glyphSource);
+        Assert.Contains("GlyphAtom.ShapedPlacement(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(text.Length)", glyphSource);
         Assert.Contains("fixed (char* textPtr = text)", glyphSource);
         Assert.Contains("_textAnalyzer->GetGlyphs(", glyphSource);
@@ -592,6 +602,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("ReadOnlySpan<ShapedGlyph> Glyphs", glyphSource);
         Assert.Contains("ReadOnlySpan<ushort> ClusterMap", glyphSource);
         Assert.Contains("public int GlyphCount => Glyphs.Length;", glyphSource);
+        Assert.Contains("public float ComputeAdvance()", glyphSource);
+        Assert.Contains("public bool HasMissingGlyph()", glyphSource);
         Assert.DoesNotContain("string Text", glyphSource);
         Assert.DoesNotContain("string SourceText", glyphSource);
         Assert.Contains("Shape probe font lookup skipped", glyphSource);
@@ -948,16 +960,16 @@ public sealed class ProgramDiagnosticsTests
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
         Assert.Equal(7, summary.TextRuns);
-        Assert.Equal(5, summary.AtlasCandidateRuns);
-        Assert.Equal(2, summary.DegradedCandidateRuns);
+        Assert.Equal(6, summary.AtlasCandidateRuns);
+        Assert.Equal(1, summary.DegradedCandidateRuns);
         Assert.Equal(1, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(1, summary.WrappingFallbackRuns);
-        Assert.Equal(1, summary.NonAsciiFallbackRuns);
-        Assert.Contains("atlasRuns=5", expectedLine);
-        Assert.Contains("degradedRuns=2", expectedLine);
+        Assert.Equal(0, summary.NonAsciiFallbackRuns);
+        Assert.Contains("atlasRuns=6", expectedLine);
+        Assert.Contains("degradedRuns=1", expectedLine);
         Assert.Contains("wrappedAtlasRuns=1", expectedLine);
         Assert.Contains("Wrapping=1", expectedLine);
-        Assert.Contains("NonAscii=1", expectedLine);
+        Assert.Contains("NonAscii=0", expectedLine);
     }
 
     [Fact]
