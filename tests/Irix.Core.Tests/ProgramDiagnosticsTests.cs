@@ -83,6 +83,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("shape".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("line\nbreak".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("tab\tbreak".AsSpan()));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ContainsTab("line\nbreak".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsTab("tab\tbreak".AsSpan()));
 
         var wrappingStyle = new TextStyle(
             TextStyle.Default.FontFamily,
@@ -580,16 +582,19 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("_textAnalyzer = textAnalyzer;", glyphSource);
         Assert.Contains("private ShapedGlyph[] _shapedGlyphScratch = [];", glyphSource);
         Assert.Contains("private ShapedGlyphSegment[] _shapedSegmentScratch = [];", glyphSource);
+        Assert.Contains("private ShapedGlyphLine[] _shapedLineScratch = [];", glyphSource);
         Assert.Contains("private const int MaxShapedRunSegments = 64;", glyphSource);
         Assert.Contains("private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out ShapedGlyphRun shapedRun)", glyphSource);
-        Assert.Contains("private bool TryShapeSegmentedFallbackRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, out ShapedGlyphRun shapedRun)", glyphSource);
+        Assert.Contains("private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, out ShapedGlyphRun shapedRun)", glyphSource);
+        Assert.Contains("private bool TryShapeTextRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
+        Assert.Contains("private bool TryShapeSegmentedFallbackRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("TryShapeTextSegment(", glyphSource);
         Assert.Contains("private bool TryGetCachedFallbackFontFace(IDWriteFont* font, out CachedFontFace fontFace)", glyphSource);
         Assert.Contains("_fontFallback->MapCharacters(", glyphSource);
         Assert.Contains("var fontFace = baseFontFace;", glyphSource);
         Assert.Contains("TryBuildShapedAtlasRun(text, textRun, style, shapedRun", glyphSource);
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
-        Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsTab(text)", glyphSource);
         Assert.Contains("shapedRun.HasMissingGlyph()", glyphSource);
         Assert.Contains("private bool TryGetShapedGlyph(", glyphSource);
         Assert.Contains("GlyphAtom.ShapedPlacement(", glyphSource);
@@ -610,12 +615,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("properties.isDiacritic", glyphSource);
         Assert.Contains("properties.isZeroWidthSpace", glyphSource);
         Assert.Contains("private readonly struct ShapedGlyphSegment(", glyphSource);
+        Assert.Contains("private readonly struct ShapedGlyphLine(", glyphSource);
         Assert.Contains("private readonly ref struct ShapedGlyphRun(", glyphSource);
         Assert.Contains("float FontEmSize", glyphSource);
         Assert.Contains("ReadOnlySpan<ShapedGlyph> Glyphs", glyphSource);
         Assert.Contains("ReadOnlySpan<ShapedGlyphSegment> Segments", glyphSource);
+        Assert.Contains("ReadOnlySpan<ShapedGlyphLine> Lines", glyphSource);
         Assert.Contains("ReadOnlySpan<ushort> ClusterMap", glyphSource);
         Assert.Contains("public int GlyphCount => Glyphs.Length;", glyphSource);
+        Assert.Contains("public int LineCount => Lines.Length;", glyphSource);
         Assert.Contains("public float ComputeAdvance()", glyphSource);
         Assert.Contains("public float ComputeLineHeight()", glyphSource);
         Assert.Contains("public float ComputeAscent()", glyphSource);

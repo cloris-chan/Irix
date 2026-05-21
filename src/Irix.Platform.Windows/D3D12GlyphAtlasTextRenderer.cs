@@ -59,6 +59,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private DWRITE_GLYPH_OFFSET[] _shapeOffsetScratch = [];
     private ShapedGlyph[] _shapedGlyphScratch = [];
     private ShapedGlyphSegment[] _shapedSegmentScratch = [];
+    private ShapedGlyphLine[] _shapedLineScratch = [];
     private int _shapeScratchResizeCount;
     private readonly Vertex[] _vertices = new Vertex[MaxGlyphVertices];
     private readonly GlyphDrawBatch[] _batches = new GlyphDrawBatch[MaxGlyphDrawBatches];
@@ -535,7 +536,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         unsupportedReason = GlyphAtlasFallbackReason.None;
-        if (style.Wrapping != TextWrapping.NoWrap || shapedRun.GlyphCount == 0 || GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text) || shapedRun.HasMissingGlyph())
+        if (style.Wrapping != TextWrapping.NoWrap || shapedRun.LineCount == 0 || GlyphAtlasTextCompositionHelpers.ContainsTab(text) || shapedRun.HasMissingGlyph())
         {
             unsupportedReason = GlyphAtlasFallbackReason.NonAscii;
             return false;
@@ -549,7 +550,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         var lineHeight = shapedRun.ComputeLineHeight();
-        if (!TextMetricsFit(textRun, lineHeight, 1))
+        if (!TextMetricsFit(textRun, lineHeight, shapedRun.LineCount))
         {
             unsupportedReason = GlyphAtlasFallbackReason.Clip;
             return false;
@@ -562,55 +563,67 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        var firstBaselineY = ComputeFirstBaselineY(textRun, style, shapedRun.ComputeAscent(), lineHeight, 1);
+        var firstBaselineY = ComputeFirstBaselineY(textRun, style, shapedRun.ComputeAscent(), lineHeight, shapedRun.LineCount);
         var color = new Vector4(textRun.R, textRun.G, textRun.B, textRun.A);
         var batchStart = vertexCount;
         var batchSegmentStart = vertexCount;
         var batchPage = default(GlyphAtlasPageHandle);
-        var penX = GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(textRun.X, textRun.Width, style.HorizontalAlignment, totalAdvance);
 
-        foreach (ref readonly var shapedSegment in shapedRun.Segments)
+        for (var lineIndex = 0; lineIndex < shapedRun.LineCount; lineIndex++)
         {
-            var segmentGlyphs = shapedRun.Glyphs.Slice(shapedSegment.GlyphStart, shapedSegment.GlyphCount);
-            foreach (ref readonly var shapedGlyph in segmentGlyphs)
+            var line = shapedRun.Lines[lineIndex];
+            var penX = GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(textRun.X, textRun.Width, style.HorizontalAlignment, line.Width);
+            var baselineY = firstBaselineY + lineIndex * lineHeight;
+            var lineSegments = shapedRun.Segments.Slice(line.SegmentStart, line.SegmentCount);
+
+            foreach (ref readonly var shapedSegment in lineSegments)
             {
-                if (!TryGetShapedGlyph(shapedSegment.FontFace, shapedSegment.FontEmSize, shapedGlyph, recordSerial, out var glyph, out unsupportedReason))
+                var segmentGlyphs = shapedRun.Glyphs.Slice(shapedSegment.GlyphStart, shapedSegment.GlyphCount);
+                foreach (ref readonly var shapedGlyph in segmentGlyphs)
                 {
-                    break;
-                }
-
-                if (glyph.Width > 0 && glyph.Height > 0)
-                {
-                    if (batchPage.IsNone)
+                    if (!TryGetShapedGlyph(shapedSegment.FontFace, shapedSegment.FontEmSize, shapedGlyph, recordSerial, out var glyph, out unsupportedReason))
                     {
-                        batchPage = glyph.Page;
-                    }
-                    else if (batchPage != glyph.Page)
-                    {
-                        if (!TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
-                        {
-                            unsupportedReason = GlyphAtlasFallbackReason.BatchLimit;
-                            break;
-                        }
-
-                        batchSegmentStart = vertexCount;
-                        batchPage = glyph.Page;
-                    }
-
-                    if (vertexCount + 6 > MaxGlyphVertices)
-                    {
-                        unsupportedReason = GlyphAtlasFallbackReason.VertexLimit;
                         break;
                     }
 
-                    var x1 = penX + glyph.OffsetX + shapedGlyph.AdvanceOffset;
-                    var y1 = firstBaselineY + glyph.OffsetY - shapedGlyph.AscenderOffset;
-                    var x2 = x1 + glyph.Width;
-                    var y2 = y1 + glyph.Height;
-                    AppendQuad(_vertices, ref vertexCount, x1, y1, x2, y2, glyph, color, viewportWidth, viewportHeight);
+                    if (glyph.Width > 0 && glyph.Height > 0)
+                    {
+                        if (batchPage.IsNone)
+                        {
+                            batchPage = glyph.Page;
+                        }
+                        else if (batchPage != glyph.Page)
+                        {
+                            if (!TryAppendDrawBatch(ref batchCount, ref vertexCount, batchSegmentStart, scissor, batchPage))
+                            {
+                                unsupportedReason = GlyphAtlasFallbackReason.BatchLimit;
+                                break;
+                            }
+
+                            batchSegmentStart = vertexCount;
+                            batchPage = glyph.Page;
+                        }
+
+                        if (vertexCount + 6 > MaxGlyphVertices)
+                        {
+                            unsupportedReason = GlyphAtlasFallbackReason.VertexLimit;
+                            break;
+                        }
+
+                        var x1 = penX + glyph.OffsetX + shapedGlyph.AdvanceOffset;
+                        var y1 = baselineY + glyph.OffsetY - shapedGlyph.AscenderOffset;
+                        var x2 = x1 + glyph.Width;
+                        var y2 = y1 + glyph.Height;
+                        AppendQuad(_vertices, ref vertexCount, x1, y1, x2, y2, glyph, color, viewportWidth, viewportHeight);
+                    }
+
+                    penX += shapedGlyph.Advance;
                 }
 
-                penX += shapedGlyph.Advance;
+                if (unsupportedReason != GlyphAtlasFallbackReason.None)
+                {
+                    break;
+                }
             }
 
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
@@ -1269,39 +1282,92 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        if (!TryShapeRunWithFont(text, fontFace, style.FontSize, out shapedRun))
+        return TryShapeRun(text, style, fontFace, out shapedRun);
+    }
+
+    private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, out ShapedGlyphRun shapedRun)
+    {
+        shapedRun = default;
+        var maxGlyphCount = GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(text.Length);
+        EnsureShapeScratch(text.Length, maxGlyphCount, MaxShapedRunSegments, text.Length + 1);
+
+        var glyphStart = 0;
+        var segmentCount = 0;
+        var lineCount = 0;
+        var index = 0;
+        while (true)
         {
-            return false;
+            var lineStart = index;
+            while (index < text.Length && !GlyphAtlasTextCompositionHelpers.IsLineBreak(text, index, out _))
+            {
+                index++;
+            }
+
+            var lineSegmentStart = segmentCount;
+            var lineGlyphStart = glyphStart;
+            if (!TryShapeTextRange(text, lineStart, index - lineStart, style, baseFontFace, ref glyphStart, ref segmentCount))
+            {
+                return false;
+            }
+
+            _shapedLineScratch[lineCount++] = new ShapedGlyphLine(
+                lineSegmentStart,
+                segmentCount - lineSegmentStart,
+                lineGlyphStart,
+                glyphStart - lineGlyphStart,
+                ComputeShapedGlyphAdvance(lineGlyphStart, glyphStart - lineGlyphStart));
+
+            if (index >= text.Length)
+            {
+                break;
+            }
+
+            GlyphAtlasTextCompositionHelpers.IsLineBreak(text, index, out var lineBreakWidth);
+            index += lineBreakWidth;
+            if (index == text.Length)
+            {
+                _shapedLineScratch[lineCount++] = new ShapedGlyphLine(segmentCount, 0, glyphStart, 0, 0);
+                break;
+            }
         }
 
-        if (!shapedRun.HasMissingGlyph()
-            || !TryShapeSegmentedFallbackRun(text, style, fontFace, out var fallbackRun)
-            || fallbackRun.HasMissingGlyph())
+        shapedRun = new ShapedGlyphRun(
+            _shapedGlyphScratch.AsSpan(0, glyphStart),
+            _shapedSegmentScratch.AsSpan(0, segmentCount),
+            _shapedLineScratch.AsSpan(0, lineCount),
+            _shapeClusterScratch.AsSpan(0, text.Length),
+            text.Length);
+        return true;
+    }
+
+    private bool TryShapeTextRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)
+    {
+        if (textLength == 0)
         {
             return true;
         }
 
-        shapedRun = fallbackRun;
-        return true;
-    }
-
-    private bool TryShapeRunWithFont(ReadOnlySpan<char> text, CachedFontFace fontFace, float fontEmSize, out ShapedGlyphRun shapedRun)
-    {
-        shapedRun = default;
-        var maxGlyphCount = GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(text.Length);
-        EnsureShapeScratch(text.Length, maxGlyphCount, segmentCapacity: 1);
-        if (!TryShapeTextSegment(text, fontFace, fontEmSize, textScratchStart: 0, glyphStart: 0, out var glyphCount))
+        var range = text.Slice(textStart, textLength);
+        var initialGlyphStart = glyphStart;
+        if (!TryShapeTextSegment(range, baseFontFace, style.FontSize, textStart, initialGlyphStart, out var glyphCount))
         {
             return false;
         }
 
-        _shapedSegmentScratch[0] = new ShapedGlyphSegment(fontFace, fontEmSize, TextStart: 0, TextLength: text.Length, GlyphStart: 0, GlyphCount: glyphCount);
-        shapedRun = new ShapedGlyphRun(
-            _shapedGlyphScratch.AsSpan(0, glyphCount),
-            _shapedSegmentScratch.AsSpan(0, 1),
-            _shapeClusterScratch.AsSpan(0, text.Length),
-            text.Length);
-        return true;
+        if (!HasMissingGlyph(initialGlyphStart, glyphCount))
+        {
+            if (segmentCount >= MaxShapedRunSegments)
+            {
+                return false;
+            }
+
+            _shapedSegmentScratch[segmentCount++] = new ShapedGlyphSegment(baseFontFace, style.FontSize, textStart, textLength, initialGlyphStart, glyphCount);
+            glyphStart = initialGlyphStart + glyphCount;
+            return true;
+        }
+
+        glyphStart = initialGlyphStart;
+        return TryShapeSegmentedFallbackRange(text, textStart, textLength, style, baseFontFace, ref glyphStart, ref segmentCount);
     }
 
     private bool TryShapeTextSegment(ReadOnlySpan<char> text, CachedFontFace fontFace, float fontEmSize, int textScratchStart, int glyphStart, out int glyphCount)
@@ -1392,19 +1458,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    private bool TryShapeSegmentedFallbackRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, out ShapedGlyphRun shapedRun)
+    private bool TryShapeSegmentedFallbackRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)
     {
-        shapedRun = default;
-        if (_fontFallback == null || text.IsEmpty || text.Length > ushort.MaxValue)
+        if (_fontFallback == null || textLength == 0 || text.Length > ushort.MaxValue)
         {
             return false;
         }
 
-        var segmentCount = 0;
+        var rangeSegmentStart = segmentCount;
         IDWriteFont* mappedFont = null;
         try
         {
-            EnsureShapeScratch(text.Length, GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(text.Length), MaxShapedRunSegments);
             fixed (char* textPtr = text)
             fixed (char* baseFamilyName = ToDirectWriteFontFamily(style.FontFamily))
             {
@@ -1435,8 +1499,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     Locale = locale
                 };
 
-                var textPosition = 0u;
-                while (textPosition < text.Length)
+                var textPosition = (uint)textStart;
+                var textEnd = (uint)(textStart + textLength);
+                while (textPosition < textEnd)
                 {
                     if (segmentCount >= MaxShapedRunSegments)
                     {
@@ -1448,7 +1513,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     _fontFallback->MapCharacters(
                         (IDWriteTextAnalysisSource*)&source,
                         textPosition,
-                        (uint)text.Length - textPosition,
+                        textEnd - textPosition,
                         _fontCollection,
                         new PCWSTR(baseFamilyName),
                         ToDirectWriteFontWeight(style.FontWeight),
@@ -1458,7 +1523,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         &mappedFont,
                         &scale);
 
-                    if (mappedLength == 0 || mappedLength > (uint)text.Length - textPosition)
+                    if (mappedLength == 0 || mappedLength > textEnd - textPosition)
                     {
                         return false;
                     }
@@ -1477,55 +1542,31 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         mappedFont = null;
                     }
 
+                    var segmentGlyphStart = glyphStart;
+                    if (!TryShapeTextSegment(
+                        text.Slice((int)textPosition, (int)mappedLength),
+                        fontFace,
+                        fontEmSize,
+                        (int)textPosition,
+                        segmentGlyphStart,
+                        out var glyphCount))
+                    {
+                        return false;
+                    }
+
                     _shapedSegmentScratch[segmentCount++] = new ShapedGlyphSegment(
                         fontFace,
                         fontEmSize,
                         (int)textPosition,
                         (int)mappedLength,
-                        GlyphStart: 0,
-                        GlyphCount: 0);
+                        segmentGlyphStart,
+                        glyphCount);
+                    glyphStart = segmentGlyphStart + glyphCount;
                     textPosition += mappedLength;
                 }
             }
 
-            if (segmentCount == 0)
-            {
-                return false;
-            }
-
-            var glyphCapacity = 0;
-            var segments = _shapedSegmentScratch.AsSpan(0, segmentCount);
-            foreach (ref readonly var segment in segments)
-            {
-                glyphCapacity = checked(glyphCapacity + GlyphAtlasTextCompositionHelpers.EstimateShapedGlyphCapacity(segment.TextLength));
-            }
-
-            EnsureShapeScratch(text.Length, glyphCapacity, segmentCount);
-            var glyphStart = 0;
-            for (var i = 0; i < segmentCount; i++)
-            {
-                var segment = _shapedSegmentScratch[i];
-                if (!TryShapeTextSegment(
-                    text.Slice(segment.TextStart, segment.TextLength),
-                    segment.FontFace,
-                    segment.FontEmSize,
-                    segment.TextStart,
-                    glyphStart,
-                    out var glyphCount))
-                {
-                    return false;
-                }
-
-                _shapedSegmentScratch[i] = segment.WithGlyphRange(glyphStart, glyphCount);
-                glyphStart += glyphCount;
-            }
-
-            shapedRun = new ShapedGlyphRun(
-                _shapedGlyphScratch.AsSpan(0, glyphStart),
-                _shapedSegmentScratch.AsSpan(0, segmentCount),
-                _shapeClusterScratch.AsSpan(0, text.Length),
-                text.Length);
-            return true;
+            return segmentCount > rangeSegmentStart;
         }
         catch (COMException ex)
         {
@@ -1589,6 +1630,32 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (face != null) face->Release();
             if (identity != null) identity->Release();
         }
+    }
+
+    private bool HasMissingGlyph(int glyphStart, int glyphCount)
+    {
+        var glyphs = _shapedGlyphScratch.AsSpan(glyphStart, glyphCount);
+        foreach (ref readonly var glyph in glyphs)
+        {
+            if (glyph.GlyphIndex == 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private float ComputeShapedGlyphAdvance(int glyphStart, int glyphCount)
+    {
+        var width = 0f;
+        var glyphs = _shapedGlyphScratch.AsSpan(glyphStart, glyphCount);
+        foreach (ref readonly var glyph in glyphs)
+        {
+            width += glyph.Advance;
+        }
+
+        return width;
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
@@ -1707,7 +1774,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    private void EnsureShapeScratch(int textLength, int glyphCapacity, int segmentCapacity)
+    private void EnsureShapeScratch(int textLength, int glyphCapacity, int segmentCapacity, int lineCapacity)
     {
         var resized = false;
         if (_shapeClusterScratch.Length < textLength)
@@ -1733,6 +1800,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             resized = true;
         }
 
+        if (_shapedLineScratch.Length < lineCapacity)
+        {
+            _shapedLineScratch = new ShapedGlyphLine[lineCapacity];
+            resized = true;
+        }
+
         if (resized)
         {
             _shapeScratchResizeCount++;
@@ -1749,7 +1822,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             + _shapeAdvanceScratch.Length * sizeof(float)
             + _shapeOffsetScratch.Length * sizeof(DWRITE_GLYPH_OFFSET)
             + _shapedGlyphScratch.Length * sizeof(ShapedGlyph)
-            + _shapedSegmentScratch.Length * (IntPtr.Size + sizeof(float) + sizeof(int) * 4));
+            + _shapedSegmentScratch.Length * (IntPtr.Size + sizeof(float) + sizeof(int) * 4)
+            + _shapedLineScratch.Length * (sizeof(int) * 4 + sizeof(float)));
     }
 
     private Span<byte> RentClearTypeScratch(int byteCount)
@@ -3010,8 +3084,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int GlyphStart { get; } = GlyphStart;
         public int GlyphCount { get; } = GlyphCount;
 
-        public ShapedGlyphSegment WithGlyphRange(int glyphStart, int glyphCount) => new(FontFace, FontEmSize, TextStart, TextLength, glyphStart, glyphCount);
-
         public float ComputeLineHeight() => D3D12GlyphAtlasTextRenderer.ComputeLineHeight(FontFace.Metrics, FontEmSize);
 
         public float ComputeAscent()
@@ -3021,24 +3093,36 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
+    private readonly struct ShapedGlyphLine(int SegmentStart, int SegmentCount, int GlyphStart, int GlyphCount, float Width)
+    {
+        public int SegmentStart { get; } = SegmentStart;
+        public int SegmentCount { get; } = SegmentCount;
+        public int GlyphStart { get; } = GlyphStart;
+        public int GlyphCount { get; } = GlyphCount;
+        public float Width { get; } = Width;
+    }
+
     private readonly ref struct ShapedGlyphRun(
         ReadOnlySpan<ShapedGlyph> Glyphs,
         ReadOnlySpan<ShapedGlyphSegment> Segments,
+        ReadOnlySpan<ShapedGlyphLine> Lines,
         ReadOnlySpan<ushort> ClusterMap,
         int TextLength)
     {
         public ReadOnlySpan<ShapedGlyph> Glyphs { get; } = Glyphs;
         public ReadOnlySpan<ShapedGlyphSegment> Segments { get; } = Segments;
+        public ReadOnlySpan<ShapedGlyphLine> Lines { get; } = Lines;
         public ReadOnlySpan<ushort> ClusterMap { get; } = ClusterMap;
         public int TextLength { get; } = TextLength;
         public int GlyphCount => Glyphs.Length;
+        public int LineCount => Lines.Length;
 
         public float ComputeAdvance()
         {
             var width = 0f;
-            foreach (ref readonly var glyph in Glyphs)
+            foreach (ref readonly var line in Lines)
             {
-                width += glyph.Advance;
+                width = Math.Max(width, line.Width);
             }
 
             return width;

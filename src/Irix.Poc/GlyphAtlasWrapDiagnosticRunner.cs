@@ -93,7 +93,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
         var tabbedText = resources.AddText($"tab\tstop {frameIndex:D3}");
         var simpleBmpText = resources.AddText($"cafe \u00E9lan \u0394\u0416 {frameIndex:D3}");
         var hardWordText = resources.AddText($"supercalifragilisticexpialidocious{frameIndex:D3}");
-        var nonAsciiText = resources.AddText($"shape cafe\u0301 {frameIndex:D3}");
+        var nonAsciiText = resources.AddText($"shape cafe\u0301 {frameIndex:D3}\nnext cafe\u0301");
 
         return
         [
@@ -104,7 +104,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             TextRun(24, 304, 190, 42, DrawColor.Opaque(255, 228, 160), tabbedText, noWrapStyle),
             TextRun(24, 364, 220, 42, DrawColor.Opaque(228, 210, 255), simpleBmpText, noWrapStyle),
             TextRun(272, 364, 42, 76, DrawColor.Opaque(255, 198, 128), hardWordText, wrapStyle),
-            TextRun(24, 464, 220, 42, DrawColor.Opaque(255, 160, 220), nonAsciiText, noWrapStyle)
+            TextRun(24, 464, 220, 76, DrawColor.Opaque(255, 160, 220), nonAsciiText, noWrapStyle)
         ];
     }
 
@@ -132,7 +132,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             var reason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             if (reason.HasFlag(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii))
             {
-                if (CanShapeAsSingleAtlasRun(text, style))
+                if (CanShapeAsAtlasRun(text, style))
                 {
                     atlasCandidateRuns++;
                     continue;
@@ -180,10 +180,10 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             && !ContainsSpace(text);
     }
 
-    private static bool CanShapeAsSingleAtlasRun(ReadOnlySpan<char> text, TextStyle style)
+    private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style)
     {
         return style.Wrapping == TextWrapping.NoWrap
-            && !GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab(text)
+            && !GlyphAtlasTextCompositionHelpers.ContainsTab(text)
             && ContainsCombiningMark(text);
     }
 
