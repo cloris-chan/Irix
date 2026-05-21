@@ -38,14 +38,14 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Glyph_atlas_fallback_classifier_accepts_single_line_ascii_and_rejects_known_unsupported_runs()
+    public void Glyph_atlas_fallback_classifier_accepts_simple_bmp_text_and_rejects_known_unsupported_runs()
     {
         Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 123".AsSpan(), TextStyle.Default));
         Assert.Equal(
-            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
-            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 測試".AsSpan(), TextStyle.Default));
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("cafe \u00E9lan".AsSpan(), TextStyle.Default));
         Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Line\nBreak".AsSpan(), TextStyle.Default));
@@ -55,6 +55,17 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Tab\tBreak".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 測試".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("e\u0301 combining".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("emoji \ud83d\ude00".AsSpan(), TextStyle.Default));
+        Assert.True(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u00E9'));
+        Assert.False(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u0301'));
 
         var wrappingStyle = new TextStyle(
             TextStyle.Default.FontFamily,
@@ -877,13 +888,13 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(6, summary.TextRuns);
-        Assert.Equal(4, summary.AtlasCandidateRuns);
+        Assert.Equal(7, summary.TextRuns);
+        Assert.Equal(5, summary.AtlasCandidateRuns);
         Assert.Equal(2, summary.DegradedCandidateRuns);
         Assert.Equal(1, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(1, summary.WrappingFallbackRuns);
         Assert.Equal(1, summary.NonAsciiFallbackRuns);
-        Assert.Contains("atlasRuns=4", expectedLine);
+        Assert.Contains("atlasRuns=5", expectedLine);
         Assert.Contains("degradedRuns=2", expectedLine);
         Assert.Contains("wrappedAtlasRuns=1", expectedLine);
         Assert.Contains("Wrapping=1", expectedLine);

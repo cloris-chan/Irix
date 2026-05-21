@@ -36,7 +36,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatExpectedLine(expected));
-            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True hardWord=True nonAscii=True");
+            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True latin1=True hardWord=True nonAscii=True");
             output.WriteLine();
         }
         finally
@@ -91,6 +91,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
         var wrappedText = resources.AddText($"one two three four {frameIndex:D3}");
         var explicitLineText = resources.AddText($"line A {frameIndex:D3}\nline B");
         var tabbedText = resources.AddText($"tab\tstop {frameIndex:D3}");
+        var latinText = resources.AddText($"cafe \u00E9lan {frameIndex:D3}");
         var hardWordText = resources.AddText($"supercalifragilisticexpialidocious{frameIndex:D3}");
         var nonAsciiText = resources.AddText($"wrap 測試 {frameIndex:D3}");
 
@@ -101,7 +102,8 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             TextRun(24, 104, 118, 76, DrawColor.Opaque(164, 232, 255), wrappedText, wrapStyle),
             TextRun(24, 204, 190, 76, DrawColor.Opaque(184, 240, 180), explicitLineText, noWrapStyle),
             TextRun(24, 304, 190, 42, DrawColor.Opaque(255, 228, 160), tabbedText, noWrapStyle),
-            TextRun(24, 364, 42, 76, DrawColor.Opaque(255, 198, 128), hardWordText, wrapStyle),
+            TextRun(24, 364, 190, 42, DrawColor.Opaque(228, 210, 255), latinText, noWrapStyle),
+            TextRun(272, 364, 42, 76, DrawColor.Opaque(255, 198, 128), hardWordText, wrapStyle),
             TextRun(24, 464, 180, 76, DrawColor.Opaque(255, 160, 220), nonAsciiText, centeredWrapStyle)
         ];
     }

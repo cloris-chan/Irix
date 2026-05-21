@@ -28,13 +28,20 @@ internal static class GlyphAtlasTextCompositionHelpers
     {
         foreach (var character in text)
         {
-            if (character is > '~' || (character < ' ' && character is not '\r' and not '\n' and not '\t'))
+            if (!IsSupportedSimpleGlyphAtlasCharacter(character))
             {
                 return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii;
             }
         }
 
         return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None;
+    }
+
+    internal static bool IsSupportedSimpleGlyphAtlasCharacter(char character)
+    {
+        return character is >= ' ' and <= '~'
+            || character is '\r' or '\n' or '\t'
+            || character is >= '\u00A0' and <= '\u00FF';
     }
 
     internal static D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason PlanLines(

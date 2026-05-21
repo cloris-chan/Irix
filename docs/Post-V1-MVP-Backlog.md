@@ -84,9 +84,9 @@ D3D12 rect pass -> D3D12 glyph atlas text pass -> Present
 
 Phase 1 foundation first kept the overlay path as the default runtime behavior and added only an internal composition seam. After opt-in smoke evidence, the post-GA renderer-foundation baseline now defaults to `GlyphAtlas`; the D3D11On12/D2D overlay renderer and explicit overlay mode have now been removed. DirectWrite remains allowed for shaping, glyph metrics, and glyph bitmap source data. This phase does not change public API or `IDrawingBackend.Execute`.
 
-The first atlas execution path records a D3D12 glyph pass for basic ASCII runs, uses an `R8_UNORM` atlas, and supports leading/center/trailing alignment plus per-run scissor for accepted runs. `NoWrap` clips over-wide line segments and accepts explicit CR/LF line breaks plus tab spacing; `Wrap` accepts minimal ASCII whitespace-based multi-line layout when every word and line stack fits.
+The first atlas execution path records a D3D12 glyph pass for basic ASCII plus simple Latin-1 BMP runs, uses an `R8_UNORM` atlas, and supports leading/center/trailing alignment plus per-run scissor for accepted runs. `NoWrap` clips over-wide line segments and accepts explicit CR/LF line breaks plus tab spacing; `Wrap` accepts minimal whitespace-based multi-line layout when every word and line stack fits.
 It now uses non-overlay degradation so unsupported renderable text runs do not force either whole-frame overlay or mixed overlay fallback.
-Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, explicit ASCII line breaks, ASCII tab spacing, minimal ASCII wrap acceptance plus hard-wrap degradation, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
+Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, explicit ASCII line breaks, ASCII tab spacing, Latin-1 atlas acceptance, minimal wrap acceptance plus hard-wrap degradation, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
 Current default GlyphAtlas behavior degrades unsupported and initialization/upload/record-failed renderable text runs without invoking overlay.
 Full shaping, hyphenation/complex wrapping, color glyphs, fallback font identity, eviction, command-order-perfect mixed text z-order, and production enablement remain follow-up work.
 
@@ -132,7 +132,7 @@ Do not keep expanding the ASCII prototype surface or flip another runtime defaul
 | Task | Entry File | Acceptance Criteria | Status |
 |------|------------|---------------------|--------|
 | Glyph atlas design doc | `Glyph-Atlas-Post-GA-Design.md` | Atlas architecture and migration plan accepted | ✅ Drafted |
-| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype; overlay renderer removed |
+| D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/simple Latin-1 text runs from atlas in D3D12-only pass | ✅ Default-on prototype; overlay renderer removed |
 | Shader/resource lifetime hardening | Windows D3D12 renderers | Runtime shader compile removed; failure diagnostics split; upload maps, swapchain/overlay intermediates, core resource init/release paths, and frame-slot upload buffers are guarded | ✅ First pass done |
 | Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
 | Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the corrected frame-scoped warm scroll allocation before optimizing | ✅ Attribution added; latest scroll sample about `2.8 KB/frame` |
