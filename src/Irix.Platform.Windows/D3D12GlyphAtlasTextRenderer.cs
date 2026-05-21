@@ -176,7 +176,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null))
             {
                 throw CreateRecordException(
-                    GlyphAtlasRecordFailurePhase.Record,
+                    GlyphAtlasRecordFailurePhase.DirectWrite,
                     "D3D12GlyphAtlasTextRenderer.TryRecord found missing DirectWrite resources.");
             }
 
@@ -482,7 +482,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         advance = 0;
         var codePoint = (uint)character;
         var glyphIndex = stackalloc ushort[1];
-        fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
+        try
+        {
+            fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
+        }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.GetGlyphIndices(measure)",
+                ex);
+        }
+
         if (glyphIndex[0] == 0 && character != ' ')
         {
             return false;
@@ -542,7 +553,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (!GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(fontFace.Face != null))
             {
                 throw CreateRecordException(
-                    GlyphAtlasRecordFailurePhase.Record,
+                    GlyphAtlasRecordFailurePhase.DirectWrite,
                     "D3D12GlyphAtlasTextRenderer.TryGetFontFace found a missing cached font face.");
             }
 
@@ -566,16 +577,30 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             _fontCollection->GetFontFamily(familyIndex, &family);
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(family != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.DirectWrite,
+                    "D3D12GlyphAtlasTextRenderer.TryGetFontFace found a missing DirectWrite font family.");
+            }
+
             family->GetFirstMatchingFont(
                 ToDirectWriteFontWeight(style.FontWeight),
                 ToDirectWriteFontStretch(style.FontStretch),
                 ToDirectWriteFontStyle(style.FontStyle),
                 &font);
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphFontResource(font != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.DirectWrite,
+                    "D3D12GlyphAtlasTextRenderer.TryGetFontFace found a missing DirectWrite font.");
+            }
+
             font->CreateFontFace(&face);
             if (!GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(face != null))
             {
                 throw CreateRecordException(
-                    GlyphAtlasRecordFailurePhase.Record,
+                    GlyphAtlasRecordFailurePhase.DirectWrite,
                     "D3D12GlyphAtlasTextRenderer.TryGetFontFace found a missing DirectWrite font face.");
             }
 
@@ -584,6 +609,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             _fontFaces.Add(key, fontFace);
             face = null;
             return true;
+        }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.TryGetFontFace",
+                ex);
         }
         finally
         {
@@ -863,7 +895,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         unsupportedReason = GlyphAtlasFallbackReason.None;
         var codePoint = (uint)character;
         var glyphIndex = stackalloc ushort[1];
-        fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
+        try
+        {
+            fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
+        }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.GetGlyphIndices(rasterize)",
+                ex);
+        }
+
         if (glyphIndex[0] == 0 && character != ' ')
         {
             unsupportedReason = GlyphAtlasFallbackReason.FontMissing;
@@ -902,7 +945,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (!GlyphAtlasTextCompositionHelpers.HasGlyphRunAnalysisResource(analysis != null))
             {
                 throw CreateRecordException(
-                    GlyphAtlasRecordFailurePhase.Record,
+                    GlyphAtlasRecordFailurePhase.DirectWrite,
                     "D3D12GlyphAtlasTextRenderer.RasterizeGlyph found a missing DirectWrite glyph run analysis.");
             }
 
@@ -962,6 +1005,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             MarkAtlasDirty(atlasPage, atlasX, atlasY, width, height);
             return true;
         }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.RasterizeGlyph",
+                ex);
+        }
         finally
         {
             if (analysis != null) analysis->Release();
@@ -995,7 +1045,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var glyphIndices = stackalloc ushort[1];
         glyphIndices[0] = glyphIndex;
         var glyphMetrics = stackalloc DWRITE_GLYPH_METRICS[1];
-        fontFace.Face->GetDesignGlyphMetrics(new ReadOnlySpan<ushort>(glyphIndices, 1), new Span<DWRITE_GLYPH_METRICS>(glyphMetrics, 1), false);
+        try
+        {
+            fontFace.Face->GetDesignGlyphMetrics(new ReadOnlySpan<ushort>(glyphIndices, 1), new Span<DWRITE_GLYPH_METRICS>(glyphMetrics, 1), false);
+        }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.GetDesignGlyphMetrics",
+                ex);
+        }
+
         return glyphMetrics[0].advanceWidth * emSize / fontFace.Metrics.designUnitsPerEm;
     }
 
@@ -1952,6 +2013,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         None,
         Record,
+        DirectWrite,
         VertexBufferMap,
         AtlasUploadMap
     }

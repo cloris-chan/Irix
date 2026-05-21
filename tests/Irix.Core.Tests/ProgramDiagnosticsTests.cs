@@ -318,6 +318,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFontCollection: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: false));
+        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(hasFontFamily: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(hasFontFamily: false));
+        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontResource(hasFont: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphFontResource(hasFont: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphRunAnalysisResource(hasGlyphRunAnalysis: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphRunAnalysisResource(hasGlyphRunAnalysis: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphVertexUploadResource(hasVertexUploadBuffer: true));
@@ -585,12 +589,16 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(list != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(fontFace.Face != null)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(family != null)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontResource(font != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(face != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphRunAnalysisResource(analysis != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphVertexUploadResource(vbuf != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(page.Texture != null, upload != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null, _rootSig != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null)", glyphSource);
+        Assert.Contains("DirectWrite,", glyphSource);
+        Assert.Contains("GlyphAtlasRecordFailurePhase.DirectWrite", glyphSource);
         Assert.Contains("public int UsedPixels { get; set; }", glyphSource);
         Assert.Contains("public int AllocatedPixels { get; set; }", glyphSource);
         Assert.Contains("public long LastUsedSerial { get; private set; }", glyphSource);
@@ -723,6 +731,32 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("degradedRuns=1", summary);
         Assert.Contains("initFailurePhase=None", summary);
         Assert.Contains("recordFailurePhase=Record", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_diagnostics_summary_reports_directwrite_record_failure_phase()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithDegradation(2, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
+            .WithRecordFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.DirectWrite);
+
+        var summary = diagnostics.FormatSummary();
+
+        Assert.Contains("RecordFailed=2", summary);
+        Assert.Contains("degradedRuns=2", summary);
+        Assert.Contains("recordFailurePhase=DirectWrite", summary);
     }
 
     [Fact]

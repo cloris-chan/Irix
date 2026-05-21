@@ -254,6 +254,16 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasFontFace;
     }
 
+    internal static bool HasGlyphFontFamilyResource(bool hasFontFamily)
+    {
+        return hasFontFamily;
+    }
+
+    internal static bool HasGlyphFontResource(bool hasFont)
+    {
+        return hasFont;
+    }
+
     internal static bool HasGlyphRunAnalysisResource(bool hasGlyphRunAnalysis)
     {
         return hasGlyphRunAnalysis;
