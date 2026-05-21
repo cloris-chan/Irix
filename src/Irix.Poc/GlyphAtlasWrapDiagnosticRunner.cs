@@ -36,7 +36,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatExpectedLine(expected));
-            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True shapedWrap=True ltrComplex=True");
+            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True shapedWrap=True ltrComplex=True rtlNoWrap=True");
             output.WriteLine();
         }
         finally
@@ -194,8 +194,10 @@ internal static class GlyphAtlasWrapDiagnosticRunner
 
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style, float width)
     {
-        return !GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate(text)
-            && (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text) || ContainsCombiningMark(text) || GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
+        return (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)
+                || ContainsCombiningMark(text)
+                || GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
+            && (!GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate(text) || style.Wrapping == TextWrapping.NoWrap)
             && (style.Wrapping == TextWrapping.NoWrap || (style.Wrapping == TextWrapping.Wrap && width >= 96 && ContainsWrapWhitespace(text)));
     }
 

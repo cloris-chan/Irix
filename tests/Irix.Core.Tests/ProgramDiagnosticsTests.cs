@@ -625,6 +625,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private DWRITE_SCRIPT_ANALYSIS[] _shapeScriptScratch = [];", glyphSource);
         Assert.Contains("private byte[] _shapeBidiLevelScratch = [];", glyphSource);
         Assert.Contains("private bool HasRightToLeftBidiLevel(int textStart, int textLength)", glyphSource);
+        Assert.Contains("private bool TryGetUniformBidiLevel(int textStart, int textLength, out byte bidiLevel)", glyphSource);
+        Assert.Contains("public byte BidiLevel { get; } = BidiLevel;", glyphSource);
+        Assert.Contains("public bool IsRightToLeft => (BidiLevel & 1) != 0;", glyphSource);
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
         Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
@@ -1040,20 +1043,20 @@ public sealed class ProgramDiagnosticsTests
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
         Assert.Equal(10, summary.TextRuns);
-        Assert.Equal(9, summary.AtlasCandidateRuns);
-        Assert.Equal(1, summary.DegradedCandidateRuns);
+        Assert.Equal(10, summary.AtlasCandidateRuns);
+        Assert.Equal(0, summary.DegradedCandidateRuns);
         Assert.Equal(3, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(0, summary.WrappingFallbackRuns);
-        Assert.Equal(1, summary.NonAsciiFallbackRuns);
+        Assert.Equal(0, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
-        Assert.Equal(1, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=9", expectedLine);
-        Assert.Contains("degradedRuns=1", expectedLine);
+        Assert.Equal(0, summary.ComplexScriptFallbackRuns);
+        Assert.Contains("atlasRuns=10", expectedLine);
+        Assert.Contains("degradedRuns=0", expectedLine);
         Assert.Contains("wrappedAtlasRuns=3", expectedLine);
         Assert.Contains("Wrapping=0", expectedLine);
-        Assert.Contains("NonAscii=1", expectedLine);
+        Assert.Contains("NonAscii=0", expectedLine);
         Assert.Contains("ColorGlyph=0", expectedLine);
-        Assert.Contains("ComplexScript=1", expectedLine);
+        Assert.Contains("ComplexScript=0", expectedLine);
     }
 
     [Fact]
