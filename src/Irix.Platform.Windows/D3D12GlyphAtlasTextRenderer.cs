@@ -1285,11 +1285,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         if (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text))
         {
+            unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
             return false;
         }
 
         if (GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
         {
+            unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ComplexScript;
             return false;
         }
 
@@ -3094,11 +3096,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         CompileFailed = 1 << 7,
         BatchLimit = 1 << 8,
         InitializationFailed = 1 << 9,
-        RecordFailed = 1 << 10
+        RecordFailed = 1 << 10,
+        ColorGlyph = 1 << 11,
+        ComplexScript = 1 << 12
     }
 
     public readonly struct GlyphAtlasFallbackReasonCounts(
         int NonAscii,
+        int ColorGlyph,
+        int ComplexScript,
         int Clip,
         int Wrapping,
         int Alignment,
@@ -3111,6 +3117,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int RecordFailed) : IEquatable<GlyphAtlasFallbackReasonCounts>
     {
         public int NonAscii { get; } = NonAscii;
+        public int ColorGlyph { get; } = ColorGlyph;
+        public int ComplexScript { get; } = ComplexScript;
         public int Clip { get; } = Clip;
         public int Wrapping { get; } = Wrapping;
         public int Alignment { get; } = Alignment;
@@ -3126,6 +3134,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             return new GlyphAtlasFallbackReasonCounts(
                 NonAscii + (reason.HasFlag(GlyphAtlasFallbackReason.NonAscii) ? 1 : 0),
+                ColorGlyph + (reason.HasFlag(GlyphAtlasFallbackReason.ColorGlyph) ? 1 : 0),
+                ComplexScript + (reason.HasFlag(GlyphAtlasFallbackReason.ComplexScript) ? 1 : 0),
                 Clip + (reason.HasFlag(GlyphAtlasFallbackReason.Clip) ? 1 : 0),
                 Wrapping + (reason.HasFlag(GlyphAtlasFallbackReason.Wrapping) ? 1 : 0),
                 Alignment + (reason.HasFlag(GlyphAtlasFallbackReason.Alignment) ? 1 : 0),
@@ -3142,6 +3152,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             return new GlyphAtlasFallbackReasonCounts(
                 NonAscii + other.NonAscii,
+                ColorGlyph + other.ColorGlyph,
+                ComplexScript + other.ComplexScript,
                 Clip + other.Clip,
                 Wrapping + other.Wrapping,
                 Alignment + other.Alignment,
@@ -3157,6 +3169,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public bool Equals(GlyphAtlasFallbackReasonCounts other)
         {
             return NonAscii == other.NonAscii
+                && ColorGlyph == other.ColorGlyph
+                && ComplexScript == other.ComplexScript
                 && Clip == other.Clip
                 && Wrapping == other.Wrapping
                 && Alignment == other.Alignment
@@ -3175,6 +3189,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             var hash = new HashCode();
             hash.Add(NonAscii);
+            hash.Add(ColorGlyph);
+            hash.Add(ComplexScript);
             hash.Add(Clip);
             hash.Add(Wrapping);
             hash.Add(Alignment);
@@ -3190,7 +3206,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         public override string ToString()
         {
-            return $"NonAscii={NonAscii}, Clip={Clip}, Wrapping={Wrapping}, Alignment={Alignment}, AtlasFull={AtlasFull}, VertexLimit={VertexLimit}, "
+            return $"NonAscii={NonAscii}, ColorGlyph={ColorGlyph}, ComplexScript={ComplexScript}, Clip={Clip}, Wrapping={Wrapping}, Alignment={Alignment}, AtlasFull={AtlasFull}, VertexLimit={VertexLimit}, "
                 + $"FontMissing={FontMissing}, CompileFailed={CompileFailed}, BatchLimit={BatchLimit}, InitializationFailed={InitializationFailed}, RecordFailed={RecordFailed}";
         }
     }

@@ -122,6 +122,8 @@ internal static class GlyphAtlasWrapDiagnosticRunner
         var wrappedAtlasCandidateRuns = 0;
         var wrappingFallbackRuns = 0;
         var nonAsciiFallbackRuns = 0;
+        var colorGlyphFallbackRuns = 0;
+        var complexScriptFallbackRuns = 0;
 
         foreach (var command in commands)
         {
@@ -149,6 +151,16 @@ internal static class GlyphAtlasWrapDiagnosticRunner
 
                 degradedCandidateRuns++;
                 nonAsciiFallbackRuns++;
+                if (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text))
+                {
+                    colorGlyphFallbackRuns++;
+                }
+
+                if (GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
+                {
+                    complexScriptFallbackRuns++;
+                }
+
                 continue;
             }
 
@@ -172,14 +184,17 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             degradedCandidateRuns,
             wrappedAtlasCandidateRuns,
             wrappingFallbackRuns,
-            nonAsciiFallbackRuns);
+            nonAsciiFallbackRuns,
+            colorGlyphFallbackRuns,
+            complexScriptFallbackRuns);
     }
 
     internal static string FormatExpectedLine(GlyphAtlasWrapSceneSummary summary)
     {
         return $"Expected GlyphAtlas per frame: textRuns={summary.TextRuns}, atlasRuns={summary.AtlasCandidateRuns}, "
             + $"degradedRuns={summary.DegradedCandidateRuns}, wrappedAtlasRuns={summary.WrappedAtlasCandidateRuns}, "
-            + $"Wrapping={summary.WrappingFallbackRuns}, NonAscii={summary.NonAsciiFallbackRuns}";
+            + $"Wrapping={summary.WrappingFallbackRuns}, NonAscii={summary.NonAsciiFallbackRuns}, "
+            + $"ColorGlyph={summary.ColorGlyphFallbackRuns}, ComplexScript={summary.ComplexScriptFallbackRuns}";
     }
 
     private static bool IsHardWrapCandidate(ReadOnlySpan<char> text, TextStyle style, float width)
@@ -283,7 +298,9 @@ internal readonly struct GlyphAtlasWrapSceneSummary(
     int DegradedCandidateRuns,
     int WrappedAtlasCandidateRuns,
     int WrappingFallbackRuns,
-    int NonAsciiFallbackRuns) : IEquatable<GlyphAtlasWrapSceneSummary>
+    int NonAsciiFallbackRuns,
+    int ColorGlyphFallbackRuns,
+    int ComplexScriptFallbackRuns) : IEquatable<GlyphAtlasWrapSceneSummary>
 {
     public int TextRuns { get; } = TextRuns;
     public int AtlasCandidateRuns { get; } = AtlasCandidateRuns;
@@ -291,6 +308,8 @@ internal readonly struct GlyphAtlasWrapSceneSummary(
     public int WrappedAtlasCandidateRuns { get; } = WrappedAtlasCandidateRuns;
     public int WrappingFallbackRuns { get; } = WrappingFallbackRuns;
     public int NonAsciiFallbackRuns { get; } = NonAsciiFallbackRuns;
+    public int ColorGlyphFallbackRuns { get; } = ColorGlyphFallbackRuns;
+    public int ComplexScriptFallbackRuns { get; } = ComplexScriptFallbackRuns;
 
     public bool Equals(GlyphAtlasWrapSceneSummary other)
     {
@@ -299,7 +318,9 @@ internal readonly struct GlyphAtlasWrapSceneSummary(
             && DegradedCandidateRuns == other.DegradedCandidateRuns
             && WrappedAtlasCandidateRuns == other.WrappedAtlasCandidateRuns
             && WrappingFallbackRuns == other.WrappingFallbackRuns
-            && NonAsciiFallbackRuns == other.NonAsciiFallbackRuns;
+            && NonAsciiFallbackRuns == other.NonAsciiFallbackRuns
+            && ColorGlyphFallbackRuns == other.ColorGlyphFallbackRuns
+            && ComplexScriptFallbackRuns == other.ComplexScriptFallbackRuns;
     }
 
     public override bool Equals(object? obj) => obj is GlyphAtlasWrapSceneSummary other && Equals(other);
@@ -312,7 +333,9 @@ internal readonly struct GlyphAtlasWrapSceneSummary(
             DegradedCandidateRuns,
             WrappedAtlasCandidateRuns,
             WrappingFallbackRuns,
-            NonAsciiFallbackRuns);
+            NonAsciiFallbackRuns,
+            ColorGlyphFallbackRuns,
+            ComplexScriptFallbackRuns);
     }
 
     public static bool operator ==(GlyphAtlasWrapSceneSummary left, GlyphAtlasWrapSceneSummary right) => left.Equals(right);

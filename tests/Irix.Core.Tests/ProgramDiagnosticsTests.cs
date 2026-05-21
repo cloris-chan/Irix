@@ -818,6 +818,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("degradedRuns=0", summary);
         Assert.Contains("fallbacks=2", summary);
         Assert.Contains("NonAscii=1", summary);
+        Assert.Contains("ColorGlyph=0", summary);
+        Assert.Contains("ComplexScript=0", summary);
         Assert.Contains("initFailurePhase=ShaderCompile", summary);
         Assert.Contains("recordFailurePhase=None", summary);
         Assert.Contains("RecordFailed=0", summary);
@@ -966,12 +968,15 @@ public sealed class ProgramDiagnosticsTests
             RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
             RasterScratchBytes: 0,
             RasterScratchResizes: 0)
-            .WithDegradation(3, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii);
+            .WithDegradation(2, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph)
+            .WithDegradation(1, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ComplexScript);
 
-        Assert.Equal(1, diagnostics.FallbackFrames);
+        Assert.Equal(2, diagnostics.FallbackFrames);
         Assert.Equal(3, diagnostics.UnsupportedRuns);
         Assert.Equal(3, diagnostics.DegradedRuns);
         Assert.Equal(3, diagnostics.Reasons.NonAscii);
+        Assert.Equal(2, diagnostics.Reasons.ColorGlyph);
+        Assert.Equal(1, diagnostics.Reasons.ComplexScript);
     }
 
     [Fact]
@@ -1011,11 +1016,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(2, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(1, summary.WrappingFallbackRuns);
         Assert.Equal(2, summary.NonAsciiFallbackRuns);
+        Assert.Equal(1, summary.ColorGlyphFallbackRuns);
+        Assert.Equal(1, summary.ComplexScriptFallbackRuns);
         Assert.Contains("atlasRuns=6", expectedLine);
         Assert.Contains("degradedRuns=3", expectedLine);
         Assert.Contains("wrappedAtlasRuns=2", expectedLine);
         Assert.Contains("Wrapping=1", expectedLine);
         Assert.Contains("NonAscii=2", expectedLine);
+        Assert.Contains("ColorGlyph=1", expectedLine);
+        Assert.Contains("ComplexScript=1", expectedLine);
     }
 
     [Fact]
@@ -1747,7 +1756,7 @@ public sealed class ProgramDiagnosticsTests
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
             "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
-                + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
+                + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, ColorGlyph=0, ComplexScript=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
             "=== Resize diagnostic mode complete ===",
