@@ -913,12 +913,37 @@ public sealed class ProgramDiagnosticsTests
             RetainedApplyBytes: 120,
             ViewportBytes: 0,
             PipelineBuildBytes: 600,
-            FeedbackBytes: 180);
+            FeedbackBytes: 180,
+            PipelineAttribution: new RenderPipelineBuildAllocationAttribution(
+                ClassificationBytes: 12,
+                LayoutBytes: 24,
+                RecordBytes: 36,
+                HitTargetsBytes: 48,
+                SnapshotBytes: 60,
+                RetainedFrameBytes: 72));
 
         var summary = TextCacheAllocationDiagnosticRunner.FormatTranslateAllocationAttribution(attribution, frameCount: 3);
 
         Assert.Equal(
             "Translate allocation: retainedApply=120 bytes (40/frame), viewport=0 bytes (0/frame), pipeline=600 bytes (200/frame), feedback=180 bytes (60/frame), measuredTotal=900 bytes (300/frame)",
+            summary);
+    }
+
+    [Fact]
+    public void Text_cache_pipeline_allocation_attribution_formatter_outputs_stable_stage_fields()
+    {
+        var attribution = new RenderPipelineBuildAllocationAttribution(
+            ClassificationBytes: 12,
+            LayoutBytes: 24,
+            RecordBytes: 36,
+            HitTargetsBytes: 48,
+            SnapshotBytes: 60,
+            RetainedFrameBytes: 72);
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatPipelineAllocationAttribution(attribution, frameCount: 3);
+
+        Assert.Equal(
+            "Pipeline allocation: classify=12 bytes (4/frame), layout=24 bytes (8/frame), record=36 bytes (12/frame), hitTargets=48 bytes (16/frame), snapshot=60 bytes (20/frame), retainedFrame=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
             summary);
     }
 
@@ -933,6 +958,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());", source);
         Assert.Contains("using var batch = translator.Translate(patch, out var translateFrameAttribution);", source);
         Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
+        Assert.Contains("output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));", source);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
     }
 

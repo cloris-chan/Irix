@@ -144,6 +144,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine($"Allocation: total={allocatedBytes} bytes, perFrame={(frameCount > 0 ? allocatedBytes / frameCount : 0)} bytes");
         output.WriteLine(FormatAllocationAttribution(attribution, frameCount));
         output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));
+        output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));
         output.WriteLine($"FrameDrawingResources: rents={poolDelta.RentCount}, created={poolDelta.CreatedCount}, reused={poolDelta.ReusedCount}, returns={poolDelta.ReturnCallCount}, returnedToPool={poolDelta.ReturnedToPoolCount}, retainedSkips={poolDelta.RetainedReturnSkipCount}, duplicateSkips={poolDelta.DuplicateReturnSkipCount}, staleSkips={poolDelta.StaleReturnSkipCount}, overflowDisposals={poolDelta.DisposedOverflowCount}, poolCount={poolDelta.PoolCount}");
         output.WriteLine();
     }
@@ -158,6 +159,12 @@ internal static class TextCacheAllocationDiagnosticRunner
     {
         var divisor = frameCount > 0 ? frameCount : 0;
         return $"Translate allocation: retainedApply={attribution.RetainedApplyBytes} bytes ({PerFrame(attribution.RetainedApplyBytes, divisor)}/frame), viewport={attribution.ViewportBytes} bytes ({PerFrame(attribution.ViewportBytes, divisor)}/frame), pipeline={attribution.PipelineBuildBytes} bytes ({PerFrame(attribution.PipelineBuildBytes, divisor)}/frame), feedback={attribution.FeedbackBytes} bytes ({PerFrame(attribution.FeedbackBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+    }
+
+    internal static string FormatPipelineAllocationAttribution(RenderPipelineBuildAllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return $"Pipeline allocation: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     private static long PerFrame(long bytes, int frameCount) => frameCount > 0 ? bytes / frameCount : 0;

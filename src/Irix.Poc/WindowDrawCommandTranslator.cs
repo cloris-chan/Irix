@@ -121,10 +121,23 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         attribution = attribution.WithViewport(AllocatedDelta(measureAllocation, beforeViewport));
 
         var beforePipeline = GetAllocatedBytes(measureAllocation);
-        var batch = _ownerFeed is not null
-            ? _ownerFeed.Build(_retainedTree.Tree.Root, viewport, textSnapshot, dirty, prevTextSnapshot, previousRoot)
-            : _renderPipeline.Build(_retainedTree.Tree.Root, viewport, textSnapshot, dirty, prevTextSnapshot, previousRoot);
+        RenderFrameBatch batch;
+        var pipelineAttribution = default(RenderPipelineBuildAllocationAttribution);
+        if (_ownerFeed is not null)
+        {
+            batch = _ownerFeed.Build(_retainedTree.Tree.Root, viewport, textSnapshot, dirty, prevTextSnapshot, previousRoot);
+        }
+        else if (measureAllocation)
+        {
+            batch = _renderPipeline.Build(_retainedTree.Tree.Root, viewport, textSnapshot, dirty, prevTextSnapshot, previousRoot, out pipelineAttribution);
+        }
+        else
+        {
+            batch = _renderPipeline.Build(_retainedTree.Tree.Root, viewport, textSnapshot, dirty, prevTextSnapshot, previousRoot);
+        }
+
         attribution = attribution.WithPipelineBuild(AllocatedDelta(measureAllocation, beforePipeline));
+        attribution = attribution.WithPipelineAttribution(pipelineAttribution);
 
         var beforeFeedback = GetAllocatedBytes(measureAllocation);
         LastScrollFeedback = BuildScrollFeedback(_renderPipeline.LastLayoutResult);
@@ -173,12 +186,14 @@ internal readonly struct WindowTranslateAllocationAttribution(
     long RetainedApplyBytes,
     long ViewportBytes,
     long PipelineBuildBytes,
-    long FeedbackBytes) : IEquatable<WindowTranslateAllocationAttribution>
+    long FeedbackBytes,
+    RenderPipelineBuildAllocationAttribution PipelineAttribution = default) : IEquatable<WindowTranslateAllocationAttribution>
 {
     public long RetainedApplyBytes { get; } = RetainedApplyBytes;
     public long ViewportBytes { get; } = ViewportBytes;
     public long PipelineBuildBytes { get; } = PipelineBuildBytes;
     public long FeedbackBytes { get; } = FeedbackBytes;
+    public RenderPipelineBuildAllocationAttribution PipelineAttribution { get; } = PipelineAttribution;
     public long TotalBytes => RetainedApplyBytes + ViewportBytes + PipelineBuildBytes + FeedbackBytes;
 
     public WindowTranslateAllocationAttribution Add(WindowTranslateAllocationAttribution other) =>
@@ -186,22 +201,26 @@ internal readonly struct WindowTranslateAllocationAttribution(
             RetainedApplyBytes + other.RetainedApplyBytes,
             ViewportBytes + other.ViewportBytes,
             PipelineBuildBytes + other.PipelineBuildBytes,
-            FeedbackBytes + other.FeedbackBytes);
+            FeedbackBytes + other.FeedbackBytes,
+            PipelineAttribution.Add(other.PipelineAttribution));
 
-    public WindowTranslateAllocationAttribution WithRetainedApply(long bytes) => new(RetainedApplyBytes + bytes, ViewportBytes, PipelineBuildBytes, FeedbackBytes);
+    public WindowTranslateAllocationAttribution WithRetainedApply(long bytes) => new(RetainedApplyBytes + bytes, ViewportBytes, PipelineBuildBytes, FeedbackBytes, PipelineAttribution);
 
-    public WindowTranslateAllocationAttribution WithViewport(long bytes) => new(RetainedApplyBytes, ViewportBytes + bytes, PipelineBuildBytes, FeedbackBytes);
+    public WindowTranslateAllocationAttribution WithViewport(long bytes) => new(RetainedApplyBytes, ViewportBytes + bytes, PipelineBuildBytes, FeedbackBytes, PipelineAttribution);
 
-    public WindowTranslateAllocationAttribution WithPipelineBuild(long bytes) => new(RetainedApplyBytes, ViewportBytes, PipelineBuildBytes + bytes, FeedbackBytes);
+    public WindowTranslateAllocationAttribution WithPipelineBuild(long bytes) => new(RetainedApplyBytes, ViewportBytes, PipelineBuildBytes + bytes, FeedbackBytes, PipelineAttribution);
 
-    public WindowTranslateAllocationAttribution WithFeedback(long bytes) => new(RetainedApplyBytes, ViewportBytes, PipelineBuildBytes, FeedbackBytes + bytes);
+    public WindowTranslateAllocationAttribution WithFeedback(long bytes) => new(RetainedApplyBytes, ViewportBytes, PipelineBuildBytes, FeedbackBytes + bytes, PipelineAttribution);
+
+    public WindowTranslateAllocationAttribution WithPipelineAttribution(RenderPipelineBuildAllocationAttribution attribution) => new(RetainedApplyBytes, ViewportBytes, PipelineBuildBytes, FeedbackBytes, PipelineAttribution.Add(attribution));
 
     public bool Equals(WindowTranslateAllocationAttribution other)
     {
         return RetainedApplyBytes == other.RetainedApplyBytes
             && ViewportBytes == other.ViewportBytes
             && PipelineBuildBytes == other.PipelineBuildBytes
-            && FeedbackBytes == other.FeedbackBytes;
+            && FeedbackBytes == other.FeedbackBytes
+            && PipelineAttribution.Equals(other.PipelineAttribution);
     }
 
     public override bool Equals(object? obj) => obj is WindowTranslateAllocationAttribution other && Equals(other);

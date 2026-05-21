@@ -137,7 +137,7 @@ Known limitations:
 - Full LRU/entry-level eviction is not implemented; AtlasFull degradation plus retained-floor-gated next-record page reuse is the current bounded safety behavior.
 - Complex shaping, fallback font face identity, color glyphs, and wrapping beyond ASCII explicit breaks / whitespace breaks are still degradation cases.
 - Warm glyph-atlas scroll allocation was previously reported at about `6.2 KB/frame`; the corrected frame-scoped `--diagnose-text-cache 30` scroll sample is about `2.8 KB/frame`.
-- Warm allocation follow-up should start with render pipeline attribution. Current local scroll evidence is `tree=953 B/frame`, `diff=273 B/frame`, `translate=1631 B/frame`, and `render=273 B/frame`; the translate breakdown is `pipeline=1631 B/frame` with retained apply, viewport, and feedback at `0 B/frame`, so renderer submit and translator shell work are not the primary remaining costs.
+- Warm allocation follow-up should start with layout result and retained snapshot boundaries. Current local scroll evidence is `tree=953 B/frame`, `diff=273 B/frame`, `translate=1631 B/frame`, and `render=273 B/frame`; the translate breakdown is `pipeline=1631 B/frame` with retained apply, viewport, and feedback at `0 B/frame`. The pipeline breakdown is `layout=811 B/frame`, `hitTargets=273 B/frame`, `snapshot=273 B/frame`, `retainedFrame=273 B/frame`, and `record=0 B/frame`, so renderer submit, translator shell work, and draw recording are not the primary remaining costs.
 
 ## Non-Goals
 
