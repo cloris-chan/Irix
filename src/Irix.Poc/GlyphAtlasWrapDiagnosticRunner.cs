@@ -36,7 +36,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatExpectedLine(expected));
-            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True shapedWrap=True");
+            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True shapedWrap=True ltrComplex=True");
             output.WriteLine();
         }
         finally
@@ -95,6 +95,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
         var hardWordText = resources.AddText($"supercalifragilisticexpialidocious{frameIndex:D3}");
         var nonAsciiText = resources.AddText($"shape\tcafe\u0301 next cafe\u0301 {frameIndex:D3}");
         var emojiText = resources.AddText($"emoji \ud83d\ude00 heart \u2764\uFE0F {frameIndex:D3}");
+        var thaiText = resources.AddText($"thai \u0E44\u0E17\u0E22 {frameIndex:D3}");
         var complexScriptText = resources.AddText($"arabic \u0645\u0631\u062D\u0628\u0627 {frameIndex:D3}");
 
         return
@@ -108,6 +109,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             TextRun(272, 364, 42, 76, DrawColor.Opaque(255, 198, 128), hardWordText, wrapStyle),
             TextRun(24, 444, 132, 96, DrawColor.Opaque(255, 160, 220), nonAsciiText, wrapStyle),
             TextRun(272, 444, 220, 42, DrawColor.Opaque(255, 190, 210), emojiText, noWrapStyle),
+            TextRun(520, 444, 220, 42, DrawColor.Opaque(180, 232, 255), thaiText, noWrapStyle),
             TextRun(272, 496, 220, 42, DrawColor.Opaque(210, 190, 255), complexScriptText, noWrapStyle)
         ];
     }
@@ -156,7 +158,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
                     colorGlyphFallbackRuns++;
                 }
 
-                if (GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
+                if (GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate(text))
                 {
                     complexScriptFallbackRuns++;
                 }
@@ -192,8 +194,8 @@ internal static class GlyphAtlasWrapDiagnosticRunner
 
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style, float width)
     {
-        return !GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)
-            && (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text) || ContainsCombiningMark(text))
+        return !GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate(text)
+            && (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text) || ContainsCombiningMark(text) || GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
             && (style.Wrapping == TextWrapping.NoWrap || (style.Wrapping == TextWrapping.Wrap && width >= 96 && ContainsWrapWhitespace(text)));
     }
 

@@ -59,6 +59,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private DWRITE_SHAPING_GLYPH_PROPERTIES[] _shapeGlyphPropsScratch = [];
     private float[] _shapeAdvanceScratch = [];
     private DWRITE_GLYPH_OFFSET[] _shapeOffsetScratch = [];
+    private DWRITE_SCRIPT_ANALYSIS[] _shapeScriptScratch = [];
+    private byte[] _shapeBidiLevelScratch = [];
     private ShapedGlyph[] _shapedGlyphScratch = [];
     private ShapedGlyphSegment[] _shapedSegmentScratch = [];
     private ShapedGlyphLine[] _shapedLineScratch = [];
@@ -1603,12 +1605,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        if (GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
-        {
-            unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ComplexScript;
-            return false;
-        }
-
         var requiresColorGlyph = GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text);
         CachedFontFace fontFace;
         try
@@ -1646,6 +1642,20 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         EnsureShapeScratch(text.Length, maxGlyphCount, MaxShapedRunSegments, text.Length + 1);
         var advances = _shapedTextAdvanceScratch.AsSpan(0, text.Length);
         advances.Clear();
+        _shapeScriptScratch.AsSpan(0, text.Length).Clear();
+        _shapeBidiLevelScratch.AsSpan(0, text.Length).Clear();
+        var hasComplexScriptCandidate = GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text);
+        if (!TryAnalyzeShapedText(text))
+        {
+            unsupportedReason = hasComplexScriptCandidate ? GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ComplexScript : GlyphAtlasFallbackReason.NonAscii;
+            return false;
+        }
+
+        if (HasRightToLeftBidiLevel(0, text.Length))
+        {
+            unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ComplexScript;
+            return false;
+        }
 
         var glyphStart = 0;
         var segmentCount = 0;
@@ -1704,6 +1714,89 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
+    private bool TryAnalyzeShapedText(ReadOnlySpan<char> text)
+    {
+        if (_textAnalyzer == null || text.IsEmpty || text.Length > ushort.MaxValue)
+        {
+            return false;
+        }
+
+        fixed (char* textPtr = text)
+        fixed (DWRITE_SCRIPT_ANALYSIS* scriptAnalysis = _shapeScriptScratch)
+        fixed (byte* bidiLevels = _shapeBidiLevelScratch)
+        {
+            var locale = stackalloc char[6];
+            locale[0] = 'e';
+            locale[1] = 'n';
+            locale[2] = '-';
+            locale[3] = 'u';
+            locale[4] = 's';
+            locale[5] = '\0';
+
+            var sourceVtbl = stackalloc void*[8];
+            sourceVtbl[0] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, Guid*, void**, HRESULT>)&TextAnalysisSourceQueryInterface;
+            sourceVtbl[1] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint>)&TextAnalysisSourceAddRef;
+            sourceVtbl[2] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint>)&TextAnalysisSourceRelease;
+            sourceVtbl[3] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, ushort**, uint*, HRESULT>)&TextAnalysisSourceGetTextAtPosition;
+            sourceVtbl[4] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, ushort**, uint*, HRESULT>)&TextAnalysisSourceGetTextBeforePosition;
+            sourceVtbl[5] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, DWRITE_READING_DIRECTION>)&TextAnalysisSourceGetParagraphReadingDirection;
+            sourceVtbl[6] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, uint*, ushort**, HRESULT>)&TextAnalysisSourceGetLocaleName;
+            sourceVtbl[7] = (delegate* unmanaged[Stdcall]<TextAnalysisSourceShim*, uint, uint*, IDWriteNumberSubstitution**, HRESULT>)&TextAnalysisSourceGetNumberSubstitution;
+
+            var sinkVtbl = stackalloc void*[7];
+            sinkVtbl[0] = (delegate* unmanaged[Stdcall]<TextAnalysisSinkShim*, Guid*, void**, HRESULT>)&TextAnalysisSinkQueryInterface;
+            sinkVtbl[1] = (delegate* unmanaged[Stdcall]<TextAnalysisSinkShim*, uint>)&TextAnalysisSinkAddRef;
+            sinkVtbl[2] = (delegate* unmanaged[Stdcall]<TextAnalysisSinkShim*, uint>)&TextAnalysisSinkRelease;
+            sinkVtbl[3] = (delegate* unmanaged[Stdcall]<TextAnalysisSinkShim*, uint, uint, DWRITE_SCRIPT_ANALYSIS*, HRESULT>)&TextAnalysisSinkSetScriptAnalysis;
+            sinkVtbl[4] = (delegate* unmanaged[Stdcall]<TextAnalysisSinkShim*, uint, uint, DWRITE_LINE_BREAKPOINT*, HRESULT>)&TextAnalysisSinkSetLineBreakpoints;
+            sinkVtbl[5] = (delegate* unmanaged[Stdcall]<TextAnalysisSinkShim*, uint, uint, byte, byte, HRESULT>)&TextAnalysisSinkSetBidiLevel;
+            sinkVtbl[6] = (delegate* unmanaged[Stdcall]<TextAnalysisSinkShim*, uint, uint, IDWriteNumberSubstitution*, HRESULT>)&TextAnalysisSinkSetNumberSubstitution;
+
+            var source = new TextAnalysisSourceShim
+            {
+                Vtbl = sourceVtbl,
+                RefCount = 1,
+                Text = textPtr,
+                TextLength = (uint)text.Length,
+                Locale = locale
+            };
+            var sink = new TextAnalysisSinkShim
+            {
+                Vtbl = sinkVtbl,
+                RefCount = 1,
+                TextLength = (uint)text.Length,
+                ScriptAnalysis = scriptAnalysis,
+                BidiLevels = bidiLevels
+            };
+
+            try
+            {
+                _textAnalyzer->AnalyzeScript((IDWriteTextAnalysisSource*)&source, 0, (uint)text.Length, (IDWriteTextAnalysisSink*)&sink);
+                _textAnalyzer->AnalyzeBidi((IDWriteTextAnalysisSource*)&source, 0, (uint)text.Length, (IDWriteTextAnalysisSink*)&sink);
+                return true;
+            }
+            catch (COMException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Shape analysis failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+                return false;
+            }
+        }
+    }
+
+    private bool HasRightToLeftBidiLevel(int textStart, int textLength)
+    {
+        var bidiLevels = _shapeBidiLevelScratch.AsSpan(textStart, textLength);
+        foreach (var level in bidiLevels)
+        {
+            if ((level & 1) != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private bool TryShapeTextRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)
     {
         if (textLength == 0)
@@ -1756,7 +1849,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         var range = text.Slice(textStart, textLength);
         var initialGlyphStart = glyphStart;
-        if (!TryShapeTextSegment(range, baseFontFace, style.FontSize, textStart, initialGlyphStart, out var glyphCount))
+        if (!TryShapeTextSegment(range, baseFontFace, style.FontSize, textStart, initialGlyphStart, _shapeScriptScratch[textStart], _shapeBidiLevelScratch[textStart], out var glyphCount))
         {
             return false;
         }
@@ -1801,10 +1894,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
-    private bool TryShapeTextSegment(ReadOnlySpan<char> text, CachedFontFace fontFace, float fontEmSize, int textScratchStart, int glyphStart, out int glyphCount)
+    private bool TryShapeTextSegment(ReadOnlySpan<char> text, CachedFontFace fontFace, float fontEmSize, int textScratchStart, int glyphStart, DWRITE_SCRIPT_ANALYSIS scriptAnalysis, byte bidiLevel, out int glyphCount)
     {
         glyphCount = 0;
-        var scriptAnalysis = new DWRITE_SCRIPT_ANALYSIS();
+        var isRightToLeft = (bidiLevel & 1) != 0;
 
         fixed (char* textPtr = text)
         fixed (ushort* clusterMapBase = _shapeClusterScratch)
@@ -1824,7 +1917,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     (uint)text.Length,
                     fontFace.Face,
                     false,
-                    false,
+                    isRightToLeft,
                     &scriptAnalysis,
                     default,
                     null,
@@ -1867,7 +1960,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         fontFace.Face,
                         fontEmSize,
                         false,
-                        false,
+                        isRightToLeft,
                         &scriptAnalysis,
                         default,
                         null,
@@ -1980,6 +2073,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         fontEmSize,
                         (int)textPosition,
                         segmentGlyphStart,
+                        _shapeScriptScratch[(int)textPosition],
+                        _shapeBidiLevelScratch[(int)textPosition],
                         out var glyphCount))
                     {
                         return false;
@@ -2289,6 +2384,82 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return (HRESULT)0;
     }
 
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSinkQueryInterface(TextAnalysisSinkShim* sink, Guid* riid, void** ppvObject)
+    {
+        if (ppvObject == null)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        var iUnknown = IUnknownGuid;
+        if (riid != null && (*riid == iUnknown || *riid == IDWriteTextAnalysisSink.IID_Guid))
+        {
+            *ppvObject = sink;
+            sink->RefCount++;
+            return (HRESULT)0;
+        }
+
+        *ppvObject = null;
+        return (HRESULT)unchecked((int)0x80004002);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static uint TextAnalysisSinkAddRef(TextAnalysisSinkShim* sink) => (uint)++sink->RefCount;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static uint TextAnalysisSinkRelease(TextAnalysisSinkShim* sink)
+    {
+        if (sink->RefCount > 0)
+        {
+            sink->RefCount--;
+        }
+
+        return (uint)sink->RefCount;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSinkSetScriptAnalysis(TextAnalysisSinkShim* sink, uint textPosition, uint textLength, DWRITE_SCRIPT_ANALYSIS* scriptAnalysis)
+    {
+        if (scriptAnalysis == null || sink->ScriptAnalysis == null || textPosition > sink->TextLength || textLength > sink->TextLength - textPosition)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        var start = (int)textPosition;
+        var end = (int)(textPosition + textLength);
+        for (var i = start; i < end; i++)
+        {
+            sink->ScriptAnalysis[i] = *scriptAnalysis;
+        }
+
+        return (HRESULT)0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSinkSetLineBreakpoints(TextAnalysisSinkShim* sink, uint textPosition, uint textLength, DWRITE_LINE_BREAKPOINT* lineBreakpoints) => (HRESULT)0;
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSinkSetBidiLevel(TextAnalysisSinkShim* sink, uint textPosition, uint textLength, byte explicitLevel, byte resolvedLevel)
+    {
+        if (sink->BidiLevels == null || textPosition > sink->TextLength || textLength > sink->TextLength - textPosition)
+        {
+            return (HRESULT)unchecked((int)0x80004003);
+        }
+
+        var start = (int)textPosition;
+        var end = (int)(textPosition + textLength);
+        for (var i = start; i < end; i++)
+        {
+            sink->BidiLevels[i] = resolvedLevel;
+        }
+
+        return (HRESULT)0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvStdcall)])]
+    private static HRESULT TextAnalysisSinkSetNumberSubstitution(TextAnalysisSinkShim* sink, uint textPosition, uint textLength, IDWriteNumberSubstitution* numberSubstitution) => (HRESULT)0;
+
     private void ProjectShapedGlyphs(int glyphStart, int glyphCount)
     {
         var glyphs = _shapedGlyphScratch.AsSpan(glyphStart, glyphCount);
@@ -2309,6 +2480,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             _shapeClusterScratch = new ushort[textLength];
             _shapeTextPropsScratch = new DWRITE_SHAPING_TEXT_PROPERTIES[textLength];
+            _shapeScriptScratch = new DWRITE_SCRIPT_ANALYSIS[textLength];
+            _shapeBidiLevelScratch = new byte[textLength];
             resized = true;
         }
 
@@ -2357,6 +2530,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return checked(
             _shapeClusterScratch.Length * sizeof(ushort)
             + _shapeTextPropsScratch.Length * sizeof(DWRITE_SHAPING_TEXT_PROPERTIES)
+            + _shapeScriptScratch.Length * sizeof(DWRITE_SCRIPT_ANALYSIS)
+            + _shapeBidiLevelScratch.Length
             + _shapeGlyphScratch.Length * sizeof(ushort)
             + _shapeGlyphPropsScratch.Length * sizeof(DWRITE_SHAPING_GLYPH_PROPERTIES)
             + _shapeAdvanceScratch.Length * sizeof(float)
@@ -3315,6 +3490,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public char* Text;
         public uint TextLength;
         public char* Locale;
+    }
+
+    private struct TextAnalysisSinkShim
+    {
+        public void** Vtbl;
+        public int RefCount;
+        public uint TextLength;
+        public DWRITE_SCRIPT_ANALYSIS* ScriptAnalysis;
+        public byte* BidiLevels;
     }
 
     public readonly struct GlyphAtlasRecordResult(bool Recorded, int AtlasRuns, int DegradedRuns) : IEquatable<GlyphAtlasRecordResult>

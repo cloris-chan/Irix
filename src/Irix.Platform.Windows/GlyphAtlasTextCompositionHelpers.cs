@@ -336,6 +336,19 @@ internal static class GlyphAtlasTextCompositionHelpers
         return false;
     }
 
+    internal static bool ContainsRightToLeftScriptCandidate(ReadOnlySpan<char> text)
+    {
+        foreach (var character in text)
+        {
+            if (character is >= '\u0590' and <= '\u08FF')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;

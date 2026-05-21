@@ -89,6 +89,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("shape cafe\u0301".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("arabic \u0645\u0631\u062D\u0628\u0627".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("thai \u0E44\u0E17\u0E22".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate("arabic \u0645\u0631\u062D\u0628\u0627".AsSpan()));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate("thai \u0E44\u0E17\u0E22".AsSpan()));
 
         var wrappingStyle = new TextStyle(
             TextStyle.Default.FontFamily,
@@ -546,6 +548,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("D3D11On12", nativeMethods);
         Assert.DoesNotContain("ID2D", nativeMethods);
         Assert.Contains("IDWriteColorGlyphRunEnumerator", nativeMethods);
+        Assert.Contains("IDWriteTextAnalysisSink", nativeMethods);
     }
 
     [Fact]
@@ -616,6 +619,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)", glyphSource);
+        Assert.Contains("_textAnalyzer->AnalyzeScript(", glyphSource);
+        Assert.Contains("_textAnalyzer->AnalyzeBidi(", glyphSource);
+        Assert.Contains("IDWriteTextAnalysisSink*", glyphSource);
+        Assert.Contains("private DWRITE_SCRIPT_ANALYSIS[] _shapeScriptScratch = [];", glyphSource);
+        Assert.Contains("private byte[] _shapeBidiLevelScratch = [];", glyphSource);
+        Assert.Contains("private bool HasRightToLeftBidiLevel(int textStart, int textLength)", glyphSource);
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
         Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
@@ -1030,15 +1039,15 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(9, summary.TextRuns);
-        Assert.Equal(8, summary.AtlasCandidateRuns);
+        Assert.Equal(10, summary.TextRuns);
+        Assert.Equal(9, summary.AtlasCandidateRuns);
         Assert.Equal(1, summary.DegradedCandidateRuns);
         Assert.Equal(3, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(0, summary.WrappingFallbackRuns);
         Assert.Equal(1, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(1, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=8", expectedLine);
+        Assert.Contains("atlasRuns=9", expectedLine);
         Assert.Contains("degradedRuns=1", expectedLine);
         Assert.Contains("wrappedAtlasRuns=3", expectedLine);
         Assert.Contains("Wrapping=0", expectedLine);
