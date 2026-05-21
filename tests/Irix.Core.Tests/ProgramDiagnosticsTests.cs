@@ -548,6 +548,7 @@ public sealed class ProgramDiagnosticsTests
         var nativeMethods = NormalizeLineEndings(File.ReadAllText(Path.Combine(platformWindows, "NativeMethods.txt")));
         Assert.DoesNotContain("D3D11On12", nativeMethods);
         Assert.DoesNotContain("ID2D", nativeMethods);
+        Assert.Contains("IDWriteFontFace4", nativeMethods);
         Assert.Contains("IDWriteColorGlyphRunEnumerator", nativeMethods);
         Assert.Contains("IDWriteTextAnalysisSink", nativeMethods);
 
@@ -655,6 +656,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
         Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
+        Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats", glyphSource);
+        Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats", glyphSource);
+        Assert.Contains("private bool HasUnsupportedOnlyColorGlyphImageFormat(ShapedGlyphSegment shapedSegment)", glyphSource);
+        Assert.Contains("private static bool HasOnlyUnsupportedColorGlyphImageFormats(DWRITE_GLYPH_IMAGE_FORMATS formats)", glyphSource);
+        Assert.Contains("private static IDWriteFontFace4* TryQueryFontFace4(IDWriteFontFace* face)", glyphSource);
+        Assert.Contains("shapedSegment.FontFace.Face4->GetGlyphImageFormats(", glyphSource);
+        Assert.Contains("DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG", glyphSource);
+        Assert.Contains("DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG", glyphSource);
+        Assert.Contains("DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE", glyphSource);
         Assert.Contains("GlyphAtom.ColorLayer(glyphIndex)", glyphSource);
         Assert.Contains("public static GlyphAtom ColorLayer(ushort glyphIndex)", glyphSource);
         Assert.Contains("_dwriteFactory2->TranslateColorGlyphRun(", glyphSource);
@@ -692,6 +702,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("float ControlAdvance", glyphSource);
         Assert.Contains("public int TextEnd => TextStart + TextLength;", glyphSource);
         Assert.Contains("public float ControlAdvance { get; } = ControlAdvance;", glyphSource);
+        Assert.Contains("public IDWriteFontFace4* Face4 { get; } = face4;", glyphSource);
         Assert.Contains("private readonly ref struct ShapedGlyphRun(", glyphSource);
         Assert.Contains("float FontEmSize", glyphSource);
         Assert.Contains("public bool RequiresColorGlyph { get; } = RequiresColorGlyph;", glyphSource);

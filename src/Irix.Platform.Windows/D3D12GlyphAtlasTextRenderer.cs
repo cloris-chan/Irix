@@ -29,6 +29,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int MaxGlyphDrawBatches = 1024;
     private const int MaxShapedRunSegments = 64;
     private const int DWriteNoColorHResult = unchecked((int)0x8898500C);
+    private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats =
+        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_CFF
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR;
+    private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats =
+        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE;
     private const int AtlasRowPitch = 1024;
     private const int AtlasPixelBytes = AtlasRowPitch * AtlasHeight;
     private const int TextureDataPitchAlignment = 256;
@@ -810,6 +821,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
+        if (HasUnsupportedOnlyColorGlyphImageFormat(shapedSegment))
+        {
+            return false;
+        }
+
         fixed (ushort* glyphIndicesBase = _shapeGlyphScratch)
         fixed (float* advancesBase = _shapeAdvanceScratch)
         fixed (DWRITE_GLYPH_OFFSET* offsetsBase = _shapeOffsetScratch)
@@ -909,6 +925,56 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             unsupportedReason = layerCount == 0 ? GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph : GlyphAtlasFallbackReason.None;
             return layerCount > 0;
         }
+    }
+
+    private bool HasUnsupportedOnlyColorGlyphImageFormat(ShapedGlyphSegment shapedSegment)
+    {
+        if (shapedSegment.FontFace.Face4 == null)
+        {
+            return false;
+        }
+
+        var pixelsPerEm = ComputeGlyphImagePixelsPerEm(shapedSegment.FontEmSize);
+        var glyphs = _shapeGlyphScratch.AsSpan(shapedSegment.GlyphStart, shapedSegment.GlyphCount);
+        foreach (var glyphIndex in glyphs)
+        {
+            if (glyphIndex == 0)
+            {
+                continue;
+            }
+
+            try
+            {
+                shapedSegment.FontFace.Face4->GetGlyphImageFormats(glyphIndex, pixelsPerEm, pixelsPerEm, out var formats);
+                if (HasOnlyUnsupportedColorGlyphImageFormats(formats))
+                {
+                    return true;
+                }
+            }
+            catch (COMException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] Color glyph image format query failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private static uint ComputeGlyphImagePixelsPerEm(float fontEmSize)
+    {
+        if (!float.IsFinite(fontEmSize) || fontEmSize <= 1f)
+        {
+            return 1;
+        }
+
+        return (uint)Math.Min(ushort.MaxValue, MathF.Ceiling(fontEmSize));
+    }
+
+    private static bool HasOnlyUnsupportedColorGlyphImageFormats(DWRITE_GLYPH_IMAGE_FORMATS formats)
+    {
+        return (formats & UnsupportedNonLayerColorGlyphFormats) != 0
+            && (formats & SupportedLayerColorGlyphFormats) == 0;
     }
 
     private bool TryAppendColorGlyphLayer(
@@ -1112,6 +1178,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         IDWriteFontFamily* family = null;
         IDWriteFont* font = null;
         IDWriteFontFace* face = null;
+        IDWriteFontFace4* face4 = null;
 
         try
         {
@@ -1154,9 +1221,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             face->GetMetrics(out var metrics);
-            fontFace = new CachedFontFace(new FontFaceIdentity(_nextFontFaceIdentity++), face, metrics);
+            face4 = TryQueryFontFace4(face);
+            fontFace = new CachedFontFace(new FontFaceIdentity(_nextFontFaceIdentity++), face, metrics, face4);
             _fontFaces.Add(key, fontFace);
             face = null;
+            face4 = null;
             return true;
         }
         catch (COMException ex)
@@ -1168,6 +1237,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
         finally
         {
+            if (face4 != null) face4->Release();
             if (face != null) face->Release();
             if (font != null) font->Release();
             if (family != null) family->Release();
@@ -2232,6 +2302,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         fontFace = default!;
         IDWriteFontFace* face = null;
+        IDWriteFontFace4* face4 = null;
         IUnknown* identity = null;
         try
         {
@@ -2256,9 +2327,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             face->GetMetrics(out var metrics);
-            fontFace = new CachedFontFace(new FontFaceIdentity(_nextFontFaceIdentity++), face, metrics, identity);
+            face4 = TryQueryFontFace4(face);
+            fontFace = new CachedFontFace(new FontFaceIdentity(_nextFontFaceIdentity++), face, metrics, face4, identity);
             _fallbackFontFaces.Add(key, fontFace);
             face = null;
+            face4 = null;
             identity = null;
             return true;
         }
@@ -2271,8 +2344,28 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
         finally
         {
+            if (face4 != null) face4->Release();
             if (face != null) face->Release();
             if (identity != null) identity->Release();
+        }
+    }
+
+    private static IDWriteFontFace4* TryQueryFontFace4(IDWriteFontFace* face)
+    {
+        if (face == null)
+        {
+            return null;
+        }
+
+        try
+        {
+            face->QueryInterface<IDWriteFontFace4>(out var face4).ThrowOnFailure();
+            return face4;
+        }
+        catch (COMException ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] DirectWrite font face4 query skipped: 0x{unchecked((uint)ex.ErrorCode):X8}");
+            return null;
         }
     }
 
@@ -4021,10 +4114,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public override int GetHashCode() => Value;
     }
 
-    private sealed class CachedFontFace(FontFaceIdentity identity, IDWriteFontFace* face, DWRITE_FONT_METRICS metrics, IUnknown* fontIdentity = null)
+    private sealed class CachedFontFace(FontFaceIdentity identity, IDWriteFontFace* face, DWRITE_FONT_METRICS metrics, IDWriteFontFace4* face4 = null, IUnknown* fontIdentity = null)
     {
         public FontFaceIdentity Identity { get; } = identity;
         public IDWriteFontFace* Face { get; } = face;
+        public IDWriteFontFace4* Face4 { get; } = face4;
         public DWRITE_FONT_METRICS Metrics { get; } = metrics;
         private IUnknown* FontIdentity { get; } = fontIdentity;
 
@@ -4033,6 +4127,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (Face != null)
             {
                 Face->Release();
+            }
+
+            if (Face4 != null)
+            {
+                Face4->Release();
             }
 
             if (FontIdentity != null)
