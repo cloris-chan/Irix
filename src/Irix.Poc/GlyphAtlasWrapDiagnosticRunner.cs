@@ -95,6 +95,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
         var hardWordText = resources.AddText($"supercalifragilisticexpialidocious{frameIndex:D3}");
         var nonAsciiText = resources.AddText($"shape\tcafe\u0301 next cafe\u0301 {frameIndex:D3}");
         var emojiText = resources.AddText($"emoji \ud83d\ude00 heart \u2764\uFE0F {frameIndex:D3}");
+        var complexScriptText = resources.AddText($"arabic \u0645\u0631\u062D\u0628\u0627 {frameIndex:D3}");
 
         return
         [
@@ -106,7 +107,8 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             TextRun(24, 364, 220, 42, DrawColor.Opaque(228, 210, 255), simpleBmpText, noWrapStyle),
             TextRun(272, 364, 42, 76, DrawColor.Opaque(255, 198, 128), hardWordText, wrapStyle),
             TextRun(24, 444, 132, 96, DrawColor.Opaque(255, 160, 220), nonAsciiText, wrapStyle),
-            TextRun(272, 444, 220, 42, DrawColor.Opaque(255, 190, 210), emojiText, noWrapStyle)
+            TextRun(272, 444, 220, 42, DrawColor.Opaque(255, 190, 210), emojiText, noWrapStyle),
+            TextRun(272, 496, 220, 42, DrawColor.Opaque(210, 190, 255), complexScriptText, noWrapStyle)
         ];
     }
 
@@ -190,6 +192,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style, float width)
     {
         return !GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)
+            && !GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)
             && ContainsCombiningMark(text)
             && (style.Wrapping == TextWrapping.NoWrap || (style.Wrapping == TextWrapping.Wrap && width >= 96 && ContainsWrapWhitespace(text)));
     }
