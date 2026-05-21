@@ -601,7 +601,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null, _rootSig != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null)", glyphSource);
         Assert.Contains("DirectWrite,", glyphSource);
+        Assert.Contains("CommandList,", glyphSource);
+        Assert.Contains("AtlasPage,", glyphSource);
+        Assert.Contains("Pipeline,", glyphSource);
+        Assert.Contains("AtlasDraw", glyphSource);
+        Assert.Contains("GlyphAtlasRecordFailurePhase.CommandList", glyphSource);
         Assert.Contains("GlyphAtlasRecordFailurePhase.DirectWrite", glyphSource);
+        Assert.Contains("GlyphAtlasRecordFailurePhase.AtlasPage", glyphSource);
+        Assert.Contains("GlyphAtlasRecordFailurePhase.Pipeline", glyphSource);
+        Assert.Contains("GlyphAtlasRecordFailurePhase.AtlasDraw", glyphSource);
         Assert.Contains("public int UsedPixels { get; set; }", glyphSource);
         Assert.Contains("public int AllocatedPixels { get; set; }", glyphSource);
         Assert.Contains("public long LastUsedSerial { get; private set; }", glyphSource);
@@ -766,6 +774,32 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("RecordFailed=2", summary);
         Assert.Contains("degradedRuns=2", summary);
         Assert.Contains("recordFailurePhase=DirectWrite", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_diagnostics_summary_reports_specific_record_resource_failure_phase()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithDegradation(3, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.RecordFailed)
+            .WithRecordFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.AtlasDraw);
+
+        var summary = diagnostics.FormatSummary();
+
+        Assert.Contains("RecordFailed=3", summary);
+        Assert.Contains("degradedRuns=3", summary);
+        Assert.Contains("recordFailurePhase=AtlasDraw", summary);
     }
 
     [Fact]

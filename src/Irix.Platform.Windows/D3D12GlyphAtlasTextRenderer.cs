@@ -169,7 +169,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (!GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(list != null))
             {
                 throw CreateRecordException(
-                    GlyphAtlasRecordFailurePhase.Record,
+                    GlyphAtlasRecordFailurePhase.CommandList,
                     "D3D12GlyphAtlasTextRenderer.TryRecord found a missing command list.");
             }
 
@@ -723,7 +723,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (!TryResolveAtlasPage(_activeAtlasPage, out var page))
         {
             throw CreateRecordException(
-                GlyphAtlasRecordFailurePhase.Record,
+                GlyphAtlasRecordFailurePhase.AtlasPage,
                 "D3D12GlyphAtlasTextRenderer.RequireActiveAtlasPage found a stale active glyph atlas page handle.");
         }
 
@@ -853,7 +853,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (!TryResolveAtlasPage(request.Page, out var page))
         {
             throw CreateRecordException(
-                GlyphAtlasRecordFailurePhase.Record,
+                GlyphAtlasRecordFailurePhase.AtlasPage,
                 "D3D12GlyphAtlasTextRenderer.ApplyPendingAtlasPageEviction found a stale pending glyph atlas page reuse handle.");
         }
 
@@ -1346,7 +1346,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (!GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null, _rootSig != null))
         {
             throw CreateRecordException(
-                GlyphAtlasRecordFailurePhase.Record,
+                GlyphAtlasRecordFailurePhase.Pipeline,
                 "D3D12GlyphAtlasTextRenderer.DrawGlyphs found a missing pipeline state or root signature.");
         }
 
@@ -1367,7 +1367,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             if (!GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null))
             {
                 throw CreateRecordException(
-                    GlyphAtlasRecordFailurePhase.Record,
+                    GlyphAtlasRecordFailurePhase.AtlasDraw,
                     "D3D12GlyphAtlasTextRenderer.DrawGlyphs found a missing atlas SRV heap.");
             }
 
@@ -1384,7 +1384,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (!TryResolveAtlasPage(pageHandle, out var page))
         {
             throw CreateRecordException(
-                GlyphAtlasRecordFailurePhase.Record,
+                GlyphAtlasRecordFailurePhase.AtlasPage,
                 "D3D12GlyphAtlasTextRenderer.DrawGlyphs found a stale glyph atlas page handle.");
         }
 
@@ -2023,7 +2023,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         Record,
         DirectWrite,
         VertexBufferMap,
-        AtlasUploadMap
+        AtlasUploadMap,
+        CommandList,
+        AtlasPage,
+        Pipeline,
+        AtlasDraw
     }
 
     public sealed class GlyphAtlasInitializationException(
