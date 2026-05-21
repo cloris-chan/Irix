@@ -77,6 +77,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         var poolBefore = FrameDrawingResources.GetPoolDiagnostics();
         var allocatedBefore = GC.GetTotalAllocatedBytes(true);
         var attribution = default(AllocationAttribution);
+        var translateAttribution = default(WindowTranslateAllocationAttribution);
         var previousTree = default(VirtualNodeTree);
         var hasPreviousTree = false;
         var activeScale = displayScale;
@@ -106,9 +107,10 @@ internal static class TextCacheAllocationDiagnosticRunner
                 attribution = attribution.AddDiff(afterDiff - beforeDiff);
 
                 var beforeTranslate = GC.GetTotalAllocatedBytes(false);
-                using var batch = translator.Translate(patch);
+                using var batch = translator.Translate(patch, out var translateFrameAttribution);
                 var afterTranslate = GC.GetTotalAllocatedBytes(false);
                 attribution = attribution.AddTranslate(afterTranslate - beforeTranslate);
+                translateAttribution = translateAttribution.Add(translateFrameAttribution);
 
                 previousTree = nextTree;
                 hasPreviousTree = true;
@@ -141,6 +143,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         var allocatedBytes = allocatedAfter - allocatedBefore;
         output.WriteLine($"Allocation: total={allocatedBytes} bytes, perFrame={(frameCount > 0 ? allocatedBytes / frameCount : 0)} bytes");
         output.WriteLine(FormatAllocationAttribution(attribution, frameCount));
+        output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));
         output.WriteLine($"FrameDrawingResources: rents={poolDelta.RentCount}, created={poolDelta.CreatedCount}, reused={poolDelta.ReusedCount}, returns={poolDelta.ReturnCallCount}, returnedToPool={poolDelta.ReturnedToPoolCount}, retainedSkips={poolDelta.RetainedReturnSkipCount}, duplicateSkips={poolDelta.DuplicateReturnSkipCount}, staleSkips={poolDelta.StaleReturnSkipCount}, overflowDisposals={poolDelta.DisposedOverflowCount}, poolCount={poolDelta.PoolCount}");
         output.WriteLine();
     }
@@ -149,6 +152,12 @@ internal static class TextCacheAllocationDiagnosticRunner
     {
         var divisor = frameCount > 0 ? frameCount : 0;
         return $"Allocation attribution: tree={attribution.TreeBytes} bytes ({PerFrame(attribution.TreeBytes, divisor)}/frame), diff={attribution.DiffBytes} bytes ({PerFrame(attribution.DiffBytes, divisor)}/frame), translate={attribution.TranslateBytes} bytes ({PerFrame(attribution.TranslateBytes, divisor)}/frame), render={attribution.RenderBytes} bytes ({PerFrame(attribution.RenderBytes, divisor)}/frame)";
+    }
+
+    internal static string FormatTranslateAllocationAttribution(WindowTranslateAllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return $"Translate allocation: retainedApply={attribution.RetainedApplyBytes} bytes ({PerFrame(attribution.RetainedApplyBytes, divisor)}/frame), viewport={attribution.ViewportBytes} bytes ({PerFrame(attribution.ViewportBytes, divisor)}/frame), pipeline={attribution.PipelineBuildBytes} bytes ({PerFrame(attribution.PipelineBuildBytes, divisor)}/frame), feedback={attribution.FeedbackBytes} bytes ({PerFrame(attribution.FeedbackBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     private static long PerFrame(long bytes, int frameCount) => frameCount > 0 ? bytes / frameCount : 0;

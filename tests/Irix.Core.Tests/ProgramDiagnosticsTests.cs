@@ -907,6 +907,22 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Text_cache_translate_allocation_attribution_formatter_outputs_stable_stage_fields()
+    {
+        var attribution = new WindowTranslateAllocationAttribution(
+            RetainedApplyBytes: 120,
+            ViewportBytes: 0,
+            PipelineBuildBytes: 600,
+            FeedbackBytes: 180);
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatTranslateAllocationAttribution(attribution, frameCount: 3);
+
+        Assert.Equal(
+            "Translate allocation: retainedApply=120 bytes (40/frame), viewport=0 bytes (0/frame), pipeline=600 bytes (200/frame), feedback=180 bytes (60/frame), measuredTotal=900 bytes (300/frame)",
+            summary);
+    }
+
+    [Fact]
     public void Text_cache_allocation_diagnostic_uses_frame_scoped_text_arena()
     {
         var root = FindRepoRoot();
@@ -915,6 +931,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
         Assert.Contains("arena.BeginFrame();", source);
         Assert.Contains("return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());", source);
+        Assert.Contains("using var batch = translator.Translate(patch, out var translateFrameAttribution);", source);
+        Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
     }
 

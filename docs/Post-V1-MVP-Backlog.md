@@ -164,7 +164,7 @@ Next hardening checklist:
 - Resource cache / stable handles: POST-011 now has generation-safe retained-floor page reuse. Continue with resource lifetime hardening and only move to full LRU/entry-level eviction after the retained atlas command ownership story is explicit.
 - Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
 - Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases beyond upload-map, frame-slot upload ownership, and swapchain/core initialization; glyph-atlas initialization failures must remain degradation-safe.
-- Warm allocation attribution: latest corrected scroll sample is mostly translator/tree cost, not renderer submit. Optimize only after tree/diff/translate/render attribution identifies the source.
+- Warm allocation attribution: latest corrected scroll sample is mostly render pipeline build plus tree cost, not renderer submit. Translate breakdown shows the scroll sample's translate allocation is all pipeline build, with retained apply, viewport, and feedback at zero. Optimize only after pipeline sub-attribution identifies the source.
 - Degradation follow-up: AtlasFull and record-failure contracts are recorded as degradation. Full LRU eviction and D3D12 rendering for currently unsupported text remain future work before widening atlas text coverage.
 - Overlay removal path: D3D11On12/D2D source is gone. Each fallback case should move toward D3D12 handling or an explicit degradation contract.
 
