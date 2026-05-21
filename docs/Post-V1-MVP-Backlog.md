@@ -37,7 +37,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 
 | ID | Task | Current status | Blocking condition |
 |----|------|---------------|-------------------|
-| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed; first single-face shaped atlas drawing added | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; narrow simple and single-face `NoWrap` shaped runs have local evidence, unsupported/fallback-face cases degrade |
+| POST-017 | D3D12-only glyph atlas text renderer | Default-on prototype foundation with overlay renderer removed; shaped atlas drawing with DirectWrite fallback-face segmentation added | Post-GA; `GlyphAtlas` is the only D3D12 PoC text composition path; simple runs and `NoWrap` shaped/fallback runs have local evidence, shaped wrapping and color/surrogate glyph cases still degrade |
 | POST-011 | Resource cache / stable global handles | Entry/page handles, four-page atlas pool, explicit atlas budget diagnostics, page-owned SRV resources, retained-floor-gated next-record cold-page reuse, page usage diagnostics, and atlas touch serials done | D3D12-specific; continue from retained-safe page reuse toward full LRU/entry-level eviction only after resource lifetime remains stable |
 | POST-009 | StyleOnly layout skip | Design only | Requires default-on partial apply first; not GA-blocking |
 | POST-010 | Retained element tree | Draft | Requires stable retained tree + local patch model |
@@ -88,7 +88,7 @@ The first atlas execution path records a D3D12 glyph pass for ASCII plus simple 
 It now uses non-overlay degradation so unsupported renderable text runs do not force either whole-frame overlay or mixed overlay fallback.
 Expanded smoke covers `ASCII / NonAscii / clipped ASCII / clipped NonAscii`, explicit ASCII line breaks, ASCII tab spacing, simple BMP atlas acceptance, minimal wrap acceptance plus hard-wrap degradation, default `300 x 3`, and 2026-05-20 short degradation runs with `syncWaits=0` and nonzero `DegradedRuns`.
 Current default GlyphAtlas behavior degrades unsupported and initialization/upload/record-failed renderable text runs without invoking overlay. `IDWriteTextAnalyzer` is now created for the atlas path and handles `NonAscii` single-face `NoWrap` shaped runs through pointer-based `GetGlyphs` / `GetGlyphPlacements`, projecting shaped glyph output into local `ShapedGlyph` scratch and a synchronous `ShapedGlyphRun` span view without retaining source strings. Accepted shaped glyphs reuse the existing D3D12 atlas raster/cache/draw path.
-Fallback font identity, shaped wrapping/line breaking, color glyphs, eviction, command-order-perfect mixed text z-order for still-degraded text, and production enablement remain follow-up work.
+Shaped wrapping/line breaking, color glyphs, surrogate/emoji handling, eviction, command-order-perfect mixed text z-order for still-degraded text, and production enablement remain follow-up work.
 
 | Work item | Scope | Acceptance criteria |
 |-----------|-------|---------------------|

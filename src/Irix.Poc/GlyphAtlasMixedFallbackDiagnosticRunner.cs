@@ -93,9 +93,9 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
         var clippedFallbackStyle = resources.AddTextStyle(CreateStyle(22, TextFontWeight.Normal));
 
         var ascii = resources.AddText($"ASCII atlas {frameIndex:D3}");
-        var nonAscii = resources.AddText("測試");
+        var nonAscii = resources.AddText($"Fallback 測試 {frameIndex:D3}");
         var clippedAscii = resources.AddText($"Clipped ASCII {frameIndex:D3}");
-        var clippedNonAscii = resources.AddText("裁剪");
+        var clippedNonAscii = resources.AddText($"裁剪 fallback {frameIndex:D3}");
 
         return
         [
@@ -132,7 +132,7 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
             var text = resources.Resolve(command.Text);
             var reason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             var hasClip = command.ClipBounds.Width > 0 && command.ClipBounds.Height > 0;
-            if (reason == D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None || CanShapeAsSingleAtlasRun(text, style))
+            if (reason == D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None || CanShapeAsAtlasRun(text, style))
             {
                 atlasCandidateRuns++;
                 if (hasClip)
@@ -174,7 +174,7 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
             : "commands=atlasOnly; actualPassOrder=rects,atlasAcceptedRuns,present; zOrderLimit=False";
     }
 
-    private static bool CanShapeAsSingleAtlasRun(ReadOnlySpan<char> text, TextStyle style)
+    private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style)
     {
         return GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style).HasFlag(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             && style.Wrapping == TextWrapping.NoWrap
