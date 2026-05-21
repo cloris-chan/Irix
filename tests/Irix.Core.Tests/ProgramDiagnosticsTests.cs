@@ -125,6 +125,25 @@ public sealed class ProgramDiagnosticsTests
             GlyphAtlasTextCompositionHelpers.ComputeAlignedPenX(runX, runWidth, alignment, lineWidth));
     }
 
+    [Theory]
+    [InlineData(TextVerticalAlignment.Top, 22)]
+    [InlineData(TextVerticalAlignment.Center, 7)]
+    [InlineData(TextVerticalAlignment.Bottom, -8)]
+    public void Glyph_atlas_first_baseline_allows_overheight_text_stack_to_clip(
+        TextVerticalAlignment alignment,
+        float expectedBaselineY)
+    {
+        Assert.Equal(
+            expectedBaselineY,
+            GlyphAtlasTextCompositionHelpers.ComputeFirstBaselineY(
+                runY: 10,
+                runHeight: 30,
+                alignment,
+                ascent: 12,
+                lineHeight: 20,
+                lineCount: 3));
+    }
+
     [Fact]
     public void Glyph_atlas_line_planner_keeps_no_wrap_as_single_line_or_clip()
     {
@@ -675,6 +694,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasTextCompositionHelpers.IsWrapWhitespace(text[position])", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.PlanLines(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.TabAdvanceSpaceCount", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ComputeFirstBaselineY(textRun.Y, textRun.Height, style.VerticalAlignment, ascent, lineHeight, lineCount)", glyphSource);
+        Assert.DoesNotContain("private static bool TextMetricsFit", glyphSource);
+        Assert.DoesNotContain("TextMetricsFit(textRun, lineHeight", glyphSource);
         Assert.Contains("spaceAdvance * spaceCount", glyphSource);
         Assert.Contains("_shapedTextAdvanceScratch[textIndex] = ComputeShapedGlyphAdvance(", glyphSource);
         Assert.Contains("if (shapedSegment.GlyphCount == 0)", glyphSource);
@@ -1077,17 +1099,17 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(12, summary.TextRuns);
-        Assert.Equal(12, summary.AtlasCandidateRuns);
+        Assert.Equal(13, summary.TextRuns);
+        Assert.Equal(13, summary.AtlasCandidateRuns);
         Assert.Equal(0, summary.DegradedCandidateRuns);
-        Assert.Equal(4, summary.WrappedAtlasCandidateRuns);
+        Assert.Equal(5, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(0, summary.WrappingFallbackRuns);
         Assert.Equal(0, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(0, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=12", expectedLine);
+        Assert.Contains("atlasRuns=13", expectedLine);
         Assert.Contains("degradedRuns=0", expectedLine);
-        Assert.Contains("wrappedAtlasRuns=4", expectedLine);
+        Assert.Contains("wrappedAtlasRuns=5", expectedLine);
         Assert.Contains("Wrapping=0", expectedLine);
         Assert.Contains("NonAscii=0", expectedLine);
         Assert.Contains("ColorGlyph=0", expectedLine);

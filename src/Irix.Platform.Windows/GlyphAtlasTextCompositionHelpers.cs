@@ -418,6 +418,23 @@ internal static class GlyphAtlasTextCompositionHelpers
         };
     }
 
+    internal static float ComputeFirstBaselineY(
+        float runY,
+        float runHeight,
+        TextVerticalAlignment verticalAlignment,
+        float ascent,
+        float lineHeight,
+        int lineCount)
+    {
+        var textHeight = lineHeight * lineCount;
+        return runY + verticalAlignment switch
+        {
+            TextVerticalAlignment.Top => ascent,
+            TextVerticalAlignment.Bottom => runHeight - textHeight + ascent,
+            _ => ((runHeight - textHeight) * 0.5f) + ascent
+        };
+    }
+
     internal static GlyphAtlasDirtyRect MergeDirtyRect(
         bool hasDirtyRect,
         int currentLeft,

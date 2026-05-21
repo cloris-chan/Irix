@@ -351,12 +351,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             var lineHeight = ComputeLineHeight(fontFace.Metrics, style.FontSize);
-            if (!TextMetricsFit(textRun, lineHeight, lineCount))
-            {
-                AddDegradedRun(style.Wrapping == TextWrapping.NoWrap ? GlyphAtlasFallbackReason.Clip : GlyphAtlasFallbackReason.Wrapping, ref degradedRunCount, ref degradationReasons);
-                continue;
-            }
-
             var firstBaselineY = ComputeFirstBaselineY(textRun, style, fontFace.Metrics, style.FontSize, lineHeight, lineCount);
             var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
             if (scissor.IsEmpty)
@@ -566,12 +560,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         var lineHeight = shapedRun.ComputeLineHeight();
-        if (!TextMetricsFit(textRun, lineHeight, shapedRun.LineCount))
-        {
-            unsupportedReason = GlyphAtlasFallbackReason.Clip;
-            return false;
-        }
-
         var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
         if (scissor.IsEmpty)
         {
@@ -1147,8 +1135,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _batches[batchCount++] = new GlyphDrawBatch(batchStart, vertexCount - batchStart, scissor, page);
         return true;
     }
-
-    private static bool TextMetricsFit(D3D12TextRun textRun, float lineHeight, int lineCount) => lineHeight * lineCount <= textRun.Height;
 
     private static IntegerScissorRect ResolveRunScissor(D3D12TextRun textRun, int viewportWidth, int viewportHeight)
     {
@@ -3025,13 +3011,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private static float ComputeFirstBaselineY(D3D12TextRun textRun, TextStyle style, float ascent, float lineHeight, int lineCount)
     {
-        var textHeight = lineHeight * lineCount;
-        return textRun.Y + style.VerticalAlignment switch
-        {
-            TextVerticalAlignment.Top => ascent,
-            TextVerticalAlignment.Bottom => Math.Max(ascent, textRun.Height - textHeight + ascent),
-            _ => ((textRun.Height - textHeight) * 0.5f) + ascent
-        };
+        return GlyphAtlasTextCompositionHelpers.ComputeFirstBaselineY(textRun.Y, textRun.Height, style.VerticalAlignment, ascent, lineHeight, lineCount);
     }
 
     private static void AppendQuad(
