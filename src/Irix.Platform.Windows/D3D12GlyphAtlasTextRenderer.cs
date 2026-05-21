@@ -173,6 +173,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     "D3D12GlyphAtlasTextRenderer.TryRecord found a missing command list.");
             }
 
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _fontCollection != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.Record,
+                    "D3D12GlyphAtlasTextRenderer.TryRecord found missing DirectWrite resources.");
+            }
+
             var recordSerial = ++_glyphRecordSerial;
             ApplyPendingAtlasPageEviction(recordSerial, oldestRetainedRecordSerial: recordSerial);
             var frame = BuildFrame(textRuns, resources, viewportWidth, viewportHeight, recordSerial);
@@ -532,6 +539,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var key = new FontFaceKey(style.FontFamily, style.FontWeight, style.FontStyle, style.FontStretch, style.FontSize);
         if (_fontFaces.TryGetValue(key, out fontFace!))
         {
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(fontFace.Face != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.Record,
+                    "D3D12GlyphAtlasTextRenderer.TryGetFontFace found a missing cached font face.");
+            }
+
             return true;
         }
 
@@ -558,6 +572,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 ToDirectWriteFontStyle(style.FontStyle),
                 &font);
             font->CreateFontFace(&face);
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(face != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.Record,
+                    "D3D12GlyphAtlasTextRenderer.TryGetFontFace found a missing DirectWrite font face.");
+            }
+
             face->GetMetrics(out var metrics);
             fontFace = new CachedFontFace(key, face, metrics);
             _fontFaces.Add(key, fontFace);

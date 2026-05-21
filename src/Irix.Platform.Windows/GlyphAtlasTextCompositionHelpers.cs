@@ -244,6 +244,16 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasCommandList;
     }
 
+    internal static bool HasGlyphDirectWriteResources(bool hasFactory, bool hasFontCollection)
+    {
+        return hasFactory && hasFontCollection;
+    }
+
+    internal static bool HasGlyphFontFaceResource(bool hasFontFace)
+    {
+        return hasFontFace;
+    }
+
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;
