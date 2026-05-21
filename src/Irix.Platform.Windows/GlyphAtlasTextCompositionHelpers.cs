@@ -153,7 +153,19 @@ internal static class GlyphAtlasTextCompositionHelpers
                         goto NextLine;
                     }
 
-                    return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Wrapping;
+                    var hardLineEnd = i + 1;
+                    var hardLineWidth = nextWidth;
+                    while (hardLineEnd < text.Length
+                        && !IsLineBreak(text, hardLineEnd, out _)
+                        && !IsWrapWhitespace(text[hardLineEnd]))
+                    {
+                        hardLineWidth += advances[hardLineEnd];
+                        hardLineEnd++;
+                    }
+
+                    AppendLine(lines, ref lineCount, lineStart, hardLineEnd, hardLineWidth);
+                    index = hardLineEnd;
+                    goto NextLine;
                 }
 
                 lineWidth = nextWidth;

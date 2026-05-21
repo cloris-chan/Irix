@@ -373,7 +373,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     }
 
                     var glyph = _layoutGlyphScratch[glyphIndex];
-                    if (penX + glyph.Advance > maxX)
+                    if (style.Wrapping == TextWrapping.NoWrap && penX + glyph.Advance > maxX)
                     {
                         unsupportedReason = GlyphAtlasFallbackReason.Clip;
                         break;

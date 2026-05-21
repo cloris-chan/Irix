@@ -256,7 +256,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Glyph_atlas_line_planner_degrades_wrap_when_word_cannot_fit()
+    public void Glyph_atlas_line_planner_keeps_unbreakable_wrap_words_as_clipped_lines()
     {
         Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[2];
         Span<float> advances = [10, 10, 5, 10];
@@ -269,8 +269,10 @@ public sealed class ProgramDiagnosticsTests
             lines,
             out var lineCount);
 
-        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Wrapping, reason);
-        Assert.Equal(0, lineCount);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, reason);
+        Assert.Equal(2, lineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, 2, 20), lines[0]);
+        Assert.Equal(new GlyphAtlasLayoutLine(3, 4, 10), lines[1]);
     }
 
     [Fact]
@@ -1029,17 +1031,17 @@ public sealed class ProgramDiagnosticsTests
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
         Assert.Equal(9, summary.TextRuns);
-        Assert.Equal(7, summary.AtlasCandidateRuns);
-        Assert.Equal(2, summary.DegradedCandidateRuns);
-        Assert.Equal(2, summary.WrappedAtlasCandidateRuns);
-        Assert.Equal(1, summary.WrappingFallbackRuns);
+        Assert.Equal(8, summary.AtlasCandidateRuns);
+        Assert.Equal(1, summary.DegradedCandidateRuns);
+        Assert.Equal(3, summary.WrappedAtlasCandidateRuns);
+        Assert.Equal(0, summary.WrappingFallbackRuns);
         Assert.Equal(1, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(1, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=7", expectedLine);
-        Assert.Contains("degradedRuns=2", expectedLine);
-        Assert.Contains("wrappedAtlasRuns=2", expectedLine);
-        Assert.Contains("Wrapping=1", expectedLine);
+        Assert.Contains("atlasRuns=8", expectedLine);
+        Assert.Contains("degradedRuns=1", expectedLine);
+        Assert.Contains("wrappedAtlasRuns=3", expectedLine);
+        Assert.Contains("Wrapping=0", expectedLine);
         Assert.Contains("NonAscii=1", expectedLine);
         Assert.Contains("ColorGlyph=0", expectedLine);
         Assert.Contains("ComplexScript=1", expectedLine);

@@ -36,7 +36,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatExpectedLine(expected));
-            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWord=True shapedWrap=True");
+            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True shapedWrap=True");
             output.WriteLine();
         }
         finally
@@ -164,13 +164,6 @@ internal static class GlyphAtlasWrapDiagnosticRunner
                 continue;
             }
 
-            if (IsHardWrapCandidate(text, style, command.Rect.Width))
-            {
-                degradedCandidateRuns++;
-                wrappingFallbackRuns++;
-                continue;
-            }
-
             atlasCandidateRuns++;
             if (style.Wrapping == TextWrapping.Wrap)
             {
@@ -195,13 +188,6 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             + $"degradedRuns={summary.DegradedCandidateRuns}, wrappedAtlasRuns={summary.WrappedAtlasCandidateRuns}, "
             + $"Wrapping={summary.WrappingFallbackRuns}, NonAscii={summary.NonAsciiFallbackRuns}, "
             + $"ColorGlyph={summary.ColorGlyphFallbackRuns}, ComplexScript={summary.ComplexScriptFallbackRuns}";
-    }
-
-    private static bool IsHardWrapCandidate(ReadOnlySpan<char> text, TextStyle style, float width)
-    {
-        return style.Wrapping == TextWrapping.Wrap
-            && width < 96
-            && !ContainsSpace(text);
     }
 
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style, float width)
