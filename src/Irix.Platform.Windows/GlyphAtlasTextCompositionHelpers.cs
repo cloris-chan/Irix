@@ -254,6 +254,11 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasFontFace;
     }
 
+    internal static bool HasGlyphRunAnalysisResource(bool hasGlyphRunAnalysis)
+    {
+        return hasGlyphRunAnalysis;
+    }
+
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;

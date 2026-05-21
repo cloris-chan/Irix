@@ -899,6 +899,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 0,
                 &analysis);
 
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphRunAnalysisResource(analysis != null))
+            {
+                throw CreateRecordException(
+                    GlyphAtlasRecordFailurePhase.Record,
+                    "D3D12GlyphAtlasTextRenderer.RasterizeGlyph found a missing DirectWrite glyph run analysis.");
+            }
+
             analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_TYPE.DWRITE_TEXTURE_CLEARTYPE_3x1, out var bounds);
             var width = bounds.right - bounds.left;
             var height = bounds.bottom - bounds.top;
