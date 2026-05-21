@@ -136,8 +136,8 @@ Known limitations:
 - Default GlyphAtlas has explicit text degradation limits: unsupported runs are not drawn until they get D3D12 handling or an accepted product degradation contract.
 - Full LRU/entry-level eviction is not implemented; AtlasFull degradation plus retained-floor-gated next-record page reuse is the current bounded safety behavior.
 - Complex shaping, fallback font face identity, color glyphs, and wrapping beyond ASCII explicit breaks / whitespace breaks are still degradation cases.
-- Warm glyph-atlas scroll allocation was previously about `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution. Optimization should wait for the attributed evidence rather than guessing.
-- Warm allocation follow-up should start with tree construction and translator attribution. Current local evidence attributes the warm scroll sample mostly to tree construction and translation rather than renderer submit.
+- Warm glyph-atlas scroll allocation was previously reported at about `6.2 KB/frame`; the corrected frame-scoped `--diagnose-text-cache 30` scroll sample is about `2.8 KB/frame`.
+- Warm allocation follow-up should start with translator and tree attribution. Current local scroll evidence is `tree=953 B/frame`, `diff=273 B/frame`, `translate=1631 B/frame`, and `render=273 B/frame`, so renderer submit is not the primary remaining cost.
 
 ## Non-Goals
 

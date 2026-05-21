@@ -122,7 +122,7 @@ The upload sizes and scratch sizes differ by diagnostic scale, which gives evide
 
 Opt-in allocation baseline:
 
-- Warm scroll scenario after the atlas is populated reports no D2D format/layout cache activity and no fallback. Per-frame allocation was `6247 bytes` at 100%, `6246 bytes` at 150%, and `6246 bytes` at 200%.
+- Historical warm scroll scenario after the atlas is populated reported no D2D format/layout cache activity and no fallback. Per-frame allocation was `6247 bytes` at 100%, `6246 bytes` at 150%, and `6246 bytes` at 200% under the old diagnostic runner; this is superseded by the 2026-05-21 frame-scoped text-cache diagnostic correction.
 - Static first-use scenarios still include glyph misses and startup/window/resource allocations. They are not the warm-frame baseline.
 
 Atlas full stress:

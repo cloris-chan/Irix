@@ -60,7 +60,7 @@ Expected smoke headers:
 
 - The default ASCII path now avoids overlay sync waits.
 - Overlay sync is still required and enabled for fallback frames.
-- `GlyphAtlas` remains a prototype renderer path with no eviction, no complex shaping, and warm scroll allocation around `6.2 KB/frame`. Runtime shader compile has since been removed in favor of embedded DXBC bytecode, `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution, and mixed fallback v0 has superseded the whole-frame fallback behavior recorded earlier in this evidence file.
+- `GlyphAtlas` remains a prototype renderer path with no eviction, no complex shaping, and the historical warm scroll allocation in this evidence file was around `6.2 KB/frame`. Runtime shader compile has since been removed in favor of embedded DXBC bytecode, `--diagnose-text-cache` now prints tree/diff/translate/render allocation attribution, a 2026-05-21 frame-scoped diagnostic correction reports the scroll sample around `2.8 KB/frame`, and mixed fallback v0 has superseded the whole-frame fallback behavior recorded earlier in this evidence file.
 - `Scissor` is the default backend clip mode; `Diagnostic` remains available for rollback and A/B diagnostics.
 
 ## P1 Hardening Evidence
@@ -70,7 +70,7 @@ Expected smoke headers:
 - Default GlyphAtlas sync smoke after embedded bytecode fix: `frameSerial=900`, `presentSerial=900`, `syncWaits=0`, `fallbacks=0`, `initFailurePhase=None`.
 - Overlay rollback sync smoke remains available: `--text-composition overlay` produced `frameSerial=900`, `presentSerial=900`, `syncWaits=900`.
 - Historical pre-mixed-fallback Non-ASCII result: `--diagnose-sync-non-ascii` produced `fallbacks=900`, `unsupportedRuns=900`, `NonAscii=900`, `syncWaits=900`, `initFailurePhase=None`. Current mixed fallback v0 evidence is recorded below.
-- Warm scroll allocation attribution from `--diagnose-text-cache 30`: total `193584 bytes`, `6452 bytes/frame`; attribution `tree=144440 bytes (4814/frame)`, `diff=3752 bytes (125/frame)`, `translate=49200 bytes (1640/frame)`, `render=8200 bytes (273/frame)`.
+- Historical warm scroll allocation attribution from `--diagnose-text-cache 30`: total `193584 bytes`, `6452 bytes/frame`; attribution `tree=144440 bytes (4814/frame)`, `diff=3752 bytes (125/frame)`, `translate=49200 bytes (1640/frame)`, `render=8200 bytes (273/frame)`. This used the old diagnostic runner before its per-frame `VirtualTextArena.BeginFrame()` correction.
 - D3D12 failure diagnostics hardening: glyph-atlas initialization failures use `initFailurePhase`; runtime record/upload/map failures now use `recordFailurePhase` and `RecordFailed` fallback reason before overlay fallback. This keeps runtime fallback distinct from constructor-time atlas setup failure.
 - D3D12 upload map lifetime hardening: rectangle vertex, glyph vertex, and atlas upload paths now unmap in `finally` after a successful map.
 - D3D12 swapchain lifetime hardening: swapchain creation now releases the DXGI factory and intermediate `IDXGISwapChain1` through `finally` after querying `IDXGISwapChain3`.

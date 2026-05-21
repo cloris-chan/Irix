@@ -135,7 +135,7 @@ Do not keep expanding the ASCII prototype surface or flip another runtime defaul
 | D3D12-only text prototype | `Irix.Platform.Windows` | Draw basic ASCII/text runs from atlas in D3D12-only pass | ✅ Default-on prototype; overlay renderer removed |
 | Shader/resource lifetime hardening | Windows D3D12 renderers | Runtime shader compile removed; failure diagnostics split; upload maps, swapchain/overlay intermediates, core resource init/release paths, and frame-slot upload buffers are guarded | ✅ First pass done |
 | Remove runtime shader compile | `D3D12GlyphAtlasTextRenderer.cs`, `D3D12Renderer2D.cs` | Replace runtime `D3DCompile` / `d3dcompiler_47.dll` dependency with embedded bytecode or build-time compiled shader assets | ✅ Embedded bytecode |
-| Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the warm scroll allocation around `6.2 KB/frame` before optimizing | ✅ Attribution added |
+| Attribute warm glyph atlas allocation | `TextCacheAllocationDiagnosticRunner.cs`, diagnostics | Attribute the corrected frame-scoped warm scroll allocation before optimizing | ✅ Attribution added; latest scroll sample about `2.8 KB/frame` |
 | Non-overlay degradation path | Renderer design | Per-run atlas plus explicit degradation so NonAscii/complex/failure cases do not invoke D3D11On12/D2D in default GlyphAtlas | ✅ Default GlyphAtlas no longer records overlay fallback runs |
 | Overlay removal | Renderer design / smoke evidence | Remove D3D11On12/D2D source, native generation, sync strategy, and explicit overlay mode | ✅ Active source removed |
 | Full migration | Glyph-atlas widening | Reduce accepted degradation by adding D3D12 handling | Planned |
@@ -156,7 +156,7 @@ Known limitations checklist before expanding text coverage:
 - Glyph atlas cache entries, draw batches, and atlas pages now have stable value handles and generations internally; page-owned texture/upload/SRV resources replace renderer-level atlas resource fields. Cache hits and new glyph rasterizations touch glyph entries/pages with a monotonic atlas record serial. The renderer preallocates a four-page atlas pool, switches pages when the active page is full, uses strict-oldest cold-page selection, splits draw batches on page changes, records page reuse requests with the triggering atlas record serial, generation-guards reused-page cache cleanup after the request becomes applicable on a later record whose retained-frame floor has advanced beyond the triggering record, and resets reused pages to a full-page dirty upload state.
 - Glyph atlas diagnostics report page count, fixed page budget, page dimensions, total atlas pixel capacity, completed and pending next-frame reuse counts, scheduled page reuse requests, hard AtlasFull-without-reuse counts, used glyph bitmap pixels, a shelf fragmentation estimate, atlas record serial, oldest/newest page age metrics, upload bytes, and uploaded glyph count for future page-size, LRU, and upload policy decisions.
 - No complex shaping, fallback font identity, color glyphs, SDF/MSDF, or complex wrapping support in the atlas path.
-- Warm glyph-atlas scroll allocation is documented at roughly `6.2 KB/frame`; `--diagnose-text-cache` now prints tree/diff/translate/render attribution. Use that evidence before doing allocation work.
+- Warm glyph-atlas scroll allocation was previously documented at roughly `6.2 KB/frame`; corrected frame-scoped `--diagnose-text-cache 30` now reports the scroll sample at roughly `2.8 KB/frame` with tree/diff/translate/render attribution. Use that evidence before doing allocation work.
 - Overlay removal is active in source. Do not reintroduce D3D11On12/D2D; widen D3D12 text handling or keep explicit degradation.
 
 Next hardening checklist:
@@ -164,7 +164,7 @@ Next hardening checklist:
 - Resource cache / stable handles: POST-011 now has generation-safe retained-floor page reuse. Continue with resource lifetime hardening and only move to full LRU/entry-level eviction after the retained atlas command ownership story is explicit.
 - Shader packaging follow-up: decide whether inline embedded DXBC is sufficient or whether to introduce a build-time shader asset pipeline before shaders grow larger.
 - Resource lifetime hardening: keep tightening D3D12 resource ownership and failure phases beyond upload-map, frame-slot upload ownership, and swapchain/core initialization; glyph-atlas initialization failures must remain degradation-safe.
-- Warm allocation attribution: run `--diagnose-text-cache` and optimize only after tree/diff/translate/render attribution identifies the source.
+- Warm allocation attribution: latest corrected scroll sample is mostly translator/tree cost, not renderer submit. Optimize only after tree/diff/translate/render attribution identifies the source.
 - Degradation follow-up: AtlasFull and record-failure contracts are recorded as degradation. Full LRU eviction and D3D12 rendering for currently unsupported text remain future work before widening atlas text coverage.
 - Overlay removal path: D3D11On12/D2D source is gone. Each fallback case should move toward D3D12 handling or an explicit degradation contract.
 

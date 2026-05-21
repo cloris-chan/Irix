@@ -48,20 +48,11 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var arena = new VirtualTextArena();
         RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) =>
-        {
-            var root = BuildRoot(arena, "Static cache baseline", scrollY: 0);
-            return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
-        });
+            BuildScenarioTree(arena, "Static cache baseline", scrollY: 0));
         RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) =>
-        {
-            var root = BuildRoot(arena, "Scrolling cache baseline", scrollY: i * 2);
-            return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
-        });
+            BuildScenarioTree(arena, "Scrolling cache baseline", scrollY: i * 2));
         RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, scale) =>
-        {
-            var root = BuildRoot(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0);
-            return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
-        }, scaleChangeAtHalf: true);
+            BuildScenarioTree(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0), scaleChangeAtHalf: true);
 
         output.WriteLine("=== Text cache / allocation diagnostic complete ===");
     }
@@ -161,6 +152,13 @@ internal static class TextCacheAllocationDiagnosticRunner
     }
 
     private static long PerFrame(long bytes, int frameCount) => frameCount > 0 ? bytes / frameCount : 0;
+
+    private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)
+    {
+        arena.BeginFrame();
+        var root = BuildRoot(arena, text, scrollY);
+        return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
+    }
 
     private static VirtualNode BuildRoot(VirtualTextArena arena, string text, int scrollY)
     {

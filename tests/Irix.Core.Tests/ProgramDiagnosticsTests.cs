@@ -907,6 +907,18 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Text_cache_allocation_diagnostic_uses_frame_scoped_text_arena()
+    {
+        var root = FindRepoRoot();
+        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "TextCacheAllocationDiagnosticRunner.cs")));
+
+        Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
+        Assert.Contains("arena.BeginFrame();", source);
+        Assert.Contains("return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());", source);
+        Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
+    }
+
+    [Fact]
     public void Glyph_atlas_stress_report_includes_atlas_full_fallback_contract()
     {
         var glyphAtlas = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
