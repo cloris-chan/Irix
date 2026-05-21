@@ -123,14 +123,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             {
                 IDWriteTextAnalyzer* textAnalyzer;
                 _dwriteFactory->CreateTextAnalyzer(&textAnalyzer);
+                RequirePointer(textAnalyzer, "D3D12GlyphAtlasTextRenderer.CreateTextAnalyzer returned a null text analyzer.");
                 _textAnalyzer = textAnalyzer;
             });
             RunInitializationPhase(GlyphAtlasInitializationPhase.FontFallback, () =>
             {
                 _dwriteFactory->QueryInterface<IDWriteFactory2>(out var factory2).ThrowOnFailure();
+                RequirePointer(factory2, "D3D12GlyphAtlasTextRenderer.QueryInterface(IDWriteFactory2) returned a null factory.");
                 _dwriteFactory2 = factory2;
                 IDWriteFontFallback* fontFallback;
                 _dwriteFactory2->GetSystemFontFallback(&fontFallback);
+                RequirePointer(fontFallback, "D3D12GlyphAtlasTextRenderer.GetSystemFontFallback returned a null font fallback.");
                 _fontFallback = fontFallback;
             });
 
@@ -223,7 +226,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     "D3D12GlyphAtlasTextRenderer.TryRecord found a missing command list.");
             }
 
-            if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _dwriteFactory2 != null, _fontCollection != null, _textAnalyzer != null))
+            if (!GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(_dwriteFactory != null, _dwriteFactory2 != null, _fontCollection != null, _textAnalyzer != null, _fontFallback != null))
             {
                 throw CreateRecordException(
                     GlyphAtlasRecordFailurePhase.DirectWrite,

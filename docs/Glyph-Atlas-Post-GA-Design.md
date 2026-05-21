@@ -44,7 +44,7 @@ D3D12 upload map paths now unmap in `finally` after a successful map, covering r
 D3D12 swapchain creation now releases the DXGI factory and intermediate `IDXGISwapChain1` in `finally`; constructor and recovery use the same helper.
 D3D12 core device/queue/RTV/command/fence setup is also shared by constructor and recovery, with pointer guards and null-safe cleanup for partial initialization failure.
 D3D12 rectangle vertex, glyph vertex, and per-page atlas upload resources are now frame-slot owned. `BeginFrame` no longer needs a coarse last-submitted-frame upload wait; normal swapchain frame-slot fencing protects each upload resource before reuse.
-Glyph-atlas record-time resource guards classify missing command list, DirectWrite factory/font collection/font face/glyph-run-analysis resources, glyph pipeline state/root signature, glyph vertex upload buffer, atlas texture/upload buffer, and atlas SRV resources as typed record failures instead of allowing null GPU resource binding.
+Glyph-atlas record-time resource guards classify missing command list, DirectWrite factory/factory2/font collection/text analyzer/font fallback/font face/glyph-run-analysis resources, glyph pipeline state/root signature, glyph vertex upload buffer, atlas texture/upload buffer, and atlas SRV resources as typed record failures instead of allowing null GPU resource binding.
 D3D11On12 / Direct2D overlay renderer sources, sync strategy, native method generation entries, and diagnostics have been removed from the active source tree.
 
 Default degradation update: `D3D12GlyphAtlasTextRenderer.TryRecord` is now an internal record result rather than a bool-only gate. It records atlas quads for accepted runs and counts unsupported or failed renderable runs as degradation.
@@ -129,7 +129,7 @@ After updating embedded blobs, run the shader bytecode decode tests plus D3D12 s
 
 `initFailurePhase` is reserved for constructor-time atlas setup failures: DirectWrite factory, font collection, root signature, shader bytecode decode, PSO, atlas texture, upload buffer, descriptor heap, SRV, or vertex buffer creation. These failures prevent atlas creation and degrade renderable text without invoking overlay.
 
-`recordFailurePhase` is reserved for runtime command recording failures after atlas initialization succeeds. Current phases cover generic record failure, missing command-list input, DirectWrite runtime lookup/measurement/rasterization failure, atlas page handle resolution, pipeline binding prerequisites, vertex-buffer map failure, atlas-upload map failure, and atlas draw resource binding. A runtime record failure disables the current atlas renderer instance and degrades renderable text for subsequent frames without marking the D3D12 device lost by itself.
+`recordFailurePhase` is reserved for runtime command recording failures after atlas initialization succeeds. Current phases cover generic record failure, missing command-list input, DirectWrite runtime lookup/measurement/rasterization/fallback-resource failure, atlas page handle resolution, pipeline binding prerequisites, vertex-buffer map failure, atlas-upload map failure, and atlas draw resource binding. A runtime record failure disables the current atlas renderer instance and degrades renderable text for subsequent frames without marking the D3D12 device lost by itself.
 Stale atlas page handles in active-page, pending-reuse, or draw-batch resolution are classified as `AtlasPage` record failures rather than leaking ordinary invalid-operation exceptions.
 
 Known limitations:
