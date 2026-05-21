@@ -83,8 +83,6 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("shape".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("line\nbreak".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsLineBreakOrTab("tab\tbreak".AsSpan()));
-        Assert.False(GlyphAtlasTextCompositionHelpers.ContainsTab("line\nbreak".AsSpan()));
-        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsTab("tab\tbreak".AsSpan()));
 
         var wrappingStyle = new TextStyle(
             TextStyle.Default.FontFamily,
@@ -587,6 +585,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryProbeShapedRun(ReadOnlySpan<char> text, TextStyle style, out ShapedGlyphRun shapedRun)", glyphSource);
         Assert.Contains("private bool TryShapeRun(ReadOnlySpan<char> text, TextStyle style, CachedFontFace baseFontFace, out ShapedGlyphRun shapedRun)", glyphSource);
         Assert.Contains("private bool TryShapeTextRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
+        Assert.Contains("private bool TryShapeTextSpan(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
+        Assert.Contains("private bool TryAppendShapedTabSegment(TextStyle style, CachedFontFace baseFontFace, int textStart, int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryShapeSegmentedFallbackRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("TryShapeTextSegment(", glyphSource);
         Assert.Contains("private bool TryGetCachedFallbackFontFace(IDWriteFont* font, out CachedFontFace fontFace)", glyphSource);
@@ -594,7 +594,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("var fontFace = baseFontFace;", glyphSource);
         Assert.Contains("TryBuildShapedAtlasRun(text, textRun, style, shapedRun", glyphSource);
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
-        Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsTab(text)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.IsTab(text[position])", glyphSource);
+        Assert.Contains("spaceAdvance * GlyphAtlasTextCompositionHelpers.TabAdvanceSpaceCount", glyphSource);
+        Assert.Contains("if (shapedSegment.GlyphCount == 0)", glyphSource);
         Assert.Contains("shapedRun.HasMissingGlyph()", glyphSource);
         Assert.Contains("private bool TryGetShapedGlyph(", glyphSource);
         Assert.Contains("GlyphAtom.ShapedPlacement(", glyphSource);
@@ -616,6 +618,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("properties.isZeroWidthSpace", glyphSource);
         Assert.Contains("private readonly struct ShapedGlyphSegment(", glyphSource);
         Assert.Contains("private readonly struct ShapedGlyphLine(", glyphSource);
+        Assert.Contains("float ControlAdvance", glyphSource);
+        Assert.Contains("public float ControlAdvance { get; } = ControlAdvance;", glyphSource);
         Assert.Contains("private readonly ref struct ShapedGlyphRun(", glyphSource);
         Assert.Contains("float FontEmSize", glyphSource);
         Assert.Contains("ReadOnlySpan<ShapedGlyph> Glyphs", glyphSource);

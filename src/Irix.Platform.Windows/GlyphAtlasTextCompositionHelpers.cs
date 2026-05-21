@@ -295,19 +295,6 @@ internal static class GlyphAtlasTextCompositionHelpers
         return false;
     }
 
-    internal static bool ContainsTab(ReadOnlySpan<char> text)
-    {
-        foreach (var character in text)
-        {
-            if (character == '\t')
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)
     {
         return hasVertexUploadBuffer;

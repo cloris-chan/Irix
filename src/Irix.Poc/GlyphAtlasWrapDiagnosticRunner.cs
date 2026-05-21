@@ -36,7 +36,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatExpectedLine(expected));
-            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWord=True shapedNonAscii=True");
+            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWord=True shapedControls=True");
             output.WriteLine();
         }
         finally
@@ -93,7 +93,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
         var tabbedText = resources.AddText($"tab\tstop {frameIndex:D3}");
         var simpleBmpText = resources.AddText($"cafe \u00E9lan \u0394\u0416 {frameIndex:D3}");
         var hardWordText = resources.AddText($"supercalifragilisticexpialidocious{frameIndex:D3}");
-        var nonAsciiText = resources.AddText($"shape cafe\u0301 {frameIndex:D3}\nnext cafe\u0301");
+        var nonAsciiText = resources.AddText($"shape\tcafe\u0301 {frameIndex:D3}\nnext cafe\u0301");
 
         return
         [
@@ -183,7 +183,6 @@ internal static class GlyphAtlasWrapDiagnosticRunner
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style)
     {
         return style.Wrapping == TextWrapping.NoWrap
-            && !GlyphAtlasTextCompositionHelpers.ContainsTab(text)
             && ContainsCombiningMark(text);
     }
 
