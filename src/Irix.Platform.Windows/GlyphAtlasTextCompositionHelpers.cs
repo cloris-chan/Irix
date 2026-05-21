@@ -41,7 +41,8 @@ internal static class GlyphAtlasTextCompositionHelpers
     {
         return character is >= ' ' and <= '~'
             || character is '\r' or '\n' or '\t'
-            || character is >= '\u00A0' and <= '\u00FF';
+            || character is >= '\u00A0' and <= '\u024F'
+            || character is >= '\u0370' and <= '\u04FF';
     }
 
     internal static D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason PlanLines(

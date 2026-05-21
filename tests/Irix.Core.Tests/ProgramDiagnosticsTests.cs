@@ -48,6 +48,15 @@ public sealed class ProgramDiagnosticsTests
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("cafe \u00E9lan".AsSpan(), TextStyle.Default));
         Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Latin \u0100\u024F".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Greek \u0391\u03A9".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Cyrillic \u0416".AsSpan(), TextStyle.Default));
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("Line\nBreak".AsSpan(), TextStyle.Default));
         Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
@@ -65,6 +74,8 @@ public sealed class ProgramDiagnosticsTests
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii,
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("emoji \ud83d\ude00".AsSpan(), TextStyle.Default));
         Assert.True(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u00E9'));
+        Assert.True(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u0394'));
+        Assert.True(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u0416'));
         Assert.False(GlyphAtlasTextCompositionHelpers.IsSupportedSimpleGlyphAtlasCharacter('\u0301'));
 
         var wrappingStyle = new TextStyle(
@@ -546,6 +557,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private long _glyphRecordSerial;", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasEntryHandle(int Index, int Generation)", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageHandle(int Index, int Generation)", glyphSource);
+        Assert.Contains("private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex)", glyphSource);
+        Assert.Contains("public static GlyphAtom SimpleCodePoint(uint codePoint, ushort glyphIndex)", glyphSource);
+        Assert.Contains("private readonly struct GlyphKey(FontFaceKey FontFace, GlyphAtom Glyph)", glyphSource);
+        Assert.Contains("private static bool TryMapCharacterToSimpleGlyph(CachedFontFace fontFace, char character, out GlyphAtom glyph)", glyphSource);
+        Assert.Contains("GlyphAtom.SimpleCodePoint(codePoint, glyphIndex[0])", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageReuseRequest(GlyphAtlasPageHandle Page, long RequestedRecordSerial)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(!IsNone, RequestedRecordSerial, recordSerial, oldestRetainedRecordSerial)", glyphSource);
         Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
@@ -646,6 +662,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("_glyphs[key] = handle;", glyphSource);
         Assert.DoesNotContain("Dictionary<GlyphKey, GlyphEntry> _glyphs", glyphSource);
         Assert.DoesNotContain("_glyphs.Add(key, glyph)", glyphSource);
+        Assert.DoesNotContain("private readonly struct GlyphKey(FontFaceKey FontFace, char Character)", glyphSource);
         Assert.DoesNotContain("private ID3D12Resource* _atlasTexture", glyphSource);
         Assert.DoesNotContain("private ID3D12Resource* _atlasUpload", glyphSource);
         Assert.DoesNotContain("private ID3D12DescriptorHeap* _srvHeap", glyphSource);

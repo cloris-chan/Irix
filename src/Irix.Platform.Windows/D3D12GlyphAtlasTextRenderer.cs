@@ -480,26 +480,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         out float advance)
     {
         advance = 0;
-        var codePoint = (uint)character;
-        var glyphIndex = stackalloc ushort[1];
-        try
-        {
-            fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
-        }
-        catch (COMException ex)
-        {
-            throw CreateRecordException(
-                GlyphAtlasRecordFailurePhase.DirectWrite,
-                "D3D12GlyphAtlasTextRenderer.GetGlyphIndices(measure)",
-                ex);
-        }
-
-        if (glyphIndex[0] == 0 && character != ' ')
+        if (!TryMapCharacterToSimpleGlyph(fontFace, character, out var glyphAtom))
         {
             return false;
         }
 
-        advance = ComputeGlyphAdvance(fontFace, emSize, glyphIndex[0]);
+        advance = ComputeGlyphAdvance(fontFace, emSize, glyphAtom.GlyphIndex);
         return true;
     }
 
@@ -634,7 +620,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         unsupportedReason = GlyphAtlasFallbackReason.None;
-        var key = new GlyphKey(fontFace.Key, character);
+        if (!TryMapCharacterToSimpleGlyph(fontFace, character, out var glyphAtom))
+        {
+            glyph = default;
+            unsupportedReason = GlyphAtlasFallbackReason.FontMissing;
+            return false;
+        }
+
+        var key = new GlyphKey(fontFace.Key, glyphAtom);
         if (_glyphs.TryGetValue(key, out var handle) && TryResolveGlyph(handle, recordSerial, out glyph))
         {
             _diagnostics = _diagnostics.WithCacheHit();
@@ -642,7 +635,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         _diagnostics = _diagnostics.WithCacheMiss();
-        if (!RasterizeGlyph(key, fontFace, style.FontSize, character, recordSerial, out glyph, out unsupportedReason))
+        if (!RasterizeGlyph(key, fontFace, style.FontSize, glyphAtom, recordSerial, out glyph, out unsupportedReason))
         {
             return false;
         }
@@ -894,35 +887,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         GlyphKey key,
         CachedFontFace fontFace,
         float emSize,
-        char character,
+        GlyphAtom glyphAtom,
         long recordSerial,
         out GlyphEntry entry,
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         entry = default;
         unsupportedReason = GlyphAtlasFallbackReason.None;
-        var codePoint = (uint)character;
         var glyphIndex = stackalloc ushort[1];
-        try
-        {
-            fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
-        }
-        catch (COMException ex)
-        {
-            throw CreateRecordException(
-                GlyphAtlasRecordFailurePhase.DirectWrite,
-                "D3D12GlyphAtlasTextRenderer.GetGlyphIndices(rasterize)",
-                ex);
-        }
-
-        if (glyphIndex[0] == 0 && character != ' ')
-        {
-            unsupportedReason = GlyphAtlasFallbackReason.FontMissing;
-            return false;
-        }
-
+        glyphIndex[0] = glyphAtom.GlyphIndex;
         var advances = stackalloc float[1];
-        advances[0] = ComputeGlyphAdvance(fontFace, emSize, glyphIndex[0]);
+        advances[0] = ComputeGlyphAdvance(fontFace, emSize, glyphAtom.GlyphIndex);
 
         var offsets = stackalloc DWRITE_GLYPH_OFFSET[1];
         var run = new DWRITE_GLYPH_RUN
@@ -1024,6 +999,32 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             if (analysis != null) analysis->Release();
         }
+    }
+
+    private static bool TryMapCharacterToSimpleGlyph(CachedFontFace fontFace, char character, out GlyphAtom glyph)
+    {
+        glyph = default;
+        var codePoint = (uint)character;
+        var glyphIndex = stackalloc ushort[1];
+        try
+        {
+            fontFace.Face->GetGlyphIndices(new ReadOnlySpan<uint>(&codePoint, 1), new Span<ushort>(glyphIndex, 1));
+        }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.GetGlyphIndices(simple)",
+                ex);
+        }
+
+        if (glyphIndex[0] == 0 && character != ' ')
+        {
+            return false;
+        }
+
+        glyph = GlyphAtom.SimpleCodePoint(codePoint, glyphIndex[0]);
+        return true;
     }
 
     private Span<byte> RentClearTypeScratch(int byteCount)
@@ -2188,16 +2189,33 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public DWRITE_FONT_METRICS Metrics { get; } = metrics;
     }
 
-    private readonly struct GlyphKey(FontFaceKey FontFace, char Character) : IEquatable<GlyphKey>
+    private readonly struct GlyphAtom(byte Kind, uint CodePoint, ushort GlyphIndex) : IEquatable<GlyphAtom>
+    {
+        private const byte SimpleCodePointKind = 1;
+
+        public byte Kind { get; } = Kind;
+        public uint CodePoint { get; } = CodePoint;
+        public ushort GlyphIndex { get; } = GlyphIndex;
+
+        public static GlyphAtom SimpleCodePoint(uint codePoint, ushort glyphIndex) => new(SimpleCodePointKind, codePoint, glyphIndex);
+
+        public bool Equals(GlyphAtom other) => Kind == other.Kind && CodePoint == other.CodePoint && GlyphIndex == other.GlyphIndex;
+
+        public override bool Equals(object? obj) => obj is GlyphAtom other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(Kind, CodePoint, GlyphIndex);
+    }
+
+    private readonly struct GlyphKey(FontFaceKey FontFace, GlyphAtom Glyph) : IEquatable<GlyphKey>
     {
         public FontFaceKey FontFace { get; } = FontFace;
-        public char Character { get; } = Character;
+        public GlyphAtom Glyph { get; } = Glyph;
 
-        public bool Equals(GlyphKey other) => FontFace.Equals(other.FontFace) && Character == other.Character;
+        public bool Equals(GlyphKey other) => FontFace.Equals(other.FontFace) && Glyph.Equals(other.Glyph);
 
         public override bool Equals(object? obj) => obj is GlyphKey other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(FontFace, Character);
+        public override int GetHashCode() => HashCode.Combine(FontFace, Glyph);
     }
 
     private readonly struct GlyphAtlasPageHandle(int Index, int Generation) : IEquatable<GlyphAtlasPageHandle>
