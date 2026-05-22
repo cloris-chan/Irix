@@ -1,7 +1,7 @@
 # Irix Project Status
 
 > Current developer handoff note for the Irix Windows PoC.
-> Last verified: 2026-05-22.
+> Last verified: 2026-05-23.
 
 ---
 
@@ -228,6 +228,7 @@ RTL strong-range helper update: Release build passed; program diagnostics tests 
 Color glyph candidate narrowing update: Release build passed; program diagnostics tests `84` passed; non-D3D12/non-performance tests `660` passed. Color-glyph routing now uses a narrower emoji/VS16 candidate helper instead of treating every surrogate pair or variation selector as color text; malformed surrogates still avoid the normal shaped path, while non-emoji supplementary pairs such as CJK Extension B can attempt the regular shaped atlas path when DirectWrite fallback provides glyphs. Existing wrap smoke stayed atlas-only with `atlasRuns=45`, `degradedRuns=0`, `RecordFailed=0`, and `syncWaits=0`.
 Nested BiDi visual-order update: Release build passed; program diagnostics tests `85` passed. Resolved-level segment ordering is now centralized in `GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder`, with direct coverage for nested level sequences such as `0,1,2,1,0` and `1,2,3,2,1`. RTL-base shaped lines apply the same nested visual ordering and then reverse the line segment iteration for the existing right-edge draw loop. Existing wrap smoke stayed atlas-only with `atlasRuns=45`, `degradedRuns=0`, `RecordFailed=0`, and `syncWaits=0`.
 Atlas page format diagnostics update: Release build passed; program diagnostics tests `85` passed; non-D3D12/non-performance tests `661` passed. Glyph atlas diagnostics now include `atlasAlphaPages` and `atlasBgraPages` alongside total `atlasPages`, so BGRA bitmap/color glyph page pressure can be distinguished from alpha mask/outline layer pressure before moving toward broader cache policy work. Existing wrap smoke stayed atlas-only with `atlasPages=1`, `atlasAlphaPages=1`, `atlasBgraPages=0`, `atlasRuns=45`, `degradedRuns=0`, `RecordFailed=0`, and `syncWaits=0`.
+Color glyph diagnostic color-run update: Release build passed; program diagnostics tests `90` passed; non-D3D12/non-performance tests `666` passed; D3D12 tests `6` passed. `--diagnose-glyph-atlas-color-formats 64` now probes `IDWriteFactory4.TranslateColorGlyphRun` in addition to direct `IDWriteFontFace4.GetGlyphImageFormats`, and local Segoe UI Emoji evidence reports `factory4=True`, `face4=True`, `colorRunCandidates=7`, `layerCandidates=7`, `bgraCandidates=0`, `encodedBitmapCandidates=0`, and `bitmapRenderableCandidates=0`. Direct format queries still report no bitmap glyph image data on this machine, so wrap smoke staying at `atlasBgraPages=0` is expected while COLR/layer color runs are naturally exercised. Existing wrap smoke stayed atlas-only with `atlasRuns=45`, `degradedRuns=0`, `atlasBgraPages=0`, `RecordFailed=0`, and `syncWaits=0`.
 
 Manual smoke status:
 

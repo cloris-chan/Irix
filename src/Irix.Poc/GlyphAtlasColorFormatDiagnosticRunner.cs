@@ -24,8 +24,8 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
     internal static string FormatSummary(ColorGlyphFormatDiagnosticSnapshot snapshot)
     {
         return string.IsNullOrEmpty(snapshot.Failure)
-            ? $"Color glyph formats: face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, layerCandidates={snapshot.LayerCandidates}, bgraCandidates={snapshot.BgraCandidates}, encodedBitmapCandidates={snapshot.EncodedBitmapCandidates}, unsupportedColorCandidates={snapshot.UnsupportedColorCandidates}, bitmapRenderableCandidates={snapshot.BitmapRenderableCandidates}"
-            : $"Color glyph formats: failure={snapshot.Failure}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, layerCandidates=0, bgraCandidates=0, encodedBitmapCandidates=0, unsupportedColorCandidates=0, bitmapRenderableCandidates=0";
+            ? $"Color glyph formats: factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates={snapshot.ColorRunCandidates}, layerCandidates={snapshot.LayerCandidates}, bgraCandidates={snapshot.BgraCandidates}, encodedBitmapCandidates={snapshot.EncodedBitmapCandidates}, unsupportedColorCandidates={snapshot.UnsupportedColorCandidates}, bitmapRenderableCandidates={snapshot.BitmapRenderableCandidates}"
+            : $"Color glyph formats: failure={snapshot.Failure}, factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates=0, layerCandidates=0, bgraCandidates=0, encodedBitmapCandidates=0, unsupportedColorCandidates=0, bitmapRenderableCandidates=0";
     }
 
     internal static string FormatProbe(ColorGlyphFormatProbeResult result)
@@ -43,10 +43,21 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
         builder.Append(FormatFlags(result.Formats));
         builder.Append(" route=");
         builder.Append(result.BitmapRoute);
+        builder.Append(" colorRuns=");
+        builder.Append(result.ColorRunCount);
+        builder.Append(" runFormats=");
+        builder.Append(FormatFlags(result.ColorRunFormats));
+        builder.Append(" runRoute=");
+        builder.Append(result.ColorRunBitmapRoute);
         if (!string.IsNullOrEmpty(result.Error))
         {
             builder.Append(" error=");
             builder.Append(result.Error);
+        }
+        if (!string.IsNullOrEmpty(result.ColorRunError))
+        {
+            builder.Append(" runError=");
+            builder.Append(result.ColorRunError);
         }
 
         return builder.ToString();
