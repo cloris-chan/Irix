@@ -1161,6 +1161,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var pixelsPerEm = ComputeGlyphImagePixelsPerEm(fontEmSize);
         var glyphPenX = colorGlyphRun->baselineOriginX;
         var glyphCount = (int)glyphRun->glyphCount;
+        var bitmapColor = ResolveColorGlyphBitmapColor(color);
         var appendedAny = false;
         for (var i = 0; i < glyphCount; i++)
         {
@@ -1198,7 +1199,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             if (!TryAppendGlyphQuad(
                 glyph,
-                color,
+                bitmapColor,
                 glyphPenX + glyph.OffsetX + offset.advanceOffset,
                 colorGlyphRun->baselineOriginY + glyph.OffsetY - offset.ascenderOffset,
                 scissor,
@@ -1272,6 +1273,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
         }
 
+        var bitmapColor = ResolveColorGlyphBitmapColor(currentBrush);
         var appendedAny = false;
         for (var i = 0; i < shapedSegment.GlyphCount; i++)
         {
@@ -1293,7 +1295,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
             if (!TryAppendGlyphQuad(
                 glyph,
-                currentBrush,
+                bitmapColor,
                 glyphPenX + glyph.OffsetX + (shapedSegment.IsRightToLeft ? -offset.advanceOffset : offset.advanceOffset),
                 baselineOriginY + glyph.OffsetY - offset.ascenderOffset,
                 scissor,
@@ -1370,6 +1372,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         var glyphPenX = shapedSegment.IsRightToLeft ? baselineOriginX + ComputeShapedGlyphAdvance(shapedSegment.GlyphStart, shapedSegment.GlyphCount) : baselineOriginX;
+        var bitmapColor = ResolveColorGlyphBitmapColor(currentBrush);
         var appendedAny = false;
         for (var i = 0; i < shapedSegment.GlyphCount; i++)
         {
@@ -1404,7 +1407,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
                 if (!TryAppendGlyphQuad(
                     glyph,
-                    currentBrush,
+                    bitmapColor,
                     glyphPenX + glyph.OffsetX + (shapedSegment.IsRightToLeft ? -offset.advanceOffset : offset.advanceOffset),
                     baselineOriginY + glyph.OffsetY - offset.ascenderOffset,
                     scissor,
@@ -1431,7 +1434,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
                 if (!TryAppendGlyphQuad(
                     glyph,
-                    currentBrush,
+                    bitmapColor,
                     glyphPenX + glyph.OffsetX + (shapedSegment.IsRightToLeft ? -offset.advanceOffset : offset.advanceOffset),
                     baselineOriginY + glyph.OffsetY - offset.ascenderOffset,
                     scissor,
@@ -1741,6 +1744,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         return new Vector4(runColor.r, runColor.g, runColor.b, runColor.a * currentBrush.W);
     }
+
+    internal static Vector4 ResolveColorGlyphBitmapColor(Vector4 currentBrush) => new(1f, 1f, 1f, currentBrush.W);
 
     private static bool TryMeasureCharacterAdvance(
         CachedFontFace fontFace,

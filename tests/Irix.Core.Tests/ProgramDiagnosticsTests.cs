@@ -1,3 +1,4 @@
+using System.Numerics;
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -1187,6 +1188,14 @@ public sealed class ProgramDiagnosticsTests
             D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
                 DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE));
+    }
+
+    [Fact]
+    public void Glyph_atlas_bitmap_color_glyphs_preserve_image_color_and_apply_text_alpha()
+    {
+        Assert.Equal(
+            new Vector4(1f, 1f, 1f, 0.375f),
+            D3D12GlyphAtlasTextRenderer.ResolveColorGlyphBitmapColor(new Vector4(0.2f, 0.4f, 0.6f, 0.375f)));
     }
 
     [Fact]
