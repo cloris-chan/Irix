@@ -592,6 +592,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("IDWriteFontFace4", nativeMethods);
         Assert.Contains("IDWriteColorGlyphRunEnumerator", nativeMethods);
         Assert.Contains("IDWriteTextAnalysisSink", nativeMethods);
+        Assert.Contains("CoCreateInstance", nativeMethods);
+        Assert.Contains("CoInitializeEx", nativeMethods);
+        Assert.Contains("CoUninitialize", nativeMethods);
+        Assert.Contains("IWICImagingFactory", nativeMethods);
+        Assert.Contains("IWICStream", nativeMethods);
+        Assert.Contains("IWICBitmapDecoder", nativeMethods);
+        Assert.Contains("IWICBitmapFrameDecode", nativeMethods);
+        Assert.Contains("IWICFormatConverter", nativeMethods);
         Assert.DoesNotContain("ID2D1", nativeMethods);
         Assert.DoesNotContain("D2D1", nativeMethods);
 
@@ -709,11 +717,30 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryAppendBgraColorGlyphSegment(", glyphSource);
         Assert.Contains("private bool TryGetBgraColorGlyph(", glyphSource);
         Assert.Contains("private bool RasterizeBgraColorGlyph(", glyphSource);
+        Assert.Contains("private bool TryAppendEncodedBitmapColorGlyphSegment(", glyphSource);
+        Assert.Contains("private bool TryGetEncodedBitmapColorGlyph(", glyphSource);
+        Assert.Contains("private bool RasterizeEncodedBitmapColorGlyph(", glyphSource);
+        Assert.Contains("private bool TryDecodeWicGlyphImage(", glyphSource);
+        Assert.Contains("private bool TryEnsureWicFactory(", glyphSource);
         Assert.Contains("fontFace.Face4->GetGlyphImageData(", glyphSource);
         Assert.Contains("fontFace.Face4->ReleaseGlyphImageData(glyphDataContext);", glyphSource);
         Assert.Contains("SelectWritableAtlasPage(GlyphAtlasPageFormat.Bgra, width, height, recordSerial)", glyphSource);
         Assert.Contains("GlyphAtom.BgraGlyph(glyphIndex, pixelsPerEm)", glyphSource);
+        Assert.Contains("GlyphAtom.EncodedBitmapGlyph(glyphIndex, pixelsPerEm, GetEncodedBitmapGlyphFormatId(imageFormat))", glyphSource);
+        Assert.Contains("public static GlyphAtom EncodedBitmapGlyph(ushort glyphIndex, uint pixelsPerEm, byte formatId)", glyphSource);
+        Assert.Contains("PInvoke.CoCreateInstance<IWICImagingFactory>", glyphSource);
+        Assert.Contains("PInvoke.CoInitializeEx(COINIT.COINIT_MULTITHREADED)", glyphSource);
+        Assert.Contains("PInvoke.CoUninitialize();", glyphSource);
+        Assert.Contains("IWICStream* stream = null;", glyphSource);
+        Assert.Contains("IWICBitmapDecoder* decoder = null;", glyphSource);
+        Assert.Contains("IWICBitmapFrameDecode* frame = null;", glyphSource);
+        Assert.Contains("IWICFormatConverter* converter = null;", glyphSource);
+        Assert.Contains("CreateDecoderFromStream((IStream*)stream, null, WICDecodeOptions.WICDecodeMetadataCacheOnLoad)", glyphSource);
+        Assert.Contains("WICBitmapDitherType.WICBitmapDitherTypeNone", glyphSource);
+        Assert.Contains("WICBitmapPaletteType.WICBitmapPaletteTypeCustom", glyphSource);
+        Assert.Contains("WicPixelFormat32bppPbgra", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats", glyphSource);
+        Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS EncodedBitmapColorGlyphFormats", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats", glyphSource);
         Assert.Contains("private bool TryGetUnsupportedOnlyColorGlyphImageFormatReason(ShapedGlyphSegment shapedSegment, out GlyphAtlasFallbackReason unsupportedReason)", glyphSource);
         Assert.Contains("internal static GlyphAtlasFallbackReason GetUnsupportedColorGlyphImageFormatReason(DWRITE_GLYPH_IMAGE_FORMATS formats)", glyphSource);
@@ -1064,18 +1091,19 @@ public sealed class ProgramDiagnosticsTests
                 DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8));
 
         Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF));
+
+        Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphSvg
-            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPng
-            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphJpeg
-            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphTiff
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPaintTree,
             D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
                 DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
-                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
-                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
-                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE));
     }
 

@@ -38,6 +38,15 @@ UpdateWindow
 CreateEventW
 WaitForSingleObject
 CloseHandle
+// COM / WIC bitmap glyph decoding
+CoCreateInstance
+CoInitializeEx
+CoUninitialize
+IWICImagingFactory
+IWICStream
+IWICBitmapDecoder
+IWICBitmapFrameDecode
+IWICFormatConverter
 // D3D12 — CsWin32 generates these so we can inspect vtable layout
 D3D12CreateDevice
 D3D12GetDebugInterface
