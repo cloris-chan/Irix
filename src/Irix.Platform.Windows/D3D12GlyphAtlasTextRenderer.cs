@@ -196,10 +196,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var pageUsage = GetAtlasPageUsage();
         return _diagnostics
             .WithCachedGlyphs(_cachedGlyphCount)
-            .WithAtlasPages(_atlasPages.Count)
             .WithAtlasPendingPageReuse(CountPendingAtlasPageReuseRequests())
             .WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)
             .WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge)
+            .WithAtlasPageCounts(_atlasPages.Count, pageUsage.AlphaPageCount, pageUsage.BgraPageCount)
             .WithRasterScratch(
                 _clearTypeScratch.Length + _grayscaleScratch.Length + GetShapeScratchByteCount(),
                 _rasterScratchResizeCount + _shapeScratchResizeCount);
@@ -222,6 +222,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             RasterScratchBytes: _clearTypeScratch.Length + _grayscaleScratch.Length,
             RasterScratchResizes: 0,
             AtlasPages: _atlasPages.Count,
+            AtlasAlphaPages: pageUsage.AlphaPageCount,
+            AtlasBgraPages: pageUsage.BgraPageCount,
             AtlasUsedPixels: pageUsage.UsedPixels,
             AtlasFragmentedPixels: pageUsage.FragmentedPixels,
             AtlasRecordSerial: _glyphRecordSerial,
@@ -2549,12 +2551,23 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     {
         var usedPixels = 0;
         var fragmentedPixels = 0;
+        var alphaPageCount = 0;
+        var bgraPageCount = 0;
         var oldestPageAge = 0L;
         var newestPageAge = 0L;
         var hasUsedPage = false;
         for (var i = 0; i < _atlasPages.Count; i++)
         {
             var page = _atlasPages[i];
+            if (page.Format == GlyphAtlasPageFormat.Bgra)
+            {
+                bgraPageCount++;
+            }
+            else
+            {
+                alphaPageCount++;
+            }
+
             usedPixels = checked(usedPixels + page.UsedPixels);
             fragmentedPixels = checked(fragmentedPixels + Math.Max(0, page.AllocatedPixels - page.UsedPixels));
             if (page.LastUsedSerial > 0)
@@ -2566,7 +2579,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
         }
 
-        return new GlyphAtlasPageUsage(usedPixels, fragmentedPixels, oldestPageAge, newestPageAge);
+        return new GlyphAtlasPageUsage(usedPixels, fragmentedPixels, alphaPageCount, bgraPageCount, oldestPageAge, newestPageAge);
     }
 
     private void ApplyPendingAtlasPageEviction(long recordSerial, long oldestRetainedRecordSerial)
@@ -5882,10 +5895,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public static bool operator !=(GlyphAtlasPageHandle left, GlyphAtlasPageHandle right) => !left.Equals(right);
     }
 
-    private readonly struct GlyphAtlasPageUsage(int UsedPixels, int FragmentedPixels, long OldestPageAge, long NewestPageAge)
+    private readonly struct GlyphAtlasPageUsage(int UsedPixels, int FragmentedPixels, int AlphaPageCount, int BgraPageCount, long OldestPageAge, long NewestPageAge)
     {
         public int UsedPixels { get; } = UsedPixels;
         public int FragmentedPixels { get; } = FragmentedPixels;
+        public int AlphaPageCount { get; } = AlphaPageCount;
+        public int BgraPageCount { get; } = BgraPageCount;
         public long OldestPageAge { get; } = OldestPageAge;
         public long NewestPageAge { get; } = NewestPageAge;
     }
@@ -6130,6 +6145,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int RasterScratchBytes,
         int RasterScratchResizes,
         int AtlasPages = 0,
+        int AtlasAlphaPages = 0,
+        int AtlasBgraPages = 0,
         int AtlasEvictions = 0,
         int AtlasUsedPixels = 0,
         int AtlasFragmentedPixels = 0,
@@ -6155,6 +6172,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int ShapedProbeRuns { get; } = ShapedProbeRuns;
         public int ShapedProbeGlyphs { get; } = ShapedProbeGlyphs;
         public int AtlasPages { get; } = AtlasPages;
+        public int AtlasAlphaPages { get; } = AtlasAlphaPages;
+        public int AtlasBgraPages { get; } = AtlasBgraPages;
         public int AtlasBudgetPages => MaxAtlasPages;
         public int AtlasPageWidth => AtlasWidth;
         public int AtlasPageHeight => AtlasHeight;
@@ -6192,6 +6211,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6222,6 +6243,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6252,6 +6275,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6282,6 +6307,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6297,7 +6324,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 ShapedProbeRuns,
                 ShapedProbeGlyphs);
 
-        public GlyphAtlasTextRendererDiagnostics WithAtlasPages(int atlasPages) =>
+        public GlyphAtlasTextRendererDiagnostics WithAtlasPages(int atlasPages) => WithAtlasPageCounts(atlasPages, AtlasAlphaPages, AtlasBgraPages);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasPageCounts(int atlasPages, int alphaPages, int bgraPages) =>
             new(
                 CachedGlyphs,
                 UploadedBytes,
@@ -6312,6 +6341,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 atlasPages,
+                alphaPages,
+                bgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6342,6 +6373,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions + 1,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6372,6 +6405,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6402,6 +6437,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6432,6 +6469,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6462,6 +6501,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 usedPixels,
                 fragmentedPixels,
@@ -6492,6 +6533,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6522,6 +6565,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6552,6 +6597,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6582,6 +6629,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6612,6 +6661,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6642,6 +6693,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 bytes,
                 resizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6672,6 +6725,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6702,6 +6757,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6748,6 +6805,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 RasterScratchBytes,
                 RasterScratchResizes,
                 AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
                 AtlasEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
@@ -6766,7 +6825,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         public string FormatSummary()
         {
-            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasEvictions={AtlasEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
+            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasAlphaPages={AtlasAlphaPages}, atlasBgraPages={AtlasBgraPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasEvictions={AtlasEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
                 + $"atlasRecordSerial={AtlasRecordSerial}, atlasOldestPageAge={AtlasOldestPageAge}, atlasNewestPageAge={AtlasNewestPageAge}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
                 + $"uploads={UploadedBytes} bytes, uploadedGlyphs={UploadedGlyphs}, shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
@@ -6782,6 +6841,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && FallbackFrames == other.FallbackFrames
                 && UnsupportedRuns == other.UnsupportedRuns
                 && AtlasPages == other.AtlasPages
+                && AtlasAlphaPages == other.AtlasAlphaPages
+                && AtlasBgraPages == other.AtlasBgraPages
                 && AtlasEvictions == other.AtlasEvictions
                 && AtlasUsedPixels == other.AtlasUsedPixels
                 && AtlasFragmentedPixels == other.AtlasFragmentedPixels
@@ -6816,6 +6877,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(FallbackFrames);
             hash.Add(UnsupportedRuns);
             hash.Add(AtlasPages);
+            hash.Add(AtlasAlphaPages);
+            hash.Add(AtlasBgraPages);
             hash.Add(AtlasEvictions);
             hash.Add(AtlasUsedPixels);
             hash.Add(AtlasFragmentedPixels);
