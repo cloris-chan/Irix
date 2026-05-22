@@ -194,9 +194,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     public GlyphAtlasTextRendererDiagnostics GetDiagnostics()
     {
         var pageUsage = GetAtlasPageUsage();
+        CountPendingAtlasPageReuseRequests(out var pendingAlphaReuses, out var pendingBgraReuses);
         return _diagnostics
             .WithCachedGlyphs(_cachedGlyphCount)
-            .WithAtlasPendingPageReuse(CountPendingAtlasPageReuseRequests())
+            .WithAtlasPendingPageReuse(pendingAlphaReuses, pendingBgraReuses)
             .WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels, pageUsage.AlphaUsedPixels, pageUsage.BgraUsedPixels, pageUsage.AlphaFragmentedPixels, pageUsage.BgraFragmentedPixels)
             .WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge, pageUsage.OldestAlphaPageAge, pageUsage.OldestBgraPageAge)
             .WithAtlasPageCounts(_atlasPages.Count, pageUsage.AlphaPageCount, pageUsage.BgraPageCount)
@@ -208,6 +209,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     public void ResetDiagnostics()
     {
         var pageUsage = GetAtlasPageUsage();
+        CountPendingAtlasPageReuseRequests(out var pendingAlphaReuses, out var pendingBgraReuses);
         _diagnostics = new GlyphAtlasTextRendererDiagnostics(
             _cachedGlyphCount,
             UploadedBytes: 0,
@@ -235,7 +237,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             AtlasNewestPageAge: pageUsage.NewestPageAge,
             AtlasOldestAlphaPageAge: pageUsage.OldestAlphaPageAge,
             AtlasOldestBgraPageAge: pageUsage.OldestBgraPageAge,
-            AtlasPendingPageReuses: CountPendingAtlasPageReuseRequests());
+            AtlasPendingPageReuses: pendingAlphaReuses + pendingBgraReuses,
+            AtlasPendingAlphaPageReuses: pendingAlphaReuses,
+            AtlasPendingBgraPageReuses: pendingBgraReuses);
         _rasterScratchResizeCount = 0;
         _shapeScratchResizeCount = 0;
     }
@@ -2221,16 +2225,21 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             RestoreRunGlyphEntryTouches();
             ReleaseAtlasPagesCreatedDuringRun();
             RestoreRunPageStates();
-            var resetPageCount = ResetPagesReusedDuringRun();
+            ResetPagesReusedDuringRun(out var resetAlphaPageCount, out var resetBgraPageCount);
             _pendingAlphaAtlasPageReuse = _runPendingAlphaAtlasPageReuse;
             _pendingBgraAtlasPageReuse = _runPendingBgraAtlasPageReuse;
             _cachedGlyphCount = CountLiveGlyphEntries();
             _diagnostics = _runDiagnostics
                 .WithCachedGlyphs(_cachedGlyphCount)
                 .WithAtlasPages(_atlasPages.Count);
-            for (var i = 0; i < resetPageCount; i++)
+            for (var i = 0; i < resetAlphaPageCount; i++)
             {
-                _diagnostics = _diagnostics.WithAtlasEviction();
+                _diagnostics = _diagnostics.WithAtlasAlphaEviction();
+            }
+
+            for (var i = 0; i < resetBgraPageCount; i++)
+            {
+                _diagnostics = _diagnostics.WithAtlasBgraEviction();
             }
         }
         else
@@ -2320,9 +2329,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    private int ResetPagesReusedDuringRun()
+    private void ResetPagesReusedDuringRun(out int alphaPageCount, out int bgraPageCount)
     {
-        var resetPageCount = 0;
+        alphaPageCount = 0;
+        bgraPageCount = 0;
         for (var i = 0; i < _atlasPages.Count; i++)
         {
             var page = _atlasPages[i];
@@ -2332,10 +2342,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             _activeAtlasPage = page.ResetForReuse();
-            resetPageCount++;
+            if (page.Format == GlyphAtlasPageFormat.Bgra)
+            {
+                bgraPageCount++;
+            }
+            else
+            {
+                alphaPageCount++;
+            }
         }
-
-        return resetPageCount;
     }
 
     private void RestoreRunPageStates()
@@ -2549,7 +2564,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _diagnostics = _diagnostics
             .WithCachedGlyphs(_cachedGlyphCount)
             .WithAtlasPages(_atlasPages.Count)
-            .WithAtlasEviction();
+            .WithAtlasEviction(selected.Format == GlyphAtlasPageFormat.Bgra);
         return selected;
     }
 
@@ -2558,7 +2573,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var page = SelectOldestAtlasPageHandle(format);
         if (page.IsNone)
         {
-            _diagnostics = _diagnostics.WithAtlasFullWithoutPageReuse();
+            _diagnostics = _diagnostics.WithAtlasFullWithoutPageReuse(format == GlyphAtlasPageFormat.Bgra);
             return;
         }
 
@@ -2576,7 +2591,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         pending = new GlyphAtlasPageReuseRequest(page, recordSerial);
-        _diagnostics = _diagnostics.WithAtlasPageReuseRequest();
+        _diagnostics = _diagnostics.WithAtlasPageReuseRequest(atlasPage.Format == GlyphAtlasPageFormat.Bgra);
     }
 
     private ref GlyphAtlasPageReuseRequest GetPendingAtlasPageReuse(GlyphAtlasPageFormat format)
@@ -2589,20 +2604,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return ref _pendingAlphaAtlasPageReuse;
     }
 
-    private int CountPendingAtlasPageReuseRequests()
+    private void CountPendingAtlasPageReuseRequests(out int alphaReuses, out int bgraReuses)
     {
-        var count = 0;
-        if (!_pendingAlphaAtlasPageReuse.IsNone)
-        {
-            count++;
-        }
-
-        if (!_pendingBgraAtlasPageReuse.IsNone)
-        {
-            count++;
-        }
-
-        return count;
+        alphaReuses = _pendingAlphaAtlasPageReuse.IsNone ? 0 : 1;
+        bgraReuses = _pendingBgraAtlasPageReuse.IsNone ? 0 : 1;
     }
 
     private GlyphAtlasPageHandle SelectOldestAtlasPageHandle(GlyphAtlasPageFormat? format)
@@ -2703,7 +2708,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _diagnostics = _diagnostics
             .WithCachedGlyphs(_cachedGlyphCount)
             .WithAtlasPages(_atlasPages.Count)
-            .WithAtlasEviction();
+            .WithAtlasEviction(page.Format == GlyphAtlasPageFormat.Bgra);
     }
 
     private GlyphAtlasPage RequireReuseAtlasPage(GlyphAtlasPageReuseRequest request)
@@ -6270,6 +6275,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int AtlasAlphaPages = 0,
         int AtlasBgraPages = 0,
         int AtlasEvictions = 0,
+        int AtlasAlphaEvictions = 0,
+        int AtlasBgraEvictions = 0,
         int AtlasUsedPixels = 0,
         int AtlasFragmentedPixels = 0,
         int AtlasAlphaUsedPixels = 0,
@@ -6282,8 +6289,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         long AtlasOldestAlphaPageAge = 0,
         long AtlasOldestBgraPageAge = 0,
         int AtlasPendingPageReuses = 0,
+        int AtlasPendingAlphaPageReuses = 0,
+        int AtlasPendingBgraPageReuses = 0,
         int AtlasPageReuseRequests = 0,
+        int AtlasAlphaPageReuseRequests = 0,
+        int AtlasBgraPageReuseRequests = 0,
         int AtlasFullWithoutPageReuse = 0,
+        int AtlasAlphaFullWithoutPageReuse = 0,
+        int AtlasBgraFullWithoutPageReuse = 0,
         int AtlasRuns = 0,
         int DegradedRuns = 0,
         int UploadedGlyphs = 0,
@@ -6312,6 +6325,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public long AtlasUploadBytes => checked(AtlasGpuBytes * UploadFrameCount);
         public long AtlasGpuBytes => ComputeAtlasResidentBytes(AtlasAlphaPages, AtlasBgraPages);
         public int AtlasEvictions { get; } = AtlasEvictions;
+        public int AtlasAlphaEvictions { get; } = AtlasAlphaEvictions;
+        public int AtlasBgraEvictions { get; } = AtlasBgraEvictions;
         public int AtlasUsedPixels { get; } = AtlasUsedPixels;
         public int AtlasFragmentedPixels { get; } = AtlasFragmentedPixels;
         public int AtlasAlphaUsedPixels { get; } = AtlasAlphaUsedPixels;
@@ -6324,8 +6339,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public long AtlasOldestAlphaPageAge { get; } = AtlasOldestAlphaPageAge;
         public long AtlasOldestBgraPageAge { get; } = AtlasOldestBgraPageAge;
         public int AtlasPendingPageReuses { get; } = AtlasPendingPageReuses;
+        public int AtlasPendingAlphaPageReuses { get; } = AtlasPendingAlphaPageReuses;
+        public int AtlasPendingBgraPageReuses { get; } = AtlasPendingBgraPageReuses;
         public int AtlasPageReuseRequests { get; } = AtlasPageReuseRequests;
+        public int AtlasAlphaPageReuseRequests { get; } = AtlasAlphaPageReuseRequests;
+        public int AtlasBgraPageReuseRequests { get; } = AtlasBgraPageReuseRequests;
         public int AtlasFullWithoutPageReuse { get; } = AtlasFullWithoutPageReuse;
+        public int AtlasAlphaFullWithoutPageReuse { get; } = AtlasAlphaFullWithoutPageReuse;
+        public int AtlasBgraFullWithoutPageReuse { get; } = AtlasBgraFullWithoutPageReuse;
         public int AtlasRuns { get; } = AtlasRuns;
         public int DegradedRuns { get; } = DegradedRuns;
         public int UploadedGlyphs { get; } = UploadedGlyphs;
@@ -6355,6 +6376,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6367,8 +6390,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6395,6 +6424,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6407,8 +6438,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6435,6 +6472,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6447,8 +6486,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6475,6 +6520,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6487,8 +6534,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6517,6 +6570,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 alphaPages,
                 bgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6529,8 +6584,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6540,126 +6601,78 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasEviction() =>
-            new(
-                CachedGlyphs,
-                UploadedBytes,
-                DrawnGlyphs,
-                CacheHits,
-                CacheMisses,
-                FallbackFrames,
-                UnsupportedRuns,
-                Reasons,
-                InitializationFailurePhase,
-                RecordFailurePhase,
-                RasterScratchBytes,
-                RasterScratchResizes,
-                AtlasPages,
-                AtlasAlphaPages,
-                AtlasBgraPages,
+            WithAtlasPolicy(AtlasEvictions + 1, AtlasAlphaEvictions, AtlasBgraEvictions, AtlasPendingAlphaPageReuses, AtlasPendingBgraPageReuses, AtlasPageReuseRequests, AtlasAlphaPageReuseRequests, AtlasBgraPageReuseRequests, AtlasFullWithoutPageReuse, AtlasAlphaFullWithoutPageReuse, AtlasBgraFullWithoutPageReuse);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasAlphaEviction() => WithAtlasEviction(isBgra: false);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasBgraEviction() => WithAtlasEviction(isBgra: true);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasEviction(bool isBgra) =>
+            WithAtlasPolicy(
                 AtlasEvictions + 1,
-                AtlasUsedPixels,
-                AtlasFragmentedPixels,
-                AtlasAlphaUsedPixels,
-                AtlasBgraUsedPixels,
-                AtlasAlphaFragmentedPixels,
-                AtlasBgraFragmentedPixels,
-                AtlasRecordSerial,
-                AtlasOldestPageAge,
-                AtlasNewestPageAge,
-                AtlasOldestAlphaPageAge,
-                AtlasOldestBgraPageAge,
-                AtlasPendingPageReuses,
+                AtlasAlphaEvictions + (isBgra ? 0 : 1),
+                AtlasBgraEvictions + (isBgra ? 1 : 0),
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
-                AtlasRuns,
-                DegradedRuns,
-                UploadedGlyphs,
-                ShapedProbeRuns,
-                ShapedProbeGlyphs,
-                ColorLayerRuns,
-                ColorBitmapRuns);
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPendingPageReuse(int pendingPageReuses) =>
-            new(
-                CachedGlyphs,
-                UploadedBytes,
-                DrawnGlyphs,
-                CacheHits,
-                CacheMisses,
-                FallbackFrames,
-                UnsupportedRuns,
-                Reasons,
-                InitializationFailurePhase,
-                RecordFailurePhase,
-                RasterScratchBytes,
-                RasterScratchResizes,
-                AtlasPages,
-                AtlasAlphaPages,
-                AtlasBgraPages,
-                AtlasEvictions,
-                AtlasUsedPixels,
-                AtlasFragmentedPixels,
-                AtlasAlphaUsedPixels,
-                AtlasBgraUsedPixels,
-                AtlasAlphaFragmentedPixels,
-                AtlasBgraFragmentedPixels,
-                AtlasRecordSerial,
-                AtlasOldestPageAge,
-                AtlasNewestPageAge,
-                AtlasOldestAlphaPageAge,
-                AtlasOldestBgraPageAge,
-                pendingPageReuses,
-                AtlasPageReuseRequests,
-                AtlasFullWithoutPageReuse,
-                AtlasRuns,
-                DegradedRuns,
-                UploadedGlyphs,
-                ShapedProbeRuns,
-                ShapedProbeGlyphs,
-                ColorLayerRuns,
-                ColorBitmapRuns);
+            WithAtlasPolicy(AtlasEvictions, AtlasAlphaEvictions, AtlasBgraEvictions, pendingPageReuses, AtlasPendingBgraPageReuses, AtlasPageReuseRequests, AtlasAlphaPageReuseRequests, AtlasBgraPageReuseRequests, AtlasFullWithoutPageReuse, AtlasAlphaFullWithoutPageReuse, AtlasBgraFullWithoutPageReuse);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasPendingPageReuse(int pendingAlphaPageReuses, int pendingBgraPageReuses) =>
+            WithAtlasPolicy(AtlasEvictions, AtlasAlphaEvictions, AtlasBgraEvictions, pendingAlphaPageReuses, pendingBgraPageReuses, AtlasPageReuseRequests, AtlasAlphaPageReuseRequests, AtlasBgraPageReuseRequests, AtlasFullWithoutPageReuse, AtlasAlphaFullWithoutPageReuse, AtlasBgraFullWithoutPageReuse);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPageReuseRequest() =>
-            new(
-                CachedGlyphs,
-                UploadedBytes,
-                DrawnGlyphs,
-                CacheHits,
-                CacheMisses,
-                FallbackFrames,
-                UnsupportedRuns,
-                Reasons,
-                InitializationFailurePhase,
-                RecordFailurePhase,
-                RasterScratchBytes,
-                RasterScratchResizes,
-                AtlasPages,
-                AtlasAlphaPages,
-                AtlasBgraPages,
+            WithAtlasPolicy(AtlasEvictions, AtlasAlphaEvictions, AtlasBgraEvictions, AtlasPendingAlphaPageReuses, AtlasPendingBgraPageReuses, AtlasPageReuseRequests + 1, AtlasAlphaPageReuseRequests, AtlasBgraPageReuseRequests, AtlasFullWithoutPageReuse, AtlasAlphaFullWithoutPageReuse, AtlasBgraFullWithoutPageReuse);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasPageReuseRequest(bool isBgra) =>
+            WithAtlasPolicy(
                 AtlasEvictions,
-                AtlasUsedPixels,
-                AtlasFragmentedPixels,
-                AtlasAlphaUsedPixels,
-                AtlasBgraUsedPixels,
-                AtlasAlphaFragmentedPixels,
-                AtlasBgraFragmentedPixels,
-                AtlasRecordSerial,
-                AtlasOldestPageAge,
-                AtlasNewestPageAge,
-                AtlasOldestAlphaPageAge,
-                AtlasOldestBgraPageAge,
-                AtlasPendingPageReuses,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests + 1,
+                AtlasAlphaPageReuseRequests + (isBgra ? 0 : 1),
+                AtlasBgraPageReuseRequests + (isBgra ? 1 : 0),
                 AtlasFullWithoutPageReuse,
-                AtlasRuns,
-                DegradedRuns,
-                UploadedGlyphs,
-                ShapedProbeRuns,
-                ShapedProbeGlyphs,
-                ColorLayerRuns,
-                ColorBitmapRuns);
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasFullWithoutPageReuse() =>
+            WithAtlasPolicy(AtlasEvictions, AtlasAlphaEvictions, AtlasBgraEvictions, AtlasPendingAlphaPageReuses, AtlasPendingBgraPageReuses, AtlasPageReuseRequests, AtlasAlphaPageReuseRequests, AtlasBgraPageReuseRequests, AtlasFullWithoutPageReuse + 1, AtlasAlphaFullWithoutPageReuse, AtlasBgraFullWithoutPageReuse);
+
+        public GlyphAtlasTextRendererDiagnostics WithAtlasFullWithoutPageReuse(bool isBgra) =>
+            WithAtlasPolicy(
+                AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
+                AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
+                AtlasFullWithoutPageReuse + 1,
+                AtlasAlphaFullWithoutPageReuse + (isBgra ? 0 : 1),
+                AtlasBgraFullWithoutPageReuse + (isBgra ? 1 : 0));
+
+        private GlyphAtlasTextRendererDiagnostics WithAtlasPolicy(
+            int evictions,
+            int alphaEvictions,
+            int bgraEvictions,
+            int pendingAlphaPageReuses,
+            int pendingBgraPageReuses,
+            int pageReuseRequests,
+            int alphaPageReuseRequests,
+            int bgraPageReuseRequests,
+            int fullWithoutPageReuse,
+            int alphaFullWithoutPageReuse,
+            int bgraFullWithoutPageReuse) =>
             new(
                 CachedGlyphs,
                 UploadedBytes,
@@ -6676,7 +6689,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasPages,
                 AtlasAlphaPages,
                 AtlasBgraPages,
-                AtlasEvictions,
+                evictions,
+                alphaEvictions,
+                bgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6688,9 +6703,15 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasNewestPageAge,
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
-                AtlasPendingPageReuses,
-                AtlasPageReuseRequests,
-                AtlasFullWithoutPageReuse + 1,
+                pendingAlphaPageReuses + pendingBgraPageReuses,
+                pendingAlphaPageReuses,
+                pendingBgraPageReuses,
+                pageReuseRequests,
+                alphaPageReuseRequests,
+                bgraPageReuseRequests,
+                fullWithoutPageReuse,
+                alphaFullWithoutPageReuse,
+                bgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6720,6 +6741,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 usedPixels,
                 fragmentedPixels,
                 alphaUsedPixels,
@@ -6732,8 +6755,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6763,6 +6792,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6775,8 +6806,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 oldestAlphaPageAge,
                 oldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6803,6 +6840,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6815,8 +6854,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns + atlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6843,6 +6888,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6855,8 +6902,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6883,6 +6936,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6895,8 +6950,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs + 1,
@@ -6923,6 +6984,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6935,8 +6998,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -6963,6 +7032,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -6975,8 +7046,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -7003,6 +7080,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -7015,8 +7094,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -7043,6 +7128,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -7055,8 +7142,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -7083,6 +7176,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -7095,8 +7190,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns,
                 UploadedGlyphs,
@@ -7139,6 +7240,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasAlphaPages,
                 AtlasBgraPages,
                 AtlasEvictions,
+                AtlasAlphaEvictions,
+                AtlasBgraEvictions,
                 AtlasUsedPixels,
                 AtlasFragmentedPixels,
                 AtlasAlphaUsedPixels,
@@ -7151,8 +7254,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 AtlasOldestAlphaPageAge,
                 AtlasOldestBgraPageAge,
                 AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
+                AtlasAlphaPageReuseRequests,
+                AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 AtlasRuns,
                 DegradedRuns + unsupportedRuns,
                 UploadedGlyphs,
@@ -7164,7 +7273,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         public string FormatSummary()
         {
-            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasAlphaPages={AtlasAlphaPages}, atlasBgraPages={AtlasBgraPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasCpuBytes={AtlasCpuBytes} bytes, atlasUploadBytes={AtlasUploadBytes} bytes, atlasGpuBytes={AtlasGpuBytes} bytes, atlasEvictions={AtlasEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
+            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasAlphaPages={AtlasAlphaPages}, atlasBgraPages={AtlasBgraPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasCpuBytes={AtlasCpuBytes} bytes, atlasUploadBytes={AtlasUploadBytes} bytes, atlasGpuBytes={AtlasGpuBytes} bytes, atlasEvictions={AtlasEvictions}, atlasAlphaEvictions={AtlasAlphaEvictions}, atlasBgraEvictions={AtlasBgraEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPendingAlphaPageReuses={AtlasPendingAlphaPageReuses}, atlasPendingBgraPageReuses={AtlasPendingBgraPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasAlphaPageReuseRequests={AtlasAlphaPageReuseRequests}, atlasBgraPageReuseRequests={AtlasBgraPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasAlphaFullWithoutPageReuse={AtlasAlphaFullWithoutPageReuse}, atlasBgraFullWithoutPageReuse={AtlasBgraFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
                 + $"atlasAlphaUsed={AtlasAlphaUsedPixels} px, atlasBgraUsed={AtlasBgraUsedPixels} px, atlasAlphaFragmented={AtlasAlphaFragmentedPixels} px, atlasBgraFragmented={AtlasBgraFragmentedPixels} px, atlasRecordSerial={AtlasRecordSerial}, atlasOldestPageAge={AtlasOldestPageAge}, atlasNewestPageAge={AtlasNewestPageAge}, atlasOldestAlphaPageAge={AtlasOldestAlphaPageAge}, atlasOldestBgraPageAge={AtlasOldestBgraPageAge}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
                 + $"uploads={UploadedBytes} bytes, uploadedGlyphs={UploadedGlyphs}, shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}, colorLayerRuns={ColorLayerRuns}, colorBitmapRuns={ColorBitmapRuns}, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
@@ -7186,6 +7295,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && AtlasAlphaPages == other.AtlasAlphaPages
                 && AtlasBgraPages == other.AtlasBgraPages
                 && AtlasEvictions == other.AtlasEvictions
+                && AtlasAlphaEvictions == other.AtlasAlphaEvictions
+                && AtlasBgraEvictions == other.AtlasBgraEvictions
                 && AtlasUsedPixels == other.AtlasUsedPixels
                 && AtlasFragmentedPixels == other.AtlasFragmentedPixels
                 && AtlasAlphaUsedPixels == other.AtlasAlphaUsedPixels
@@ -7198,8 +7309,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && AtlasOldestAlphaPageAge == other.AtlasOldestAlphaPageAge
                 && AtlasOldestBgraPageAge == other.AtlasOldestBgraPageAge
                 && AtlasPendingPageReuses == other.AtlasPendingPageReuses
+                && AtlasPendingAlphaPageReuses == other.AtlasPendingAlphaPageReuses
+                && AtlasPendingBgraPageReuses == other.AtlasPendingBgraPageReuses
                 && AtlasPageReuseRequests == other.AtlasPageReuseRequests
+                && AtlasAlphaPageReuseRequests == other.AtlasAlphaPageReuseRequests
+                && AtlasBgraPageReuseRequests == other.AtlasBgraPageReuseRequests
                 && AtlasFullWithoutPageReuse == other.AtlasFullWithoutPageReuse
+                && AtlasAlphaFullWithoutPageReuse == other.AtlasAlphaFullWithoutPageReuse
+                && AtlasBgraFullWithoutPageReuse == other.AtlasBgraFullWithoutPageReuse
                 && AtlasRuns == other.AtlasRuns
                 && DegradedRuns == other.DegradedRuns
                 && UploadedGlyphs == other.UploadedGlyphs
@@ -7230,6 +7347,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(AtlasAlphaPages);
             hash.Add(AtlasBgraPages);
             hash.Add(AtlasEvictions);
+            hash.Add(AtlasAlphaEvictions);
+            hash.Add(AtlasBgraEvictions);
             hash.Add(AtlasUsedPixels);
             hash.Add(AtlasFragmentedPixels);
             hash.Add(AtlasAlphaUsedPixels);
@@ -7242,8 +7361,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(AtlasOldestAlphaPageAge);
             hash.Add(AtlasOldestBgraPageAge);
             hash.Add(AtlasPendingPageReuses);
+            hash.Add(AtlasPendingAlphaPageReuses);
+            hash.Add(AtlasPendingBgraPageReuses);
             hash.Add(AtlasPageReuseRequests);
+            hash.Add(AtlasAlphaPageReuseRequests);
+            hash.Add(AtlasBgraPageReuseRequests);
             hash.Add(AtlasFullWithoutPageReuse);
+            hash.Add(AtlasAlphaFullWithoutPageReuse);
+            hash.Add(AtlasBgraFullWithoutPageReuse);
             hash.Add(AtlasRuns);
             hash.Add(DegradedRuns);
             hash.Add(UploadedGlyphs);
