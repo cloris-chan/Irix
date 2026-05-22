@@ -1295,9 +1295,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("colorRunCandidates={snapshot.ColorRunCandidates}", runnerSource);
         Assert.Contains("IDWriteFontFace4*", platformSource);
         Assert.Contains("IDWriteFactory4*", platformSource);
+        Assert.Contains("factory->QueryInterface<IDWriteFactory4>(out factory4).ThrowOnFailure();", platformSource);
         Assert.Contains("factory4->TranslateColorGlyphRun(", platformSource);
         Assert.Contains("D2D_POINT_2F", platformSource);
         Assert.Contains("IDWriteColorGlyphRunEnumerator1* colorRuns", platformSource);
+        Assert.DoesNotContain("Factory4Missing", platformSource);
+        Assert.DoesNotContain("Factory4AndFace4Missing", platformSource);
         Assert.Contains("GetGlyphImageFormats(glyphIndex[0], pixelsPerEm, pixelsPerEm, out var formats)", platformSource);
         Assert.Contains("TrySelectColorGlyphBitmapImageFormat(formats, out var selectedFormat)", platformSource);
     }

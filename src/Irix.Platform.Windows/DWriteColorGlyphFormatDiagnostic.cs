@@ -55,13 +55,10 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
                 typeof(IDWriteFactory).GUID,
                 out var factoryObject).ThrowOnFailure();
             factory = (IDWriteFactory*)factoryObject;
-            try
+            factory->QueryInterface<IDWriteFactory4>(out factory4).ThrowOnFailure();
+            if (factory4 == null)
             {
-                factory->QueryInterface<IDWriteFactory4>(out factory4).ThrowOnFailure();
-            }
-            catch (COMException)
-            {
-                factory4 = null;
+                return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, "Factory4Unavailable");
             }
 
             factory->GetSystemFontCollection(&fontCollection, false);
@@ -105,7 +102,7 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
                 results[i] = Probe(factory4, face, face4, DefaultProbes[i], pixelsPerEm);
             }
 
-            return ColorGlyphFormatDiagnosticSnapshot.Create(familyName, pixelsPerEm, factory4 != null, face4 != null, results);
+            return ColorGlyphFormatDiagnosticSnapshot.Create(familyName, pixelsPerEm, factory4Available: true, face4 != null, results);
         }
         catch (COMException ex)
         {
@@ -146,17 +143,12 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
         }
         catch (COMException ex)
         {
-            return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, GlyphIndex: 0, GlyphFound: false, Factory4Available: factory4 != null, Face4Available: face4 != null, Formats: ColorGlyphImageFormatFlags.None, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.GlyphIndexFailed, Error: $"0x{unchecked((uint)ex.ErrorCode):X8}");
+            return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, GlyphIndex: 0, GlyphFound: false, Factory4Available: true, Face4Available: face4 != null, Formats: ColorGlyphImageFormatFlags.None, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.GlyphIndexFailed, Error: $"0x{unchecked((uint)ex.ErrorCode):X8}");
         }
 
         if (glyphIndex[0] == 0)
         {
-            return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, GlyphIndex: 0, GlyphFound: false, Factory4Available: factory4 != null, Face4Available: face4 != null, Formats: ColorGlyphImageFormatFlags.None, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.GlyphMissing, Error: "");
-        }
-
-        if (factory4 == null && face4 == null)
-        {
-            return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, glyphIndex[0], GlyphFound: true, Factory4Available: false, Face4Available: false, Formats: ColorGlyphImageFormatFlags.None, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.Factory4AndFace4Missing, Error: "");
+            return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, GlyphIndex: 0, GlyphFound: false, Factory4Available: true, Face4Available: face4 != null, Formats: ColorGlyphImageFormatFlags.None, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.GlyphMissing, Error: "");
         }
 
         var faceFormats = ColorGlyphImageFormatFlags.None;
@@ -186,16 +178,9 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
         var colorRunFormats = ColorGlyphImageFormatFlags.None;
         var colorRunRoute = ColorGlyphBitmapRoute.None;
         var colorRunError = "";
-        if (factory4 != null)
-        {
-            ProbeColorGlyphRuns(factory4, face, glyphIndex[0], pixelsPerEm, out colorRunCount, out colorRunFormats, out colorRunRoute, out colorRunError);
-        }
-        else if (status == ColorGlyphFormatProbeStatus.Ok)
-        {
-            status = ColorGlyphFormatProbeStatus.Factory4Missing;
-        }
+        ProbeColorGlyphRuns(factory4, face, glyphIndex[0], pixelsPerEm, out colorRunCount, out colorRunFormats, out colorRunRoute, out colorRunError);
 
-        return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, glyphIndex[0], GlyphFound: true, Factory4Available: factory4 != null, Face4Available: face4 != null, Formats: faceFormats, BitmapRoute: faceRoute, Status: status, Error: error, ColorRunCount: colorRunCount, ColorRunFormats: colorRunFormats, ColorRunBitmapRoute: colorRunRoute, ColorRunError: colorRunError);
+        return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, glyphIndex[0], GlyphFound: true, Factory4Available: true, Face4Available: face4 != null, Formats: faceFormats, BitmapRoute: faceRoute, Status: status, Error: error, ColorRunCount: colorRunCount, ColorRunFormats: colorRunFormats, ColorRunBitmapRoute: colorRunRoute, ColorRunError: colorRunError);
     }
 
     private static void ProbeColorGlyphRuns(
@@ -377,9 +362,7 @@ internal enum ColorGlyphFormatProbeStatus : byte
 {
     Ok,
     GlyphMissing,
-    Factory4Missing,
     Face4Missing,
-    Factory4AndFace4Missing,
     GlyphIndexFailed,
     FormatQueryFailed
 }
