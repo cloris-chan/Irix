@@ -86,6 +86,20 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-glyph-atlas-matrix"))
+        {
+            var frameCount = 3;
+            var frameArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-matrix").Skip(1).FirstOrDefault();
+            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            GlyphAtlasRegressionMatrixDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                frameCount,
+                ParseTextCompositionMode(args),
+                ParseDiagnosticScale(args));
+            return;
+        }
+
         if (args.Contains("--diagnose-glyph-atlas-color-formats"))
         {
             var pixelsPerEm = 64u;

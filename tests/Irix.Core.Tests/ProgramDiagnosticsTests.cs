@@ -1594,6 +1594,68 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_regression_matrix_pins_script_wrap_tab_crlf_and_emoji_coverage()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var commands = GlyphAtlasRegressionMatrixDiagnosticRunner.BuildMatrixCommands(resources, frameIndex: 0);
+        resources.Seal();
+
+        var summary = GlyphAtlasRegressionMatrixDiagnosticRunner.AnalyzeMatrixScene(commands, resources);
+        var expectedLine = GlyphAtlasRegressionMatrixDiagnosticRunner.FormatSummary(summary);
+        var contractLine = GlyphAtlasRegressionMatrixDiagnosticRunner.FormatContract(summary.Contract);
+
+        Assert.Equal(13, summary.TextRuns);
+        Assert.Equal(13, summary.AtlasRuns);
+        Assert.Equal(0, summary.DegradedRuns);
+        Assert.Equal(2, summary.WrappedRuns);
+        Assert.Equal(1, summary.TabRuns);
+        Assert.Equal(1, summary.ExplicitLineRuns);
+        Assert.Equal(3, summary.SimpleBmpRuns);
+        Assert.Equal(5, summary.ShapedRuns);
+        Assert.Equal(1, summary.CjkRuns);
+        Assert.Equal(2, summary.ArabicRuns);
+        Assert.Equal(1, summary.HebrewRuns);
+        Assert.Equal(1, summary.MixedBidiRuns);
+        Assert.Equal(1, summary.EmojiRuns);
+        Assert.Contains("ASCII=True", "Matrix cases: ASCII=True LatinExtended=True Greek=True Cyrillic=True CJK=True Arabic=True Hebrew=True MixedBidi=True Emoji=True Wrap=True Tab=True CRLF=True");
+        Assert.Contains("atlasRuns=13", expectedLine);
+        Assert.Contains("degradedRuns=0", expectedLine);
+        Assert.Contains("simpleBmpRuns=3", expectedLine);
+        Assert.Contains("shapedRuns=5", expectedLine);
+        Assert.Contains("emojiRuns=1", expectedLine);
+        Assert.Contains("svgColorGlyph=True", contractLine);
+        Assert.Contains("colrPaintTreeColorGlyph=True", contractLine);
+        Assert.Contains("bidiBeyondResolvedLevels=True", contractLine);
+        Assert.Contains("overlayFallback=False", contractLine);
+    }
+
+    [Fact]
+    public void Glyph_atlas_degradation_contract_marks_known_remaining_cases_as_explicit_non_overlay_degradation()
+    {
+        var contract = GlyphAtlasDegradationContract.CreateDefault();
+
+        Assert.True(contract.SvgColorGlyph);
+        Assert.True(contract.ColrPaintTreeColorGlyph);
+        Assert.True(contract.BidiBeyondResolvedLevels);
+        Assert.True(contract.AtlasFullAfterBudget);
+        Assert.True(contract.RecordFailure);
+        Assert.True(contract.InitializationFailure);
+        Assert.False(contract.OverlayFallback);
+    }
+
+    [Fact]
+    public void Glyph_atlas_regression_matrix_cli_is_wired()
+    {
+        var root = FindRepoRoot();
+        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+
+        Assert.Contains("--diagnose-glyph-atlas-matrix", source);
+        Assert.Contains("GlyphAtlasRegressionMatrixDiagnosticRunner.Run", source);
+        Assert.Contains("ParseTextCompositionMode(args)", source);
+        Assert.Contains("ParseDiagnosticScale(args)", source);
+    }
+
+    [Fact]
     public void Text_cache_allocation_attribution_formatter_outputs_stable_stage_fields()
     {
         var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(
