@@ -739,6 +739,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("PInvoke.CoCreateInstance<IWICImagingFactory>", glyphSource);
         Assert.Contains("PInvoke.CoInitializeEx(COINIT.COINIT_MULTITHREADED)", glyphSource);
         Assert.Contains("PInvoke.CoUninitialize();", glyphSource);
+        Assert.Contains("private void ReleaseWicFactory()", glyphSource);
+        Assert.Contains("_wicFactory->Release();\n            _wicFactory = null;", glyphSource);
+        Assert.Contains("_wicComInitializedForFactory = false;\n        _wicComInitializationThreadId = 0;", glyphSource);
         Assert.Contains("IWICStream* stream = null;", glyphSource);
         Assert.Contains("IWICBitmapDecoder* decoder = null;", glyphSource);
         Assert.Contains("IWICBitmapFrameDecode* frame = null;", glyphSource);

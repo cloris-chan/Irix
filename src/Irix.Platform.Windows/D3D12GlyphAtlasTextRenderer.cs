@@ -5298,18 +5298,30 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (_bgraPso != null) _bgraPso->Release();
         if (_pso != null) _pso->Release();
         if (_rootSig != null) _rootSig->Release();
-        if (_wicFactory != null) _wicFactory->Release();
-        if (_wicComInitializedForFactory && _wicComInitializationThreadId == Environment.CurrentManagedThreadId)
-        {
-            PInvoke.CoUninitialize();
-        }
-
+        ReleaseWicFactory();
         if (_fontFallback != null) _fontFallback->Release();
         if (_textAnalyzer != null) _textAnalyzer->Release();
         if (_fontCollection != null) _fontCollection->Release();
         if (_dwriteFactory4 != null) _dwriteFactory4->Release();
         if (_dwriteFactory != null) _dwriteFactory->Release();
         _disposed = true;
+    }
+
+    private void ReleaseWicFactory()
+    {
+        if (_wicFactory != null)
+        {
+            _wicFactory->Release();
+            _wicFactory = null;
+        }
+
+        if (_wicComInitializedForFactory && _wicComInitializationThreadId == Environment.CurrentManagedThreadId)
+        {
+            PInvoke.CoUninitialize();
+        }
+
+        _wicComInitializedForFactory = false;
+        _wicComInitializationThreadId = 0;
     }
 
     [StructLayout(LayoutKind.Sequential)]
