@@ -475,8 +475,10 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.True(lengths.VertexBytes >= 4);
         Assert.True(lengths.PixelBytes >= 4);
+        Assert.True(lengths.BgraPixelBytes >= 4);
         Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.VertexHeader));
         Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.PixelHeader));
+        Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.BgraPixelHeader));
     }
 
     [Fact]
@@ -590,6 +592,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("IDWriteFontFace4", nativeMethods);
         Assert.Contains("IDWriteColorGlyphRunEnumerator", nativeMethods);
         Assert.Contains("IDWriteTextAnalysisSink", nativeMethods);
+        Assert.DoesNotContain("ID2D1", nativeMethods);
+        Assert.DoesNotContain("D2D1", nativeMethods);
 
         var gaBaseline = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "ga-baseline.ps1")));
         Assert.DoesNotContain("text-overlay-sync-strategy", gaBaseline);
@@ -702,6 +706,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
         Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
+        Assert.Contains("private bool TryAppendBgraColorGlyphSegment(", glyphSource);
+        Assert.Contains("private bool TryGetBgraColorGlyph(", glyphSource);
+        Assert.Contains("private bool RasterizeBgraColorGlyph(", glyphSource);
+        Assert.Contains("fontFace.Face4->GetGlyphImageData(", glyphSource);
+        Assert.Contains("fontFace.Face4->ReleaseGlyphImageData(glyphDataContext);", glyphSource);
+        Assert.Contains("SelectWritableAtlasPage(GlyphAtlasPageFormat.Bgra, width, height, recordSerial)", glyphSource);
+        Assert.Contains("GlyphAtom.BgraGlyph(glyphIndex, pixelsPerEm)", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats", glyphSource);
         Assert.Contains("private bool TryGetUnsupportedOnlyColorGlyphImageFormatReason(ShapedGlyphSegment shapedSegment, out GlyphAtlasFallbackReason unsupportedReason)", glyphSource);
@@ -715,6 +726,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE", glyphSource);
         Assert.Contains("GlyphAtom.ColorLayer(glyphIndex)", glyphSource);
         Assert.Contains("public static GlyphAtom ColorLayer(ushort glyphIndex)", glyphSource);
+        Assert.Contains("public static GlyphAtom BgraGlyph(ushort glyphIndex, uint pixelsPerEm)", glyphSource);
         Assert.Contains("_dwriteFactory2->TranslateColorGlyphRun(", glyphSource);
         Assert.Contains("IDWriteColorGlyphRunEnumerator* colorLayers", glyphSource);
         Assert.Contains("DWRITE_COLOR_GLYPH_RUN* colorGlyphRun", glyphSource);
@@ -821,6 +833,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("BgraAtlasBytesPerPixel = 4", glyphSource);
         Assert.Contains("GlyphAtlasPageFormat.Bgra => DXGI_FORMAT.DXGI_FORMAT_B8G8R8A8_UNORM", glyphSource);
         Assert.Contains("GlyphAtlasPageFormat.Bgra => BgraAtlasBytesPerPixel", glyphSource);
+        Assert.Contains("private const string BgraPixelShaderBytecodeBase64", glyphSource);
+        Assert.Contains("private ID3D12PipelineState* _bgraPso;", glyphSource);
+        Assert.Contains("private byte[] _bgraPixelShaderBytecode = [];", glyphSource);
+        Assert.Contains("_bgraPso = CreateGlyphPipelineState(_bgraPixelShaderBytecode", glyphSource);
+        Assert.Contains("GlyphAtlasPageFormat.Bgra => _bgraPso", glyphSource);
         Assert.Contains("private static int GetAtlasRowPitch(GlyphAtlasPageFormat format)", glyphSource);
         Assert.Contains("private static int GetAtlasPixelBytes(GlyphAtlasPageFormat format)", glyphSource);
         Assert.Contains("private static DXGI_FORMAT GetDxgiFormat(GlyphAtlasPageFormat format)", glyphSource);
@@ -890,7 +907,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphRunAnalysisResource(analysis != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphVertexUploadResource(vbuf != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(page.Texture != null, upload != null)", glyphSource);
-        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null, _rootSig != null)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null && _bgraPso != null, _rootSig != null)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null)", glyphSource);
         Assert.Contains("DirectWrite,", glyphSource);
         Assert.Contains("TextAnalyzer,", glyphSource);
@@ -1042,20 +1059,23 @@ public sealed class ProgramDiagnosticsTests
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG));
 
         Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8));
+
+        Assert.Equal(
             D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphSvg
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPng
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphJpeg
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphTiff
-            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra
             | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPaintTree,
             D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
                 DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF
-                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE));
     }
 

@@ -49,6 +49,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         "RFhCQ0hOwF2N9gtTu/HrKRNRsV8BAAAA4AIAAAUAAAA0AAAAoAAAABABAACEAQAARAIAAFJERUZkAAAAAAAAAAAAAAAAAAAAPAAAAAAF/v8AgQAAPAAAAFJEMTE8AAAAGAAAACAAAAAoAAAAJAAAAAwAAAAAAAAATWljcm9zb2Z0IChSKSBITFNMIFNoYWRlciBDb21waWxlciAxMC4xAElTR05oAAAAAwAAAAgAAABQAAAAAAAAAAAAAAADAAAAAAAAAAMDAABZAAAAAAAAAAAAAAADAAAAAQAAAAMDAABiAAAAAAAAAAAAAAADAAAAAgAAAA8PAABQT1NJVElPTgBURVhDT09SRABDT0xPUgBPU0dObAAAAAMAAAAIAAAAUAAAAAAAAAABAAAAAwAAAAAAAAAPAAAAXAAAAAAAAAAAAAAAAwAAAAEAAAADDAAAZQAAAAAAAAAAAAAAAwAAAAIAAAAPAAAAU1ZfUE9TSVRJT04AVEVYQ09PUkQAQ09MT1IAq1NIRVi4AAAAUAABAC4AAABqCAABXwAAAzIQEAAAAAAAXwAAAzIQEAABAAAAXwAAA/IQEAACAAAAZwAABPIgEAAAAAAAAQAAAGUAAAMyIBAAAQAAAGUAAAPyIBAAAgAAADYAAAUyIBAAAAAAAEYQEAAAAAAANgAACMIgEAAAAAAAAkAAAAAAAAAAAAAAAAAAAAAAgD82AAAFMiAQAAEAAABGEBAAAQAAADYAAAXyIBAAAgAAAEYeEAACAAAAPgAAAVNUQVSUAAAABQAAAAAAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
     private const string PixelShaderBytecodeBase64 =
         "RFhCQw3tOgpD5F95IlkFLIOjg2ABAAAA9AIAAAUAAAA0AAAA9AAAAGgBAACcAQAAWAIAAFJERUa4AAAAAAAAAAAAAAACAAAAPAAAAAAF//8AgQAAjwAAAFJEMTE8AAAAGAAAACAAAAAoAAAAJAAAAAwAAAAAAAAAfAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAACJAAAAAgAAAAUAAAAEAAAA/////wAAAAABAAAAAQAAAEF0bGFzU2FtcGxlcgBBdGxhcwBNaWNyb3NvZnQgKFIpIEhMU0wgU2hhZGVyIENvbXBpbGVyIDEwLjEAq0lTR05sAAAAAwAAAAgAAABQAAAAAAAAAAEAAAADAAAAAAAAAA8AAABcAAAAAAAAAAAAAAADAAAAAQAAAAMDAABlAAAAAAAAAAAAAAADAAAAAgAAAA8PAABTVl9QT1NJVElPTgBURVhDT09SRABDT0xPUgCrT1NHTiwAAAABAAAACAAAACAAAAAAAAAAAAAAAAMAAAAAAAAADwAAAFNWX1RBUkdFVACrq1NIRVi0AAAAUAAAAC0AAABqCAABWgAAAwBgEAAAAAAAWBgABABwEAAAAAAAVVUAAGIQAAMyEBAAAQAAAGIQAAPyEBAAAgAAAGUAAAPyIBAAAAAAAGgAAAIBAAAARQAAi8IAAIBDVRUAEgAQAAAAAABGEBAAAQAAAEZ+EAAAAAAAAGAQAAAAAAA4AAAHgiAQAAAAAAAKABAAAAAAADoQEAACAAAANgAABXIgEAAAAAAARhIQAAIAAAA+AAABU1RBVJQAAAAEAAAAAQAAAAAAAAADAAAAAQAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    private const string BgraPixelShaderBytecodeBase64 =
+        "RFhCQ6RFWgCEelPeWMrtfrsGtrUBAAAAPAMAAAUAAAA0AAAA9AAAAGgBAACcAQAAoAIAAFJERUa4AAAAAAAAAAAAAAACAAAAPAAAAAAF//8AAQAAjwAAAFJEMTE8AAAAGAAAACAAAAAoAAAAJAAAAAwAAAAAAAAAfAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAACJAAAAAgAAAAUAAAAEAAAA/////wAAAAABAAAADQAAAEF0bGFzU2FtcGxlcgBBdGxhcwBNaWNyb3NvZnQgKFIpIEhMU0wgU2hhZGVyIENvbXBpbGVyIDEwLjEAq0lTR05sAAAAAwAAAAgAAABQAAAAAAAAAAEAAAADAAAAAAAAAA8AAABcAAAAAAAAAAAAAAADAAAAAQAAAAMDAABlAAAAAAAAAAAAAAADAAAAAgAAAA8IAABTVl9QT1NJVElPTgBURVhDT09SRABDT0xPUgCrT1NHTiwAAAABAAAACAAAACAAAAAAAAAAAAAAAAMAAAAAAAAADwAAAFNWX1RBUkdFVACrq1NIRVj8AAAAUAAAAD8AAABqCAABWgAAAwBgEAAAAAAAWBgABABwEAAAAAAAVVUAAGIQAAMyEBAAAQAAAGIQAAOCEBAAAgAAAGUAAAPyIBAAAAAAAGgAAAICAAAARQAAi8IAAIBDVRUA8gAQAAAAAABGEBAAAQAAAEZ+EAAAAAAAAGAQAAAAAAAxAAAHEgAQAAEAAAABQAAAAAAAADoAEAAAAAAADgAAB+IAEAABAAAABgkQAAAAAAD2DxAAAAAAADcAAAlyIBAAAAAAAAYAEAABAAAAlgcQAAEAAABGAhAAAAAAADgAAAeCIBAAAAAAADoAEAAAAAAAOhAQAAIAAAA+AAABU1RBVJQAAAAGAAAAAgAAAAAAAAADAAAAAwAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     private readonly ID3D12Device* _device;
     private IDWriteFactory* _dwriteFactory;
@@ -58,10 +60,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private IDWriteFontFallback* _fontFallback;
     private ID3D12RootSignature* _rootSig;
     private ID3D12PipelineState* _pso;
+    private ID3D12PipelineState* _bgraPso;
     private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];
     private readonly D3D12_VERTEX_BUFFER_VIEW[] _vbvs = new D3D12_VERTEX_BUFFER_VIEW[UploadFrameCount];
     private byte[] _vertexShaderBytecode = [];
     private byte[] _pixelShaderBytecode = [];
+    private byte[] _bgraPixelShaderBytecode = [];
     private byte[] _clearTypeScratch = [];
     private byte[] _grayscaleScratch = [];
     private int _rasterScratchResizeCount;
@@ -832,6 +836,29 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
+        if (TryAppendBgraColorGlyphSegment(
+            shapedSegment,
+            baselineOriginX,
+            baselineOriginY,
+            currentBrush,
+            scissor,
+            viewportWidth,
+            viewportHeight,
+            recordSerial,
+            ref vertexCount,
+            ref batchCount,
+            ref batchSegmentStart,
+            ref batchPage,
+            out unsupportedReason))
+        {
+            return true;
+        }
+
+        if (unsupportedReason != GlyphAtlasFallbackReason.None)
+        {
+            return false;
+        }
+
         if (TryGetUnsupportedOnlyColorGlyphImageFormatReason(shapedSegment, out var imageFormatUnsupportedReason))
         {
             unsupportedReason = imageFormatUnsupportedReason;
@@ -939,6 +966,104 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
+    private bool TryAppendBgraColorGlyphSegment(
+        ShapedGlyphSegment shapedSegment,
+        float baselineOriginX,
+        float baselineOriginY,
+        Vector4 currentBrush,
+        IntegerScissorRect scissor,
+        int viewportWidth,
+        int viewportHeight,
+        long recordSerial,
+        ref int vertexCount,
+        ref int batchCount,
+        ref int batchSegmentStart,
+        ref GlyphAtlasPageHandle batchPage,
+        out GlyphAtlasFallbackReason unsupportedReason)
+    {
+        unsupportedReason = GlyphAtlasFallbackReason.None;
+        if (shapedSegment.FontFace.Face4 == null || shapedSegment.GlyphCount == 0)
+        {
+            return false;
+        }
+
+        var glyphPenX = shapedSegment.IsRightToLeft ? baselineOriginX + ComputeShapedGlyphAdvance(shapedSegment.GlyphStart, shapedSegment.GlyphCount) : baselineOriginX;
+        var pixelsPerEm = ComputeGlyphImagePixelsPerEm(shapedSegment.FontEmSize);
+        for (var i = 0; i < shapedSegment.GlyphCount; i++)
+        {
+            var glyphIndex = _shapeGlyphScratch[shapedSegment.GlyphStart + i];
+            if (glyphIndex == 0)
+            {
+                unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
+                return false;
+            }
+
+            try
+            {
+                shapedSegment.FontFace.Face4->GetGlyphImageFormats(glyphIndex, pixelsPerEm, pixelsPerEm, out var formats);
+                if ((formats & SupportedLayerColorGlyphFormats) != 0)
+                {
+                    return false;
+                }
+
+                if ((formats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8) == 0)
+                {
+                    return false;
+                }
+            }
+            catch (COMException ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[D3D12GlyphAtlasTextRenderer] BGRA color glyph image format query failed: 0x{unchecked((uint)ex.ErrorCode):X8}");
+                return false;
+            }
+        }
+
+        var appendedAny = false;
+        for (var i = 0; i < shapedSegment.GlyphCount; i++)
+        {
+            var glyphIndex = _shapeGlyphScratch[shapedSegment.GlyphStart + i];
+            var advance = _shapeAdvanceScratch[shapedSegment.GlyphStart + i];
+            var offset = _shapeOffsetScratch[shapedSegment.GlyphStart + i];
+            if (shapedSegment.IsRightToLeft)
+            {
+                glyphPenX -= advance;
+            }
+
+            if (!TryGetBgraColorGlyph(shapedSegment.FontFace, shapedSegment.FontEmSize, pixelsPerEm, glyphIndex, advance, recordSerial, out var glyph, out var glyphHadBgra, out unsupportedReason))
+            {
+                unsupportedReason = unsupportedReason == GlyphAtlasFallbackReason.None
+                    ? GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph | GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra
+                    : unsupportedReason;
+                return false;
+            }
+
+            if (!TryAppendGlyphQuad(
+                glyph,
+                currentBrush,
+                glyphPenX + glyph.OffsetX + (shapedSegment.IsRightToLeft ? -offset.advanceOffset : offset.advanceOffset),
+                baselineOriginY + glyph.OffsetY - offset.ascenderOffset,
+                scissor,
+                viewportWidth,
+                viewportHeight,
+                ref vertexCount,
+                ref batchCount,
+                ref batchSegmentStart,
+                ref batchPage,
+                out unsupportedReason))
+            {
+                return false;
+            }
+
+            appendedAny |= glyphHadBgra;
+            if (!shapedSegment.IsRightToLeft)
+            {
+                glyphPenX += advance;
+            }
+        }
+
+        return appendedAny;
+    }
+
     private bool TryGetUnsupportedOnlyColorGlyphImageFormatReason(ShapedGlyphSegment shapedSegment, out GlyphAtlasFallbackReason unsupportedReason)
     {
         unsupportedReason = GlyphAtlasFallbackReason.None;
@@ -987,12 +1112,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     internal static GlyphAtlasFallbackReason GetUnsupportedColorGlyphImageFormatReason(DWRITE_GLYPH_IMAGE_FORMATS formats)
     {
-        if ((formats & SupportedLayerColorGlyphFormats) != 0)
+        if ((formats & (SupportedLayerColorGlyphFormats | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8)) != 0)
         {
             return GlyphAtlasFallbackReason.None;
         }
 
-        var unsupportedFormats = formats & UnsupportedNonLayerColorGlyphFormats;
+        var unsupportedFormats = formats & (UnsupportedNonLayerColorGlyphFormats & ~DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8);
         if (unsupportedFormats == 0)
         {
             return GlyphAtlasFallbackReason.None;
@@ -1017,11 +1142,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF) != 0)
         {
             reason |= GlyphAtlasFallbackReason.ColorGlyphTiff;
-        }
-
-        if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8) != 0)
-        {
-            reason |= GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra;
         }
 
         if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE) != 0)
@@ -1390,6 +1510,48 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         _diagnostics = _diagnostics.WithCacheMiss();
         if (!RasterizeGlyph(key, fontFace, fontEmSize, ShapedGlyph.Simple(glyphIndex, advance), recordSerial, out glyph, out unsupportedReason))
+        {
+            return false;
+        }
+
+        handle = AddGlyphEntry(glyph);
+        _glyphs[key] = handle;
+        _cachedGlyphCount++;
+        _diagnostics = _diagnostics
+            .WithCachedGlyphs(_cachedGlyphCount)
+            .WithUploadedGlyph();
+        return true;
+    }
+
+    private bool TryGetBgraColorGlyph(
+        CachedFontFace fontFace,
+        float fontEmSize,
+        uint pixelsPerEm,
+        ushort glyphIndex,
+        float advance,
+        long recordSerial,
+        out GlyphEntry glyph,
+        out bool glyphHadBgra,
+        out GlyphAtlasFallbackReason unsupportedReason)
+    {
+        glyph = default;
+        glyphHadBgra = false;
+        unsupportedReason = GlyphAtlasFallbackReason.None;
+        if (fontFace.Face4 == null)
+        {
+            return false;
+        }
+
+        glyphHadBgra = true;
+        var key = new GlyphKey(fontFace.Identity, fontEmSize, GlyphAtom.BgraGlyph(glyphIndex, pixelsPerEm));
+        if (_glyphs.TryGetValue(key, out var handle) && TryResolveGlyph(handle, recordSerial, out glyph))
+        {
+            _diagnostics = _diagnostics.WithCacheHit();
+            return true;
+        }
+
+        _diagnostics = _diagnostics.WithCacheMiss();
+        if (!RasterizeBgraColorGlyph(key, fontFace, pixelsPerEm, glyphIndex, advance, recordSerial, out glyph, out unsupportedReason))
         {
             return false;
         }
@@ -2050,6 +2212,117 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             if (analysis != null) analysis->Release();
         }
+    }
+
+    private bool RasterizeBgraColorGlyph(
+        GlyphKey key,
+        CachedFontFace fontFace,
+        uint pixelsPerEm,
+        ushort glyphIndex,
+        float advance,
+        long recordSerial,
+        out GlyphEntry entry,
+        out GlyphAtlasFallbackReason unsupportedReason)
+    {
+        entry = default;
+        unsupportedReason = GlyphAtlasFallbackReason.None;
+        if (fontFace.Face4 == null)
+        {
+            return false;
+        }
+
+        void* glyphDataContext = null;
+        try
+        {
+            fontFace.Face4->GetGlyphImageData(
+                glyphIndex,
+                pixelsPerEm,
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8,
+                out var glyphData,
+                out glyphDataContext);
+
+            if (glyphData.imageData == null || glyphData.imageDataSize == 0)
+            {
+                return false;
+            }
+
+            if (!TryGetBgraGlyphImageSize(glyphData, out var width, out var height))
+            {
+                unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph | GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra;
+                return false;
+            }
+
+            var rowBytes = checked(width * BgraAtlasBytesPerPixel);
+            var glyphBytes = checked(rowBytes * height);
+            if ((uint)glyphBytes > glyphData.imageDataSize)
+            {
+                unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph | GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra;
+                return false;
+            }
+
+            var atlasPage = SelectWritableAtlasPage(GlyphAtlasPageFormat.Bgra, width, height, recordSerial);
+            if (atlasPage is null)
+            {
+                unsupportedReason = GlyphAtlasFallbackReason.AtlasFull;
+                return false;
+            }
+
+            if (!TryAllocateGlyph(atlasPage, width, height, out var atlasX, out var atlasY))
+            {
+                unsupportedReason = GlyphAtlasFallbackReason.AtlasFull;
+                return false;
+            }
+
+            CopyGlyphToAtlas(atlasPage, new ReadOnlySpan<byte>(glyphData.imageData, glyphBytes), width, height, atlasX, atlasY);
+            atlasPage.Touch(recordSerial);
+            var u1 = atlasX / (float)AtlasWidth;
+            var v1 = atlasY / (float)AtlasHeight;
+            var u2 = (atlasX + width) / (float)AtlasWidth;
+            var v2 = (atlasY + height) / (float)AtlasHeight;
+            entry = new GlyphEntry(
+                key,
+                width,
+                height,
+                glyphData.horizontalLeftOrigin.X,
+                -glyphData.horizontalLeftOrigin.Y,
+                advance,
+                u1,
+                v1,
+                u2,
+                v2,
+                atlasPage.Handle,
+                LastUsedSerial: recordSerial);
+            MarkAtlasDirty(atlasPage, atlasX, atlasY, width, height);
+            return true;
+        }
+        catch (COMException ex)
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.DirectWrite,
+                "D3D12GlyphAtlasTextRenderer.GetGlyphImageData(BGRA)",
+                ex);
+        }
+        finally
+        {
+            if (glyphDataContext != null)
+            {
+                fontFace.Face4->ReleaseGlyphImageData(glyphDataContext);
+            }
+        }
+    }
+
+    private static bool TryGetBgraGlyphImageSize(DWRITE_GLYPH_IMAGE_DATA glyphData, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        if (glyphData.pixelSize.width == 0 || glyphData.pixelSize.height == 0 || glyphData.pixelSize.width > int.MaxValue || glyphData.pixelSize.height > int.MaxValue)
+        {
+            return false;
+        }
+
+        width = (int)glyphData.pixelSize.width;
+        height = (int)glyphData.pixelSize.height;
+        return width <= AtlasWidth - AtlasPadding * 2 && height <= AtlasHeight - AtlasPadding * 2;
     }
 
     private static bool TryMapCharacterToSimpleGlyph(CachedFontFace fontFace, char character, out GlyphAtom glyph)
@@ -3559,7 +3832,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void DrawGlyphs(ID3D12GraphicsCommandList* list, GlyphFrame frame, int viewportWidth, int viewportHeight, int frameResourceIndex)
     {
-        if (!GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null, _rootSig != null))
+        if (!GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null && _bgraPso != null, _rootSig != null))
         {
             throw CreateRecordException(
                 GlyphAtlasRecordFailurePhase.Pipeline,
@@ -3569,16 +3842,23 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var viewport = new D3D12_VIEWPORT { Width = viewportWidth, Height = viewportHeight, MaxDepth = 1.0f };
         list->RSSetViewports(1, &viewport);
 
-        list->SetPipelineState(_pso);
         list->SetGraphicsRootSignature(_rootSig);
         list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         var vbv = _vbvs[frameResourceIndex % UploadFrameCount];
         list->IASetVertexBuffers(0, 1, &vbv);
 
+        ID3D12PipelineState* activePso = null;
         for (var i = 0; i < frame.BatchCount; i++)
         {
             var batch = _batches[i];
             var page = ResolveDrawBatchPage(batch.Page);
+            var batchPso = SelectPipelineState(page.Format);
+            if (batchPso != activePso)
+            {
+                list->SetPipelineState(batchPso);
+                activePso = batchPso;
+            }
+
             var heap = page.SrvHeap;
             if (!GlyphAtlasTextCompositionHelpers.HasAtlasDrawResources(heap != null))
             {
@@ -3594,6 +3874,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             list->DrawInstanced((uint)batch.VertexCount, 1, (uint)batch.StartVertex, 0);
         }
     }
+
+    private ID3D12PipelineState* SelectPipelineState(GlyphAtlasPageFormat format) =>
+        format switch
+        {
+            GlyphAtlasPageFormat.Bgra => _bgraPso,
+            _ => _pso
+        };
 
     private GlyphAtlasPage ResolveDrawBatchPage(GlyphAtlasPageHandle pageHandle)
     {
@@ -3734,97 +4021,105 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void CreatePSO()
     {
-        if (_vertexShaderBytecode.Length == 0 || _pixelShaderBytecode.Length == 0)
+        if (_vertexShaderBytecode.Length == 0 || _pixelShaderBytecode.Length == 0 || _bgraPixelShaderBytecode.Length == 0)
         {
             throw new InvalidOperationException("Glyph atlas embedded shader bytecode is empty.");
         }
 
+        _pso = CreateGlyphPipelineState(_pixelShaderBytecode, "D3D12GlyphAtlasTextRenderer.CreateGraphicsPipelineState(alpha)");
+        _bgraPso = CreateGlyphPipelineState(_bgraPixelShaderBytecode, "D3D12GlyphAtlasTextRenderer.CreateGraphicsPipelineState(bgra)");
+    }
+
+    private ID3D12PipelineState* CreateGlyphPipelineState(byte[] pixelShaderBytecode, string context)
+    {
         fixed (byte* vs = _vertexShaderBytecode)
-        fixed (byte* ps = _pixelShaderBytecode)
+        fixed (byte* ps = pixelShaderBytecode)
+        fixed (byte* posBytes = "POSITION"u8)
+        fixed (byte* texBytes = "TEXCOORD"u8)
+        fixed (byte* colBytes = "COLOR"u8)
         {
-            fixed (byte* posBytes = "POSITION"u8)
-            fixed (byte* texBytes = "TEXCOORD"u8)
-            fixed (byte* colBytes = "COLOR"u8)
+            var elems = stackalloc D3D12_INPUT_ELEMENT_DESC[3];
+            elems[0] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)posBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT };
+            elems[1] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)texBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT, AlignedByteOffset = 8 };
+            elems[2] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)colBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT, AlignedByteOffset = 16 };
+
+            var desc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
+            desc.pRootSignature = _rootSig;
+            desc.InputLayout.pInputElementDescs = elems;
+            desc.InputLayout.NumElements = 3;
+            desc.VS.pShaderBytecode = vs;
+            desc.VS.BytecodeLength = (nuint)_vertexShaderBytecode.Length;
+            desc.PS.pShaderBytecode = ps;
+            desc.PS.BytecodeLength = (nuint)pixelShaderBytecode.Length;
+            desc.BlendState.RenderTarget._0.BlendEnable = true;
+            desc.BlendState.RenderTarget._0.SrcBlend = D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
+            desc.BlendState.RenderTarget._0.DestBlend = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+            desc.BlendState.RenderTarget._0.BlendOp = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+            desc.BlendState.RenderTarget._0.SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE;
+            desc.BlendState.RenderTarget._0.DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
+            desc.BlendState.RenderTarget._0.BlendOpAlpha = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
+            desc.BlendState.RenderTarget._0.RenderTargetWriteMask = 0xF;
+            desc.SampleMask = 0xFFFFFFFF;
+            desc.RasterizerState.FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
+            desc.RasterizerState.CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
+            desc.RasterizerState.DepthClipEnable = true;
+            desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+            desc.NumRenderTargets = 1;
+            desc.RTVFormats._0 = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
+            desc.SampleDesc.Count = 1;
+
+            void* psoObj = null;
+            try
             {
-                var elems = stackalloc D3D12_INPUT_ELEMENT_DESC[3];
-                elems[0] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)posBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT };
-                elems[1] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)texBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32_FLOAT, AlignedByteOffset = 8 };
-                elems[2] = new D3D12_INPUT_ELEMENT_DESC { SemanticName = (PCSTR)colBytes, Format = DXGI_FORMAT.DXGI_FORMAT_R32G32B32A32_FLOAT, AlignedByteOffset = 16 };
-
-                var desc = new D3D12_GRAPHICS_PIPELINE_STATE_DESC();
-                desc.pRootSignature = _rootSig;
-                desc.InputLayout.pInputElementDescs = elems;
-                desc.InputLayout.NumElements = 3;
-                desc.VS.pShaderBytecode = vs;
-                desc.VS.BytecodeLength = (nuint)_vertexShaderBytecode.Length;
-                desc.PS.pShaderBytecode = ps;
-                desc.PS.BytecodeLength = (nuint)_pixelShaderBytecode.Length;
-                desc.BlendState.RenderTarget._0.BlendEnable = true;
-                desc.BlendState.RenderTarget._0.SrcBlend = D3D12_BLEND.D3D12_BLEND_SRC_ALPHA;
-                desc.BlendState.RenderTarget._0.DestBlend = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
-                desc.BlendState.RenderTarget._0.BlendOp = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
-                desc.BlendState.RenderTarget._0.SrcBlendAlpha = D3D12_BLEND.D3D12_BLEND_ONE;
-                desc.BlendState.RenderTarget._0.DestBlendAlpha = D3D12_BLEND.D3D12_BLEND_INV_SRC_ALPHA;
-                desc.BlendState.RenderTarget._0.BlendOpAlpha = D3D12_BLEND_OP.D3D12_BLEND_OP_ADD;
-                desc.BlendState.RenderTarget._0.RenderTargetWriteMask = 0xF;
-                desc.SampleMask = 0xFFFFFFFF;
-                desc.RasterizerState.FillMode = D3D12_FILL_MODE.D3D12_FILL_MODE_SOLID;
-                desc.RasterizerState.CullMode = D3D12_CULL_MODE.D3D12_CULL_MODE_NONE;
-                desc.RasterizerState.DepthClipEnable = true;
-                desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE.D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
-                desc.NumRenderTargets = 1;
-                desc.RTVFormats._0 = DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM;
-                desc.SampleDesc.Count = 1;
-
-                void* psoObj = null;
-                try
-                {
-                    _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out psoObj);
-                }
-                catch (COMException ex)
-                {
-                    throw WrapD3D12Exception("D3D12GlyphAtlasTextRenderer.CreateGraphicsPipelineState", ex);
-                }
-
-                if (psoObj == null)
-                {
-                    throw new InvalidOperationException("D3D12GlyphAtlasTextRenderer.CreateGraphicsPipelineState returned a null PSO.");
-                }
-
-                _pso = (ID3D12PipelineState*)psoObj;
+                _device->CreateGraphicsPipelineState(desc, typeof(ID3D12PipelineState).GUID, out psoObj);
             }
+            catch (COMException ex)
+            {
+                throw WrapD3D12Exception(context, ex);
+            }
+
+            if (psoObj == null)
+            {
+                throw new InvalidOperationException($"{context} returned a null PSO.");
+            }
+
+            return (ID3D12PipelineState*)psoObj;
         }
     }
 
     private void LoadEmbeddedShaderBytecode()
     {
-        var (vertexShader, pixelShader) = DecodeEmbeddedShaderBytecode();
+        var (vertexShader, pixelShader, bgraPixelShader) = DecodeEmbeddedShaderBytecode();
         _vertexShaderBytecode = vertexShader;
         _pixelShaderBytecode = pixelShader;
+        _bgraPixelShaderBytecode = bgraPixelShader;
     }
 
-    internal static (int VertexBytes, int PixelBytes, byte[] VertexHeader, byte[] PixelHeader) GetEmbeddedShaderBytecodeLengths()
+    internal static (int VertexBytes, int PixelBytes, int BgraPixelBytes, byte[] VertexHeader, byte[] PixelHeader, byte[] BgraPixelHeader) GetEmbeddedShaderBytecodeLengths()
     {
-        var (vertexShader, pixelShader) = DecodeEmbeddedShaderBytecode();
+        var (vertexShader, pixelShader, bgraPixelShader) = DecodeEmbeddedShaderBytecode();
         return (
             vertexShader.Length,
             pixelShader.Length,
+            bgraPixelShader.Length,
             vertexShader[..Math.Min(4, vertexShader.Length)],
-            pixelShader[..Math.Min(4, pixelShader.Length)]);
+            pixelShader[..Math.Min(4, pixelShader.Length)],
+            bgraPixelShader[..Math.Min(4, bgraPixelShader.Length)]);
     }
 
-    private static (byte[] VertexShader, byte[] PixelShader) DecodeEmbeddedShaderBytecode()
+    private static (byte[] VertexShader, byte[] PixelShader, byte[] BgraPixelShader) DecodeEmbeddedShaderBytecode()
     {
         try
         {
             var vertexShader = Convert.FromBase64String(VertexShaderBytecodeBase64);
             var pixelShader = Convert.FromBase64String(PixelShaderBytecodeBase64);
-            if (vertexShader.Length == 0 || pixelShader.Length == 0)
+            var bgraPixelShader = Convert.FromBase64String(BgraPixelShaderBytecodeBase64);
+            if (vertexShader.Length == 0 || pixelShader.Length == 0 || bgraPixelShader.Length == 0)
             {
                 throw new InvalidOperationException("Glyph atlas embedded shader bytecode is empty.");
             }
 
-            return (vertexShader, pixelShader);
+            return (vertexShader, pixelShader, bgraPixelShader);
         }
         catch (FormatException ex)
         {
@@ -4185,6 +4480,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 _vbufs[i] = null;
             }
         }
+        if (_bgraPso != null) _bgraPso->Release();
         if (_pso != null) _pso->Release();
         if (_rootSig != null) _rootSig->Release();
         if (_fontFallback != null) _fontFallback->Release();
@@ -4697,6 +4993,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         private const byte SimpleCodePointKind = 1;
         private const byte ShapedPlacementKind = 2;
         private const byte ColorLayerKind = 3;
+        private const byte BgraGlyphKind = 4;
         private const byte DiacriticFlag = 1 << 0;
         private const byte ZeroWidthSpaceFlag = 1 << 1;
 
@@ -4714,6 +5011,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         public static GlyphAtom ColorLayer(ushort glyphIndex) => new(ColorLayerKind, 0, glyphIndex, Flags: 0);
+
+        public static GlyphAtom BgraGlyph(ushort glyphIndex, uint pixelsPerEm) => new(BgraGlyphKind, pixelsPerEm, glyphIndex, Flags: 0);
 
         public bool Equals(GlyphAtom other) => Kind == other.Kind && CodePoint == other.CodePoint && GlyphIndex == other.GlyphIndex && Flags == other.Flags;
 
