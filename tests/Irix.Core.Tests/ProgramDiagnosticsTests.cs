@@ -1354,8 +1354,8 @@ public sealed class ProgramDiagnosticsTests
     {
         var results = new[]
         {
-            new ColorGlyphFormatProbeResult("grinning", 0x1F600, 42, GlyphFound: true, Factory4Available: true, Face4Available: true, Formats: ColorGlyphImageFormatFlags.Colr | ColorGlyphImageFormatFlags.PremultipliedBgra, BitmapRoute: ColorGlyphBitmapRoute.Bgra, Status: ColorGlyphFormatProbeStatus.Ok, Error: "", ColorRunCount: 1, ColorRunFormats: ColorGlyphImageFormatFlags.Colr, ColorRunBitmapRoute: ColorGlyphBitmapRoute.None),
-            new ColorGlyphFormatProbeResult("rocket", 0x1F680, 43, GlyphFound: true, Factory4Available: true, Face4Available: true, Formats: ColorGlyphImageFormatFlags.Png, BitmapRoute: ColorGlyphBitmapRoute.Png, Status: ColorGlyphFormatProbeStatus.Ok, Error: "", ColorRunCount: 1, ColorRunFormats: ColorGlyphImageFormatFlags.Png, ColorRunBitmapRoute: ColorGlyphBitmapRoute.Png),
+            new ColorGlyphFormatProbeResult("grinning", 0x1F600, 42, GlyphFound: true, Factory4Available: true, Face4Available: true, Formats: ColorGlyphImageFormatFlags.Colr | ColorGlyphImageFormatFlags.PremultipliedBgra, BitmapRoute: ColorGlyphBitmapRoute.Bgra, Status: ColorGlyphFormatProbeStatus.Ok, Error: "", ColorRunCount: 1, ColorRunFormats: ColorGlyphImageFormatFlags.Colr, ColorRunBitmapRoute: ColorGlyphBitmapRoute.None, ImageDataRoute: ColorGlyphBitmapRoute.Bgra, ImageDataBytes: 4096, ImageDataPixelsPerEm: 64, ImageDataWidth: 32, ImageDataHeight: 32, ImageDecodeBytes: 4096, ImageDecodeWidth: 32, ImageDecodeHeight: 32),
+            new ColorGlyphFormatProbeResult("rocket", 0x1F680, 43, GlyphFound: true, Factory4Available: true, Face4Available: true, Formats: ColorGlyphImageFormatFlags.Png, BitmapRoute: ColorGlyphBitmapRoute.Png, Status: ColorGlyphFormatProbeStatus.Ok, Error: "", ColorRunCount: 1, ColorRunFormats: ColorGlyphImageFormatFlags.Png, ColorRunBitmapRoute: ColorGlyphBitmapRoute.Png, ImageDataRoute: ColorGlyphBitmapRoute.Png, ImageDataBytes: 2048, ImageDataPixelsPerEm: 128, ImageDataWidth: 0, ImageDataHeight: 0, ImageDecodeBytes: 16384, ImageDecodeWidth: 64, ImageDecodeHeight: 64),
             new ColorGlyphFormatProbeResult("paint-tree", 0x1F3AF, 44, GlyphFound: true, Factory4Available: true, Face4Available: true, Formats: ColorGlyphImageFormatFlags.ColrPaintTree, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.Ok, Error: "")
         };
         var snapshot = ColorGlyphFormatDiagnosticSnapshot.Create("Segoe UI Emoji", 64, factory4Available: true, face4Available: true, results);
@@ -1367,10 +1367,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(1, snapshot.EncodedBitmapCandidates);
         Assert.Equal(1, snapshot.UnsupportedColorCandidates);
         Assert.Equal(2, snapshot.BitmapRenderableCandidates);
+        Assert.Equal(2, snapshot.ImageDataCandidates);
+        Assert.Equal(2, snapshot.DecodedBitmapCandidates);
         Assert.Equal("COLR|BGRA", GlyphAtlasColorFormatDiagnosticRunner.FormatFlags(results[0].Formats));
-        Assert.Equal("Probe: U+1F600 grinning glyph=42 status=Ok formats=COLR|BGRA route=Bgra colorRuns=1 runFormats=COLR runRoute=None", GlyphAtlasColorFormatDiagnosticRunner.FormatProbe(results[0]));
-        Assert.Equal("Color glyph formats: factory4=True, face4=True, probes=3, glyphs=3, colorRunCandidates=2, layerCandidates=1, bgraCandidates=1, encodedBitmapCandidates=1, unsupportedColorCandidates=1, bitmapRenderableCandidates=2", GlyphAtlasColorFormatDiagnosticRunner.FormatSummary(snapshot));
-        Assert.Equal("Color glyph natural coverage: status=BitmapRenderableAvailable, layerRoute=True, bgraRoute=True, encodedBitmapRoute=True, bitmapRenderableRoute=True, naturalBgraSmoke=True", GlyphAtlasColorFormatDiagnosticRunner.FormatNaturalCoverage(snapshot));
+        Assert.Equal("Probe: U+1F600 grinning glyph=42 status=Ok formats=COLR|BGRA route=Bgra colorRuns=1 runFormats=COLR runRoute=None imageDataRoute=Bgra imageDataBytes=4096 imageDataPpem=64 imageDataSize=32x32 decodeBytes=4096 decodeSize=32x32", GlyphAtlasColorFormatDiagnosticRunner.FormatProbe(results[0]));
+        Assert.Equal("Probe: U+1F680 rocket glyph=43 status=Ok formats=PNG route=Png colorRuns=1 runFormats=PNG runRoute=Png imageDataRoute=Png imageDataBytes=2048 imageDataPpem=128 imageDataSize=0x0 decodeBytes=16384 decodeSize=64x64", GlyphAtlasColorFormatDiagnosticRunner.FormatProbe(results[1]));
+        Assert.Equal("Color glyph formats: factory4=True, face4=True, probes=3, glyphs=3, colorRunCandidates=2, layerCandidates=1, bgraCandidates=1, encodedBitmapCandidates=1, unsupportedColorCandidates=1, bitmapRenderableCandidates=2, imageDataCandidates=2, decodedBitmapCandidates=2", GlyphAtlasColorFormatDiagnosticRunner.FormatSummary(snapshot));
+        Assert.Equal("Color glyph natural coverage: status=BitmapRenderableAvailable, layerRoute=True, bgraRoute=True, encodedBitmapRoute=True, bitmapRenderableRoute=True, imageDataRoute=True, decodedBitmapRoute=True, naturalBgraSmoke=True", GlyphAtlasColorFormatDiagnosticRunner.FormatNaturalCoverage(snapshot));
     }
 
     [Fact]
@@ -1386,7 +1389,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(0, snapshot.BgraCandidates);
         Assert.Equal(0, snapshot.EncodedBitmapCandidates);
         Assert.Equal(0, snapshot.BitmapRenderableCandidates);
-        Assert.Equal("Color glyph natural coverage: status=LayerOnly, layerRoute=True, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, naturalBgraSmoke=False", GlyphAtlasColorFormatDiagnosticRunner.FormatNaturalCoverage(snapshot));
+        Assert.Equal(0, snapshot.ImageDataCandidates);
+        Assert.Equal(0, snapshot.DecodedBitmapCandidates);
+        Assert.Equal("Color glyph natural coverage: status=LayerOnly, layerRoute=True, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, imageDataRoute=False, decodedBitmapRoute=False, naturalBgraSmoke=False", GlyphAtlasColorFormatDiagnosticRunner.FormatNaturalCoverage(snapshot));
     }
 
     [Fact]
@@ -1399,15 +1404,28 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-glyph-atlas-color-formats", programSource);
         Assert.Contains("--diagnose-color-glyph-family", programSource);
+        Assert.Contains("--diagnose-color-glyph-font-file", programSource);
         Assert.Contains("DWriteColorGlyphFormatDiagnostic.Capture(familyName, pixelsPerEm)", runnerSource);
+        Assert.Contains("DWriteColorGlyphFormatDiagnostic.CaptureFromFontFile(fontFilePath, pixelsPerEm)", runnerSource);
         Assert.Contains("factory4={snapshot.Factory4Available}", runnerSource);
         Assert.Contains("colorRunCandidates={snapshot.ColorRunCandidates}", runnerSource);
+        Assert.Contains("imageDataCandidates={snapshot.ImageDataCandidates}", runnerSource);
+        Assert.Contains("decodedBitmapCandidates={snapshot.DecodedBitmapCandidates}", runnerSource);
         Assert.Contains("FormatNaturalCoverage(snapshot)", runnerSource);
         Assert.Contains("naturalBgraSmoke={bitmapRenderableRoute}", runnerSource);
         Assert.Contains("IDWriteFontFace4*", platformSource);
         Assert.Contains("IDWriteFactory4*", platformSource);
         Assert.Contains("factory->QueryInterface<IDWriteFactory4>(out factory4).ThrowOnFailure();", platformSource);
+        Assert.Contains("CreateFontFileReference(fullPath, null, &fontFile)", platformSource);
+        Assert.Contains("CreateFontFace(", platformSource);
+        Assert.Contains("fontFile->Analyze(out var isSupportedFontType", platformSource);
         Assert.Contains("factory4->TranslateColorGlyphRun(", platformSource);
+        Assert.Contains("ProbeGlyphImageData(face4", platformSource);
+        Assert.Contains("face4->GetGlyphImageData(glyphIndex, pixelsPerEm, imageFormat, out var glyphData, out glyphDataContext)", platformSource);
+        Assert.Contains("face4->ReleaseGlyphImageData(glyphDataContext)", platformSource);
+        Assert.Contains("TryDecodeWicImage(new ReadOnlySpan<byte>(glyphData.imageData", platformSource);
+        Assert.Contains("PInvoke.CoCreateInstance<IWICImagingFactory>", platformSource);
+        Assert.Contains("CreateDecoderFromStream((IStream*)stream, null, WICDecodeOptions.WICDecodeMetadataCacheOnLoad)", platformSource);
         Assert.Contains("D2D_POINT_2F", platformSource);
         Assert.Contains("IDWriteColorGlyphRunEnumerator1* colorRuns", platformSource);
         Assert.DoesNotContain("Factory4Missing", platformSource);

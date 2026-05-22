@@ -106,11 +106,13 @@ internal static class Program
             var pixelsPerEmArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-color-formats").Skip(1).FirstOrDefault();
             if (uint.TryParse(pixelsPerEmArg, out var n) && n > 0) pixelsPerEm = n;
             var familyName = args.SkipWhile(a => a != "--diagnose-color-glyph-family").Skip(1).FirstOrDefault();
+            var fontFilePath = args.SkipWhile(a => a != "--diagnose-color-glyph-font-file").Skip(1).FirstOrDefault();
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
             GlyphAtlasColorFormatDiagnosticRunner.Run(
                 diagnosticOutput ?? Console.Out,
                 string.IsNullOrWhiteSpace(familyName) ? "Segoe UI Emoji" : familyName,
-                pixelsPerEm);
+                pixelsPerEm,
+                fontFilePath);
             return;
         }
 

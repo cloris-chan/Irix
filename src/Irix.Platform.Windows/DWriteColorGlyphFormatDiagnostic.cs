@@ -3,13 +3,19 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct2D.Common;
 using Windows.Win32.Graphics.DirectWrite;
+using Windows.Win32.Graphics.Imaging;
+using Windows.Win32.System.Com;
 
 namespace Irix.Platform.Windows;
 
 internal static unsafe class DWriteColorGlyphFormatDiagnostic
 {
+    private static readonly Guid WicImagingFactoryClsid = new(0xCACAF262, 0x9370, 0x4615, 0xA1, 0x3B, 0x9F, 0x55, 0x39, 0xDA, 0x4C, 0x0A);
+    private static readonly Guid WicPixelFormat32bppPbgra = new(0x6FDDC324, 0x4E03, 0x4BFE, 0xB1, 0x85, 0x3D, 0x77, 0x76, 0x8D, 0xC9, 0x0F);
     private const uint DefaultPixelsPerEm = 64;
     private const int DWriteNoColorHResult = unchecked((int)0x8898500C);
+    private const int RpcEChangedModeHResult = unchecked((int)0x80010106);
+    private const int BgraBytesPerPixel = 4;
     private const DWRITE_GLYPH_IMAGE_FORMATS ColorGlyphRunImageFormats =
         DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE
         | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_CFF
@@ -120,6 +126,97 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
         }
     }
 
+    internal static ColorGlyphFormatDiagnosticSnapshot CaptureFromFontFile(string fontFilePath, uint pixelsPerEm = DefaultPixelsPerEm)
+    {
+        if (string.IsNullOrWhiteSpace(fontFilePath))
+        {
+            return ColorGlyphFormatDiagnosticSnapshot.Failed("FontFile", pixelsPerEm, "FontFilePathMissing");
+        }
+
+        pixelsPerEm = Math.Clamp(pixelsPerEm, 1, ushort.MaxValue);
+        var fullPath = Path.GetFullPath(fontFilePath);
+        var familyName = $"FontFile:{Path.GetFileName(fullPath)}";
+        if (!File.Exists(fullPath))
+        {
+            return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, "FontFileMissing");
+        }
+
+        IDWriteFactory* factory = null;
+        IDWriteFactory4* factory4 = null;
+        IDWriteFontFile* fontFile = null;
+        IDWriteFontFace* face = null;
+        IDWriteFontFace4* face4 = null;
+
+        try
+        {
+            PInvoke.DWriteCreateFactory(
+                DWRITE_FACTORY_TYPE.DWRITE_FACTORY_TYPE_SHARED,
+                typeof(IDWriteFactory).GUID,
+                out var factoryObject).ThrowOnFailure();
+            factory = (IDWriteFactory*)factoryObject;
+            factory->QueryInterface<IDWriteFactory4>(out factory4).ThrowOnFailure();
+            if (factory4 == null)
+            {
+                return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, "Factory4Unavailable");
+            }
+
+            factory4->CreateFontFileReference(fullPath, null, &fontFile);
+            if (fontFile == null)
+            {
+                return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, "FontFileReferenceUnavailable");
+            }
+
+            fontFile->Analyze(out var isSupportedFontType, out _, out var fontFaceType, out var faceCount);
+            if (!isSupportedFontType || faceCount == 0)
+            {
+                return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, "UnsupportedFontFile");
+            }
+
+            var fontFiles = stackalloc IDWriteFontFile*[1];
+            fontFiles[0] = fontFile;
+            factory4->CreateFontFace(
+                fontFaceType,
+                numberOfFiles: 1,
+                fontFiles,
+                faceIndex: 0,
+                DWRITE_FONT_SIMULATIONS.DWRITE_FONT_SIMULATIONS_NONE,
+                &face);
+            if (face == null)
+            {
+                return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, "FontFaceUnavailable");
+            }
+
+            face4 = TryQueryFontFace4(face);
+            var results = new ColorGlyphFormatProbeResult[DefaultProbes.Length];
+            for (var i = 0; i < DefaultProbes.Length; i++)
+            {
+                results[i] = Probe(factory4, face, face4, DefaultProbes[i], pixelsPerEm);
+            }
+
+            return ColorGlyphFormatDiagnosticSnapshot.Create(familyName, pixelsPerEm, factory4Available: true, face4 != null, results);
+        }
+        catch (COMException ex)
+        {
+            return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, $"DirectWrite=0x{unchecked((uint)ex.ErrorCode):X8}");
+        }
+        catch (IOException ex)
+        {
+            return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, $"IO=0x{unchecked((uint)ex.HResult):X8}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ColorGlyphFormatDiagnosticSnapshot.Failed(familyName, pixelsPerEm, $"Access=0x{unchecked((uint)ex.HResult):X8}");
+        }
+        finally
+        {
+            if (face4 != null) face4->Release();
+            if (face != null) face->Release();
+            if (fontFile != null) fontFile->Release();
+            if (factory4 != null) factory4->Release();
+            if (factory != null) factory->Release();
+        }
+    }
+
     private static IDWriteFontFace4* TryQueryFontFace4(IDWriteFontFace* face)
     {
         try
@@ -151,6 +248,7 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
             return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, GlyphIndex: 0, GlyphFound: false, Factory4Available: true, Face4Available: face4 != null, Formats: ColorGlyphImageFormatFlags.None, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.GlyphMissing, Error: "");
         }
 
+        DWRITE_GLYPH_IMAGE_FORMATS faceNativeFormats = default;
         var faceFormats = ColorGlyphImageFormatFlags.None;
         var faceRoute = ColorGlyphBitmapRoute.None;
         var status = ColorGlyphFormatProbeStatus.Ok;
@@ -164,6 +262,7 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
             try
             {
                 face4->GetGlyphImageFormats(glyphIndex[0], pixelsPerEm, pixelsPerEm, out var formats);
+                faceNativeFormats = formats;
                 faceFormats = ToDiagnosticFlags(formats);
                 faceRoute = SelectBitmapRoute(formats);
             }
@@ -175,12 +274,16 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
         }
 
         var colorRunCount = 0;
+        DWRITE_GLYPH_IMAGE_FORMATS colorRunNativeFormats = default;
         var colorRunFormats = ColorGlyphImageFormatFlags.None;
         var colorRunRoute = ColorGlyphBitmapRoute.None;
         var colorRunError = "";
-        ProbeColorGlyphRuns(factory4, face, glyphIndex[0], pixelsPerEm, out colorRunCount, out colorRunFormats, out colorRunRoute, out colorRunError);
+        ProbeColorGlyphRuns(factory4, face, glyphIndex[0], pixelsPerEm, out colorRunCount, out colorRunNativeFormats, out colorRunFormats, out colorRunRoute, out colorRunError);
 
-        return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, glyphIndex[0], GlyphFound: true, Factory4Available: true, Face4Available: face4 != null, Formats: faceFormats, BitmapRoute: faceRoute, Status: status, Error: error, ColorRunCount: colorRunCount, ColorRunFormats: colorRunFormats, ColorRunBitmapRoute: colorRunRoute, ColorRunError: colorRunError);
+        var imageDataFormats = faceRoute != ColorGlyphBitmapRoute.None ? faceNativeFormats : colorRunNativeFormats;
+        ProbeGlyphImageData(face4, glyphIndex[0], pixelsPerEm, imageDataFormats, out var imageDataRoute, out var imageDataBytes, out var imageDataPixelsPerEm, out var imageDataWidth, out var imageDataHeight, out var imageDataError, out var imageDecodeBytes, out var imageDecodeWidth, out var imageDecodeHeight, out var imageDecodeError);
+
+        return new ColorGlyphFormatProbeResult(probe.Label, probe.CodePoint, glyphIndex[0], GlyphFound: true, Factory4Available: true, Face4Available: face4 != null, Formats: faceFormats, BitmapRoute: faceRoute, Status: status, Error: error, ColorRunCount: colorRunCount, ColorRunFormats: colorRunFormats, ColorRunBitmapRoute: colorRunRoute, ColorRunError: colorRunError, ImageDataRoute: imageDataRoute, ImageDataBytes: imageDataBytes, ImageDataPixelsPerEm: imageDataPixelsPerEm, ImageDataWidth: imageDataWidth, ImageDataHeight: imageDataHeight, ImageDataError: imageDataError, ImageDecodeBytes: imageDecodeBytes, ImageDecodeWidth: imageDecodeWidth, ImageDecodeHeight: imageDecodeHeight, ImageDecodeError: imageDecodeError);
     }
 
     private static void ProbeColorGlyphRuns(
@@ -189,11 +292,13 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
         ushort glyphIndex,
         uint pixelsPerEm,
         out int colorRunCount,
+        out DWRITE_GLYPH_IMAGE_FORMATS colorRunNativeFormats,
         out ColorGlyphImageFormatFlags colorRunFormats,
         out ColorGlyphBitmapRoute colorRunRoute,
         out string error)
     {
         colorRunCount = 0;
+        colorRunNativeFormats = default;
         colorRunFormats = ColorGlyphImageFormatFlags.None;
         colorRunRoute = ColorGlyphBitmapRoute.None;
         error = "";
@@ -268,6 +373,7 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
 
                 colorRunCount++;
                 var imageFormat = currentRun->glyphImageFormat;
+                colorRunNativeFormats |= imageFormat;
                 colorRunFormats |= ToDiagnosticFlags(imageFormat);
                 if (colorRunRoute == ColorGlyphBitmapRoute.None)
                 {
@@ -282,6 +388,200 @@ internal static unsafe class DWriteColorGlyphFormatDiagnostic
         finally
         {
             colorRuns->Release();
+        }
+    }
+
+    private static void ProbeGlyphImageData(
+        IDWriteFontFace4* face4,
+        ushort glyphIndex,
+        uint pixelsPerEm,
+        DWRITE_GLYPH_IMAGE_FORMATS formats,
+        out ColorGlyphBitmapRoute imageDataRoute,
+        out uint imageDataBytes,
+        out uint imageDataPixelsPerEm,
+        out int imageDataWidth,
+        out int imageDataHeight,
+        out string imageDataError,
+        out uint imageDecodeBytes,
+        out int imageDecodeWidth,
+        out int imageDecodeHeight,
+        out string imageDecodeError)
+    {
+        imageDataRoute = ColorGlyphBitmapRoute.None;
+        imageDataBytes = 0;
+        imageDataPixelsPerEm = 0;
+        imageDataWidth = 0;
+        imageDataHeight = 0;
+        imageDataError = "";
+        imageDecodeBytes = 0;
+        imageDecodeWidth = 0;
+        imageDecodeHeight = 0;
+        imageDecodeError = "";
+        if (face4 == null || !D3D12GlyphAtlasTextRenderer.TrySelectColorGlyphBitmapImageFormat(formats, out var imageFormat))
+        {
+            return;
+        }
+
+        void* glyphDataContext = null;
+        try
+        {
+            face4->GetGlyphImageData(glyphIndex, pixelsPerEm, imageFormat, out var glyphData, out glyphDataContext);
+            if (glyphData.imageData == null || glyphData.imageDataSize == 0)
+            {
+                imageDataError = "EmptyImageData";
+                return;
+            }
+
+            imageDataRoute = SelectBitmapRoute(imageFormat);
+            imageDataBytes = glyphData.imageDataSize;
+            imageDataPixelsPerEm = glyphData.pixelsPerEm;
+            if (glyphData.pixelSize.width <= int.MaxValue && glyphData.pixelSize.height <= int.MaxValue)
+            {
+                imageDataWidth = (int)glyphData.pixelSize.width;
+                imageDataHeight = (int)glyphData.pixelSize.height;
+            }
+
+            if (imageDataRoute == ColorGlyphBitmapRoute.Bgra)
+            {
+                imageDecodeBytes = imageDataBytes;
+                imageDecodeWidth = imageDataWidth;
+                imageDecodeHeight = imageDataHeight;
+            }
+            else
+            {
+                TryDecodeWicImage(new ReadOnlySpan<byte>(glyphData.imageData, checked((int)glyphData.imageDataSize)), out imageDecodeBytes, out imageDecodeWidth, out imageDecodeHeight, out imageDecodeError);
+            }
+        }
+        catch (COMException ex)
+        {
+            imageDataError = $"0x{unchecked((uint)ex.ErrorCode):X8}";
+        }
+        catch (OverflowException)
+        {
+            imageDataError = "Overflow";
+        }
+        finally
+        {
+            if (glyphDataContext != null)
+            {
+                face4->ReleaseGlyphImageData(glyphDataContext);
+            }
+        }
+    }
+
+    private static bool TryDecodeWicImage(ReadOnlySpan<byte> encodedBytes, out uint decodedBytes, out int width, out int height, out string error)
+    {
+        decodedBytes = 0;
+        width = 0;
+        height = 0;
+        error = "";
+        if (encodedBytes.IsEmpty)
+        {
+            error = "EmptyEncodedData";
+            return false;
+        }
+
+        var coInitializeHr = PInvoke.CoInitializeEx(COINIT.COINIT_MULTITHREADED);
+        var ownsComInitialization = coInitializeHr.Succeeded;
+        if (coInitializeHr.Failed && (int)coInitializeHr != RpcEChangedModeHResult)
+        {
+            error = $"CoInitialize=0x{unchecked((uint)coInitializeHr.Value):X8}";
+            return false;
+        }
+
+        IWICImagingFactory* factory = null;
+        IWICStream* stream = null;
+        IWICBitmapDecoder* decoder = null;
+        IWICBitmapFrameDecode* frame = null;
+        IWICFormatConverter* converter = null;
+        try
+        {
+            var factoryHr = PInvoke.CoCreateInstance<IWICImagingFactory>(WicImagingFactoryClsid, null, CLSCTX.CLSCTX_INPROC_SERVER, out factory);
+            if (factoryHr.Failed || factory == null)
+            {
+                error = $"CoCreateWIC=0x{unchecked((uint)factoryHr.Value):X8}";
+                return false;
+            }
+
+            factory->CreateStream(&stream);
+            if (stream == null)
+            {
+                error = "WicStreamUnavailable";
+                return false;
+            }
+
+            stream->InitializeFromMemory(encodedBytes);
+            decoder = factory->CreateDecoderFromStream((IStream*)stream, null, WICDecodeOptions.WICDecodeMetadataCacheOnLoad);
+            if (decoder == null)
+            {
+                error = "WicDecoderUnavailable";
+                return false;
+            }
+
+            decoder->GetFrame(0, &frame);
+            if (frame == null)
+            {
+                error = "WicFrameUnavailable";
+                return false;
+            }
+
+            factory->CreateFormatConverter(&converter);
+            if (converter == null)
+            {
+                error = "WicConverterUnavailable";
+                return false;
+            }
+
+            converter->Initialize(
+                (IWICBitmapSource*)frame,
+                WicPixelFormat32bppPbgra,
+                WICBitmapDitherType.WICBitmapDitherTypeNone,
+                null,
+                0,
+                WICBitmapPaletteType.WICBitmapPaletteTypeCustom);
+            converter->GetSize(out var decodedWidth, out var decodedHeight);
+            if (decodedWidth == 0 || decodedHeight == 0 || decodedWidth > int.MaxValue || decodedHeight > int.MaxValue)
+            {
+                error = "InvalidDecodedSize";
+                return false;
+            }
+
+            width = (int)decodedWidth;
+            height = (int)decodedHeight;
+            var stride = checked((uint)(width * BgraBytesPerPixel));
+            var decodedByteCount = checked(width * height * BgraBytesPerPixel);
+            var decodedPixels = new byte[decodedByteCount];
+            converter->CopyPixels(null, stride, decodedPixels);
+            decodedBytes = (uint)decodedByteCount;
+            return true;
+        }
+        catch (COMException ex)
+        {
+            error = $"WIC=0x{unchecked((uint)ex.ErrorCode):X8}";
+            decodedBytes = 0;
+            width = 0;
+            height = 0;
+            return false;
+        }
+        catch (OverflowException)
+        {
+            error = "Overflow";
+            decodedBytes = 0;
+            width = 0;
+            height = 0;
+            return false;
+        }
+        finally
+        {
+            if (converter != null) converter->Release();
+            if (frame != null) frame->Release();
+            if (decoder != null) decoder->Release();
+            if (stream != null) stream->Release();
+            if (factory != null) factory->Release();
+            if (ownsComInitialization)
+            {
+                PInvoke.CoUninitialize();
+            }
         }
     }
 
@@ -381,7 +681,17 @@ internal readonly struct ColorGlyphFormatProbeResult(
     int ColorRunCount = 0,
     ColorGlyphImageFormatFlags ColorRunFormats = ColorGlyphImageFormatFlags.None,
     ColorGlyphBitmapRoute ColorRunBitmapRoute = ColorGlyphBitmapRoute.None,
-    string ColorRunError = "") : IEquatable<ColorGlyphFormatProbeResult>
+    string ColorRunError = "",
+    ColorGlyphBitmapRoute ImageDataRoute = ColorGlyphBitmapRoute.None,
+    uint ImageDataBytes = 0,
+    uint ImageDataPixelsPerEm = 0,
+    int ImageDataWidth = 0,
+    int ImageDataHeight = 0,
+    string ImageDataError = "",
+    uint ImageDecodeBytes = 0,
+    int ImageDecodeWidth = 0,
+    int ImageDecodeHeight = 0,
+    string ImageDecodeError = "") : IEquatable<ColorGlyphFormatProbeResult>
 {
     public string Label { get; } = Label;
     public uint CodePoint { get; } = CodePoint;
@@ -397,12 +707,24 @@ internal readonly struct ColorGlyphFormatProbeResult(
     public ColorGlyphImageFormatFlags ColorRunFormats { get; } = ColorRunFormats;
     public ColorGlyphBitmapRoute ColorRunBitmapRoute { get; } = ColorRunBitmapRoute;
     public string ColorRunError { get; } = ColorRunError;
+    public ColorGlyphBitmapRoute ImageDataRoute { get; } = ImageDataRoute;
+    public uint ImageDataBytes { get; } = ImageDataBytes;
+    public uint ImageDataPixelsPerEm { get; } = ImageDataPixelsPerEm;
+    public int ImageDataWidth { get; } = ImageDataWidth;
+    public int ImageDataHeight { get; } = ImageDataHeight;
+    public string ImageDataError { get; } = ImageDataError;
+    public uint ImageDecodeBytes { get; } = ImageDecodeBytes;
+    public int ImageDecodeWidth { get; } = ImageDecodeWidth;
+    public int ImageDecodeHeight { get; } = ImageDecodeHeight;
+    public string ImageDecodeError { get; } = ImageDecodeError;
     public bool HasLayerFormat => HasLayerFormatFlags(Formats | ColorRunFormats);
     public bool HasEncodedBitmapFormat => HasEncodedBitmapFormatFlags(Formats | ColorRunFormats);
     public bool HasBgraFormat => ((Formats | ColorRunFormats) & ColorGlyphImageFormatFlags.PremultipliedBgra) != 0;
     public bool HasUnsupportedColorFormat => ((Formats | ColorRunFormats) & (ColorGlyphImageFormatFlags.Svg | ColorGlyphImageFormatFlags.ColrPaintTree)) != 0;
     public bool HasColorRuns => ColorRunCount > 0;
-    public bool HasBitmapRenderableFormat => BitmapRoute != ColorGlyphBitmapRoute.None || ColorRunBitmapRoute != ColorGlyphBitmapRoute.None;
+    public bool HasImageData => ImageDataRoute != ColorGlyphBitmapRoute.None && ImageDataBytes > 0;
+    public bool HasDecodedImage => ImageDecodeBytes > 0;
+    public bool HasBitmapRenderableFormat => BitmapRoute != ColorGlyphBitmapRoute.None || ColorRunBitmapRoute != ColorGlyphBitmapRoute.None || HasImageData;
 
     private static bool HasLayerFormatFlags(ColorGlyphImageFormatFlags flags) => (flags & (ColorGlyphImageFormatFlags.TrueType | ColorGlyphImageFormatFlags.Cff | ColorGlyphImageFormatFlags.Colr)) != 0;
 
@@ -423,7 +745,17 @@ internal readonly struct ColorGlyphFormatProbeResult(
             && ColorRunCount == other.ColorRunCount
             && ColorRunFormats == other.ColorRunFormats
             && ColorRunBitmapRoute == other.ColorRunBitmapRoute
-            && ColorRunError == other.ColorRunError;
+            && ColorRunError == other.ColorRunError
+            && ImageDataRoute == other.ImageDataRoute
+            && ImageDataBytes == other.ImageDataBytes
+            && ImageDataPixelsPerEm == other.ImageDataPixelsPerEm
+            && ImageDataWidth == other.ImageDataWidth
+            && ImageDataHeight == other.ImageDataHeight
+            && ImageDataError == other.ImageDataError
+            && ImageDecodeBytes == other.ImageDecodeBytes
+            && ImageDecodeWidth == other.ImageDecodeWidth
+            && ImageDecodeHeight == other.ImageDecodeHeight
+            && ImageDecodeError == other.ImageDecodeError;
     }
 
     public override bool Equals(object? obj) => obj is ColorGlyphFormatProbeResult other && Equals(other);
@@ -445,6 +777,16 @@ internal readonly struct ColorGlyphFormatProbeResult(
         hash.Add(ColorRunFormats);
         hash.Add(ColorRunBitmapRoute);
         hash.Add(ColorRunError);
+        hash.Add(ImageDataRoute);
+        hash.Add(ImageDataBytes);
+        hash.Add(ImageDataPixelsPerEm);
+        hash.Add(ImageDataWidth);
+        hash.Add(ImageDataHeight);
+        hash.Add(ImageDataError);
+        hash.Add(ImageDecodeBytes);
+        hash.Add(ImageDecodeWidth);
+        hash.Add(ImageDecodeHeight);
+        hash.Add(ImageDecodeError);
         return hash.ToHashCode();
     }
 
@@ -466,7 +808,9 @@ internal readonly struct ColorGlyphFormatDiagnosticSnapshot(
     int BgraCandidates,
     int EncodedBitmapCandidates,
     int UnsupportedColorCandidates,
-    int BitmapRenderableCandidates) : IEquatable<ColorGlyphFormatDiagnosticSnapshot>
+    int BitmapRenderableCandidates,
+    int ImageDataCandidates,
+    int DecodedBitmapCandidates) : IEquatable<ColorGlyphFormatDiagnosticSnapshot>
 {
     public string FamilyName { get; } = FamilyName;
     public uint PixelsPerEm { get; } = PixelsPerEm;
@@ -482,9 +826,11 @@ internal readonly struct ColorGlyphFormatDiagnosticSnapshot(
     public int EncodedBitmapCandidates { get; } = EncodedBitmapCandidates;
     public int UnsupportedColorCandidates { get; } = UnsupportedColorCandidates;
     public int BitmapRenderableCandidates { get; } = BitmapRenderableCandidates;
+    public int ImageDataCandidates { get; } = ImageDataCandidates;
+    public int DecodedBitmapCandidates { get; } = DecodedBitmapCandidates;
 
     public static ColorGlyphFormatDiagnosticSnapshot Failed(string familyName, uint pixelsPerEm, string failure) =>
-        new(familyName, pixelsPerEm, Factory4Available: false, Face4Available: false, failure, [], Glyphs: 0, ColorRunCandidates: 0, LayerCandidates: 0, BgraCandidates: 0, EncodedBitmapCandidates: 0, UnsupportedColorCandidates: 0, BitmapRenderableCandidates: 0);
+        new(familyName, pixelsPerEm, Factory4Available: false, Face4Available: false, failure, [], Glyphs: 0, ColorRunCandidates: 0, LayerCandidates: 0, BgraCandidates: 0, EncodedBitmapCandidates: 0, UnsupportedColorCandidates: 0, BitmapRenderableCandidates: 0, ImageDataCandidates: 0, DecodedBitmapCandidates: 0);
 
     public static ColorGlyphFormatDiagnosticSnapshot Create(string familyName, uint pixelsPerEm, bool factory4Available, bool face4Available, ColorGlyphFormatProbeResult[] results)
     {
@@ -495,6 +841,8 @@ internal readonly struct ColorGlyphFormatDiagnosticSnapshot(
         var encodedBitmapCandidates = 0;
         var unsupportedColorCandidates = 0;
         var bitmapRenderableCandidates = 0;
+        var imageDataCandidates = 0;
+        var decodedBitmapCandidates = 0;
         foreach (ref readonly var result in results.AsSpan())
         {
             if (result.GlyphFound) glyphs++;
@@ -504,9 +852,11 @@ internal readonly struct ColorGlyphFormatDiagnosticSnapshot(
             if (result.HasEncodedBitmapFormat) encodedBitmapCandidates++;
             if (result.HasUnsupportedColorFormat) unsupportedColorCandidates++;
             if (result.HasBitmapRenderableFormat) bitmapRenderableCandidates++;
+            if (result.HasImageData) imageDataCandidates++;
+            if (result.HasDecodedImage) decodedBitmapCandidates++;
         }
 
-        return new ColorGlyphFormatDiagnosticSnapshot(familyName, pixelsPerEm, factory4Available, face4Available, "", results, glyphs, colorRunCandidates, layerCandidates, bgraCandidates, encodedBitmapCandidates, unsupportedColorCandidates, bitmapRenderableCandidates);
+        return new ColorGlyphFormatDiagnosticSnapshot(familyName, pixelsPerEm, factory4Available, face4Available, "", results, glyphs, colorRunCandidates, layerCandidates, bgraCandidates, encodedBitmapCandidates, unsupportedColorCandidates, bitmapRenderableCandidates, imageDataCandidates, decodedBitmapCandidates);
     }
 
     public bool Equals(ColorGlyphFormatDiagnosticSnapshot other)
@@ -523,7 +873,9 @@ internal readonly struct ColorGlyphFormatDiagnosticSnapshot(
             && BgraCandidates == other.BgraCandidates
             && EncodedBitmapCandidates == other.EncodedBitmapCandidates
             && UnsupportedColorCandidates == other.UnsupportedColorCandidates
-            && BitmapRenderableCandidates == other.BitmapRenderableCandidates;
+            && BitmapRenderableCandidates == other.BitmapRenderableCandidates
+            && ImageDataCandidates == other.ImageDataCandidates
+            && DecodedBitmapCandidates == other.DecodedBitmapCandidates;
     }
 
     public override bool Equals(object? obj) => obj is ColorGlyphFormatDiagnosticSnapshot other && Equals(other);
@@ -544,6 +896,8 @@ internal readonly struct ColorGlyphFormatDiagnosticSnapshot(
         hash.Add(EncodedBitmapCandidates);
         hash.Add(UnsupportedColorCandidates);
         hash.Add(BitmapRenderableCandidates);
+        hash.Add(ImageDataCandidates);
+        hash.Add(DecodedBitmapCandidates);
         return hash.ToHashCode();
     }
 

@@ -5,9 +5,11 @@ namespace Irix.Poc;
 
 internal static class GlyphAtlasColorFormatDiagnosticRunner
 {
-    internal static void Run(TextWriter output, string familyName = "Segoe UI Emoji", uint pixelsPerEm = 64)
+    internal static void Run(TextWriter output, string familyName = "Segoe UI Emoji", uint pixelsPerEm = 64, string? fontFilePath = null)
     {
-        var snapshot = DWriteColorGlyphFormatDiagnostic.Capture(familyName, pixelsPerEm);
+        var snapshot = string.IsNullOrWhiteSpace(fontFilePath)
+            ? DWriteColorGlyphFormatDiagnostic.Capture(familyName, pixelsPerEm)
+            : DWriteColorGlyphFormatDiagnostic.CaptureFromFontFile(fontFilePath, pixelsPerEm);
 
         output.WriteLine("=== Glyph Atlas Color Glyph Format Diagnostic ===");
         output.WriteLine($"Family: {snapshot.FamilyName}");
@@ -25,23 +27,25 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
     internal static string FormatSummary(ColorGlyphFormatDiagnosticSnapshot snapshot)
     {
         return string.IsNullOrEmpty(snapshot.Failure)
-            ? $"Color glyph formats: factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates={snapshot.ColorRunCandidates}, layerCandidates={snapshot.LayerCandidates}, bgraCandidates={snapshot.BgraCandidates}, encodedBitmapCandidates={snapshot.EncodedBitmapCandidates}, unsupportedColorCandidates={snapshot.UnsupportedColorCandidates}, bitmapRenderableCandidates={snapshot.BitmapRenderableCandidates}"
-            : $"Color glyph formats: failure={snapshot.Failure}, factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates=0, layerCandidates=0, bgraCandidates=0, encodedBitmapCandidates=0, unsupportedColorCandidates=0, bitmapRenderableCandidates=0";
+            ? $"Color glyph formats: factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates={snapshot.ColorRunCandidates}, layerCandidates={snapshot.LayerCandidates}, bgraCandidates={snapshot.BgraCandidates}, encodedBitmapCandidates={snapshot.EncodedBitmapCandidates}, unsupportedColorCandidates={snapshot.UnsupportedColorCandidates}, bitmapRenderableCandidates={snapshot.BitmapRenderableCandidates}, imageDataCandidates={snapshot.ImageDataCandidates}, decodedBitmapCandidates={snapshot.DecodedBitmapCandidates}"
+            : $"Color glyph formats: failure={snapshot.Failure}, factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates=0, layerCandidates=0, bgraCandidates=0, encodedBitmapCandidates=0, unsupportedColorCandidates=0, bitmapRenderableCandidates=0, imageDataCandidates=0, decodedBitmapCandidates=0";
     }
 
     internal static string FormatNaturalCoverage(ColorGlyphFormatDiagnosticSnapshot snapshot)
     {
         if (!string.IsNullOrEmpty(snapshot.Failure))
         {
-            return $"Color glyph natural coverage: status=Unavailable, failure={snapshot.Failure}, layerRoute=False, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, naturalBgraSmoke=False";
+            return $"Color glyph natural coverage: status=Unavailable, failure={snapshot.Failure}, layerRoute=False, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, imageDataRoute=False, decodedBitmapRoute=False, naturalBgraSmoke=False";
         }
 
         var layerRoute = snapshot.LayerCandidates > 0;
         var bgraRoute = snapshot.BgraCandidates > 0;
         var encodedBitmapRoute = snapshot.EncodedBitmapCandidates > 0;
         var bitmapRenderableRoute = snapshot.BitmapRenderableCandidates > 0;
+        var imageDataRoute = snapshot.ImageDataCandidates > 0;
+        var decodedBitmapRoute = snapshot.DecodedBitmapCandidates > 0;
         var status = bitmapRenderableRoute ? "BitmapRenderableAvailable" : layerRoute ? "LayerOnly" : snapshot.UnsupportedColorCandidates > 0 ? "UnsupportedOnly" : "NoColorGlyphData";
-        return $"Color glyph natural coverage: status={status}, layerRoute={layerRoute}, bgraRoute={bgraRoute}, encodedBitmapRoute={encodedBitmapRoute}, bitmapRenderableRoute={bitmapRenderableRoute}, naturalBgraSmoke={bitmapRenderableRoute}";
+        return $"Color glyph natural coverage: status={status}, layerRoute={layerRoute}, bgraRoute={bgraRoute}, encodedBitmapRoute={encodedBitmapRoute}, bitmapRenderableRoute={bitmapRenderableRoute}, imageDataRoute={imageDataRoute}, decodedBitmapRoute={decodedBitmapRoute}, naturalBgraSmoke={bitmapRenderableRoute}";
     }
 
     internal static string FormatProbe(ColorGlyphFormatProbeResult result)
@@ -65,6 +69,22 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
         builder.Append(FormatFlags(result.ColorRunFormats));
         builder.Append(" runRoute=");
         builder.Append(result.ColorRunBitmapRoute);
+        builder.Append(" imageDataRoute=");
+        builder.Append(result.ImageDataRoute);
+        builder.Append(" imageDataBytes=");
+        builder.Append(result.ImageDataBytes);
+        builder.Append(" imageDataPpem=");
+        builder.Append(result.ImageDataPixelsPerEm);
+        builder.Append(" imageDataSize=");
+        builder.Append(result.ImageDataWidth);
+        builder.Append('x');
+        builder.Append(result.ImageDataHeight);
+        builder.Append(" decodeBytes=");
+        builder.Append(result.ImageDecodeBytes);
+        builder.Append(" decodeSize=");
+        builder.Append(result.ImageDecodeWidth);
+        builder.Append('x');
+        builder.Append(result.ImageDecodeHeight);
         if (!string.IsNullOrEmpty(result.Error))
         {
             builder.Append(" error=");
@@ -74,6 +94,16 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
         {
             builder.Append(" runError=");
             builder.Append(result.ColorRunError);
+        }
+        if (!string.IsNullOrEmpty(result.ImageDataError))
+        {
+            builder.Append(" imageDataError=");
+            builder.Append(result.ImageDataError);
+        }
+        if (!string.IsNullOrEmpty(result.ImageDecodeError))
+        {
+            builder.Append(" decodeError=");
+            builder.Append(result.ImageDecodeError);
         }
 
         return builder.ToString();
