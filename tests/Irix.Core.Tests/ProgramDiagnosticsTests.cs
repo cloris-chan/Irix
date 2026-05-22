@@ -1055,6 +1055,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains(".WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge, pageUsage.OldestAlphaPageAge, pageUsage.OldestBgraPageAge)", glyphSource);
         Assert.Contains(".WithAtlasPageCounts(_atlasPages.Count, pageUsage.AlphaPageCount, pageUsage.BgraPageCount)", glyphSource);
         Assert.Contains(".WithAtlasPendingPageReuse(CountPendingAtlasPageReuseRequests())", glyphSource);
+        Assert.Contains("RasterScratchBytes: _clearTypeScratch.Length + _grayscaleScratch.Length + GetShapeScratchByteCount()", glyphSource);
+        Assert.Contains("_shapeScratchResizeCount = 0;", glyphSource);
         Assert.Contains("public int AtlasBudgetPages => MaxAtlasPages;", glyphSource);
         Assert.Contains("public int AtlasPageWidth => AtlasWidth;", glyphSource);
         Assert.Contains("public int AtlasPageHeight => AtlasHeight;", glyphSource);

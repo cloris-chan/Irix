@@ -219,7 +219,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             Reasons: default,
             InitializationFailurePhase: GlyphAtlasInitializationPhase.None,
             RecordFailurePhase: GlyphAtlasRecordFailurePhase.None,
-            RasterScratchBytes: _clearTypeScratch.Length + _grayscaleScratch.Length,
+            RasterScratchBytes: _clearTypeScratch.Length + _grayscaleScratch.Length + GetShapeScratchByteCount(),
             RasterScratchResizes: 0,
             AtlasPages: _atlasPages.Count,
             AtlasAlphaPages: pageUsage.AlphaPageCount,
@@ -237,6 +237,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             AtlasOldestBgraPageAge: pageUsage.OldestBgraPageAge,
             AtlasPendingPageReuses: CountPendingAtlasPageReuseRequests());
         _rasterScratchResizeCount = 0;
+        _shapeScratchResizeCount = 0;
     }
 
     public GlyphAtlasRecordResult TryRecord(
