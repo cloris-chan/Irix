@@ -264,6 +264,7 @@ D3D11On12 / D2D overlay deletion is active in the renderer source:
 
 - `D3D12TextRenderer`, `TextOverlaySyncStrategy`, and D3D11 query extensions are removed.
 - `NativeMethods.txt` no longer requests D3D11On12 or Direct2D generation.
+- The only remaining Direct2D-named active symbol is the `Direct2D.Common` `D2D_POINT_2F` value type required by `IDWriteFactory4.TranslateColorGlyphRun`; no Direct2D factory/device/context or D3D11On12 overlay API is generated or used.
 - `TextCompositionMode` has no overlay mode; `--text-composition overlay` is rejected, and `GlyphAtlas` is the only active text composition mode.
 - Diagnostics expose `atlasPages`, `atlasBudgetPages`, `atlasPage`, `atlasCapacity`, `atlasEvictions`, `atlasPendingPageReuses`, `atlasPageReuseRequests`, `atlasFullWithoutPageReuse`, `atlasUsed`, `atlasFragmented`, `atlasRecordSerial`, atlas page ages, upload bytes/new glyphs, accepted text runs, degradation runs, aggregate `NonAscii`, split `ColorGlyph` / `ComplexScript`, SVG/PNG/JPEG/TIFF/premultiplied BGRA/COLR paint-tree color glyph counters, other per-run reasons, sync/present serials, and failure phases.
 

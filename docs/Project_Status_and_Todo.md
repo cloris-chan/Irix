@@ -29,7 +29,7 @@ Removed historical prep/checkpoint docs were already absorbed into the canonical
 | Area | Status |
 |------|--------|
 | V1 core | Complete / regression-only. Do not reopen core feature scope for GA cleanup. |
-| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; accepted atlas runs stay on D3D12 and unsupported/failure runs degrade without D3D11On12/D2D overlay. The D3D11On12/D2D overlay renderer, sync strategy, native generation entries, explicit overlay mode, and legacy `--text-composition overlay` alias are removed from active source. |
+| Windows backend | D3D12 is the active v1 PoC backend. GlyphAtlas text composition is the post-GA default on `post-ga-renderer-foundation`; accepted atlas runs stay on D3D12 and unsupported/failure runs degrade without D3D11On12/D2D overlay. The D3D11On12/D2D overlay renderer, sync strategy, native generation entries, explicit overlay mode, and legacy `--text-composition overlay` alias are removed from active source. The only remaining Direct2D-named active symbol is the `Direct2D.Common` `D2D_POINT_2F` value type required by DirectWrite color-glyph translation; source guards reject Direct2D factory/device/context and D3D11On12 overlay APIs. |
 | Backend clip | Scissor is the default backend clip mode; `--disable-scissor` / `--clip-mode diagnostic` remain diagnostic rollback paths. |
 | Default renderer baseline | GlyphAtlas + Scissor default baseline enabled. Do not introduce another runtime default switch before shader/resource lifetime and allocation attribution hardening. |
 | Partial apply | Default-on, with `--no-partial-apply` rollback. Existing segmented ownership path and guards are test-covered. |

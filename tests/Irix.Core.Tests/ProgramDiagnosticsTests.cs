@@ -606,6 +606,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(File.Exists(Path.Combine(platformWindows, "TextOverlaySyncStrategy.cs")));
         Assert.False(File.Exists(Path.Combine(platformWindows, "D3D11DeviceContextQueryExtensions.cs")));
 
+        var direct2DCommonReferences = 0;
+        var d2dPointReferences = 0;
         foreach (var sourcePath in Directory.EnumerateFiles(platformWindows, "*.cs"))
         {
             var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
@@ -615,7 +617,16 @@ public sealed class ProgramDiagnosticsTests
             Assert.DoesNotContain("ID2D", source);
             Assert.DoesNotContain("D2D1", source);
             Assert.DoesNotContain("D2D1CreateFactory", source);
+            direct2DCommonReferences += CountOccurrences(source, "Windows.Win32.Graphics.Direct2D.Common");
+            d2dPointReferences += CountOccurrences(source, "D2D_POINT_2F");
+            if (!sourcePath.EndsWith("D3D12GlyphAtlasTextRenderer.cs", StringComparison.Ordinal))
+            {
+                Assert.DoesNotContain("D2D_POINT_2F", source);
+            }
         }
+
+        Assert.True(direct2DCommonReferences <= 1);
+        Assert.True(d2dPointReferences <= 1);
 
         var nativeMethods = NormalizeLineEndings(File.ReadAllText(Path.Combine(platformWindows, "NativeMethods.txt")));
         var nativeMethodLines = nativeMethods.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
