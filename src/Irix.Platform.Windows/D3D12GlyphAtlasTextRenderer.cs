@@ -3947,7 +3947,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var lineGlyphStart = segmentIndex < segmentCount ? _shapedSegmentScratch[segmentIndex].GlyphStart : 0;
             var lineGlyphEnd = lineGlyphStart;
             var hasGlyphSegment = false;
-            var allGlyphSegmentsRightToLeft = true;
+            var firstGlyphSegmentBidiLevel = (byte)0;
             while (segmentIndex < segmentCount && _shapedSegmentScratch[segmentIndex].TextStart < plannedLine.End)
             {
                 var segment = _shapedSegmentScratch[segmentIndex];
@@ -3958,8 +3958,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
                 if (segment.GlyphCount > 0)
                 {
+                    if (!hasGlyphSegment)
+                    {
+                        firstGlyphSegmentBidiLevel = segment.BidiLevel;
+                    }
+
                     hasGlyphSegment = true;
-                    allGlyphSegmentsRightToLeft &= segment.IsRightToLeft;
                 }
 
                 lineGlyphEnd = Math.Max(lineGlyphEnd, segment.GlyphStart + segment.GlyphCount);
@@ -3967,7 +3971,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             var lineSegmentCount = segmentIndex - lineSegmentStart;
-            var lineIsRightToLeft = hasGlyphSegment && allGlyphSegmentsRightToLeft;
+            var lineIsRightToLeft = hasGlyphSegment && (firstGlyphSegmentBidiLevel & 1) != 0;
             if (!lineIsRightToLeft)
             {
                 ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount);

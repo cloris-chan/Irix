@@ -717,7 +717,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("return TryShapeBidiLevelRuns(text, textStart, textLength, style, baseFontFace, ref glyphStart, ref segmentCount);", glyphSource);
         Assert.Contains("ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount);", glyphSource);
         Assert.Contains("ReverseShapedSegments(reverseStart, index - 1);", glyphSource);
-        Assert.Contains("var lineIsRightToLeft = hasGlyphSegment && allGlyphSegmentsRightToLeft;", glyphSource);
+        Assert.Contains("var firstGlyphSegmentBidiLevel = (byte)0;", glyphSource);
+        Assert.Contains("firstGlyphSegmentBidiLevel = segment.BidiLevel;", glyphSource);
+        Assert.Contains("var lineIsRightToLeft = hasGlyphSegment && (firstGlyphSegmentBidiLevel & 1) != 0;", glyphSource);
         Assert.Contains("lineIsRightToLeft ? (byte)1 : (byte)0", glyphSource);
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
@@ -1328,15 +1330,15 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(13, summary.TextRuns);
-        Assert.Equal(13, summary.AtlasCandidateRuns);
+        Assert.Equal(14, summary.TextRuns);
+        Assert.Equal(14, summary.AtlasCandidateRuns);
         Assert.Equal(0, summary.DegradedCandidateRuns);
         Assert.Equal(5, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(0, summary.WrappingFallbackRuns);
         Assert.Equal(0, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(0, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=13", expectedLine);
+        Assert.Contains("atlasRuns=14", expectedLine);
         Assert.Contains("degradedRuns=0", expectedLine);
         Assert.Contains("wrappedAtlasRuns=5", expectedLine);
         Assert.Contains("Wrapping=0", expectedLine);
