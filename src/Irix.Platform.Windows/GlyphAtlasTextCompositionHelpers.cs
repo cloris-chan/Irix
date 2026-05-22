@@ -275,9 +275,9 @@ internal static class GlyphAtlasTextCompositionHelpers
         return hasCommandList;
     }
 
-    internal static bool HasGlyphDirectWriteResources(bool hasFactory, bool hasFactory2, bool hasFontCollection, bool hasTextAnalyzer, bool hasFontFallback)
+    internal static bool HasGlyphDirectWriteResources(bool hasFactory, bool hasFactory4, bool hasFontCollection, bool hasTextAnalyzer, bool hasFontFallback)
     {
-        return hasFactory && hasFactory2 && hasFontCollection && hasTextAnalyzer && hasFontFallback;
+        return hasFactory && hasFactory4 && hasFontCollection && hasTextAnalyzer && hasFontFallback;
     }
 
     internal static bool HasGlyphFontFaceResource(bool hasFontFace)

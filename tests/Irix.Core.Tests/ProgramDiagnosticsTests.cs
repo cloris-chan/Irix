@@ -390,12 +390,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(hasPipelineState: true, hasRootSignature: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(hasCommandList: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphRecordCommandList(hasCommandList: false));
-        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: true, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: false, hasFactory2: true, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: false, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: true, hasFontCollection: false, hasTextAnalyzer: true, hasFontFallback: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: true, hasFontCollection: true, hasTextAnalyzer: false, hasFontFallback: true));
-        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory2: true, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: false));
+        Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory4: true, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: false, hasFactory4: true, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory4: false, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory4: true, hasFontCollection: false, hasTextAnalyzer: true, hasFontFallback: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory4: true, hasFontCollection: true, hasTextAnalyzer: false, hasFontFallback: true));
+        Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphDirectWriteResources(hasFactory: true, hasFactory4: true, hasFontCollection: true, hasTextAnalyzer: true, hasFontFallback: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: true));
         Assert.False(GlyphAtlasTextCompositionHelpers.HasGlyphFontFaceResource(hasFontFace: false));
         Assert.True(GlyphAtlasTextCompositionHelpers.HasGlyphFontFamilyResource(hasFontFamily: true));
