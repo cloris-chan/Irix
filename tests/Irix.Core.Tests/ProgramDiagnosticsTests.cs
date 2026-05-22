@@ -617,7 +617,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs", glyphSource);
         Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
-        Assert.Contains("private const int MaxAtlasPages = 8;", glyphSource);
+        Assert.Contains("private const int MaxAtlasPages = 48;", glyphSource);
         Assert.Contains("private const int AtlasPagePixels = AtlasWidth * AtlasHeight;", glyphSource);
         Assert.Contains("private const int AtlasBudgetPixels = MaxAtlasPages * AtlasPagePixels;", glyphSource);
         Assert.Contains("private readonly List<int> _freeGlyphEntryIndices", glyphSource);
@@ -789,6 +789,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private void RemoveRunGlyphEntries(bool clearPixels)", glyphSource);
         Assert.Contains("private void RestoreRunGlyphEntryTouches()", glyphSource);
         Assert.Contains("private void ClearGlyphEntryPixels(GlyphEntry entry)", glyphSource);
+        Assert.Contains("private void ReleaseAtlasPagesCreatedDuringRun()", glyphSource);
         Assert.Contains("private int ResetPagesReusedDuringRun()", glyphSource);
         Assert.Contains("private void RestoreRunPageStates()", glyphSource);
         Assert.Contains("private int CountLiveGlyphEntries()", glyphSource);
@@ -796,6 +797,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("RollbackAtlasRunMutation(recordSerial, unsupportedReason);", glyphSource);
         Assert.Contains("CommitAtlasRunMutation();", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle AddAtlasPage(", glyphSource);
+        Assert.Contains("private GlyphAtlasPage? TryCreateAdditionalAtlasPage()", glyphSource);
         Assert.Contains("ID3D12Resource*[] uploads, ID3D12DescriptorHeap* srvHeap, D3D12_RESOURCE_STATES textureState)", glyphSource);
         Assert.Contains("private bool TryResolveAtlasPage(GlyphAtlasPageHandle handle,", glyphSource);
         Assert.Contains("entry.Generation != handle.Generation || !TryResolveAtlasPage(entry.Page, out var page)", glyphSource);
@@ -937,9 +939,9 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("cachedGlyphs=12", summary);
         Assert.Contains("atlasPages=1", summary);
-        Assert.Contains("atlasBudgetPages=8", summary);
+        Assert.Contains("atlasBudgetPages=48", summary);
         Assert.Contains("atlasPage=1024x1024", summary);
-        Assert.Contains("atlasCapacity=8388608 px", summary);
+        Assert.Contains("atlasCapacity=50331648 px", summary);
         Assert.Contains("atlasEvictions=1", summary);
         Assert.Contains("atlasPendingPageReuses=0", summary);
         Assert.Contains("atlasPageReuseRequests=1", summary);
@@ -1282,8 +1284,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Text composition mode: GlyphAtlas", report);
         Assert.Contains("Device removed: False", report);
         Assert.Contains("Frame serial: frameSerial=1, presentSerial=1, syncWaits=0", report);
-        Assert.Contains("atlasBudgetPages=8", report);
-        Assert.Contains("atlasCapacity=8388608 px", report);
+        Assert.Contains("atlasBudgetPages=48", report);
+        Assert.Contains("atlasCapacity=50331648 px", report);
         Assert.Contains("degradedRuns=1", report);
         Assert.Contains("AtlasFull=1", report);
         Assert.Contains("=== Glyph atlas stress diagnostic complete ===", report);
@@ -1894,7 +1896,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=8, atlasPage=1024x1024, atlasCapacity=8388608 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=48, atlasPage=1024x1024, atlasCapacity=50331648 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, ColorGlyph=0, ComplexScript=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

@@ -21,7 +21,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int AtlasWidth = 1024;
     private const int AtlasHeight = 1024;
     private const int AtlasPadding = 1;
-    private const int MaxAtlasPages = 8;
+    private const int MaxAtlasPages = 48;
     private const int AtlasPagePixels = AtlasWidth * AtlasHeight;
     private const int AtlasBudgetPixels = MaxAtlasPages * AtlasPagePixels;
     private const int MaxGlyphQuads = 4096;
@@ -98,6 +98,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private GlyphAtlasPageReuseRequest _runPendingAtlasPageReuse;
     private int _cachedGlyphCount;
     private int _runCachedGlyphCount;
+    private int _runAtlasPageCount;
     private int _nextFontFaceIdentity = 1;
     private long _glyphRecordSerial;
     private bool _runAtlasMutationActive;
@@ -1394,6 +1395,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _runActiveAtlasPage = _activeAtlasPage;
         _runPendingAtlasPageReuse = _pendingAtlasPageReuse;
         _runCachedGlyphCount = _cachedGlyphCount;
+        _runAtlasPageCount = _atlasPages.Count;
         _runDiagnostics = _diagnostics;
         for (var i = 0; i < _atlasPages.Count; i++)
         {
@@ -1409,6 +1411,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _runGlyphEntryStates.Clear();
         _runActiveAtlasPage = default;
         _runPendingAtlasPageReuse = default;
+        _runAtlasPageCount = 0;
     }
 
     private void RollbackAtlasRunMutation(long recordSerial, GlyphAtlasFallbackReason reason)
@@ -1422,6 +1425,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             RemoveRunGlyphEntries(clearPixels: true);
             RestoreRunGlyphEntryTouches();
+            ReleaseAtlasPagesCreatedDuringRun();
             RestoreRunPageStates();
             var resetPageCount = ResetPagesReusedDuringRun();
             _pendingAtlasPageReuse = _runPendingAtlasPageReuse;
@@ -1438,6 +1442,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         {
             RemoveRunGlyphEntries(clearPixels: true);
             RestoreRunGlyphEntryTouches();
+            ReleaseAtlasPagesCreatedDuringRun();
             RestoreRunPageStates();
             _activeAtlasPage = _runActiveAtlasPage;
             _pendingAtlasPageReuse = _runPendingAtlasPageReuse;
@@ -1538,6 +1543,16 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         for (var i = 0; i < _atlasPages.Count; i++)
         {
             _atlasPages[i].RestoreMutationState(_runPageStates[i]);
+        }
+    }
+
+    private void ReleaseAtlasPagesCreatedDuringRun()
+    {
+        while (_atlasPages.Count > _runAtlasPageCount)
+        {
+            var pageIndex = _atlasPages.Count - 1;
+            _atlasPages[pageIndex].Release();
+            _atlasPages.RemoveAt(pageIndex);
         }
     }
 
@@ -1654,6 +1669,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var page = _atlasPages[selectedIndex];
             _activeAtlasPage = page.Handle;
             return page;
+        }
+
+        var newPage = TryCreateAdditionalAtlasPage();
+        if (newPage is not null)
+        {
+            _activeAtlasPage = newPage.Handle;
+            return newPage;
         }
 
         var reusedPage = TryReuseColdAtlasPageForCurrentRecord(width, height, recordSerial);
@@ -3719,14 +3741,19 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void CreateAtlasResources()
     {
-        for (var i = 0; i < MaxAtlasPages; i++)
+        var page = CreateAtlasPageResources();
+        _activeAtlasPage = page;
+    }
+
+    private GlyphAtlasPage? TryCreateAdditionalAtlasPage()
+    {
+        if (_atlasPages.Count >= MaxAtlasPages)
         {
-            var page = CreateAtlasPageResources();
-            if (i == 0)
-            {
-                _activeAtlasPage = page;
-            }
+            return null;
         }
+
+        var handle = CreateAtlasPageResources();
+        return TryResolveAtlasPage(handle, out var page) ? page : null;
     }
 
     private GlyphAtlasPageHandle CreateAtlasPageResources()
