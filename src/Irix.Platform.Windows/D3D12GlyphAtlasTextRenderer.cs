@@ -1784,7 +1784,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         _diagnostics = _diagnostics.WithCacheMiss();
-        if (!RasterizeBgraColorGlyph(key, fontFace, pixelsPerEm, glyphIndex, advance, recordSerial, out glyph, out unsupportedReason))
+        if (!RasterizeBgraColorGlyph(key, fontFace, fontEmSize, pixelsPerEm, glyphIndex, advance, recordSerial, out glyph, out unsupportedReason))
         {
             return false;
         }
@@ -1824,7 +1824,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         _diagnostics = _diagnostics.WithCacheMiss();
-        if (!RasterizeEncodedBitmapColorGlyph(key, fontFace, pixelsPerEm, glyphIndex, imageFormat, advance, recordSerial, out glyph, out unsupportedReason))
+        if (!RasterizeEncodedBitmapColorGlyph(key, fontFace, fontEmSize, pixelsPerEm, glyphIndex, imageFormat, advance, recordSerial, out glyph, out unsupportedReason))
         {
             return false;
         }
@@ -1980,15 +1980,20 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void ClearGlyphEntryPixels(GlyphEntry entry)
     {
-        if (entry.Width <= 0 || entry.Height <= 0 || !TryResolveAtlasPage(entry.Page, out var page))
+        if (!TryResolveAtlasPage(entry.Page, out var page))
         {
             return;
         }
 
         var x = Math.Clamp((int)MathF.Round(entry.U1 * AtlasWidth), 0, AtlasWidth);
         var y = Math.Clamp((int)MathF.Round(entry.V1 * AtlasHeight), 0, AtlasHeight);
-        var width = Math.Clamp((int)MathF.Ceiling(entry.Width), 0, AtlasWidth - x);
-        var height = Math.Clamp((int)MathF.Ceiling(entry.Height), 0, AtlasHeight - y);
+        var width = Math.Clamp((int)MathF.Round(entry.U2 * AtlasWidth), x, AtlasWidth) - x;
+        var height = Math.Clamp((int)MathF.Round(entry.V2 * AtlasHeight), y, AtlasHeight) - y;
+        if (width <= 0 || height <= 0)
+        {
+            return;
+        }
+
         var rowPitch = page.RowPitch;
         var bytesPerPixel = page.BytesPerPixel;
         var byteX = x * bytesPerPixel;
@@ -2490,6 +2495,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private bool RasterizeBgraColorGlyph(
         GlyphKey key,
         CachedFontFace fontFace,
+        float fontEmSize,
         uint pixelsPerEm,
         ushort glyphIndex,
         float advance,
@@ -2552,12 +2558,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var v1 = atlasY / (float)AtlasHeight;
             var u2 = (atlasX + width) / (float)AtlasWidth;
             var v2 = (atlasY + height) / (float)AtlasHeight;
+            var imageScale = ComputeGlyphImageScale(fontEmSize, glyphData.pixelsPerEm);
             entry = new GlyphEntry(
                 key,
-                width,
-                height,
-                glyphData.horizontalLeftOrigin.X,
-                -glyphData.horizontalLeftOrigin.Y,
+                width * imageScale,
+                height * imageScale,
+                glyphData.horizontalLeftOrigin.X * imageScale,
+                -glyphData.horizontalLeftOrigin.Y * imageScale,
                 advance,
                 u1,
                 v1,
@@ -2587,6 +2594,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private bool RasterizeEncodedBitmapColorGlyph(
         GlyphKey key,
         CachedFontFace fontFace,
+        float fontEmSize,
         uint pixelsPerEm,
         ushort glyphIndex,
         DWRITE_GLYPH_IMAGE_FORMATS imageFormat,
@@ -2649,12 +2657,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var v1 = atlasY / (float)AtlasHeight;
             var u2 = (atlasX + width) / (float)AtlasWidth;
             var v2 = (atlasY + height) / (float)AtlasHeight;
+            var imageScale = ComputeGlyphImageScale(fontEmSize, glyphData.pixelsPerEm);
             entry = new GlyphEntry(
                 key,
-                width,
-                height,
-                glyphData.horizontalLeftOrigin.X,
-                -glyphData.horizontalLeftOrigin.Y,
+                width * imageScale,
+                height * imageScale,
+                glyphData.horizontalLeftOrigin.X * imageScale,
+                -glyphData.horizontalLeftOrigin.Y * imageScale,
                 advance,
                 u1,
                 v1,
@@ -2822,6 +2831,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         width = (int)decodedWidth;
         height = (int)decodedHeight;
         return true;
+    }
+
+    internal static float ComputeGlyphImageScale(float fontEmSize, uint pixelsPerEm)
+    {
+        if (!float.IsFinite(fontEmSize) || fontEmSize <= 0 || pixelsPerEm == 0)
+        {
+            return 1f;
+        }
+
+        var scale = fontEmSize / pixelsPerEm;
+        return float.IsFinite(scale) && scale > 0 ? scale : 1f;
     }
 
     private void EnsureWicDecodeScratch(int byteCount)

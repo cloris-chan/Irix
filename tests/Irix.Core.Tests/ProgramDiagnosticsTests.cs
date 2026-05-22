@@ -739,6 +739,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("WICBitmapDitherType.WICBitmapDitherTypeNone", glyphSource);
         Assert.Contains("WICBitmapPaletteType.WICBitmapPaletteTypeCustom", glyphSource);
         Assert.Contains("WicPixelFormat32bppPbgra", glyphSource);
+        Assert.Contains("ComputeGlyphImageScale(fontEmSize, glyphData.pixelsPerEm)", glyphSource);
+        Assert.Contains("var width = Math.Clamp((int)MathF.Round(entry.U2 * AtlasWidth), x, AtlasWidth) - x;", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS EncodedBitmapColorGlyphFormats", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats", glyphSource);
@@ -1105,6 +1107,16 @@ public sealed class ProgramDiagnosticsTests
             D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
                 DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
                 | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE));
+    }
+
+    [Fact]
+    public void Glyph_atlas_scales_color_glyph_image_data_to_requested_em_size()
+    {
+        Assert.Equal(1f, D3D12GlyphAtlasTextRenderer.ComputeGlyphImageScale(18f, 18));
+        Assert.Equal(0.75f, D3D12GlyphAtlasTextRenderer.ComputeGlyphImageScale(18f, 24));
+        Assert.Equal(1.25f, D3D12GlyphAtlasTextRenderer.ComputeGlyphImageScale(20f, 16));
+        Assert.Equal(1f, D3D12GlyphAtlasTextRenderer.ComputeGlyphImageScale(18f, 0));
+        Assert.Equal(1f, D3D12GlyphAtlasTextRenderer.ComputeGlyphImageScale(float.NaN, 18));
     }
 
     [Fact]
