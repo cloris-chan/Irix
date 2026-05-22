@@ -748,7 +748,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         var segmentRequiresColor = shapedRun.RequiresColorGlyph
-            && GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text.Slice(shapedSegment.TextStart, shapedSegment.TextLength));
+            && GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate(text.Slice(shapedSegment.TextStart, shapedSegment.TextLength));
         return segmentRequiresColor
             ? TryAppendColorGlyphSegmentLayers(
                 shapedSegment,
@@ -3175,7 +3175,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        var requiresColorGlyph = GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text);
+        var requiresColorGlyph = GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate(text);
         CachedFontFace fontFace;
         try
         {

@@ -88,6 +88,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector("shape".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector("emoji \ud83d\ude00".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector("heart \u2764\uFE0F".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate("emoji \ud83d\ude00".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate("heart \u2764\uFE0F".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate("broken surrogate \uD83D".AsSpan()));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate("cjk ext b \uD840\uDC00".AsSpan()));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate("heart text \u2764\uFE0E".AsSpan()));
         Assert.False(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("shape cafe\u0301".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("arabic \u0645\u0631\u062D\u0628\u0627".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("arabic presentation \uFE8E".AsSpan()));
@@ -701,7 +706,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("TryBuildShapedAtlasRun(text, textRun, style, shapedRun", glyphSource);
         Assert.Contains("private bool TryBuildShapedAtlasRun(", glyphSource);
         Assert.Contains("private bool TryAppendShapedSegment(", glyphSource);
-        Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate(text)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate(text.Slice(shapedSegment.TextStart, shapedSegment.TextLength))", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.IsRightToLeftStrongCharacter(character)", glyphSource);
         Assert.Contains("_textAnalyzer->AnalyzeScript(", glyphSource);

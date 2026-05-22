@@ -163,7 +163,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
 
                 degradedCandidateRuns++;
                 nonAsciiFallbackRuns++;
-                if (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text))
+                if (GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate(text))
                 {
                     colorGlyphFallbackRuns++;
                 }
@@ -204,7 +204,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
 
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style, float width)
     {
-        return (GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)
+        return (GlyphAtlasTextCompositionHelpers.ContainsColorGlyphCandidate(text)
                 || ContainsCombiningMark(text)
                 || GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text))
             && (style.Wrapping == TextWrapping.NoWrap || (style.Wrapping == TextWrapping.Wrap && width >= 96 && ContainsWrapWhitespace(text)));

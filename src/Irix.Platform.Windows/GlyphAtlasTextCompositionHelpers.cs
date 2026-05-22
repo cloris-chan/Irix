@@ -331,6 +331,47 @@ internal static class GlyphAtlasTextCompositionHelpers
         return false;
     }
 
+    internal static bool ContainsColorGlyphCandidate(ReadOnlySpan<char> text)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            var character = text[i];
+            if (character == '\uFE0F')
+            {
+                return true;
+            }
+
+            if (char.IsHighSurrogate(character))
+            {
+                if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+                {
+                    var codePoint = char.ConvertToUtf32(character, text[i + 1]);
+                    if (IsSupplementaryEmojiCodePoint(codePoint))
+                    {
+                        return true;
+                    }
+
+                    i++;
+                    continue;
+                }
+
+                return true;
+            }
+
+            if (char.IsLowSurrogate(character))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsSupplementaryEmojiCodePoint(int codePoint)
+    {
+        return codePoint is >= 0x1F000 and <= 0x1FAFF;
+    }
+
     internal static bool ContainsComplexScriptCandidate(ReadOnlySpan<char> text)
     {
         foreach (var character in text)
