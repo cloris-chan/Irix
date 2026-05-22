@@ -64,10 +64,10 @@ D3D12SerializeRootSignature
 // DirectWrite glyph raster source
 DWriteCreateFactory
 IDWriteFactory
-IDWriteFactory2
+IDWriteFactory4
 IDWriteFontFace4
 IDWriteFontFallback
-IDWriteColorGlyphRunEnumerator
+IDWriteColorGlyphRunEnumerator1
 IDWriteTextAnalysisSink
 // DXGI
 CreateDXGIFactory1
