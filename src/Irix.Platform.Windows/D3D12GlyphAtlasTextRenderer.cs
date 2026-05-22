@@ -3974,10 +3974,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var lineIsRightToLeft = TryDetermineRangeReadingDirection(text, plannedLine.Start, plannedLine.End, out var lineDirection)
                 ? lineDirection == DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_RIGHT_TO_LEFT
                 : hasGlyphSegment && (firstGlyphSegmentBidiLevel & 1) != 0;
-            if (!lineIsRightToLeft)
-            {
-                ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount);
-            }
+            ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount, lineIsRightToLeft);
 
             _shapedLineScratch[lineCount++] = new ShapedGlyphLine(
                 lineSegmentStart,
@@ -3991,54 +3988,25 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
-    private void ApplyShapedLineVisualOrder(int segmentStart, int segmentCount)
+    private void ApplyShapedLineVisualOrder(int segmentStart, int segmentCount, bool lineIsRightToLeft)
     {
         if (segmentCount <= 1)
         {
             return;
         }
 
-        var segmentEnd = segmentStart + segmentCount;
-        var maxLevel = 0;
-        var lowestOddLevel = int.MaxValue;
-        for (var i = segmentStart; i < segmentEnd; i++)
+        var segments = _shapedSegmentScratch.AsSpan(segmentStart, segmentCount);
+        Span<byte> bidiLevels = stackalloc byte[MaxShapedRunSegments];
+        var lineBidiLevels = bidiLevels.Slice(0, segmentCount);
+        for (var i = 0; i < segments.Length; i++)
         {
-            var level = _shapedSegmentScratch[i].BidiLevel;
-            maxLevel = Math.Max(maxLevel, level);
-            if ((level & 1) != 0)
-            {
-                lowestOddLevel = Math.Min(lowestOddLevel, level);
-            }
+            lineBidiLevels[i] = segments[i].BidiLevel;
         }
 
-        if (maxLevel == 0)
+        GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder(segments, lineBidiLevels);
+        if (lineIsRightToLeft)
         {
-            return;
-        }
-
-        if (lowestOddLevel == int.MaxValue)
-        {
-            lowestOddLevel = (maxLevel & 1) == 0 ? maxLevel - 1 : maxLevel;
-        }
-
-        for (var level = maxLevel; level >= lowestOddLevel; level--)
-        {
-            var index = segmentStart;
-            while (index < segmentEnd)
-            {
-                while (index < segmentEnd && _shapedSegmentScratch[index].BidiLevel < level)
-                {
-                    index++;
-                }
-
-                var reverseStart = index;
-                while (index < segmentEnd && _shapedSegmentScratch[index].BidiLevel >= level)
-                {
-                    index++;
-                }
-
-                ReverseShapedSegments(reverseStart, index - 1);
-            }
+            ReverseShapedSegments(segmentStart, segmentStart + segmentCount - 1);
         }
     }
 

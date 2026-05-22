@@ -45,6 +45,55 @@ internal static class GlyphAtlasTextCompositionHelpers
             || character is >= '\u0370' and <= '\u04FF';
     }
 
+    internal static void ApplyBidiVisualOrder<T>(Span<T> items, Span<byte> bidiLevels)
+    {
+        if (items.Length != bidiLevels.Length)
+        {
+            throw new ArgumentException("BiDi visual-order scratch length must match the item span.");
+        }
+
+        if (items.Length <= 1)
+        {
+            return;
+        }
+
+        var maxLevel = 0;
+        var lowestOddLevel = int.MaxValue;
+        foreach (var level in bidiLevels)
+        {
+            maxLevel = Math.Max(maxLevel, level);
+            if ((level & 1) != 0)
+            {
+                lowestOddLevel = Math.Min(lowestOddLevel, level);
+            }
+        }
+
+        if (lowestOddLevel == int.MaxValue)
+        {
+            return;
+        }
+
+        for (var level = maxLevel; level >= lowestOddLevel; level--)
+        {
+            var index = 0;
+            while (index < bidiLevels.Length)
+            {
+                while (index < bidiLevels.Length && bidiLevels[index] < level)
+                {
+                    index++;
+                }
+
+                var reverseStart = index;
+                while (index < bidiLevels.Length && bidiLevels[index] >= level)
+                {
+                    index++;
+                }
+
+                ReverseRange(items, bidiLevels, reverseStart, index - 1);
+            }
+        }
+    }
+
     internal static D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason PlanLines(
         ReadOnlySpan<char> text,
         ReadOnlySpan<float> advances,
@@ -455,6 +504,17 @@ internal static class GlyphAtlasTextCompositionHelpers
         }
 
         lines[lineCount++] = new GlyphAtlasLayoutLine(start, end, width);
+    }
+
+    private static void ReverseRange<T>(Span<T> items, Span<byte> bidiLevels, int start, int end)
+    {
+        while (start < end)
+        {
+            (items[start], items[end]) = (items[end], items[start]);
+            (bidiLevels[start], bidiLevels[end]) = (bidiLevels[end], bidiLevels[start]);
+            start++;
+            end--;
+        }
     }
 
     internal static bool ShouldRenderTextRun(D3D12TextRun textRun, IFrameResourceResolver resources)

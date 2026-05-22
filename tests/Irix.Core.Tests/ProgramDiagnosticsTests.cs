@@ -118,6 +118,25 @@ public sealed class ProgramDiagnosticsTests
             GlyphAtlasTextCompositionHelpers.GetUnsupportedReason("ASCII 123".AsSpan(), wrappingStyle));
     }
 
+    [Fact]
+    public void Glyph_atlas_bidi_visual_order_handles_nested_levels()
+    {
+        int[] ltrOrder = [0, 1, 2, 3, 4];
+        byte[] ltrLevels = [0, 1, 2, 1, 0];
+        GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder(ltrOrder, ltrLevels);
+        Assert.Equal([0, 3, 2, 1, 4], ltrOrder);
+
+        int[] rtlNestedOrder = [0, 1, 2, 3, 4];
+        byte[] rtlNestedLevels = [1, 2, 3, 2, 1];
+        GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder(rtlNestedOrder, rtlNestedLevels);
+        Assert.Equal([4, 1, 2, 3, 0], rtlNestedOrder);
+
+        int[] evenOnlyOrder = [0, 1, 2];
+        byte[] evenOnlyLevels = [0, 2, 2];
+        GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder(evenOnlyOrder, evenOnlyLevels);
+        Assert.Equal([0, 1, 2], evenOnlyOrder);
+    }
+
     [Theory]
     [InlineData(TextHorizontalAlignment.Leading, 10, 100, 40, 10)]
     [InlineData(TextHorizontalAlignment.Center, 10, 100, 40, 40)]
@@ -697,7 +716,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryShapeSegmentedFallbackRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryAssignShapedTextAdvances(int textStart, int textLength, int glyphStart, int glyphCount)", glyphSource);
         Assert.Contains("private bool TryBuildShapedLinesFromLayout(ReadOnlySpan<char> text, int segmentCount, int plannedLineCount, out int lineCount)", glyphSource);
-        Assert.Contains("private void ApplyShapedLineVisualOrder(int segmentStart, int segmentCount)", glyphSource);
+        Assert.Contains("private void ApplyShapedLineVisualOrder(int segmentStart, int segmentCount, bool lineIsRightToLeft)", glyphSource);
         Assert.Contains("private void ReverseShapedSegments(int start, int end)", glyphSource);
         Assert.Contains("TryShapeTextSegment(", glyphSource);
         Assert.Contains("private bool TryGetCachedFallbackFontFace(IDWriteFont* font, out CachedFontFace fontFace)", glyphSource);
@@ -729,8 +748,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("if (line.IsRightToLeft)", glyphSource);
         Assert.Contains("bidiLevel = shapedSegment.BidiLevel", glyphSource);
         Assert.Contains("return TryShapeBidiLevelRuns(text, textStart, textLength, style, baseFontFace, ref glyphStart, ref segmentCount);", glyphSource);
-        Assert.Contains("ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount);", glyphSource);
-        Assert.Contains("ReverseShapedSegments(reverseStart, index - 1);", glyphSource);
+        Assert.Contains("ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount, lineIsRightToLeft);", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder(segments, lineBidiLevels);", glyphSource);
+        Assert.Contains("ReverseShapedSegments(segmentStart, segmentStart + segmentCount - 1);", glyphSource);
         Assert.Contains("var firstGlyphSegmentBidiLevel = (byte)0;", glyphSource);
         Assert.Contains("firstGlyphSegmentBidiLevel = segment.BidiLevel;", glyphSource);
         Assert.Contains("TryDetermineRangeReadingDirection(text, plannedLine.Start, plannedLine.End, out var lineDirection)", glyphSource);
