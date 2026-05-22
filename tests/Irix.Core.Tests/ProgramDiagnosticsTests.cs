@@ -359,6 +359,14 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_current_record_reuse_only_accepts_pages_not_touched_this_record()
+    {
+        Assert.True(GlyphAtlasTextCompositionHelpers.CanReuseAtlasPageInCurrentRecord(pageLastUsedSerial: 3, currentRecordSerial: 4));
+        Assert.False(GlyphAtlasTextCompositionHelpers.CanReuseAtlasPageInCurrentRecord(pageLastUsedSerial: 4, currentRecordSerial: 4));
+        Assert.False(GlyphAtlasTextCompositionHelpers.CanReuseAtlasPageInCurrentRecord(pageLastUsedSerial: 5, currentRecordSerial: 4));
+    }
+
+    [Fact]
     public void Glyph_atlas_record_resource_guards_require_gpu_resources()
     {
         Assert.True(GlyphAtlasTextCompositionHelpers.HasAtlasUploadResources(hasTexture: true, hasUpload: true));
@@ -599,7 +607,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs", glyphSource);
         Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
-        Assert.Contains("private const int MaxAtlasPages = 4;", glyphSource);
+        Assert.Contains("private const int MaxAtlasPages = 8;", glyphSource);
         Assert.Contains("private const int AtlasPagePixels = AtlasWidth * AtlasHeight;", glyphSource);
         Assert.Contains("private const int AtlasBudgetPixels = MaxAtlasPages * AtlasPagePixels;", glyphSource);
         Assert.Contains("private readonly List<int> _freeGlyphEntryIndices", glyphSource);
@@ -787,8 +795,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(", glyphSource);
         Assert.Contains("_freeGlyphEntryIndices.Add(i);", glyphSource);
         Assert.Contains("private GlyphAtlasPage? SelectWritableAtlasPage(int width, int height, long recordSerial)", glyphSource);
+        Assert.Contains("private GlyphAtlasPage? TryReuseColdAtlasPageForCurrentRecord(int width, int height, long recordSerial)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.CanReuseAtlasPageInCurrentRecord(page.LastUsedSerial, recordSerial)", glyphSource);
+        Assert.Contains("var reusedPage = TryReuseColdAtlasPageForCurrentRecord(width, height, recordSerial);", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle SelectOldestAtlasPageHandle()", glyphSource);
-        Assert.Equal(2, CountOccurrences(glyphSource, "GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage("));
+        Assert.Equal(3, CountOccurrences(glyphSource, "GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage("));
         Assert.Contains("private static bool CanAllocateGlyph(GlyphAtlasPage page, int width, int height)", glyphSource);
         Assert.Contains("private void ScheduleAtlasPageReuse(long recordSerial)", glyphSource);
         Assert.Contains("var page = SelectOldestAtlasPageHandle();", glyphSource);
@@ -891,9 +902,9 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("cachedGlyphs=12", summary);
         Assert.Contains("atlasPages=1", summary);
-        Assert.Contains("atlasBudgetPages=4", summary);
+        Assert.Contains("atlasBudgetPages=8", summary);
         Assert.Contains("atlasPage=1024x1024", summary);
-        Assert.Contains("atlasCapacity=4194304 px", summary);
+        Assert.Contains("atlasCapacity=8388608 px", summary);
         Assert.Contains("atlasEvictions=1", summary);
         Assert.Contains("atlasPendingPageReuses=0", summary);
         Assert.Contains("atlasPageReuseRequests=1", summary);
@@ -1236,8 +1247,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Text composition mode: GlyphAtlas", report);
         Assert.Contains("Device removed: False", report);
         Assert.Contains("Frame serial: frameSerial=1, presentSerial=1, syncWaits=0", report);
-        Assert.Contains("atlasBudgetPages=4", report);
-        Assert.Contains("atlasCapacity=4194304 px", report);
+        Assert.Contains("atlasBudgetPages=8", report);
+        Assert.Contains("atlasCapacity=8388608 px", report);
         Assert.Contains("degradedRuns=1", report);
         Assert.Contains("AtlasFull=1", report);
         Assert.Contains("=== Glyph atlas stress diagnostic complete ===", report);
@@ -1848,7 +1859,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=4, atlasPage=1024x1024, atlasCapacity=4194304 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=8, atlasPage=1024x1024, atlasCapacity=8388608 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, ColorGlyph=0, ComplexScript=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

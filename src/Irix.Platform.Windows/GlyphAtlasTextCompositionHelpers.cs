@@ -244,6 +244,11 @@ internal static class GlyphAtlasTextCompositionHelpers
         return candidateLastUsedSerial < selectedLastUsedSerial;
     }
 
+    internal static bool CanReuseAtlasPageInCurrentRecord(long pageLastUsedSerial, long currentRecordSerial)
+    {
+        return pageLastUsedSerial < currentRecordSerial;
+    }
+
     internal static bool HasAtlasUploadResources(bool hasTexture, bool hasUpload)
     {
         return hasTexture && hasUpload;

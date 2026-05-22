@@ -21,7 +21,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int AtlasWidth = 1024;
     private const int AtlasHeight = 1024;
     private const int AtlasPadding = 1;
-    private const int MaxAtlasPages = 4;
+    private const int MaxAtlasPages = 8;
     private const int AtlasPagePixels = AtlasWidth * AtlasHeight;
     private const int AtlasBudgetPixels = MaxAtlasPages * AtlasPagePixels;
     private const int MaxGlyphQuads = 4096;
@@ -1450,8 +1450,54 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return page;
         }
 
+        var reusedPage = TryReuseColdAtlasPageForCurrentRecord(width, height, recordSerial);
+        if (reusedPage is not null)
+        {
+            return reusedPage;
+        }
+
         ScheduleAtlasPageReuse(recordSerial);
         return null;
+    }
+
+    private GlyphAtlasPage? TryReuseColdAtlasPageForCurrentRecord(int width, int height, long recordSerial)
+    {
+        if (width + AtlasPadding * 2 > AtlasWidth || height + AtlasPadding * 2 > AtlasHeight)
+        {
+            return null;
+        }
+
+        var selectedIndex = -1;
+        var selectedLastUsedSerial = long.MaxValue;
+        for (var i = 0; i < _atlasPages.Count; i++)
+        {
+            var page = _atlasPages[i];
+            if (!GlyphAtlasTextCompositionHelpers.CanReuseAtlasPageInCurrentRecord(page.LastUsedSerial, recordSerial))
+            {
+                continue;
+            }
+
+            if (GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(selectedLastUsedSerial, page.LastUsedSerial))
+            {
+                selectedIndex = i;
+                selectedLastUsedSerial = page.LastUsedSerial;
+            }
+        }
+
+        if (selectedIndex < 0)
+        {
+            return null;
+        }
+
+        var selected = _atlasPages[selectedIndex];
+        var reusedHandle = selected.Handle;
+        _activeAtlasPage = selected.ResetForReuse();
+        RemoveGlyphsForReusedPage(reusedHandle);
+        _diagnostics = _diagnostics
+            .WithCachedGlyphs(_cachedGlyphCount)
+            .WithAtlasPages(_atlasPages.Count)
+            .WithAtlasEviction();
+        return selected;
     }
 
     private void ScheduleAtlasPageReuse(long recordSerial)
