@@ -1255,6 +1255,44 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_color_format_diagnostic_reports_bitmap_route_candidates()
+    {
+        var results = new[]
+        {
+            new ColorGlyphFormatProbeResult("grinning", 0x1F600, 42, GlyphFound: true, Face4Available: true, ColorGlyphImageFormatFlags.Colr | ColorGlyphImageFormatFlags.PremultipliedBgra, ColorGlyphBitmapRoute.Bgra, ColorGlyphFormatProbeStatus.Ok, ""),
+            new ColorGlyphFormatProbeResult("rocket", 0x1F680, 43, GlyphFound: true, Face4Available: true, ColorGlyphImageFormatFlags.Png, ColorGlyphBitmapRoute.Png, ColorGlyphFormatProbeStatus.Ok, ""),
+            new ColorGlyphFormatProbeResult("paint-tree", 0x1F3AF, 44, GlyphFound: true, Face4Available: true, ColorGlyphImageFormatFlags.ColrPaintTree, ColorGlyphBitmapRoute.None, ColorGlyphFormatProbeStatus.Ok, "")
+        };
+        var snapshot = ColorGlyphFormatDiagnosticSnapshot.Create("Segoe UI Emoji", 64, face4Available: true, results);
+
+        Assert.Equal(3, snapshot.Glyphs);
+        Assert.Equal(1, snapshot.LayerCandidates);
+        Assert.Equal(1, snapshot.BgraCandidates);
+        Assert.Equal(1, snapshot.EncodedBitmapCandidates);
+        Assert.Equal(1, snapshot.UnsupportedColorCandidates);
+        Assert.Equal(2, snapshot.BitmapRenderableCandidates);
+        Assert.Equal("COLR|BGRA", GlyphAtlasColorFormatDiagnosticRunner.FormatFlags(results[0].Formats));
+        Assert.Equal("Probe: U+1F600 grinning glyph=42 status=Ok formats=COLR|BGRA route=Bgra", GlyphAtlasColorFormatDiagnosticRunner.FormatProbe(results[0]));
+        Assert.Equal("Color glyph formats: face4=True, probes=3, glyphs=3, layerCandidates=1, bgraCandidates=1, encodedBitmapCandidates=1, unsupportedColorCandidates=1, bitmapRenderableCandidates=2", GlyphAtlasColorFormatDiagnosticRunner.FormatSummary(snapshot));
+    }
+
+    [Fact]
+    public void Glyph_atlas_color_format_diagnostic_cli_is_wired()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasColorFormatDiagnosticRunner.cs")));
+        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.cs")));
+
+        Assert.Contains("--diagnose-glyph-atlas-color-formats", programSource);
+        Assert.Contains("--diagnose-color-glyph-family", programSource);
+        Assert.Contains("DWriteColorGlyphFormatDiagnostic.Capture(familyName, pixelsPerEm)", runnerSource);
+        Assert.Contains("IDWriteFontFace4*", platformSource);
+        Assert.Contains("GetGlyphImageFormats(glyphIndex[0], pixelsPerEm, pixelsPerEm, out var formats)", platformSource);
+        Assert.Contains("TrySelectColorGlyphBitmapImageFormat(formats, out var selectedFormat)", platformSource);
+    }
+
+    [Fact]
     public void Glyph_atlas_scales_color_glyph_image_data_to_requested_em_size()
     {
         Assert.Equal(1f, D3D12GlyphAtlasTextRenderer.ComputeGlyphImageScale(18f, 18));
