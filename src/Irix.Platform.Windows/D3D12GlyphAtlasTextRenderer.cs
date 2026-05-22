@@ -88,16 +88,25 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs = [];
     private readonly List<GlyphEntry> _glyphEntries = new(512);
     private readonly List<int> _freeGlyphEntryIndices = new(128);
+    private readonly List<int> _runGlyphEntryIndices = new(128);
+    private readonly List<GlyphEntryMutationState> _runGlyphEntryStates = new(128);
     private readonly List<GlyphAtlasPage> _atlasPages = new(MaxAtlasPages);
+    private readonly GlyphAtlasPageMutationState[] _runPageStates = new GlyphAtlasPageMutationState[MaxAtlasPages];
     private GlyphAtlasPageHandle _activeAtlasPage;
+    private GlyphAtlasPageHandle _runActiveAtlasPage;
     private GlyphAtlasPageReuseRequest _pendingAtlasPageReuse;
+    private GlyphAtlasPageReuseRequest _runPendingAtlasPageReuse;
     private int _cachedGlyphCount;
+    private int _runCachedGlyphCount;
     private int _nextFontFaceIdentity = 1;
     private long _glyphRecordSerial;
+    private bool _runAtlasMutationActive;
+    private bool _runAtlasMutationUsedPageReuse;
     private bool _disposed;
     private bool _disabled;
     private DeviceErrorDiagnostic _deviceError = DeviceErrorDiagnostic.None;
     private GlyphAtlasTextRendererDiagnostics _diagnostics;
+    private GlyphAtlasTextRendererDiagnostics _runDiagnostics;
 
     public D3D12GlyphAtlasTextRenderer(ID3D12Device* device)
     {
@@ -317,6 +326,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             var style = (textRun.ResolvedStyle != default ? textRun.ResolvedStyle : runResolver.ResolveTextStyle(textRun.Style)).Normalize();
+            BeginAtlasRunMutation();
             var unsupportedReason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(text, style);
             if (unsupportedReason != GlyphAtlasFallbackReason.None)
             {
@@ -327,6 +337,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     _diagnostics = _diagnostics.WithShapedGlyphProbe(shapedRun.GlyphCount);
                     if (TryBuildShapedAtlasRun(text, textRun, style, shapedRun, viewportWidth, viewportHeight, recordSerial, ref vertexCount, ref batchCount, out unsupportedReason))
                     {
+                        CommitAtlasRunMutation();
                         atlasRunCount++;
                         continue;
                     }
@@ -336,12 +347,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     unsupportedReason = shapedUnsupportedReason;
                 }
 
+                RollbackAtlasRunMutation(recordSerial, unsupportedReason);
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
             if (!TryGetFontFace(style, out var fontFace))
             {
+                RollbackAtlasRunMutation(recordSerial, GlyphAtlasFallbackReason.FontMissing);
                 AddDegradedRun(GlyphAtlasFallbackReason.FontMissing, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
@@ -349,6 +362,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             EnsureLayoutScratch(text.Length);
             if (!TryBuildLineLayout(text, fontFace, style, textRun.Width, recordSerial, out var lineCount, out unsupportedReason))
             {
+                RollbackAtlasRunMutation(recordSerial, unsupportedReason);
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
@@ -358,6 +372,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
             if (scissor.IsEmpty)
             {
+                RollbackAtlasRunMutation(recordSerial, GlyphAtlasFallbackReason.Clip);
                 AddDegradedRun(GlyphAtlasFallbackReason.Clip, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
@@ -437,6 +452,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     batchCount--;
                 }
 
+                RollbackAtlasRunMutation(recordSerial, unsupportedReason);
                 AddDegradedRun(unsupportedReason, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
@@ -449,10 +465,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     batchCount--;
                 }
 
+                RollbackAtlasRunMutation(recordSerial, GlyphAtlasFallbackReason.BatchLimit);
                 AddDegradedRun(GlyphAtlasFallbackReason.BatchLimit, ref degradedRunCount, ref degradationReasons);
                 continue;
             }
 
+            CommitAtlasRunMutation();
             atlasRunCount++;
         }
 
@@ -1349,12 +1367,192 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var generation = checked(_glyphEntries[entryIndex].Generation + 1);
             var reusedHandle = new GlyphAtlasEntryHandle(entryIndex, generation);
             _glyphEntries[entryIndex] = entry.WithGeneration(generation);
+            TrackRunGlyphEntry(entryIndex);
             return reusedHandle;
         }
 
         var handle = new GlyphAtlasEntryHandle(_glyphEntries.Count, 1);
         _glyphEntries.Add(entry.WithGeneration(handle.Generation));
+        TrackRunGlyphEntry(handle.Index);
         return handle;
+    }
+
+    private void TrackRunGlyphEntry(int entryIndex)
+    {
+        if (_runAtlasMutationActive)
+        {
+            _runGlyphEntryIndices.Add(entryIndex);
+        }
+    }
+
+    private void BeginAtlasRunMutation()
+    {
+        _runAtlasMutationActive = true;
+        _runAtlasMutationUsedPageReuse = false;
+        _runGlyphEntryIndices.Clear();
+        _runGlyphEntryStates.Clear();
+        _runActiveAtlasPage = _activeAtlasPage;
+        _runPendingAtlasPageReuse = _pendingAtlasPageReuse;
+        _runCachedGlyphCount = _cachedGlyphCount;
+        _runDiagnostics = _diagnostics;
+        for (var i = 0; i < _atlasPages.Count; i++)
+        {
+            _runPageStates[i] = _atlasPages[i].CaptureMutationState();
+        }
+    }
+
+    private void CommitAtlasRunMutation()
+    {
+        _runAtlasMutationActive = false;
+        _runAtlasMutationUsedPageReuse = false;
+        _runGlyphEntryIndices.Clear();
+        _runGlyphEntryStates.Clear();
+        _runActiveAtlasPage = default;
+        _runPendingAtlasPageReuse = default;
+    }
+
+    private void RollbackAtlasRunMutation(long recordSerial, GlyphAtlasFallbackReason reason)
+    {
+        if (!_runAtlasMutationActive)
+        {
+            return;
+        }
+
+        if (_runAtlasMutationUsedPageReuse)
+        {
+            RemoveRunGlyphEntries(clearPixels: true);
+            RestoreRunGlyphEntryTouches();
+            RestoreRunPageStates();
+            var resetPageCount = ResetPagesReusedDuringRun();
+            _pendingAtlasPageReuse = _runPendingAtlasPageReuse;
+            _cachedGlyphCount = CountLiveGlyphEntries();
+            _diagnostics = _runDiagnostics
+                .WithCachedGlyphs(_cachedGlyphCount)
+                .WithAtlasPages(_atlasPages.Count);
+            for (var i = 0; i < resetPageCount; i++)
+            {
+                _diagnostics = _diagnostics.WithAtlasEviction();
+            }
+        }
+        else
+        {
+            RemoveRunGlyphEntries(clearPixels: true);
+            RestoreRunGlyphEntryTouches();
+            RestoreRunPageStates();
+            _activeAtlasPage = _runActiveAtlasPage;
+            _pendingAtlasPageReuse = _runPendingAtlasPageReuse;
+            _cachedGlyphCount = _runCachedGlyphCount;
+            _diagnostics = _runDiagnostics;
+        }
+
+        if (reason == GlyphAtlasFallbackReason.AtlasFull)
+        {
+            ScheduleAtlasPageReuse(recordSerial);
+        }
+
+        CommitAtlasRunMutation();
+    }
+
+    private void RemoveRunGlyphEntries(bool clearPixels)
+    {
+        for (var i = 0; i < _runGlyphEntryIndices.Count; i++)
+        {
+            var entryIndex = _runGlyphEntryIndices[i];
+            if ((uint)entryIndex >= (uint)_glyphEntries.Count)
+            {
+                continue;
+            }
+
+            var entry = _glyphEntries[entryIndex];
+            if (!entry.IsLive)
+            {
+                continue;
+            }
+
+            if (clearPixels)
+            {
+                ClearGlyphEntryPixels(entry);
+            }
+
+            _glyphs.Remove(entry.Key);
+            _glyphEntries[entryIndex] = entry.Clear();
+            _freeGlyphEntryIndices.Add(entryIndex);
+        }
+    }
+
+    private void RestoreRunGlyphEntryTouches()
+    {
+        for (var i = 0; i < _runGlyphEntryStates.Count; i++)
+        {
+            var state = _runGlyphEntryStates[i];
+            if ((uint)state.Index >= (uint)_glyphEntries.Count)
+            {
+                continue;
+            }
+
+            var entry = _glyphEntries[state.Index];
+            if (entry.IsLive && entry.Generation == state.Generation)
+            {
+                _glyphEntries[state.Index] = entry.WithLastUsedSerial(state.LastUsedSerial);
+            }
+        }
+    }
+
+    private void ClearGlyphEntryPixels(GlyphEntry entry)
+    {
+        if (entry.Width <= 0 || entry.Height <= 0 || !TryResolveAtlasPage(entry.Page, out var page))
+        {
+            return;
+        }
+
+        var x = Math.Clamp((int)MathF.Round(entry.U1 * AtlasWidth), 0, AtlasWidth);
+        var y = Math.Clamp((int)MathF.Round(entry.V1 * AtlasHeight), 0, AtlasHeight);
+        var width = Math.Clamp((int)MathF.Ceiling(entry.Width), 0, AtlasWidth - x);
+        var height = Math.Clamp((int)MathF.Ceiling(entry.Height), 0, AtlasHeight - y);
+        for (var row = 0; row < height; row++)
+        {
+            page.Pixels.AsSpan((y + row) * AtlasRowPitch + x, width).Clear();
+        }
+    }
+
+    private int ResetPagesReusedDuringRun()
+    {
+        var resetPageCount = 0;
+        for (var i = 0; i < _atlasPages.Count; i++)
+        {
+            var page = _atlasPages[i];
+            if (page.Handle == _runPageStates[i].Handle)
+            {
+                continue;
+            }
+
+            _activeAtlasPage = page.ResetForReuse();
+            resetPageCount++;
+        }
+
+        return resetPageCount;
+    }
+
+    private void RestoreRunPageStates()
+    {
+        for (var i = 0; i < _atlasPages.Count; i++)
+        {
+            _atlasPages[i].RestoreMutationState(_runPageStates[i]);
+        }
+    }
+
+    private int CountLiveGlyphEntries()
+    {
+        var count = 0;
+        for (var i = 0; i < _glyphEntries.Count; i++)
+        {
+            if (_glyphEntries[i].IsLive)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private bool TryResolveGlyph(GlyphAtlasEntryHandle handle, long recordSerial, out GlyphEntry entry)
@@ -1369,6 +1567,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if (!entry.IsLive || entry.Generation != handle.Generation || !TryResolveAtlasPage(entry.Page, out var page))
         {
             return false;
+        }
+
+        if (_runAtlasMutationActive && entry.LastUsedSerial != recordSerial)
+        {
+            _runGlyphEntryStates.Add(new GlyphEntryMutationState(handle.Index, entry.Generation, entry.LastUsedSerial));
         }
 
         page.Touch(recordSerial);
@@ -1494,6 +1697,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         var selected = _atlasPages[selectedIndex];
         var reusedHandle = selected.Handle;
+        if (_runAtlasMutationActive)
+        {
+            _runAtlasMutationUsedPageReuse = true;
+        }
+
         _activeAtlasPage = selected.ResetForReuse();
         RemoveGlyphsForReusedPage(reusedHandle);
         _diagnostics = _diagnostics
@@ -4382,6 +4590,41 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public long NewestPageAge { get; } = NewestPageAge;
     }
 
+    private readonly struct GlyphAtlasPageMutationState(
+        GlyphAtlasPageHandle Handle,
+        int NextX,
+        int NextY,
+        int RowHeight,
+        bool IsDirty,
+        int DirtyLeft,
+        int DirtyTop,
+        int DirtyRight,
+        int DirtyBottom,
+        int UsedPixels,
+        int AllocatedPixels,
+        long LastUsedSerial)
+    {
+        public GlyphAtlasPageHandle Handle { get; } = Handle;
+        public int NextX { get; } = NextX;
+        public int NextY { get; } = NextY;
+        public int RowHeight { get; } = RowHeight;
+        public bool IsDirty { get; } = IsDirty;
+        public int DirtyLeft { get; } = DirtyLeft;
+        public int DirtyTop { get; } = DirtyTop;
+        public int DirtyRight { get; } = DirtyRight;
+        public int DirtyBottom { get; } = DirtyBottom;
+        public int UsedPixels { get; } = UsedPixels;
+        public int AllocatedPixels { get; } = AllocatedPixels;
+        public long LastUsedSerial { get; } = LastUsedSerial;
+    }
+
+    private readonly struct GlyphEntryMutationState(int Index, int Generation, long LastUsedSerial)
+    {
+        public int Index { get; } = Index;
+        public int Generation { get; } = Generation;
+        public long LastUsedSerial { get; } = LastUsedSerial;
+    }
+
     private readonly struct GlyphAtlasPageReuseRequest(GlyphAtlasPageHandle Page, long RequestedRecordSerial)
     {
         public GlyphAtlasPageHandle Page { get; } = Page;
@@ -4432,6 +4675,24 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public void Touch(long serial)
         {
             LastUsedSerial = Math.Max(LastUsedSerial, serial);
+        }
+
+        public GlyphAtlasPageMutationState CaptureMutationState() =>
+            new(Handle, NextX, NextY, RowHeight, IsDirty, DirtyLeft, DirtyTop, DirtyRight, DirtyBottom, UsedPixels, AllocatedPixels, LastUsedSerial);
+
+        public void RestoreMutationState(GlyphAtlasPageMutationState state)
+        {
+            NextX = state.NextX;
+            NextY = state.NextY;
+            RowHeight = state.RowHeight;
+            IsDirty = state.IsDirty;
+            DirtyLeft = state.DirtyLeft;
+            DirtyTop = state.DirtyTop;
+            DirtyRight = state.DirtyRight;
+            DirtyBottom = state.DirtyBottom;
+            UsedPixels = state.UsedPixels;
+            AllocatedPixels = state.AllocatedPixels;
+            LastUsedSerial = state.LastUsedSerial;
         }
 
         public GlyphAtlasPageHandle ResetForReuse()
