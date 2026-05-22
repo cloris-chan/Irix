@@ -686,7 +686,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryAppendShapedControlSegment(TextStyle style, CachedFontFace baseFontFace, int textStart, int glyphStart, ref int segmentCount, int spaceCount)", glyphSource);
         Assert.Contains("private bool TryShapeSegmentedFallbackRange(ReadOnlySpan<char> text, int textStart, int textLength, TextStyle style, CachedFontFace baseFontFace, ref int glyphStart, ref int segmentCount)", glyphSource);
         Assert.Contains("private bool TryAssignShapedTextAdvances(int textStart, int textLength, int glyphStart, int glyphCount)", glyphSource);
-        Assert.Contains("private bool TryBuildShapedLinesFromLayout(int segmentCount, int plannedLineCount, out int lineCount)", glyphSource);
+        Assert.Contains("private bool TryBuildShapedLinesFromLayout(ReadOnlySpan<char> text, int segmentCount, int plannedLineCount, out int lineCount)", glyphSource);
         Assert.Contains("private void ApplyShapedLineVisualOrder(int segmentStart, int segmentCount)", glyphSource);
         Assert.Contains("private void ReverseShapedSegments(int start, int end)", glyphSource);
         Assert.Contains("TryShapeTextSegment(", glyphSource);
@@ -708,6 +708,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private void PromoteRtlSpanBaseLevel(ReadOnlySpan<char> text, int textStart, int textLength)", glyphSource);
         Assert.Contains("private static bool IsRtlOnlyStrongSpan(ReadOnlySpan<char> text)", glyphSource);
         Assert.Contains("private static DWRITE_READING_DIRECTION DetermineParagraphReadingDirection(ReadOnlySpan<char> text)", glyphSource);
+        Assert.Contains("private static bool TryDetermineRangeReadingDirection(ReadOnlySpan<char> text, int start, int end, out DWRITE_READING_DIRECTION direction)", glyphSource);
+        Assert.Contains("private static bool TryGetStrongReadingDirection(char character, out DWRITE_READING_DIRECTION direction)", glyphSource);
         Assert.Contains("public DWRITE_READING_DIRECTION ReadingDirection;", glyphSource);
         Assert.Contains("public byte BidiLevel { get; } = BidiLevel;", glyphSource);
         Assert.Contains("public bool IsRightToLeft => (BidiLevel & 1) != 0;", glyphSource);
@@ -719,7 +721,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("ReverseShapedSegments(reverseStart, index - 1);", glyphSource);
         Assert.Contains("var firstGlyphSegmentBidiLevel = (byte)0;", glyphSource);
         Assert.Contains("firstGlyphSegmentBidiLevel = segment.BidiLevel;", glyphSource);
-        Assert.Contains("var lineIsRightToLeft = hasGlyphSegment && (firstGlyphSegmentBidiLevel & 1) != 0;", glyphSource);
+        Assert.Contains("TryDetermineRangeReadingDirection(text, plannedLine.Start, plannedLine.End, out var lineDirection)", glyphSource);
+        Assert.Contains("lineDirection == DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_RIGHT_TO_LEFT", glyphSource);
+        Assert.Contains(": hasGlyphSegment && (firstGlyphSegmentBidiLevel & 1) != 0;", glyphSource);
         Assert.Contains("lineIsRightToLeft ? (byte)1 : (byte)0", glyphSource);
         Assert.Contains("TryAppendColorGlyphSegmentLayers(", glyphSource);
         Assert.Contains("TryAppendColorGlyphLayer(", glyphSource);
@@ -1330,15 +1334,15 @@ public sealed class ProgramDiagnosticsTests
         var summary = GlyphAtlasWrapDiagnosticRunner.AnalyzeWrapScene(commands, resources);
         var expectedLine = GlyphAtlasWrapDiagnosticRunner.FormatExpectedLine(summary);
 
-        Assert.Equal(14, summary.TextRuns);
-        Assert.Equal(14, summary.AtlasCandidateRuns);
+        Assert.Equal(15, summary.TextRuns);
+        Assert.Equal(15, summary.AtlasCandidateRuns);
         Assert.Equal(0, summary.DegradedCandidateRuns);
         Assert.Equal(5, summary.WrappedAtlasCandidateRuns);
         Assert.Equal(0, summary.WrappingFallbackRuns);
         Assert.Equal(0, summary.NonAsciiFallbackRuns);
         Assert.Equal(0, summary.ColorGlyphFallbackRuns);
         Assert.Equal(0, summary.ComplexScriptFallbackRuns);
-        Assert.Contains("atlasRuns=14", expectedLine);
+        Assert.Contains("atlasRuns=15", expectedLine);
         Assert.Contains("degradedRuns=0", expectedLine);
         Assert.Contains("wrappedAtlasRuns=5", expectedLine);
         Assert.Contains("Wrapping=0", expectedLine);

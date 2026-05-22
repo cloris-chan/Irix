@@ -3266,7 +3266,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        if (!TryBuildShapedLinesFromLayout(segmentCount, plannedLineCount, out var lineCount))
+        if (!TryBuildShapedLinesFromLayout(text, segmentCount, plannedLineCount, out var lineCount))
         {
             unsupportedReason = GlyphAtlasFallbackReason.NonAscii;
             return false;
@@ -3931,7 +3931,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return true;
     }
 
-    private bool TryBuildShapedLinesFromLayout(int segmentCount, int plannedLineCount, out int lineCount)
+    private bool TryBuildShapedLinesFromLayout(ReadOnlySpan<char> text, int segmentCount, int plannedLineCount, out int lineCount)
     {
         lineCount = 0;
         var segmentIndex = 0;
@@ -3971,7 +3971,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             }
 
             var lineSegmentCount = segmentIndex - lineSegmentStart;
-            var lineIsRightToLeft = hasGlyphSegment && (firstGlyphSegmentBidiLevel & 1) != 0;
+            var lineIsRightToLeft = TryDetermineRangeReadingDirection(text, plannedLine.Start, plannedLine.End, out var lineDirection)
+                ? lineDirection == DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_RIGHT_TO_LEFT
+                : hasGlyphSegment && (firstGlyphSegmentBidiLevel & 1) != 0;
             if (!lineIsRightToLeft)
             {
                 ApplyShapedLineVisualOrder(lineSegmentStart, lineSegmentCount);
@@ -5250,22 +5252,41 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         };
     }
 
-    private static DWRITE_READING_DIRECTION DetermineParagraphReadingDirection(ReadOnlySpan<char> text)
-    {
-        foreach (var character in text)
-        {
-            if (character is >= '\u0590' and <= '\u08FF')
-            {
-                return DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_RIGHT_TO_LEFT;
-            }
+    private static DWRITE_READING_DIRECTION DetermineParagraphReadingDirection(ReadOnlySpan<char> text) =>
+        TryDetermineRangeReadingDirection(text, 0, text.Length, out var direction) ? direction : DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
 
-            if (char.IsLetterOrDigit(character))
+    private static bool TryDetermineRangeReadingDirection(ReadOnlySpan<char> text, int start, int end, out DWRITE_READING_DIRECTION direction)
+    {
+        var clampedStart = Math.Clamp(start, 0, text.Length);
+        var clampedEnd = Math.Clamp(end, clampedStart, text.Length);
+        for (var i = clampedStart; i < clampedEnd; i++)
+        {
+            if (TryGetStrongReadingDirection(text[i], out direction))
             {
-                return DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
+                return true;
             }
         }
 
-        return DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
+        direction = DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
+        return false;
+    }
+
+    private static bool TryGetStrongReadingDirection(char character, out DWRITE_READING_DIRECTION direction)
+    {
+        if (character is >= '\u0590' and <= '\u08FF')
+        {
+            direction = DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_RIGHT_TO_LEFT;
+            return true;
+        }
+
+        if (char.IsLetter(character))
+        {
+            direction = DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
+            return true;
+        }
+
+        direction = DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT;
+        return false;
     }
 
     public void Dispose()

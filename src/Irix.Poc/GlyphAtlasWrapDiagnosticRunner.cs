@@ -36,7 +36,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatExpectedLine(expected));
-            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True overHeightClip=True shapedWrap=True ltrComplex=True rtlNoWrap=True rtlWrap=True mixedBidi=True rtlMixedBase=True");
+            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True overHeightClip=True shapedWrap=True ltrComplex=True rtlNoWrap=True rtlWrap=True mixedBidi=True rtlMixedBase=True rtlLeadingWeak=True");
             output.WriteLine();
         }
         finally
@@ -99,6 +99,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
         var complexScriptText = resources.AddText($"arabic \u0645\u0631\u062D\u0628\u0627 {frameIndex:D3}");
         var mixedBidiText = resources.AddText($"abc\u0645\u0631\u062D\u0628\u0627xyz {frameIndex:D3}");
         var rtlMixedBaseText = resources.AddText($"\u0645\u0631\u062D\u0628\u0627 123 {frameIndex:D3}");
+        var rtlLeadingWeakText = resources.AddText($"123 \u0645\u0631\u062D\u0628\u0627 {frameIndex:D3}");
         var rtlWrapText = resources.AddText("\u0645\u0631\u062D\u0628\u0627 \u0639\u0627\u0644\u0645 \u0645\u0631\u062D\u0628\u0627");
         var overHeightWrapText = resources.AddText($"alpha beta gamma delta {frameIndex:D3}");
 
@@ -117,6 +118,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             TextRun(272, 496, 220, 42, DrawColor.Opaque(210, 190, 255), complexScriptText, noWrapStyle),
             TextRun(520, 304, 260, 42, DrawColor.Opaque(178, 216, 255), mixedBidiText, noWrapStyle),
             TextRun(520, 244, 260, 42, DrawColor.Opaque(225, 210, 150), rtlMixedBaseText, noWrapStyle),
+            TextRun(520, 204, 260, 42, DrawColor.Opaque(255, 216, 188), rtlLeadingWeakText, noWrapStyle),
             TextRun(520, 364, 96, 96, DrawColor.Opaque(196, 226, 170), rtlWrapText, wrapStyle),
             TextRun(640, 364, 112, 28, DrawColor.Opaque(238, 218, 154), overHeightWrapText, wrapStyle)
         ];
