@@ -13,6 +13,7 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
         output.WriteLine($"Family: {snapshot.FamilyName}");
         output.WriteLine($"PixelsPerEm: {snapshot.PixelsPerEm}");
         output.WriteLine(FormatSummary(snapshot));
+        output.WriteLine(FormatNaturalCoverage(snapshot));
         foreach (var result in snapshot.Results)
         {
             output.WriteLine(FormatProbe(result));
@@ -26,6 +27,21 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
         return string.IsNullOrEmpty(snapshot.Failure)
             ? $"Color glyph formats: factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates={snapshot.ColorRunCandidates}, layerCandidates={snapshot.LayerCandidates}, bgraCandidates={snapshot.BgraCandidates}, encodedBitmapCandidates={snapshot.EncodedBitmapCandidates}, unsupportedColorCandidates={snapshot.UnsupportedColorCandidates}, bitmapRenderableCandidates={snapshot.BitmapRenderableCandidates}"
             : $"Color glyph formats: failure={snapshot.Failure}, factory4={snapshot.Factory4Available}, face4={snapshot.Face4Available}, probes={snapshot.ProbeCount}, glyphs={snapshot.Glyphs}, colorRunCandidates=0, layerCandidates=0, bgraCandidates=0, encodedBitmapCandidates=0, unsupportedColorCandidates=0, bitmapRenderableCandidates=0";
+    }
+
+    internal static string FormatNaturalCoverage(ColorGlyphFormatDiagnosticSnapshot snapshot)
+    {
+        if (!string.IsNullOrEmpty(snapshot.Failure))
+        {
+            return $"Color glyph natural coverage: status=Unavailable, failure={snapshot.Failure}, layerRoute=False, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, naturalBgraSmoke=False";
+        }
+
+        var layerRoute = snapshot.LayerCandidates > 0;
+        var bgraRoute = snapshot.BgraCandidates > 0;
+        var encodedBitmapRoute = snapshot.EncodedBitmapCandidates > 0;
+        var bitmapRenderableRoute = snapshot.BitmapRenderableCandidates > 0;
+        var status = bitmapRenderableRoute ? "BitmapRenderableAvailable" : layerRoute ? "LayerOnly" : snapshot.UnsupportedColorCandidates > 0 ? "UnsupportedOnly" : "NoColorGlyphData";
+        return $"Color glyph natural coverage: status={status}, layerRoute={layerRoute}, bgraRoute={bgraRoute}, encodedBitmapRoute={encodedBitmapRoute}, bitmapRenderableRoute={bitmapRenderableRoute}, naturalBgraSmoke={bitmapRenderableRoute}";
     }
 
     internal static string FormatProbe(ColorGlyphFormatProbeResult result)

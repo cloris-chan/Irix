@@ -15,6 +15,7 @@ Observed output:
 Family: Segoe UI Emoji
 PixelsPerEm: 64
 Color glyph formats: factory4=True, face4=True, probes=8, glyphs=8, colorRunCandidates=7, layerCandidates=7, bgraCandidates=0, encodedBitmapCandidates=0, unsupportedColorCandidates=0, bitmapRenderableCandidates=0
+Color glyph natural coverage: status=LayerOnly, layerRoute=True, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, naturalBgraSmoke=False
 Probe: U+2764 heart glyph=4016 status=Ok formats=None route=None colorRuns=4 runFormats=TRUETYPE|COLR runRoute=None
 Probe: U+1F600 grinning glyph=2266 status=Ok formats=None route=None colorRuns=6 runFormats=TRUETYPE|COLR runRoute=None
 Probe: U+1F603 smiling glyph=2269 status=Ok formats=None route=None colorRuns=7 runFormats=TRUETYPE|COLR runRoute=None
@@ -32,4 +33,5 @@ Interpretation:
 - Direct `IDWriteFontFace4.GetGlyphImageFormats` reports `None` for these probes at `ppem=64`, but `IDWriteFactory4.TranslateColorGlyphRun` exposes DirectWrite-renderable `TRUETYPE|COLR` layer runs for seven probes.
 - This machine does not expose DirectWrite `PREMULTIPLIED_B8G8R8A8`, PNG, JPEG, or TIFF image data for these probes at `ppem=64`.
 - Therefore `--diagnose-glyph-atlas-wrap` reporting `atlasBgraPages=0` on this machine is expected and does not imply that the D3D12 BGRA atlas route has regressed.
+- The natural coverage line makes this machine-readable: local status is `LayerOnly`, `naturalBgraSmoke=False`, and both direct BGRA and encoded bitmap routes are absent in the installed default emoji font.
 - The layer route is naturally exercised locally through `TranslateColorGlyphRun`; the BGRA/encoded bitmap route remains code-covered through format selector, raster/decode, page-format, diagnostics, and source guards. Natural local BGRA smoke needs an installed color font that exposes DirectWrite bitmap image formats.

@@ -138,6 +138,21 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal([0, 1, 2], evenOnlyOrder);
     }
 
+    [Fact]
+    public void Glyph_atlas_bidi_ordering_oracle_pins_current_resolved_level_projection()
+    {
+        AssertBidiOrder([0, 1, 2, 3, 4, 5], [0, 1, 1, 2, 1, 0], [0, 4, 3, 2, 1, 5]);
+        AssertBidiOrder([0, 1, 2, 3], [1, 2, 2, 1], [3, 1, 2, 0]);
+        AssertBidiOrder([0, 1, 2, 3, 4, 5], [0, 0, 1, 2, 2, 1], [0, 1, 5, 3, 4, 2]);
+        AssertBidiOrder([0, 1, 2, 3], [2, 2, 2, 2], [0, 1, 2, 3]);
+
+        static void AssertBidiOrder(int[] logicalOrder, byte[] levels, int[] expectedVisualOrder)
+        {
+            GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder(logicalOrder, levels);
+            Assert.Equal(expectedVisualOrder, logicalOrder);
+        }
+    }
+
     [Theory]
     [InlineData(TextHorizontalAlignment.Leading, 10, 100, 40, 10)]
     [InlineData(TextHorizontalAlignment.Center, 10, 100, 40, 40)]
@@ -1355,6 +1370,23 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal("COLR|BGRA", GlyphAtlasColorFormatDiagnosticRunner.FormatFlags(results[0].Formats));
         Assert.Equal("Probe: U+1F600 grinning glyph=42 status=Ok formats=COLR|BGRA route=Bgra colorRuns=1 runFormats=COLR runRoute=None", GlyphAtlasColorFormatDiagnosticRunner.FormatProbe(results[0]));
         Assert.Equal("Color glyph formats: factory4=True, face4=True, probes=3, glyphs=3, colorRunCandidates=2, layerCandidates=1, bgraCandidates=1, encodedBitmapCandidates=1, unsupportedColorCandidates=1, bitmapRenderableCandidates=2", GlyphAtlasColorFormatDiagnosticRunner.FormatSummary(snapshot));
+        Assert.Equal("Color glyph natural coverage: status=BitmapRenderableAvailable, layerRoute=True, bgraRoute=True, encodedBitmapRoute=True, bitmapRenderableRoute=True, naturalBgraSmoke=True", GlyphAtlasColorFormatDiagnosticRunner.FormatNaturalCoverage(snapshot));
+    }
+
+    [Fact]
+    public void Glyph_atlas_color_format_diagnostic_reports_layer_only_natural_coverage_without_bitmap_claims()
+    {
+        var results = new[]
+        {
+            new ColorGlyphFormatProbeResult("heart", 0x2764, 42, GlyphFound: true, Factory4Available: true, Face4Available: true, Formats: ColorGlyphImageFormatFlags.None, BitmapRoute: ColorGlyphBitmapRoute.None, Status: ColorGlyphFormatProbeStatus.Ok, Error: "", ColorRunCount: 4, ColorRunFormats: ColorGlyphImageFormatFlags.TrueType | ColorGlyphImageFormatFlags.Colr, ColorRunBitmapRoute: ColorGlyphBitmapRoute.None)
+        };
+        var snapshot = ColorGlyphFormatDiagnosticSnapshot.Create("Segoe UI Emoji", 64, factory4Available: true, face4Available: true, results);
+
+        Assert.Equal(1, snapshot.LayerCandidates);
+        Assert.Equal(0, snapshot.BgraCandidates);
+        Assert.Equal(0, snapshot.EncodedBitmapCandidates);
+        Assert.Equal(0, snapshot.BitmapRenderableCandidates);
+        Assert.Equal("Color glyph natural coverage: status=LayerOnly, layerRoute=True, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, naturalBgraSmoke=False", GlyphAtlasColorFormatDiagnosticRunner.FormatNaturalCoverage(snapshot));
     }
 
     [Fact]
@@ -1370,6 +1402,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("DWriteColorGlyphFormatDiagnostic.Capture(familyName, pixelsPerEm)", runnerSource);
         Assert.Contains("factory4={snapshot.Factory4Available}", runnerSource);
         Assert.Contains("colorRunCandidates={snapshot.ColorRunCandidates}", runnerSource);
+        Assert.Contains("FormatNaturalCoverage(snapshot)", runnerSource);
+        Assert.Contains("naturalBgraSmoke={bitmapRenderableRoute}", runnerSource);
         Assert.Contains("IDWriteFontFace4*", platformSource);
         Assert.Contains("IDWriteFactory4*", platformSource);
         Assert.Contains("factory->QueryInterface<IDWriteFactory4>(out factory4).ThrowOnFailure();", platformSource);
