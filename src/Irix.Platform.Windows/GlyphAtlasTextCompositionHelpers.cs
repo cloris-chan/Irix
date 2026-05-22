@@ -335,10 +335,7 @@ internal static class GlyphAtlasTextCompositionHelpers
     {
         foreach (var character in text)
         {
-            if (character is >= '\u0590' and <= '\u08FF'
-                || character is >= '\u0900' and <= '\u0DFF'
-                || character is >= '\u0E00' and <= '\u0FFF'
-                || character is >= '\u1780' and <= '\u17FF')
+            if (IsComplexScriptCandidateCharacter(character))
             {
                 return true;
             }
@@ -351,13 +348,28 @@ internal static class GlyphAtlasTextCompositionHelpers
     {
         foreach (var character in text)
         {
-            if (character is >= '\u0590' and <= '\u08FF')
+            if (IsRightToLeftStrongCharacter(character))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    internal static bool IsComplexScriptCandidateCharacter(char character)
+    {
+        return IsRightToLeftStrongCharacter(character)
+            || character is >= '\u0900' and <= '\u0DFF'
+            || character is >= '\u0E00' and <= '\u0FFF'
+            || character is >= '\u1780' and <= '\u17FF';
+    }
+
+    internal static bool IsRightToLeftStrongCharacter(char character)
+    {
+        return character is >= '\u0590' and <= '\u08FF'
+            || character is >= '\uFB1D' and <= '\uFDFF'
+            || character is >= '\uFE70' and <= '\uFEFC';
     }
 
     internal static bool HasGlyphVertexUploadResource(bool hasVertexUploadBuffer)

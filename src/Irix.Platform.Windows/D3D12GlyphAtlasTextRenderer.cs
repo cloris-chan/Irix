@@ -3821,13 +3821,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var hasRightToLeftStrong = false;
         foreach (var character in text)
         {
-            if (character is >= '\u0590' and <= '\u08FF')
+            if (GlyphAtlasTextCompositionHelpers.IsRightToLeftStrongCharacter(character))
             {
                 hasRightToLeftStrong = true;
                 continue;
             }
 
-            if (char.IsLetterOrDigit(character))
+            if (char.IsLetter(character))
             {
                 return false;
             }
@@ -5273,7 +5273,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private static bool TryGetStrongReadingDirection(char character, out DWRITE_READING_DIRECTION direction)
     {
-        if (character is >= '\u0590' and <= '\u08FF')
+        if (GlyphAtlasTextCompositionHelpers.IsRightToLeftStrongCharacter(character))
         {
             direction = DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_RIGHT_TO_LEFT;
             return true;

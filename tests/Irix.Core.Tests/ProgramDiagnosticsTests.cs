@@ -90,8 +90,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector("heart \u2764\uFE0F".AsSpan()));
         Assert.False(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("shape cafe\u0301".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("arabic \u0645\u0631\u062D\u0628\u0627".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("arabic presentation \uFE8E".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("hebrew presentation \uFB1D".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate("thai \u0E44\u0E17\u0E22".AsSpan()));
         Assert.True(GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate("arabic \u0645\u0631\u062D\u0628\u0627".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate("arabic presentation \uFE8E".AsSpan()));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate("hebrew presentation \uFB1D".AsSpan()));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate("heart \uFE0F".AsSpan()));
         Assert.False(GlyphAtlasTextCompositionHelpers.ContainsRightToLeftScriptCandidate("thai \u0E44\u0E17\u0E22".AsSpan()));
 
         var wrappingStyle = new TextStyle(
@@ -698,6 +703,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryAppendShapedSegment(", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsSurrogateOrVariationSelector(text)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ContainsComplexScriptCandidate(text)", glyphSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.IsRightToLeftStrongCharacter(character)", glyphSource);
         Assert.Contains("_textAnalyzer->AnalyzeScript(", glyphSource);
         Assert.Contains("_textAnalyzer->AnalyzeBidi(", glyphSource);
         Assert.Contains("IDWriteTextAnalysisSink*", glyphSource);
