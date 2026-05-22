@@ -3,6 +3,7 @@ using Irix.Platform;
 using Irix.Platform.Windows;
 using Irix.Poc;
 using Irix.Rendering;
+using Windows.Win32.Graphics.DirectWrite;
 using Xunit;
 
 namespace Irix.Core.Tests;
@@ -703,8 +704,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private bool TryGetColorLayerGlyph(", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats", glyphSource);
         Assert.Contains("private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats", glyphSource);
-        Assert.Contains("private bool HasUnsupportedOnlyColorGlyphImageFormat(ShapedGlyphSegment shapedSegment)", glyphSource);
-        Assert.Contains("private static bool HasOnlyUnsupportedColorGlyphImageFormats(DWRITE_GLYPH_IMAGE_FORMATS formats)", glyphSource);
+        Assert.Contains("private bool TryGetUnsupportedOnlyColorGlyphImageFormatReason(ShapedGlyphSegment shapedSegment, out GlyphAtlasFallbackReason unsupportedReason)", glyphSource);
+        Assert.Contains("internal static GlyphAtlasFallbackReason GetUnsupportedColorGlyphImageFormatReason(DWRITE_GLYPH_IMAGE_FORMATS formats)", glyphSource);
+        Assert.Contains("GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra", glyphSource);
+        Assert.Contains("GlyphAtlasFallbackReason.ColorGlyphPaintTree", glyphSource);
         Assert.Contains("private static IDWriteFontFace4* TryQueryFontFace4(IDWriteFontFace* face)", glyphSource);
         Assert.Contains("shapedSegment.FontFace.Face4->GetGlyphImageFormats(", glyphSource);
         Assert.Contains("DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG", glyphSource);
@@ -961,10 +964,71 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("NonAscii=1", summary);
         Assert.Contains("ColorGlyph=0", summary);
         Assert.Contains("ComplexScript=0", summary);
+        Assert.Contains("ColorGlyphPremultipliedBgra=0", summary);
         Assert.Contains("initFailurePhase=ShaderCompile", summary);
         Assert.Contains("recordFailurePhase=None", summary);
         Assert.Contains("RecordFailed=0", summary);
         Assert.Contains("rasterScratch=768 bytes/2 resizes", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_diagnostics_counts_color_glyph_formats_separately_from_aggregate()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithDegradation(
+                1,
+                D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii
+                | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph
+                | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra
+                | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPaintTree);
+
+        var summary = diagnostics.FormatSummary();
+
+        Assert.Contains("NonAscii=1", summary);
+        Assert.Contains("ColorGlyph=1", summary);
+        Assert.Contains("ColorGlyphPremultipliedBgra=1", summary);
+        Assert.Contains("ColorGlyphPaintTree=1", summary);
+        Assert.Contains("ColorGlyphSvg=0", summary);
+        Assert.Contains("ComplexScript=0", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_classifies_unsupported_color_glyph_image_formats()
+    {
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None,
+            D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG));
+
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphSvg
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPng
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphJpeg
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphTiff
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPaintTree,
+            D3D12GlyphAtlasTextRenderer.GetUnsupportedColorGlyphImageFormatReason(
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE));
     }
 
     [Fact]
@@ -1897,7 +1961,7 @@ public sealed class ProgramDiagnosticsTests
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
             "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasBudgetPages=48, atlasPage=1024x1024, atlasCapacity=50331648 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
-                + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, ColorGlyph=0, ComplexScript=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
+                + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, ColorGlyph=0, ComplexScript=0, ColorGlyphSvg=0, ColorGlyphPng=0, ColorGlyphJpeg=0, ColorGlyphTiff=0, ColorGlyphPremultipliedBgra=0, ColorGlyphPaintTree=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",
             "=== Resize diagnostic mode complete ===",

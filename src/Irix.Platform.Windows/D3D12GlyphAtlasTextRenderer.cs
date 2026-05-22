@@ -831,8 +831,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
-        if (HasUnsupportedOnlyColorGlyphImageFormat(shapedSegment))
+        if (TryGetUnsupportedOnlyColorGlyphImageFormatReason(shapedSegment, out var imageFormatUnsupportedReason))
         {
+            unsupportedReason = imageFormatUnsupportedReason;
             return false;
         }
 
@@ -937,8 +938,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    private bool HasUnsupportedOnlyColorGlyphImageFormat(ShapedGlyphSegment shapedSegment)
+    private bool TryGetUnsupportedOnlyColorGlyphImageFormatReason(ShapedGlyphSegment shapedSegment, out GlyphAtlasFallbackReason unsupportedReason)
     {
+        unsupportedReason = GlyphAtlasFallbackReason.None;
         if (shapedSegment.FontFace.Face4 == null)
         {
             return false;
@@ -956,7 +958,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             try
             {
                 shapedSegment.FontFace.Face4->GetGlyphImageFormats(glyphIndex, pixelsPerEm, pixelsPerEm, out var formats);
-                if (HasOnlyUnsupportedColorGlyphImageFormats(formats))
+                unsupportedReason = GetUnsupportedColorGlyphImageFormatReason(formats);
+                if (unsupportedReason != GlyphAtlasFallbackReason.None)
                 {
                     return true;
                 }
@@ -981,10 +984,51 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return (uint)Math.Min(ushort.MaxValue, MathF.Ceiling(fontEmSize));
     }
 
-    private static bool HasOnlyUnsupportedColorGlyphImageFormats(DWRITE_GLYPH_IMAGE_FORMATS formats)
+    internal static GlyphAtlasFallbackReason GetUnsupportedColorGlyphImageFormatReason(DWRITE_GLYPH_IMAGE_FORMATS formats)
     {
-        return (formats & UnsupportedNonLayerColorGlyphFormats) != 0
-            && (formats & SupportedLayerColorGlyphFormats) == 0;
+        if ((formats & SupportedLayerColorGlyphFormats) != 0)
+        {
+            return GlyphAtlasFallbackReason.None;
+        }
+
+        var unsupportedFormats = formats & UnsupportedNonLayerColorGlyphFormats;
+        if (unsupportedFormats == 0)
+        {
+            return GlyphAtlasFallbackReason.None;
+        }
+
+        var reason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
+        if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG) != 0)
+        {
+            reason |= GlyphAtlasFallbackReason.ColorGlyphSvg;
+        }
+
+        if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG) != 0)
+        {
+            reason |= GlyphAtlasFallbackReason.ColorGlyphPng;
+        }
+
+        if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG) != 0)
+        {
+            reason |= GlyphAtlasFallbackReason.ColorGlyphJpeg;
+        }
+
+        if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF) != 0)
+        {
+            reason |= GlyphAtlasFallbackReason.ColorGlyphTiff;
+        }
+
+        if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8) != 0)
+        {
+            reason |= GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra;
+        }
+
+        if ((unsupportedFormats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE) != 0)
+        {
+            reason |= GlyphAtlasFallbackReason.ColorGlyphPaintTree;
+        }
+
+        return reason;
     }
 
     private bool TryAppendColorGlyphLayer(
@@ -4220,7 +4264,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     }
 
     [Flags]
-    public enum GlyphAtlasFallbackReason : ushort
+    public enum GlyphAtlasFallbackReason
     {
         None = 0,
         NonAscii = 1 << 0,
@@ -4235,13 +4279,25 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         InitializationFailed = 1 << 9,
         RecordFailed = 1 << 10,
         ColorGlyph = 1 << 11,
-        ComplexScript = 1 << 12
+        ComplexScript = 1 << 12,
+        ColorGlyphSvg = 1 << 13,
+        ColorGlyphPng = 1 << 14,
+        ColorGlyphJpeg = 1 << 15,
+        ColorGlyphTiff = 1 << 16,
+        ColorGlyphPremultipliedBgra = 1 << 17,
+        ColorGlyphPaintTree = 1 << 18
     }
 
     public readonly struct GlyphAtlasFallbackReasonCounts(
         int NonAscii,
         int ColorGlyph,
         int ComplexScript,
+        int ColorGlyphSvg,
+        int ColorGlyphPng,
+        int ColorGlyphJpeg,
+        int ColorGlyphTiff,
+        int ColorGlyphPremultipliedBgra,
+        int ColorGlyphPaintTree,
         int Clip,
         int Wrapping,
         int Alignment,
@@ -4256,6 +4312,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int NonAscii { get; } = NonAscii;
         public int ColorGlyph { get; } = ColorGlyph;
         public int ComplexScript { get; } = ComplexScript;
+        public int ColorGlyphSvg { get; } = ColorGlyphSvg;
+        public int ColorGlyphPng { get; } = ColorGlyphPng;
+        public int ColorGlyphJpeg { get; } = ColorGlyphJpeg;
+        public int ColorGlyphTiff { get; } = ColorGlyphTiff;
+        public int ColorGlyphPremultipliedBgra { get; } = ColorGlyphPremultipliedBgra;
+        public int ColorGlyphPaintTree { get; } = ColorGlyphPaintTree;
         public int Clip { get; } = Clip;
         public int Wrapping { get; } = Wrapping;
         public int Alignment { get; } = Alignment;
@@ -4270,20 +4332,28 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public GlyphAtlasFallbackReasonCounts With(GlyphAtlasFallbackReason reason)
         {
             return new GlyphAtlasFallbackReasonCounts(
-                NonAscii + (reason.HasFlag(GlyphAtlasFallbackReason.NonAscii) ? 1 : 0),
-                ColorGlyph + (reason.HasFlag(GlyphAtlasFallbackReason.ColorGlyph) ? 1 : 0),
-                ComplexScript + (reason.HasFlag(GlyphAtlasFallbackReason.ComplexScript) ? 1 : 0),
-                Clip + (reason.HasFlag(GlyphAtlasFallbackReason.Clip) ? 1 : 0),
-                Wrapping + (reason.HasFlag(GlyphAtlasFallbackReason.Wrapping) ? 1 : 0),
-                Alignment + (reason.HasFlag(GlyphAtlasFallbackReason.Alignment) ? 1 : 0),
-                AtlasFull + (reason.HasFlag(GlyphAtlasFallbackReason.AtlasFull) ? 1 : 0),
-                VertexLimit + (reason.HasFlag(GlyphAtlasFallbackReason.VertexLimit) ? 1 : 0),
-                FontMissing + (reason.HasFlag(GlyphAtlasFallbackReason.FontMissing) ? 1 : 0),
-                CompileFailed + (reason.HasFlag(GlyphAtlasFallbackReason.CompileFailed) ? 1 : 0),
-                BatchLimit + (reason.HasFlag(GlyphAtlasFallbackReason.BatchLimit) ? 1 : 0),
-                InitializationFailed + (reason.HasFlag(GlyphAtlasFallbackReason.InitializationFailed) ? 1 : 0),
-                RecordFailed + (reason.HasFlag(GlyphAtlasFallbackReason.RecordFailed) ? 1 : 0));
+                NonAscii + (HasReason(reason, GlyphAtlasFallbackReason.NonAscii) ? 1 : 0),
+                ColorGlyph + (HasReason(reason, GlyphAtlasFallbackReason.ColorGlyph) ? 1 : 0),
+                ComplexScript + (HasReason(reason, GlyphAtlasFallbackReason.ComplexScript) ? 1 : 0),
+                ColorGlyphSvg + (HasReason(reason, GlyphAtlasFallbackReason.ColorGlyphSvg) ? 1 : 0),
+                ColorGlyphPng + (HasReason(reason, GlyphAtlasFallbackReason.ColorGlyphPng) ? 1 : 0),
+                ColorGlyphJpeg + (HasReason(reason, GlyphAtlasFallbackReason.ColorGlyphJpeg) ? 1 : 0),
+                ColorGlyphTiff + (HasReason(reason, GlyphAtlasFallbackReason.ColorGlyphTiff) ? 1 : 0),
+                ColorGlyphPremultipliedBgra + (HasReason(reason, GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra) ? 1 : 0),
+                ColorGlyphPaintTree + (HasReason(reason, GlyphAtlasFallbackReason.ColorGlyphPaintTree) ? 1 : 0),
+                Clip + (HasReason(reason, GlyphAtlasFallbackReason.Clip) ? 1 : 0),
+                Wrapping + (HasReason(reason, GlyphAtlasFallbackReason.Wrapping) ? 1 : 0),
+                Alignment + (HasReason(reason, GlyphAtlasFallbackReason.Alignment) ? 1 : 0),
+                AtlasFull + (HasReason(reason, GlyphAtlasFallbackReason.AtlasFull) ? 1 : 0),
+                VertexLimit + (HasReason(reason, GlyphAtlasFallbackReason.VertexLimit) ? 1 : 0),
+                FontMissing + (HasReason(reason, GlyphAtlasFallbackReason.FontMissing) ? 1 : 0),
+                CompileFailed + (HasReason(reason, GlyphAtlasFallbackReason.CompileFailed) ? 1 : 0),
+                BatchLimit + (HasReason(reason, GlyphAtlasFallbackReason.BatchLimit) ? 1 : 0),
+                InitializationFailed + (HasReason(reason, GlyphAtlasFallbackReason.InitializationFailed) ? 1 : 0),
+                RecordFailed + (HasReason(reason, GlyphAtlasFallbackReason.RecordFailed) ? 1 : 0));
         }
+
+        private static bool HasReason(GlyphAtlasFallbackReason reason, GlyphAtlasFallbackReason flag) => (reason & flag) != 0;
 
         public GlyphAtlasFallbackReasonCounts Add(GlyphAtlasFallbackReasonCounts other)
         {
@@ -4291,6 +4361,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 NonAscii + other.NonAscii,
                 ColorGlyph + other.ColorGlyph,
                 ComplexScript + other.ComplexScript,
+                ColorGlyphSvg + other.ColorGlyphSvg,
+                ColorGlyphPng + other.ColorGlyphPng,
+                ColorGlyphJpeg + other.ColorGlyphJpeg,
+                ColorGlyphTiff + other.ColorGlyphTiff,
+                ColorGlyphPremultipliedBgra + other.ColorGlyphPremultipliedBgra,
+                ColorGlyphPaintTree + other.ColorGlyphPaintTree,
                 Clip + other.Clip,
                 Wrapping + other.Wrapping,
                 Alignment + other.Alignment,
@@ -4308,6 +4384,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return NonAscii == other.NonAscii
                 && ColorGlyph == other.ColorGlyph
                 && ComplexScript == other.ComplexScript
+                && ColorGlyphSvg == other.ColorGlyphSvg
+                && ColorGlyphPng == other.ColorGlyphPng
+                && ColorGlyphJpeg == other.ColorGlyphJpeg
+                && ColorGlyphTiff == other.ColorGlyphTiff
+                && ColorGlyphPremultipliedBgra == other.ColorGlyphPremultipliedBgra
+                && ColorGlyphPaintTree == other.ColorGlyphPaintTree
                 && Clip == other.Clip
                 && Wrapping == other.Wrapping
                 && Alignment == other.Alignment
@@ -4328,6 +4410,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(NonAscii);
             hash.Add(ColorGlyph);
             hash.Add(ComplexScript);
+            hash.Add(ColorGlyphSvg);
+            hash.Add(ColorGlyphPng);
+            hash.Add(ColorGlyphJpeg);
+            hash.Add(ColorGlyphTiff);
+            hash.Add(ColorGlyphPremultipliedBgra);
+            hash.Add(ColorGlyphPaintTree);
             hash.Add(Clip);
             hash.Add(Wrapping);
             hash.Add(Alignment);
@@ -4343,7 +4431,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         public override string ToString()
         {
-            return $"NonAscii={NonAscii}, ColorGlyph={ColorGlyph}, ComplexScript={ComplexScript}, Clip={Clip}, Wrapping={Wrapping}, Alignment={Alignment}, AtlasFull={AtlasFull}, VertexLimit={VertexLimit}, "
+            return $"NonAscii={NonAscii}, ColorGlyph={ColorGlyph}, ComplexScript={ComplexScript}, ColorGlyphSvg={ColorGlyphSvg}, ColorGlyphPng={ColorGlyphPng}, ColorGlyphJpeg={ColorGlyphJpeg}, ColorGlyphTiff={ColorGlyphTiff}, ColorGlyphPremultipliedBgra={ColorGlyphPremultipliedBgra}, ColorGlyphPaintTree={ColorGlyphPaintTree}, Clip={Clip}, Wrapping={Wrapping}, Alignment={Alignment}, AtlasFull={AtlasFull}, VertexLimit={VertexLimit}, "
                 + $"FontMissing={FontMissing}, CompileFailed={CompileFailed}, BatchLimit={BatchLimit}, InitializationFailed={InitializationFailed}, RecordFailed={RecordFailed}";
         }
     }
