@@ -1175,7 +1175,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var advance = glyphRun->glyphAdvances != null ? glyphRun->glyphAdvances[i] : ComputeGlyphAdvance(fontFace, fontEmSize, glyphIndex);
             var offset = glyphRun->glyphOffsets != null ? glyphRun->glyphOffsets[i] : default;
             GlyphEntry glyph;
-            if (imageFormat == DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8)
+            if (!TrySelectColorGlyphBitmapImageFormat(imageFormat, out var selectedImageFormat))
+            {
+                unsupportedReason = GetColorGlyphRunImageFormatFallbackReason(imageFormat);
+                return false;
+            }
+
+            if (selectedImageFormat == DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8)
             {
                 if (!TryGetBgraColorGlyph(fontFace, fontEmSize, pixelsPerEm, glyphIndex, advance, recordSerial, out glyph, out _, out unsupportedReason))
                 {
@@ -1183,18 +1189,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     return false;
                 }
             }
-            else if (TrySelectEncodedBitmapColorGlyphFormat(imageFormat, out var encodedImageFormat))
+            else
             {
-                if (!TryGetEncodedBitmapColorGlyph(fontFace, fontEmSize, pixelsPerEm, glyphIndex, encodedImageFormat, advance, recordSerial, out glyph, out unsupportedReason))
+                if (!TryGetEncodedBitmapColorGlyph(fontFace, fontEmSize, pixelsPerEm, glyphIndex, selectedImageFormat, advance, recordSerial, out glyph, out unsupportedReason))
                 {
                     unsupportedReason = unsupportedReason == GlyphAtlasFallbackReason.None ? GetColorGlyphRunImageFormatFallbackReason(imageFormat) : unsupportedReason;
                     return false;
                 }
-            }
-            else
-            {
-                unsupportedReason = GetColorGlyphRunImageFormatFallbackReason(imageFormat);
-                return false;
             }
 
             if (!TryAppendGlyphQuad(
@@ -1395,7 +1396,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 return false;
             }
 
-            if ((formats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8) != 0)
+            if (!TrySelectColorGlyphBitmapImageFormat(formats, out var imageFormat))
+            {
+                return false;
+            }
+
+            if (imageFormat == DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8)
             {
                 if (!TryGetBgraColorGlyph(shapedSegment.FontFace, shapedSegment.FontEmSize, pixelsPerEm, glyphIndex, advance, recordSerial, out var glyph, out _, out unsupportedReason))
                 {
@@ -1422,7 +1428,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     return false;
                 }
             }
-            else if (TrySelectEncodedBitmapColorGlyphFormat(formats, out var imageFormat))
+            else
             {
                 if (!TryGetEncodedBitmapColorGlyph(shapedSegment.FontFace, shapedSegment.FontEmSize, pixelsPerEm, glyphIndex, imageFormat, advance, recordSerial, out var glyph, out unsupportedReason))
                 {
@@ -1448,10 +1454,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 {
                     return false;
                 }
-            }
-            else
-            {
-                return false;
             }
 
             appendedAny = true;
@@ -1537,6 +1539,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return reason;
     }
 
+    internal static bool TrySelectColorGlyphBitmapImageFormat(DWRITE_GLYPH_IMAGE_FORMATS formats, out DWRITE_GLYPH_IMAGE_FORMATS imageFormat)
+    {
+        if ((formats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8) != 0)
+        {
+            imageFormat = DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8;
+            return true;
+        }
+
+        return TrySelectEncodedBitmapColorGlyphFormat(formats, out imageFormat);
+    }
+
     private static bool TrySelectEncodedBitmapColorGlyphFormat(DWRITE_GLYPH_IMAGE_FORMATS formats, out DWRITE_GLYPH_IMAGE_FORMATS imageFormat)
     {
         if ((formats & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG) != 0)
@@ -1564,27 +1577,27 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private static GlyphAtlasFallbackReason GetEncodedBitmapColorGlyphFallbackReason(DWRITE_GLYPH_IMAGE_FORMATS imageFormat)
     {
         var reason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
-        if (imageFormat == DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG)
+        if ((imageFormat & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG) != 0)
         {
             return reason | GlyphAtlasFallbackReason.ColorGlyphPng;
         }
 
-        if (imageFormat == DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG)
-        {
-            return reason | GlyphAtlasFallbackReason.ColorGlyphJpeg;
-        }
-
-        if (imageFormat == DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF)
+        if ((imageFormat & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF) != 0)
         {
             return reason | GlyphAtlasFallbackReason.ColorGlyphTiff;
+        }
+
+        if ((imageFormat & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG) != 0)
+        {
+            return reason | GlyphAtlasFallbackReason.ColorGlyphJpeg;
         }
 
         return reason;
     }
 
-    private static GlyphAtlasFallbackReason GetColorGlyphRunImageFormatFallbackReason(DWRITE_GLYPH_IMAGE_FORMATS imageFormat)
+    internal static GlyphAtlasFallbackReason GetColorGlyphRunImageFormatFallbackReason(DWRITE_GLYPH_IMAGE_FORMATS imageFormat)
     {
-        if (imageFormat == DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8)
+        if ((imageFormat & DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8) != 0)
         {
             return GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph | GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra;
         }

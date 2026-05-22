@@ -1191,6 +1191,62 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_selects_bitmap_color_glyph_format_by_d3d12_route_priority()
+    {
+        Assert.True(D3D12GlyphAtlasTextRenderer.TrySelectColorGlyphBitmapImageFormat(
+            DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8
+            | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG,
+            out var bgraFormat));
+        Assert.Equal(DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8, bgraFormat);
+
+        Assert.True(D3D12GlyphAtlasTextRenderer.TrySelectColorGlyphBitmapImageFormat(
+            DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
+            | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF
+            | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG,
+            out var encodedFormat));
+        Assert.Equal(DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG, encodedFormat);
+
+        Assert.True(D3D12GlyphAtlasTextRenderer.TrySelectColorGlyphBitmapImageFormat(
+            DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF
+            | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG,
+            out var tiffFormat));
+        Assert.Equal(DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF, tiffFormat);
+
+        Assert.False(D3D12GlyphAtlasTextRenderer.TrySelectColorGlyphBitmapImageFormat(
+            DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
+            | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE,
+            out _));
+    }
+
+    [Fact]
+    public void Glyph_atlas_color_glyph_run_format_fallback_reason_uses_selected_bitmap_route()
+    {
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPremultipliedBgra,
+            D3D12GlyphAtlasTextRenderer.GetColorGlyphRunImageFormatFallbackReason(
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG));
+
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphPng,
+            D3D12GlyphAtlasTextRenderer.GetColorGlyphRunImageFormatFallbackReason(
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG));
+
+        Assert.Equal(
+            D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyph
+            | D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.ColorGlyphTiff,
+            D3D12GlyphAtlasTextRenderer.GetColorGlyphRunImageFormatFallbackReason(
+                DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF
+                | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG));
+    }
+
+    [Fact]
     public void Glyph_atlas_bitmap_color_glyphs_preserve_image_color_and_apply_text_alpha()
     {
         Assert.Equal(
