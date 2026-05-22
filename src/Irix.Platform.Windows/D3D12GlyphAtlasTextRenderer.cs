@@ -116,8 +116,10 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly GlyphAtlasPageMutationState[] _runPageStates = new GlyphAtlasPageMutationState[MaxAtlasPages];
     private GlyphAtlasPageHandle _activeAtlasPage;
     private GlyphAtlasPageHandle _runActiveAtlasPage;
-    private GlyphAtlasPageReuseRequest _pendingAtlasPageReuse;
-    private GlyphAtlasPageReuseRequest _runPendingAtlasPageReuse;
+    private GlyphAtlasPageReuseRequest _pendingAlphaAtlasPageReuse;
+    private GlyphAtlasPageReuseRequest _pendingBgraAtlasPageReuse;
+    private GlyphAtlasPageReuseRequest _runPendingAlphaAtlasPageReuse;
+    private GlyphAtlasPageReuseRequest _runPendingBgraAtlasPageReuse;
     private int _cachedGlyphCount;
     private int _runCachedGlyphCount;
     private int _runAtlasPageCount;
@@ -195,7 +197,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         return _diagnostics
             .WithCachedGlyphs(_cachedGlyphCount)
             .WithAtlasPages(_atlasPages.Count)
-            .WithAtlasPendingPageReuse(_pendingAtlasPageReuse.IsNone ? 0 : 1)
+            .WithAtlasPendingPageReuse(CountPendingAtlasPageReuseRequests())
             .WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)
             .WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge)
             .WithRasterScratch(
@@ -225,7 +227,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             AtlasRecordSerial: _glyphRecordSerial,
             AtlasOldestPageAge: pageUsage.OldestPageAge,
             AtlasNewestPageAge: pageUsage.NewestPageAge,
-            AtlasPendingPageReuses: _pendingAtlasPageReuse.IsNone ? 0 : 1);
+            AtlasPendingPageReuses: CountPendingAtlasPageReuseRequests());
         _rasterScratchResizeCount = 0;
     }
 
@@ -2101,7 +2103,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _runGlyphEntryIndices.Clear();
         _runGlyphEntryStates.Clear();
         _runActiveAtlasPage = _activeAtlasPage;
-        _runPendingAtlasPageReuse = _pendingAtlasPageReuse;
+        _runPendingAlphaAtlasPageReuse = _pendingAlphaAtlasPageReuse;
+        _runPendingBgraAtlasPageReuse = _pendingBgraAtlasPageReuse;
         _runCachedGlyphCount = _cachedGlyphCount;
         _runAtlasPageCount = _atlasPages.Count;
         _runDiagnostics = _diagnostics;
@@ -2118,7 +2121,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         _runGlyphEntryIndices.Clear();
         _runGlyphEntryStates.Clear();
         _runActiveAtlasPage = default;
-        _runPendingAtlasPageReuse = default;
+        _runPendingAlphaAtlasPageReuse = default;
+        _runPendingBgraAtlasPageReuse = default;
         _runAtlasPageCount = 0;
     }
 
@@ -2136,7 +2140,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             ReleaseAtlasPagesCreatedDuringRun();
             RestoreRunPageStates();
             var resetPageCount = ResetPagesReusedDuringRun();
-            _pendingAtlasPageReuse = _runPendingAtlasPageReuse;
+            _pendingAlphaAtlasPageReuse = _runPendingAlphaAtlasPageReuse;
+            _pendingBgraAtlasPageReuse = _runPendingBgraAtlasPageReuse;
             _cachedGlyphCount = CountLiveGlyphEntries();
             _diagnostics = _runDiagnostics
                 .WithCachedGlyphs(_cachedGlyphCount)
@@ -2153,7 +2158,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             ReleaseAtlasPagesCreatedDuringRun();
             RestoreRunPageStates();
             _activeAtlasPage = _runActiveAtlasPage;
-            _pendingAtlasPageReuse = _runPendingAtlasPageReuse;
+            _pendingAlphaAtlasPageReuse = _runPendingAlphaAtlasPageReuse;
+            _pendingBgraAtlasPageReuse = _runPendingBgraAtlasPageReuse;
             _cachedGlyphCount = _runCachedGlyphCount;
             _diagnostics = _runDiagnostics;
         }
@@ -2467,11 +2473,6 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void ScheduleAtlasPageReuse(long recordSerial, GlyphAtlasPageFormat? format = null)
     {
-        if (!_pendingAtlasPageReuse.IsNone)
-        {
-            return;
-        }
-
         var page = SelectOldestAtlasPageHandle(format);
         if (page.IsNone)
         {
@@ -2479,8 +2480,47 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return;
         }
 
-        _pendingAtlasPageReuse = new GlyphAtlasPageReuseRequest(page, recordSerial);
+        if (!TryResolveAtlasPage(page, out var atlasPage))
+        {
+            throw CreateRecordException(
+                GlyphAtlasRecordFailurePhase.AtlasPage,
+                "D3D12GlyphAtlasTextRenderer.ScheduleAtlasPageReuse found a stale glyph atlas page handle.");
+        }
+
+        ref var pending = ref GetPendingAtlasPageReuse(atlasPage.Format);
+        if (!pending.IsNone)
+        {
+            return;
+        }
+
+        pending = new GlyphAtlasPageReuseRequest(page, recordSerial);
         _diagnostics = _diagnostics.WithAtlasPageReuseRequest();
+    }
+
+    private ref GlyphAtlasPageReuseRequest GetPendingAtlasPageReuse(GlyphAtlasPageFormat format)
+    {
+        if (format == GlyphAtlasPageFormat.Bgra)
+        {
+            return ref _pendingBgraAtlasPageReuse;
+        }
+
+        return ref _pendingAlphaAtlasPageReuse;
+    }
+
+    private int CountPendingAtlasPageReuseRequests()
+    {
+        var count = 0;
+        if (!_pendingAlphaAtlasPageReuse.IsNone)
+        {
+            count++;
+        }
+
+        if (!_pendingBgraAtlasPageReuse.IsNone)
+        {
+            count++;
+        }
+
+        return count;
     }
 
     private GlyphAtlasPageHandle SelectOldestAtlasPageHandle(GlyphAtlasPageFormat? format)
@@ -2531,16 +2571,22 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private void ApplyPendingAtlasPageEviction(long recordSerial, long oldestRetainedRecordSerial)
     {
-        if (!_pendingAtlasPageReuse.CanApply(recordSerial, oldestRetainedRecordSerial))
+        ApplyPendingAtlasPageEviction(ref _pendingAlphaAtlasPageReuse, recordSerial, oldestRetainedRecordSerial);
+        ApplyPendingAtlasPageEviction(ref _pendingBgraAtlasPageReuse, recordSerial, oldestRetainedRecordSerial);
+    }
+
+    private void ApplyPendingAtlasPageEviction(ref GlyphAtlasPageReuseRequest pendingPageReuse, long recordSerial, long oldestRetainedRecordSerial)
+    {
+        if (!pendingPageReuse.CanApply(recordSerial, oldestRetainedRecordSerial))
         {
             return;
         }
 
-        var page = RequireReuseAtlasPage(_pendingAtlasPageReuse);
+        var page = RequireReuseAtlasPage(pendingPageReuse);
         var reusedPage = page.Handle;
         _activeAtlasPage = page.ResetForReuse();
         RemoveGlyphsForReusedPage(reusedPage);
-        _pendingAtlasPageReuse = default;
+        pendingPageReuse = default;
         _diagnostics = _diagnostics
             .WithCachedGlyphs(_cachedGlyphCount)
             .WithAtlasPages(_atlasPages.Count)

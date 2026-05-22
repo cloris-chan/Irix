@@ -646,8 +646,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly GlyphAtlasPageMutationState[] _runPageStates = new GlyphAtlasPageMutationState[MaxAtlasPages];", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle _activeAtlasPage;", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle _runActiveAtlasPage;", glyphSource);
-        Assert.Contains("private GlyphAtlasPageReuseRequest _pendingAtlasPageReuse;", glyphSource);
-        Assert.Contains("private GlyphAtlasPageReuseRequest _runPendingAtlasPageReuse;", glyphSource);
+        Assert.Contains("private GlyphAtlasPageReuseRequest _pendingAlphaAtlasPageReuse;", glyphSource);
+        Assert.Contains("private GlyphAtlasPageReuseRequest _pendingBgraAtlasPageReuse;", glyphSource);
+        Assert.Contains("private GlyphAtlasPageReuseRequest _runPendingAlphaAtlasPageReuse;", glyphSource);
+        Assert.Contains("private GlyphAtlasPageReuseRequest _runPendingBgraAtlasPageReuse;", glyphSource);
         Assert.Contains("private long _glyphRecordSerial;", glyphSource);
         Assert.Contains("private bool _runAtlasMutationActive;", glyphSource);
         Assert.Contains("private bool _runAtlasMutationUsedPageReuse;", glyphSource);
@@ -914,7 +916,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("var dirtyRowBytes = dirtyWidth * bytesPerPixel;", glyphSource);
         Assert.Contains("ApplyPendingAtlasPageEviction(recordSerial, oldestRetainedRecordSerial: recordSerial);", glyphSource);
         Assert.Contains("private void ApplyPendingAtlasPageEviction(long recordSerial, long oldestRetainedRecordSerial)", glyphSource);
-        Assert.Contains("if (!_pendingAtlasPageReuse.CanApply(recordSerial, oldestRetainedRecordSerial))", glyphSource);
+        Assert.Contains("ApplyPendingAtlasPageEviction(ref _pendingAlphaAtlasPageReuse, recordSerial, oldestRetainedRecordSerial);", glyphSource);
+        Assert.Contains("ApplyPendingAtlasPageEviction(ref _pendingBgraAtlasPageReuse, recordSerial, oldestRetainedRecordSerial);", glyphSource);
+        Assert.Contains("if (!pendingPageReuse.CanApply(recordSerial, oldestRetainedRecordSerial))", glyphSource);
         Assert.Contains("var reusedPage = page.Handle;", glyphSource);
         Assert.Contains("RemoveGlyphsForReusedPage(reusedPage);", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ShouldClearGlyphForReusedPage(", glyphSource);
@@ -927,7 +931,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public int ComputeAvailablePixels()", glyphSource);
         Assert.Contains("private void ScheduleAtlasPageReuse(long recordSerial, GlyphAtlasPageFormat? format = null)", glyphSource);
         Assert.Contains("var page = SelectOldestAtlasPageHandle(format);", glyphSource);
-        Assert.Contains("_pendingAtlasPageReuse = new GlyphAtlasPageReuseRequest(page, recordSerial);", glyphSource);
+        Assert.Contains("private ref GlyphAtlasPageReuseRequest GetPendingAtlasPageReuse(GlyphAtlasPageFormat format)", glyphSource);
+        Assert.Contains("return ref _pendingBgraAtlasPageReuse;", glyphSource);
+        Assert.Contains("return ref _pendingAlphaAtlasPageReuse;", glyphSource);
+        Assert.Contains("private int CountPendingAtlasPageReuseRequests()", glyphSource);
+        Assert.Contains("pending = new GlyphAtlasPageReuseRequest(page, recordSerial);", glyphSource);
         Assert.Contains("_diagnostics = _diagnostics.WithAtlasPageReuseRequest();", glyphSource);
         Assert.Contains("_diagnostics = _diagnostics.WithAtlasFullWithoutPageReuse();", glyphSource);
         Assert.Contains("D3D12GlyphAtlasTextRenderer.RequireActiveAtlasPage found a stale active glyph atlas page handle.", glyphSource);
@@ -977,7 +985,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("private readonly struct GlyphAtlasPageUsage(int UsedPixels, int FragmentedPixels, long OldestPageAge, long NewestPageAge)", glyphSource);
         Assert.Contains(".WithAtlasPageUsage(pageUsage.UsedPixels, pageUsage.FragmentedPixels)", glyphSource);
         Assert.Contains(".WithAtlasTouchMetrics(_glyphRecordSerial, pageUsage.OldestPageAge, pageUsage.NewestPageAge)", glyphSource);
-        Assert.Contains(".WithAtlasPendingPageReuse(_pendingAtlasPageReuse.IsNone ? 0 : 1)", glyphSource);
+        Assert.Contains(".WithAtlasPendingPageReuse(CountPendingAtlasPageReuseRequests())", glyphSource);
         Assert.Contains("public int AtlasBudgetPages => MaxAtlasPages;", glyphSource);
         Assert.Contains("public int AtlasPageWidth => AtlasWidth;", glyphSource);
         Assert.Contains("public int AtlasPageHeight => AtlasHeight;", glyphSource);
