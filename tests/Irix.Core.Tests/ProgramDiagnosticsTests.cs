@@ -1053,6 +1053,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public int AtlasPageWidth => AtlasWidth;", glyphSource);
         Assert.Contains("public int AtlasPageHeight => AtlasHeight;", glyphSource);
         Assert.Contains("public int AtlasCapacityPixels => AtlasBudgetPixels;", glyphSource);
+        Assert.Contains("public long AtlasCpuBytes => ComputeAtlasResidentBytes(AtlasAlphaPages, AtlasBgraPages);", glyphSource);
+        Assert.Contains("public long AtlasUploadBytes => checked(AtlasGpuBytes * UploadFrameCount);", glyphSource);
+        Assert.Contains("public long AtlasGpuBytes => ComputeAtlasResidentBytes(AtlasAlphaPages, AtlasBgraPages);", glyphSource);
+        Assert.Contains("private static long ComputeAtlasResidentBytes(int alphaPages, int bgraPages)", glyphSource);
         Assert.Contains("public int AtlasPendingPageReuses { get; } = AtlasPendingPageReuses;", glyphSource);
         Assert.Contains("public int AtlasPageReuseRequests { get; } = AtlasPageReuseRequests;", glyphSource);
         Assert.Contains("public int AtlasFullWithoutPageReuse { get; } = AtlasFullWithoutPageReuse;", glyphSource);
@@ -1107,6 +1111,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("atlasBudgetPages=48", summary);
         Assert.Contains("atlasPage=1024x1024", summary);
         Assert.Contains("atlasCapacity=50331648 px", summary);
+        Assert.Contains("atlasCpuBytes=1048576 bytes", summary);
+        Assert.Contains("atlasUploadBytes=2097152 bytes", summary);
+        Assert.Contains("atlasGpuBytes=1048576 bytes", summary);
         Assert.Contains("atlasEvictions=1", summary);
         Assert.Contains("atlasPendingPageReuses=0", summary);
         Assert.Contains("atlasPageReuseRequests=1", summary);
@@ -1133,6 +1140,33 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("recordFailurePhase=None", summary);
         Assert.Contains("RecordFailed=0", summary);
         Assert.Contains("rasterScratch=768 bytes/2 resizes", summary);
+    }
+
+    [Fact]
+    public void Glyph_atlas_diagnostics_resident_bytes_follow_page_formats()
+    {
+        var diagnostics = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 0,
+            UploadedBytes: 0,
+            DrawnGlyphs: 0,
+            CacheHits: 0,
+            CacheMisses: 0,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithAtlasPageCounts(3, 2, 1);
+        var summary = diagnostics.FormatSummary();
+
+        Assert.Equal(6291456, diagnostics.AtlasCpuBytes);
+        Assert.Equal(12582912, diagnostics.AtlasUploadBytes);
+        Assert.Equal(6291456, diagnostics.AtlasGpuBytes);
+        Assert.Contains("atlasCpuBytes=6291456 bytes", summary);
+        Assert.Contains("atlasUploadBytes=12582912 bytes", summary);
+        Assert.Contains("atlasGpuBytes=6291456 bytes", summary);
     }
 
     [Fact]
@@ -2252,7 +2286,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasAlphaPages=1, atlasBgraPages=0, atlasBudgetPages=48, atlasPage=1024x1024, atlasCapacity=50331648 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, colorLayerRuns=0, colorBitmapRuns=0, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasAlphaPages=1, atlasBgraPages=0, atlasBudgetPages=48, atlasPage=1024x1024, atlasCapacity=50331648 px, atlasCpuBytes=1048576 bytes, atlasUploadBytes=2097152 bytes, atlasGpuBytes=1048576 bytes, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, colorLayerRuns=0, colorBitmapRuns=0, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, ColorGlyph=0, ComplexScript=0, ColorGlyphSvg=0, ColorGlyphPng=0, ColorGlyphJpeg=0, ColorGlyphTiff=0, ColorGlyphPremultipliedBgra=0, ColorGlyphPaintTree=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

@@ -6257,6 +6257,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int AtlasPageWidth => AtlasWidth;
         public int AtlasPageHeight => AtlasHeight;
         public int AtlasCapacityPixels => AtlasBudgetPixels;
+        public long AtlasCpuBytes => ComputeAtlasResidentBytes(AtlasAlphaPages, AtlasBgraPages);
+        public long AtlasUploadBytes => checked(AtlasGpuBytes * UploadFrameCount);
+        public long AtlasGpuBytes => ComputeAtlasResidentBytes(AtlasAlphaPages, AtlasBgraPages);
         public int AtlasEvictions { get; } = AtlasEvictions;
         public int AtlasUsedPixels { get; } = AtlasUsedPixels;
         public int AtlasFragmentedPixels { get; } = AtlasFragmentedPixels;
@@ -6978,11 +6981,14 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
         public string FormatSummary()
         {
-            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasAlphaPages={AtlasAlphaPages}, atlasBgraPages={AtlasBgraPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasEvictions={AtlasEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
+            return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasAlphaPages={AtlasAlphaPages}, atlasBgraPages={AtlasBgraPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasCpuBytes={AtlasCpuBytes} bytes, atlasUploadBytes={AtlasUploadBytes} bytes, atlasGpuBytes={AtlasGpuBytes} bytes, atlasEvictions={AtlasEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
                 + $"atlasRecordSerial={AtlasRecordSerial}, atlasOldestPageAge={AtlasOldestPageAge}, atlasNewestPageAge={AtlasNewestPageAge}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
                 + $"uploads={UploadedBytes} bytes, uploadedGlyphs={UploadedGlyphs}, shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}, colorLayerRuns={ColorLayerRuns}, colorBitmapRuns={ColorBitmapRuns}, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
         }
+
+        private static long ComputeAtlasResidentBytes(int alphaPages, int bgraPages) =>
+            checked((long)alphaPages * GetAtlasPixelBytes(GlyphAtlasPageFormat.Alpha) + (long)bgraPages * GetAtlasPixelBytes(GlyphAtlasPageFormat.Bgra));
 
         public bool Equals(GlyphAtlasTextRendererDiagnostics other)
         {
