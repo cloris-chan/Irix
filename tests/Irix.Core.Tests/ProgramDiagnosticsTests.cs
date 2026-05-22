@@ -1824,6 +1824,130 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_soak_scenario_cadence_interleaves_pressure_matrix_wrap_and_reuse()
+    {
+        Assert.Equal(GlyphAtlasSoakScenario.Pressure, GlyphAtlasSoakDiagnosticRunner.SelectScenario(0, pressureEvery: 4));
+        Assert.Equal(GlyphAtlasSoakScenario.Matrix, GlyphAtlasSoakDiagnosticRunner.SelectScenario(1, pressureEvery: 4));
+        Assert.Equal(GlyphAtlasSoakScenario.Wrap, GlyphAtlasSoakDiagnosticRunner.SelectScenario(2, pressureEvery: 4));
+        Assert.Equal(GlyphAtlasSoakScenario.Reuse, GlyphAtlasSoakDiagnosticRunner.SelectScenario(3, pressureEvery: 4));
+        Assert.Equal(GlyphAtlasSoakScenario.Pressure, GlyphAtlasSoakDiagnosticRunner.SelectScenario(4, pressureEvery: 4));
+    }
+
+    [Fact]
+    public void Glyph_atlas_soak_pressure_commands_are_alpha_atlas_candidates()
+    {
+        using var resources = FrameDrawingResources.Rent();
+        var ascii = new string(Enumerable.Range(32, 95).Select(static code => (char)code).ToArray());
+        var commands = GlyphAtlasSoakDiagnosticRunner.BuildPressureCommands(resources, ascii, 960, 540, pressureIndex: 2);
+        resources.Seal();
+
+        var textCommandCount = commands.Count(static command => command.Kind == DrawCommandKind.DrawTextRun);
+        Assert.Equal(32, textCommandCount);
+        for (var i = 1; i < commands.Length; i++)
+        {
+            var reason = GlyphAtlasTextCompositionHelpers.GetUnsupportedReason(
+                resources.Resolve(commands[i].Text),
+                resources.ResolveTextStyle(commands[i].Resource));
+            Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, reason);
+        }
+    }
+
+    [Fact]
+    public void Glyph_atlas_soak_summary_tracks_peak_residency_and_current_reuse_counters()
+    {
+        var first = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 12,
+            UploadedBytes: 1024,
+            DrawnGlyphs: 30,
+            CacheHits: 1,
+            CacheMisses: 12,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            AtlasPages: 2,
+            AtlasAlphaPages: 2,
+            AtlasBgraPages: 0,
+            AtlasUsedPixels: 120,
+            AtlasFragmentedPixels: 30,
+            AtlasAlphaUsedPixels: 120,
+            AtlasBgraUsedPixels: 0,
+            AtlasAlphaFragmentedPixels: 30,
+            AtlasBgraFragmentedPixels: 0,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0);
+        var second = new D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics(
+            CachedGlyphs: 24,
+            UploadedBytes: 2048,
+            DrawnGlyphs: 60,
+            CacheHits: 2,
+            CacheMisses: 24,
+            FallbackFrames: 0,
+            UnsupportedRuns: 0,
+            Reasons: default,
+            InitializationFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.None,
+            RecordFailurePhase: D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordFailurePhase.None,
+            AtlasPages: 3,
+            AtlasAlphaPages: 2,
+            AtlasBgraPages: 1,
+            AtlasEvictions: 1,
+            AtlasAlphaEvictions: 1,
+            AtlasBgraEvictions: 0,
+            AtlasPageReuseRequests: 1,
+            AtlasAlphaPageReuseRequests: 1,
+            AtlasBgraPageReuseRequests: 0,
+            AtlasUsedPixels: 180,
+            AtlasFragmentedPixels: 50,
+            AtlasAlphaUsedPixels: 140,
+            AtlasBgraUsedPixels: 40,
+            AtlasAlphaFragmentedPixels: 40,
+            AtlasBgraFragmentedPixels: 10,
+            RasterScratchBytes: 0,
+            RasterScratchResizes: 0)
+            .WithDegradation(2, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.AtlasFull);
+
+        var summary = GlyphAtlasSoakSummary.Empty
+            .WithFrame(GlyphAtlasSoakScenario.Pressure, first)
+            .WithFrame(GlyphAtlasSoakScenario.Matrix, second);
+        var formatted = GlyphAtlasSoakDiagnosticRunner.FormatSummary(summary);
+        var policy = GlyphAtlasSoakDiagnosticRunner.FormatPagePolicy(summary);
+
+        Assert.Equal(2, summary.Frames);
+        Assert.Equal(1, summary.PressureFrames);
+        Assert.Equal(1, summary.MatrixFrames);
+        Assert.Equal(3, summary.MaxAtlasPages);
+        Assert.Equal(2, summary.MaxAlphaPages);
+        Assert.Equal(1, summary.MaxBgraPages);
+        Assert.Equal(6291456, summary.MaxAtlasCpuBytes);
+        Assert.Equal(6291456, summary.MaxAtlasGpuBytes);
+        Assert.Equal(180, summary.MaxAtlasUsedPixels);
+        Assert.Equal(50, summary.MaxAtlasFragmentedPixels);
+        Assert.Equal(1, summary.AtlasEvictions);
+        Assert.Equal(1, summary.AtlasAlphaPageReuseRequests);
+        Assert.Equal(2, summary.MaxDegradedRuns);
+        Assert.Contains("pageReuse=FormatScopedColdPage", policy);
+        Assert.Contains("currentRecordColdReuse=True", policy);
+        Assert.Contains("sameRecordTouchedReuse=False", policy);
+        Assert.Contains("entryLru=False", policy);
+        Assert.Contains("subRectFreeList=False", policy);
+        Assert.Contains("maxAtlasPages=3", formatted);
+        Assert.Contains("atlasPageReuseRequests=1", formatted);
+        Assert.Contains("maxDegradedRuns=2", formatted);
+    }
+
+    [Fact]
+    public void Glyph_atlas_soak_cli_is_wired()
+    {
+        var root = FindRepoRoot();
+        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+
+        Assert.Contains("--diagnose-glyph-atlas-soak", source);
+        Assert.Contains("--pressure-every", source);
+        Assert.Contains("GlyphAtlasSoakDiagnosticRunner.Run", source);
+    }
+
+    [Fact]
     public void Glyph_atlas_record_failure_contract_degrades_all_renderable_runs()
     {
         using var resources = FrameDrawingResources.Rent();

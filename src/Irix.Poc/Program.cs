@@ -124,6 +124,24 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-glyph-atlas-soak"))
+        {
+            var frameCount = 60;
+            var frameArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-soak").Skip(1).FirstOrDefault();
+            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
+            var pressureEvery = 6;
+            var pressureArg = args.SkipWhile(a => a != "--pressure-every").Skip(1).FirstOrDefault();
+            if (int.TryParse(pressureArg, out var cadence) && cadence > 0) pressureEvery = cadence;
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            GlyphAtlasSoakDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                frameCount,
+                pressureEvery,
+                ParseTextCompositionMode(args),
+                ParseDiagnosticScale(args));
+            return;
+        }
+
         if (args.Contains("--diagnose-text-cache"))
         {
             var frameCount = 180;
