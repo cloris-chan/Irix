@@ -244,6 +244,12 @@ internal static class GlyphAtlasTextCompositionHelpers
         return candidateLastUsedSerial < selectedLastUsedSerial;
     }
 
+    internal static bool ShouldSelectWritableAtlasPage(int selectedAvailablePixels, long selectedLastUsedSerial, int candidateAvailablePixels, long candidateLastUsedSerial)
+    {
+        return candidateAvailablePixels > selectedAvailablePixels
+            || (candidateAvailablePixels == selectedAvailablePixels && candidateLastUsedSerial < selectedLastUsedSerial);
+    }
+
     internal static bool CanReuseAtlasPageInCurrentRecord(long pageLastUsedSerial, long currentRecordSerial)
     {
         return pageLastUsedSerial < currentRecordSerial;

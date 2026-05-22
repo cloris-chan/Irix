@@ -1427,6 +1427,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         }
 
         var selectedIndex = -1;
+        var selectedAvailablePixels = -1;
         var selectedLastUsedSerial = long.MaxValue;
         for (var i = 0; i < _atlasPages.Count; i++)
         {
@@ -1436,9 +1437,11 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 continue;
             }
 
-            if (GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage(selectedLastUsedSerial, page.LastUsedSerial))
+            var availablePixels = page.ComputeAvailablePixels();
+            if (GlyphAtlasTextCompositionHelpers.ShouldSelectWritableAtlasPage(selectedAvailablePixels, selectedLastUsedSerial, availablePixels, page.LastUsedSerial))
             {
                 selectedIndex = i;
+                selectedAvailablePixels = availablePixels;
                 selectedLastUsedSerial = page.LastUsedSerial;
             }
         }
@@ -4460,6 +4463,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             var committedRows = Math.Max(0, NextY - AtlasPadding);
             var currentRowWidth = Math.Max(0, NextX - AtlasPadding);
             return checked((committedRows * AtlasWidth) + (currentRowWidth * RowHeight));
+        }
+
+        public int ComputeAvailablePixels()
+        {
+            var rowAvailable = Math.Max(0, AtlasWidth - AtlasPadding - NextX) * Math.Max(0, RowHeight);
+            var rowsAvailable = Math.Max(0, AtlasHeight - AtlasPadding - NextY - RowHeight) * AtlasWidth;
+            return checked(rowAvailable + rowsAvailable);
         }
 
         public void Release()

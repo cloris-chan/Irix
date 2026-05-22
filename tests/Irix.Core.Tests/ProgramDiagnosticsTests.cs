@@ -359,6 +359,16 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_writable_page_selection_prefers_remaining_space_then_older_pages()
+    {
+        Assert.True(GlyphAtlasTextCompositionHelpers.ShouldSelectWritableAtlasPage(selectedAvailablePixels: -1, selectedLastUsedSerial: long.MaxValue, candidateAvailablePixels: 100, candidateLastUsedSerial: 8));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ShouldSelectWritableAtlasPage(selectedAvailablePixels: 100, selectedLastUsedSerial: 3, candidateAvailablePixels: 200, candidateLastUsedSerial: 9));
+        Assert.True(GlyphAtlasTextCompositionHelpers.ShouldSelectWritableAtlasPage(selectedAvailablePixels: 200, selectedLastUsedSerial: 9, candidateAvailablePixels: 200, candidateLastUsedSerial: 3));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ShouldSelectWritableAtlasPage(selectedAvailablePixels: 200, selectedLastUsedSerial: 3, candidateAvailablePixels: 100, candidateLastUsedSerial: 1));
+        Assert.False(GlyphAtlasTextCompositionHelpers.ShouldSelectWritableAtlasPage(selectedAvailablePixels: 200, selectedLastUsedSerial: 3, candidateAvailablePixels: 200, candidateLastUsedSerial: 9));
+    }
+
+    [Fact]
     public void Glyph_atlas_current_record_reuse_only_accepts_pages_not_touched_this_record()
     {
         Assert.True(GlyphAtlasTextCompositionHelpers.CanReuseAtlasPageInCurrentRecord(pageLastUsedSerial: 3, currentRecordSerial: 4));
@@ -799,8 +809,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CanReuseAtlasPageInCurrentRecord(page.LastUsedSerial, recordSerial)", glyphSource);
         Assert.Contains("var reusedPage = TryReuseColdAtlasPageForCurrentRecord(width, height, recordSerial);", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle SelectOldestAtlasPageHandle()", glyphSource);
-        Assert.Equal(3, CountOccurrences(glyphSource, "GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage("));
+        Assert.Equal(2, CountOccurrences(glyphSource, "GlyphAtlasTextCompositionHelpers.ShouldSelectOlderAtlasPage("));
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ShouldSelectWritableAtlasPage(", glyphSource);
         Assert.Contains("private static bool CanAllocateGlyph(GlyphAtlasPage page, int width, int height)", glyphSource);
+        Assert.Contains("public int ComputeAvailablePixels()", glyphSource);
         Assert.Contains("private void ScheduleAtlasPageReuse(long recordSerial)", glyphSource);
         Assert.Contains("var page = SelectOldestAtlasPageHandle();", glyphSource);
         Assert.Contains("_pendingAtlasPageReuse = new GlyphAtlasPageReuseRequest(page, recordSerial);", glyphSource);
