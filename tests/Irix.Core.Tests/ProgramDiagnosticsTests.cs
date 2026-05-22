@@ -891,8 +891,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Shape probe GetGlyphPlacements failed", glyphSource);
         Assert.Contains("public int ShapedProbeRuns { get; } = ShapedProbeRuns;", glyphSource);
         Assert.Contains("public int ShapedProbeGlyphs { get; } = ShapedProbeGlyphs;", glyphSource);
+        Assert.Contains("public int ColorLayerRuns { get; } = ColorLayerRuns;", glyphSource);
+        Assert.Contains("public int ColorBitmapRuns { get; } = ColorBitmapRuns;", glyphSource);
         Assert.Contains("public GlyphAtlasTextRendererDiagnostics WithShapedGlyphProbe(int glyphCount)", glyphSource);
-        Assert.Contains("shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}", glyphSource);
+        Assert.Contains("public GlyphAtlasTextRendererDiagnostics WithColorGlyphRuns(int layerRuns, int bitmapRuns)", glyphSource);
+        Assert.Contains("shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}, colorLayerRuns={ColorLayerRuns}, colorBitmapRuns={ColorBitmapRuns}", glyphSource);
         Assert.Contains("private readonly struct GlyphAtlasPageReuseRequest(GlyphAtlasPageHandle Page, long RequestedRecordSerial)", glyphSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.CanApplyAtlasPageReuseRequest(!IsNone, RequestedRecordSerial, recordSerial, oldestRetainedRecordSerial)", glyphSource);
         Assert.Contains("private sealed unsafe class GlyphAtlasPage", glyphSource);
@@ -1091,6 +1094,7 @@ public sealed class ProgramDiagnosticsTests
             .WithAtlasPageUsage(2048, 512)
             .WithUploadedGlyph()
             .WithUploadedGlyph()
+            .WithColorGlyphRuns(3, 1)
             .WithDegradation(0, D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.NonAscii)
             .WithInitializationFailure(D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile);
 
@@ -1116,6 +1120,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("uploadedGlyphs=2", summary);
         Assert.Contains("shapedProbeRuns=0", summary);
         Assert.Contains("shapedProbeGlyphs=0", summary);
+        Assert.Contains("colorLayerRuns=3", summary);
+        Assert.Contains("colorBitmapRuns=1", summary);
         Assert.Contains("atlasRuns=7", summary);
         Assert.Contains("degradedRuns=0", summary);
         Assert.Contains("fallbacks=2", summary);
@@ -2246,7 +2252,7 @@ public sealed class ProgramDiagnosticsTests
             "scale=0x0",
             "logicalViewport=0x0",
             "coordinateSpace=PipelineLogicalPixels backendPhysicalPixels=True inputPhysicalMappedToLogical=True",
-            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasAlphaPages=1, atlasBgraPages=0, atlasBudgetPages=48, atlasPage=1024x1024, atlasCapacity=50331648 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, hits=30, misses=8, "
+            "Glyph atlas: cachedGlyphs=8, atlasPages=1, atlasAlphaPages=1, atlasBgraPages=0, atlasBudgetPages=48, atlasPage=1024x1024, atlasCapacity=50331648 px, atlasEvictions=0, atlasPendingPageReuses=0, atlasPageReuseRequests=0, atlasFullWithoutPageReuse=0, atlasUsed=0 px, atlasFragmented=0 px, atlasRecordSerial=0, atlasOldestPageAge=0, atlasNewestPageAge=0, drawnGlyphs=24, atlasRuns=0, degradedRuns=0, uploads=2048 bytes, uploadedGlyphs=0, shapedProbeRuns=0, shapedProbeGlyphs=0, colorLayerRuns=0, colorBitmapRuns=0, hits=30, misses=8, "
                 + "fallbacks=0, unsupportedRuns=0, reasons=[NonAscii=0, ColorGlyph=0, ComplexScript=0, ColorGlyphSvg=0, ColorGlyphPng=0, ColorGlyphJpeg=0, ColorGlyphTiff=0, ColorGlyphPremultipliedBgra=0, ColorGlyphPaintTree=0, Clip=0, Wrapping=0, Alignment=0, AtlasFull=0, VertexLimit=0, "
                 + "FontMissing=0, CompileFailed=0, BatchLimit=0, InitializationFailed=0, RecordFailed=0], initFailurePhase=None, "
                 + "recordFailurePhase=None, rasterScratch=512 bytes/2 resizes",

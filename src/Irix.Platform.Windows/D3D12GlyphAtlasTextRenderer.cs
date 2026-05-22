@@ -298,7 +298,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             DrawGlyphs(list, frame, viewportWidth, viewportHeight, frameResourceIndex);
             _diagnostics = _diagnostics
                 .WithDrawnGlyphs(frame.VertexCount / 6)
-                .WithAtlasRuns(frame.AtlasRunCount);
+                .WithAtlasRuns(frame.AtlasRunCount)
+                .WithColorGlyphRuns(frame.ColorLayerRunCount, frame.ColorBitmapRunCount);
             RecordDegradation(frame.DegradedRunCount, frame.DegradationReasons);
             return new GlyphAtlasRecordResult(true, frame.AtlasRunCount, frame.DegradedRunCount);
         }
@@ -345,6 +346,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var batchCount = 0;
         var atlasRunCount = 0;
         var degradedRunCount = 0;
+        var colorLayerRunCount = 0;
+        var colorBitmapRunCount = 0;
         var degradationReasons = default(GlyphAtlasFallbackReasonCounts);
 
         foreach (var textRun in textRuns)
@@ -366,7 +369,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                     && TryProbeShapedRun(text, style, textRun.Width, out var shapedRun, out shapedUnsupportedReason))
                 {
                     _diagnostics = _diagnostics.WithShapedGlyphProbe(shapedRun.GlyphCount);
-                    if (TryBuildShapedAtlasRun(text, textRun, style, shapedRun, viewportWidth, viewportHeight, recordSerial, ref vertexCount, ref batchCount, out unsupportedReason))
+                    if (TryBuildShapedAtlasRun(text, textRun, style, shapedRun, viewportWidth, viewportHeight, recordSerial, ref vertexCount, ref batchCount, ref colorLayerRunCount, ref colorBitmapRunCount, out unsupportedReason))
                     {
                         CommitAtlasRunMutation();
                         atlasRunCount++;
@@ -505,7 +508,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             atlasRunCount++;
         }
 
-        return new GlyphFrame(vertexCount, batchCount, atlasRunCount, degradedRunCount, degradationReasons);
+        return new GlyphFrame(vertexCount, batchCount, atlasRunCount, degradedRunCount, degradationReasons, colorLayerRunCount, colorBitmapRunCount);
     }
 
     private void EnsureLayoutScratch(int textLength)
@@ -595,6 +598,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         long recordSerial,
         ref int vertexCount,
         ref int batchCount,
+        ref int acceptedColorLayerRuns,
+        ref int acceptedColorBitmapRuns,
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         unsupportedReason = GlyphAtlasFallbackReason.None;
@@ -624,6 +629,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         var batchStart = vertexCount;
         var batchSegmentStart = vertexCount;
         var batchPage = default(GlyphAtlasPageHandle);
+        var colorLayerRuns = 0;
+        var colorBitmapRuns = 0;
 
         for (var lineIndex = 0; lineIndex < shapedRun.LineCount; lineIndex++)
         {
@@ -659,6 +666,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         ref batchCount,
                         ref batchSegmentStart,
                         ref batchPage,
+                        ref colorLayerRuns,
+                        ref colorBitmapRuns,
                         out unsupportedReason))
                     {
                         break;
@@ -691,6 +700,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         ref batchCount,
                         ref batchSegmentStart,
                         ref batchPage,
+                        ref colorLayerRuns,
+                        ref colorBitmapRuns,
                         out unsupportedReason))
                     {
                         break;
@@ -729,6 +740,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             return false;
         }
 
+        acceptedColorLayerRuns += colorLayerRuns;
+        acceptedColorBitmapRuns += colorBitmapRuns;
         return true;
     }
 
@@ -747,6 +760,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         ref int batchCount,
         ref int batchSegmentStart,
         ref GlyphAtlasPageHandle batchPage,
+        ref int acceptedColorLayerRuns,
+        ref int acceptedColorBitmapRuns,
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         var segmentRequiresColor = shapedRun.RequiresColorGlyph
@@ -765,6 +780,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 ref batchCount,
                 ref batchSegmentStart,
                 ref batchPage,
+                ref acceptedColorLayerRuns,
+                ref acceptedColorBitmapRuns,
                 out unsupportedReason)
             : TryAppendShapedGlyphSegment(
                 shapedRun.Glyphs,
@@ -853,6 +870,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         ref int batchCount,
         ref int batchSegmentStart,
         ref GlyphAtlasPageHandle batchPage,
+        ref int acceptedColorLayerRuns,
+        ref int acceptedColorBitmapRuns,
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         unsupportedReason = GlyphAtlasFallbackReason.NonAscii | GlyphAtlasFallbackReason.ColorGlyph;
@@ -874,8 +893,12 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             ref batchCount,
             ref batchSegmentStart,
             ref batchPage,
+            out var colorLayerRuns,
+            out var colorBitmapRuns,
             out unsupportedReason))
         {
+            acceptedColorLayerRuns += colorLayerRuns;
+            acceptedColorBitmapRuns += colorBitmapRuns;
             return true;
         }
 
@@ -899,6 +922,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             ref batchPage,
             out unsupportedReason))
         {
+            acceptedColorBitmapRuns++;
             return true;
         }
 
@@ -922,6 +946,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             ref batchPage,
             out unsupportedReason))
         {
+            acceptedColorBitmapRuns++;
             return true;
         }
 
@@ -953,9 +978,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         ref int batchCount,
         ref int batchSegmentStart,
         ref GlyphAtlasPageHandle batchPage,
+        out int acceptedColorLayerRuns,
+        out int acceptedColorBitmapRuns,
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         unsupportedReason = GlyphAtlasFallbackReason.None;
+        acceptedColorLayerRuns = 0;
+        acceptedColorBitmapRuns = 0;
         if (_dwriteFactory4 == null || shapedSegment.FontFace.Face == null || shapedSegment.GlyphCount == 0)
         {
             return false;
@@ -1042,11 +1071,21 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                         ref batchCount,
                         ref batchSegmentStart,
                         ref batchPage,
+                        out var acceptedLayerRun,
+                        out var acceptedBitmapRun,
                         out unsupportedReason))
                     {
                         return false;
                     }
 
+                    if (acceptedLayerRun)
+                    {
+                        acceptedColorLayerRuns++;
+                    }
+                    if (acceptedBitmapRun)
+                    {
+                        acceptedColorBitmapRuns++;
+                    }
                     runCount++;
                 }
             }
@@ -1078,9 +1117,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         ref int batchCount,
         ref int batchSegmentStart,
         ref GlyphAtlasPageHandle batchPage,
+        out bool acceptedLayerRun,
+        out bool acceptedBitmapRun,
         out GlyphAtlasFallbackReason unsupportedReason)
     {
         unsupportedReason = GlyphAtlasFallbackReason.None;
+        acceptedLayerRun = false;
+        acceptedBitmapRun = false;
         if (colorGlyphRun == null)
         {
             return true;
@@ -1090,7 +1133,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         if ((imageFormat & SupportedLayerColorGlyphFormats) != 0)
         {
             var baseRun = &colorGlyphRun->Base;
-            return TryAppendColorGlyphLayer(
+            if (TryAppendColorGlyphLayer(
                 fontFace,
                 &baseRun->glyphRun,
                 baseRun->baselineOriginX,
@@ -1104,12 +1147,18 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 ref batchCount,
                 ref batchSegmentStart,
                 ref batchPage,
-                out unsupportedReason);
+                out unsupportedReason))
+            {
+                acceptedLayerRun = true;
+                return true;
+            }
+
+            return false;
         }
 
         if ((imageFormat & SupportedBitmapColorGlyphFormats) != 0)
         {
-            return TryAppendBitmapColorGlyphRun(
+            if (TryAppendBitmapColorGlyphRun(
                 fontFace,
                 &colorGlyphRun->Base,
                 imageFormat,
@@ -1122,7 +1171,13 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 ref batchCount,
                 ref batchSegmentStart,
                 ref batchPage,
-                out unsupportedReason);
+                out unsupportedReason))
+            {
+                acceptedBitmapRun = true;
+                return true;
+            }
+
+            return false;
         }
 
         unsupportedReason = GetColorGlyphRunImageFormatFallbackReason(imageFormat);
@@ -5406,13 +5461,17 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int BatchCount,
         int AtlasRunCount,
         int DegradedRunCount,
-        GlyphAtlasFallbackReasonCounts DegradationReasons)
+        GlyphAtlasFallbackReasonCounts DegradationReasons,
+        int ColorLayerRunCount,
+        int ColorBitmapRunCount)
     {
         public int VertexCount { get; } = VertexCount;
         public int BatchCount { get; } = BatchCount;
         public int AtlasRunCount { get; } = AtlasRunCount;
         public int DegradedRunCount { get; } = DegradedRunCount;
         public GlyphAtlasFallbackReasonCounts DegradationReasons { get; } = DegradationReasons;
+        public int ColorLayerRunCount { get; } = ColorLayerRunCount;
+        public int ColorBitmapRunCount { get; } = ColorBitmapRunCount;
     }
 
     private enum GlyphAtlasPageFormat : byte
@@ -6178,7 +6237,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         int DegradedRuns = 0,
         int UploadedGlyphs = 0,
         int ShapedProbeRuns = 0,
-        int ShapedProbeGlyphs = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
+        int ShapedProbeGlyphs = 0,
+        int ColorLayerRuns = 0,
+        int ColorBitmapRuns = 0) : IEquatable<GlyphAtlasTextRendererDiagnostics>
     {
         public int CachedGlyphs { get; } = CachedGlyphs;
         public long UploadedBytes { get; } = UploadedBytes;
@@ -6208,6 +6269,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int AtlasRuns { get; } = AtlasRuns;
         public int DegradedRuns { get; } = DegradedRuns;
         public int UploadedGlyphs { get; } = UploadedGlyphs;
+        public int ColorLayerRuns { get; } = ColorLayerRuns;
+        public int ColorBitmapRuns { get; } = ColorBitmapRuns;
         public GlyphAtlasFallbackReasonCounts Reasons { get; } = Reasons;
         public GlyphAtlasInitializationPhase InitializationFailurePhase { get; } = InitializationFailurePhase;
         public GlyphAtlasRecordFailurePhase RecordFailurePhase { get; } = RecordFailurePhase;
@@ -6244,7 +6307,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheHit() =>
             new(
@@ -6276,7 +6341,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithCacheMiss() =>
             new(
@@ -6308,7 +6375,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithDrawnGlyphs(int glyphs) =>
             new(
@@ -6340,7 +6409,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPages(int atlasPages) => WithAtlasPageCounts(atlasPages, AtlasAlphaPages, AtlasBgraPages);
 
@@ -6374,7 +6445,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasEviction() =>
             new(
@@ -6406,7 +6479,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPendingPageReuse(int pendingPageReuses) =>
             new(
@@ -6438,7 +6513,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPageReuseRequest() =>
             new(
@@ -6470,7 +6547,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasFullWithoutPageReuse() =>
             new(
@@ -6502,7 +6581,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasPageUsage(int usedPixels, int fragmentedPixels) =>
             new(
@@ -6534,7 +6615,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasTouchMetrics(long recordSerial, long oldestPageAge, long newestPageAge) =>
             new(
@@ -6566,7 +6649,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithAtlasRuns(int atlasRuns) =>
             new(
@@ -6598,7 +6683,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithUploadedBytes(long bytes) =>
             new(
@@ -6630,7 +6717,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithUploadedGlyph() =>
             new(
@@ -6662,7 +6751,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs + 1,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithShapedGlyphProbe(int glyphCount) =>
             new(
@@ -6694,7 +6785,43 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns + 1,
-                ShapedProbeGlyphs + glyphCount);
+                ShapedProbeGlyphs + glyphCount,
+                ColorLayerRuns,
+                ColorBitmapRuns);
+
+        public GlyphAtlasTextRendererDiagnostics WithColorGlyphRuns(int layerRuns, int bitmapRuns) =>
+            new(
+                CachedGlyphs,
+                UploadedBytes,
+                DrawnGlyphs,
+                CacheHits,
+                CacheMisses,
+                FallbackFrames,
+                UnsupportedRuns,
+                Reasons,
+                InitializationFailurePhase,
+                RecordFailurePhase,
+                RasterScratchBytes,
+                RasterScratchResizes,
+                AtlasPages,
+                AtlasAlphaPages,
+                AtlasBgraPages,
+                AtlasEvictions,
+                AtlasUsedPixels,
+                AtlasFragmentedPixels,
+                AtlasRecordSerial,
+                AtlasOldestPageAge,
+                AtlasNewestPageAge,
+                AtlasPendingPageReuses,
+                AtlasPageReuseRequests,
+                AtlasFullWithoutPageReuse,
+                AtlasRuns,
+                DegradedRuns,
+                UploadedGlyphs,
+                ShapedProbeRuns,
+                ShapedProbeGlyphs,
+                ColorLayerRuns + layerRuns,
+                ColorBitmapRuns + bitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRasterScratch(int bytes, int resizes) =>
             new(
@@ -6726,7 +6853,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithInitializationFailure(GlyphAtlasInitializationPhase phase) =>
             new(
@@ -6758,7 +6887,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithRecordFailure(GlyphAtlasRecordFailurePhase phase) =>
             new(
@@ -6790,7 +6921,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
 
         public GlyphAtlasTextRendererDiagnostics WithDegradation(int unsupportedRuns, GlyphAtlasFallbackReason reason)
         {
@@ -6838,14 +6971,16 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 DegradedRuns + unsupportedRuns,
                 UploadedGlyphs,
                 ShapedProbeRuns,
-                ShapedProbeGlyphs);
+                ShapedProbeGlyphs,
+                ColorLayerRuns,
+                ColorBitmapRuns);
         }
 
         public string FormatSummary()
         {
             return $"cachedGlyphs={CachedGlyphs}, atlasPages={AtlasPages}, atlasAlphaPages={AtlasAlphaPages}, atlasBgraPages={AtlasBgraPages}, atlasBudgetPages={AtlasBudgetPages}, atlasPage={AtlasPageWidth}x{AtlasPageHeight}, atlasCapacity={AtlasCapacityPixels} px, atlasEvictions={AtlasEvictions}, atlasPendingPageReuses={AtlasPendingPageReuses}, atlasPageReuseRequests={AtlasPageReuseRequests}, atlasFullWithoutPageReuse={AtlasFullWithoutPageReuse}, atlasUsed={AtlasUsedPixels} px, atlasFragmented={AtlasFragmentedPixels} px, "
                 + $"atlasRecordSerial={AtlasRecordSerial}, atlasOldestPageAge={AtlasOldestPageAge}, atlasNewestPageAge={AtlasNewestPageAge}, drawnGlyphs={DrawnGlyphs}, atlasRuns={AtlasRuns}, degradedRuns={DegradedRuns}, "
-                + $"uploads={UploadedBytes} bytes, uploadedGlyphs={UploadedGlyphs}, shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
+                + $"uploads={UploadedBytes} bytes, uploadedGlyphs={UploadedGlyphs}, shapedProbeRuns={ShapedProbeRuns}, shapedProbeGlyphs={ShapedProbeGlyphs}, colorLayerRuns={ColorLayerRuns}, colorBitmapRuns={ColorBitmapRuns}, hits={CacheHits}, misses={CacheMisses}, fallbacks={FallbackFrames}, unsupportedRuns={UnsupportedRuns}, reasons=[{Reasons}], "
                 + $"initFailurePhase={InitializationFailurePhase}, recordFailurePhase={RecordFailurePhase}, rasterScratch={RasterScratchBytes} bytes/{RasterScratchResizes} resizes";
         }
 
@@ -6875,6 +7010,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
                 && UploadedGlyphs == other.UploadedGlyphs
                 && ShapedProbeRuns == other.ShapedProbeRuns
                 && ShapedProbeGlyphs == other.ShapedProbeGlyphs
+                && ColorLayerRuns == other.ColorLayerRuns
+                && ColorBitmapRuns == other.ColorBitmapRuns
                 && Reasons.Equals(other.Reasons)
                 && InitializationFailurePhase == other.InitializationFailurePhase
                 && RecordFailurePhase == other.RecordFailurePhase
@@ -6911,6 +7048,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
             hash.Add(UploadedGlyphs);
             hash.Add(ShapedProbeRuns);
             hash.Add(ShapedProbeGlyphs);
+            hash.Add(ColorLayerRuns);
+            hash.Add(ColorBitmapRuns);
             hash.Add(Reasons);
             hash.Add(InitializationFailurePhase);
             hash.Add(RecordFailurePhase);
