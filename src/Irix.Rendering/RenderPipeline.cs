@@ -491,13 +491,13 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         TextBufferSnapshot? textSnapshot) =>
         new(
             layoutResult,
-            [.. elementCommandRanges],
-            [.. hitTargets],
+            elementCommandRanges,
+            hitTargets,
             retainedRoot,
             viewport,
-            [.. dirtyClassifications],
-            [.. dirtyElementRanges],
-            [.. dirtyCommandRanges],
+            dirtyClassifications,
+            dirtyElementRanges,
+            dirtyCommandRanges,
             LayoutRebuildReason: layoutRebuildReason,
             PreviousTextSnapshot: previousTextSnapshot,
             TextSnapshot: textSnapshot);
