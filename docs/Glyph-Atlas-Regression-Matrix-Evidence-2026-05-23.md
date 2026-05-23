@@ -29,8 +29,9 @@ CI quota note:
 Observed validation:
 
 ```text
-Smoke guard: Passed on 2026-05-23
-ProgramDiagnosticsTests: Passed, 109
+Smoke guard: Passed on 2026-05-24
+ProgramDiagnosticsTests: Passed, 113
+Local lane: not rerun for this closeout check because recent changes were allocation attribution/status and retained input snapshot allocation only, with no glyph/page/shaping changes.
 ```
 
 Latest local Smoke guard summary:
@@ -60,6 +61,7 @@ Glyph atlas: cachedGlyphs=106, atlasPages=1, atlasAlphaPages=1, atlasBgraPages=0
 Interpretation:
 
 - `--diagnose-glyph-atlas-matrix` is now the fixed broad glyph-atlas smoke. It covers the script/control matrix in one scene and keeps expected per-frame classification machine-readable.
+- Latest local closeout Smoke guard passed after allocation attribution and retained input snapshot allocation work; the guard summary stayed at matrix `degradedRuns=0`, `glyphAtlasInitialized=True`, `overlaySync=False`, and soak `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`.
 - `scripts/glyph-atlas-regression.ps1` is the canonical local smoke entry. `-Mode Smoke` uses a 60-frame soak and should be run before/after broad changes while Actions quota is unavailable; `-Mode Local` uses 300 frames after glyph/page/shaping changes; `-Mode Nightly` uses 900 frames only for manual long runs after page-policy, eviction, or shaping overhauls. All modes run matrix, soak, color-format natural coverage, BiDi oracle, and glyph oracle diagnostics into `TestResults`.
 - The fixed lane emits machine-readable `matrix.expected`, `matrix.actual`, `soak.actual`, `bidi-oracle.expected`, `bidi-oracle.actual`, `glyph-oracle.expected`, and `glyph-oracle.actual` lines, then writes a `glyph-atlas-regression-*-*.guard.summary.txt` file only after validating the contract.
 - The summary guard fails fast if matrix actual drifts from `degradedRuns=0`, `glyphAtlasInitialized=True`, or `overlaySync=False`; if soak reports device loss, overlay sync, sync waits, hard full-without-reuse, `RecordFailed`, or a non-`None` record failure phase; or if oracle expected/actual probe labels/counts drift.
