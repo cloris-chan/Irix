@@ -8,8 +8,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 {
     private readonly TranslatorViewportProvider _translatorViewportProvider;
     private readonly TranslatorFeedbackSink _feedbackSink;
-    private readonly RenderPipeline _renderPipeline;
-    private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
+    private readonly TranslatorCore _translatorCore;
     private DisplayScale _displayScale;
     private PixelRectangle _lastLayoutViewport;
     private long _layoutRebuildCount;
@@ -27,14 +26,9 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     {
         _translatorViewportProvider = new TranslatorViewportProvider(window, prepareFrame, viewportProvider);
         _feedbackSink = new TranslatorFeedbackSink(postFrameCallback);
-        _renderPipeline = (renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create();
-        _ownerFeed = ownerOptions.EnableSegmentedRetainedFrameRuntimeOwner
-            ? new SegmentedRetainedFrameProductionOwnerFeed(_renderPipeline, ownerOptions)
-            : null;
+        _translatorCore = new TranslatorCore((renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create(), ownerOptions);
         _displayScale = displayScale.Normalize();
     }
-
-    private readonly RetainedTree _retainedTree = new(default);
 
     /// <summary>MaxScrollY from the last layout pass. 0 if no scroll needed.</summary>
     public double LastMaxScrollY => _feedbackSink.LastMaxScrollY;
@@ -51,7 +45,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications => _lastDirtyClassifications;
 
-    internal RetainedRenderFrameSegmentOwnership? SegmentOwnership => _ownerFeed?.SegmentOwnership;
+    internal RetainedRenderFrameSegmentOwnership? SegmentOwnership => _translatorCore.SegmentOwnership;
 
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null, renderPipelineFactory: null)
@@ -80,30 +74,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     {
         var allocationMeter = new TranslatorAllocationMeter(measureAllocation);
         var beforeApply = allocationMeter.Capture();
-        IReadOnlyList<int>? dirty = null;
-        VirtualNode previousRoot = default;
-        TextBufferSnapshot? prevTextSnapshot = null;
-        if (patchBatch.Kind == PatchBatchKind.RenderRequest)
-        {
-            // Render request: reuse retained tree, no dirty nodes
-        }
-        else if (patchBatch.Count > 0)
-        {
-            // Diff batch: apply patches to retained tree, get dirty set
-            var result = _retainedTree.Apply(patchBatch);
-            dirty = result.Dirty;
-            if (dirty.Count > 0)
-            {
-                previousRoot = result.PreviousRoot;
-                prevTextSnapshot = result.PreviousTextSnapshot;
-            }
-        }
-        else
-        {
-            // Empty diff with new root (e.g. initial frame): apply to update retained tree
-            _retainedTree.Apply(patchBatch);
-        }
-
+        var retained = _translatorCore.Apply(in patchBatch);
         allocationMeter.RecordRetainedApply(beforeApply);
 
         var beforeViewport = allocationMeter.Capture();
@@ -112,13 +83,13 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 
         var beforePipeline = allocationMeter.Capture();
         var pipelineAttribution = default(RenderPipelineBuildAllocationAttribution);
-        var output = BuildOutput(in input, dirty, prevTextSnapshot, previousRoot, measureAllocation, out pipelineAttribution);
+        var output = _translatorCore.BuildOutput(in input, in retained, measureAllocation, out pipelineAttribution);
         allocationMeter.RecordPipelineBuild(beforePipeline);
         allocationMeter.RecordPipelineAttribution(pipelineAttribution);
         ApplyOutput(in output);
 
         var beforeFeedback = allocationMeter.Capture();
-        _feedbackSink.Deliver(_renderPipeline.LastLayoutResult, _renderPipeline.LastMaxScrollY);
+        _feedbackSink.Deliver(output.LayoutResult, output.MaxScrollY);
         allocationMeter.RecordFeedback(beforeFeedback);
         attribution = allocationMeter.Attribution;
 
@@ -129,39 +100,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     {
         var viewport = _translatorViewportProvider.Resolve(_displayScale);
         return new TranslatorInput(patchBatch, viewport.PhysicalViewport, viewport.LayoutViewport, viewport.DisplayScale);
-    }
-
-    private TranslatorOutput BuildOutput(
-        in TranslatorInput input,
-        IReadOnlyList<int>? dirtyNodes,
-        TextBufferSnapshot? previousTextSnapshot,
-        VirtualNode previousRoot,
-        bool measureAllocation,
-        out RenderPipelineBuildAllocationAttribution pipelineAttribution)
-    {
-        var textSnapshot = _retainedTree.Tree.TextSnapshot;
-        RenderFrameBatch batch;
-        pipelineAttribution = default;
-        if (_ownerFeed is not null)
-        {
-            batch = _ownerFeed.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, dirtyNodes, previousTextSnapshot, previousRoot);
-        }
-        else if (measureAllocation)
-        {
-            batch = _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, dirtyNodes, previousTextSnapshot, previousRoot, out pipelineAttribution);
-        }
-        else
-        {
-            batch = _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, dirtyNodes, previousTextSnapshot, previousRoot);
-        }
-
-        return new TranslatorOutput(
-            batch,
-            input.PhysicalViewport,
-            _renderPipeline.LastViewport,
-            _renderPipeline.LayoutRebuildCount,
-            _renderPipeline.LastLayoutRebuildReason,
-            _renderPipeline.LastDirtyClassifications);
     }
 
     private void ApplyOutput(in TranslatorOutput output)
@@ -181,6 +119,75 @@ internal sealed class TranslatorRenderPipelineFactory(Func<RenderPipeline> creat
     public static TranslatorRenderPipelineFactory FromStyle(RenderStylePreset stylePreset) => new(() => new RenderPipeline(stylePreset));
 
     public RenderPipeline Create() => create();
+}
+
+internal sealed class TranslatorCore
+{
+    private readonly RenderPipeline _renderPipeline;
+    private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
+    private readonly RetainedTree _retainedTree = new(default);
+
+    public TranslatorCore(RenderPipeline renderPipeline, RenderPipelineProductionOwnerOptions ownerOptions)
+    {
+        _renderPipeline = renderPipeline;
+        _ownerFeed = ownerOptions.EnableSegmentedRetainedFrameRuntimeOwner
+            ? new SegmentedRetainedFrameProductionOwnerFeed(_renderPipeline, ownerOptions)
+            : null;
+    }
+
+    public RetainedRenderFrameSegmentOwnership? SegmentOwnership => _ownerFeed?.SegmentOwnership;
+
+    public TranslatorRetainedState Apply(in PatchBatch patchBatch)
+    {
+        if (patchBatch.Kind == PatchBatchKind.RenderRequest)
+        {
+            return default;
+        }
+
+        if (patchBatch.Count > 0)
+        {
+            var result = _retainedTree.Apply(patchBatch);
+            return result.Dirty.Count == 0
+                ? new TranslatorRetainedState(result.Dirty)
+                : new TranslatorRetainedState(result.Dirty, result.PreviousRoot, result.PreviousTextSnapshot);
+        }
+
+        _retainedTree.Apply(patchBatch);
+        return default;
+    }
+
+    public TranslatorOutput BuildOutput(
+        in TranslatorInput input,
+        in TranslatorRetainedState retained,
+        bool measureAllocation,
+        out RenderPipelineBuildAllocationAttribution pipelineAttribution)
+    {
+        var textSnapshot = _retainedTree.Tree.TextSnapshot;
+        RenderFrameBatch batch;
+        pipelineAttribution = default;
+        if (_ownerFeed is not null)
+        {
+            batch = _ownerFeed.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot);
+        }
+        else if (measureAllocation)
+        {
+            batch = _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot, out pipelineAttribution);
+        }
+        else
+        {
+            batch = _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot);
+        }
+
+        return new TranslatorOutput(
+            batch,
+            input.PhysicalViewport,
+            _renderPipeline.LastViewport,
+            _renderPipeline.LayoutRebuildCount,
+            _renderPipeline.LastLayoutRebuildReason,
+            _renderPipeline.LastDirtyClassifications,
+            _renderPipeline.LastLayoutResult,
+            _renderPipeline.LastMaxScrollY);
+    }
 }
 
 internal sealed class TranslatorViewportProvider(INativeWindow window, Action? prepareFrame, Func<PixelRectangle>? viewportProvider)
@@ -249,6 +256,16 @@ internal sealed class TranslatorFeedbackSink(Action<double>? postFrameCallback)
     }
 }
 
+internal readonly struct TranslatorRetainedState(
+    IReadOnlyList<int>? DirtyNodes,
+    VirtualNode PreviousRoot = default,
+    TextBufferSnapshot? PreviousTextSnapshot = null)
+{
+    public IReadOnlyList<int>? DirtyNodes { get; } = DirtyNodes;
+    public VirtualNode PreviousRoot { get; } = PreviousRoot;
+    public TextBufferSnapshot? PreviousTextSnapshot { get; } = PreviousTextSnapshot;
+}
+
 internal readonly struct TranslatorInput(
     PatchBatch PatchBatch,
     PixelRectangle PhysicalViewport,
@@ -267,7 +284,9 @@ internal readonly struct TranslatorOutput(
     PixelRectangle LayoutViewport,
     long LayoutRebuildCount,
     LayoutRebuildReason LastLayoutRebuildReason,
-    IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications)
+    IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications,
+    LayoutTreeResult? LayoutResult,
+    double MaxScrollY)
 {
     public RenderFrameBatch Batch { get; } = Batch;
     public PixelRectangle PhysicalViewport { get; } = PhysicalViewport;
@@ -275,6 +294,8 @@ internal readonly struct TranslatorOutput(
     public long LayoutRebuildCount { get; } = LayoutRebuildCount;
     public LayoutRebuildReason LastLayoutRebuildReason { get; } = LastLayoutRebuildReason;
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; } = LastDirtyClassifications;
+    public LayoutTreeResult? LayoutResult { get; } = LayoutResult;
+    public double MaxScrollY { get; } = MaxScrollY;
 }
 
 internal struct TranslatorAllocationMeter(bool Enabled)
