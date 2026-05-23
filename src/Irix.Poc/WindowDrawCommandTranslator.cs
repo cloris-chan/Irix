@@ -6,9 +6,7 @@ namespace Irix.Poc;
 
 internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 {
-    private readonly INativeWindow _window;
-    private readonly Action? _prepareFrame;
-    private readonly Func<PixelRectangle>? _viewportProvider;
+    private readonly TranslatorViewportProvider _translatorViewportProvider;
     private readonly Action<double>? _postFrameCallback;
     private readonly RenderPipeline _renderPipeline;
     private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
@@ -27,9 +25,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         RenderPipelineProductionOwnerOptions ownerOptions = default,
         DisplayScale displayScale = default)
     {
-        _window = window;
-        _prepareFrame = prepareFrame;
-        _viewportProvider = viewportProvider;
+        _translatorViewportProvider = new TranslatorViewportProvider(window, prepareFrame, viewportProvider);
         _postFrameCallback = postFrameCallback;
         _renderPipeline = (renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create();
         _ownerFeed = ownerOptions.EnableSegmentedRetainedFrameRuntimeOwner
@@ -131,9 +127,8 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 
     private TranslatorInput CreateInput(in PatchBatch patchBatch)
     {
-        _prepareFrame?.Invoke();
-        var physicalViewport = _viewportProvider?.Invoke() ?? _window.Region.PhysicalBounds;
-        return new TranslatorInput(patchBatch, physicalViewport, ResolveLogicalViewport(physicalViewport, _displayScale), _displayScale);
+        var viewport = _translatorViewportProvider.Resolve(_displayScale);
+        return new TranslatorInput(patchBatch, viewport.PhysicalViewport, viewport.LayoutViewport, viewport.DisplayScale);
     }
 
     private TranslatorOutput BuildOutput(
@@ -178,17 +173,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         _lastDirtyClassifications = output.LastDirtyClassifications;
     }
 
-    private static PixelRectangle ResolveLogicalViewport(PixelRectangle physicalViewport, DisplayScale displayScale)
-    {
-        return displayScale.IsIdentity
-            ? physicalViewport
-            : new PixelRectangle(
-                physicalViewport.X,
-                physicalViewport.Y,
-                (int)(physicalViewport.Width / displayScale.ScaleX),
-                (int)(physicalViewport.Height / displayScale.ScaleY));
-    }
-
     private static long GetAllocatedBytes(bool enabled) => enabled ? GC.GetTotalAllocatedBytes(false) : 0;
 
     private static long AllocatedDelta(bool enabled, long before) => enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
@@ -222,6 +206,37 @@ internal sealed class TranslatorRenderPipelineFactory(Func<RenderPipeline> creat
     public static TranslatorRenderPipelineFactory FromStyle(RenderStylePreset stylePreset) => new(() => new RenderPipeline(stylePreset));
 
     public RenderPipeline Create() => create();
+}
+
+internal sealed class TranslatorViewportProvider(INativeWindow window, Action? prepareFrame, Func<PixelRectangle>? viewportProvider)
+{
+    public TranslatorViewport Resolve(DisplayScale displayScale)
+    {
+        prepareFrame?.Invoke();
+        var physicalViewport = viewportProvider?.Invoke() ?? window.Region.PhysicalBounds;
+        return new TranslatorViewport(physicalViewport, ResolveLogicalViewport(physicalViewport, displayScale), displayScale);
+    }
+
+    private static PixelRectangle ResolveLogicalViewport(PixelRectangle physicalViewport, DisplayScale displayScale)
+    {
+        return displayScale.IsIdentity
+            ? physicalViewport
+            : new PixelRectangle(
+                physicalViewport.X,
+                physicalViewport.Y,
+                (int)(physicalViewport.Width / displayScale.ScaleX),
+                (int)(physicalViewport.Height / displayScale.ScaleY));
+    }
+}
+
+internal readonly struct TranslatorViewport(
+    PixelRectangle PhysicalViewport,
+    PixelRectangle LayoutViewport,
+    DisplayScale DisplayScale)
+{
+    public PixelRectangle PhysicalViewport { get; } = PhysicalViewport;
+    public PixelRectangle LayoutViewport { get; } = LayoutViewport;
+    public DisplayScale DisplayScale { get; } = DisplayScale;
 }
 
 internal readonly struct TranslatorInput(
