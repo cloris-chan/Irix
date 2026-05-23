@@ -78,8 +78,8 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         bool measureAllocation,
         out WindowTranslateAllocationAttribution attribution)
     {
-        attribution = default;
-        var beforeApply = GetAllocatedBytes(measureAllocation);
+        var allocationMeter = new TranslatorAllocationMeter(measureAllocation);
+        var beforeApply = allocationMeter.Capture();
         IReadOnlyList<int>? dirty = null;
         VirtualNode previousRoot = default;
         TextBufferSnapshot? prevTextSnapshot = null;
@@ -104,22 +104,23 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
             _retainedTree.Apply(patchBatch);
         }
 
-        attribution = attribution.WithRetainedApply(AllocatedDelta(measureAllocation, beforeApply));
+        allocationMeter.RecordRetainedApply(beforeApply);
 
-        var beforeViewport = GetAllocatedBytes(measureAllocation);
+        var beforeViewport = allocationMeter.Capture();
         var input = CreateInput(in patchBatch);
-        attribution = attribution.WithViewport(AllocatedDelta(measureAllocation, beforeViewport));
+        allocationMeter.RecordViewport(beforeViewport);
 
-        var beforePipeline = GetAllocatedBytes(measureAllocation);
+        var beforePipeline = allocationMeter.Capture();
         var pipelineAttribution = default(RenderPipelineBuildAllocationAttribution);
         var output = BuildOutput(in input, dirty, prevTextSnapshot, previousRoot, measureAllocation, out pipelineAttribution);
-        attribution = attribution.WithPipelineBuild(AllocatedDelta(measureAllocation, beforePipeline));
-        attribution = attribution.WithPipelineAttribution(pipelineAttribution);
+        allocationMeter.RecordPipelineBuild(beforePipeline);
+        allocationMeter.RecordPipelineAttribution(pipelineAttribution);
         ApplyOutput(in output);
 
-        var beforeFeedback = GetAllocatedBytes(measureAllocation);
+        var beforeFeedback = allocationMeter.Capture();
         _feedbackSink.Deliver(_renderPipeline.LastLayoutResult, _renderPipeline.LastMaxScrollY);
-        attribution = attribution.WithFeedback(AllocatedDelta(measureAllocation, beforeFeedback));
+        allocationMeter.RecordFeedback(beforeFeedback);
+        attribution = allocationMeter.Attribution;
 
         return output.Batch;
     }
@@ -171,10 +172,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         _lastLayoutRebuildReason = output.LastLayoutRebuildReason;
         _lastDirtyClassifications = output.LastDirtyClassifications;
     }
-
-    private static long GetAllocatedBytes(bool enabled) => enabled ? GC.GetTotalAllocatedBytes(false) : 0;
-
-    private static long AllocatedDelta(bool enabled, long before) => enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
 }
 
 internal sealed class TranslatorRenderPipelineFactory(Func<RenderPipeline> create)
@@ -278,6 +275,25 @@ internal readonly struct TranslatorOutput(
     public long LayoutRebuildCount { get; } = LayoutRebuildCount;
     public LayoutRebuildReason LastLayoutRebuildReason { get; } = LastLayoutRebuildReason;
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; } = LastDirtyClassifications;
+}
+
+internal struct TranslatorAllocationMeter(bool Enabled)
+{
+    public WindowTranslateAllocationAttribution Attribution { get; private set; }
+
+    public long Capture() => Enabled ? GC.GetTotalAllocatedBytes(false) : 0;
+
+    public void RecordRetainedApply(long before) => Attribution = Attribution.WithRetainedApply(Delta(before));
+
+    public void RecordViewport(long before) => Attribution = Attribution.WithViewport(Delta(before));
+
+    public void RecordPipelineBuild(long before) => Attribution = Attribution.WithPipelineBuild(Delta(before));
+
+    public void RecordPipelineAttribution(RenderPipelineBuildAllocationAttribution attribution) => Attribution = Attribution.WithPipelineAttribution(attribution);
+
+    public void RecordFeedback(long before) => Attribution = Attribution.WithFeedback(Delta(before));
+
+    private long Delta(long before) => Enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
 }
 
 internal readonly struct WindowTranslateAllocationAttribution(
