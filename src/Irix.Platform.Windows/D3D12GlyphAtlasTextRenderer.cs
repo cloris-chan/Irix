@@ -25,9 +25,9 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int AtlasWidth = 1024;
     private const int AtlasHeight = 1024;
     private const int AtlasPadding = 1;
-    private const int MaxAtlasPages = 48;
+    internal const int AtlasPageBudget = 48;
     private const int AtlasPagePixels = AtlasWidth * AtlasHeight;
-    private const int AtlasBudgetPixels = MaxAtlasPages * AtlasPagePixels;
+    private const int AtlasBudgetPixels = AtlasPageBudget * AtlasPagePixels;
     private const int MaxGlyphQuads = 4096;
     private const int MaxGlyphVertices = MaxGlyphQuads * 6;
     private const int MaxGlyphDrawBatches = 1024;
@@ -112,8 +112,8 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
     private readonly List<int> _freeGlyphEntryIndices = new(128);
     private readonly List<int> _runGlyphEntryIndices = new(128);
     private readonly List<GlyphEntryMutationState> _runGlyphEntryStates = new(128);
-    private readonly List<GlyphAtlasPage> _atlasPages = new(MaxAtlasPages);
-    private readonly GlyphAtlasPageMutationState[] _runPageStates = new GlyphAtlasPageMutationState[MaxAtlasPages];
+    private readonly List<GlyphAtlasPage> _atlasPages = new(AtlasPageBudget);
+    private readonly GlyphAtlasPageMutationState[] _runPageStates = new GlyphAtlasPageMutationState[AtlasPageBudget];
     private GlyphAtlasPageHandle _activeAtlasPage;
     private GlyphAtlasPageHandle _runActiveAtlasPage;
     private GlyphAtlasPageReuseRequest _pendingAlphaAtlasPageReuse;
@@ -2412,7 +2412,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private GlyphAtlasPageHandle AddAtlasPage(GlyphAtlasPageFormat format, ID3D12Resource* texture, ID3D12Resource*[] uploads, ID3D12DescriptorHeap* srvHeap, D3D12_RESOURCE_STATES textureState)
     {
-        if (_atlasPages.Count >= MaxAtlasPages)
+        if (_atlasPages.Count >= AtlasPageBudget)
         {
             throw new InvalidOperationException("Glyph atlas page pool exceeded its fixed capacity.");
         }
@@ -5042,7 +5042,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
 
     private GlyphAtlasPage? TryCreateAdditionalAtlasPage(GlyphAtlasPageFormat format)
     {
-        if (_atlasPages.Count >= MaxAtlasPages)
+        if (_atlasPages.Count >= AtlasPageBudget)
         {
             return null;
         }
@@ -6317,7 +6317,7 @@ internal sealed unsafe class D3D12GlyphAtlasTextRenderer : IDisposable
         public int AtlasPages { get; } = AtlasPages;
         public int AtlasAlphaPages { get; } = AtlasAlphaPages;
         public int AtlasBgraPages { get; } = AtlasBgraPages;
-        public int AtlasBudgetPages => MaxAtlasPages;
+        public int AtlasBudgetPages => AtlasPageBudget;
         public int AtlasPageWidth => AtlasWidth;
         public int AtlasPageHeight => AtlasHeight;
         public int AtlasCapacityPixels => AtlasBudgetPixels;

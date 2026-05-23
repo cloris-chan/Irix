@@ -122,7 +122,7 @@ internal static class GlyphAtlasSoakDiagnosticRunner
 
     internal static string FormatPagePolicy(GlyphAtlasSoakSummary summary)
     {
-        var budget = summary.AtlasBudgetPages == 0 ? 48 : summary.AtlasBudgetPages;
+        var budget = summary.AtlasBudgetPages == 0 ? D3D12GlyphAtlasTextRenderer.AtlasPageBudget : summary.AtlasBudgetPages;
         return $"Page policy: budgetPages={budget}, pageReuse=FormatScopedColdPage, retainedFloorGate=True, currentRecordColdReuse=True, sameRecordTouchedReuse=False, entryLru=False, subRectFreeList=False";
     }
 
@@ -131,7 +131,9 @@ internal static class GlyphAtlasSoakDiagnosticRunner
         return $"Soak summary: frames={summary.Frames}, pressureFrames={summary.PressureFrames}, matrixFrames={summary.MatrixFrames}, wrapFrames={summary.WrapFrames}, reuseFrames={summary.ReuseFrames}, "
             + $"maxAtlasPages={summary.MaxAtlasPages}, maxAlphaPages={summary.MaxAlphaPages}, maxBgraPages={summary.MaxBgraPages}, maxAtlasCpuBytes={summary.MaxAtlasCpuBytes} bytes, maxAtlasGpuBytes={summary.MaxAtlasGpuBytes} bytes, "
             + $"maxAtlasUsed={summary.MaxAtlasUsedPixels} px, maxAtlasFragmented={summary.MaxAtlasFragmentedPixels} px, atlasEvictions={summary.AtlasEvictions}, atlasAlphaEvictions={summary.AtlasAlphaEvictions}, atlasBgraEvictions={summary.AtlasBgraEvictions}, "
-            + $"atlasPageReuseRequests={summary.AtlasPageReuseRequests}, atlasAlphaPageReuseRequests={summary.AtlasAlphaPageReuseRequests}, atlasBgraPageReuseRequests={summary.AtlasBgraPageReuseRequests}, atlasFullWithoutPageReuse={summary.AtlasFullWithoutPageReuse}, maxDegradedRuns={summary.MaxDegradedRuns}";
+            + $"atlasPendingPageReuses={summary.AtlasPendingPageReuses}, atlasPendingAlphaPageReuses={summary.AtlasPendingAlphaPageReuses}, atlasPendingBgraPageReuses={summary.AtlasPendingBgraPageReuses}, "
+            + $"atlasPageReuseRequests={summary.AtlasPageReuseRequests}, atlasAlphaPageReuseRequests={summary.AtlasAlphaPageReuseRequests}, atlasBgraPageReuseRequests={summary.AtlasBgraPageReuseRequests}, "
+            + $"atlasFullWithoutPageReuse={summary.AtlasFullWithoutPageReuse}, atlasAlphaFullWithoutPageReuse={summary.AtlasAlphaFullWithoutPageReuse}, atlasBgraFullWithoutPageReuse={summary.AtlasBgraFullWithoutPageReuse}, maxDegradedRuns={summary.MaxDegradedRuns}";
     }
 
     private static DrawCommand TextRun(
@@ -201,10 +203,15 @@ internal readonly struct GlyphAtlasSoakSummary(
     int AtlasEvictions,
     int AtlasAlphaEvictions,
     int AtlasBgraEvictions,
+    int AtlasPendingPageReuses,
+    int AtlasPendingAlphaPageReuses,
+    int AtlasPendingBgraPageReuses,
     int AtlasPageReuseRequests,
     int AtlasAlphaPageReuseRequests,
     int AtlasBgraPageReuseRequests,
     int AtlasFullWithoutPageReuse,
+    int AtlasAlphaFullWithoutPageReuse,
+    int AtlasBgraFullWithoutPageReuse,
     int MaxDegradedRuns) : IEquatable<GlyphAtlasSoakSummary>
 {
     public int Frames { get; } = Frames;
@@ -223,10 +230,15 @@ internal readonly struct GlyphAtlasSoakSummary(
     public int AtlasEvictions { get; } = AtlasEvictions;
     public int AtlasAlphaEvictions { get; } = AtlasAlphaEvictions;
     public int AtlasBgraEvictions { get; } = AtlasBgraEvictions;
+    public int AtlasPendingPageReuses { get; } = AtlasPendingPageReuses;
+    public int AtlasPendingAlphaPageReuses { get; } = AtlasPendingAlphaPageReuses;
+    public int AtlasPendingBgraPageReuses { get; } = AtlasPendingBgraPageReuses;
     public int AtlasPageReuseRequests { get; } = AtlasPageReuseRequests;
     public int AtlasAlphaPageReuseRequests { get; } = AtlasAlphaPageReuseRequests;
     public int AtlasBgraPageReuseRequests { get; } = AtlasBgraPageReuseRequests;
     public int AtlasFullWithoutPageReuse { get; } = AtlasFullWithoutPageReuse;
+    public int AtlasAlphaFullWithoutPageReuse { get; } = AtlasAlphaFullWithoutPageReuse;
+    public int AtlasBgraFullWithoutPageReuse { get; } = AtlasBgraFullWithoutPageReuse;
     public int MaxDegradedRuns { get; } = MaxDegradedRuns;
 
     public static GlyphAtlasSoakSummary Empty => default;
@@ -258,10 +270,15 @@ internal readonly struct GlyphAtlasSoakSummary(
                 AtlasEvictions,
                 AtlasAlphaEvictions,
                 AtlasBgraEvictions,
+                AtlasPendingPageReuses,
+                AtlasPendingAlphaPageReuses,
+                AtlasPendingBgraPageReuses,
                 AtlasPageReuseRequests,
                 AtlasAlphaPageReuseRequests,
                 AtlasBgraPageReuseRequests,
                 AtlasFullWithoutPageReuse,
+                AtlasAlphaFullWithoutPageReuse,
+                AtlasBgraFullWithoutPageReuse,
                 MaxDegradedRuns);
         }
 
@@ -283,10 +300,15 @@ internal readonly struct GlyphAtlasSoakSummary(
             value.AtlasEvictions,
             value.AtlasAlphaEvictions,
             value.AtlasBgraEvictions,
+            value.AtlasPendingPageReuses,
+            value.AtlasPendingAlphaPageReuses,
+            value.AtlasPendingBgraPageReuses,
             value.AtlasPageReuseRequests,
             value.AtlasAlphaPageReuseRequests,
             value.AtlasBgraPageReuseRequests,
             value.AtlasFullWithoutPageReuse,
+            value.AtlasAlphaFullWithoutPageReuse,
+            value.AtlasBgraFullWithoutPageReuse,
             Math.Max(MaxDegradedRuns, value.DegradedRuns));
     }
 
@@ -308,10 +330,15 @@ internal readonly struct GlyphAtlasSoakSummary(
             && AtlasEvictions == other.AtlasEvictions
             && AtlasAlphaEvictions == other.AtlasAlphaEvictions
             && AtlasBgraEvictions == other.AtlasBgraEvictions
+            && AtlasPendingPageReuses == other.AtlasPendingPageReuses
+            && AtlasPendingAlphaPageReuses == other.AtlasPendingAlphaPageReuses
+            && AtlasPendingBgraPageReuses == other.AtlasPendingBgraPageReuses
             && AtlasPageReuseRequests == other.AtlasPageReuseRequests
             && AtlasAlphaPageReuseRequests == other.AtlasAlphaPageReuseRequests
             && AtlasBgraPageReuseRequests == other.AtlasBgraPageReuseRequests
             && AtlasFullWithoutPageReuse == other.AtlasFullWithoutPageReuse
+            && AtlasAlphaFullWithoutPageReuse == other.AtlasAlphaFullWithoutPageReuse
+            && AtlasBgraFullWithoutPageReuse == other.AtlasBgraFullWithoutPageReuse
             && MaxDegradedRuns == other.MaxDegradedRuns;
     }
 
@@ -336,10 +363,15 @@ internal readonly struct GlyphAtlasSoakSummary(
         hash.Add(AtlasEvictions);
         hash.Add(AtlasAlphaEvictions);
         hash.Add(AtlasBgraEvictions);
+        hash.Add(AtlasPendingPageReuses);
+        hash.Add(AtlasPendingAlphaPageReuses);
+        hash.Add(AtlasPendingBgraPageReuses);
         hash.Add(AtlasPageReuseRequests);
         hash.Add(AtlasAlphaPageReuseRequests);
         hash.Add(AtlasBgraPageReuseRequests);
         hash.Add(AtlasFullWithoutPageReuse);
+        hash.Add(AtlasAlphaFullWithoutPageReuse);
+        hash.Add(AtlasBgraFullWithoutPageReuse);
         hash.Add(MaxDegradedRuns);
         return hash.ToHashCode();
     }

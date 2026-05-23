@@ -718,17 +718,18 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs", glyphSource);
         Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
-        Assert.Contains("private const int MaxAtlasPages = 48;", glyphSource);
+        Assert.Contains("internal const int AtlasPageBudget = 48;", glyphSource);
         Assert.Contains("private const int AtlasPagePixels = AtlasWidth * AtlasHeight;", glyphSource);
-        Assert.Contains("private const int AtlasBudgetPixels = MaxAtlasPages * AtlasPagePixels;", glyphSource);
+        Assert.Contains("private const int AtlasBudgetPixels = AtlasPageBudget * AtlasPagePixels;", glyphSource);
+        Assert.Contains("public int AtlasBudgetPages => AtlasPageBudget;", glyphSource);
         Assert.Contains("public int AtlasAlphaPages { get; } = AtlasAlphaPages;", glyphSource);
         Assert.Contains("public int AtlasBgraPages { get; } = AtlasBgraPages;", glyphSource);
         Assert.Contains("WithAtlasPageCounts(_atlasPages.Count, pageUsage.AlphaPageCount, pageUsage.BgraPageCount)", glyphSource);
         Assert.Contains("private readonly List<int> _freeGlyphEntryIndices", glyphSource);
         Assert.Contains("private readonly List<int> _runGlyphEntryIndices = new(128);", glyphSource);
         Assert.Contains("private readonly List<GlyphEntryMutationState> _runGlyphEntryStates = new(128);", glyphSource);
-        Assert.Contains("private readonly List<GlyphAtlasPage> _atlasPages = new(MaxAtlasPages);", glyphSource);
-        Assert.Contains("private readonly GlyphAtlasPageMutationState[] _runPageStates = new GlyphAtlasPageMutationState[MaxAtlasPages];", glyphSource);
+        Assert.Contains("private readonly List<GlyphAtlasPage> _atlasPages = new(AtlasPageBudget);", glyphSource);
+        Assert.Contains("private readonly GlyphAtlasPageMutationState[] _runPageStates = new GlyphAtlasPageMutationState[AtlasPageBudget];", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle _activeAtlasPage;", glyphSource);
         Assert.Contains("private GlyphAtlasPageHandle _runActiveAtlasPage;", glyphSource);
         Assert.Contains("private GlyphAtlasPageReuseRequest _pendingAlphaAtlasPageReuse;", glyphSource);
@@ -1096,7 +1097,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains(".WithAtlasPendingPageReuse(pendingAlphaReuses, pendingBgraReuses)", glyphSource);
         Assert.Contains("RasterScratchBytes: _clearTypeScratch.Length + _grayscaleScratch.Length + GetShapeScratchByteCount()", glyphSource);
         Assert.Contains("_shapeScratchResizeCount = 0;", glyphSource);
-        Assert.Contains("public int AtlasBudgetPages => MaxAtlasPages;", glyphSource);
+        Assert.Contains("public int AtlasBudgetPages => AtlasPageBudget;", glyphSource);
         Assert.Contains("public int AtlasPageWidth => AtlasWidth;", glyphSource);
         Assert.Contains("public int AtlasPageHeight => AtlasHeight;", glyphSource);
         Assert.Contains("public int AtlasCapacityPixels => AtlasBudgetPixels;", glyphSource);
@@ -1992,9 +1993,15 @@ public sealed class ProgramDiagnosticsTests
             AtlasEvictions: 1,
             AtlasAlphaEvictions: 1,
             AtlasBgraEvictions: 0,
+            AtlasPendingPageReuses: 1,
+            AtlasPendingAlphaPageReuses: 1,
+            AtlasPendingBgraPageReuses: 0,
             AtlasPageReuseRequests: 1,
             AtlasAlphaPageReuseRequests: 1,
             AtlasBgraPageReuseRequests: 0,
+            AtlasFullWithoutPageReuse: 2,
+            AtlasAlphaFullWithoutPageReuse: 1,
+            AtlasBgraFullWithoutPageReuse: 1,
             AtlasUsedPixels: 180,
             AtlasFragmentedPixels: 50,
             AtlasAlphaUsedPixels: 140,
@@ -2022,7 +2029,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(180, summary.MaxAtlasUsedPixels);
         Assert.Equal(50, summary.MaxAtlasFragmentedPixels);
         Assert.Equal(1, summary.AtlasEvictions);
+        Assert.Equal(1, summary.AtlasPendingPageReuses);
+        Assert.Equal(1, summary.AtlasPendingAlphaPageReuses);
+        Assert.Equal(0, summary.AtlasPendingBgraPageReuses);
         Assert.Equal(1, summary.AtlasAlphaPageReuseRequests);
+        Assert.Equal(2, summary.AtlasFullWithoutPageReuse);
+        Assert.Equal(1, summary.AtlasAlphaFullWithoutPageReuse);
+        Assert.Equal(1, summary.AtlasBgraFullWithoutPageReuse);
         Assert.Equal(2, summary.MaxDegradedRuns);
         Assert.Contains("pageReuse=FormatScopedColdPage", policy);
         Assert.Contains("currentRecordColdReuse=True", policy);
@@ -2030,7 +2043,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("entryLru=False", policy);
         Assert.Contains("subRectFreeList=False", policy);
         Assert.Contains("maxAtlasPages=3", formatted);
+        Assert.Contains("atlasPendingPageReuses=1", formatted);
+        Assert.Contains("atlasPendingAlphaPageReuses=1", formatted);
+        Assert.Contains("atlasPendingBgraPageReuses=0", formatted);
         Assert.Contains("atlasPageReuseRequests=1", formatted);
+        Assert.Contains("atlasFullWithoutPageReuse=2", formatted);
+        Assert.Contains("atlasAlphaFullWithoutPageReuse=1", formatted);
+        Assert.Contains("atlasBgraFullWithoutPageReuse=1", formatted);
         Assert.Contains("maxDegradedRuns=2", formatted);
     }
 
@@ -2039,10 +2058,14 @@ public sealed class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasSoakDiagnosticRunner.cs")));
 
         Assert.Contains("--diagnose-glyph-atlas-soak", source);
         Assert.Contains("--pressure-every", source);
         Assert.Contains("GlyphAtlasSoakDiagnosticRunner.Run", source);
+        Assert.Contains("D3D12GlyphAtlasTextRenderer.AtlasPageBudget", runnerSource);
+        Assert.Contains("atlasPendingAlphaPageReuses={summary.AtlasPendingAlphaPageReuses}", runnerSource);
+        Assert.Contains("atlasBgraFullWithoutPageReuse={summary.AtlasBgraFullWithoutPageReuse}", runnerSource);
     }
 
     [Fact]
