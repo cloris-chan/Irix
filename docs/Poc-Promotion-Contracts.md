@@ -36,14 +36,12 @@ It consumes:
 - Optional post-frame callback for legacy `MaxScrollY` feedback.
 - `DisplayScale` for logical/physical coordinate conversion.
 - `PatchBatch` from the app/runtime.
-- `TranslatorRenderPipelineFactory` for the concrete `RenderPipeline`.
+- `TranslatorRenderPipelineFactory` for PoC-level `RenderPipeline` construction.
 - `RenderPipelineProductionOwnerOptions` for segmented retained-frame ownership diagnostics.
 
 It owns:
 
-- A `RetainedTree`.
-- A `RenderPipeline`.
-- Optional `SegmentedRetainedFrameProductionOwnerFeed`.
+- A `TranslatorCore` that owns the `RetainedTree`, `RenderPipeline`, and optional `SegmentedRetainedFrameProductionOwnerFeed`.
 - Last viewport/layout/dirty diagnostics.
 - Scroll feedback projection from `LayoutTreeResult.ScrollDiagnostics`.
 - Allocation attribution around retained apply, viewport, pipeline build, and feedback stages.
@@ -66,9 +64,9 @@ Required split before move:
 | `INativeWindow` viewport fallback / prepare-frame callback | Stay in app/platform adapter | It couples translation cadence to window/backend timing. |
 | Scroll feedback projection | Candidate shared runtime contract after scroll ownership is written | It is app-visible control feedback, not pure render output. |
 | Allocation attribution wrapper | Diagnostics layer | It should not be mandatory for the core translator API. |
-| `TranslatorRenderPipelineFactory` defaulting to `CounterStylePreset.Default` | Stay in Poc or replace with explicit style input | Current default is app-specific. |
+| `TranslatorRenderPipelineFactory.CounterDefault` | Stay in Poc composition root | Counter default style is app-specific and must not become reusable translator core state. |
 
-Mechanical move readiness: no. First extract an explicit translator input struct and output struct, remove `CounterStylePreset` default coupling, and keep scroll feedback out of the core rendering translator.
+Mechanical move readiness: partial. The explicit translator input/output, viewport provider, feedback sink, allocation meter, and in-place `TranslatorCore` now exist. The remaining blocker is separating Poc app/control feedback and diagnostics contracts before moving any core into `Irix.Rendering`.
 
 ### Translator Split Concepts
 

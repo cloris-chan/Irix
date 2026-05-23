@@ -26,7 +26,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     {
         _translatorViewportProvider = new TranslatorViewportProvider(window, prepareFrame, viewportProvider);
         _feedbackSink = new TranslatorFeedbackSink(postFrameCallback);
-        _translatorCore = new TranslatorCore((renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create(), ownerOptions);
+        _translatorCore = new TranslatorCore((renderPipelineFactory ?? TranslatorRenderPipelineFactory.CounterDefault).Create(), ownerOptions);
         _displayScale = displayScale.Normalize();
     }
 
@@ -114,7 +114,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 
 internal sealed class TranslatorRenderPipelineFactory(Func<RenderPipeline> create)
 {
-    public static TranslatorRenderPipelineFactory Default { get; } = FromStyle(CounterStylePreset.Default);
+    public static TranslatorRenderPipelineFactory CounterDefault { get; } = FromStyle(CounterStylePreset.Default);
 
     public static TranslatorRenderPipelineFactory FromStyle(RenderStylePreset stylePreset) => new(() => new RenderPipeline(stylePreset));
 
