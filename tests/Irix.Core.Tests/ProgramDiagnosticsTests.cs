@@ -761,6 +761,46 @@ public sealed class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var platformWindows = Path.Combine(root, "src", "Irix.Platform.Windows");
+        var glyphSource = ReadGlyphAtlasRendererSources(root);
+        var renderer2DSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(platformWindows, "D3D12Renderer2D.cs")));
+
+        foreach (var token in new[]
+        {
+            "public D3D12GlyphAtlasTextRenderer(",
+            "public bool IsDisabled",
+            "public DeviceErrorDiagnostic DeviceError",
+            "public GlyphAtlasTextRendererDiagnostics GetDiagnostics",
+            "public void ResetDiagnostics",
+            "public GlyphAtlasRecordResult TryRecord",
+            "public readonly struct GlyphAtlasRecordResult",
+            "public enum GlyphAtlasInitializationPhase",
+            "public enum GlyphAtlasRecordFailurePhase",
+            "public sealed class GlyphAtlasInitializationException",
+            "public enum GlyphAtlasFallbackReason",
+            "public readonly struct GlyphAtlasFallbackReasonCounts",
+            "public readonly struct GlyphAtlasTextRendererDiagnostics"
+        })
+        {
+            Assert.DoesNotContain(token, glyphSource);
+        }
+
+        Assert.Contains("internal D3D12GlyphAtlasTextRenderer(", glyphSource);
+        Assert.Contains("internal bool IsDisabled", glyphSource);
+        Assert.Contains("internal DeviceErrorDiagnostic DeviceError", glyphSource);
+        Assert.Contains("internal GlyphAtlasTextRendererDiagnostics GetDiagnostics", glyphSource);
+        Assert.Contains("internal void ResetDiagnostics", glyphSource);
+        Assert.Contains("internal GlyphAtlasRecordResult TryRecord", glyphSource);
+        Assert.Contains("internal readonly struct GlyphAtlasRecordResult", glyphSource);
+        Assert.Contains("internal enum GlyphAtlasInitializationPhase", glyphSource);
+        Assert.Contains("internal enum GlyphAtlasRecordFailurePhase", glyphSource);
+        Assert.Contains("internal sealed class GlyphAtlasInitializationException", glyphSource);
+        Assert.Contains("internal enum GlyphAtlasFallbackReason", glyphSource);
+        Assert.Contains("internal readonly struct GlyphAtlasFallbackReasonCounts", glyphSource);
+        Assert.Contains("internal readonly struct GlyphAtlasTextRendererDiagnostics", glyphSource);
+        Assert.DoesNotContain("public struct Vertex", renderer2DSource);
+        Assert.DoesNotContain("public readonly struct RectData", renderer2DSource);
+        Assert.Contains("private struct Vertex", renderer2DSource);
+        Assert.Contains("internal readonly struct RectData", renderer2DSource);
 
         AssertSourceTokensOnlyIn(
             platformWindows,

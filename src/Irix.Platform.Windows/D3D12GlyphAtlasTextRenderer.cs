@@ -1,15 +1,10 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Irix.Drawing;
 using Irix.Platform;
 using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.DirectWrite;
-using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Irix.Platform.Windows;
 
@@ -103,7 +98,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
     private GlyphAtlasTextRendererDiagnostics _diagnostics;
     private GlyphAtlasTextRendererDiagnostics _runDiagnostics;
 
-    public D3D12GlyphAtlasTextRenderer(ID3D12Device* device)
+    internal D3D12GlyphAtlasTextRenderer(ID3D12Device* device)
     {
         _device = device;
 
@@ -154,10 +149,10 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
         }
     }
 
-    public bool IsDisabled => _disabled;
-    public DeviceErrorDiagnostic DeviceError => _deviceError;
+    internal bool IsDisabled => _disabled;
+    internal DeviceErrorDiagnostic DeviceError => _deviceError;
 
-    public GlyphAtlasTextRendererDiagnostics GetDiagnostics()
+    internal GlyphAtlasTextRendererDiagnostics GetDiagnostics()
     {
         var pageUsage = GetAtlasPageUsage();
         CountPendingAtlasPageReuseRequests(out var pendingAlphaReuses, out var pendingBgraReuses);
@@ -172,7 +167,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
                 _rasterScratchResizeCount + _shapeScratchResizeCount);
     }
 
-    public void ResetDiagnostics()
+    internal void ResetDiagnostics()
     {
         var pageUsage = GetAtlasPageUsage();
         CountPendingAtlasPageReuseRequests(out var pendingAlphaReuses, out var pendingBgraReuses);
@@ -210,7 +205,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
         _shapeScratchResizeCount = 0;
     }
 
-    public GlyphAtlasRecordResult TryRecord(
+    internal GlyphAtlasRecordResult TryRecord(
         ID3D12GraphicsCommandList* list,
         ReadOnlySpan<D3D12TextRun> textRuns,
         IFrameResourceResolver resources,

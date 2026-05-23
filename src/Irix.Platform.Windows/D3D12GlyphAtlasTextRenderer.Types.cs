@@ -1,12 +1,6 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Irix.Drawing;
-using Irix.Platform;
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.DirectWrite;
 using Windows.Win32.Graphics.Dxgi.Common;
@@ -42,7 +36,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         public byte* BidiLevels;
     }
 
-    public readonly struct GlyphAtlasRecordResult(bool Recorded, int AtlasRuns, int DegradedRuns) : IEquatable<GlyphAtlasRecordResult>
+    internal readonly struct GlyphAtlasRecordResult(bool Recorded, int AtlasRuns, int DegradedRuns) : IEquatable<GlyphAtlasRecordResult>
     {
         public bool Recorded { get; } = Recorded;
         public int AtlasRuns { get; } = AtlasRuns;
@@ -100,7 +94,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         public GlyphAtlasPageHandle Page { get; } = Page;
     }
 
-    public enum GlyphAtlasInitializationPhase : byte
+    internal enum GlyphAtlasInitializationPhase : byte
     {
         None,
         DirectWriteFactory,
@@ -117,7 +111,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         VertexBuffer
     }
 
-    public enum GlyphAtlasRecordFailurePhase : byte
+    internal enum GlyphAtlasRecordFailurePhase : byte
     {
         None,
         Record,
@@ -130,7 +124,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         AtlasDraw
     }
 
-    public sealed class GlyphAtlasInitializationException(
+    internal sealed class GlyphAtlasInitializationException(
         GlyphAtlasInitializationPhase phase,
         Exception innerException) : InvalidOperationException($"Glyph atlas initialization failed during {phase}.", innerException)
     {
@@ -145,7 +139,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
     }
 
     [Flags]
-    public enum GlyphAtlasFallbackReason
+    internal enum GlyphAtlasFallbackReason
     {
         None = 0,
         NonAscii = 1 << 0,
@@ -169,7 +163,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         ColorGlyphPaintTree = 1 << 18
     }
 
-    public readonly struct GlyphAtlasFallbackReasonCounts(
+    internal readonly struct GlyphAtlasFallbackReasonCounts(
         int NonAscii,
         int ColorGlyph,
         int ComplexScript,
@@ -838,7 +832,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         public GlyphEntry Clear() => new(Key, 0, 0, 0, 0, 0, 0, 0, 0, 0, Page, Generation, 0);
     }
 
-    public readonly struct GlyphAtlasTextRendererDiagnostics(
+    internal readonly struct GlyphAtlasTextRendererDiagnostics(
         int CachedGlyphs,
         long UploadedBytes,
         int DrawnGlyphs,

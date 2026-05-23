@@ -1,16 +1,9 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Irix.Drawing;
-using Irix.Platform;
-using Windows.Win32;
 using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Direct3D;
-using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Direct2D.Common;
 using Windows.Win32.Graphics.DirectWrite;
-using Windows.Win32.Graphics.Dxgi.Common;
 
 namespace Irix.Platform.Windows;
 

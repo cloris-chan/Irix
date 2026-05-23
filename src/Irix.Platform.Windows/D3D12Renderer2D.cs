@@ -326,13 +326,13 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct Vertex
+    private struct Vertex
     {
         public Vector2 Position;
         public Vector4 Color;
     }
 
-    public readonly struct RectData(float X, float Y, float Width, float Height, float R, float G, float B, float A, IntegerScissorRect Scissor) : IEquatable<RectData>
+    internal readonly struct RectData(float X, float Y, float Width, float Height, float R, float G, float B, float A, IntegerScissorRect Scissor) : IEquatable<RectData>
     {
         public float X { get; } = X;
         public float Y { get; } = Y;
