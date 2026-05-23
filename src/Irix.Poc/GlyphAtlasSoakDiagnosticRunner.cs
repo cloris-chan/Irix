@@ -31,6 +31,7 @@ internal static class GlyphAtlasSoakDiagnosticRunner
         var viewport = new DrawRect(0, 0, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
         var summary = GlyphAtlasSoakSummary.Empty;
         var pressureIndex = 0;
+        var deviceLost = false;
 
         output.WriteLine("=== Glyph Atlas Soak Diagnostic ===");
         output.WriteLine($"Frames: {frameCount}");
@@ -67,6 +68,7 @@ internal static class GlyphAtlasSoakDiagnosticRunner
             summary = summary.WithFrame(scenario, d3d12Renderer.GetGlyphAtlasTextDiagnostics());
             if (d3d12Renderer.IsDeviceRemoved)
             {
+                deviceLost = true;
                 output.WriteLine($"Device removed at frame {frameIndex}: {d3d12Renderer.DeviceError}");
                 break;
             }
@@ -75,6 +77,8 @@ internal static class GlyphAtlasSoakDiagnosticRunner
         var finalDiag = d3d12Backend.FrameSerialDiagnostics;
         output.WriteLine($"Final: frameSerial={finalDiag.FrameSerial}, presentSerial={finalDiag.PresentSerial}, syncWaits={finalDiag.SyncWaitCount}");
         output.WriteLine(FormatSummary(summary));
+        output.WriteLine(FormatThresholds());
+        output.WriteLine(FormatThresholdActual(deviceLost, finalDiag.SyncWaitCount, summary));
         var atlasDiag = d3d12Renderer.GetGlyphAtlasTextDiagnostics();
         output.WriteLine(atlasDiag.HasValue ? $"Glyph atlas: {atlasDiag.Value.FormatSummary()}" : "Glyph atlas: (not initialized)");
         output.WriteLine("=== glyph atlas soak diagnostic complete ===");
@@ -134,6 +138,22 @@ internal static class GlyphAtlasSoakDiagnosticRunner
             + $"atlasPendingPageReuses={summary.AtlasPendingPageReuses}, atlasPendingAlphaPageReuses={summary.AtlasPendingAlphaPageReuses}, atlasPendingBgraPageReuses={summary.AtlasPendingBgraPageReuses}, "
             + $"atlasPageReuseRequests={summary.AtlasPageReuseRequests}, atlasAlphaPageReuseRequests={summary.AtlasAlphaPageReuseRequests}, atlasBgraPageReuseRequests={summary.AtlasBgraPageReuseRequests}, "
             + $"atlasFullWithoutPageReuse={summary.AtlasFullWithoutPageReuse}, atlasAlphaFullWithoutPageReuse={summary.AtlasAlphaFullWithoutPageReuse}, atlasBgraFullWithoutPageReuse={summary.AtlasBgraFullWithoutPageReuse}, maxDegradedRuns={summary.MaxDegradedRuns}";
+    }
+
+    internal static string FormatThresholds()
+    {
+        return "Soak thresholds: noDeviceLost=True, overlaySync=False, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes";
+    }
+
+    internal static string FormatThresholdActual(bool deviceLost, long syncWaits, GlyphAtlasSoakSummary summary)
+    {
+        var countersPresent = summary.Frames > 0
+            && summary.MaxAtlasCpuBytes >= 0
+            && summary.MaxAtlasGpuBytes >= 0
+            && summary.MaxAtlasFragmentedPixels >= 0
+            && summary.AtlasEvictions >= 0
+            && summary.AtlasPageReuseRequests >= 0;
+        return $"soak.actual deviceLost={deviceLost} overlaySync=False syncWaits={syncWaits} hardFullWithoutReuse={summary.AtlasFullWithoutPageReuse} countersPresent={countersPresent}";
     }
 
     private static DrawCommand TextRun(

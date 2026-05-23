@@ -705,8 +705,15 @@ public sealed class ProgramDiagnosticsTests
         var forbidden = new[]
         {
             "D3D11On12",
+            "D3D11On12CreateDevice",
+            "ID3D11On12Device",
+            "ID3D11Device",
+            "ID3D11DeviceContext",
             "D3D11Query",
             "ID3D11",
+            "CreateWrappedResource",
+            "AcquireWrappedResources",
+            "ReleaseWrappedResources",
             "D3D12FenceAfterOverlay",
             "D3D12TextRenderer",
             "TextOverlaySyncStrategy",
@@ -716,6 +723,11 @@ public sealed class ProgramDiagnosticsTests
             "CreateTextLayout",
             "Windows.Win32.Graphics.Direct2D;",
             "ID2D",
+            "ID2D1Factory",
+            "ID2D1Device",
+            "ID2D1DeviceContext",
+            "ID2D1RenderTarget",
+            "D2D1_FACTORY_TYPE",
             "D2D1CreateFactory"
         };
 
@@ -1745,6 +1757,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("simpleBmpRuns=3", expectedLine);
         Assert.Contains("shapedRuns=5", expectedLine);
         Assert.Contains("emojiRuns=1", expectedLine);
+        Assert.Equal("matrix.expected textRuns=13 atlasRuns=13 degradedRuns=0 wrappedRuns=2 tabRuns=1 explicitLineRuns=1 simpleBmpRuns=3 shapedRuns=5 cjkRuns=1 arabicRuns=2 hebrewRuns=1 mixedBidiRuns=1 emojiRuns=1 overlayFallback=False", GlyphAtlasRegressionMatrixDiagnosticRunner.FormatExpectedMachineLine(summary));
+        Assert.Equal("matrix.actual frameSerial=3 presentSerial=3 syncWaits=0 glyphAtlasInitialized=False atlasRuns=0 degradedRuns=0 colorLayerRuns=0 colorBitmapRuns=0 overlaySync=False", GlyphAtlasRegressionMatrixDiagnosticRunner.FormatActualMachineLine(3, 3, 0, null));
         Assert.Contains("svgColorGlyph=True", contractLine);
         Assert.Contains("colrPaintTreeColorGlyph=True", contractLine);
         Assert.Contains("bidiBeyondResolvedLevels=True", contractLine);
@@ -1775,6 +1789,28 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasRegressionMatrixDiagnosticRunner.Run", source);
         Assert.Contains("ParseTextCompositionMode(args)", source);
         Assert.Contains("ParseDiagnosticScale(args)", source);
+    }
+
+    [Fact]
+    public void Glyph_atlas_soak_thresholds_are_machine_readable()
+    {
+        Assert.Equal("Soak thresholds: noDeviceLost=True, overlaySync=False, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes", GlyphAtlasSoakDiagnosticRunner.FormatThresholds());
+        Assert.Equal("soak.actual deviceLost=False overlaySync=False syncWaits=0 hardFullWithoutReuse=0 countersPresent=False", GlyphAtlasSoakDiagnosticRunner.FormatThresholdActual(deviceLost: false, syncWaits: 0, GlyphAtlasSoakSummary.Empty));
+    }
+
+    [Fact]
+    public void Glyph_atlas_post_ga_design_freezes_coverage_until_oracle_regression_split()
+    {
+        var root = FindRepoRoot();
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Post-GA-Design.md")));
+
+        Assert.Contains("coverage freeze until oracle/regression split", design);
+        Assert.Contains("New script or glyph-image-format support is frozen", design);
+        Assert.Contains("D3D12-only Degradation Policy", design);
+        Assert.Contains("SVG and COLR paint-tree-only color glyphs", design);
+        Assert.Contains("BiDi beyond the current resolved-level segment projection", design);
+        Assert.Contains("AtlasFull after the 48-page budget", design);
+        Assert.Contains("must not reintroduce D3D11On12, Direct2D final composition, IDWriteTextLayout, or hidden overlay fallback", design);
     }
 
     [Fact]

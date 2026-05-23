@@ -36,6 +36,7 @@ internal static class GlyphAtlasRegressionMatrixDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatSummary(summary));
+            output.WriteLine(FormatExpectedMachineLine(summary));
             output.WriteLine(FormatContract(summary.Contract));
             output.WriteLine("Matrix cases: ASCII=True LatinExtended=True Greek=True Cyrillic=True CJK=True Arabic=True Hebrew=True MixedBidi=True Emoji=True Wrap=True Tab=True CRLF=True");
             output.WriteLine("Accepted degradation: overlay=False svgColorGlyph=True colrPaintTreeColorGlyph=True bidiBeyondResolvedLevels=True atlasFullAfterBudget=True recordFailure=True initializationFailure=True");
@@ -73,6 +74,7 @@ internal static class GlyphAtlasRegressionMatrixDiagnosticRunner
         output.WriteLine($"Final: frameSerial={finalDiag.FrameSerial}, presentSerial={finalDiag.PresentSerial}, syncWaits={finalDiag.SyncWaitCount}");
         var atlasDiag = d3d12Renderer.GetGlyphAtlasTextDiagnostics();
         output.WriteLine(atlasDiag.HasValue ? $"Glyph atlas: {atlasDiag.Value.FormatSummary()}" : "Glyph atlas: (not initialized)");
+        output.WriteLine(FormatActualMachineLine(finalDiag.FrameSerial, finalDiag.PresentSerial, finalDiag.SyncWaitCount, atlasDiag));
         output.WriteLine("=== glyph atlas regression matrix diagnostic complete ===");
     }
 
@@ -191,6 +193,22 @@ internal static class GlyphAtlasRegressionMatrixDiagnosticRunner
     internal static string FormatSummary(GlyphAtlasRegressionMatrixSummary summary)
     {
         return $"Expected matrix: textRuns={summary.TextRuns}, atlasRuns={summary.AtlasRuns}, degradedRuns={summary.DegradedRuns}, wrappedRuns={summary.WrappedRuns}, tabRuns={summary.TabRuns}, explicitLineRuns={summary.ExplicitLineRuns}, simpleBmpRuns={summary.SimpleBmpRuns}, shapedRuns={summary.ShapedRuns}, cjkRuns={summary.CjkRuns}, arabicRuns={summary.ArabicRuns}, hebrewRuns={summary.HebrewRuns}, mixedBidiRuns={summary.MixedBidiRuns}, emojiRuns={summary.EmojiRuns}";
+    }
+
+    internal static string FormatExpectedMachineLine(GlyphAtlasRegressionMatrixSummary summary)
+    {
+        return $"matrix.expected textRuns={summary.TextRuns} atlasRuns={summary.AtlasRuns} degradedRuns={summary.DegradedRuns} wrappedRuns={summary.WrappedRuns} tabRuns={summary.TabRuns} explicitLineRuns={summary.ExplicitLineRuns} simpleBmpRuns={summary.SimpleBmpRuns} shapedRuns={summary.ShapedRuns} cjkRuns={summary.CjkRuns} arabicRuns={summary.ArabicRuns} hebrewRuns={summary.HebrewRuns} mixedBidiRuns={summary.MixedBidiRuns} emojiRuns={summary.EmojiRuns} overlayFallback={summary.Contract.OverlayFallback}";
+    }
+
+    internal static string FormatActualMachineLine(
+        long frameSerial,
+        long presentSerial,
+        long syncWaits,
+        D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? diagnostics)
+    {
+        return diagnostics.HasValue
+            ? $"matrix.actual frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} glyphAtlasInitialized=True atlasRuns={diagnostics.Value.AtlasRuns} degradedRuns={diagnostics.Value.UnsupportedRuns} colorLayerRuns={diagnostics.Value.ColorLayerRuns} colorBitmapRuns={diagnostics.Value.ColorBitmapRuns} overlaySync=False"
+            : $"matrix.actual frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} glyphAtlasInitialized=False atlasRuns=0 degradedRuns=0 colorLayerRuns=0 colorBitmapRuns=0 overlaySync=False";
     }
 
     internal static string FormatContract(GlyphAtlasDegradationContract contract)

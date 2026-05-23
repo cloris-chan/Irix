@@ -12,6 +12,8 @@ The first post-GA renderer-foundation change introduced an internal text composi
 
 DirectWrite is retained as a shaping, metrics, and glyph bitmap source for the atlas path. The near-term goal is to reduce `DegradedRuns` by adding D3D12 handling for more text cases, not to reintroduce Direct2D final composition. No public API or `IDrawingBackend.Execute` signature changes are part of this phase.
 
+coverage freeze until oracle/regression split: New script or glyph-image-format support is frozen until the shaping oracle, regression matrix lane, and degradation-policy tests are split and stable. Allowed changes during this freeze are bug fixes, source guards, diagnostics, tests, local evidence updates, renderer structure cleanup, and documentation. New accepted coverage must not be added opportunistically in `D3D12GlyphAtlasTextRenderer`; it needs a matching oracle/regression case first.
+
 The first executable atlas path is intentionally narrow but default-on in the post-GA renderer-foundation branch. ASCII, Latin Extended, Greek, and Cyrillic BMP runs may be rasterized from DirectWrite glyph analysis into a D3D12 `R8_UNORM` atlas texture and drawn as D3D12 glyph quads before command-list close/execute when the selected DirectWrite face provides direct glyph indices. A first shaped-run path also accepts shaped runs when DirectWrite returns nonzero glyph indices, including system fallback font segmentation for mixed base/fallback runs such as ASCII+CJK text, LTR complex-script runs after DirectWrite script/bidi analysis, single-level RTL `NoWrap` segments, RTL-base wrapped/mixed lines drawn from the line's right edge including leading weak digits before the first RTL strong character, and mixed BiDi spans split into resolved-level runs with nested visual ordering for LTR and RTL-base lines. `NoWrap` still clips over-wide line segments; explicit CR/LF creates multiple line segments. Tab is treated as a fixed four-space advance control token and is not rasterized as a glyph, including inside accepted shaped runs. `Wrap` supports minimal whitespace-based multi-line layout, including shaped runs whose cluster map is monotonic enough to project per-character advances; unbreakable over-wide wrap words and over-height line stacks stay accepted and are clipped by the per-run text scissor. Per-run scissor clipping is supported for accepted runs. Unsupported runs, including BiDi cases beyond current resolved-level segment projection, missing glyphs, missing fonts, atlas-full conditions, vertex/batch limits, and initialization/upload failures, are counted as explicit degradation in default `GlyphAtlas` mode until the atlas path is correctness-complete for those cases.
 
 Current implementation status:
@@ -252,19 +254,19 @@ Rules:
 - Text layout still computes line breaks, glyph positions, and run bounds before draw recording.
 - Existing `DrawTextRun` clip semantics must remain observable in diagnostics.
 
-## Fallback Strategy
+## D3D12-only Degradation Policy
 
 DirectWrite remains available as the glyph metrics/raster source. Current default GlyphAtlas behavior is mixed per renderable run: accepted ASCII, simple BMP, shaped fallback-face, color-layer, LTR complex-script, single-level RTL `NoWrap`, RTL-base wrapped/mixed-line including leading weak digits, and mixed BiDi resolved-level segment-ordered runs, including explicit line breaks, tab spacing, minimal whitespace-wrapped lines, unbreakable wrap words, and over-height line stacks clipped by scissor, draw through the atlas, while unsupported or failed runs are explicitly degraded and counted without D3D11On12 / D2D final composition. The active migration target is to replace each degradation case with D3D12 handling where practical and keep only accepted degradation where not. Initialization and runtime record failures currently degrade every renderable run for the affected frame because no safe atlas command list should be submitted from a failed record path.
 
-Fallback cases:
+Accepted degradation cases:
 
-- SVG and COLR paint-tree color glyph formats beyond DirectWrite outline/COLR color-run layers and DirectWrite bitmap glyph image data are not supported by the current atlas path.
-- BiDi shaping features not yet covered by the resolved-level segment projection.
-- Atlas full and eviction cannot safely free space for the current frame.
-- Glyph atlas initialization or upload failure.
+- SVG and COLR paint-tree-only color glyphs beyond DirectWrite outline/COLR color-run layers and DirectWrite bitmap glyph image data are not supported by the current atlas path.
+- BiDi beyond the current resolved-level segment projection.
+- AtlasFull after the 48-page budget when no safe current-record or retained-floor-gated page reuse is available.
+- Glyph atlas record or initialization failure.
 - Full LRU/entry-level eviction is not yet implemented; AtlasFull degrades the current run after scheduling safe format-scoped page reuse when possible.
 
-Fallback or degradation must preserve renderer stability, diagnostics, and clip semantics. New work must not add D3D11On12 / D2D dependency. NonAscii, complex shaping, atlas-full safety, and runtime failure fallback are either handled by D3D12 atlas or reported as degradation.
+This is not an overlay fallback contract. Degradation must preserve renderer stability, diagnostics, and clip semantics, and must not reintroduce D3D11On12, Direct2D final composition, IDWriteTextLayout, or hidden overlay fallback. NonAscii, complex shaping, color glyph, atlas-full safety, and runtime failure cases are either handled by D3D12 atlas or reported as D3D12-only degradation.
 
 ## Overlay Removal Status
 
