@@ -1843,6 +1843,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_status_documents_actions_quota_and_local_guard_source()
+    {
+        var root = FindRepoRoot();
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var matrixEvidence = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Regression-Matrix-Evidence-2026-05-23.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Post-GA-Design.md")));
+        var backlog = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Post-V1-MVP-Backlog.md")));
+
+        Assert.Contains("GitHub Actions quota is currently exhausted", status);
+        Assert.Contains("CI lane configured but currently not runnable", matrixEvidence);
+        Assert.Contains("local guard summary is the current status source", design);
+        Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
+        Assert.Contains("Run `Smoke` before/after broad changes", backlog);
+        Assert.Contains("Do not add artifact-upload work until Actions quota returns", backlog);
+        Assert.Contains("reserve `-Mode Nightly` as a manual 900-frame long run", NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Soak-Memory-Pressure-Evidence-2026-05-23.md"))));
+    }
+
+    [Fact]
     public void Glyph_atlas_soak_thresholds_are_machine_readable()
     {
         Assert.Equal("Soak thresholds: noDeviceLost=True, overlaySync=False, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes", GlyphAtlasSoakDiagnosticRunner.FormatThresholds());
