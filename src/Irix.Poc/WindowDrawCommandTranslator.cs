@@ -7,7 +7,7 @@ namespace Irix.Poc;
 internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 {
     private readonly TranslatorViewportProvider _translatorViewportProvider;
-    private readonly Action<double>? _postFrameCallback;
+    private readonly TranslatorFeedbackSink _feedbackSink;
     private readonly RenderPipeline _renderPipeline;
     private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
     private DisplayScale _displayScale;
@@ -26,7 +26,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         DisplayScale displayScale = default)
     {
         _translatorViewportProvider = new TranslatorViewportProvider(window, prepareFrame, viewportProvider);
-        _postFrameCallback = postFrameCallback;
+        _feedbackSink = new TranslatorFeedbackSink(postFrameCallback);
         _renderPipeline = (renderPipelineFactory ?? TranslatorRenderPipelineFactory.Default).Create();
         _ownerFeed = ownerOptions.EnableSegmentedRetainedFrameRuntimeOwner
             ? new SegmentedRetainedFrameProductionOwnerFeed(_renderPipeline, ownerOptions)
@@ -37,9 +37,9 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     private readonly RetainedTree _retainedTree = new(default);
 
     /// <summary>MaxScrollY from the last layout pass. 0 if no scroll needed.</summary>
-    public double LastMaxScrollY => _renderPipeline.LastMaxScrollY;
+    public double LastMaxScrollY => _feedbackSink.LastMaxScrollY;
 
-    public ScrollFeedback LastScrollFeedback { get; private set; } = ScrollFeedback.Empty;
+    public ScrollFeedback LastScrollFeedback => _feedbackSink.LastScrollFeedback;
 
     public PixelRectangle LastViewport { get; private set; }
 
@@ -118,8 +118,7 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         ApplyOutput(in output);
 
         var beforeFeedback = GetAllocatedBytes(measureAllocation);
-        LastScrollFeedback = BuildScrollFeedback(_renderPipeline.LastLayoutResult);
-        _postFrameCallback?.Invoke(_renderPipeline.LastMaxScrollY);
+        _feedbackSink.Deliver(_renderPipeline.LastLayoutResult, _renderPipeline.LastMaxScrollY);
         attribution = attribution.WithFeedback(AllocatedDelta(measureAllocation, beforeFeedback));
 
         return output.Batch;
@@ -176,27 +175,6 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     private static long GetAllocatedBytes(bool enabled) => enabled ? GC.GetTotalAllocatedBytes(false) : 0;
 
     private static long AllocatedDelta(bool enabled, long before) => enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
-
-    private static ScrollFeedback BuildScrollFeedback(LayoutTreeResult? layoutResult)
-    {
-        if (layoutResult is null || layoutResult.ScrollDiagnostics.Count == 0)
-        {
-            return ScrollFeedback.Empty;
-        }
-
-        var containers = new ScrollContainerMetrics[layoutResult.ScrollDiagnostics.Count];
-        for (var index = 0; index < containers.Length; index++)
-        {
-            var diagnostics = layoutResult.ScrollDiagnostics[index];
-            containers[index] = new ScrollContainerMetrics(
-                ContainerId: new ScrollContainerId(diagnostics.DfsIndex),
-                ViewportExtent: diagnostics.VisibleHeight,
-                ContentExtent: diagnostics.ContentHeight,
-                MaxScrollY: diagnostics.MaxScrollY);
-        }
-
-        return new ScrollFeedback(containers);
-    }
 }
 
 internal sealed class TranslatorRenderPipelineFactory(Func<RenderPipeline> create)
@@ -237,6 +215,41 @@ internal readonly struct TranslatorViewport(
     public PixelRectangle PhysicalViewport { get; } = PhysicalViewport;
     public PixelRectangle LayoutViewport { get; } = LayoutViewport;
     public DisplayScale DisplayScale { get; } = DisplayScale;
+}
+
+internal sealed class TranslatorFeedbackSink(Action<double>? postFrameCallback)
+{
+    public double LastMaxScrollY { get; private set; }
+
+    public ScrollFeedback LastScrollFeedback { get; private set; } = ScrollFeedback.Empty;
+
+    public void Deliver(LayoutTreeResult? layoutResult, double maxScrollY)
+    {
+        LastMaxScrollY = maxScrollY;
+        LastScrollFeedback = BuildScrollFeedback(layoutResult);
+        postFrameCallback?.Invoke(maxScrollY);
+    }
+
+    private static ScrollFeedback BuildScrollFeedback(LayoutTreeResult? layoutResult)
+    {
+        if (layoutResult is null || layoutResult.ScrollDiagnostics.Count == 0)
+        {
+            return ScrollFeedback.Empty;
+        }
+
+        var containers = new ScrollContainerMetrics[layoutResult.ScrollDiagnostics.Count];
+        for (var index = 0; index < containers.Length; index++)
+        {
+            var diagnostics = layoutResult.ScrollDiagnostics[index];
+            containers[index] = new ScrollContainerMetrics(
+                ContainerId: new ScrollContainerId(diagnostics.DfsIndex),
+                ViewportExtent: diagnostics.VisibleHeight,
+                ContentExtent: diagnostics.ContentHeight,
+                MaxScrollY: diagnostics.MaxScrollY);
+        }
+
+        return new ScrollFeedback(containers);
+    }
 }
 
 internal readonly struct TranslatorInput(
