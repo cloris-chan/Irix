@@ -29,7 +29,21 @@ CI quota note:
 Observed validation:
 
 ```text
-ProgramDiagnosticsTests: Passed, 107
+Smoke guard: Passed on 2026-05-23
+ProgramDiagnosticsTests: Passed, 109
+```
+
+Latest local Smoke guard summary:
+
+```text
+glyph-atlas-regression.guard status=Passed mode=Smoke matrixFrames=3 soakFrames=60 pressureEvery=6
+matrix.expected textRuns=13 atlasRuns=13 degradedRuns=0 wrappedRuns=2 tabRuns=1 explicitLineRuns=1 simpleBmpRuns=3 shapedRuns=5 cjkRuns=1 arabicRuns=2 hebrewRuns=1 mixedBidiRuns=1 emojiRuns=1 overlayFallback=False
+matrix.actual frameSerial=3 presentSerial=3 syncWaits=0 glyphAtlasInitialized=True atlasRuns=39 degradedRuns=0 colorLayerRuns=30 colorBitmapRuns=0 overlaySync=False
+soak.actual deviceLost=False overlaySync=False syncWaits=0 hardFullWithoutReuse=0 countersPresent=True
+Color glyph formats: factory4=True, face4=True, probes=8, glyphs=8, colorRunCandidates=7, layerCandidates=7, bgraCandidates=0, encodedBitmapCandidates=0, unsupportedColorCandidates=0, bitmapRenderableCandidates=0, imageDataCandidates=0, decodedBitmapCandidates=0
+Color glyph natural coverage: status=LayerOnly, layerRoute=True, bgraRoute=False, encodedBitmapRoute=False, bitmapRenderableRoute=False, imageDataRoute=False, decodedBitmapRoute=False, naturalBgraSmoke=False
+bidi-oracle.actual probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed mixedLevelProbes=4 visualReorderedProbes=4 failedProbes=0 layoutOracle=False pixelOracle=False overlayFallback=False
+glyph-oracle.actual probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf failedProbes=0 fallbackFontProbes=5 mixedBidiProbes=2 lineBreakProbes=5 totalGlyphs=67 layoutOracle=False pixelOracle=False overlayFallback=False
 ```
 
 Matrix smoke key output:
