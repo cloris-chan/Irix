@@ -11,7 +11,9 @@ internal static class GlyphAtlasGlyphOracleDiagnosticRunner
         var snapshot = DWriteGlyphOracleDiagnostic.Capture();
 
         output.WriteLine("=== Glyph Atlas Glyph Oracle Diagnostic ===");
+        output.WriteLine(FormatExpectedSnapshot());
         output.WriteLine(FormatSummary(snapshot));
+        output.WriteLine(FormatActualSnapshot(snapshot));
         foreach (var result in snapshot.Results)
         {
             output.WriteLine(FormatProbe(result));
@@ -25,6 +27,27 @@ internal static class GlyphAtlasGlyphOracleDiagnosticRunner
         return string.IsNullOrEmpty(snapshot.Failure)
             ? $"Glyph oracle: factory={snapshot.FactoryAvailable}, analyzer={snapshot.AnalyzerAvailable}, fontFallback={snapshot.FontFallbackAvailable}, probes={snapshot.ProbeCount}, failedProbes={snapshot.FailedProbes}, fallbackFontProbes={snapshot.FallbackFontProbes}, mixedBidiProbes={snapshot.MixedBidiProbes}, lineBreakProbes={snapshot.LineBreakProbes}, totalGlyphs={snapshot.TotalGlyphs}"
             : $"Glyph oracle: failure={snapshot.Failure}, factory={snapshot.FactoryAvailable}, analyzer={snapshot.AnalyzerAvailable}, fontFallback={snapshot.FontFallbackAvailable}, probes={snapshot.ProbeCount}, failedProbes=0, fallbackFontProbes=0, mixedBidiProbes=0, lineBreakProbes=0, totalGlyphs=0";
+    }
+
+    internal static string FormatExpectedSnapshot() =>
+        "glyph-oracle.expected probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf fields=glyphCount|glyphIndices|advances|offsets|bidiLevels|lineBreaks|segments layoutOracle=False pixelOracle=False overlayFallback=False";
+
+    internal static string FormatActualSnapshot(GlyphOracleDiagnosticSnapshot snapshot)
+    {
+        var labels = new StringBuilder(112);
+        for (var i = 0; i < snapshot.Results.Count; i++)
+        {
+            if (i > 0)
+            {
+                labels.Append('|');
+            }
+
+            labels.Append(snapshot.Results[i].Label);
+        }
+
+        return string.IsNullOrEmpty(snapshot.Failure)
+            ? $"glyph-oracle.actual probes={snapshot.ProbeCount} labels={labels} failedProbes={snapshot.FailedProbes} fallbackFontProbes={snapshot.FallbackFontProbes} mixedBidiProbes={snapshot.MixedBidiProbes} lineBreakProbes={snapshot.LineBreakProbes} totalGlyphs={snapshot.TotalGlyphs} layoutOracle=False pixelOracle=False overlayFallback=False"
+            : $"glyph-oracle.actual probes={snapshot.ProbeCount} labels={labels} failure={snapshot.Failure} failedProbes=0 fallbackFontProbes=0 mixedBidiProbes=0 lineBreakProbes=0 totalGlyphs=0 layoutOracle=False pixelOracle=False overlayFallback=False";
     }
 
     internal static string FormatProbe(GlyphOracleProbeResult result)

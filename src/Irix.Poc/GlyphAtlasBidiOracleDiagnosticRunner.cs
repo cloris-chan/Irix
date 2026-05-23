@@ -11,7 +11,9 @@ internal static class GlyphAtlasBidiOracleDiagnosticRunner
         var snapshot = DWriteBidiOracleDiagnostic.Capture();
 
         output.WriteLine("=== Glyph Atlas BiDi Oracle Diagnostic ===");
+        output.WriteLine(FormatExpectedSnapshot());
         output.WriteLine(FormatSummary(snapshot));
+        output.WriteLine(FormatActualSnapshot(snapshot));
         foreach (var result in snapshot.Results)
         {
             output.WriteLine(FormatProbe(result));
@@ -25,6 +27,27 @@ internal static class GlyphAtlasBidiOracleDiagnosticRunner
         return string.IsNullOrEmpty(snapshot.Failure)
             ? $"BiDi oracle: factory={snapshot.FactoryAvailable}, analyzer={snapshot.AnalyzerAvailable}, probes={snapshot.ProbeCount}, mixedLevelProbes={snapshot.MixedLevelProbes}, visualReorderedProbes={snapshot.VisualReorderedProbes}, failedProbes={snapshot.FailedProbes}"
             : $"BiDi oracle: failure={snapshot.Failure}, factory={snapshot.FactoryAvailable}, analyzer={snapshot.AnalyzerAvailable}, probes={snapshot.ProbeCount}, mixedLevelProbes=0, visualReorderedProbes=0, failedProbes=0";
+    }
+
+    internal static string FormatExpectedSnapshot() =>
+        "bidi-oracle.expected probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed fields=levels|logicalRuns|visualRuns|charOrder layoutOracle=False pixelOracle=False overlayFallback=False";
+
+    internal static string FormatActualSnapshot(BidiOracleDiagnosticSnapshot snapshot)
+    {
+        var labels = new StringBuilder(96);
+        for (var i = 0; i < snapshot.Results.Count; i++)
+        {
+            if (i > 0)
+            {
+                labels.Append('|');
+            }
+
+            labels.Append(snapshot.Results[i].Label);
+        }
+
+        return string.IsNullOrEmpty(snapshot.Failure)
+            ? $"bidi-oracle.actual probes={snapshot.ProbeCount} labels={labels} mixedLevelProbes={snapshot.MixedLevelProbes} visualReorderedProbes={snapshot.VisualReorderedProbes} failedProbes={snapshot.FailedProbes} layoutOracle=False pixelOracle=False overlayFallback=False"
+            : $"bidi-oracle.actual probes={snapshot.ProbeCount} labels={labels} failure={snapshot.Failure} mixedLevelProbes=0 visualReorderedProbes=0 failedProbes=0 layoutOracle=False pixelOracle=False overlayFallback=False";
     }
 
     internal static string FormatProbe(BidiOracleProbeResult result)

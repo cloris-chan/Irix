@@ -1797,14 +1797,24 @@ public sealed class ProgramDiagnosticsTests
         var root = FindRepoRoot();
         var script = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "glyph-atlas-regression.ps1")));
 
+        Assert.Contains("[ValidateSet(\"Smoke\", \"Local\", \"Nightly\")]", script);
+        Assert.Contains("SoakFrames = 60", script);
+        Assert.Contains("SoakFrames = 300", script);
+        Assert.Contains("SoakFrames = 900", script);
         Assert.Contains("--diagnose-glyph-atlas-matrix", script);
         Assert.Contains("--diagnose-glyph-atlas-soak", script);
+        Assert.Contains("--diagnose-glyph-atlas-color-formats", script);
         Assert.Contains("--diagnose-glyph-atlas-bidi-oracle", script);
         Assert.Contains("--diagnose-glyph-atlas-glyph-oracle", script);
         Assert.Contains("matrix.expected", script);
         Assert.Contains("matrix.actual", script);
         Assert.Contains("Soak thresholds:", script);
         Assert.Contains("soak.actual", script);
+        Assert.Contains("Color glyph natural coverage:", script);
+        Assert.Contains("bidi-oracle.expected", script);
+        Assert.Contains("bidi-oracle.actual", script);
+        Assert.Contains("glyph-oracle.expected", script);
+        Assert.Contains("glyph-oracle.actual", script);
         Assert.Contains("Glyph oracle:", script);
         Assert.DoesNotContain("text-overlay-sync-strategy", script);
         Assert.DoesNotContain("D3D11On12", script);
@@ -1836,6 +1846,30 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_entry_eviction_remains_design_only_until_retained_ownership_is_explicit()
+    {
+        var root = FindRepoRoot();
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Entry-Eviction-Design.md")));
+        var soakRunnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasSoakDiagnosticRunner.cs")));
+        var rendererSource = string.Join(
+            "\n",
+            Directory.EnumerateFiles(Path.Combine(root, "src", "Irix.Platform.Windows"), "D3D12GlyphAtlasTextRenderer*.cs")
+                .OrderBy(static path => path, StringComparer.Ordinal)
+                .Select(static path => NormalizeLineEndings(File.ReadAllText(path))));
+
+        Assert.Contains("design-only follow-up", design);
+        Assert.Contains("Do not implement entry-level LRU or a sub-rect free-list until retained atlas command ownership is explicit", design);
+        Assert.Contains("current page-level reuse policy remains stable under the fixed regression/soak lane", design);
+        Assert.Contains("Retained atlas command ownership must expose the oldest retained atlas record serial", design);
+        Assert.Contains("Do not change the renderer coverage surface during the coverage freeze", design);
+        Assert.Contains("Do not use D3D11On12, Direct2D final composition, or overlay fallback", design);
+        Assert.Contains("entryLru=False", soakRunnerSource);
+        Assert.Contains("subRectFreeList=False", soakRunnerSource);
+        Assert.DoesNotContain("EntryLru", rendererSource);
+        Assert.DoesNotContain("SubRectFreeList", rendererSource);
+    }
+
+    [Fact]
     public void Glyph_atlas_bidi_oracle_cli_is_wired()
     {
         var root = FindRepoRoot();
@@ -1843,9 +1877,14 @@ public sealed class ProgramDiagnosticsTests
         var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasBidiOracleDiagnosticRunner.cs")));
         var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteBidiOracleDiagnostic.cs")));
 
+        Assert.Equal(
+            "bidi-oracle.expected probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed fields=levels|logicalRuns|visualRuns|charOrder layoutOracle=False pixelOracle=False overlayFallback=False",
+            GlyphAtlasBidiOracleDiagnosticRunner.FormatExpectedSnapshot());
         Assert.Contains("--diagnose-glyph-atlas-bidi-oracle", programSource);
         Assert.Contains("GlyphAtlasBidiOracleDiagnosticRunner.Run", programSource);
         Assert.Contains("DWriteBidiOracleDiagnostic.Capture()", runnerSource);
+        Assert.Contains("FormatExpectedSnapshot()", runnerSource);
+        Assert.Contains("bidi-oracle.actual probes={snapshot.ProbeCount}", runnerSource);
         Assert.Contains("BiDi oracle: factory={snapshot.FactoryAvailable}", runnerSource);
         Assert.Contains("visualRuns=", runnerSource);
         Assert.Contains("charOrder=", runnerSource);
@@ -1866,9 +1905,14 @@ public sealed class ProgramDiagnosticsTests
         var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasGlyphOracleDiagnosticRunner.cs")));
         var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteGlyphOracleDiagnostic.cs")));
 
+        Assert.Equal(
+            "glyph-oracle.expected probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf fields=glyphCount|glyphIndices|advances|offsets|bidiLevels|lineBreaks|segments layoutOracle=False pixelOracle=False overlayFallback=False",
+            GlyphAtlasGlyphOracleDiagnosticRunner.FormatExpectedSnapshot());
         Assert.Contains("--diagnose-glyph-atlas-glyph-oracle", programSource);
         Assert.Contains("GlyphAtlasGlyphOracleDiagnosticRunner.Run", programSource);
         Assert.Contains("DWriteGlyphOracleDiagnostic.Capture()", runnerSource);
+        Assert.Contains("FormatExpectedSnapshot()", runnerSource);
+        Assert.Contains("glyph-oracle.actual probes={snapshot.ProbeCount}", runnerSource);
         Assert.Contains("Glyph oracle: factory={snapshot.FactoryAvailable}", runnerSource);
         Assert.Contains("glyphCount=", runnerSource);
         Assert.Contains("bidiLevels=", runnerSource);

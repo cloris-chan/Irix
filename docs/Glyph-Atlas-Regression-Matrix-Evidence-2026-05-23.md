@@ -7,12 +7,15 @@ Commands:
 ```powershell
 dotnet test -c Release --no-restore --filter "FullyQualifiedName~ProgramDiagnosticsTests"
 dotnet run --no-build -c Release --project src\Irix.Poc -- --diagnose-glyph-atlas-matrix 3 --diagnose-scale 150
+.\scripts\glyph-atlas-regression.ps1
+.\scripts\glyph-atlas-regression.ps1 -Mode Local
+.\scripts\glyph-atlas-regression.ps1 -Mode Nightly
 ```
 
 Observed validation:
 
 ```text
-ProgramDiagnosticsTests: Passed, 94
+ProgramDiagnosticsTests: Passed, 107
 ```
 
 Matrix smoke key output:
@@ -29,6 +32,8 @@ Glyph atlas: cachedGlyphs=106, atlasPages=1, atlasAlphaPages=1, atlasBgraPages=0
 Interpretation:
 
 - `--diagnose-glyph-atlas-matrix` is now the fixed broad glyph-atlas smoke. It covers the script/control matrix in one scene and keeps expected per-frame classification machine-readable.
+- `scripts/glyph-atlas-regression.ps1` is the canonical daily smoke entry. `-Mode Smoke` uses a 60-frame soak, `-Mode Local` uses 300 frames, and `-Mode Nightly` uses 900 frames; all modes run matrix, soak, color-format natural coverage, BiDi oracle, and glyph oracle diagnostics into `TestResults`.
+- The fixed lane emits machine-readable `matrix.expected`, `matrix.actual`, `soak.actual`, `bidi-oracle.expected`, `bidi-oracle.actual`, `glyph-oracle.expected`, and `glyph-oracle.actual` lines for later baseline comparison.
 - The matrix remains D3D12-only: `syncWaits=0`, `degradedRuns=0`, and `overlayFallback=False`.
 - The explicit accepted-degradation contract is: SVG color glyphs, COLR paint-tree-only color glyphs, BiDi cases beyond current resolved-level projection, AtlasFull after the bounded page budget, record failure, and initialization failure may degrade without invoking D3D11On12/D2D overlay.
 - Natural BGRA/encoded-bitmap font coverage remains separate from this matrix because local Segoe UI Emoji exposes COLR/layer runs but no bitmap glyph image data on this machine.
