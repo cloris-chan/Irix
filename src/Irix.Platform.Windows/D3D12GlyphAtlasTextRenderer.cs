@@ -10,6 +10,7 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
 {
+    // Orchestrates initialization, diagnostics, TryRecord, and frame construction.
     private static readonly Guid IUnknownGuid = new(0x00000000, 0x0000, 0x0000, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46);
     private const int UploadFrameCount = 2;
     private const int AtlasWidth = 1024;

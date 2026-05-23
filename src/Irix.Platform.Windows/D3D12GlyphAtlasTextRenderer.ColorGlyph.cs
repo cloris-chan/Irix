@@ -9,6 +9,7 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
 {
+    // DirectWrite color glyph source-data translation for atlas entries.
     private const int DWriteNoColorHResult = unchecked((int)0x8898500C);
     private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats =
         DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE

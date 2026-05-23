@@ -8,6 +8,7 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
 {
+    // DirectWrite analyzer/font-fallback source path; no layout object or final composition.
     private static bool TryMapCharacterToSimpleGlyph(CachedFontFace fontFace, char character, out GlyphAtom glyph)
     {
         glyph = default;

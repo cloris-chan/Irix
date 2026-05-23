@@ -12,6 +12,7 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
 {
+    // D3D12 final composition path for atlas pages.
     private static float ComputeGlyphAdvance(CachedFontFace fontFace, float emSize, ushort glyphIndex)
     {
         var glyphIndices = stackalloc ushort[1];
