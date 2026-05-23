@@ -1792,6 +1792,26 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_regression_script_runs_fixed_matrix_soak_and_oracle_lane()
+    {
+        var root = FindRepoRoot();
+        var script = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "glyph-atlas-regression.ps1")));
+
+        Assert.Contains("--diagnose-glyph-atlas-matrix", script);
+        Assert.Contains("--diagnose-glyph-atlas-soak", script);
+        Assert.Contains("--diagnose-glyph-atlas-bidi-oracle", script);
+        Assert.Contains("--diagnose-glyph-atlas-glyph-oracle", script);
+        Assert.Contains("matrix.expected", script);
+        Assert.Contains("matrix.actual", script);
+        Assert.Contains("Soak thresholds:", script);
+        Assert.Contains("soak.actual", script);
+        Assert.Contains("Glyph oracle:", script);
+        Assert.DoesNotContain("text-overlay-sync-strategy", script);
+        Assert.DoesNotContain("D3D11On12", script);
+        Assert.DoesNotContain("ID2D", script);
+    }
+
+    [Fact]
     public void Glyph_atlas_soak_thresholds_are_machine_readable()
     {
         Assert.Equal("Soak thresholds: noDeviceLost=True, overlaySync=False, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes", GlyphAtlasSoakDiagnosticRunner.FormatThresholds());
@@ -1811,6 +1831,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("BiDi beyond the current resolved-level segment projection", design);
         Assert.Contains("AtlasFull after the 48-page budget", design);
         Assert.Contains("must not reintroduce D3D11On12, Direct2D final composition, IDWriteTextLayout, or hidden overlay fallback", design);
+        Assert.Contains("Entry eviction design update", design);
+        Assert.Contains("entry-level LRU and a sub-rect free-list remain design-only", design);
     }
 
     [Fact]
