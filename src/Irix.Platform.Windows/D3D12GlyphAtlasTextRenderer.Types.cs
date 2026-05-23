@@ -10,30 +10,11 @@ using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.DirectWrite;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.Graphics.Imaging;
-using Windows.Win32.System.Com;
 
 namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
 {
-    private void ReleaseWicFactory()
-    {
-        if (_wicFactory != null)
-        {
-            _wicFactory->Release();
-            _wicFactory = null;
-        }
-
-        if (_wicComInitializedForFactory && _wicComInitializationThreadId == Environment.CurrentManagedThreadId)
-        {
-            PInvoke.CoUninitialize();
-        }
-
-        _wicComInitializedForFactory = false;
-        _wicComInitializationThreadId = 0;
-    }
-
     [StructLayout(LayoutKind.Sequential)]
     private struct Vertex
     {
@@ -369,13 +350,13 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         public override int GetHashCode() => Value;
     }
 
-    private sealed class CachedFontFace(FontFaceIdentity identity, IDWriteFontFace* face, DWRITE_FONT_METRICS metrics, IDWriteFontFace4* face4 = null, IUnknown* fontIdentity = null)
+    private sealed class CachedFontFace(FontFaceIdentity identity, IDWriteFontFace* face, DWRITE_FONT_METRICS metrics, IDWriteFontFace4* face4 = null, global::Windows.Win32.System.Com.IUnknown* fontIdentity = null)
     {
         public FontFaceIdentity Identity { get; } = identity;
         public IDWriteFontFace* Face { get; } = face;
         public IDWriteFontFace4* Face4 { get; } = face4;
         public DWRITE_FONT_METRICS Metrics { get; } = metrics;
-        private IUnknown* FontIdentity { get; } = fontIdentity;
+        private global::Windows.Win32.System.Com.IUnknown* FontIdentity { get; } = fontIdentity;
 
         public void Release()
         {

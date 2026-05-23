@@ -10,16 +10,12 @@ using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.DirectWrite;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.Graphics.Imaging;
-using Windows.Win32.System.Com;
 
 namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
 {
     private static readonly Guid IUnknownGuid = new(0x00000000, 0x0000, 0x0000, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46);
-    private static readonly Guid WicImagingFactoryClsid = new(0xCACAF262, 0x9370, 0x4615, 0xA1, 0x3B, 0x9F, 0x55, 0x39, 0xDA, 0x4C, 0x0A);
-    private static readonly Guid WicPixelFormat32bppPbgra = new(0x6FDDC324, 0x4E03, 0x4BFE, 0xB1, 0x85, 0x3D, 0x77, 0x76, 0x8D, 0xC9, 0x0F);
     private const int UploadFrameCount = 2;
     private const int AtlasWidth = 1024;
     private const int AtlasHeight = 1024;
@@ -31,30 +27,6 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
     private const int MaxGlyphVertices = MaxGlyphQuads * 6;
     private const int MaxGlyphDrawBatches = 1024;
     private const int MaxShapedRunSegments = 64;
-    private const int DWriteNoColorHResult = unchecked((int)0x8898500C);
-    private const int RpcEChangedModeHResult = unchecked((int)0x80010106);
-    private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats =
-        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_CFF
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR;
-    private const DWRITE_GLYPH_IMAGE_FORMATS EncodedBitmapColorGlyphFormats =
-        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF;
-    private const DWRITE_GLYPH_IMAGE_FORMATS SupportedBitmapColorGlyphFormats =
-        EncodedBitmapColorGlyphFormats
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8;
-    private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats =
-        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE;
-    private const DWRITE_GLYPH_IMAGE_FORMATS ColorGlyphRunImageFormats =
-        SupportedLayerColorGlyphFormats
-        | SupportedBitmapColorGlyphFormats;
-    private const DWRITE_GLYPH_IMAGE_FORMATS BitmapColorGlyphFormats =
-        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
-        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF;
     private const int AlphaAtlasBytesPerPixel = 1;
     private const int BgraAtlasBytesPerPixel = 4;
     private const int AtlasRowPitch = AtlasWidth * AlphaAtlasBytesPerPixel;
@@ -90,7 +62,6 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
     private DWRITE_SHAPING_GLYPH_PROPERTIES[] _shapeGlyphPropsScratch = [];
     private float[] _shapeAdvanceScratch = [];
     private DWRITE_GLYPH_OFFSET[] _shapeOffsetScratch = [];
-    private byte[] _wicDecodeScratch = [];
     private DWRITE_SCRIPT_ANALYSIS[] _shapeScriptScratch = [];
     private byte[] _shapeBidiLevelScratch = [];
     private ShapedGlyph[] _shapedGlyphScratch = [];
@@ -128,10 +99,6 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
     private bool _runAtlasMutationUsedPageReuse;
     private bool _disposed;
     private bool _disabled;
-    private bool _wicFactoryUnavailable;
-    private bool _wicComInitializedForFactory;
-    private int _wicComInitializationThreadId;
-    private IWICImagingFactory* _wicFactory;
     private DeviceErrorDiagnostic _deviceError = DeviceErrorDiagnostic.None;
     private GlyphAtlasTextRendererDiagnostics _diagnostics;
     private GlyphAtlasTextRendererDiagnostics _runDiagnostics;

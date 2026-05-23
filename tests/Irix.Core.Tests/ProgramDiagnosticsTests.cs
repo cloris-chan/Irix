@@ -757,6 +757,87 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_renderer_source_boundaries_keep_wic_and_dwrite_oracles_on_owned_paths()
+    {
+        var root = FindRepoRoot();
+        var platformWindows = Path.Combine(root, "src", "Irix.Platform.Windows");
+
+        AssertSourceTokensOnlyIn(
+            platformWindows,
+            [
+                "Windows.Win32.Graphics.Imaging",
+                "Windows.Win32.System.Com;",
+                "IWIC",
+                "WICBitmap",
+                "WICDecodeOptions",
+                "WicImagingFactoryClsid",
+                "WicPixelFormat32bppPbgra",
+                "PInvoke.CoCreateInstance<IWICImagingFactory>",
+                "PInvoke.CoInitializeEx(COINIT.COINIT_MULTITHREADED)",
+                "PInvoke.CoUninitialize();",
+                "CLSCTX.CLSCTX_INPROC_SERVER",
+                "COINIT.COINIT_MULTITHREADED",
+                "CreateDecoderFromStream((IStream*)stream, null, WICDecodeOptions.WICDecodeMetadataCacheOnLoad)"
+            ],
+            [
+                "D3D12GlyphAtlasTextRenderer.Rasterization.cs",
+                "DWriteColorGlyphFormatDiagnostic.cs"
+            ]);
+
+        AssertSourceTokensOnlyIn(
+            platformWindows,
+            [
+                "_wicDecodeScratch",
+                "_wicFactoryUnavailable",
+                "_wicComInitializedForFactory",
+                "_wicComInitializationThreadId",
+                "_wicFactory",
+                "private void ReleaseWicFactory()"
+            ],
+            ["D3D12GlyphAtlasTextRenderer.Rasterization.cs"]);
+
+        AssertSourceTokensOnlyIn(
+            platformWindows,
+            ["TranslateColorGlyphRun"],
+            [
+                "D3D12GlyphAtlasTextRenderer.ColorGlyph.cs",
+                "DWriteColorGlyphFormatDiagnostic.cs"
+            ]);
+
+        AssertSourceTokensOnlyIn(
+            platformWindows,
+            ["GetGlyphImageData"],
+            [
+                "D3D12GlyphAtlasTextRenderer.Rasterization.cs",
+                "DWriteColorGlyphFormatDiagnostic.cs"
+            ]);
+
+        AssertSourceTokensOnlyIn(
+            platformWindows,
+            [
+                "_textAnalyzer->AnalyzeScript(",
+                "_textAnalyzer->AnalyzeBidi(",
+                "_textAnalyzer->GetGlyphs(",
+                "_textAnalyzer->GetGlyphPlacements("
+            ],
+            ["D3D12GlyphAtlasTextRenderer.ShapingAnalysis.cs"]);
+
+        AssertSourceTokensOnlyIn(
+            platformWindows,
+            [
+                "analyzer->AnalyzeScript(",
+                "analyzer->AnalyzeBidi(",
+                "analyzer->AnalyzeLineBreakpoints(",
+                "analyzer->GetGlyphs(",
+                "analyzer->GetGlyphPlacements("
+            ],
+            [
+                "DWriteBidiOracleDiagnostic.cs",
+                "DWriteGlyphOracleDiagnostic.cs"
+            ]);
+    }
+
+    [Fact]
     public void D3D12_text_run_ir_does_not_retain_text_strings()
     {
         var root = FindRepoRoot();
@@ -3110,6 +3191,23 @@ public sealed class ProgramDiagnosticsTests
 
             count++;
             start = index + value.Length;
+        }
+    }
+
+    private static void AssertSourceTokensOnlyIn(string directory, string[] tokens, string[] allowedFileNames)
+    {
+        foreach (var sourcePath in Directory.EnumerateFiles(directory, "*.cs", SearchOption.TopDirectoryOnly))
+        {
+            var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
+            var fileName = Path.GetFileName(sourcePath);
+            var allowed = allowedFileNames.Contains(fileName, StringComparer.Ordinal);
+            foreach (var token in tokens)
+            {
+                if (source.Contains(token, StringComparison.Ordinal))
+                {
+                    Assert.True(allowed, $"{token} should stay in {string.Join(", ", allowedFileNames)} but was found in {fileName}.");
+                }
+            }
         }
     }
 

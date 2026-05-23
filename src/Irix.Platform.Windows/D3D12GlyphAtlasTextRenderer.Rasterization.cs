@@ -17,6 +17,33 @@ namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
 {
+    private static readonly Guid WicImagingFactoryClsid = new(0xCACAF262, 0x9370, 0x4615, 0xA1, 0x3B, 0x9F, 0x55, 0x39, 0xDA, 0x4C, 0x0A);
+    private static readonly Guid WicPixelFormat32bppPbgra = new(0x6FDDC324, 0x4E03, 0x4BFE, 0xB1, 0x85, 0x3D, 0x77, 0x76, 0x8D, 0xC9, 0x0F);
+    private const int RpcEChangedModeHResult = unchecked((int)0x80010106);
+
+    private byte[] _wicDecodeScratch = [];
+    private bool _wicFactoryUnavailable;
+    private bool _wicComInitializedForFactory;
+    private int _wicComInitializationThreadId;
+    private IWICImagingFactory* _wicFactory;
+
+    private void ReleaseWicFactory()
+    {
+        if (_wicFactory != null)
+        {
+            _wicFactory->Release();
+            _wicFactory = null;
+        }
+
+        if (_wicComInitializedForFactory && _wicComInitializationThreadId == Environment.CurrentManagedThreadId)
+        {
+            PInvoke.CoUninitialize();
+        }
+
+        _wicComInitializedForFactory = false;
+        _wicComInitializationThreadId = 0;
+    }
+
     private bool RasterizeGlyph(
         GlyphKey key,
         CachedFontFace fontFace,

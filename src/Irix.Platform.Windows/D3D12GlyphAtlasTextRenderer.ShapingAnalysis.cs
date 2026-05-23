@@ -10,8 +10,6 @@ using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.DirectWrite;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.Graphics.Imaging;
-using Windows.Win32.System.Com;
 
 namespace Irix.Platform.Windows;
 
@@ -605,13 +603,13 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         fontFace = default!;
         IDWriteFontFace* face = null;
         IDWriteFontFace4* face4 = null;
-        IUnknown* identity = null;
+        global::Windows.Win32.System.Com.IUnknown* identity = null;
         try
         {
             var iid = IUnknownGuid;
             void* identityObject = null;
             font->QueryInterface(&iid, &identityObject).ThrowOnFailure();
-            identity = (IUnknown*)identityObject;
+            identity = (global::Windows.Win32.System.Com.IUnknown*)identityObject;
             var key = (nint)identity;
             if (_fallbackFontFaces.TryGetValue(key, out fontFace!))
             {

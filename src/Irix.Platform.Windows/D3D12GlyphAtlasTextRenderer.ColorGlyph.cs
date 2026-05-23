@@ -11,13 +11,35 @@ using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.Direct2D.Common;
 using Windows.Win32.Graphics.DirectWrite;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.Graphics.Imaging;
-using Windows.Win32.System.Com;
 
 namespace Irix.Platform.Windows;
 
 internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
 {
+    private const int DWriteNoColorHResult = unchecked((int)0x8898500C);
+    private const DWRITE_GLYPH_IMAGE_FORMATS SupportedLayerColorGlyphFormats =
+        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_CFF
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR;
+    private const DWRITE_GLYPH_IMAGE_FORMATS EncodedBitmapColorGlyphFormats =
+        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF;
+    private const DWRITE_GLYPH_IMAGE_FORMATS SupportedBitmapColorGlyphFormats =
+        EncodedBitmapColorGlyphFormats
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8;
+    private const DWRITE_GLYPH_IMAGE_FORMATS UnsupportedNonLayerColorGlyphFormats =
+        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_SVG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE;
+    private const DWRITE_GLYPH_IMAGE_FORMATS ColorGlyphRunImageFormats =
+        SupportedLayerColorGlyphFormats
+        | SupportedBitmapColorGlyphFormats;
+    private const DWRITE_GLYPH_IMAGE_FORMATS BitmapColorGlyphFormats =
+        DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_PNG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_JPEG
+        | DWRITE_GLYPH_IMAGE_FORMATS.DWRITE_GLYPH_IMAGE_FORMATS_TIFF;
+
     private bool TryAppendColorGlyphSegmentLayers(
         ShapedGlyphSegment shapedSegment,
         float baselineOriginX,

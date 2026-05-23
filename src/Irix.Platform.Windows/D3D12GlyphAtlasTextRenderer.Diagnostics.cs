@@ -10,8 +10,6 @@ using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
 using Windows.Win32.Graphics.DirectWrite;
 using Windows.Win32.Graphics.Dxgi.Common;
-using Windows.Win32.Graphics.Imaging;
-using Windows.Win32.System.Com;
 
 namespace Irix.Platform.Windows;
 
