@@ -68,7 +68,42 @@ Required split before move:
 | Allocation attribution wrapper | Diagnostics layer | It should not be mandatory for the core translator API. |
 | `TranslatorRenderPipelineFactory` defaulting to `CounterStylePreset.Default` | Stay in Poc or replace with explicit style input | Current default is app-specific. |
 
-Mechanical move readiness: no. First extract an explicit translator input struct and output struct, remove `CounterStylePreset` default coupling, and decide whether scroll feedback belongs to rendering diagnostics or app control feedback.
+Mechanical move readiness: no. First extract an explicit translator input struct and output struct, remove `CounterStylePreset` default coupling, and keep scroll feedback out of the core rendering translator.
+
+### Translator Split Concepts
+
+The next split should name the translation boundary before moving code:
+
+| Concept | Ownership | Shape | Boundary |
+|---------|-----------|-------|----------|
+| `TranslatorInput` | Candidate `Irix.Rendering` value type | `PatchBatch`, logical viewport, `DisplayScale`, optional production-owner options, and optional previous-root/snapshot details if retained-tree ownership is externalized. | No `INativeWindow`, callbacks, app style defaults, scroll pump, CLI diagnostics, or allocation measurement. |
+| `TranslatorOutput` | Candidate `Irix.Rendering` value type | `RenderFrameBatch`, layout diagnostics, dirty classifications, optional retained segment ownership, and renderer-neutral layout viewport. | No direct mutation of app model and no platform callback invocation. |
+| `IViewportProvider` / `ViewportProvider` | Poc/platform adapter | Supplies physical viewport and applied renderer viewport; may call prepare-frame before reading backend/window state. | Stays outside the platform-neutral translation core because it couples window/backend timing to translation cadence. |
+| `IFeedbackSink` / `FeedbackSink` | App/control adapter | Receives `ScrollFeedback`, legacy `MaxScrollY`, and future control feedback after layout. | It is app/control feedback, not rendering diagnostics and not platform feedback. |
+| `TranslatorDiagnostics` | Diagnostics adapter | Allocation attribution, last viewport fields, and debug rows. | Optional wrapper around the core translator; not required for the core API. |
+| `RenderPipelineFactory` | Composition root | Supplies style preset and `RenderPipeline` construction. | Do not default to `CounterStylePreset.Default` in reusable code. |
+
+Proposed extraction order:
+
+1. Introduce `TranslatorInput` / `TranslatorOutput` in place while the class remains in `Irix.Poc`.
+2. Move viewport callbacks behind a Poc-owned `ViewportProvider`.
+3. Move scroll/max-scroll callbacks behind a Poc-owned `FeedbackSink`.
+4. Move allocation attribution into a diagnostics wrapper.
+5. Only then move the platform-neutral translation core to `Irix.Rendering`.
+
+### Scroll Feedback Ownership
+
+Decision: `ScrollFeedback` is app/control feedback.
+
+It is derived from render/layout results, but its consumer is app/control state: `CounterApplication` uses max scroll and typed scroll-container metrics to clamp or update scroll behavior. It should not be modeled as rendering diagnostics because diagnostics are read-only observation, while scroll feedback participates in runtime state correction. It also should not be modeled as platform feedback because it does not come from Win32 or the display backend.
+
+Rules:
+
+- `RenderPipeline` may continue to expose scroll diagnostics as layout observation.
+- The translator or future translation core may project scroll diagnostics into a feedback value.
+- Delivery to app/control state belongs to `FeedbackSink`, outside the platform-neutral translation core.
+- CLI/debug formatting may observe scroll feedback, but must not become the owner.
+- `ScrollController`, `ScrollState`, `ScrollFramePump`, and `ScrollFeedback` stay in `Irix.Poc` until a separate scroll ownership contract is written.
 
 ## `D3D12DrawingBackend`
 
@@ -110,6 +145,14 @@ Move invariants:
 
 Mechanical move status: complete.
 
+Move validation:
+
+- `dotnet build --no-restore -c Release` passed.
+- `D3D12DrawingBackendScissorTests`, `DisplayScaleTests`, and `PerformanceRegressionTests` targeted lane passed: 64 tests.
+- `ProgramDiagnosticsTests` passed: 113 tests.
+- Full `dotnet test --no-build -c Release --verbosity normal` passed: 701 tests.
+- Glyph atlas Smoke was not run because the move did not change glyph renderer behavior, matrix expected values, or `D3D12Renderer` internals.
+
 ## `WindowBackend`
 
 Current role: PoC legacy/debug window presentation adapter.
@@ -125,6 +168,8 @@ Reason:
 - It is valuable as a legacy/debug presentation path and test double for compositor behavior.
 
 Future action: isolate or replace only if the GDI/window presentation tests become a maintenance burden. Do not move it into `Irix.Rendering` or `Irix.Platform.Windows` as-is.
+
+WindowBackend remains intentionally unchanged by the translator split. It is a legacy/debug presentation path and not a reusable framework runtime surface.
 
 ## Source Grep Promotion Plan
 

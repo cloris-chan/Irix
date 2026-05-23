@@ -38,10 +38,10 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-024 | Split `WindowDrawCommandTranslator` | Promotion contract exists in `Poc-Promotion-Contracts.md`; translator remains in `Irix.Poc` because it mixes runtime translation, viewport callbacks, scroll feedback, diagnostics, and allocation attribution. | Extract an explicit platform-neutral translation core before moving anything into `Irix.Rendering`. |
+| POST-024 | Split `WindowDrawCommandTranslator` | Promotion contract exists in `Poc-Promotion-Contracts.md`; translator remains in `Irix.Poc` because it mixes runtime translation, viewport callbacks, app/control scroll feedback, diagnostics, and allocation attribution. | Introduce `TranslatorInput` / `TranslatorOutput` / `ViewportProvider` / `FeedbackSink` boundaries first; extract a platform-neutral translation core before moving anything into `Irix.Rendering`. |
 | POST-025 | Keep `D3D12DrawingBackend` in Windows platform | Backend and helper structs now live in `Irix.Platform.Windows`. | Preserve scissor/text clip/device recovery/scale diagnostics tests; do not move it back into `Irix.Poc`. |
 | POST-026 | Keep `WindowBackend` isolated | Contract decision is stay: it is a legacy/debug `INativeWindow.SetContent` presentation path. | Do not move it into `Irix.Rendering` or `Irix.Platform.Windows`; replace only if the legacy/debug path becomes unnecessary. |
-| POST-027 | Scroll extraction | Scroll state/pump remains in `Irix.Poc`. | Extract only after typed feedback and viewport ownership contracts are stable. |
+| POST-027 | Scroll extraction | Scroll feedback is app/control feedback derived from layout diagnostics; scroll state/pump remains in `Irix.Poc`. | Extract only after typed feedback and viewport ownership contracts are stable. |
 | POST-028 | Settings provider | Runtime settings wiring remains postponed. | Add only after a concrete app/framework boundary is written; keep fallback-only internal provider until then. |
 
 ### P1 - Measurement-Led Optimization

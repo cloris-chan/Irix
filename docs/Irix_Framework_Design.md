@@ -29,7 +29,7 @@ Promotion contract summary:
 | Candidate | Why it stays in Poc for now | Required before moving |
 |-----------|-----------------------------|------------------------|
 | `D3D12DrawingBackend` | Windows D3D12 drawing backend adapter over `D3D12Renderer`. | Moved to `Irix.Platform.Windows`; helper structs and tests moved with the namespace boundary. |
-| `WindowDrawCommandTranslator` | Owns app glue for viewport, display scale, scroll feedback, retained-frame feed, allocation attribution, and diagnostics. | Split platform-neutral translation core from Poc/window glue before moving. |
+| `WindowDrawCommandTranslator` | Owns app glue for viewport, display scale, app/control scroll feedback, retained-frame feed, allocation attribution, and diagnostics. | Define `TranslatorInput` / `TranslatorOutput` / `ViewportProvider` / `FeedbackSink` boundaries, then split platform-neutral translation core from Poc/window glue. |
 | `WindowBackend` | Converts draw commands into `INativeWindow.SetContent` elements for legacy/debug GDI-style presentation. | Stay in `Irix.Poc`; do not promote as framework runtime surface. |
 
 Detailed input/output contracts and the source grep move plan live in [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md).
