@@ -1837,6 +1837,42 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Glyph_atlas_glyph_oracle_cli_is_wired_without_overlay_or_layout()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasGlyphOracleDiagnosticRunner.cs")));
+        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteGlyphOracleDiagnostic.cs")));
+
+        Assert.Contains("--diagnose-glyph-atlas-glyph-oracle", programSource);
+        Assert.Contains("GlyphAtlasGlyphOracleDiagnosticRunner.Run", programSource);
+        Assert.Contains("DWriteGlyphOracleDiagnostic.Capture()", runnerSource);
+        Assert.Contains("Glyph oracle: factory={snapshot.FactoryAvailable}", runnerSource);
+        Assert.Contains("glyphCount=", runnerSource);
+        Assert.Contains("bidiLevels=", runnerSource);
+        Assert.Contains("lineBreaks=", runnerSource);
+        Assert.Contains("segments=", runnerSource);
+        Assert.Contains("glyphs=", runnerSource);
+        Assert.Contains("glyph.Advance.ToString", runnerSource);
+        Assert.Contains("glyph.AdvanceOffset", runnerSource);
+        Assert.Contains("glyph.AscenderOffset", runnerSource);
+        Assert.Contains("IDWriteFontFallback*", platformSource);
+        Assert.Contains("fontFallback->MapCharacters(", platformSource);
+        Assert.Contains("analyzer->AnalyzeScript(", platformSource);
+        Assert.Contains("analyzer->AnalyzeBidi(", platformSource);
+        Assert.Contains("analyzer->AnalyzeLineBreakpoints(", platformSource);
+        Assert.Contains("analyzer->GetGlyphs(", platformSource);
+        Assert.Contains("analyzer->GetGlyphPlacements(", platformSource);
+        Assert.Contains("GlyphOracleLineBreak", platformSource);
+        Assert.Contains("GlyphOracleSegment", platformSource);
+        Assert.Contains("GlyphOracleGlyph", platformSource);
+        Assert.DoesNotContain("IDWriteTextLayout", platformSource);
+        Assert.DoesNotContain("CreateTextLayout", platformSource);
+        Assert.DoesNotContain("ID2D", platformSource);
+        Assert.DoesNotContain("D3D11On12", platformSource);
+    }
+
+    [Fact]
     public void Text_cache_allocation_attribution_formatter_outputs_stable_stage_fields()
     {
         var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(

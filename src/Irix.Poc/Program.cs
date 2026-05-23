@@ -123,6 +123,13 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-glyph-atlas-glyph-oracle"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            GlyphAtlasGlyphOracleDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
+            return;
+        }
+
         if (args.Contains("--diagnose-glyph-atlas-stress"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);

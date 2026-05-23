@@ -17,6 +17,7 @@
 | [Glyph-Atlas-Soak-Memory-Pressure-Evidence-2026-05-23.md](Glyph-Atlas-Soak-Memory-Pressure-Evidence-2026-05-23.md) | Local evidence for glyph-atlas long soak, memory pressure, page reuse, and fragmentation diagnostics. |
 | [Glyph-Atlas-Color-Format-Smoke-Evidence-2026-05-23.md](Glyph-Atlas-Color-Format-Smoke-Evidence-2026-05-23.md) | Local evidence for default COLR/layer color glyphs plus Noto font-file PNG image-data and WIC decode coverage. |
 | [Glyph-Atlas-BiDi-Oracle-Evidence-2026-05-23.md](Glyph-Atlas-BiDi-Oracle-Evidence-2026-05-23.md) | Local evidence for DirectWrite analyzer-level BiDi resolved-level oracle coverage. |
+| [Glyph-Atlas-Glyph-Oracle-Evidence-2026-05-23.md](Glyph-Atlas-Glyph-Oracle-Evidence-2026-05-23.md) | Local evidence contract for diagnostic-only DirectWrite shaping/layout-data oracle coverage. |
 | [Glyph-Atlas-Mixed-Fallback-Smoke-Evidence-2026-05-19.md](Glyph-Atlas-Mixed-Fallback-Smoke-Evidence-2026-05-19.md) | Local evidence for mixed ASCII/NonAscii/clipped glyph-atlas fallback and default long smoke. |
 | [Post-GA-Default-Baseline-Evidence-2026-05-18.md](Post-GA-Default-Baseline-Evidence-2026-05-18.md) | Local evidence for the post-GA default switch to GlyphAtlas text composition and Scissor clipping. |
 | [ADR-Scissor-Clipping-v0.md](ADR-Scissor-Clipping-v0.md) | Clip/scissor/text-clip v0 decision and frozen behavior. |
