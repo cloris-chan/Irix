@@ -37,9 +37,9 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-024 | Promotion contract for `WindowDrawCommandTranslator` | Translator remains in `Irix.Poc` and owns app/diagnostic glue around `RenderPipeline`. | A contract exists for viewport input, display scale, retained-frame ownership, scroll feedback, allocation attribution, and diagnostics before moving code. |
-| POST-025 | Promotion contract for `D3D12DrawingBackend` | Backend remains in `Irix.Poc` as the app-facing adapter over `Irix.Platform.Windows.D3D12Renderer`. | A contract exists for clip mode, device recovery, dirty range, scale diagnostics, and renderer ownership before moving code. |
-| POST-026 | Retire or isolate `WindowBackend` | `WindowBackend` is a PoC-only GDI/window presentation adapter. | Either stays explicitly PoC-only or is replaced by reusable drawing/backend contracts; no framework dependency on window content elements. |
+| POST-024 | Split `WindowDrawCommandTranslator` | Promotion contract exists in `Poc-Promotion-Contracts.md`; translator remains in `Irix.Poc` because it mixes runtime translation, viewport callbacks, scroll feedback, diagnostics, and allocation attribution. | Extract an explicit platform-neutral translation core before moving anything into `Irix.Rendering`. |
+| POST-025 | Move `D3D12DrawingBackend` | Promotion contract marks it as the first mechanical move candidate for `Irix.Platform.Windows`. | Move backend plus helper structs together; preserve scissor/text clip/device recovery/scale diagnostics tests; do not change renderer behavior. |
+| POST-026 | Keep `WindowBackend` isolated | Contract decision is stay: it is a legacy/debug `INativeWindow.SetContent` presentation path. | Do not move it into `Irix.Rendering` or `Irix.Platform.Windows`; replace only if the legacy/debug path becomes unnecessary. |
 | POST-027 | Scroll extraction | Scroll state/pump remains in `Irix.Poc`. | Extract only after typed feedback and viewport ownership contracts are stable. |
 | POST-028 | Settings provider | Runtime settings wiring remains postponed. | Add only after a concrete app/framework boundary is written; keep fallback-only internal provider until then. |
 
@@ -75,7 +75,7 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 ```text
 Completed Private GA + Renderer foundation
   ├─ POST-021..023 local gates and source boundaries
-  ├─ POST-024..026 framework promotion contracts
+  ├─ POST-024..026 framework promotion execution
   │    ├─ POST-027 scroll extraction
   │    └─ POST-028 settings provider
   ├─ POST-029..031 measured allocation work

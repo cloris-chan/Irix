@@ -24,13 +24,15 @@ The repository is still private. Public API compatibility is not frozen; when a 
 | `Irix.Platform.Windows` | Windows host and D3D12 renderer implementation. | Owns Win32, DXGI, D3D12, DirectWrite/WIC source-data integration, and device/resource lifetimes. |
 | `Irix.Poc` | App, CLI diagnostics, debug UI, and temporary adapter glue. | Not the reusable framework home. Promotion requires written ownership and diagnostic contracts first. |
 
-Promotion candidates currently staying in `Irix.Poc`:
+Promotion contract summary:
 
 | Candidate | Why it stays in Poc for now | Required before moving |
 |-----------|-----------------------------|------------------------|
-| `WindowBackend` | Couples Win32 window presentation and PoC app lifetime. | Platform/window ownership contract and replacement boundary. |
-| `WindowDrawCommandTranslator` | Owns app glue for viewport, display scale, scroll feedback, retained-frame feed, allocation attribution, and diagnostics. | Explicit input/output contract and tests around those dependencies. |
-| `D3D12DrawingBackend` | App-facing adapter over the Windows D3D12 renderer. | Renderer ownership, device recovery, clip mode, dirty range, scale diagnostics, and failure contract. |
+| `D3D12DrawingBackend` | It is the app-facing adapter over `Irix.Platform.Windows.D3D12Renderer`, but its responsibilities are Windows D3D12 execution concerns. | First mechanical move candidate for `Irix.Platform.Windows`; move helper structs and update tests together. |
+| `WindowDrawCommandTranslator` | Owns app glue for viewport, display scale, scroll feedback, retained-frame feed, allocation attribution, and diagnostics. | Split platform-neutral translation core from Poc/window glue before moving. |
+| `WindowBackend` | Converts draw commands into `INativeWindow.SetContent` elements for legacy/debug GDI-style presentation. | Stay in `Irix.Poc`; do not promote as framework runtime surface. |
+
+Detailed input/output contracts and the source grep move plan live in [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md).
 
 ## Data Flow
 
