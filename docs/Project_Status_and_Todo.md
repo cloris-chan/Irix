@@ -10,7 +10,7 @@
 | Doc | Purpose |
 |-----|---------|
 | [Irix_Framework_Design.md](Irix_Framework_Design.md) | Main architecture design, layer boundaries, phase boundaries, ADR index, and v1/vNext scope. |
-| [GA-Hardening-Plan.md](GA-Hardening-Plan.md) | Private-GA hardening state, accepted risks, and stability/performance evidence. |
+| [GA-Hardening-Plan.md](GA-Hardening-Plan.md) | Current private-GA baseline, guarded invariants, and accepted constraints. |
 | [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md) | Remaining post-foundation backlog and framework-promotion candidates. |
 | [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md) | D3D12-only glyph atlas text renderer design, degradation policy, and coverage freeze. |
 | [Glyph-Atlas-Regression-Matrix-Evidence-2026-05-23.md](Glyph-Atlas-Regression-Matrix-Evidence-2026-05-23.md) | Local fixed regression matrix and Smoke guard evidence. |

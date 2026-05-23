@@ -52,19 +52,7 @@ Global grouping by clip is not allowed because it can change visual stacking onc
 
 This section records the removed overlay implementation. It is superseded by D3D12 GlyphAtlas text clipping and must not be treated as current renderer behavior.
 
-Text is drawn through the Direct2D/DirectWrite overlay path after D3D12 rectangles. D3D12 rasterizer scissor does not automatically clip these D2D overlay draw calls, so text clipping uses a separate Direct2D clip scope.
-
-The minimal text clip step clips each `DrawTextRun` in the Direct2D overlay path with the same effective rectangle model used by FillRect scissor:
-
-1. Preserve `DrawCommand.ClipBounds` through the text translation path. `D3D12DrawingBackend` resolves the DrawTextRun clip and passes `EffectiveScissor` into `D3D12TextRenderer.TextData`.
-2. Resolve `viewport + ClipBounds/default` with `DrawingScissor.ResolveEffectiveScissor` so FillRect and text agree on default clip, viewport intersection, and empty-intersection semantics.
-3. If the effective text clip is empty, skip that DrawTextRun.
-4. If the effective text clip is the full viewport/default target, draw through the original text path without pushing an extra D2D clip.
-5. Otherwise, before `ID2D1DeviceContext2.DrawTextLayout`, push one axis-aligned D2D clip matching the effective clip bounds; immediately pop it after that DrawTextRun. The scope must be per text run so later runs cannot inherit stale clip state.
-6. Keep `D2D1_DRAW_TEXT_OPTIONS_CLIP` for layout-box clipping. The new D2D axis-aligned clip is for scroll/container `ClipBounds`; the existing layout clip is only the text layout rectangle.
-7. Diagnostics report `textClip=True`, the effective text clip, and empty text clip skip count.
-
-This intentionally avoids nested clip stacks, global text batching by clip, or changing DirectWrite layout cache keys. It is a per-run Direct2D state scope around existing DrawTextRun rendering.
+The private-GA overlay path used a per-run Direct2D clip scope because D3D12 rasterizer scissor did not apply to Direct2D overlay draw calls. That implementation and its `D3D12TextRenderer` data path have been removed. The current invariant is simpler: accepted text is clipped in the D3D12 GlyphAtlas pass, and unsupported text degrades explicitly without invoking overlay composition.
 
 ## Minimal Smoke
 
@@ -97,4 +85,4 @@ Current `--diagnose` smokes switch the backend to `Scissor` for FillRect and tex
 
 ## Follow-up
 
-Default-on closeout: the explicit-switch soak round passed, so Scissor is now the default. Keep `Diagnostic` rollback available while future work avoids expanding the clip scope into nested clip stacks, retained partial redraw, text batching, theme work, or generic control abstraction.
+Scissor is the default. Keep `Diagnostic` rollback available while future work avoids expanding the clip scope into nested clip stacks, retained partial redraw, text batching, theme work, or generic control abstraction.
