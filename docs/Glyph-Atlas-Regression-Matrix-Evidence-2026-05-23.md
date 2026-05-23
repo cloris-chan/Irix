@@ -12,6 +12,12 @@ dotnet run --no-build -c Release --project src\Irix.Poc -- --diagnose-glyph-atla
 .\scripts\glyph-atlas-regression.ps1 -Mode Nightly
 ```
 
+Pre-merge fixed step:
+
+```powershell
+.\scripts\glyph-atlas-regression.ps1 -Mode Smoke
+```
+
 Observed validation:
 
 ```text
@@ -33,7 +39,9 @@ Interpretation:
 
 - `--diagnose-glyph-atlas-matrix` is now the fixed broad glyph-atlas smoke. It covers the script/control matrix in one scene and keeps expected per-frame classification machine-readable.
 - `scripts/glyph-atlas-regression.ps1` is the canonical daily smoke entry. `-Mode Smoke` uses a 60-frame soak, `-Mode Local` uses 300 frames, and `-Mode Nightly` uses 900 frames; all modes run matrix, soak, color-format natural coverage, BiDi oracle, and glyph oracle diagnostics into `TestResults`.
-- The fixed lane emits machine-readable `matrix.expected`, `matrix.actual`, `soak.actual`, `bidi-oracle.expected`, `bidi-oracle.actual`, `glyph-oracle.expected`, and `glyph-oracle.actual` lines for later baseline comparison.
+- The fixed lane emits machine-readable `matrix.expected`, `matrix.actual`, `soak.actual`, `bidi-oracle.expected`, `bidi-oracle.actual`, `glyph-oracle.expected`, and `glyph-oracle.actual` lines, then writes a `glyph-atlas-regression-*-*.guard.summary.txt` file only after validating the contract.
+- The summary guard fails fast if matrix actual drifts from `degradedRuns=0`, `glyphAtlasInitialized=True`, or `overlaySync=False`; if soak reports device loss, overlay sync, sync waits, hard full-without-reuse, `RecordFailed`, or a non-`None` record failure phase; or if oracle expected/actual probe labels/counts drift.
+- Windows CI runs `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke` as the pre-merge glyph atlas regression step.
 - The matrix remains D3D12-only: `syncWaits=0`, `degradedRuns=0`, and `overlayFallback=False`.
 - The explicit accepted-degradation contract is: SVG color glyphs, COLR paint-tree-only color glyphs, BiDi cases beyond current resolved-level projection, AtlasFull after the bounded page budget, record failure, and initialization failure may degrade without invoking D3D11On12/D2D overlay.
 - Natural BGRA/encoded-bitmap font coverage remains separate from this matrix because local Segoe UI Emoji exposes COLR/layer runs but no bitmap glyph image data on this machine.

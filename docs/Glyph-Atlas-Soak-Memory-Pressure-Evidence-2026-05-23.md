@@ -7,6 +7,8 @@ Commands:
 ```powershell
 dotnet test -c Release --no-restore --filter "FullyQualifiedName~ProgramDiagnosticsTests"
 dotnet run --no-build -c Release --project src\Irix.Poc -- --diagnose-glyph-atlas-soak 60 --pressure-every 6 --diagnose-scale 150
+.\scripts\glyph-atlas-regression.ps1 -Mode Local
+.\scripts\glyph-atlas-regression.ps1 -Mode Nightly
 ```
 
 Observed validation:
@@ -34,3 +36,4 @@ Interpretation:
 - The soak summary now reports pending reuse and hard full-without-reuse counters split by Alpha/Bgra, matching the final glyph-atlas diagnostic summary.
 - This run reached the full 48 Alpha page budget and reused cold pages 231 times without pending reuse buildup, hard full-without-reuse, device removal, record failure, or overlay sync waits.
 - `degradedRuns=49` / `AtlasFull=49` is accepted pressure behavior after budget saturation; it is non-overlay degradation and remains observable through diagnostics.
+- The fixed regression script promotes the soak checks into recurring lanes: `-Mode Local` is the 300-frame local cadence, and `-Mode Nightly` is the 900-frame large-change cadence. Both are expected to keep `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`, and `recordFailurePhase=None`; pressure degradation is accepted only while it remains explicit `AtlasFull`/budget behavior.

@@ -23,6 +23,9 @@ jobs:
           - name: Windows 2025 / SDK 26100 / headless D3D12
             os: windows-2025
             suite: d3d12
+          - name: Windows 2025 / SDK 26100 / glyph atlas regression lane
+            os: windows-2025
+            suite: glyph-atlas
           - name: Windows 2025 / SDK 26100 / performance baseline
             os: windows-2025
             suite: performance
@@ -67,6 +70,11 @@ jobs:
       - name: D3D12 smoke tests
         if: matrix.suite == 'd3d12'
         run: dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
+
+      - name: Glyph atlas regression lane
+        if: matrix.suite == 'glyph-atlas'
+        shell: pwsh
+        run: .\scripts\glyph-atlas-regression.ps1 -Mode Smoke
 
       - name: Performance regression baseline
         if: matrix.suite == 'performance'

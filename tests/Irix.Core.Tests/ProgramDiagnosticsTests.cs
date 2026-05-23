@@ -1815,10 +1815,31 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("bidi-oracle.actual", script);
         Assert.Contains("glyph-oracle.expected", script);
         Assert.Contains("glyph-oracle.actual", script);
+        Assert.Contains("Assert-RegressionSummaries", script);
+        Assert.Contains("glyph-atlas-regression.guard status=Passed", script);
+        Assert.Contains("matrix.actual", script);
+        Assert.Contains("degradedRuns\" \"0\"", script);
+        Assert.Contains("glyphAtlasInitialized\" \"True\"", script);
+        Assert.Contains("hardFullWithoutReuse\" \"0\"", script);
+        Assert.Contains("RecordFailed=0", script);
+        Assert.Contains("Assert-FieldsMatch $bidiExpectedFields $bidiActualFields", script);
+        Assert.Contains("Assert-FieldsMatch $glyphExpectedFields $glyphActualFields", script);
         Assert.Contains("Glyph oracle:", script);
         Assert.DoesNotContain("text-overlay-sync-strategy", script);
         Assert.DoesNotContain("D3D11On12", script);
         Assert.DoesNotContain("ID2D", script);
+    }
+
+    [Fact]
+    public void Glyph_atlas_regression_lane_is_pre_merge_ci_step()
+    {
+        var root = FindRepoRoot();
+        var workflow = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml")));
+
+        Assert.Contains("suite: glyph-atlas", workflow);
+        Assert.Contains("Glyph atlas regression lane", workflow);
+        Assert.Contains(".\\scripts\\glyph-atlas-regression.ps1 -Mode Smoke", workflow);
+        Assert.Contains("windows-2025", workflow);
     }
 
     [Fact]
