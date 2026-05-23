@@ -2138,6 +2138,21 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Text_cache_tree_allocation_attribution_formatter_outputs_stable_stage_fields()
+    {
+        var attribution = new TextCacheAllocationDiagnosticRunner.TreeAllocationAttribution(
+            BeginFrameBytes: 30,
+            BuildRootBytes: 210,
+            SnapshotBytes: 60);
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatTreeAllocationAttribution(attribution, frameCount: 3);
+
+        Assert.Equal(
+            "Tree allocation: beginFrame=30 bytes (10/frame), buildRoot=210 bytes (70/frame), snapshot=60 bytes (20/frame), measuredTotal=300 bytes (100/frame)",
+            summary);
+    }
+
+    [Fact]
     public void Text_cache_pipeline_allocation_attribution_formatter_outputs_stable_stage_fields()
     {
         var attribution = new RenderPipelineBuildAllocationAttribution(
@@ -2156,6 +2171,22 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Text_cache_record_allocation_attribution_formatter_outputs_stable_stage_fields()
+    {
+        var attribution = new DrawCommandRecordAllocationAttribution(
+            ResourcesBytes: 12,
+            StylesBytes: 24,
+            CommandBuildBytes: 144,
+            DirtyRangesBytes: 0);
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatRecordAllocationAttribution(attribution, frameCount: 3);
+
+        Assert.Equal(
+            "Record allocation: resources=12 bytes (4/frame), styles=24 bytes (8/frame), commandBuild=144 bytes (48/frame), dirtyRanges=0 bytes (0/frame), measuredTotal=180 bytes (60/frame)",
+            summary);
+    }
+
+    [Fact]
     public void Text_cache_allocation_diagnostic_uses_frame_scoped_text_arena()
     {
         var root = FindRepoRoot();
@@ -2163,10 +2194,15 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
         Assert.Contains("arena.BeginFrame();", source);
-        Assert.Contains("return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());", source);
+        Assert.Contains("var snapshot = arena.GetOrCreateSnapshot();", source);
+        Assert.Contains("return new VirtualNodeTree(root, snapshot);", source);
+        Assert.Contains("out var treeFrameAttribution", source);
+        Assert.Contains("treeAttribution = treeAttribution.Add(treeFrameAttribution);", source);
         Assert.Contains("using var batch = translator.Translate(patch, out var translateFrameAttribution);", source);
+        Assert.Contains("output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));", source);
+        Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
     }
 

@@ -225,5 +225,5 @@ internal readonly struct WindowTranslateAllocationAttribution(
 
     public override bool Equals(object? obj) => obj is WindowTranslateAllocationAttribution other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(RetainedApplyBytes, ViewportBytes, PipelineBuildBytes, FeedbackBytes);
+    public override int GetHashCode() => HashCode.Combine(RetainedApplyBytes, ViewportBytes, PipelineBuildBytes, FeedbackBytes, PipelineAttribution);
 }

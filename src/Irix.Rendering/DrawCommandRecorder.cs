@@ -39,6 +39,26 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
         IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
         TextBufferSnapshot textSnapshot)
     {
+        return RecordCore(elements, dirtyElementRanges, textSnapshot, measureAllocation: false, out _);
+    }
+
+    internal DrawCommandRecordResult Record(
+        IReadOnlyList<LayoutElement> elements,
+        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        TextBufferSnapshot textSnapshot,
+        out DrawCommandRecordAllocationAttribution attribution)
+    {
+        return RecordCore(elements, dirtyElementRanges, textSnapshot, measureAllocation: true, out attribution);
+    }
+
+    private DrawCommandRecordResult RecordCore(
+        IReadOnlyList<LayoutElement> elements,
+        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        TextBufferSnapshot textSnapshot,
+        bool measureAllocation,
+        out DrawCommandRecordAllocationAttribution attribution)
+    {
+        attribution = default;
         if (elements.Count == 0)
         {
             return new DrawCommandRecordResult(
@@ -47,20 +67,28 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
         }
 
         var maximumCommandCount = elements.Count * 2;
+        var beforeResources = GetAllocatedBytes(measureAllocation);
         var resources = FrameDrawingResources.Rent();
+        attribution = attribution.WithResources(AllocatedDelta(measureAllocation, beforeResources));
         var success = false;
         try
         {
+            var beforeStyles = GetAllocatedBytes(measureAllocation);
             var textStyle = resources.AddTextStyle(_style.TextStyle);
             var buttonTextStyle = resources.AddTextStyle(_style.ButtonTextStyle);
+            attribution = attribution.WithStyles(AllocatedDelta(measureAllocation, beforeStyles));
 
+            var beforeCommandBuild = GetAllocatedBytes(measureAllocation);
             var (batch, resolver, elementRanges) = maximumCommandCount <= StackCommandThreshold
                 ? RecordSmallBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount, textSnapshot)
                 : RecordLargeBatch(elements, resources, textStyle, buttonTextStyle, maximumCommandCount, textSnapshot);
+            attribution = attribution.WithCommandBuild(AllocatedDelta(measureAllocation, beforeCommandBuild));
 
+            var beforeDirtyRanges = GetAllocatedBytes(measureAllocation);
             var dirtyCommandRanges = dirtyElementRanges is { Count: > 0 }
                 ? RangeUtils.MapAndMerge(elementRanges, dirtyElementRanges)
                 : (IReadOnlyList<(int Start, int Count)>)[];
+            attribution = attribution.WithDirtyRanges(AllocatedDelta(measureAllocation, beforeDirtyRanges));
 
             success = true;
             return new DrawCommandRecordResult(batch, resolver, elementRanges, dirtyCommandRanges);
@@ -73,6 +101,10 @@ internal sealed class DrawCommandRecorder(DrawingStyle style, ControlVisualState
             }
         }
     }
+
+    private static long GetAllocatedBytes(bool enabled) => enabled ? GC.GetTotalAllocatedBytes(false) : 0;
+
+    private static long AllocatedDelta(bool enabled, long before) => enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
 
     private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRange[]) RecordSmallBatch(
         IReadOnlyList<LayoutElement> elements,

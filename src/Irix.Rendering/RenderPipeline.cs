@@ -142,10 +142,14 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         LastDirtyElementRanges = dirtyElementRanges ?? [];
 
         var beforeRecord = GetAllocatedBytes(measureAllocation);
-        var result = _drawCommandRecorder.Record(layout, dirtyElementRanges, _retainedTextSnapshot);
+        var recordAttribution = default(DrawCommandRecordAllocationAttribution);
+        var result = measureAllocation
+            ? _drawCommandRecorder.Record(layout, dirtyElementRanges, _retainedTextSnapshot, out recordAttribution)
+            : _drawCommandRecorder.Record(layout, dirtyElementRanges, _retainedTextSnapshot);
         LastDirtyCommandRanges = result.DirtyCommandRanges;
         LastElementCommandRanges = result.ElementCommandRanges;
         attribution = attribution.WithRecord(AllocatedDelta(measureAllocation, beforeRecord));
+        attribution = attribution.WithRecordAttribution(recordAttribution);
 
         var beforeHitTargets = GetAllocatedBytes(measureAllocation);
         var hitTargets = BuildHitTargets(layout);
@@ -518,7 +522,8 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
     long RecordBytes,
     long HitTargetsBytes,
     long SnapshotBytes,
-    long RetainedFrameBytes) : IEquatable<RenderPipelineBuildAllocationAttribution>
+    long RetainedFrameBytes,
+    DrawCommandRecordAllocationAttribution RecordAttribution = default) : IEquatable<RenderPipelineBuildAllocationAttribution>
 {
     public long ClassificationBytes { get; } = ClassificationBytes;
     public long LayoutBytes { get; } = LayoutBytes;
@@ -526,6 +531,7 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
     public long HitTargetsBytes { get; } = HitTargetsBytes;
     public long SnapshotBytes { get; } = SnapshotBytes;
     public long RetainedFrameBytes { get; } = RetainedFrameBytes;
+    public DrawCommandRecordAllocationAttribution RecordAttribution { get; } = RecordAttribution;
     public long TotalBytes => ClassificationBytes + LayoutBytes + RecordBytes + HitTargetsBytes + SnapshotBytes + RetainedFrameBytes;
 
     public RenderPipelineBuildAllocationAttribution Add(RenderPipelineBuildAllocationAttribution other) =>
@@ -535,19 +541,22 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
             RecordBytes + other.RecordBytes,
             HitTargetsBytes + other.HitTargetsBytes,
             SnapshotBytes + other.SnapshotBytes,
-            RetainedFrameBytes + other.RetainedFrameBytes);
+            RetainedFrameBytes + other.RetainedFrameBytes,
+            RecordAttribution.Add(other.RecordAttribution));
 
-    public RenderPipelineBuildAllocationAttribution WithClassification(long bytes) => new(ClassificationBytes + bytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes);
+    public RenderPipelineBuildAllocationAttribution WithClassification(long bytes) => new(ClassificationBytes + bytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithLayout(long bytes) => new(ClassificationBytes, LayoutBytes + bytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes);
+    public RenderPipelineBuildAllocationAttribution WithLayout(long bytes) => new(ClassificationBytes, LayoutBytes + bytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithRecord(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes + bytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes);
+    public RenderPipelineBuildAllocationAttribution WithRecord(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes + bytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithHitTargets(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes + bytes, SnapshotBytes, RetainedFrameBytes);
+    public RenderPipelineBuildAllocationAttribution WithHitTargets(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes + bytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithSnapshot(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes + bytes, RetainedFrameBytes);
+    public RenderPipelineBuildAllocationAttribution WithSnapshot(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes + bytes, RetainedFrameBytes, RecordAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithRetainedFrame(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes + bytes);
+    public RenderPipelineBuildAllocationAttribution WithRetainedFrame(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes + bytes, RecordAttribution);
+
+    public RenderPipelineBuildAllocationAttribution WithRecordAttribution(DrawCommandRecordAllocationAttribution attribution) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution.Add(attribution));
 
     public bool Equals(RenderPipelineBuildAllocationAttribution other)
     {
@@ -556,10 +565,51 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
             && RecordBytes == other.RecordBytes
             && HitTargetsBytes == other.HitTargetsBytes
             && SnapshotBytes == other.SnapshotBytes
-            && RetainedFrameBytes == other.RetainedFrameBytes;
+            && RetainedFrameBytes == other.RetainedFrameBytes
+            && RecordAttribution.Equals(other.RecordAttribution);
     }
 
     public override bool Equals(object? obj) => obj is RenderPipelineBuildAllocationAttribution other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes);
+    public override int GetHashCode() => HashCode.Combine(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
+}
+
+internal readonly struct DrawCommandRecordAllocationAttribution(
+    long ResourcesBytes,
+    long StylesBytes,
+    long CommandBuildBytes,
+    long DirtyRangesBytes) : IEquatable<DrawCommandRecordAllocationAttribution>
+{
+    public long ResourcesBytes { get; } = ResourcesBytes;
+    public long StylesBytes { get; } = StylesBytes;
+    public long CommandBuildBytes { get; } = CommandBuildBytes;
+    public long DirtyRangesBytes { get; } = DirtyRangesBytes;
+    public long TotalBytes => ResourcesBytes + StylesBytes + CommandBuildBytes + DirtyRangesBytes;
+
+    public DrawCommandRecordAllocationAttribution Add(DrawCommandRecordAllocationAttribution other) =>
+        new(
+            ResourcesBytes + other.ResourcesBytes,
+            StylesBytes + other.StylesBytes,
+            CommandBuildBytes + other.CommandBuildBytes,
+            DirtyRangesBytes + other.DirtyRangesBytes);
+
+    public DrawCommandRecordAllocationAttribution WithResources(long bytes) => new(ResourcesBytes + bytes, StylesBytes, CommandBuildBytes, DirtyRangesBytes);
+
+    public DrawCommandRecordAllocationAttribution WithStyles(long bytes) => new(ResourcesBytes, StylesBytes + bytes, CommandBuildBytes, DirtyRangesBytes);
+
+    public DrawCommandRecordAllocationAttribution WithCommandBuild(long bytes) => new(ResourcesBytes, StylesBytes, CommandBuildBytes + bytes, DirtyRangesBytes);
+
+    public DrawCommandRecordAllocationAttribution WithDirtyRanges(long bytes) => new(ResourcesBytes, StylesBytes, CommandBuildBytes, DirtyRangesBytes + bytes);
+
+    public bool Equals(DrawCommandRecordAllocationAttribution other)
+    {
+        return ResourcesBytes == other.ResourcesBytes
+            && StylesBytes == other.StylesBytes
+            && CommandBuildBytes == other.CommandBuildBytes
+            && DirtyRangesBytes == other.DirtyRangesBytes;
+    }
+
+    public override bool Equals(object? obj) => obj is DrawCommandRecordAllocationAttribution other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(ResourcesBytes, StylesBytes, CommandBuildBytes, DirtyRangesBytes);
 }

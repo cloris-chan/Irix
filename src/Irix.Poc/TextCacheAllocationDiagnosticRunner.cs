@@ -47,12 +47,12 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine();
 
         var arena = new VirtualTextArena();
-        RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) =>
-            BuildScenarioTree(arena, "Static cache baseline", scrollY: 0));
-        RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, _) =>
-            BuildScenarioTree(arena, "Scrolling cache baseline", scrollY: i * 2));
-        RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (i, scale) =>
-            BuildScenarioTree(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0), scaleChangeAtHalf: true);
+        RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (int i, DisplayScale _, out TreeAllocationAttribution treeFrameAttribution) =>
+            BuildScenarioTree(arena, "Static cache baseline", scrollY: 0, measureAllocation: true, out treeFrameAttribution));
+        RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (int i, DisplayScale _, out TreeAllocationAttribution treeFrameAttribution) =>
+            BuildScenarioTree(arena, "Scrolling cache baseline", scrollY: i * 2, measureAllocation: true, out treeFrameAttribution));
+        RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (int i, DisplayScale scale, out TreeAllocationAttribution treeFrameAttribution) =>
+            BuildScenarioTree(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0, measureAllocation: true, out treeFrameAttribution), scaleChangeAtHalf: true);
 
         output.WriteLine("=== Text cache / allocation diagnostic complete ===");
     }
@@ -66,7 +66,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         DrawingBackendCompositor compositor,
         WindowDrawCommandTranslator translator,
         DisplayScale displayScale,
-        Func<int, DisplayScale, VirtualNodeTree> treeFactory,
+        ScenarioTreeFactory treeFactory,
         bool scaleChangeAtHalf = false)
     {
         renderer.ResetTextDiagnostics();
@@ -77,6 +77,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         var poolBefore = FrameDrawingResources.GetPoolDiagnostics();
         var allocatedBefore = GC.GetTotalAllocatedBytes(true);
         var attribution = default(AllocationAttribution);
+        var treeAttribution = default(TreeAllocationAttribution);
         var translateAttribution = default(WindowTranslateAllocationAttribution);
         var previousTree = default(VirtualNodeTree);
         var hasPreviousTree = false;
@@ -94,9 +95,10 @@ internal static class TextCacheAllocationDiagnosticRunner
             }
 
             var beforeTree = GC.GetTotalAllocatedBytes(false);
-            var nextTree = treeFactory(i, activeScale);
+            var nextTree = treeFactory(i, activeScale, out var treeFrameAttribution);
             var afterTree = GC.GetTotalAllocatedBytes(false);
             attribution = attribution.AddTree(afterTree - beforeTree);
+            treeAttribution = treeAttribution.Add(treeFrameAttribution);
 
             var beforeDiff = GC.GetTotalAllocatedBytes(false);
             using (var patch = hasPreviousTree
@@ -143,8 +145,10 @@ internal static class TextCacheAllocationDiagnosticRunner
         var allocatedBytes = allocatedAfter - allocatedBefore;
         output.WriteLine($"Allocation: total={allocatedBytes} bytes, perFrame={(frameCount > 0 ? allocatedBytes / frameCount : 0)} bytes");
         output.WriteLine(FormatAllocationAttribution(attribution, frameCount));
+        output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));
         output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));
         output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));
+        output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));
         output.WriteLine($"FrameDrawingResources: rents={poolDelta.RentCount}, created={poolDelta.CreatedCount}, reused={poolDelta.ReusedCount}, returns={poolDelta.ReturnCallCount}, returnedToPool={poolDelta.ReturnedToPoolCount}, retainedSkips={poolDelta.RetainedReturnSkipCount}, duplicateSkips={poolDelta.DuplicateReturnSkipCount}, staleSkips={poolDelta.StaleReturnSkipCount}, overflowDisposals={poolDelta.DisposedOverflowCount}, poolCount={poolDelta.PoolCount}");
         output.WriteLine();
     }
@@ -153,6 +157,12 @@ internal static class TextCacheAllocationDiagnosticRunner
     {
         var divisor = frameCount > 0 ? frameCount : 0;
         return $"Allocation attribution: tree={attribution.TreeBytes} bytes ({PerFrame(attribution.TreeBytes, divisor)}/frame), diff={attribution.DiffBytes} bytes ({PerFrame(attribution.DiffBytes, divisor)}/frame), translate={attribution.TranslateBytes} bytes ({PerFrame(attribution.TranslateBytes, divisor)}/frame), render={attribution.RenderBytes} bytes ({PerFrame(attribution.RenderBytes, divisor)}/frame)";
+    }
+
+    internal static string FormatTreeAllocationAttribution(TreeAllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return $"Tree allocation: beginFrame={attribution.BeginFrameBytes} bytes ({PerFrame(attribution.BeginFrameBytes, divisor)}/frame), buildRoot={attribution.BuildRootBytes} bytes ({PerFrame(attribution.BuildRootBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     internal static string FormatTranslateAllocationAttribution(WindowTranslateAllocationAttribution attribution, int frameCount)
@@ -167,13 +177,43 @@ internal static class TextCacheAllocationDiagnosticRunner
         return $"Pipeline allocation: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
+    internal static string FormatRecordAllocationAttribution(DrawCommandRecordAllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return $"Record allocation: resources={attribution.ResourcesBytes} bytes ({PerFrame(attribution.ResourcesBytes, divisor)}/frame), styles={attribution.StylesBytes} bytes ({PerFrame(attribution.StylesBytes, divisor)}/frame), commandBuild={attribution.CommandBuildBytes} bytes ({PerFrame(attribution.CommandBuildBytes, divisor)}/frame), dirtyRanges={attribution.DirtyRangesBytes} bytes ({PerFrame(attribution.DirtyRangesBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+    }
+
     private static long PerFrame(long bytes, int frameCount) => frameCount > 0 ? bytes / frameCount : 0;
 
+    private static long GetAllocatedBytes(bool enabled) => enabled ? GC.GetTotalAllocatedBytes(false) : 0;
+
+    private static long AllocatedDelta(bool enabled, long before) => enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
+
+    private delegate VirtualNodeTree ScenarioTreeFactory(int frameIndex, DisplayScale displayScale, out TreeAllocationAttribution attribution);
+
     private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)
+        => BuildScenarioTree(arena, text, scrollY, measureAllocation: false, out _);
+
+    private static VirtualNodeTree BuildScenarioTree(
+        VirtualTextArena arena,
+        string text,
+        int scrollY,
+        bool measureAllocation,
+        out TreeAllocationAttribution attribution)
     {
+        attribution = default;
+        var beforeBeginFrame = GetAllocatedBytes(measureAllocation);
         arena.BeginFrame();
+        attribution = attribution.WithBeginFrame(AllocatedDelta(measureAllocation, beforeBeginFrame));
+
+        var beforeBuildRoot = GetAllocatedBytes(measureAllocation);
         var root = BuildRoot(arena, text, scrollY);
-        return new VirtualNodeTree(root, arena.GetOrCreateSnapshot());
+        attribution = attribution.WithBuildRoot(AllocatedDelta(measureAllocation, beforeBuildRoot));
+
+        var beforeSnapshot = GetAllocatedBytes(measureAllocation);
+        var snapshot = arena.GetOrCreateSnapshot();
+        attribution = attribution.WithSnapshot(AllocatedDelta(measureAllocation, beforeSnapshot));
+        return new VirtualNodeTree(root, snapshot);
     }
 
     private static VirtualNode BuildRoot(VirtualTextArena arena, string text, int scrollY)
@@ -230,5 +270,39 @@ internal static class TextCacheAllocationDiagnosticRunner
         public override bool Equals(object? obj) => obj is AllocationAttribution other && Equals(other);
 
         public override int GetHashCode() => HashCode.Combine(TreeBytes, DiffBytes, TranslateBytes, RenderBytes);
+    }
+
+    internal readonly struct TreeAllocationAttribution(
+        long BeginFrameBytes,
+        long BuildRootBytes,
+        long SnapshotBytes) : IEquatable<TreeAllocationAttribution>
+    {
+        public long BeginFrameBytes { get; } = BeginFrameBytes;
+        public long BuildRootBytes { get; } = BuildRootBytes;
+        public long SnapshotBytes { get; } = SnapshotBytes;
+        public long TotalBytes => BeginFrameBytes + BuildRootBytes + SnapshotBytes;
+
+        public TreeAllocationAttribution Add(TreeAllocationAttribution other) =>
+            new(
+                BeginFrameBytes + other.BeginFrameBytes,
+                BuildRootBytes + other.BuildRootBytes,
+                SnapshotBytes + other.SnapshotBytes);
+
+        public TreeAllocationAttribution WithBeginFrame(long bytes) => new(BeginFrameBytes + bytes, BuildRootBytes, SnapshotBytes);
+
+        public TreeAllocationAttribution WithBuildRoot(long bytes) => new(BeginFrameBytes, BuildRootBytes + bytes, SnapshotBytes);
+
+        public TreeAllocationAttribution WithSnapshot(long bytes) => new(BeginFrameBytes, BuildRootBytes, SnapshotBytes + bytes);
+
+        public bool Equals(TreeAllocationAttribution other)
+        {
+            return BeginFrameBytes == other.BeginFrameBytes
+                && BuildRootBytes == other.BuildRootBytes
+                && SnapshotBytes == other.SnapshotBytes;
+        }
+
+        public override bool Equals(object? obj) => obj is TreeAllocationAttribution other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(BeginFrameBytes, BuildRootBytes, SnapshotBytes);
     }
 }
