@@ -116,6 +116,13 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-glyph-atlas-bidi-oracle"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            GlyphAtlasBidiOracleDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
+            return;
+        }
+
         if (args.Contains("--diagnose-glyph-atlas-stress"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);

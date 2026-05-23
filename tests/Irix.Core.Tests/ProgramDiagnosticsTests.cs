@@ -153,6 +153,29 @@ public sealed class ProgramDiagnosticsTests
         }
     }
 
+    [Fact]
+    public void Glyph_atlas_bidi_oracle_diagnostic_formats_directwrite_level_projection()
+    {
+        var results = new[]
+        {
+            BidiOracleProbeResult.Create(
+                "nested",
+                6,
+                DWRITE_READING_DIRECTION.DWRITE_READING_DIRECTION_LEFT_TO_RIGHT,
+                [0, 1, 1, 2, 1, 0],
+                [new BidiOracleLevelRun(0, 1, 0), new BidiOracleLevelRun(1, 2, 1), new BidiOracleLevelRun(3, 1, 2), new BidiOracleLevelRun(4, 1, 1), new BidiOracleLevelRun(5, 1, 0)],
+                [new BidiOracleLevelRun(0, 1, 0), new BidiOracleLevelRun(4, 1, 1), new BidiOracleLevelRun(3, 1, 2), new BidiOracleLevelRun(1, 2, 1), new BidiOracleLevelRun(5, 1, 0)],
+                [0, 4, 3, 2, 1, 5])
+        };
+        var snapshot = BidiOracleDiagnosticSnapshot.Create(factoryAvailable: true, analyzerAvailable: true, results);
+
+        Assert.Equal(1, snapshot.MixedLevelProbes);
+        Assert.Equal(1, snapshot.VisualReorderedProbes);
+        Assert.Equal(0, snapshot.FailedProbes);
+        Assert.Equal("BiDi oracle: factory=True, analyzer=True, probes=1, mixedLevelProbes=1, visualReorderedProbes=1, failedProbes=0", GlyphAtlasBidiOracleDiagnosticRunner.FormatSummary(snapshot));
+        Assert.Equal("Probe: nested base=LTR textLength=6 levels=0,1,1,2,1,0 logicalRuns=[0..1@0|1..3@1|3..4@2|4..5@1|5..6@0] visualRuns=[0..1@0|4..5@1|3..4@2|1..3@1|5..6@0] charOrder=[0,4,3,2,1,5]", GlyphAtlasBidiOracleDiagnosticRunner.FormatProbe(results[0]));
+    }
+
     [Theory]
     [InlineData(TextHorizontalAlignment.Leading, 10, 100, 40, 10)]
     [InlineData(TextHorizontalAlignment.Center, 10, 100, 40, 40)]
@@ -1705,6 +1728,29 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphAtlasRegressionMatrixDiagnosticRunner.Run", source);
         Assert.Contains("ParseTextCompositionMode(args)", source);
         Assert.Contains("ParseDiagnosticScale(args)", source);
+    }
+
+    [Fact]
+    public void Glyph_atlas_bidi_oracle_cli_is_wired()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasBidiOracleDiagnosticRunner.cs")));
+        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteBidiOracleDiagnostic.cs")));
+
+        Assert.Contains("--diagnose-glyph-atlas-bidi-oracle", programSource);
+        Assert.Contains("GlyphAtlasBidiOracleDiagnosticRunner.Run", programSource);
+        Assert.Contains("DWriteBidiOracleDiagnostic.Capture()", runnerSource);
+        Assert.Contains("BiDi oracle: factory={snapshot.FactoryAvailable}", runnerSource);
+        Assert.Contains("visualRuns=", runnerSource);
+        Assert.Contains("charOrder=", runnerSource);
+        Assert.Contains("CreateTextAnalyzer(&analyzer)", platformSource);
+        Assert.Contains("analyzer->AnalyzeBidi(", platformSource);
+        Assert.Contains("TextAnalysisSourceShim", platformSource);
+        Assert.Contains("TextAnalysisSinkSetBidiLevel", platformSource);
+        Assert.Contains("GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder", platformSource);
+        Assert.DoesNotContain("IDWriteTextLayout", platformSource);
+        Assert.DoesNotContain("ID2D", platformSource);
     }
 
     [Fact]
