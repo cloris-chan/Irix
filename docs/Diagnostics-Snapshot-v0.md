@@ -26,7 +26,7 @@ The model answers:
 | Snapshot | Producer owner | Current consumers | Boundary |
 |----------|----------------|-------------------|----------|
 | `RenderingPipelineDiagnosticSnapshot` | `Irix.Rendering` counters from `RenderPipeline` / `DrawingBackendCompositor` | `--diagnose` compositor and layout pipeline blocks | Pipeline counters must come from pipeline/compositor state, not retained PoC statics. |
-| `BackendClipTextDiagnosticSnapshot` | Backend adapter owner; currently `Irix.Poc.D3D12DrawingBackend` plus `D3D12Renderer` device state | `--diagnose` scissor/text clip smokes and debug clip row | Device errors remain typed until CLI/debug formatting. |
+| `BackendClipTextDiagnosticSnapshot` | Backend adapter owner; currently `Irix.Platform.Windows.D3D12DrawingBackend` plus `D3D12Renderer` device state | `--diagnose` scissor/text clip smokes and debug clip row | Device errors remain typed until CLI/debug formatting. |
 | `ViewportDiagnosticsSnapshot` | Platform/render bridge owner; current data crosses window, renderer, and translator | `--diagnose-resize` and debug viewport row | Dimensions must come from window/renderer/translator source-of-truth fields. |
 | `ScrollDiagnosticsSnapshot` | Scroll service owner; currently PoC scroll pump/controller | `--diagnose-scroll` and debug scroll row | PoC statics are read-only v0 adapters until scroll ownership is extracted. |
 | `InputDiagnosticsSnapshot` | Input routing/focus owner; currently PoC input ownership/router | `--diagnose-input` and debug input row | Ownership state is value data; diagnostics history remains bounded. |
@@ -60,7 +60,7 @@ Snapshot v0 does not move runtime ownership or core behavior. These files stay w
 - `src/Irix.Poc/ScrollFramePump.cs`
 - `src/Irix.Poc/CounterInputRouter.cs`
 - `src/Irix.Poc/InputOwnershipState.cs`
-- `src/Irix.Poc/D3D12DrawingBackend.cs`
+- `src/Irix.Platform.Windows/D3D12DrawingBackend.cs`
 - `src/Irix.Rendering/RenderPipeline.cs`
 
 ## Completion State

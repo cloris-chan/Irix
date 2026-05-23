@@ -1,6 +1,5 @@
 using Irix.Drawing;
 using Irix.Platform.Windows;
-using Irix.Poc;
 using Xunit;
 
 namespace Irix.Core.Tests;

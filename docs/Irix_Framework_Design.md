@@ -28,7 +28,7 @@ Promotion contract summary:
 
 | Candidate | Why it stays in Poc for now | Required before moving |
 |-----------|-----------------------------|------------------------|
-| `D3D12DrawingBackend` | It is the app-facing adapter over `Irix.Platform.Windows.D3D12Renderer`, but its responsibilities are Windows D3D12 execution concerns. | First mechanical move candidate for `Irix.Platform.Windows`; move helper structs and update tests together. |
+| `D3D12DrawingBackend` | Windows D3D12 drawing backend adapter over `D3D12Renderer`. | Moved to `Irix.Platform.Windows`; helper structs and tests moved with the namespace boundary. |
 | `WindowDrawCommandTranslator` | Owns app glue for viewport, display scale, scroll feedback, retained-frame feed, allocation attribution, and diagnostics. | Split platform-neutral translation core from Poc/window glue before moving. |
 | `WindowBackend` | Converts draw commands into `INativeWindow.SetContent` elements for legacy/debug GDI-style presentation. | Stay in `Irix.Poc`; do not promote as framework runtime surface. |
 

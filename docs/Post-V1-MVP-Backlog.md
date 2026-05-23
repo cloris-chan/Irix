@@ -16,6 +16,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 |-----------|---------|
 | Private GA | Tagged as `v1.0-private-ga`; default-on partial apply, D3D12 segmented ownership, device-lost recovery, platform smokes, Windows SDK CI checks, performance guards, GPU memory pressure diagnostics, and command allocator reset failure handling are complete for the private milestone. |
 | Renderer foundation | D3D12-only GlyphAtlas text composition is default. D3D11On12 / Direct2D overlay final composition, sync strategy, explicit overlay mode, native generation entries, and legacy overlay CLI alias are removed. DirectWrite/WIC remain source-data paths only. Regression matrix, soak, color-format, BiDi oracle, glyph oracle, and entry-eviction design docs are the active evidence set. |
+| Windows backend promotion | `D3D12DrawingBackend` and its helper structs moved from `Irix.Poc` to `Irix.Platform.Windows` without renderer behavior changes. |
 | Resource cache / stable handles | Glyph entries and atlas pages use stable value handles with generations. The atlas grows on demand to a bounded 48-page budget, tracks Alpha/Bgra page formats, reports resident bytes and fragmentation, and supports format-scoped retained-floor-gated page reuse. |
 | Performance baseline | Split frame-stage allocation guards and `--diagnose-text-cache` attribution exist. Latest warm scroll evidence shows record allocation is low; future optimization should start from tree/layout/snapshot boundaries. |
 
@@ -38,7 +39,7 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
 | POST-024 | Split `WindowDrawCommandTranslator` | Promotion contract exists in `Poc-Promotion-Contracts.md`; translator remains in `Irix.Poc` because it mixes runtime translation, viewport callbacks, scroll feedback, diagnostics, and allocation attribution. | Extract an explicit platform-neutral translation core before moving anything into `Irix.Rendering`. |
-| POST-025 | Move `D3D12DrawingBackend` | Promotion contract marks it as the first mechanical move candidate for `Irix.Platform.Windows`. | Move backend plus helper structs together; preserve scissor/text clip/device recovery/scale diagnostics tests; do not change renderer behavior. |
+| POST-025 | Keep `D3D12DrawingBackend` in Windows platform | Backend and helper structs now live in `Irix.Platform.Windows`. | Preserve scissor/text clip/device recovery/scale diagnostics tests; do not move it back into `Irix.Poc`. |
 | POST-026 | Keep `WindowBackend` isolated | Contract decision is stay: it is a legacy/debug `INativeWindow.SetContent` presentation path. | Do not move it into `Irix.Rendering` or `Irix.Platform.Windows`; replace only if the legacy/debug path becomes unnecessary. |
 | POST-027 | Scroll extraction | Scroll state/pump remains in `Irix.Poc`. | Extract only after typed feedback and viewport ownership contracts are stable. |
 | POST-028 | Settings provider | Runtime settings wiring remains postponed. | Add only after a concrete app/framework boundary is written; keep fallback-only internal provider until then. |

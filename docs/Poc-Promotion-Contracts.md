@@ -11,7 +11,7 @@ Irix.Core
 Irix.Drawing -> Irix.Core
 Irix.Platform
 Irix.Rendering -> Irix.Drawing, Irix.Core, Irix.Platform
-Irix.Platform.Windows -> Irix.Drawing, Irix.Platform
+Irix.Platform.Windows -> Irix.Drawing, Irix.Platform, Irix.Rendering
 Irix.Poc -> Irix.Core, Irix.Drawing, Irix.Rendering, Irix.Platform, Irix.Platform.Windows
 ```
 
@@ -19,7 +19,7 @@ Rules:
 
 - `Irix.Rendering` may reference `Irix.Platform` for platform-neutral geometry/input/display contracts such as `PixelRectangle` and `INativeWindow` abstractions when the code still has no Win32, DXGI, D3D12, DirectWrite, WIC, or device ownership.
 - `Irix.Rendering` must not reference `Irix.Platform.Windows` or own native window/GPU resources.
-- `Irix.Platform.Windows` may reference `Irix.Drawing` and `Irix.Platform`, but not `Irix.Rendering` unless a separate adapter contract is accepted. The low-level Windows renderer should stay free of retained layout pipeline ownership.
+- `Irix.Platform.Windows` may reference `Irix.Drawing`, `Irix.Platform`, and the small backend adapter contracts in `Irix.Rendering` such as `IDeviceRecovery`. It must not own retained layout pipeline state.
 - `Irix.Poc` may compose all projects and may keep app, CLI diagnostics, debug UI, and temporary adapters.
 
 Consequence: `WindowDrawCommandTranslator` is not blocked from `Irix.Rendering` solely because it uses `Irix.Platform`; it is blocked because it currently mixes runtime adapter, app scroll feedback, diagnostics, and allocation attribution.
@@ -72,7 +72,7 @@ Mechanical move readiness: no. First extract an explicit translator input struct
 
 ## `D3D12DrawingBackend`
 
-Current role: app-facing Windows D3D12 drawing backend adapter.
+Current role: Windows D3D12 drawing backend adapter in `Irix.Platform.Windows`.
 
 It consumes:
 
@@ -97,18 +97,18 @@ It outputs:
 - Frame serial diagnostics pass-through.
 - Device removed / recovery status.
 
-Promotion decision: move candidate for `Irix.Platform.Windows`.
+Promotion decision: moved to `Irix.Platform.Windows`.
 
-It is mechanically close to move because it already wraps `D3D12Renderer`, owns Windows D3D12 execution concerns, and does not depend on `CounterApplication`, `WindowDrawCommandTranslator`, `ScrollFeedback`, or app message state. The helper structs in `D3D12DrawingBackend.cs` should move with it.
+The move is intentionally mechanical: it wraps `D3D12Renderer`, owns Windows D3D12 execution concerns, and does not depend on `CounterApplication`, `WindowDrawCommandTranslator`, `ScrollFeedback`, or app message state. The helper structs in `D3D12DrawingBackend.cs` moved with it.
 
-Move preconditions:
+Move invariants:
 
 - Preserve test visibility for `ResolveFillRectScissor`, `ResolveTextClip`, `ComputeFillRectScissorDiagnostics`, `ComputeTextClipDiagnostics`, `ExecuteCore`, and `ScaleTextStyleToPhysicalPixels`.
-- Keep `FrameRenderList<T>` accessible from the target project or move the minimal reusable buffer helper intentionally.
+- Keep `FrameRenderList<T>` in `Irix.Drawing`.
 - Keep `IDrawingBackend`, `IDirtyRangeAware`, `IClipScissorCapability`, and `IDeviceRecovery` contracts in their current owning projects.
 - Keep D3D12-only final composition; do not add overlay fallback.
 
-Mechanical move readiness: yes, after dependency check for `FrameRenderList<T>` and test namespace updates. This should be the first code move if promotion proceeds.
+Mechanical move status: complete.
 
 ## `WindowBackend`
 
@@ -132,7 +132,7 @@ Classes and structs in `Irix.Poc` that are not purely app model or CLI entrypoin
 
 | Candidate | Current category | Initial decision |
 |-----------|------------------|------------------|
-| `D3D12DrawingBackend` and helper structs | Windows D3D12 drawing adapter | Move candidate to `Irix.Platform.Windows`. |
+| `D3D12DrawingBackend` and helper structs | Windows D3D12 drawing adapter | Moved to `Irix.Platform.Windows`. |
 | `WindowDrawCommandTranslator`, `TranslatorRenderPipelineFactory`, `WindowTranslateAllocationAttribution` | Runtime adapter + Poc glue | Split before move. |
 | `WindowBackend`, `WindowBackendRenderResult` | Legacy/debug window presentation | Stay in Poc. |
 | `WindowVisualCompositor` | Poc compositor over `INativeWindow.SetContent` | Stay with `WindowBackend`. |
@@ -145,8 +145,6 @@ Classes and structs in `Irix.Poc` that are not purely app model or CLI entrypoin
 
 Recommended move order:
 
-1. Move `D3D12DrawingBackend` and its helper structs to `Irix.Platform.Windows`.
-2. Split `WindowDrawCommandTranslator` into a platform-neutral translation core and Poc/window glue.
-3. Revisit scroll/input/control projection after translator split exposes the right contracts.
-4. Keep `WindowBackend`, `WindowVisualCompositor`, and `PoCDrawingBackend` as legacy/debug presentation until replaced.
-
+1. Split `WindowDrawCommandTranslator` into a platform-neutral translation core and Poc/window glue.
+2. Revisit scroll/input/control projection after translator split exposes the right contracts.
+3. Keep `WindowBackend`, `WindowVisualCompositor`, and `PoCDrawingBackend` as legacy/debug presentation until replaced.

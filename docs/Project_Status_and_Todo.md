@@ -44,7 +44,7 @@ GitHub Actions quota is currently exhausted. `.github/workflows/ci.yml` remains 
 | Windows backend | D3D12 is the active v1 Windows PoC backend. GlyphAtlas is the only active text composition path; D3D11On12 / Direct2D final overlay, sync strategy, explicit overlay mode, and legacy overlay CLI alias are removed. DirectWrite and WIC are allowed only as shaping, metrics, raster, and image source-data paths. |
 | Glyph atlas | Coverage surface is frozen until oracle/regression split is stable. Allowed work is bugfix, guard, diagnostic, test, documentation, and local evidence updates. SVG/COLR paint-tree-only glyphs, BiDi beyond current resolved-level projection, unsafe AtlasFull cases, and init/record failure remain explicit D3D12-only degradation. |
 | Text/value IR | Framework/core paths must not retain raw text strings. Retained and drawing paths use `TextNodeContent`, `TextBufferSnapshot`, `FrameTextArena`, `TextSlice`, and resolver boundaries. CLI/debug/report formatting strings are output-boundary exceptions. |
-| Architecture boundary | `Irix.Poc` is an app, diagnostics, and adapter-glue project. It is not the reusable framework home. `D3D12DrawingBackend` is the first mechanical move candidate for `Irix.Platform.Windows`; `WindowDrawCommandTranslator` needs a split before moving; `WindowBackend` stays as legacy/debug presentation. |
+| Architecture boundary | `Irix.Poc` is an app, diagnostics, and adapter-glue project. It is not the reusable framework home. `D3D12DrawingBackend` has moved to `Irix.Platform.Windows`; `WindowDrawCommandTranslator` needs a split before moving; `WindowBackend` stays as legacy/debug presentation. |
 | Performance | Pre-GA micro-optimization is closed. Latest `--diagnose-text-cache 180` warm scroll baseline is `394216 bytes`, `2190 B/frame`: top level `tree=546`, `diff=273`, `translate=1138`, `render=273` B/frame; pipeline `layout=501`, `record=45`, `hitTargets=136`, `snapshot=273`, `retainedFrame=45` B/frame. Record allocation is not the next target. |
 | Docs | Current docs should describe active architecture and remaining work, not post-GA process history. |
 
@@ -65,7 +65,7 @@ Keep guards green for these non-negotiable boundaries:
 | Priority | Work | Boundary |
 |----------|------|----------|
 | P0 | Keep local Smoke gate authoritative | Run `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke` for broad changes while Actions quota is unavailable. |
-| P1 | Framework promotion review | Use [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md) as the move contract. Next code move, if desired, should start with `D3D12DrawingBackend`; translator split comes later. |
+| P1 | Framework promotion review | Use [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md) as the move contract. Next move should split `WindowDrawCommandTranslator`; do not move `WindowBackend` as framework runtime surface. |
 | P1 | Text-cache allocation follow-up | Optimize only from attribution. Current next candidates are tree/layout/snapshot boundaries, not glyph renderer or draw recording. |
 | P1 | Glyph atlas maintenance | Stay within the coverage freeze: bugfixes, guards, diagnostics, and tests only unless a matching oracle/regression case is added first. |
 | P2 | Entry-level eviction | Keep design-only until retained atlas command ownership and sub-rect free-list ownership are explicit. |

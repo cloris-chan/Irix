@@ -1,8 +1,7 @@
 using Irix.Drawing;
-using Irix.Platform.Windows;
 using Irix.Rendering;
 
-namespace Irix.Poc;
+namespace Irix.Platform.Windows;
 
 internal readonly struct D3D12FillRectScissorPlan(EffectiveScissor EffectiveScissor, IntegerScissorRect RenderScissor, bool Skip) : IEquatable<D3D12FillRectScissorPlan>
 {
