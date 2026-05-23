@@ -565,7 +565,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var rectSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer2D.cs")));
-        var glyphSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs")));
+        var glyphSource = ReadGlyphAtlasRendererSources(root);
 
         Assert.Equal(1, CountOccurrences(rectSource, "finally\n        {\n            vbuf->Unmap(0, null);\n        }"));
         Assert.Equal(1, CountOccurrences(glyphSource, "finally\n        {\n            vbuf->Unmap(0, null);\n        }"));
@@ -578,7 +578,7 @@ public sealed class ProgramDiagnosticsTests
         var root = FindRepoRoot();
         var rendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer.cs")));
         var rectSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer2D.cs")));
-        var glyphSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs")));
+        var glyphSource = ReadGlyphAtlasRendererSources(root);
 
         Assert.Contains("var frameResourceIndex = (int)_frameIndex;", rendererSource);
         Assert.Contains("RenderRectangles(_list, rects, width, height, frameResourceIndex)", rendererSource);
@@ -658,7 +658,7 @@ public sealed class ProgramDiagnosticsTests
             Assert.DoesNotContain("D2D1CreateFactory", source);
             direct2DCommonReferences += CountOccurrences(source, "Windows.Win32.Graphics.Direct2D.Common");
             d2dPointReferences += CountOccurrences(source, "D2D_POINT_2F");
-            var allowsD2dPointInterop = sourcePath.EndsWith("D3D12GlyphAtlasTextRenderer.cs", StringComparison.Ordinal)
+            var allowsD2dPointInterop = sourcePath.EndsWith("D3D12GlyphAtlasTextRenderer.ColorGlyph.cs", StringComparison.Ordinal)
                 || sourcePath.EndsWith("DWriteColorGlyphFormatDiagnostic.cs", StringComparison.Ordinal);
             if (!allowsD2dPointInterop)
             {
@@ -740,7 +740,7 @@ public sealed class ProgramDiagnosticsTests
                 Assert.DoesNotContain(token, source);
             }
 
-            var allowsD2dPointInterop = sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs"), StringComparison.Ordinal)
+            var allowsD2dPointInterop = sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.ColorGlyph.cs"), StringComparison.Ordinal)
                 || sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.cs"), StringComparison.Ordinal);
             if (allowsD2dPointInterop)
             {
@@ -772,7 +772,7 @@ public sealed class ProgramDiagnosticsTests
     public void Glyph_atlas_cache_uses_stable_entry_handles()
     {
         var root = FindRepoRoot();
-        var glyphSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs")));
+        var glyphSource = ReadGlyphAtlasRendererSources(root);
 
         Assert.Contains("private readonly Dictionary<GlyphKey, GlyphAtlasEntryHandle> _glyphs", glyphSource);
         Assert.Contains("private readonly List<GlyphEntry> _glyphEntries", glyphSource);
@@ -2944,6 +2944,16 @@ public sealed class ProgramDiagnosticsTests
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");
+
+    private static string ReadGlyphAtlasRendererSources(string root)
+    {
+        var platformWindows = Path.Combine(root, "src", "Irix.Platform.Windows");
+        return NormalizeLineEndings(string.Join(
+            "\n",
+            Directory.EnumerateFiles(platformWindows, "D3D12GlyphAtlasTextRenderer*.cs", SearchOption.TopDirectoryOnly)
+                .Order(StringComparer.Ordinal)
+                .Select(File.ReadAllText)));
+    }
 
     private static int CountOccurrences(string text, string value)
     {
