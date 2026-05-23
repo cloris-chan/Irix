@@ -699,6 +699,52 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Active_sources_do_not_reintroduce_overlay_or_directwrite_layout_paths()
+    {
+        var root = FindRepoRoot();
+        var forbidden = new[]
+        {
+            "D3D11On12",
+            "D3D11Query",
+            "ID3D11",
+            "D3D12FenceAfterOverlay",
+            "D3D12TextRenderer",
+            "TextOverlaySyncStrategy",
+            "SyncTextOverlay",
+            "text-overlay-sync-strategy",
+            "IDWriteTextLayout",
+            "CreateTextLayout",
+            "Windows.Win32.Graphics.Direct2D;",
+            "ID2D",
+            "D2D1CreateFactory"
+        };
+
+        var d2dPointReferences = 0;
+        foreach (var sourcePath in EnumerateActiveSourceGuardFiles(root))
+        {
+            var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
+            foreach (var token in forbidden)
+            {
+                Assert.DoesNotContain(token, source);
+            }
+
+            var allowsD2dPointInterop = sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.cs"), StringComparison.Ordinal)
+                || sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.cs"), StringComparison.Ordinal);
+            if (allowsD2dPointInterop)
+            {
+                d2dPointReferences += CountOccurrences(source, "D2D_POINT_2F");
+            }
+            else
+            {
+                Assert.DoesNotContain("Windows.Win32.Graphics.Direct2D.Common", source);
+                Assert.DoesNotContain("D2D_POINT_2F", source);
+            }
+        }
+
+        Assert.Equal(2, d2dPointReferences);
+    }
+
+    [Fact]
     public void D3D12_text_run_ir_does_not_retain_text_strings()
     {
         var root = FindRepoRoot();
@@ -1880,7 +1926,7 @@ public sealed class ProgramDiagnosticsTests
     [Fact]
     public void Glyph_atlas_mixed_stress_commands_keep_prefix_atlas_candidates_and_trailing_fallback()
     {
-        using var resources = FrameDrawingResources.Rent();
+        using var resources = new FrameDrawingResources();
         var ascii = new string(Enumerable.Range(32, 95).Select(static code => (char)code).ToArray());
         var commands = GlyphAtlasStressDiagnosticRunner.BuildMixedFallbackStressCommands(resources, ascii, 960, 540);
         resources.Seal();
@@ -2891,6 +2937,29 @@ public sealed class ProgramDiagnosticsTests
         }
 
         throw new InvalidOperationException("Could not find repo root (Irix.slnx)");
+    }
+
+    private static IEnumerable<string> EnumerateActiveSourceGuardFiles(string root)
+    {
+        var srcRoot = Path.Combine(root, "src");
+        foreach (var path in Directory.EnumerateFiles(srcRoot, "*.cs", SearchOption.AllDirectories))
+        {
+            if (path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                || path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            yield return path;
+        }
+
+        yield return Path.Combine(root, "src", "Irix.Platform.Windows", "NativeMethods.txt");
+
+        var scriptsRoot = Path.Combine(root, "scripts");
+        foreach (var path in Directory.EnumerateFiles(scriptsRoot, "*.ps1", SearchOption.TopDirectoryOnly))
+        {
+            yield return path;
+        }
     }
 
     private static bool ContainsNode(ReadOnlySpan<VirtualNode> nodes, Func<VirtualNode, bool> predicate)

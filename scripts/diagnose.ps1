@@ -7,8 +7,8 @@
     Verifies:
     - D3D12 device creation
     - Rectangle rendering (D3D12Renderer2D)
-    - Text rendering (D3D12TextRenderer + DirectWrite)
-    - Text format/layout cache stats
+    - Text rendering (D3D12 GlyphAtlas with DirectWrite shaping/raster source)
+    - Glyph atlas cache stats
     - Device removed state and error reason
 
     Requires: Windows with D3D12-capable GPU, .NET 10 SDK.

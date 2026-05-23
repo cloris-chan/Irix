@@ -518,7 +518,7 @@ VirtualNode
 自研 Drawing 层最容易失控的地方通常不是矩形，而是文本和路径。因此 v1 建议明确分层：
 
 - 文本 shaping 与 glyph rasterization：Windows PoC 委托给 DirectWrite；最终合成在 D3D12 GlyphAtlas 中完成，不走 Direct2D/D3D11On12 overlay。
-- 文本格式资源：`TextStyle` 通过 `ResourceHandle` 引用，Windows backend 缓存 bounded `IDWriteTextFormat` 与 bounded `IDWriteTextLayout`。当前 layout cache 以文本 hash、长度、样式与布局尺寸为 key，并保存文本副本用于 hash collision 验证；动画尺寸频繁变化时可能产生 layout churn，但缓存上限控制了资源风险。
+- 文本格式资源：`TextStyle` 通过 `ResourceHandle` 引用。当前 Windows D3D12 backend 的 post-GA 路线不再保留 `IDWriteTextLayout` / Direct2D overlay cache；DirectWrite 只作为 shaping、metrics 与 glyph bitmap source，最终 glyph/cache 管理由 D3D12 GlyphAtlas 完成。
 - 显式 glyph cache：Windows PoC 已有 D3D12 GlyphAtlas/cache；跨 backend glyph 资源复用仍是后续设计，post-GA 细节见 `Glyph-Atlas-Post-GA-Design.md`。
 - 复杂路径栅格化：后续可委托给 `Skia` backend adapter 或自研路径模块，当前不急于实现。
 - 图片解码与上传：使用独立资源接口封装，避免与 backend 紧耦合。
