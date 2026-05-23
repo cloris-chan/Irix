@@ -179,7 +179,7 @@ Irix 并非在所有方向上超越竞品，而是专注解决以下三个核心
 | 布局 | `LayoutTreeBuilder` | ⚠️ 部分 | Retained layout 已引入，未脱离 PoC 硬编码常量 |
 | 命令录制 | `DrawCommandRecorder` | ⚠️ 部分 | 基础录制可用，文本内容已通过 `FrameTextArena + TextSlice` 分离，已接入 D3D12 PoC backend |
 | 帧消费 | `CompositorLoop` | ✅ 已验证 | 消费 + 所有权转移 + 释放 + 合并式显式重绘请求 |
-| GPU 渲染 | D3D12 backend | ✅ Phase 3 已验证 | D3D12 矩形渲染 + DirectWrite 文本叠加已实现；viewport 以已应用 swapchain 尺寸为准；resize pending 在布局前应用 |
+| GPU 渲染 | D3D12 backend | ✅ Phase 3 已验证 | D3D12 矩形渲染 + D3D12 GlyphAtlas 文本合成已实现；DirectWrite/WIC 只作为文本 shaping、metrics、glyph raster/source-data 路径；viewport 以已应用 swapchain 尺寸为准；resize pending 在布局前应用 |
 | PoC 可视化 | `WindowVisualCompositor` | ✅ 已验证 | PoC Window 内容元素 + 命中目标已通 |
 
 ### 4.2 最小化 PoC 项目结构（当前仓库）
@@ -190,12 +190,14 @@ src/
 ├─ Irix.Drawing/           # Drawing 抽象：DrawCommand、FrameContext、IDrawingBackend
 ├─ Irix.Rendering/         # Compositor 抽象、Patch 消费循环、backend 编排与诊断输出
 ├─ Irix.Platform/          # 平台无关抽象：IPlatformHost、屏幕与输入模型
-├─ Irix.Platform.Windows/  # Windows 平台宿主 PoC 实现
-└─ Irix.Poc/               # 最小示例应用（Counter）
+├─ Irix.Platform.Windows/  # Windows 平台宿主与 D3D12 renderer 实现
+└─ Irix.Poc/               # 最小示例应用、diagnostics runner、Windows PoC adapter glue
 
 tests/
 └─ Irix.Core.Tests/        # MVU Runtime 与 Patch 发布基础测试
 ```
+
+`Irix.Poc` 是应用层、诊断入口和临时 adapter glue 的所在地，不是 reusable framework 的长期归宿。任何从 `Irix.Poc` 提升到 `Irix.Rendering`、`Irix.Drawing`、`Irix.Platform` 或 `Irix.Platform.Windows` 的代码，都必须先写清楚输入/输出、所有权、诊断、测试与运行时依赖边界，再迁移调用方。
 
 > **命名统一说明：** PoC 已统一采用 C# 风格命名，例如 `VirtualNode`、`VirtualNodePatch`、`Message`、`Command`、`IMessageDispatcher`，避免继续沿用 `VNode`、`Msg` 这类缩写式标识。完整术语对照见 [附录 A：术语表](#附录-a术语表)。
 
@@ -300,7 +302,7 @@ v1 只实现**单 `CompositorThread` + 单主视口**。每个屏幕一个独立
 CompositorThread.Start()
   ├─ 初始化图形 API 设备 (v1 / Windows PoC: D3D12)
   ├─ 创建 Swapchain (匹配当前屏幕刷新率)
-    ├─ 初始化 Drawing Backend Context（当前 PoC: D3D12 + DirectWrite overlay）
+    ├─ 初始化 Drawing Backend Context（当前 PoC: D3D12 rect pass + D3D12 GlyphAtlas text pass）
   └─ 进入渲染循环:
        while (!cancellation.IsCancellationRequested)
          ├─ 等待 VSync 信号 (或高精度 Timer)
@@ -333,7 +335,7 @@ CompositorThread.Start()
 
 #### 5.2.4 Drawing 层策略
 
-Irix 不应将 UI 语义层直接绑定到 `Skia`、Direct2D 或任意单一 backend API。PoC 阶段已经优先验证 `D3D12 + DirectWrite` 主链，`Skia` 更适合作为未来可替换 backend adapter，而不是长期架构中心。
+Irix 不应将 UI 语义层直接绑定到 `Skia`、Direct2D 或任意单一 backend API。当前 Windows PoC 已经优先验证 `D3D12 + DrawCommand + GlyphAtlas` 主链，DirectWrite/WIC 只作为文本 shaping、metrics、raster 和 image source-data 路径；`Skia` 更适合作为未来可替换 backend adapter，而不是长期架构中心。
 
 v1 的推荐分层如下：
 
@@ -343,7 +345,7 @@ VirtualNode Patch
   → Layout Result
   → DrawCommand List
   → IDrawingBackend
-    → D3D12 / DirectWrite / Skia / Future Backend
+    → D3D12 / Future Backend
 ```
 
 其中 `DrawCommand` 是 Irix 自己的稳定中间层，至少覆盖：
@@ -493,25 +495,29 @@ VirtualNode
 
 #### 5.2.8 与当前 PoC 的衔接方式
 
-当前仓库中的 `WindowVisualCompositor` 已经收敛为 PoC backend 层，当前主要承担两件事：
+当前仓库已经把主链收敛为：
 
-1. 消费 `RenderFrameBatch`（当前过渡实现为 `DrawCommandBatch + HitTestTarget[] + IFrameResourceResolver`）；
-2. 把绘制命令和并行命中目标翻译成 PoC 窗口内容元素与点击路由数据。
+`VirtualNodePatch -> RetainedTree -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> IDrawingBackend`
 
-这对于演示是合适的，但不适合作为正式 rendering 架构的终点。推荐演进顺序如下：
+**已落地：** `DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已支持合并式显式重绘请求。Button visual state v0 已通过 `OwnershipSnapshot` 派生 `IsHovered` / `IsPressed` / `IsFocused`，并在 layout/recording 层用现有 `DrawCommand.Color` 选择 style token，不扩展 backend 接口。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + D3D12 GlyphAtlas 文本；DirectWrite/WIC 仅作文本和 image source-data）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013），并通过 `CsWin32RunAsBuildTask=true` 生成实体 `obj` 编译输入，同时排除 CsWin32 analyzer/source-generator 资产，避免编辑器依赖易失效的 Roslyn 虚拟生成文档。
 
-1. 把 `WindowVisualCompositor` 中的布局逻辑抽成 `LayoutTreeBuilder`。
-2. 把 `WindowContentElement` 视为临时的 `DrawCommand` 替身，先建立 `DrawCommandRecorder`。
-3. 保持 `WindowVisualCompositor` 只消费 `RenderFrameBatch`，不要再把 `ActionId` / hit testing 元数据塞回 `DrawCommand`。
-4. 后续新增 `SkiaBackend` 或自研 backend 时，PoC Window backend 与 GPU backend 共享同一套 `DrawCommand + FrameDrawingResources` 输入。
+当前重要边界：
 
-也就是说，当前 PoC 最务实的下一步不是"立刻写 Skia"，而是先把中间层站稳：
+- `Irix.Poc` 只承载 demo app、diagnostics runner、命令行入口、Windows PoC adapter glue 和本地 smoke 场景。
+- `WindowBackend` 是 PoC-only GDI/window presentation adapter，用于把 `DrawCommand` + `HitTestTarget` 投影到 `WindowContentElement`，不应成为 framework rendering contract。
+- `WindowDrawCommandTranslator` 是 app/diagnostics glue，当前串接 viewport、display scale、scroll feedback、retained-frame ownership feed、allocation attribution 和 `RenderPipeline`。迁移前必须先拆出这些输入输出契约。
+- `D3D12DrawingBackend` 是 `Irix.Poc` 对 `Irix.Platform.Windows.D3D12Renderer` 的 app-facing adapter。它可以成为迁移候选，但要先明确 clip mode、dirty range、device recovery、scale diagnostics 和 renderer ownership。
+- `Irix.Platform.Windows` 是 Windows renderer/platform implementation home；D3D12 GlyphAtlas renderer 属于这里。它不应依赖 `Irix.Poc`。
 
-`VirtualNodePatch -> LayoutTreeBuilder -> DrawCommandRecorder -> RenderPipeline -> RenderFrameBatch -> WindowBackend`
+Candidate migration table:
 
-**已落地：** 这条链路已经稳定运行。`DrawCommand` 已移除内联文本（ADR-011）；`RenderPipeline` 已引入 retained layout；`VirtualNodeDiffer` 已实现局部 diff；`CompositorLoop` 已支持合并式显式重绘请求。Button visual state v0 已通过 `OwnershipSnapshot` 派生 `IsHovered` / `IsPressed` / `IsFocused`，并在 layout/recording 层用现有 `DrawCommand.Color` 选择 style token，不扩展 backend 接口。`IDrawingBackend` 已两条路径落地：`PoCDrawingBackend`（GDI Window）+ `D3D12DrawingBackend`（D3D12 矩形 + D3D12 GlyphAtlas 文本；DirectWrite 仅作文本源）。D3D12 互操作已从手写 vtable 迁移到 CsWin32 生成的裸指针 COM 包装（ADR-013），并通过 `CsWin32RunAsBuildTask=true` 生成实体 `obj` 编译输入，同时排除 CsWin32 analyzer/source-generator 资产，避免编辑器依赖易失效的 Roslyn 虚拟生成文档。
+| Candidate | Current home | Possible target | Required contract before move |
+|-----------|--------------|-----------------|-------------------------------|
+| `WindowBackend` | `Irix.Poc` | None yet / test-only PoC adapter | Decide whether this remains demo-only or is replaced by reusable presentation contracts; do not move `WindowContentElement` semantics into framework. |
+| `WindowDrawCommandTranslator` | `Irix.Poc` | `Irix.Rendering` after contract split | Define viewport provider, display scale ingress, scroll feedback, retained owner feed, allocation attribution, diagnostics snapshots, and app callback ownership. |
+| `D3D12DrawingBackend` | `Irix.Poc` | `Irix.Platform.Windows` or a Windows adapter package | Define renderer lifetime, clip mode, dirty range awareness, device recovery, scale conversion, and diagnostics surface without pulling app/CLI dependencies. |
 
-**下一步：** V1 MVP/GA candidate 不再新增 renderer 功能。Post-GA renderer-foundation 已默认使用 D3D12 GlyphAtlas，后续只扩大 D3D12 文本覆盖或保留显式 degradation；不要恢复 Direct2D/D3D11On12 final composition。
+**下一步：** 不做盲目代码搬迁。先把 promotion contracts 写清楚，再迁移调用方和测试。Renderer 行为保持 D3D12-only GlyphAtlas 或显式 degradation；不要恢复 Direct2D/D3D11On12 final composition。
 
 #### 5.2.9 文本、路径与图片的资源策略
 
@@ -562,7 +568,7 @@ public interface IImageResourceManager
 v1 Drawing 层的成功标准只有两个：
 
 1. 对上能稳定承接 Irix 自己的 UI 布局与绘制语义。
-2. 对下能让 `WindowBackend`、D3D12 backend 与未来 `SkiaBackend` 共用同一份 `DrawCommand + FrameDrawingResources` 输入。
+2. 对下能让 `WindowBackend`、D3D12 backend 与未来 backend adapter 共用同一份 `DrawCommand + FrameDrawingResources` 输入。
 
 #### 5.2.10 裁剪与 Scissor 实现路线（ADR-018 设计草案）
 
@@ -1313,7 +1319,7 @@ let update (model: Model) (message: Message) =
 |------|------|------------|---------|------|
 | **图形 API** | 底层硬件接口 | `D3D12` | **v1** | Windows-only PoC 的唯一图形后端，先把主链打通再谈第二后端 |
 | **Drawing 抽象** | 中间绘制层 | `DrawCommand` + `IDrawingBackend` | **v1** | 上层 UI 不直接耦合第三方绘图库，为后续替换后端或自研引擎留边界 |
-| **矢量绘图实现** | 2D 绘图后端 | `SkiaSharp`（作为适配器） | **v1** | 先复用成熟文本/路径能力，但限制在 backend adapter 边界内 |
+| **矢量绘图实现** | 2D 绘图后端 | Deferred backend adapter | vNext | 当前 v1 不以 SkiaSharp 作为 active dependency；复杂路径/图片能力后续以 backend adapter 形式评估 |
 | **平台窗口** | 系统 API | Win32 P/Invoke (`user32.dll`) | **v1** | 先完成主 `HWND` 路径，`Ghost Window` 与多子视口分阶段增强 |
 | **核心逻辑** | 状态引擎 | C# 14 | **v1** | `MemoryPool`、同步热路径优化、Native AOT 友好设计 |
 | **本地 IPC** | 线程间通信 | `System.Threading.Channels` (MPSC) | **v1** | `IMemoryOwner` 所有权转移通道 |
@@ -1332,14 +1338,14 @@ let update (model: Model) (message: Message) =
 | 编号 | 风险描述 | 严重程度 | 缓解策略 |
 |------|---------|---------|---------|
 | R-01 | `D3D12` 主链在资源生命周期、设备恢复或文本渲染上稳定性低于预期 | 🔴 高 | 先锁定单窗口、单主视口、单后端；以文本、矩形、裁剪、资源释放为首批验收项 |
-| R-02 | `Skia` 与 `D3D12` 集成稳定性低于预期 | 🔴 高 | 严格限制上层只依赖 `DrawCommand` 与 backend adapter，必要时保留替换绘制实现的空间 |
+| R-02 | 复杂路径/图片 backend adapter 与 `D3D12` 集成稳定性低于预期 | 🔴 高 | 严格限制上层只依赖 `DrawCommand` 与 backend adapter，必要时保留替换绘制实现的空间 |
 | R-03 | 过早深绑 `Skia` API，导致后续替换 backend 或自研 drawing engine 成本过高 | 🔴 高 | 在 v1 先建立 `DrawCommand` + `IDrawingBackend` 边界，禁止上层直接依赖 `Skia` 对象模型 |
 | R-04 | `VirtualNode` 全量 `ref struct` 化导致实现与调试复杂度过高 | 🟠 中高 | v1 改为"热路径零分配优先"，不把整棵声明树栈上化作为硬要求 |
 | R-05 | Win32 强绑定导致跨平台迁移成本高 | 🟠 中高 | `IPlatformHost` 接口 Day 1 设计；Win32 实现完整封装在 `Platform.Windows` 项目 |
 | R-06 | v1 范围膨胀导致 PoC 成功但产品不可交付 | 🟠 中高 | 将 `Local UI Remoting`、`Remote UI Delivery`、`MVVM Bridge`、`F#`、自研 Drawing Engine 下放到后续阶段，v1 只保留本地主路径 |
 | R-07 | `IMemoryOwner<T>` 所有权转移在异常/取消路径下被破坏 | 🟡 中 | 在 MPSC 管线引入专项单元测试、压力测试与 Analyzer 辅助检查 |
 | R-08 | 多显示器动态插拔（热插拔）的 `HWND` 生命周期管理 | 🟡 中 | 作为 v1.1 专项能力建设，先覆盖单窗口单主视口 |
-| R-09 | 过早启动自研 Drawing Engine，吞噬核心 UI 框架建设节奏 | 🟡 中 | 先用 `SkiaBackend` 跑通 MVP，再以基线数据决定是否自研 |
+| R-09 | 过早启动自研 Drawing Engine，吞噬核心 UI 框架建设节奏 | 🟡 中 | 先稳定 `DrawCommand + D3D12` 主链，再以基线数据决定是否自研或接入第三方 backend adapter |
 | R-10 | 开源版与商业版的 UI 协议分叉，导致生态与商业化相互掣肘 | 🟡 中 | `Local UI Remoting` 与 `Remote UI Delivery` 共享核心 UI 协议，仅在传输边界和运营能力上区分 |
 | R-11 | 为兼容 MVVM / XAML 过度引入 `WPF / WinUI / MAUI` 级运行时对象模型，导致 AOT、热路径和架构边界失守 | 🟡 中 | 明确 bridge 仅为编译期 DSL + Binding 代码生成，不引入运行时 parser、反射式 Binding Engine、`DependencyProperty` 体系 |
 
@@ -1365,7 +1371,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 
 - [ ] 搭建 `D3D12` 基础渲染循环（三角形上屏）
 - [ ] 定义 `DrawCommand` / `IDrawingBackend` 最小抽象
-- [ ] 集成 `SkiaSharp` 作为 `D3D12` 路径下的首个 backend adapter，渲染基础矩形、路径、文本
+- [ ] 保持 `DrawCommand` 与 backend adapter 边界；复杂路径/图片 backend adapter 后移，不作为当前 D3D12 主链阻塞项
 - [ ] 实现主 `HWND` + 单 `CompositorThread` 基础渲染闭环
 - [ ] 实现最小化 MVU Core（`Model/Update/View` 三元组）
 - [ ] 实现 `VirtualNodePatch -> Retained UI Tree -> DrawCommandBatch + HitTestTarget` 单消费者渲染链路
@@ -1392,7 +1398,7 @@ v1.0 以**本地模式可用、单图形后端稳定、最小 MVU/Compositor 主
 - [ ] 评估是否引入 `Ghost Event Window`，若收益不足则保留为实验特性
 - [ ] 补齐资源释放、异常恢复、取消路径与压力测试
 - [ ] 建立显存占用、帧时间、GC、线程竞争的基线监测
-- [ ] 评估 `SkiaBackend` 是否已经成为性能或资源模型瓶颈，决定是否立项 `Irix.Drawing`
+- [ ] 评估 D3D12 GlyphAtlas、路径/图片 adapter、或平台文本源是否已经成为性能或资源模型瓶颈，决定是否立项更完整的 `Irix.Drawing`
 - [ ] **验收指标：** 双屏固定拓扑下动画无明显撕裂；无跨线程资源竞争告警；稳态帧循环 GC 分配为 0 或保持严格上界
 
 ### Phase 4：v1.x Local UI Remoting（开源/免费许可方向）
