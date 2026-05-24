@@ -54,44 +54,46 @@ It outputs:
 - Optional `WindowTranslateAllocationAttribution`.
 - Optional retained-frame segment ownership diagnostics.
 
-Promotion decision: stay in `Irix.Poc` until split.
+Promotion decision: outer adapter stays in `Irix.Poc`; core moved to `Irix.Rendering`.
 
-Required split before move:
+Post-split boundary:
 
 | Piece | Target | Reason |
 |-------|--------|--------|
-| Patch-to-render-frame translation core | Candidate for `Irix.Rendering` | It is a platform-neutral adapter over `RetainedTree` and `RenderPipeline`. |
+| Patch-to-render-frame translation core | Moved to `Irix.Rendering` | It is a platform-neutral adapter over `RetainedTree` and `RenderPipeline`. |
 | `INativeWindow` viewport fallback / prepare-frame callback | Stay in app/platform adapter | It couples translation cadence to window/backend timing. |
 | Scroll feedback projection | Candidate shared runtime contract after scroll ownership is written | It is app-visible control feedback, not pure render output. |
 | Allocation attribution wrapper | Diagnostics layer | It should not be mandatory for the core translator API. |
 | `TranslatorRenderPipelineFactory.CounterDefault` | Stay in Poc composition root | Counter default style is app-specific and must not become reusable translator core state. |
 
-Mechanical move readiness: core-only ready, outer adapter not ready. `TranslatorCore` can move to `Irix.Rendering` with its neutral value types, while `WindowDrawCommandTranslator` remains Poc glue around viewport timing, app feedback, diagnostics, and Counter default composition.
+Mechanical move status: core moved, outer adapter remains Poc glue. `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` now live in `Irix.Rendering`; `WindowDrawCommandTranslator` remains Poc glue around viewport timing, app feedback, diagnostics, and Counter default composition.
 
 ### Translator Split Concepts
 
-The next split should name the translation boundary before moving code:
+The current split names the translation boundary before any public API is introduced:
 
 | Concept | Ownership | Shape | Boundary |
 |---------|-----------|-------|----------|
-| `TranslatorInput` | Candidate `Irix.Rendering` value type | `PatchBatch`, logical viewport, `DisplayScale`, optional production-owner options, and optional previous-root/snapshot details if retained-tree ownership is externalized. | No `INativeWindow`, callbacks, app style defaults, scroll pump, CLI diagnostics, or allocation measurement. |
-| `TranslatorOutput` | Candidate `Irix.Rendering` value type | `RenderFrameBatch`, layout diagnostics, dirty classifications, optional retained segment ownership, and renderer-neutral layout viewport. | No direct mutation of app model and no platform callback invocation. |
+| `TranslatorInput` | `Irix.Rendering` internal value type | `PatchBatch`, physical viewport, layout viewport, and `DisplayScale`. | No `INativeWindow`, callbacks, app style defaults, scroll pump, CLI diagnostics, or allocation measurement. |
+| `TranslatorOutput` | `Irix.Rendering` internal value type | `RenderFrameBatch`, layout diagnostics, dirty classifications, layout result, max scroll, and renderer-neutral layout viewport. | No direct mutation of app model and no platform callback invocation. |
 | `IViewportProvider` / `ViewportProvider` | Poc/platform adapter | Supplies physical viewport and applied renderer viewport; may call prepare-frame before reading backend/window state. | Stays outside the platform-neutral translation core because it couples window/backend timing to translation cadence. |
 | `IFeedbackSink` / `FeedbackSink` | App/control adapter | Receives `ScrollFeedback`, legacy `MaxScrollY`, and future control feedback after layout. | It is app/control feedback, not rendering diagnostics and not platform feedback. |
 | `TranslatorDiagnostics` | Diagnostics adapter | Allocation attribution, last viewport fields, and debug rows. | Optional wrapper around the core translator; not required for the core API. |
 | `RenderPipelineFactory` | Composition root | Supplies style preset and `RenderPipeline` construction. | Do not default to `CounterStylePreset.Default` in reusable code. |
 
-Proposed extraction order:
+Extraction status:
 
-1. Introduce `TranslatorInput` / `TranslatorOutput` in place while the class remains in `Irix.Poc`.
-2. Move viewport callbacks behind a Poc-owned `ViewportProvider`.
-3. Move scroll/max-scroll callbacks behind a Poc-owned `FeedbackSink`.
-4. Move allocation attribution into a diagnostics wrapper.
-5. Only then move the platform-neutral translation core to `Irix.Rendering`.
+Completed extraction:
+
+1. `TranslatorInput` / `TranslatorOutput` introduced in place.
+2. Viewport callbacks moved behind a Poc-owned `TranslatorViewportProvider`.
+3. Scroll/max-scroll callbacks moved behind a Poc-owned `TranslatorFeedbackSink`.
+4. Allocation attribution moved into a Poc-owned `TranslatorAllocationMeter`.
+5. Platform-neutral `TranslatorCore` moved to `Irix.Rendering`.
 
 ### Translator Core Move Audit
 
-`TranslatorCore` has no direct dependency on `Irix.Poc` types. Its current dependencies are neutral framework types:
+`TranslatorCore` has no direct dependency on `Irix.Poc` types. Its dependencies are neutral framework types:
 
 | Dependency | Current owner | Move impact |
 |------------|---------------|-------------|
@@ -100,7 +102,7 @@ Proposed extraction order:
 | `PixelRectangle` | `Irix.Platform` | Compatible with the existing rule that `Irix.Rendering` may use platform-neutral geometry/display contracts. |
 | `RenderPipeline`, `RenderFrameBatch`, `RenderPipelineProductionOwnerOptions`, `SegmentedRetainedFrameProductionOwnerFeed`, `RetainedRenderFrameSegmentOwnership`, `RenderPipelineBuildAllocationAttribution`, `LayoutTreeResult`, `LayoutRebuildReason`, `LayoutDirtyClassification` | `Irix.Rendering` | Natural home for the core; several dependencies are already `internal` to `Irix.Rendering`. |
 
-Movable with the core:
+Moved with the core:
 
 | Type | Target | Reason |
 |------|--------|--------|
@@ -119,7 +121,7 @@ Remain in `Irix.Poc`:
 | `TranslatorAllocationMeter`, `WindowTranslateAllocationAttribution` | Diagnostics-only allocation attribution used by Poc diagnostic commands/tests. |
 | `TranslatorRenderPipelineFactory.CounterDefault` | Poc composition root for `CounterStylePreset.Default`; must not move with reusable translator core. |
 
-Rename decision: defer. `TranslatorCore` is acceptable for the in-place split. Rename to `RenderFrameTranslator` or `PatchRenderFrameTranslator` only when the mechanical move happens, so this contract update stays behavior-neutral.
+Rename decision: defer. `TranslatorCore` remains internal; rename to `RenderFrameTranslator` or `PatchRenderFrameTranslator` only if a later public/runtime API boundary needs the more specific name.
 
 ### Scroll Feedback Ownership
 
