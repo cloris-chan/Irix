@@ -48,6 +48,8 @@ GitHub Actions quota is currently exhausted. `.github/workflows/ci.yml` remains 
 | Performance | Pre-GA micro-optimization is closed. Latest `--diagnose-text-cache 180` warm scroll baseline with layout attribution is about `396792 bytes`, `2204 B/frame`: `pipeline.layout=589` B/frame, split into `elementsArray=226`, `treeNodesArray=136`, `scrollDiagnosticsArray=89`, `result=91`, `dirtyRanges=45`, `nodeWalk=0` B/frame. `tree.buildRoot` is about `318 B/frame`, `pipeline.snapshot` about `227 B/frame`, and record about `91 B/frame`; record allocation is not the next target. |
 | Docs | Current docs should describe active architecture and remaining work, not post-GA process history. |
 
+Performance allocation note: `layout.nodeWalk=0` means the layout bucket is retained publication cost, not property-read or clip-propagation allocation. `LayoutTreeResult` arrays are retained across frames and must not expose pooled mutable storage.
+
 ---
 
 ## Active Source Guards

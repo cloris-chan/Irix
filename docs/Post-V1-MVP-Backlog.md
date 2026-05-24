@@ -53,6 +53,12 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 | POST-030 | Layout builder scratch ownership | Layout full/dirty allocation is stable but still visible in attribution. | Scratch lifetime and pooling design does not leak retained state, stack memory, or rented arrays. |
 | POST-031 | Retained snapshot boundary review | Snapshot copy allocation is visible but not dominant. | Any reuse design preserves `TextSlice`/resource snapshot validity and cross-frame ownership rules. |
 
+Layout publication note: main layout arrays are retained publication state, not disposable same-frame scratch.
+
+`Elements`, `TreeNodes`, `DirtyElementRanges`, and `ScrollDiagnostics` are retained by `LastLayoutResult` / `LastRetainedInputSnapshot`.
+
+Safe reuse is limited to empty/static collections or same-frame scratch that is copied before publication.
+
 ### P1 / P2 - Glyph Atlas Follow-Up
 
 | ID | Task | Current status | Acceptance |
