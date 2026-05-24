@@ -146,10 +146,12 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine($"Allocation: total={allocatedBytes} bytes, perFrame={(frameCount > 0 ? allocatedBytes / frameCount : 0)} bytes");
         output.WriteLine(FormatAllocationAttribution(attribution, frameCount));
         output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));
+        output.WriteLine(FormatTreeSnapshotAllocationAttribution(treeAttribution.SnapshotAttribution, frameCount));
         output.WriteLine(FormatBuildRootAllocationAttribution(treeAttribution.BuildRootAttribution, frameCount));
         output.WriteLine(FormatButtonAllocationAttribution(treeAttribution.BuildRootAttribution.ButtonAttribution, frameCount));
         output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));
         output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));
+        output.WriteLine(FormatPipelineSnapshotAllocationAttribution(translateAttribution.PipelineAttribution.SnapshotAttribution, frameCount));
         output.WriteLine(FormatLayoutAllocationAttribution(translateAttribution.PipelineAttribution.LayoutAttribution, frameCount));
         output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));
         output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));
@@ -167,6 +169,16 @@ internal static class TextCacheAllocationDiagnosticRunner
     {
         var divisor = frameCount > 0 ? frameCount : 0;
         return $"Tree allocation: beginFrame={attribution.BeginFrameBytes} bytes ({PerFrame(attribution.BeginFrameBytes, divisor)}/frame), buildRoot={attribution.BuildRootBytes} bytes ({PerFrame(attribution.BuildRootBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+    }
+
+    internal static string FormatTreeSnapshotAllocationAttribution(TextBufferSnapshotAllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return "Tree snapshot allocation: "
+            + $"textBuffer={attribution.CharBufferBytes} bytes ({PerFrame(attribution.CharBufferBytes, divisor)}/frame), "
+            + $"snapshotShell={attribution.SnapshotShellBytes} bytes ({PerFrame(attribution.SnapshotShellBytes, divisor)}/frame), "
+            + $"detailGap={attribution.DetailGapBytes} bytes ({PerFrame(attribution.DetailGapBytes, divisor)}/frame), "
+            + $"measuredTotal={attribution.MeasuredBytes} bytes ({PerFrame(attribution.MeasuredBytes, divisor)}/frame)";
     }
 
     internal static string FormatBuildRootAllocationAttribution(BuildRootAllocationAttribution attribution, int frameCount)
@@ -207,6 +219,16 @@ internal static class TextCacheAllocationDiagnosticRunner
         return $"Pipeline allocation: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
+    internal static string FormatPipelineSnapshotAllocationAttribution(RenderPipelineSnapshotAllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return "Pipeline snapshot allocation: "
+            + $"frameBatch={attribution.FrameBatchBytes} bytes ({PerFrame(attribution.FrameBatchBytes, divisor)}/frame), "
+            + $"retainedInput={attribution.RetainedInputBytes} bytes ({PerFrame(attribution.RetainedInputBytes, divisor)}/frame), "
+            + $"detailGap={attribution.DetailGapBytes} bytes ({PerFrame(attribution.DetailGapBytes, divisor)}/frame), "
+            + $"measuredTotal={attribution.MeasuredBytes} bytes ({PerFrame(attribution.MeasuredBytes, divisor)}/frame)";
+    }
+
     internal static string FormatLayoutAllocationAttribution(LayoutBuildAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
@@ -225,10 +247,17 @@ internal static class TextCacheAllocationDiagnosticRunner
         var pipelineAttribution = translateAttribution.PipelineAttribution;
         var buildRootAttribution = treeAttribution.BuildRootAttribution;
         var buttonAttribution = buildRootAttribution.ButtonAttribution;
+        var treeSnapshotAttribution = treeAttribution.SnapshotAttribution;
+        var pipelineSnapshotAttribution = pipelineAttribution.SnapshotAttribution;
         var largestName = buttonAttribution.MeasuredBytes > 0 ? "tree.buildRoot.button.childrenArray" : buildRootAttribution.TotalBytes > 0 ? "tree.buildRoot.buttons" : "tree.buildRoot";
         var largestBytes = buttonAttribution.MeasuredBytes > 0 ? buttonAttribution.ChildrenArrayBytes : buildRootAttribution.TotalBytes > 0 ? buildRootAttribution.ButtonBytes : treeAttribution.BuildRootBytes;
         var nextName = "tree.snapshot";
         var nextBytes = treeAttribution.SnapshotBytes;
+        if (treeSnapshotAttribution.MeasuredBytes > 0)
+        {
+            UpdateLargest("tree.snapshot.textBuffer", treeSnapshotAttribution.CharBufferBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("tree.snapshot.snapshotShell", treeSnapshotAttribution.SnapshotShellBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        }
         if (buildRootAttribution.TotalBytes > 0)
         {
             if (buttonAttribution.MeasuredBytes > 0)
@@ -260,7 +289,15 @@ internal static class TextCacheAllocationDiagnosticRunner
         {
             UpdateLargest("pipeline.layout", pipelineAttribution.LayoutBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
         }
-        UpdateLargest("pipeline.snapshot", pipelineAttribution.SnapshotBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        if (pipelineSnapshotAttribution.MeasuredBytes > 0)
+        {
+            UpdateLargest("pipeline.snapshot.frameBatch", pipelineSnapshotAttribution.FrameBatchBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("pipeline.snapshot.retainedInput", pipelineSnapshotAttribution.RetainedInputBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        }
+        else
+        {
+            UpdateLargest("pipeline.snapshot", pipelineAttribution.SnapshotBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        }
         var treeDetailGap = attribution.TreeBytes - treeAttribution.TotalBytes;
         var pipelineDetailGap = translateAttribution.PipelineBuildBytes - pipelineAttribution.TotalBytes;
         return $"Allocation focus: largestCandidate={largestName}={largestBytes} bytes ({PerFrame(largestBytes, divisor)}/frame), nextCandidate={nextName}={nextBytes} bytes ({PerFrame(nextBytes, divisor)}/frame), treeDetailGap={treeDetailGap} bytes ({PerFrame(treeDetailGap, divisor)}/frame), pipelineDetailGap={pipelineDetailGap} bytes ({PerFrame(pipelineDetailGap, divisor)}/frame), drawRecord={pipelineAttribution.RecordBytes} bytes ({PerFrame(pipelineAttribution.RecordBytes, divisor)}/frame)";
@@ -315,8 +352,8 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithBuildRoot(AllocatedDelta(measureAllocation, beforeBuildRoot), buildRootAttribution);
 
         var beforeSnapshot = GetAllocatedBytes(measureAllocation);
-        var snapshot = arena.GetOrCreateSnapshot();
-        attribution = attribution.WithSnapshot(AllocatedDelta(measureAllocation, beforeSnapshot));
+        var snapshot = arena.GetOrCreateSnapshot(measureAllocation, out var snapshotAttribution);
+        attribution = attribution.WithSnapshot(AllocatedDelta(measureAllocation, beforeSnapshot), snapshotAttribution);
         return new VirtualNodeTree(root, snapshot);
     }
 
@@ -446,12 +483,14 @@ internal static class TextCacheAllocationDiagnosticRunner
         long BeginFrameBytes,
         long BuildRootBytes,
         long SnapshotBytes,
-        BuildRootAllocationAttribution BuildRootAttribution = default) : IEquatable<TreeAllocationAttribution>
+        BuildRootAllocationAttribution BuildRootAttribution = default,
+        TextBufferSnapshotAllocationAttribution SnapshotAttribution = default) : IEquatable<TreeAllocationAttribution>
     {
         public long BeginFrameBytes { get; } = BeginFrameBytes;
         public long BuildRootBytes { get; } = BuildRootBytes;
         public long SnapshotBytes { get; } = SnapshotBytes;
         public BuildRootAllocationAttribution BuildRootAttribution { get; } = BuildRootAttribution;
+        public TextBufferSnapshotAllocationAttribution SnapshotAttribution { get; } = SnapshotAttribution;
         public long TotalBytes => BeginFrameBytes + BuildRootBytes + SnapshotBytes;
 
         public TreeAllocationAttribution Add(TreeAllocationAttribution other) =>
@@ -459,28 +498,33 @@ internal static class TextCacheAllocationDiagnosticRunner
                 BeginFrameBytes + other.BeginFrameBytes,
                 BuildRootBytes + other.BuildRootBytes,
                 SnapshotBytes + other.SnapshotBytes,
-                BuildRootAttribution.Add(other.BuildRootAttribution));
+                BuildRootAttribution.Add(other.BuildRootAttribution),
+                SnapshotAttribution.Add(other.SnapshotAttribution));
 
-        public TreeAllocationAttribution WithBeginFrame(long bytes) => new(BeginFrameBytes + bytes, BuildRootBytes, SnapshotBytes, BuildRootAttribution);
+        public TreeAllocationAttribution WithBeginFrame(long bytes) => new(BeginFrameBytes + bytes, BuildRootBytes, SnapshotBytes, BuildRootAttribution, SnapshotAttribution);
 
-        public TreeAllocationAttribution WithBuildRoot(long bytes) => new(BeginFrameBytes, BuildRootBytes + bytes, SnapshotBytes, BuildRootAttribution);
+        public TreeAllocationAttribution WithBuildRoot(long bytes) => new(BeginFrameBytes, BuildRootBytes + bytes, SnapshotBytes, BuildRootAttribution, SnapshotAttribution);
 
         public TreeAllocationAttribution WithBuildRoot(long bytes, BuildRootAllocationAttribution attribution) =>
-            new(BeginFrameBytes, BuildRootBytes + bytes, SnapshotBytes, BuildRootAttribution.Add(attribution));
+            new(BeginFrameBytes, BuildRootBytes + bytes, SnapshotBytes, BuildRootAttribution.Add(attribution), SnapshotAttribution);
 
-        public TreeAllocationAttribution WithSnapshot(long bytes) => new(BeginFrameBytes, BuildRootBytes, SnapshotBytes + bytes, BuildRootAttribution);
+        public TreeAllocationAttribution WithSnapshot(long bytes) => new(BeginFrameBytes, BuildRootBytes, SnapshotBytes + bytes, BuildRootAttribution, SnapshotAttribution);
+
+        public TreeAllocationAttribution WithSnapshot(long bytes, TextBufferSnapshotAllocationAttribution attribution) =>
+            new(BeginFrameBytes, BuildRootBytes, SnapshotBytes + bytes, BuildRootAttribution, SnapshotAttribution.Add(attribution));
 
         public bool Equals(TreeAllocationAttribution other)
         {
             return BeginFrameBytes == other.BeginFrameBytes
                 && BuildRootBytes == other.BuildRootBytes
                 && SnapshotBytes == other.SnapshotBytes
-                && BuildRootAttribution.Equals(other.BuildRootAttribution);
+                && BuildRootAttribution.Equals(other.BuildRootAttribution)
+                && SnapshotAttribution.Equals(other.SnapshotAttribution);
         }
 
         public override bool Equals(object? obj) => obj is TreeAllocationAttribution other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(BeginFrameBytes, BuildRootBytes, SnapshotBytes, BuildRootAttribution);
+        public override int GetHashCode() => HashCode.Combine(BeginFrameBytes, BuildRootBytes, SnapshotBytes, BuildRootAttribution, SnapshotAttribution);
     }
 
     internal readonly struct BuildRootAllocationAttribution(

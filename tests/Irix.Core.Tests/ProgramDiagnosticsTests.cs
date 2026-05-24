@@ -2157,15 +2157,23 @@ public sealed class ProgramDiagnosticsTests
                     ChildrenArrayBytes: 30,
                     PropertyArrayBytes: 48,
                     ButtonNodeBytes: 0,
-                    MeasuredBytes: 90)));
+                    MeasuredBytes: 90)),
+            SnapshotAttribution: new TextBufferSnapshotAllocationAttribution(
+                CharBufferBytes: 48,
+                SnapshotShellBytes: 0,
+                MeasuredBytes: 48));
 
         var summary = TextCacheAllocationDiagnosticRunner.FormatTreeAllocationAttribution(attribution, frameCount: 3);
+        var snapshotSummary = TextCacheAllocationDiagnosticRunner.FormatTreeSnapshotAllocationAttribution(attribution.SnapshotAttribution, frameCount: 3);
         var buildRootSummary = TextCacheAllocationDiagnosticRunner.FormatBuildRootAllocationAttribution(attribution.BuildRootAttribution, frameCount: 3);
         var buttonSummary = TextCacheAllocationDiagnosticRunner.FormatButtonAllocationAttribution(attribution.BuildRootAttribution.ButtonAttribution, frameCount: 3);
 
         Assert.Equal(
             "Tree allocation: beginFrame=30 bytes (10/frame), buildRoot=210 bytes (70/frame), snapshot=60 bytes (20/frame), measuredTotal=300 bytes (100/frame)",
             summary);
+        Assert.Equal(
+            "Tree snapshot allocation: textBuffer=48 bytes (16/frame), snapshotShell=0 bytes (0/frame), detailGap=0 bytes (0/frame), measuredTotal=48 bytes (16/frame)",
+            snapshotSummary);
         Assert.Equal(
             "BuildRoot allocation: "
             + "buttons=90 bytes (30/frame), text=30 bytes (10/frame), "
@@ -2190,13 +2198,21 @@ public sealed class ProgramDiagnosticsTests
             RecordBytes: 36,
             HitTargetsBytes: 48,
             SnapshotBytes: 60,
-            RetainedFrameBytes: 72);
+            RetainedFrameBytes: 72,
+            SnapshotAttribution: new RenderPipelineSnapshotAllocationAttribution(
+                FrameBatchBytes: 12,
+                RetainedInputBytes: 48,
+                MeasuredBytes: 60));
 
         var summary = TextCacheAllocationDiagnosticRunner.FormatPipelineAllocationAttribution(attribution, frameCount: 3);
+        var snapshotSummary = TextCacheAllocationDiagnosticRunner.FormatPipelineSnapshotAllocationAttribution(attribution.SnapshotAttribution, frameCount: 3);
 
         Assert.Equal(
             "Pipeline allocation: classify=12 bytes (4/frame), layout=24 bytes (8/frame), record=36 bytes (12/frame), hitTargets=48 bytes (16/frame), snapshot=60 bytes (20/frame), retainedFrame=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
             summary);
+        Assert.Equal(
+            "Pipeline snapshot allocation: frameBatch=12 bytes (4/frame), retainedInput=48 bytes (16/frame), detailGap=0 bytes (0/frame), measuredTotal=60 bytes (20/frame)",
+            snapshotSummary);
     }
 
     [Fact]
@@ -2340,14 +2356,16 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
         Assert.Contains("arena.BeginFrame();", source);
-        Assert.Contains("var snapshot = arena.GetOrCreateSnapshot();", source);
+        Assert.Contains("var snapshot = arena.GetOrCreateSnapshot(measureAllocation, out var snapshotAttribution);", source);
         Assert.Contains("return new VirtualNodeTree(root, snapshot);", source);
         Assert.Contains("out var treeFrameAttribution", source);
         Assert.Contains("treeAttribution = treeAttribution.Add(treeFrameAttribution);", source);
+        Assert.Contains("output.WriteLine(FormatTreeSnapshotAllocationAttribution(treeAttribution.SnapshotAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatBuildRootAllocationAttribution(treeAttribution.BuildRootAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatButtonAllocationAttribution(treeAttribution.BuildRootAttribution.ButtonAttribution, frameCount));", source);
         Assert.Contains("BuildRootAllocationAttribution", source);
         Assert.Contains("ButtonAllocationAttribution", source);
+        Assert.Contains("TextBufferSnapshotAllocationAttribution", source);
         Assert.Contains("BuildMeasuredButton", source);
         Assert.Contains("attribution = attribution.WithButton", source);
         Assert.Contains("attribution = attribution.WithText", source);
@@ -2358,6 +2376,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));", source);
+        Assert.Contains("output.WriteLine(FormatPipelineSnapshotAllocationAttribution(translateAttribution.PipelineAttribution.SnapshotAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatLayoutAllocationAttribution(translateAttribution.PipelineAttribution.LayoutAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));", source);
