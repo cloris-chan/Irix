@@ -10,6 +10,7 @@ Irix is a native .NET UI framework prototype focused on a small, high-performanc
 - Retained render pipeline: diff, layout, draw command recording, hit-test metadata, diagnostics.
 - Windows PoC backend: Win32 window/input hosting plus D3D12 final composition.
 - D3D12 text path: GlyphAtlas only. DirectWrite and WIC are source-data paths for shaping, metrics, raster, fallback, and glyph image decode.
+- Post-foundation design work: style layers, animation ownership, and future GPU composition contracts.
 
 The repository is still private. Public API compatibility is not frozen; when a boundary is wrong, migrate callers, tests, and docs directly instead of layering compatibility shims.
 
@@ -19,7 +20,7 @@ The repository is still private. Public API compatibility is not frozen; when a 
 |---------|------------------------|----------|
 | `Irix.Core` | MVU runtime, `VirtualNode`, typed property/value model, patch primitives. | No backend, Win32, D3D12, DirectWrite, WIC, or retained renderer ownership. |
 | `Irix.Drawing` | Stable drawing/data contracts such as `DrawCommand`, resource handles, frame resources, text slices. | No platform renderer implementation. `DrawTextRun` must not carry source strings. |
-| `Irix.Rendering` | Render pipeline, layout tree, retained frame model, hit targets, diagnostics, style-only eligibility. | No Win32 window ownership and no D3D12 device ownership. |
+| `Irix.Rendering` | Render pipeline, layout tree, retained frame model, hit targets, diagnostics, style-only eligibility, and platform-neutral translator core. | No Win32 window ownership and no D3D12 device ownership. |
 | `Irix.Platform` | Platform-neutral host/input/display abstractions. | No Windows-specific COM or GPU implementation details. |
 | `Irix.Platform.Windows` | Windows host and D3D12 renderer implementation. | Owns Win32, DXGI, D3D12, DirectWrite/WIC source-data integration, and device/resource lifetimes. |
 | `Irix.Poc` | App, CLI diagnostics, debug UI, and temporary adapter glue. | Not the reusable framework home. Promotion requires written ownership and diagnostic contracts first. |
@@ -53,9 +54,30 @@ Ownership rules:
 - The MVU/update side owns application state.
 - The render pipeline owns retained layout/render state.
 - Layout scroll diagnostics are render/layout observation; scroll feedback and scroll state remain app/control runtime state until a framework runtime owner is chosen.
+- Future compositor presentation state is not app state unless a commit/cancel contract says so.
 - `FrameDrawingResources` owns frame-local text/resource payloads.
 - `TextSlice` is only a frame-local reference into resolver-owned text; retained/core paths must not hold raw source `string`.
 - Cross-boundary data should be value typed, immutable after publication, and explicit about lifetime.
+
+## Style, Animation, And Composition
+
+Post-foundation architecture work is design-first:
+
+| Doc | Purpose |
+|-----|---------|
+| [Post-Foundation-Roadmap.md](Post-Foundation-Roadmap.md) | Overall roadmap for style, animation, GPU composition, and runtime ownership planning. |
+| [Style-System-v0.md](Style-System-v0.md) | Splits layout style, visual style, text shaping style, composition style, and control-state style. |
+| [Animation-Composition-v0.md](Animation-Composition-v0.md) | Splits UI-runtime animation, compositor animation, hybrid animation, and backend-internal animation. |
+| [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | Defines future platform-neutral composition IR, backend capabilities, and GPU offload phases. |
+
+High-level rules:
+
+- Layout style changes require layout work.
+- Visual style changes may update draw commands or future layer materials without layout.
+- Text shaping style changes may invalidate shaping, glyph cache, and layout metrics.
+- Composition style covers transform, opacity, layer clip, and presented scroll offset.
+- Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
+- Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
 
 ## Renderer Contract
 
@@ -76,6 +98,22 @@ Hard removal boundaries:
 - No runtime shader compilation in active D3D12 renderer source.
 
 Glyph atlas coverage is frozen until oracle/regression split is stable. Allowed work is bugfix, guard, diagnostics, tests, evidence updates, renderer structure cleanup, and documentation. New script or glyph-image-format support requires a matching oracle/regression case first. The detailed contract lives in [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md).
+
+## GPU / Composition Direction
+
+Irix should target modern explicit GPU APIs for future backends. D3D12 remains the implemented backend, but design should map to Vulkan and Metal without exposing backend device objects above platform backends.
+
+Preferred GPU offload order:
+
+1. Layer transform and opacity property updates.
+2. Presented scroll offset under a layer clip.
+3. Layer content caching / render target reuse.
+4. Backend-side batching and persistent upload rings.
+5. GPU culling/compaction for large retained scenes.
+6. Indirect draw and descriptor-indexed resource tables.
+7. Effects/material graph after style/material contracts exist.
+
+Do not implement Vulkan/Metal or advanced GPU paths until the platform-neutral composition contract is stable.
 
 ## Layout, Clip, And Diagnostics
 
@@ -103,12 +141,13 @@ Current v1/private baseline:
 
 Deferred:
 
-- Cross-platform backend.
-- Second graphics backend.
+- Vulkan/Metal backend implementation.
+- Public composition API.
+- Public animation API.
+- Theme/resource dictionary system.
 - Local/remote UI remoting.
 - MVVM/XAML bridge.
 - Full accessibility/UIA.
-- Theme/resource dictionary system.
 - Complex path/image/vector drawing beyond the current backend contract.
 - Pixel/layout oracle.
 - Entry-level glyph atlas eviction.
@@ -121,6 +160,8 @@ Deferred:
 - Allocation work must not pool or reuse retained publication arrays/snapshots without an ownership design.
 - Renderer failures must be explicit diagnostics or explicit D3D12-only degradation.
 - Device/resource ownership stays in the platform renderer.
+- App/control runtime state does not move into `Irix.Rendering` just because layout exposes observation data.
+- Compositor animation does not mutate logical app state without a commit/cancel contract.
 - `Irix.Poc` code is not promoted without a contract.
 - Workflow/CI churn is deferred while Actions quota is exhausted.
 
@@ -129,7 +170,8 @@ Deferred:
 The active backlog is intentionally narrow:
 
 - Keep local Smoke gate authoritative for broad changes.
-- Write framework-promotion contracts before moving Poc adapter code.
+- Use the post-foundation roadmap before new runtime/composition implementation.
+- Treat style, animation, and GPU composition as design-first tracks.
 - Treat allocation measurement/hardening as closed for this stage; reopen only with an ownership design and one measured target bucket.
 - Use the scroll and input/control ownership contracts before extracting runtime state from Poc.
 - Maintain GlyphAtlas inside the coverage freeze.
@@ -159,3 +201,6 @@ The actionable backlog lives in [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)
 | ADR-016 | `TextStyle` is referenced through resource handles and backend cache ownership. | Accepted |
 | ADR-017 | Cross-frame partial rendering needs stable resource snapshots; v1 keeps same-frame/full-resource ownership. | Design-only |
 | ADR-018 | D3D12 scissor/clipping v0 is default-on with diagnostic rollback. | Accepted |
+| ADR-019 | Style layers are split into layout, visual, text shaping, composition, and control-state categories. | Design-only |
+| ADR-020 | Animation ownership is split between UI runtime, compositor, hybrid, and backend-internal classes. | Design-only |
+| ADR-021 | Future composition architecture targets modern explicit GPU APIs through platform-neutral composition IR and backend capabilities. | Design-only |
