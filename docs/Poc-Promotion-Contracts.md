@@ -210,7 +210,8 @@ Classes and structs in `Irix.Poc` that are not purely app model or CLI entrypoin
 | Candidate | Current category | Initial decision |
 |-----------|------------------|------------------|
 | `D3D12DrawingBackend` and helper structs | Windows D3D12 drawing adapter | Moved to `Irix.Platform.Windows`. |
-| `WindowDrawCommandTranslator`, `TranslatorRenderPipelineFactory`, `WindowTranslateAllocationAttribution` | Runtime adapter + Poc glue | Split before move. |
+| `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, `TranslatorRetainedState` | Platform-neutral translation core | Moved to `Irix.Rendering`. |
+| `WindowDrawCommandTranslator`, `TranslatorRenderPipelineFactory`, `WindowTranslateAllocationAttribution` | Runtime adapter + Poc glue | Stay in Poc until app/control feedback, diagnostics, allocation attribution, and composition-root contracts change. |
 | `WindowBackend`, `WindowBackendRenderResult` | Legacy/debug window presentation | Stay in Poc. |
 | `WindowVisualCompositor` | Poc compositor over `INativeWindow.SetContent` | Stay with `WindowBackend`. |
 | `PoCDrawingBackend` | Test/Poc backend over `INativeWindow.SetContent` | Stay as test/debug adapter unless replaced. |
@@ -222,6 +223,6 @@ Classes and structs in `Irix.Poc` that are not purely app model or CLI entrypoin
 
 Recommended move order:
 
-1. Split `WindowDrawCommandTranslator` into a platform-neutral translation core and Poc/window glue.
-2. Revisit scroll/input/control projection after translator split exposes the right contracts.
+1. Return to measured tree/layout/snapshot allocation hardening.
+2. Revisit scroll/input/control projection only after a scroll ownership contract exists.
 3. Keep `WindowBackend`, `WindowVisualCompositor`, and `PoCDrawingBackend` as legacy/debug presentation until replaced.

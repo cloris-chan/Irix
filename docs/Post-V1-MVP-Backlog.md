@@ -17,6 +17,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | Private GA | Tagged as `v1.0-private-ga`; default-on partial apply, D3D12 segmented ownership, device-lost recovery, platform smokes, Windows SDK CI checks, performance guards, GPU memory pressure diagnostics, and command allocator reset failure handling are complete for the private milestone. |
 | Renderer foundation | D3D12-only GlyphAtlas text composition is default. D3D11On12 / Direct2D overlay final composition, sync strategy, explicit overlay mode, native generation entries, and legacy overlay CLI alias are removed. DirectWrite/WIC remain source-data paths only. Regression matrix, soak, color-format, BiDi oracle, glyph oracle, and entry-eviction design docs are the active evidence set. |
 | Windows backend promotion | `D3D12DrawingBackend` and its helper structs moved from `Irix.Poc` to `Irix.Platform.Windows` without renderer behavior changes. |
+| Translator core promotion | `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` moved from `Irix.Poc` to `Irix.Rendering`; `WindowDrawCommandTranslator` remains Poc glue for viewport timing, app/control feedback, diagnostics, allocation attribution, and Counter default composition. |
 | Resource cache / stable handles | Glyph entries and atlas pages use stable value handles with generations. The atlas grows on demand to a bounded 48-page budget, tracks Alpha/Bgra page formats, reports resident bytes and fragmentation, and supports format-scoped retained-floor-gated page reuse. |
 | Performance baseline | Split frame-stage allocation guards and `--diagnose-text-cache` attribution exist. Latest warm scroll evidence shows record allocation is low; future optimization should start from tree/layout/snapshot boundaries. |
 
@@ -38,10 +39,10 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-024 | Split `WindowDrawCommandTranslator` | Promotion contract exists in `Poc-Promotion-Contracts.md`; translator remains in `Irix.Poc` because it mixes runtime translation, viewport callbacks, app/control scroll feedback, diagnostics, and allocation attribution. | Introduce `TranslatorInput` / `TranslatorOutput` / `ViewportProvider` / `FeedbackSink` boundaries first; extract a platform-neutral translation core before moving anything into `Irix.Rendering`. |
+| POST-024 | Keep translator core in Rendering and outer adapter in Poc | `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` now live in `Irix.Rendering`. `WindowDrawCommandTranslator` remains in `Irix.Poc` because it composes viewport callbacks, app/control scroll feedback, diagnostics, allocation attribution, and Counter default style construction. | Do not move the outer adapter or make the core public without a new contract. |
 | POST-025 | Keep `D3D12DrawingBackend` in Windows platform | Backend and helper structs now live in `Irix.Platform.Windows`. | Preserve scissor/text clip/device recovery/scale diagnostics tests; do not move it back into `Irix.Poc`. |
 | POST-026 | Keep `WindowBackend` isolated | Contract decision is stay: it is a legacy/debug `INativeWindow.SetContent` presentation path. | Do not move it into `Irix.Rendering` or `Irix.Platform.Windows`; replace only if the legacy/debug path becomes unnecessary. |
-| POST-027 | Scroll extraction | Scroll feedback is app/control feedback derived from layout diagnostics; scroll state/pump remains in `Irix.Poc`. | Extract only after typed feedback and viewport ownership contracts are stable. |
+| POST-027 | Scroll extraction hold | Scroll feedback is app/control feedback derived from layout diagnostics; scroll state/pump remains in `Irix.Poc`. | Do not split scroll/input until a scroll ownership contract exists. |
 | POST-028 | Settings provider | Runtime settings wiring remains postponed. | Add only after a concrete app/framework boundary is written; keep fallback-only internal provider until then. |
 
 ### P1 - Measurement-Led Optimization
@@ -76,7 +77,7 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 ```text
 Completed Private GA + Renderer foundation
   ├─ POST-021..023 local gates and source boundaries
-  ├─ POST-024..026 framework promotion execution
+  ├─ POST-024..026 completed/held framework promotion boundaries
   │    ├─ POST-027 scroll extraction
   │    └─ POST-028 settings provider
   ├─ POST-029..031 measured allocation work
