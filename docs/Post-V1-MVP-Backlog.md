@@ -20,6 +20,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | Translator core promotion | `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` moved from `Irix.Poc` to `Irix.Rendering`; `WindowDrawCommandTranslator` remains Poc glue for viewport timing, app/control feedback, diagnostics, allocation attribution, and Counter default composition. |
 | Resource cache / stable handles | Glyph entries and atlas pages use stable value handles with generations. The atlas grows on demand to a bounded 48-page budget, tracks Alpha/Bgra page formats, reports resident bytes and fragmentation, and supports format-scoped retained-floor-gated page reuse. |
 | Performance allocation phase | Split frame-stage allocation guards and `--diagnose-text-cache` attribution exist. Layout attribution now shows `pipeline.layout` is mostly published arrays/result shell, not node-walk/property-read/clip propagation. Safe empty publication array reuse is complete. Further tree/layout/snapshot optimization is paused until ownership design exists. |
+| Post-foundation design start | Style, animation, and GPU composition design contracts now exist as design-only docs. No runtime/compositor code extraction is implied by those docs. |
 
 ---
 
@@ -31,9 +32,19 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 |----|------|----------------|------------|
 | POST-021 | Local Smoke gate | GitHub Actions quota is exhausted, so local `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke` is the broad-change gate. | Guard `status=Passed`; matrix `degradedRuns=0`, `glyphAtlasInitialized=True`, `overlaySync=False`; soak `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`. |
 | POST-022 | Coverage freeze | Glyph atlas script/format support is frozen until oracle/regression split is stable. | Only bugfix, guard, diagnostic, test, documentation, or evidence updates unless new coverage has a matching oracle/regression case. |
-| POST-023 | Source boundary guards | Active guards block overlay revival, runtime shader compile, `IDWriteTextLayout`, and raw retained text strings in framework/core paths. | Guards stay green after renderer, text, or diagnostics changes. |
+| POST-023 | Source boundary guards | Active guards block overlay revival, runtime shader compile, `IDWriteTextLayout`, raw retained text strings, and premature compositor/runtime extraction. | Guards stay green after renderer, text, diagnostics, or architecture-boundary changes. |
 
 Run `Smoke` before/after broad changes. Do not add artifact-upload work until Actions quota returns.
+
+### P1 - Post-Foundation Architecture Design
+
+| ID | Task | Current status | Acceptance |
+|----|------|----------------|------------|
+| POST-040 | Style system v0 | `Style-System-v0.md` defines layout, visual, text shaping, composition, and control-state style layers. | Keep code changes blocked until a target layer and invalidation rule are explicitly chosen. |
+| POST-041 | Animation/composition v0 | `Animation-Composition-v0.md` defines UI-runtime, compositor, hybrid, and backend-internal animation classes. Scroll is marked as the first future hybrid case. | Do not implement animation scheduler or scroll compositor until the first narrow implementation case is selected. |
+| POST-042 | GPU composition architecture v0 | `GPU-Composition-Architecture-v0.md` defines future composition IR, backend capabilities, GPU offload phases, and D3D12/Vulkan/Metal mapping notes. | Do not start Vulkan/Metal or advanced GPU paths until the D3D12 composition contract is stable. |
+| POST-043 | Scroll compositor design | Not yet written. Current docs say logical scroll remains app/control runtime and presented scroll should become compositor animation. | Write a dedicated design before moving scroll code or adding compositor scroll behavior. |
+| POST-044 | Composition IR implementation gate | Not started. | First code change must be minimal, D3D12-backed, and should not alter current draw command renderer behavior without tests. |
 
 ### P1 - Framework Boundary / Promotion
 
@@ -74,8 +85,8 @@ Safe reuse is limited to empty/static collections or same-frame scratch that is 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
 | POST-037 | Unified diagnostics channel | Postponed. | Replace per-component diagnostics only after current snapshots prove insufficient. |
-| POST-038 | StyleOnly layout skip | Design only. | Implement after layout dirty ownership and retained-frame semantics are stable. |
-| POST-039 | Second graphics backend | Deferred. | Start only after D3D12 contracts and project/layer boundaries are stable. |
+| POST-038 | StyleOnly layout skip | Design only. | Implement after style layer classification, layout dirty ownership, and retained-frame semantics are stable. |
+| POST-039 | Second graphics backend | Deferred. | Start only after D3D12 composition contracts and project/layer boundaries are stable. |
 
 ---
 
@@ -84,6 +95,8 @@ Safe reuse is limited to empty/static collections or same-frame scratch that is 
 ```text
 Completed Private GA + Renderer foundation
   ├─ POST-021..023 local gates and source boundaries
+  ├─ POST-040..044 post-foundation style/animation/GPU composition design
+  │    └─ POST-043 scroll compositor design before scroll compositor code
   ├─ POST-024..026 completed/held framework promotion boundaries
   │    ├─ POST-027 scroll ownership
   │    └─ POST-028 settings provider
@@ -104,3 +117,5 @@ Completed Private GA + Renderer foundation
 - No pixel oracle or DirectWrite layout renderer as a blocker for the current foundation.
 - No retained-array, snapshot, or tree-builder allocation optimization without an ownership design plus attribution.
 - No public API expansion or code migration from `Irix.Poc` without a written contract.
+- No compositor/runtime code extraction before the style, animation, and composition design gate is satisfied.
+- No Vulkan/Metal backend implementation in the current planning phase.
