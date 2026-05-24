@@ -2143,13 +2143,26 @@ public sealed class ProgramDiagnosticsTests
         var attribution = new TextCacheAllocationDiagnosticRunner.TreeAllocationAttribution(
             BeginFrameBytes: 30,
             BuildRootBytes: 210,
-            SnapshotBytes: 60);
+            SnapshotBytes: 60,
+            BuildRootAttribution: new TextCacheAllocationDiagnosticRunner.BuildRootAllocationAttribution(
+                ButtonBytes: 90,
+                TextBytes: 30,
+                ScrollPropertyBytes: 12,
+                ChildrenBytes: 18,
+                ContainerBytes: 60));
 
         var summary = TextCacheAllocationDiagnosticRunner.FormatTreeAllocationAttribution(attribution, frameCount: 3);
+        var buildRootSummary = TextCacheAllocationDiagnosticRunner.FormatBuildRootAllocationAttribution(attribution.BuildRootAttribution, frameCount: 3);
 
         Assert.Equal(
             "Tree allocation: beginFrame=30 bytes (10/frame), buildRoot=210 bytes (70/frame), snapshot=60 bytes (20/frame), measuredTotal=300 bytes (100/frame)",
             summary);
+        Assert.Equal(
+            "BuildRoot allocation: "
+            + "buttons=90 bytes (30/frame), text=30 bytes (10/frame), "
+            + "scrollProperty=12 bytes (4/frame), children=18 bytes (6/frame), "
+            + "container=60 bytes (20/frame), measuredTotal=210 bytes (70/frame)",
+            buildRootSummary);
     }
 
     [Fact]
@@ -2215,7 +2228,13 @@ public sealed class ProgramDiagnosticsTests
         var treeAttribution = new TextCacheAllocationDiagnosticRunner.TreeAllocationAttribution(
             BeginFrameBytes: 0,
             BuildRootBytes: 210,
-            SnapshotBytes: 60);
+            SnapshotBytes: 60,
+            BuildRootAttribution: new TextCacheAllocationDiagnosticRunner.BuildRootAllocationAttribution(
+                ButtonBytes: 90,
+                TextBytes: 30,
+                ScrollPropertyBytes: 0,
+                ChildrenBytes: 0,
+                ContainerBytes: 90));
         var translateAttribution = new WindowTranslateAllocationAttribution(
             RetainedApplyBytes: 0,
             ViewportBytes: 0,
@@ -2239,7 +2258,7 @@ public sealed class ProgramDiagnosticsTests
         var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Allocation focus: largestCandidate=layout.elementsArray=330 bytes (110/frame), nextCandidate=tree.buildRoot=210 bytes (70/frame), treeDetailGap=120 bytes (40/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
+            "Allocation focus: largestCandidate=layout.elementsArray=330 bytes (110/frame), nextCandidate=pipeline.snapshot=150 bytes (50/frame), treeDetailGap=120 bytes (40/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
             summary);
     }
 
@@ -2255,6 +2274,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("return new VirtualNodeTree(root, snapshot);", source);
         Assert.Contains("out var treeFrameAttribution", source);
         Assert.Contains("treeAttribution = treeAttribution.Add(treeFrameAttribution);", source);
+        Assert.Contains("output.WriteLine(FormatBuildRootAllocationAttribution(treeAttribution.BuildRootAttribution, frameCount));", source);
+        Assert.Contains("BuildRootAllocationAttribution", source);
+        Assert.Contains("attribution = attribution.WithButton", source);
+        Assert.Contains("attribution = attribution.WithText", source);
+        Assert.Contains("attribution = attribution.WithScrollProperty", source);
+        Assert.Contains("attribution = attribution.WithChildren", source);
+        Assert.Contains("attribution = attribution.WithContainer", source);
         Assert.Contains("using var batch = translator.Translate(patch, out var translateFrameAttribution);", source);
         Assert.Contains("output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
