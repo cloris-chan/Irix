@@ -149,6 +149,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));
         output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));
         output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));
+        output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));
         output.WriteLine($"FrameDrawingResources: rents={poolDelta.RentCount}, created={poolDelta.CreatedCount}, reused={poolDelta.ReusedCount}, returns={poolDelta.ReturnCallCount}, returnedToPool={poolDelta.ReturnedToPoolCount}, retainedSkips={poolDelta.RetainedReturnSkipCount}, duplicateSkips={poolDelta.DuplicateReturnSkipCount}, staleSkips={poolDelta.StaleReturnSkipCount}, overflowDisposals={poolDelta.DisposedOverflowCount}, poolCount={poolDelta.PoolCount}");
         output.WriteLine();
     }
@@ -181,6 +182,37 @@ internal static class TextCacheAllocationDiagnosticRunner
     {
         var divisor = frameCount > 0 ? frameCount : 0;
         return $"Record allocation: resources={attribution.ResourcesBytes} bytes ({PerFrame(attribution.ResourcesBytes, divisor)}/frame), styles={attribution.StylesBytes} bytes ({PerFrame(attribution.StylesBytes, divisor)}/frame), commandBuild={attribution.CommandBuildBytes} bytes ({PerFrame(attribution.CommandBuildBytes, divisor)}/frame), dirtyRanges={attribution.DirtyRangesBytes} bytes ({PerFrame(attribution.DirtyRangesBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+    }
+
+    internal static string FormatAllocationFocus(AllocationAttribution attribution, TreeAllocationAttribution treeAttribution, WindowTranslateAllocationAttribution translateAttribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        var pipelineAttribution = translateAttribution.PipelineAttribution;
+        var largestName = "tree.buildRoot";
+        var largestBytes = treeAttribution.BuildRootBytes;
+        var nextName = "tree.snapshot";
+        var nextBytes = treeAttribution.SnapshotBytes;
+        UpdateLargest("pipeline.layout", pipelineAttribution.LayoutBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        UpdateLargest("pipeline.snapshot", pipelineAttribution.SnapshotBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        var treeDetailGap = attribution.TreeBytes - treeAttribution.TotalBytes;
+        var pipelineDetailGap = translateAttribution.PipelineBuildBytes - pipelineAttribution.TotalBytes;
+        return $"Allocation focus: largestCandidate={largestName}={largestBytes} bytes ({PerFrame(largestBytes, divisor)}/frame), nextCandidate={nextName}={nextBytes} bytes ({PerFrame(nextBytes, divisor)}/frame), treeDetailGap={treeDetailGap} bytes ({PerFrame(treeDetailGap, divisor)}/frame), pipelineDetailGap={pipelineDetailGap} bytes ({PerFrame(pipelineDetailGap, divisor)}/frame), drawRecord={pipelineAttribution.RecordBytes} bytes ({PerFrame(pipelineAttribution.RecordBytes, divisor)}/frame)";
+    }
+
+    private static void UpdateLargest(string candidateName, long candidateBytes, ref string largestName, ref long largestBytes, ref string nextName, ref long nextBytes)
+    {
+        if (candidateBytes > largestBytes)
+        {
+            nextName = largestName;
+            nextBytes = largestBytes;
+            largestName = candidateName;
+            largestBytes = candidateBytes;
+        }
+        else if (candidateBytes > nextBytes)
+        {
+            nextName = candidateName;
+            nextBytes = candidateBytes;
+        }
     }
 
     private static long PerFrame(long bytes, int frameCount) => frameCount > 0 ? bytes / frameCount : 0;

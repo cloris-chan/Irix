@@ -2187,6 +2187,38 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Text_cache_allocation_focus_formatter_selects_largest_candidate_bucket()
+    {
+        var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(
+            TreeBytes: 390,
+            DiffBytes: 90,
+            TranslateBytes: 660,
+            RenderBytes: 120);
+        var treeAttribution = new TextCacheAllocationDiagnosticRunner.TreeAllocationAttribution(
+            BeginFrameBytes: 0,
+            BuildRootBytes: 210,
+            SnapshotBytes: 60);
+        var translateAttribution = new WindowTranslateAllocationAttribution(
+            RetainedApplyBytes: 0,
+            ViewportBytes: 0,
+            PipelineBuildBytes: 600,
+            FeedbackBytes: 60,
+            PipelineAttribution: new RenderPipelineBuildAllocationAttribution(
+                ClassificationBytes: 0,
+                LayoutBytes: 300,
+                RecordBytes: 30,
+                HitTargetsBytes: 45,
+                SnapshotBytes: 150,
+                RetainedFrameBytes: 75));
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount: 3);
+
+        Assert.Equal(
+            "Allocation focus: largestCandidate=pipeline.layout=300 bytes (100/frame), nextCandidate=tree.buildRoot=210 bytes (70/frame), treeDetailGap=120 bytes (40/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
+            summary);
+    }
+
+    [Fact]
     public void Text_cache_allocation_diagnostic_uses_frame_scoped_text_arena()
     {
         var root = FindRepoRoot();
@@ -2203,6 +2235,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
+        Assert.Contains("output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));", source);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
     }
 
