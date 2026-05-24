@@ -2149,10 +2149,19 @@ public sealed class ProgramDiagnosticsTests
                 TextBytes: 30,
                 ScrollPropertyBytes: 12,
                 ChildrenBytes: 18,
-                ContainerBytes: 60));
+                ContainerBytes: 60,
+                ButtonAttribution: new TextCacheAllocationDiagnosticRunner.ButtonAllocationAttribution(
+                    ActionPropertyBytes: 0,
+                    LabelTextBytes: 12,
+                    LabelNodeBytes: 0,
+                    ChildrenArrayBytes: 30,
+                    PropertyArrayBytes: 48,
+                    ButtonNodeBytes: 0,
+                    MeasuredBytes: 90)));
 
         var summary = TextCacheAllocationDiagnosticRunner.FormatTreeAllocationAttribution(attribution, frameCount: 3);
         var buildRootSummary = TextCacheAllocationDiagnosticRunner.FormatBuildRootAllocationAttribution(attribution.BuildRootAttribution, frameCount: 3);
+        var buttonSummary = TextCacheAllocationDiagnosticRunner.FormatButtonAllocationAttribution(attribution.BuildRootAttribution.ButtonAttribution, frameCount: 3);
 
         Assert.Equal(
             "Tree allocation: beginFrame=30 bytes (10/frame), buildRoot=210 bytes (70/frame), snapshot=60 bytes (20/frame), measuredTotal=300 bytes (100/frame)",
@@ -2163,6 +2172,13 @@ public sealed class ProgramDiagnosticsTests
             + "scrollProperty=12 bytes (4/frame), children=18 bytes (6/frame), "
             + "container=60 bytes (20/frame), measuredTotal=210 bytes (70/frame)",
             buildRootSummary);
+        Assert.Equal(
+            "Button allocation: "
+            + "actionProperty=0 bytes (0/frame), labelText=12 bytes (4/frame), "
+            + "labelNode=0 bytes (0/frame), childrenArray=30 bytes (10/frame), "
+            + "propertyArray=48 bytes (16/frame), buttonNode=0 bytes (0/frame), "
+            + "detailGap=0 bytes (0/frame), measuredTotal=90 bytes (30/frame)",
+            buttonSummary);
     }
 
     [Fact]
@@ -2234,7 +2250,15 @@ public sealed class ProgramDiagnosticsTests
                 TextBytes: 30,
                 ScrollPropertyBytes: 0,
                 ChildrenBytes: 0,
-                ContainerBytes: 90));
+                ContainerBytes: 90,
+                ButtonAttribution: new TextCacheAllocationDiagnosticRunner.ButtonAllocationAttribution(
+                    ActionPropertyBytes: 0,
+                    LabelTextBytes: 0,
+                    LabelNodeBytes: 0,
+                    ChildrenArrayBytes: 120,
+                    PropertyArrayBytes: 90,
+                    ButtonNodeBytes: 0,
+                    MeasuredBytes: 210)));
         var translateAttribution = new WindowTranslateAllocationAttribution(
             RetainedApplyBytes: 0,
             ViewportBytes: 0,
@@ -2263,6 +2287,52 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Text_cache_allocation_focus_formatter_uses_button_leaf_buckets()
+    {
+        var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(
+            TreeBytes: 390,
+            DiffBytes: 90,
+            TranslateBytes: 300,
+            RenderBytes: 120);
+        var treeAttribution = new TextCacheAllocationDiagnosticRunner.TreeAllocationAttribution(
+            BeginFrameBytes: 0,
+            BuildRootBytes: 300,
+            SnapshotBytes: 60,
+            BuildRootAttribution: new TextCacheAllocationDiagnosticRunner.BuildRootAllocationAttribution(
+                ButtonBytes: 210,
+                TextBytes: 0,
+                ScrollPropertyBytes: 0,
+                ChildrenBytes: 0,
+                ContainerBytes: 90,
+                ButtonAttribution: new TextCacheAllocationDiagnosticRunner.ButtonAllocationAttribution(
+                    ActionPropertyBytes: 0,
+                    LabelTextBytes: 0,
+                    LabelNodeBytes: 0,
+                    ChildrenArrayBytes: 120,
+                    PropertyArrayBytes: 90,
+                    ButtonNodeBytes: 0,
+                    MeasuredBytes: 210)));
+        var translateAttribution = new WindowTranslateAllocationAttribution(
+            RetainedApplyBytes: 0,
+            ViewportBytes: 0,
+            PipelineBuildBytes: 240,
+            FeedbackBytes: 60,
+            PipelineAttribution: new RenderPipelineBuildAllocationAttribution(
+                ClassificationBytes: 0,
+                LayoutBytes: 30,
+                RecordBytes: 30,
+                HitTargetsBytes: 45,
+                SnapshotBytes: 75,
+                RetainedFrameBytes: 60));
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount: 3);
+
+        Assert.Equal(
+            "Allocation focus: largestCandidate=tree.buildRoot.button.childrenArray=120 bytes (40/frame), nextCandidate=tree.buildRoot.button.propertyArray=90 bytes (30/frame), treeDetailGap=30 bytes (10/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
+            summary);
+    }
+
+    [Fact]
     public void Text_cache_allocation_diagnostic_uses_frame_scoped_text_arena()
     {
         var root = FindRepoRoot();
@@ -2275,7 +2345,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("out var treeFrameAttribution", source);
         Assert.Contains("treeAttribution = treeAttribution.Add(treeFrameAttribution);", source);
         Assert.Contains("output.WriteLine(FormatBuildRootAllocationAttribution(treeAttribution.BuildRootAttribution, frameCount));", source);
+        Assert.Contains("output.WriteLine(FormatButtonAllocationAttribution(treeAttribution.BuildRootAttribution.ButtonAttribution, frameCount));", source);
         Assert.Contains("BuildRootAllocationAttribution", source);
+        Assert.Contains("ButtonAllocationAttribution", source);
+        Assert.Contains("BuildMeasuredButton", source);
         Assert.Contains("attribution = attribution.WithButton", source);
         Assert.Contains("attribution = attribution.WithText", source);
         Assert.Contains("attribution = attribution.WithScrollProperty", source);
