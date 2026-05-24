@@ -10,6 +10,10 @@
 | Doc | Purpose |
 |-----|---------|
 | [Irix_Framework_Design.md](Irix_Framework_Design.md) | Main architecture design, layer boundaries, phase boundaries, ADR index, and v1/vNext scope. |
+| [Post-Foundation-Roadmap.md](Post-Foundation-Roadmap.md) | Post-renderer-foundation roadmap for style, animation, GPU composition, and runtime ownership planning. |
+| [Style-System-v0.md](Style-System-v0.md) | Style layer contract: layout style, visual style, text shaping style, composition style, and control-state style. |
+| [Animation-Composition-v0.md](Animation-Composition-v0.md) | Animation ownership contract: UI-runtime animation, compositor animation, hybrid animation, and scroll presentation model. |
+| [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | Future platform-neutral composition/GPU-offload architecture for D3D12 now and Vulkan/Metal later. |
 | [GA-Hardening-Plan.md](GA-Hardening-Plan.md) | Current private-GA baseline, guarded invariants, and accepted constraints. |
 | [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md) | Remaining post-foundation backlog and framework-promotion candidates. |
 | [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md) | Promotion contracts for `Irix.Poc` runtime adapters, Windows backend adapters, and legacy/debug presentation paths. |
@@ -45,6 +49,7 @@ GitHub Actions quota is currently exhausted. `.github/workflows/ci.yml` remains 
 | Glyph atlas | Coverage surface is frozen until oracle/regression split is stable. Allowed work is bugfix, guard, diagnostic, test, documentation, and local evidence updates. SVG/COLR paint-tree-only glyphs, BiDi beyond current resolved-level projection, unsafe AtlasFull cases, and init/record failure remain explicit D3D12-only degradation. |
 | Text/value IR | Framework/core paths must not retain raw text strings. Retained and drawing paths use `TextNodeContent`, `TextBufferSnapshot`, `FrameTextArena`, `TextSlice`, and resolver boundaries. CLI/debug/report formatting strings are output-boundary exceptions. |
 | Architecture boundary | `Irix.Poc` is an app, diagnostics, and adapter-glue project. It is not the reusable framework home. `D3D12DrawingBackend` has moved to `Irix.Platform.Windows`; `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` have moved to `Irix.Rendering`; `WindowDrawCommandTranslator` remains the Poc adapter around viewport timing, app/control scroll feedback, diagnostics, allocation attribution, and Counter default composition. `WindowBackend` stays as legacy/debug presentation. |
+| Style / animation / composition | Design-only phase is active. Style, animation, and GPU composition contracts now define the intended layer boundaries before any compositor/runtime code extraction. Scroll should move toward a hybrid model: logical scroll in app/control runtime, presented scroll in compositor animation. |
 | Performance | Allocation measurement/hardening is closed for this stage. Latest `--diagnose-text-cache 180` warm scroll baseline with buildRoot/layout attribution is the comparison point: about `396760 bytes`, `2204 B/frame`; `pipeline.layout=501` B/frame, `tree.buildRoot=546` B/frame, and record about `45 B/frame`. Only safe empty publication array reuse was implemented. Remaining tree/layout/snapshot buckets require ownership design, not opportunistic retained-array micro-optimization. |
 | Docs | Current docs should describe active architecture and remaining work, not post-GA process history. |
 
@@ -59,6 +64,7 @@ Keep guards green for these non-negotiable boundaries:
 - No D3D11On12 / Direct2D final composition, factory/device/context path, `TextOverlaySyncStrategy`, `D3D12TextRenderer`, `IDWriteTextLayout`, or runtime shader compile in active renderer source.
 - No raw retained text string path in framework/core rendering or layout state.
 - No public string style/value factory path, legacy attribute-era API, public `VirtualNodeProperty` construction, silent `PropertyValue` getters, ref-struct leakage into retained/batch state, or framework/backend `record struct` outside the existing PoC authoring exception.
+- No compositor/runtime code extraction before the relevant style, animation, composition, scroll, or input/control ownership contract is written.
 
 ---
 
@@ -67,6 +73,7 @@ Keep guards green for these non-negotiable boundaries:
 | Priority | Work | Boundary |
 |----------|------|----------|
 | P0 | Keep local Smoke gate authoritative | Run `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke` for broad changes while Actions quota is unavailable. |
+| P1 | Post-foundation architecture planning | Use [Post-Foundation-Roadmap.md](Post-Foundation-Roadmap.md), [Style-System-v0.md](Style-System-v0.md), [Animation-Composition-v0.md](Animation-Composition-v0.md), and [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) before code changes. |
 | P1 | Framework ownership contracts | `D3D12DrawingBackend` and translator core promotion are complete. `WindowBackend` stays in Poc. Scroll and input/control contracts are documentation-only for now; do not move those runtime types until the contracts are ready for code extraction. |
 | P1 | Allocation follow-up hold | Keep the current `--diagnose-text-cache 180` baseline as a future comparison point. Do not resume retained array, snapshot, or tree-builder optimization without an ownership design and a single measured target bucket. |
 | P1 | Glyph atlas maintenance | Stay within the coverage freeze: bugfixes, guards, diagnostics, and tests only unless a matching oracle/regression case is added first. |
