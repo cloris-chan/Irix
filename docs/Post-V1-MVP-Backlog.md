@@ -19,7 +19,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | Windows backend promotion | `D3D12DrawingBackend` and its helper structs moved from `Irix.Poc` to `Irix.Platform.Windows` without renderer behavior changes. |
 | Translator core promotion | `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` moved from `Irix.Poc` to `Irix.Rendering`; `WindowDrawCommandTranslator` remains Poc glue for viewport timing, app/control feedback, diagnostics, allocation attribution, and Counter default composition. |
 | Resource cache / stable handles | Glyph entries and atlas pages use stable value handles with generations. The atlas grows on demand to a bounded 48-page budget, tracks Alpha/Bgra page formats, reports resident bytes and fragmentation, and supports format-scoped retained-floor-gated page reuse. |
-| Performance baseline | Split frame-stage allocation guards and `--diagnose-text-cache` attribution exist. Latest warm scroll evidence shows `pipeline.layout` and `tree.buildRoot` are the largest candidates; record allocation is low. |
+| Performance baseline | Split frame-stage allocation guards and `--diagnose-text-cache` attribution exist. Layout attribution now shows `pipeline.layout` is mostly published arrays/result shell, not node-walk/property-read/clip propagation. Record allocation is low. |
 
 ---
 
@@ -49,7 +49,7 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-029 | Tree/layout/snapshot allocation pass | Latest `--diagnose-text-cache 180` warm scroll sample is `2190 B/frame`; focus summary ranks `pipeline.layout=455 B/frame` first and `tree.buildRoot=410 B/frame` second. Record is `91 B/frame`. | One focused change per measured bucket, with updated attribution. Do not optimize glyph renderer or `DrawCommandRecorder` first unless new evidence changes the profile. |
+| POST-029 | Tree/layout/snapshot allocation pass | Latest `--diagnose-text-cache 180` warm scroll sample is about `2204 B/frame`; layout detail is `elementsArray=226`, `treeNodesArray=136`, `scrollDiagnosticsArray=89`, `result=91`, `dirtyRanges=45`, `nodeWalk=0` B/frame. `tree.buildRoot` is about `318 B/frame`; record is `91 B/frame`. | One focused change per measured bucket, with updated attribution. Do not optimize glyph renderer or `DrawCommandRecorder` first unless new evidence changes the profile. |
 | POST-030 | Layout builder scratch ownership | Layout full/dirty allocation is stable but still visible in attribution. | Scratch lifetime and pooling design does not leak retained state, stack memory, or rented arrays. |
 | POST-031 | Retained snapshot boundary review | Snapshot copy allocation is visible but not dominant. | Any reuse design preserves `TextSlice`/resource snapshot validity and cross-frame ownership rules. |
 

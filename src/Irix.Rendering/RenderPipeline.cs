@@ -123,8 +123,11 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         if (treeChanged || viewportChanged || hasDirty)
         {
             var beforeLayout = GetAllocatedBytes(measureAllocation);
+            var layoutAttribution = default(LayoutBuildAllocationAttribution);
             LayoutRebuildCount++;
-            _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
+            _retainedLayoutResult = measureAllocation
+                ? _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes, out layoutAttribution)
+                : _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
             _retainedLayout = _retainedLayoutResult.Elements;
             _retainedRoot = root;
             _retainedTextSnapshot = textSnapshot;
@@ -132,6 +135,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
             LastMaxScrollY = ResolveRootMaxScrollY(_retainedLayoutResult.ScrollDiagnostics);
             attribution = attribution.WithLayout(AllocatedDelta(measureAllocation, beforeLayout));
+            attribution = attribution.WithLayoutAttribution(layoutAttribution);
         }
 
         var layout = _retainedLayout!;
@@ -523,7 +527,8 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
     long HitTargetsBytes,
     long SnapshotBytes,
     long RetainedFrameBytes,
-    DrawCommandRecordAllocationAttribution RecordAttribution = default) : IEquatable<RenderPipelineBuildAllocationAttribution>
+    DrawCommandRecordAllocationAttribution RecordAttribution = default,
+    LayoutBuildAllocationAttribution LayoutAttribution = default) : IEquatable<RenderPipelineBuildAllocationAttribution>
 {
     public long ClassificationBytes { get; } = ClassificationBytes;
     public long LayoutBytes { get; } = LayoutBytes;
@@ -532,6 +537,7 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
     public long SnapshotBytes { get; } = SnapshotBytes;
     public long RetainedFrameBytes { get; } = RetainedFrameBytes;
     public DrawCommandRecordAllocationAttribution RecordAttribution { get; } = RecordAttribution;
+    public LayoutBuildAllocationAttribution LayoutAttribution { get; } = LayoutAttribution;
     public long TotalBytes => ClassificationBytes + LayoutBytes + RecordBytes + HitTargetsBytes + SnapshotBytes + RetainedFrameBytes;
 
     public RenderPipelineBuildAllocationAttribution Add(RenderPipelineBuildAllocationAttribution other) =>
@@ -542,21 +548,24 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
             HitTargetsBytes + other.HitTargetsBytes,
             SnapshotBytes + other.SnapshotBytes,
             RetainedFrameBytes + other.RetainedFrameBytes,
-            RecordAttribution.Add(other.RecordAttribution));
+            RecordAttribution.Add(other.RecordAttribution),
+            LayoutAttribution.Add(other.LayoutAttribution));
 
-    public RenderPipelineBuildAllocationAttribution WithClassification(long bytes) => new(ClassificationBytes + bytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
+    public RenderPipelineBuildAllocationAttribution WithClassification(long bytes) => new(ClassificationBytes + bytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution, LayoutAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithLayout(long bytes) => new(ClassificationBytes, LayoutBytes + bytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
+    public RenderPipelineBuildAllocationAttribution WithLayout(long bytes) => new(ClassificationBytes, LayoutBytes + bytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution, LayoutAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithRecord(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes + bytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
+    public RenderPipelineBuildAllocationAttribution WithRecord(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes + bytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution, LayoutAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithHitTargets(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes + bytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
+    public RenderPipelineBuildAllocationAttribution WithHitTargets(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes + bytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution, LayoutAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithSnapshot(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes + bytes, RetainedFrameBytes, RecordAttribution);
+    public RenderPipelineBuildAllocationAttribution WithSnapshot(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes + bytes, RetainedFrameBytes, RecordAttribution, LayoutAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithRetainedFrame(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes + bytes, RecordAttribution);
+    public RenderPipelineBuildAllocationAttribution WithRetainedFrame(long bytes) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes + bytes, RecordAttribution, LayoutAttribution);
 
-    public RenderPipelineBuildAllocationAttribution WithRecordAttribution(DrawCommandRecordAllocationAttribution attribution) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution.Add(attribution));
+    public RenderPipelineBuildAllocationAttribution WithRecordAttribution(DrawCommandRecordAllocationAttribution attribution) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution.Add(attribution), LayoutAttribution);
+
+    public RenderPipelineBuildAllocationAttribution WithLayoutAttribution(LayoutBuildAllocationAttribution attribution) => new(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution, LayoutAttribution.Add(attribution));
 
     public bool Equals(RenderPipelineBuildAllocationAttribution other)
     {
@@ -566,12 +575,13 @@ internal readonly struct RenderPipelineBuildAllocationAttribution(
             && HitTargetsBytes == other.HitTargetsBytes
             && SnapshotBytes == other.SnapshotBytes
             && RetainedFrameBytes == other.RetainedFrameBytes
-            && RecordAttribution.Equals(other.RecordAttribution);
+            && RecordAttribution.Equals(other.RecordAttribution)
+            && LayoutAttribution.Equals(other.LayoutAttribution);
     }
 
     public override bool Equals(object? obj) => obj is RenderPipelineBuildAllocationAttribution other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution);
+    public override int GetHashCode() => HashCode.Combine(ClassificationBytes, LayoutBytes, RecordBytes, HitTargetsBytes, SnapshotBytes, RetainedFrameBytes, RecordAttribution, LayoutAttribution);
 }
 
 internal readonly struct DrawCommandRecordAllocationAttribution(

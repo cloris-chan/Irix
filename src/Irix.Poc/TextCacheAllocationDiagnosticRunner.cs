@@ -148,6 +148,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));
         output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));
         output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));
+        output.WriteLine(FormatLayoutAllocationAttribution(translateAttribution.PipelineAttribution.LayoutAttribution, frameCount));
         output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));
         output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));
         output.WriteLine($"FrameDrawingResources: rents={poolDelta.RentCount}, created={poolDelta.CreatedCount}, reused={poolDelta.ReusedCount}, returns={poolDelta.ReturnCallCount}, returnedToPool={poolDelta.ReturnedToPoolCount}, retainedSkips={poolDelta.RetainedReturnSkipCount}, duplicateSkips={poolDelta.DuplicateReturnSkipCount}, staleSkips={poolDelta.StaleReturnSkipCount}, overflowDisposals={poolDelta.DisposedOverflowCount}, poolCount={poolDelta.PoolCount}");
@@ -178,6 +179,12 @@ internal static class TextCacheAllocationDiagnosticRunner
         return $"Pipeline allocation: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
+    internal static string FormatLayoutAllocationAttribution(LayoutBuildAllocationAttribution attribution, int frameCount)
+    {
+        var divisor = frameCount > 0 ? frameCount : 0;
+        return $"Layout allocation: nodeWalk={attribution.NodeWalkBytes} bytes ({PerFrame(attribution.NodeWalkBytes, divisor)}/frame), dirtyRanges={attribution.DirtyRangeBytes} bytes ({PerFrame(attribution.DirtyRangeBytes, divisor)}/frame), elementsArray={attribution.ElementArrayBytes} bytes ({PerFrame(attribution.ElementArrayBytes, divisor)}/frame), treeNodesArray={attribution.TreeNodeArrayBytes} bytes ({PerFrame(attribution.TreeNodeArrayBytes, divisor)}/frame), scrollDiagnosticsArray={attribution.ScrollDiagnosticsArrayBytes} bytes ({PerFrame(attribution.ScrollDiagnosticsArrayBytes, divisor)}/frame), result={attribution.ResultBytes} bytes ({PerFrame(attribution.ResultBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+    }
+
     internal static string FormatRecordAllocationAttribution(DrawCommandRecordAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
@@ -192,7 +199,20 @@ internal static class TextCacheAllocationDiagnosticRunner
         var largestBytes = treeAttribution.BuildRootBytes;
         var nextName = "tree.snapshot";
         var nextBytes = treeAttribution.SnapshotBytes;
-        UpdateLargest("pipeline.layout", pipelineAttribution.LayoutBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        var layoutAttribution = pipelineAttribution.LayoutAttribution;
+        if (layoutAttribution.TotalBytes > 0)
+        {
+            UpdateLargest("layout.nodeWalk", layoutAttribution.NodeWalkBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("layout.dirtyRanges", layoutAttribution.DirtyRangeBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("layout.elementsArray", layoutAttribution.ElementArrayBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("layout.treeNodesArray", layoutAttribution.TreeNodeArrayBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("layout.scrollDiagnosticsArray", layoutAttribution.ScrollDiagnosticsArrayBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("layout.result", layoutAttribution.ResultBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        }
+        else
+        {
+            UpdateLargest("pipeline.layout", pipelineAttribution.LayoutBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+        }
         UpdateLargest("pipeline.snapshot", pipelineAttribution.SnapshotBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
         var treeDetailGap = attribution.TreeBytes - treeAttribution.TotalBytes;
         var pipelineDetailGap = translateAttribution.PipelineBuildBytes - pipelineAttribution.TotalBytes;

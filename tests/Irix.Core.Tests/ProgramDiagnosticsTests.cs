@@ -2171,6 +2171,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Text_cache_layout_allocation_attribution_formatter_outputs_stable_stage_fields()
+    {
+        var attribution = new LayoutBuildAllocationAttribution(
+            NodeWalkBytes: 12,
+            DirtyRangeBytes: 24,
+            ElementArrayBytes: 36,
+            TreeNodeArrayBytes: 48,
+            ScrollDiagnosticsArrayBytes: 60,
+            ResultBytes: 72);
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatLayoutAllocationAttribution(attribution, frameCount: 3);
+
+        Assert.Equal(
+            "Layout allocation: nodeWalk=12 bytes (4/frame), dirtyRanges=24 bytes (8/frame), elementsArray=36 bytes (12/frame), treeNodesArray=48 bytes (16/frame), scrollDiagnosticsArray=60 bytes (20/frame), result=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
+            summary);
+    }
+
+    [Fact]
     public void Text_cache_record_allocation_attribution_formatter_outputs_stable_stage_fields()
     {
         var attribution = new DrawCommandRecordAllocationAttribution(
@@ -2209,12 +2227,19 @@ public sealed class ProgramDiagnosticsTests
                 RecordBytes: 30,
                 HitTargetsBytes: 45,
                 SnapshotBytes: 150,
-                RetainedFrameBytes: 75));
+                RetainedFrameBytes: 75,
+                LayoutAttribution: new LayoutBuildAllocationAttribution(
+                    NodeWalkBytes: 30,
+                    DirtyRangeBytes: 15,
+                    ElementArrayBytes: 330,
+                    TreeNodeArrayBytes: 60,
+                    ScrollDiagnosticsArrayBytes: 45,
+                    ResultBytes: 0)));
 
         var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Allocation focus: largestCandidate=pipeline.layout=300 bytes (100/frame), nextCandidate=tree.buildRoot=210 bytes (70/frame), treeDetailGap=120 bytes (40/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
+            "Allocation focus: largestCandidate=layout.elementsArray=330 bytes (110/frame), nextCandidate=tree.buildRoot=210 bytes (70/frame), treeDetailGap=120 bytes (40/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
             summary);
     }
 
@@ -2234,6 +2259,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));", source);
+        Assert.Contains("output.WriteLine(FormatLayoutAllocationAttribution(translateAttribution.PipelineAttribution.LayoutAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));", source);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
