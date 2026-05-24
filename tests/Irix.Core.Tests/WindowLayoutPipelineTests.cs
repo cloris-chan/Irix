@@ -2032,6 +2032,24 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void LayoutTree_empty_publications_reuse_static_empty_arrays()
+    {
+        var builder = new LayoutTreeBuilder();
+        var textRoot = VirtualNodeBuilder.Text(_arena, "hello", new NodeKey(1));
+        var containerRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.ScrollContainer(new NodeKey(2)),
+            VirtualNodeBuilder.Text(_arena, "after", new NodeKey(3)));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        var cleanResult = builder.BuildLayoutTree(textRoot, viewport);
+        var dirtyEmptyResult = builder.BuildLayoutTree(containerRoot, viewport, [1]);
+
+        Assert.Same(Array.Empty<(int Start, int Count)>(), cleanResult.DirtyElementRanges);
+        Assert.Same(Array.Empty<ScrollContainerDiag>(), cleanResult.ScrollDiagnostics);
+        Assert.Same(Array.Empty<(int Start, int Count)>(), dirtyEmptyResult.DirtyElementRanges);
+    }
+
+    [Fact]
     public void LayoutTree_tree_structure_maps_dfs_indices()
     {
         var builder = new LayoutTreeBuilder();

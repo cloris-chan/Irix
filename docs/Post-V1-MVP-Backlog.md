@@ -49,7 +49,7 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-029 | Tree/layout/snapshot allocation pass | Latest `--diagnose-text-cache 180` warm scroll sample is about `2204 B/frame`; layout detail is `elementsArray=226`, `treeNodesArray=136`, `scrollDiagnosticsArray=89`, `result=91`, `dirtyRanges=45`, `nodeWalk=0` B/frame. `tree.buildRoot` is about `318 B/frame`; record is `91 B/frame`. | One focused change per measured bucket, with updated attribution. Do not optimize glyph renderer or `DrawCommandRecorder` first unless new evidence changes the profile. |
+| POST-029 | Tree/layout/snapshot allocation pass | Latest `--diagnose-text-cache 180` warm scroll sample is about `2190 B/frame`; layout detail is `elementsArray=227`, `treeNodesArray=182`, `scrollDiagnosticsArray=45`, `result=0`, `dirtyRanges=0`, `nodeWalk=0` B/frame. `tree.buildRoot` is about `410 B/frame`; record is `91 B/frame`. | One focused change per measured bucket, with updated attribution. Do not optimize glyph renderer or `DrawCommandRecorder` first unless new evidence changes the profile. |
 | POST-030 | Layout builder scratch ownership | Layout full/dirty allocation is stable but still visible in attribution. | Scratch lifetime and pooling design does not leak retained state, stack memory, or rented arrays. |
 | POST-031 | Retained snapshot boundary review | Snapshot copy allocation is visible but not dominant. | Any reuse design preserves `TextSlice`/resource snapshot validity and cross-frame ownership rules. |
 

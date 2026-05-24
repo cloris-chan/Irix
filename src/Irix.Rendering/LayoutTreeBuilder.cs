@@ -34,6 +34,9 @@ internal ref struct LayoutContext
 
 internal sealed class LayoutTreeBuilder(LayoutStyle style)
 {
+    private static readonly (int Start, int Count)[] EmptyDirtyElementRanges = Array.Empty<(int Start, int Count)>();
+    private static readonly ScrollContainerDiag[] EmptyScrollDiagnostics = Array.Empty<ScrollContainerDiag>();
+
     private const int InlineLayoutElementCapacity = 32;
     private const int InlineLayoutTreeNodeCapacity = 32;
     private const int InlineLayoutElementRangeCapacity = 64;
@@ -84,7 +87,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             var beforeDirtyRanges = GetAllocatedBytes(measureAllocation);
             var dirtyRanges = dirtyNodes is { Count: > 0 }
                 ? CollectDirtyRanges(state.ElementRanges, dirtyNodes, scratch)
-                : [];
+                : EmptyDirtyElementRanges;
             attribution = attribution.WithDirtyRanges(AllocatedDelta(measureAllocation, beforeDirtyRanges));
 
             var beforeElementsArray = GetAllocatedBytes(measureAllocation);
@@ -149,7 +152,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
         public LayoutTreeNode[] TreeNodesToArray() => _treeNodes.ToArray();
 
-        public ScrollContainerDiag[] ScrollDiagnosticsToArray() => _scrollDiags.ToArray();
+        public ScrollContainerDiag[] ScrollDiagnosticsToArray() =>
+            _scrollDiags.Count == 0 ? EmptyScrollDiagnostics : _scrollDiags.ToArray();
 
         public void LayoutRoot(VirtualNode root, PixelRectangle viewportBounds)
         {
@@ -474,7 +478,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     {
         if (ranges.Count == 0)
         {
-            return [];
+            return EmptyDirtyElementRanges;
         }
 
         if (ranges.Count == 1)

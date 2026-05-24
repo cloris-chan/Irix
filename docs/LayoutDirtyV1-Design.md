@@ -69,6 +69,8 @@ Safe allocation work must preserve this contract:
 - If optimizing a non-empty bucket, first introduce a compact owned publication representation or a same-frame scratch boundary that is copied before publication.
 - Treat `scrollDiagnosticsArray` and `result` as smaller first candidates only because their blast radius is lower than `Elements` / `TreeNodes`; `ScrollDiagnostics` is still retained state and must not become pool-backed mutable data.
 
+Current implementation: empty `DirtyElementRanges` and absent `ScrollDiagnostics` explicitly publish `Array.Empty<T>()`.
+
 ## Stage Freeze
 
 - Layout dirty v1 diagnostics are complete for this stage.
