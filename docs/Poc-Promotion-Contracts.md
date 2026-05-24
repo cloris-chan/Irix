@@ -125,17 +125,61 @@ Rename decision: defer. `TranslatorCore` remains internal; rename to `RenderFram
 
 ### Scroll Feedback Ownership
 
-Decision: `ScrollFeedback` is app/control feedback.
+Decision: scroll is split across layout observation, app/control feedback, and app runtime state. It is not one movable unit yet.
 
-It is derived from render/layout results, but its consumer is app/control state: `CounterApplication` uses max scroll and typed scroll-container metrics to clamp or update scroll behavior. It should not be modeled as rendering diagnostics because diagnostics are read-only observation, while scroll feedback participates in runtime state correction. It also should not be modeled as platform feedback because it does not come from Win32 or the display backend.
+`ScrollFeedback` is derived from render/layout results, but its consumer is app/control state: `CounterApplication` uses max scroll and typed scroll-container metrics to clamp or update scroll behavior. It should not be modeled as rendering diagnostics because diagnostics are read-only observation, while scroll feedback participates in runtime state correction. It also should not be modeled as platform feedback because it does not come from Win32 or the display backend.
+
+Current ownership:
+
+| Type / concept | Current owner | Contract |
+|----------------|---------------|----------|
+| `ScrollContainerDiag` / `LayoutTreeResult.ScrollDiagnostics` | `Irix.Rendering` layout observation | Published immutable layout diagnostics. Same-frame consumers may derive max scroll and feedback, but the render pipeline does not own app scroll state. |
+| `ScrollFeedback`, `ScrollContainerMetrics`, `ScrollContainerId` | `Irix.Poc` app/control feedback | Projection from layout diagnostics into app-visible control feedback. Delivery is owned by `TranslatorFeedbackSink`; future extraction needs a framework control-feedback contract. |
+| `ScrollController` | `Irix.Poc` app runtime behavior | Pure functions for delta conversion, clamping, and animation tick over app-owned `ScrollState`. Candidate for framework runtime only after input and control ownership are no longer Counter-specific. |
+| `ScrollState`, `ScrollDelta`, `ScrollMetrics`, `SystemScrollSettings` | `Irix.Poc` app runtime state/config | App-owned runtime values. They are not retained render state and must not be written by `RenderPipeline`. |
+| `ScrollFramePump` | `Irix.Poc` app runtime scheduling | Coalesces pending pixel deltas and dispatches app messages. It is not a renderer frame pump and should not move into `Irix.Rendering`. |
+| `ScrollDiagnosticsSnapshot` / formatter rows | `Irix.Poc` diagnostics | Observation/output only. Diagnostics may read scroll state and layout diagnostics, but do not own either. |
 
 Rules:
 
 - `RenderPipeline` may continue to expose scroll diagnostics as layout observation.
-- The translator or future translation core may project scroll diagnostics into a feedback value.
+- The translator or future control adapter may project scroll diagnostics into a feedback value.
 - Delivery to app/control state belongs to `FeedbackSink`, outside the platform-neutral translation core.
 - CLI/debug formatting may observe scroll feedback, but must not become the owner.
-- `ScrollController`, `ScrollState`, `ScrollFramePump`, and `ScrollFeedback` stay in `Irix.Poc` until a separate scroll ownership contract is written.
+- `ScrollController`, `ScrollState`, `ScrollFramePump`, and `ScrollFeedback` stay in `Irix.Poc` until a separate code-extraction commit chooses a framework runtime owner.
+- Do not move scroll runtime types together with renderer, glyph, D3D12 backend, or allocation changes.
+
+Extraction candidates after the contract is promoted beyond documentation:
+
+| Candidate | Possible target | Blocker |
+|-----------|-----------------|---------|
+| Pure scroll state/update functions | Framework runtime/control package | Needs a framework-level control state owner and non-Counter input message model. |
+| Scroll feedback projection | Framework control adapter | Needs a stable control feedback channel separate from diagnostics and render output. |
+| Scroll frame pump | App/runtime scheduler | Needs a runtime frame scheduling contract; must stay separate from renderer presentation cadence. |
+
+### Input / Control Projection Ownership
+
+Decision: input/control projection remains Counter/Poc runtime for now.
+
+The current input path is useful and tested, but it is not yet a reusable framework input runtime. It assumes a single pointer, left-button capture semantics, Counter `ActionId` mapping, button-only visual projection, and direct app message construction.
+
+Current ownership:
+
+| Type / concept | Current owner | Contract |
+|----------------|---------------|----------|
+| `InputOwnershipState` / `OwnershipSnapshot` | `Irix.Poc` app runtime state | Tracks single-pointer hover, pressed, captured, and focused targets for Counter. Candidate runtime state, but not movable until multi-control ownership and action dispatch are no longer Counter-specific. |
+| `InputOwnershipEvent` / diagnostics ring | `Irix.Poc` diagnostics over app input state | Diagnostic observation only. It should follow the input owner if a future runtime extraction happens. |
+| `IActionHitTestResolver` and resolver implementations | `Irix.Poc` input adapter | Bridges physical input coordinates to `ActionId` through Poc/compositor hit targets. Future framework form needs a renderer-neutral hit-test service contract. |
+| `CounterInputRouter` | `Irix.Poc` sample app router | Maps raw input plus ownership state to `CounterMessage`; it must not be promoted as framework runtime. |
+| `ControlVisualState`, `ControlVisualStateProjection`, `ControlVisualStatePropertyAdapter`, `ButtonPropertyBundle` | `Irix.Poc` control projection | Converts ownership snapshot into Counter button properties. Candidate concept, but current shape is button-specific and property-array publishing remains app-authoring glue. |
+
+Rules:
+
+- Input ownership is app/control runtime state, not rendering diagnostics and not platform backend state.
+- Hit testing may consume renderer-produced hit targets, but the input owner must not own retained render frames.
+- `ControlVisualState` projection is a control feedback/projection layer. It should not move into `Irix.Rendering` because it emits `VirtualNodeProperty` updates for app/control state.
+- `ActionId` dispatch and `CounterMessage` mapping are sample-app concerns. A framework extraction must introduce typed control actions or routed commands first.
+- Keep the current code in `Irix.Poc` until a future commit can move one coherent unit with tests and without Counter-specific assumptions.
 
 ## `D3D12DrawingBackend`
 
@@ -223,6 +267,6 @@ Classes and structs in `Irix.Poc` that are not purely app model or CLI entrypoin
 
 Recommended move order:
 
-1. Return to measured tree/layout/snapshot allocation hardening.
-2. Revisit scroll/input/control projection only after a scroll ownership contract exists.
+1. Keep allocation measurement/hardening closed for this stage; reopen only with an ownership design and one measured target bucket.
+2. Use the scroll and input/control contracts above before extracting app/control runtime state from Poc.
 3. Keep `WindowBackend`, `WindowVisualCompositor`, and `PoCDrawingBackend` as legacy/debug presentation until replaced.

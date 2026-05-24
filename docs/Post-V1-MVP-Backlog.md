@@ -19,7 +19,7 @@ Irix v1 Windows PoC separates target SDK from runtime minimum. Windows-targeted 
 | Windows backend promotion | `D3D12DrawingBackend` and its helper structs moved from `Irix.Poc` to `Irix.Platform.Windows` without renderer behavior changes. |
 | Translator core promotion | `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` moved from `Irix.Poc` to `Irix.Rendering`; `WindowDrawCommandTranslator` remains Poc glue for viewport timing, app/control feedback, diagnostics, allocation attribution, and Counter default composition. |
 | Resource cache / stable handles | Glyph entries and atlas pages use stable value handles with generations. The atlas grows on demand to a bounded 48-page budget, tracks Alpha/Bgra page formats, reports resident bytes and fragmentation, and supports format-scoped retained-floor-gated page reuse. |
-| Performance baseline | Split frame-stage allocation guards and `--diagnose-text-cache` attribution exist. Layout attribution now shows `pipeline.layout` is mostly published arrays/result shell, not node-walk/property-read/clip propagation. Record allocation is low. |
+| Performance allocation phase | Split frame-stage allocation guards and `--diagnose-text-cache` attribution exist. Layout attribution now shows `pipeline.layout` is mostly published arrays/result shell, not node-walk/property-read/clip propagation. Safe empty publication array reuse is complete. Further tree/layout/snapshot optimization is paused until ownership design exists. |
 
 ---
 
@@ -42,39 +42,40 @@ Run `Smoke` before/after broad changes. Do not add artifact-upload work until Ac
 | POST-024 | Keep translator core in Rendering and outer adapter in Poc | `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` now live in `Irix.Rendering`. `WindowDrawCommandTranslator` remains in `Irix.Poc` because it composes viewport callbacks, app/control scroll feedback, diagnostics, allocation attribution, and Counter default style construction. | Do not move the outer adapter or make the core public without a new contract. |
 | POST-025 | Keep `D3D12DrawingBackend` in Windows platform | Backend and helper structs now live in `Irix.Platform.Windows`. | Preserve scissor/text clip/device recovery/scale diagnostics tests; do not move it back into `Irix.Poc`. |
 | POST-026 | Keep `WindowBackend` isolated | Contract decision is stay: it is a legacy/debug `INativeWindow.SetContent` presentation path. | Do not move it into `Irix.Rendering` or `Irix.Platform.Windows`; replace only if the legacy/debug path becomes unnecessary. |
-| POST-027 | Scroll extraction hold | Scroll feedback is app/control feedback derived from layout diagnostics; scroll state/pump remains in `Irix.Poc`. | Do not split scroll/input until a scroll ownership contract exists. |
+| POST-027 | Scroll ownership contract | Written as a documentation boundary. `ScrollDiagnostics` is layout observation; `ScrollFeedback` is app/control feedback; `ScrollController`, `ScrollState`, and `ScrollFramePump` remain app runtime state in `Irix.Poc`. | Do not move scroll runtime code until a separate extraction commit chooses a framework runtime owner. |
 | POST-028 | Settings provider | Runtime settings wiring remains postponed. | Add only after a concrete app/framework boundary is written; keep fallback-only internal provider until then. |
+| POST-029 | Input/control projection contract | Written as a documentation boundary. `InputOwnershipState`, `ControlVisualState*`, and `ActionHitTestResolver` remain Counter/Poc runtime projection for now. | Do not promote input/control code without replacing Counter-specific action mapping and single-pointer assumptions. |
 
-### P1 - Measurement-Led Optimization
+### P1 - Allocation Follow-Up Hold
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-029 | Tree/layout/snapshot allocation pass | Latest `--diagnose-text-cache 180` warm scroll sample is about `2204 B/frame`; `tree.buildRoot=546` B/frame, split mostly into `buttons=318` and `container=227`; text/property/children are currently 0 B/frame in the sample. `pipeline.layout=501` B/frame and `layout.nodeWalk=0`. Record is `45 B/frame`. | One focused change per measured bucket, with updated attribution. Do not optimize glyph renderer or `DrawCommandRecorder` first unless new evidence changes the profile. |
-| POST-030 | Layout builder scratch ownership | Layout full/dirty allocation is stable but still visible in attribution. | Scratch lifetime and pooling design does not leak retained state, stack memory, or rented arrays. |
-| POST-031 | Retained snapshot boundary review | Snapshot copy allocation is visible but not dominant. | Any reuse design preserves `TextSlice`/resource snapshot validity and cross-frame ownership rules. |
+| POST-030 | Allocation phase closeout | Latest `--diagnose-text-cache 180` warm scroll sample is the comparison baseline: about `2204 B/frame`; `tree.buildRoot=546` B/frame, `pipeline.layout=501` B/frame, `layout.nodeWalk=0`, record `45 B/frame`. Safe empty publication array reuse is the only optimization from this phase. | Do not continue small fixes against retained arrays or snapshots. Reopen only with an ownership design and one measured bucket. |
+| POST-031 | Layout builder scratch ownership | Layout full/dirty allocation is stable but still visible in attribution. | Design only. Scratch lifetime and pooling must not leak retained state, stack memory, or rented arrays. |
+| POST-032 | Retained snapshot boundary review | Snapshot copy allocation is visible but not dominant. | Design only. Any reuse design preserves `TextSlice`/resource snapshot validity and cross-frame ownership rules. |
 
 Layout publication note: main layout arrays are retained publication state, not disposable same-frame scratch.
 
 `Elements`, `TreeNodes`, `DirtyElementRanges`, and `ScrollDiagnostics` are retained by `LastLayoutResult` / `LastRetainedInputSnapshot`.
 
-Safe reuse is limited to empty/static collections or same-frame scratch that is copied before publication.
+Safe reuse is limited to empty/static collections or same-frame scratch that is copied before publication. Do not pool or reuse `VirtualNode` owned arrays, non-empty `LayoutTreeResult` publication arrays, or `TextBufferSnapshot` character arrays in this stage.
 
 ### P1 / P2 - Glyph Atlas Follow-Up
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-032 | Local/Manual soak cadence | `Smoke` is routine; `Local` after glyph/page/shaping changes; `Nightly` after page-policy, eviction, or shaping overhauls. | Evidence is updated only when results materially change or cover a representative change. |
-| POST-033 | BGRA/TIFF natural font coverage | Default local Segoe UI Emoji naturally covers COLR/layer; Noto probes naturally cover PNG image data. Direct BGRA/TIFF natural font coverage remains unavailable locally. | Add evidence if a real font/environment exposes direct BGRA or TIFF; otherwise keep code-level selector/raster/decode/page-format tests. |
-| POST-034 | Entry-level eviction design | Design exists; implementation is blocked. | Do not implement entry LRU/sub-rect free-list until retained atlas command ownership exposes an oldest retained atlas record serial and page-local free-list ownership is explicit. |
-| POST-035 | Pixel/layout oracle | Structural DirectWrite analyzer/glyph oracles exist; pixel/layout oracle is deferred. | Future work remains separate from current regression matrix and does not reintroduce D2D overlay rendering. |
+| POST-033 | Local/Manual soak cadence | `Smoke` is routine; `Local` after glyph/page/shaping changes; `Nightly` after page-policy, eviction, or shaping overhauls. | Evidence is updated only when results materially change or cover a representative change. |
+| POST-034 | BGRA/TIFF natural font coverage | Default local Segoe UI Emoji naturally covers COLR/layer; Noto probes naturally cover PNG image data. Direct BGRA/TIFF natural font coverage remains unavailable locally. | Add evidence if a real font/environment exposes direct BGRA or TIFF; otherwise keep code-level selector/raster/decode/page-format tests. |
+| POST-035 | Entry-level eviction design | Design exists; implementation is blocked. | Do not implement entry LRU/sub-rect free-list until retained atlas command ownership exposes an oldest retained atlas record serial and page-local free-list ownership is explicit. |
+| POST-036 | Pixel/layout oracle | Structural DirectWrite analyzer/glyph oracles exist; pixel/layout oracle is deferred. | Future work remains separate from current regression matrix and does not reintroduce D2D overlay rendering. |
 
 ### P2 - Deferred Architecture
 
 | ID | Task | Current status | Acceptance |
 |----|------|----------------|------------|
-| POST-036 | Unified diagnostics channel | Postponed. | Replace per-component diagnostics only after current snapshots prove insufficient. |
-| POST-037 | StyleOnly layout skip | Design only. | Implement after layout dirty ownership and retained-frame semantics are stable. |
-| POST-038 | Second graphics backend | Deferred. | Start only after D3D12 contracts and project/layer boundaries are stable. |
+| POST-037 | Unified diagnostics channel | Postponed. | Replace per-component diagnostics only after current snapshots prove insufficient. |
+| POST-038 | StyleOnly layout skip | Design only. | Implement after layout dirty ownership and retained-frame semantics are stable. |
+| POST-039 | Second graphics backend | Deferred. | Start only after D3D12 contracts and project/layer boundaries are stable. |
 
 ---
 
@@ -84,11 +85,12 @@ Safe reuse is limited to empty/static collections or same-frame scratch that is 
 Completed Private GA + Renderer foundation
   ├─ POST-021..023 local gates and source boundaries
   ├─ POST-024..026 completed/held framework promotion boundaries
-  │    ├─ POST-027 scroll extraction
+  │    ├─ POST-027 scroll ownership
   │    └─ POST-028 settings provider
-  ├─ POST-029..031 measured allocation work
-  └─ POST-032..035 glyph atlas follow-up
-       └─ POST-034 entry eviction only after retained atlas command ownership is explicit
+  ├─ POST-029 input/control projection
+  ├─ POST-030..032 allocation follow-up hold
+  └─ POST-033..036 glyph atlas follow-up
+       └─ POST-035 entry eviction only after retained atlas command ownership is explicit
 ```
 
 ---
@@ -100,5 +102,5 @@ Completed Private GA + Renderer foundation
 - No glyph script/format coverage expansion during the coverage freeze without matching oracle/regression coverage.
 - No entry LRU or sub-rect free-list implementation before the ownership contract exists.
 - No pixel oracle or DirectWrite layout renderer as a blocker for the current foundation.
-- No allocation optimization without attribution.
+- No retained-array, snapshot, or tree-builder allocation optimization without an ownership design plus attribution.
 - No public API expansion or code migration from `Irix.Poc` without a written contract.

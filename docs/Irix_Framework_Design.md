@@ -29,7 +29,7 @@ Promotion contract summary:
 | Candidate | Why it stays in Poc for now | Required before moving |
 |-----------|-----------------------------|------------------------|
 | `D3D12DrawingBackend` | Windows D3D12 drawing backend adapter over `D3D12Renderer`. | Moved to `Irix.Platform.Windows`; helper structs and tests moved with the namespace boundary. |
-| `WindowDrawCommandTranslator` | Owns app glue for viewport, display scale, app/control scroll feedback, retained-frame feed, allocation attribution, and diagnostics. | Define `TranslatorInput` / `TranslatorOutput` / `ViewportProvider` / `FeedbackSink` boundaries, then split platform-neutral translation core from Poc/window glue. |
+| `WindowDrawCommandTranslator` | Owns app glue for viewport, display scale, app/control scroll feedback, retained-frame feed, allocation attribution, and diagnostics. | Core moved to `Irix.Rendering`; outer adapter stays in Poc until scroll/input/control ownership is ready for extraction. |
 | `WindowBackend` | Converts draw commands into `INativeWindow.SetContent` elements for legacy/debug GDI-style presentation. | Stay in `Irix.Poc`; do not promote as framework runtime surface. |
 
 Detailed input/output contracts and the source grep move plan live in [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md).
@@ -52,6 +52,7 @@ Ownership rules:
 
 - The MVU/update side owns application state.
 - The render pipeline owns retained layout/render state.
+- Layout scroll diagnostics are render/layout observation; scroll feedback and scroll state remain app/control runtime state until a framework runtime owner is chosen.
 - `FrameDrawingResources` owns frame-local text/resource payloads.
 - `TextSlice` is only a frame-local reference into resolver-owned text; retained/core paths must not hold raw source `string`.
 - Cross-boundary data should be value typed, immutable after publication, and explicit about lifetime.
@@ -117,6 +118,7 @@ Deferred:
 - Framework/core paths do not retain raw text strings.
 - Public typed property/value surfaces must not regress to string-keyed domain models.
 - Retained state must not hold stack memory or rented arrays.
+- Allocation work must not pool or reuse retained publication arrays/snapshots without an ownership design.
 - Renderer failures must be explicit diagnostics or explicit D3D12-only degradation.
 - Device/resource ownership stays in the platform renderer.
 - `Irix.Poc` code is not promoted without a contract.
@@ -128,7 +130,8 @@ The active backlog is intentionally narrow:
 
 - Keep local Smoke gate authoritative for broad changes.
 - Write framework-promotion contracts before moving Poc adapter code.
-- Use allocation attribution before optimizing tree/layout/snapshot boundaries.
+- Treat allocation measurement/hardening as closed for this stage; reopen only with an ownership design and one measured target bucket.
+- Use the scroll and input/control ownership contracts before extracting runtime state from Poc.
 - Maintain GlyphAtlas inside the coverage freeze.
 - Keep entry eviction and pixel/layout oracle as future work.
 
