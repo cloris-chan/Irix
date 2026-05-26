@@ -1,6 +1,6 @@
 # Post-Foundation Roadmap
 
-> Planning note for the architecture phase after the renderer-foundation, promotion, and allocation-attribution work. This document is intentionally design-only unless a later task explicitly says otherwise.
+> Planning note for the architecture phase after the renderer-foundation, promotion, and allocation-attribution work.
 
 ## Current Baseline
 
@@ -20,9 +20,9 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 | Track | Purpose | First artifact | Code movement |
 |-------|---------|----------------|---------------|
 | Style system | Define layout, visual, text, control-state, and composition style boundaries. | [Style-System-v0.md](Style-System-v0.md) | No initial code movement. |
-| Animation system | Define UI-runtime animation vs compositor/GPU animation ownership. | [Animation-Composition-v0.md](Animation-Composition-v0.md) | No initial code movement. |
-| GPU composition | Define a platform-neutral composition model and drive the first implementation through D3D12/GPU-backed layer updates. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md), [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | First code movement is the narrow D3D12-backed transform/opacity diagnostic path. |
-| Scroll/compositor bridge | Use scroll as the first hybrid case: runtime owns logical target; compositor owns presented offset. | Future scroll compositor design | Only after style/animation/composition contracts are accepted. |
+| Animation system | Define UI-runtime animation vs compositor/GPU animation ownership. | [Animation-Composition-v0.md](Animation-Composition-v0.md) | Internal transform/opacity `CompositionAnimationPlan` exists; runtime declaration is next. |
+| GPU composition | Define a platform-neutral composition model and drive implementation through D3D12/GPU-backed layer updates. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md), [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | D3D12-backed compositor tick for transform/opacity exists. |
+| Scroll/compositor bridge | Use scroll as the first hybrid case: runtime owns logical target; compositor owns presented offset. | Future scroll compositor design | After layer identity and hit-test mapping are contracted. |
 | Runtime/control extraction | Decide whether scroll/input/control state needs a new runtime/control package. | Future ownership design | Only after Counter-specific assumptions are removed. |
 
 ## Design Order
@@ -31,7 +31,7 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 2. **Animation/composition model**: use the property classification to decide which animations are UI-runtime animations and which can run independently in the compositor.
 3. **GPU composition architecture**: define composition IR, layer boundaries, backend capability reporting, and GPU offload phases.
 4. **Scroll compositor design**: specify logical vs presented scroll, hit-test mapping, invalidation, and compositor timeline ownership.
-5. **D3D12-first implementation spike**: after the contracts above are written, target a real D3D12/GPU-backed composition path first. Add fallback compatibility only when that spike exposes an explicit short-term blocker.
+5. **D3D12-first implementation spike**: current transform/opacity tick is in place. Continue with stable retained layer identity, runtime animation declaration, then scroll presentation. Add fallback compatibility only when the D3D12 path exposes an explicit short-term blocker.
 
 ## Principles
 

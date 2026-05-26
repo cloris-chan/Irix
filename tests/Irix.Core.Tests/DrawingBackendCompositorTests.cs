@@ -202,6 +202,97 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task RenderCompositionAnimationTickAsync_uses_retained_frame_without_regular_execute()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        using var frame = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 80), Color: DrawColor.Opaque(1, 2, 3)),
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(10, 20, 30, 40), Color: DrawColor.Opaque(4, 5, 6)),
+            ]), 2),
+            [],
+            resources);
+
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(42),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(0, 10),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(0, 20),
+                new CompositionScalarAnimation(0, 10)),
+            new CompositionScalarAnimation(1f, 0.5f))));
+
+        var result = await compositor.RenderCompositionAnimationTickAsync(5, cancellationToken);
+
+        Assert.Equal(1, compositor.RenderCount);
+        Assert.Equal(1, compositor.CompositionTickCount);
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(1, backend.ExecuteCompositionCount);
+        Assert.Equal(new CompositionTransform(10, 5), backend.LastCompositionFrame.Layer.Transform);
+        Assert.Equal(0.75f, backend.LastCompositionFrame.Layer.Opacity.Normalized);
+        Assert.Equal(new CompositionLayerId(42), backend.LastCompositionFrame.Layer.Id);
+        Assert.Equal(2, result.CommandCount);
+        Assert.Same(resources, backend.LastCompositionResources);
+    }
+
+    [Fact]
+    public async Task RenderCompositionAnimationTickAsync_requires_composition_backend()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var compositor = new DrawingBackendCompositor(new DirtyRangeTrackingBackend());
+        var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        using var frame = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 80), Color: DrawColor.Opaque(1, 2, 3)),
+            ]), 1),
+            [],
+            resources);
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(0, 1),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f))));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderCompositionAnimationTickAsync(1, cancellationToken));
+        Assert.Contains("transform/opacity composition execution", exception.Message);
+    }
+
+    [Fact]
+    public void CompositionAnimationPlan_evaluates_timeline_and_easing()
+    {
+        var plan = new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(7),
+            CommandStart: 2,
+            CommandCount: 3,
+            new CompositionAnimationTimeline(10, 20, CompositionAnimationRepeatMode.Alternate),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(0, 100),
+                new CompositionScalarAnimation(10, 20, CompositionAnimationEasing.SineInOut)),
+            new CompositionScalarAnimation(1f, 0f)));
+
+        var forward = plan.Evaluate(8, 20).Layer;
+        var reverse = plan.Evaluate(8, 40).Layer;
+
+        Assert.Equal(new CompositionLayerId(7), forward.Id);
+        Assert.Equal(50, forward.Transform.TranslateX);
+        Assert.Equal(15, forward.Transform.TranslateY);
+        Assert.Equal(0.5f, forward.Opacity.Normalized);
+        Assert.Equal(50, reverse.Transform.TranslateX);
+    }
+
+    [Fact]
     public async Task RenderAsync_falls_back_to_full_apply_when_resources_differ()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -544,6 +635,46 @@ public sealed class DrawingBackendCompositorTests
         public void BeginFrame(in FrameContext frameContext) { }
         public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources) { }
         public void EndFrame() { }
+        public void Dispose() { }
+    }
+
+    private sealed class CompositionTrackingBackend : IDrawingBackend, ICompositionDrawingBackend
+    {
+        public int ExecuteCount { get; private set; }
+        public int ExecuteCompositionCount { get; private set; }
+        public FrameContext LastBeginFrameContext { get; private set; }
+        public CompositionFrame LastCompositionFrame { get; private set; }
+        public IFrameResourceResolver? LastCompositionResources { get; private set; }
+        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity;
+
+        public void BeginFrame(in FrameContext frameContext)
+        {
+            LastBeginFrameContext = frameContext;
+        }
+
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+            ExecuteCount++;
+        }
+
+        public CompositionBackendExecutionResult ExecuteComposition(
+            ReadOnlySpan<DrawCommand> commands,
+            IFrameResourceResolver resources,
+            in CompositionFrame compositionFrame)
+        {
+            ExecuteCompositionCount++;
+            LastCompositionFrame = compositionFrame;
+            LastCompositionResources = resources;
+            return new CompositionBackendExecutionResult(
+                D3D12Backed: true,
+                LayerCount: 1,
+                CommandCount: commands.Length,
+                TranslatedCommands: compositionFrame.Layer.Transform.IsIdentity ? 0 : compositionFrame.Layer.CommandCount,
+                OpacityAppliedCommands: compositionFrame.Layer.Opacity.IsOpaque ? 0 : compositionFrame.Layer.CommandCount);
+        }
+
+        public void EndFrame() { }
+
         public void Dispose() { }
     }
 

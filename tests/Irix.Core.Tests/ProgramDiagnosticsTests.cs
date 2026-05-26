@@ -1909,17 +1909,14 @@ public sealed class ProgramDiagnosticsTests
         var first = CompositionTransformDemoRunner.BuildAnimatedCompositionFrame(commands.Length, frameIndex: 0, frameCount: 120);
         var middle = CompositionTransformDemoRunner.BuildAnimatedCompositionFrame(commands.Length, frameIndex: 30, frameCount: 120);
         var summary = CompositionTransformDemoRunner.FormatDemoSummary(
-            new D3D12CompositionExecuteDiagnostics(
+            new CompositionBackendExecutionResult(
                 D3D12Backed: true,
                 LayerCount: 1,
                 CommandCount: commands.Length,
-                LayerCommandStart: 1,
-                LayerCommandCount: commands.Length - 1,
                 TranslatedCommands: commands.Length - 1,
-                OpacityAppliedCommands: commands.Length - 1,
-                first.Layer.Transform,
-                first.Layer.Opacity,
-                default),
+                OpacityAppliedCommands: commands.Length - 1),
+            renderCount: 1,
+            compositionTickCount: 120,
             frameSerial: 120,
             presentSerial: 120,
             syncWaits: 0,
@@ -1932,7 +1929,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(commands.Length - 1, first.Layer.CommandCount);
         Assert.NotEqual(first.Layer.Transform, middle.Layer.Transform);
         Assert.NotEqual(first.Layer.Opacity, middle.Layer.Opacity);
-        Assert.Equal("composition.demo finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 translatedCommands=2 opacityAppliedCommands=2 frameSerial=120 presentSerial=120 syncWaits=0 deviceRemoved=False", summary);
+        Assert.Equal("composition.demo finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 translatedCommands=2 opacityAppliedCommands=2 renderCount=1 compositionTicks=120 frameSerial=120 presentSerial=120 syncWaits=0 deviceRemoved=False", summary);
     }
 
     [Fact]

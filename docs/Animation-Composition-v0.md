@@ -1,6 +1,6 @@
 # Animation / Composition v0
 
-> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. It does not implement an animation API.
+> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. A narrow transform/opacity compositor tick exists; a public animation API does not.
 
 ## Goals
 
@@ -13,8 +13,8 @@
 ## Non-Goals
 
 - No public animation API.
-- No timeline scheduler implementation.
-- No GPU compositor implementation in this document.
+- No public timeline scheduler.
+- No scroll compositor implementation in this document.
 - No scroll code extraction from `Irix.Poc`.
 - No retained-array or snapshot ownership changes.
 
@@ -78,15 +78,13 @@ v0 does not implement compositor scroll. It only defines the target architecture
 
 ## Implementation Bias
 
-Once the first animation implementation case is selected, prefer a compositor/GPU-backed path over a runtime-only compatibility path when the property is compositor-eligible.
-
-The first practical target should be D3D12-backed transform or opacity because those properties validate layer identity, compositor state, timing, diagnostics, and backend update plumbing without scroll hit-test complexity.
+The first implementation case is D3D12-backed transform/opacity. It validates compositor state, timing, diagnostics, and backend update plumbing without scroll hit-test complexity.
 
 Runtime fallback is acceptable only when the GPU-first path exposes a concrete blocker. That fallback must preserve logical state ownership, emit diagnostics showing why compositor execution did not run, and remain secondary to the D3D12-backed path.
 
 ## Compositor Animation Contract
 
-A future compositor animation entry should be expressed as data, not as a callback into app/runtime each tick:
+Compositor animation entries are expressed as data, not as callbacks into app/runtime each tick. The current internal form is `CompositionAnimationPlan` for a single transform/opacity layer:
 
 | Field | Purpose |
 |-------|---------|
@@ -98,7 +96,7 @@ A future compositor animation entry should be expressed as data, not as a callba
 | Commit policy | Whether and when final presented state updates logical runtime state. |
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 
-The runtime may create, cancel, or retarget animations. The backend/compositor should advance compositor animations without requiring a full UI frame rebuild.
+The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The next missing contract is how normal UI output publishes stable layer ids so runtime declarations can target real retained layers instead of demo command ranges.
 
 ## Invalidation Rules
 

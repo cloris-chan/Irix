@@ -165,6 +165,16 @@ internal readonly struct D3D12CompositionExecuteDiagnostics(
 
     public override int GetHashCode() => HashCode.Combine(D3D12Backed, LayerCount, CommandCount, LayerCommandStart, LayerCommandCount, TranslatedCommands, OpacityAppliedCommands, HashCode.Combine(AppliedTransform, AppliedOpacity, ExecuteResult));
 
+    public CompositionBackendExecutionResult ToBackendExecutionResult()
+    {
+        return new CompositionBackendExecutionResult(
+            D3D12Backed,
+            LayerCount,
+            CommandCount,
+            TranslatedCommands,
+            OpacityAppliedCommands);
+    }
+
     public static bool operator ==(D3D12CompositionExecuteDiagnostics left, D3D12CompositionExecuteDiagnostics right) => left.Equals(right);
 
     public static bool operator !=(D3D12CompositionExecuteDiagnostics left, D3D12CompositionExecuteDiagnostics right) => !left.Equals(right);
@@ -174,7 +184,7 @@ internal readonly struct D3D12CompositionExecuteDiagnostics(
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
 /// </summary>
-internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Scissor) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability, IDeviceRecovery
+internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Scissor) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability, IDeviceRecovery, ICompositionDrawingBackend
 {
     private struct ExecuteDiagnosticsAccumulator
     {
@@ -258,6 +268,8 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     public EffectiveScissor LastEffectiveTextClip => _lastEffectiveTextClip;
 
     public DrawingBackendClipMode ClipMode { get; private set; } = clipMode;
+
+    public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity;
 
     /// <summary>Frame serial diagnostics from the D3D12 renderer (sync wait count, timing, etc.).</summary>
     internal D3D12Renderer.FrameSerialDiagnostics FrameSerialDiagnostics => _renderer.GetFrameSerialDiagnostics();
@@ -395,7 +407,23 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         }
     }
 
+    public CompositionBackendExecutionResult ExecuteComposition(
+        ReadOnlySpan<DrawCommand> commands,
+        IFrameResourceResolver resources,
+        in CompositionFrame compositionFrame)
+    {
+        return ExecuteCompositionCore(commands, resources, compositionFrame).ToBackendExecutionResult();
+    }
+
     internal D3D12CompositionExecuteDiagnostics ExecuteCompositionDiagnostic(
+        ReadOnlySpan<DrawCommand> commands,
+        IFrameResourceResolver resources,
+        in CompositionFrame compositionFrame)
+    {
+        return ExecuteCompositionCore(commands, resources, compositionFrame);
+    }
+
+    private D3D12CompositionExecuteDiagnostics ExecuteCompositionCore(
         ReadOnlySpan<DrawCommand> commands,
         IFrameResourceResolver resources,
         in CompositionFrame compositionFrame)

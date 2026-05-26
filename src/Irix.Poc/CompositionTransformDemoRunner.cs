@@ -23,32 +23,44 @@ internal static class CompositionTransformDemoRunner
         window.ExternalRenderingEnabled = true;
         window.Show();
 
-        using var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-        using var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
+        var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer);
+        using var compositor = new DrawingBackendCompositor(d3d12Backend);
         window.SizeChanged += (width, height) => d3d12Renderer.Resize(width, height);
-        window.DpiChanged += scale => displayScale = scale.Normalize();
+        window.DpiChanged += scale =>
+        {
+            displayScale = scale.Normalize();
+            compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
+        };
 
         var resources = FrameDrawingResources.Rent();
         try
         {
             var commands = CompositionTransformDiagnosticRunner.BuildCommands(resources);
             resources.Seal();
+            compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
+            using var staticFrame = new RenderFrameBatch(
+                new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(commands), commands.Length),
+                [],
+                resources);
+            await compositor.RenderAsync(staticFrame, cancellationToken);
+            var animationPlan = BuildAnimationPlan(commands.Length, frameCount);
+            compositor.SetCompositionAnimationPlan(animationPlan);
+
             output.WriteLine("=== D3D12 Composition Transform Demo ===");
             output.WriteLine($"Frames: {frameCount}");
             output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
             output.WriteLine($"Initial display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
-            output.WriteLine("Demo model: static draw commands, per-frame CompositionFrame transform/opacity updates, D3D12-backed presentation.");
+            output.WriteLine("Demo model: static retained frame, compositor-owned transform/opacity animation ticks, D3D12-backed presentation.");
 
             var frameDelayMs = ResolveFrameDelayMilliseconds(screen.RefreshRateHz);
-            var lastDiagnostics = default(D3D12CompositionExecuteDiagnostics);
+            var lastExecution = default(CompositionBackendExecutionResult);
             for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 _ = d3d12Renderer.ApplyPendingResize();
-                var compositionFrame = BuildAnimatedCompositionFrame(commands.Length, frameIndex, frameCount);
-                d3d12Backend.BeginFrame(new FrameContext(d3d12Renderer.Width, d3d12Renderer.Height, displayScale, frameIndex));
-                lastDiagnostics = d3d12Backend.ExecuteCompositionDiagnostic(commands, resources, compositionFrame);
-                d3d12Backend.EndFrame();
+                compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
+                lastExecution = await compositor.RenderCompositionAnimationTickAsync(frameIndex, cancellationToken);
                 if (d3d12Renderer.IsDeviceRemoved)
                 {
                     break;
@@ -61,7 +73,14 @@ internal static class CompositionTransformDemoRunner
             }
 
             var frameSerial = d3d12Backend.FrameSerialDiagnostics;
-            output.WriteLine(FormatDemoSummary(lastDiagnostics, frameSerial.FrameSerial, frameSerial.PresentSerial, frameSerial.SyncWaitCount, d3d12Renderer.IsDeviceRemoved));
+            output.WriteLine(FormatDemoSummary(
+                lastExecution,
+                compositor.RenderCount,
+                compositor.CompositionTickCount,
+                frameSerial.FrameSerial,
+                frameSerial.PresentSerial,
+                frameSerial.SyncWaitCount,
+                d3d12Renderer.IsDeviceRemoved));
             output.WriteLine("=== d3d12 composition transform demo complete ===");
         }
         finally
@@ -70,31 +89,35 @@ internal static class CompositionTransformDemoRunner
         }
     }
 
-    internal static CompositionFrame BuildAnimatedCompositionFrame(int commandCount, int frameIndex, int frameCount)
+    internal static CompositionAnimationPlan BuildAnimationPlan(int commandCount, int frameCount)
     {
         frameCount = Math.Max(1, frameCount);
-        var t = frameCount == 1 ? 1f : frameIndex / (float)(frameCount - 1);
-        var wave = MathF.Sin(t * MathF.Tau);
-        var x = 24f + wave * 96f;
-        var y = 18f + MathF.Sin(t * MathF.Tau * 2f) * 24f;
-        var opacity = 0.55f + (MathF.Sin(t * MathF.Tau + MathF.PI * 0.5f) + 1f) * 0.2f;
-
-        return new CompositionFrame(new CompositionLayer(
+        return new CompositionAnimationPlan(new CompositionLayerAnimation(
             new CompositionLayerId(1),
             CommandStart: 1,
             CommandCount: commandCount - 1,
-            new CompositionTransform(x, y),
-            new CompositionOpacity(opacity)));
+            new CompositionAnimationTimeline(0, Math.Max(1, frameCount - 1), CompositionAnimationRepeatMode.Once),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(24f, 120f, CompositionAnimationEasing.SineInOut),
+                new CompositionScalarAnimation(18f, 42f, CompositionAnimationEasing.SineInOut)),
+            new CompositionScalarAnimation(0.95f, 0.55f, CompositionAnimationEasing.SineInOut)));
+    }
+
+    internal static CompositionFrame BuildAnimatedCompositionFrame(int commandCount, int frameIndex, int frameCount)
+    {
+        return BuildAnimationPlan(commandCount, frameCount).Evaluate(commandCount, frameIndex);
     }
 
     internal static string FormatDemoSummary(
-        D3D12CompositionExecuteDiagnostics diagnostics,
+        CompositionBackendExecutionResult execution,
+        long renderCount,
+        long compositionTickCount,
         long frameSerial,
         long presentSerial,
         long syncWaits,
         bool deviceRemoved)
     {
-        return $"composition.demo finalComposition=D3D12 d3d12Backed={diagnostics.D3D12Backed} layers={diagnostics.LayerCount} commands={diagnostics.CommandCount} translatedCommands={diagnostics.TranslatedCommands} opacityAppliedCommands={diagnostics.OpacityAppliedCommands} frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} deviceRemoved={deviceRemoved}";
+        return $"composition.demo finalComposition=D3D12 d3d12Backed={execution.D3D12Backed} layers={execution.LayerCount} commands={execution.CommandCount} translatedCommands={execution.TranslatedCommands} opacityAppliedCommands={execution.OpacityAppliedCommands} renderCount={renderCount} compositionTicks={compositionTickCount} frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} deviceRemoved={deviceRemoved}";
     }
 
     private static int ResolveFrameDelayMilliseconds(int refreshRateHz)

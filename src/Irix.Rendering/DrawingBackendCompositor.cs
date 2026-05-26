@@ -30,6 +30,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private long _totalFrameTimeTicks;
     private long _frameTimeSampleCount;
     private long _maxFrameTimeTicks;
+    private CompositionAnimationPlan? _compositionAnimationPlan;
+    private CompositionFrame _lastCompositionFrame;
+    private CompositionBackendExecutionResult _lastCompositionExecutionResult;
+    private long _compositionTickCount;
+    private long _lastCompositionTickTimeTicks;
+    private long _totalCompositionTickTimeTicks;
+    private long _compositionTickTimeSampleCount;
+    private long _maxCompositionTickTimeTicks;
 
     /// <summary>
     /// The dirty command ranges from the last render, if any.
@@ -64,6 +72,9 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     /// <summary>Number of empty frames received (commands.Count == 0).</summary>
     public long EmptyFrameCount => _emptyFrameCount;
+
+    /// <summary>Number of compositor-only animation ticks executed over the retained frame.</summary>
+    public long CompositionTickCount => Volatile.Read(ref _compositionTickCount);
 
     public DrawingBackendClipMode BackendClipMode => _backend is IClipScissorCapability capability
         ? capability.ClipMode
@@ -101,6 +112,45 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// <summary>Maximum elapsed time of any non-empty render in microseconds.</summary>
     public long MaxFrameTimeUs => Volatile.Read(ref _maxFrameTimeTicks) * 1_000_000 / Stopwatch.Frequency;
 
+    /// <summary>Elapsed time of the last compositor-only animation tick in microseconds.</summary>
+    public long LastCompositionTickTimeUs => Volatile.Read(ref _lastCompositionTickTimeTicks) * 1_000_000 / Stopwatch.Frequency;
+
+    /// <summary>Average elapsed time per compositor-only animation tick in microseconds.</summary>
+    public long AverageCompositionTickTimeUs
+    {
+        get
+        {
+            var count = Volatile.Read(ref _compositionTickTimeSampleCount);
+            return count > 0 ? Volatile.Read(ref _totalCompositionTickTimeTicks) * 1_000_000 / Stopwatch.Frequency / count : 0;
+        }
+    }
+
+    /// <summary>Maximum elapsed time of any compositor-only animation tick in microseconds.</summary>
+    public long MaxCompositionTickTimeUs => Volatile.Read(ref _maxCompositionTickTimeTicks) * 1_000_000 / Stopwatch.Frequency;
+
+    internal CompositionFrame LastCompositionFrame => _lastCompositionFrame;
+
+    internal CompositionBackendExecutionResult LastCompositionExecutionResult => _lastCompositionExecutionResult;
+
+    internal CompositionAnimationPlan? CompositionAnimationPlan => _compositionAnimationPlan;
+
+    internal void SetCompositionAnimationPlan(in CompositionAnimationPlan plan)
+    {
+        if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
+        {
+            throw new ArgumentException("Composition animation plan layer range must fit the retained command frame.", nameof(plan));
+        }
+
+        _compositionAnimationPlan = plan;
+    }
+
+    internal void ClearCompositionAnimationPlan()
+    {
+        _compositionAnimationPlan = null;
+        _lastCompositionFrame = default;
+        _lastCompositionExecutionResult = default;
+    }
+
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
         return RenderAsync(renderFrameBatch, null, cancellationToken);
@@ -131,6 +181,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _retainedFrame.ReleaseResources();
             _retainedFrame.Invalidate();
             _lastAppliedFrameId = 0;
+            ClearCompositionAnimationPlan();
             LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
             LastPartialApplySucceeded = false;
             LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
@@ -235,6 +286,58 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _hitTargets = [.. _retainedFrame.HitTargets];
         }
         return ValueTask.CompletedTask;
+    }
+
+    internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAsync(
+        long timestamp,
+        CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled<CompositionBackendExecutionResult>(cancellationToken);
+        }
+
+        if (_compositionAnimationPlan is not { } plan)
+        {
+            throw new InvalidOperationException("A composition animation plan must be set before compositor-only animation ticks can be rendered.");
+        }
+
+        if (_backend is not ICompositionDrawingBackend compositionBackend
+            || (compositionBackend.CompositionCapabilities & CompositionBackendCapabilities.TransformOpacity) != CompositionBackendCapabilities.TransformOpacity)
+        {
+            throw new InvalidOperationException("The drawing backend must expose transform/opacity composition execution for compositor-only animation ticks.");
+        }
+
+        if (!_retainedFrame.TryReadFrame(out var commands, out var resources))
+        {
+            throw new InvalidOperationException("A retained render frame must exist before compositor-only animation ticks can be rendered.");
+        }
+
+        var compositionFrame = plan.Evaluate(commands.Length, timestamp);
+        var sw = Stopwatch.StartNew();
+        var frameContext = CreateBackendFrameContext(timestamp);
+        var result = default(CompositionBackendExecutionResult);
+        try
+        {
+            _backend.BeginFrame(frameContext);
+            result = compositionBackend.ExecuteComposition(commands, resources, compositionFrame);
+            _backend.EndFrame();
+        }
+        catch (Exception ex)
+        {
+            if (TryHandleDeviceLost(ex))
+            {
+                return ValueTask.FromResult(result);
+            }
+
+            throw;
+        }
+
+        _lastCompositionFrame = compositionFrame;
+        _lastCompositionExecutionResult = result;
+        Interlocked.Increment(ref _compositionTickCount);
+        RecordCompositionTickTime(sw);
+        return ValueTask.FromResult(result);
     }
 
     internal bool TryGetCandidateActionIdAtPhysicalPixel(int x, int y, out ActionId actionId)
@@ -567,9 +670,9 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return false;
     }
 
-    private FrameContext CreateBackendFrameContext()
+    private FrameContext CreateBackendFrameContext(long timestamp = 0)
     {
-        return new FrameContext(_physicalViewport.Width, _physicalViewport.Height, _displayScale);
+        return new FrameContext(_physicalViewport.Width, _physicalViewport.Height, _displayScale, timestamp);
     }
 
     private (int X, int Y) ToLogicalPoint(int physicalX, int physicalY)
@@ -597,6 +700,21 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         if (ticks > currentMax)
         {
             Volatile.Write(ref _maxFrameTimeTicks, ticks);
+        }
+    }
+
+    private void RecordCompositionTickTime(Stopwatch sw)
+    {
+        sw.Stop();
+        var ticks = sw.ElapsedTicks;
+        Volatile.Write(ref _lastCompositionTickTimeTicks, ticks);
+        Interlocked.Add(ref _totalCompositionTickTimeTicks, ticks);
+        Interlocked.Increment(ref _compositionTickTimeSampleCount);
+
+        var currentMax = Volatile.Read(ref _maxCompositionTickTimeTicks);
+        if (ticks > currentMax)
+        {
+            Volatile.Write(ref _maxCompositionTickTimeTicks, ticks);
         }
     }
 

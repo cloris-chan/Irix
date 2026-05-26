@@ -10,7 +10,7 @@ Irix is a native .NET UI framework prototype focused on a small, high-performanc
 - Retained render pipeline: diff, layout, draw command recording, hit-test metadata, diagnostics.
 - Windows PoC backend: Win32 window/input hosting plus D3D12 final composition.
 - D3D12 text path: GlyphAtlas only. DirectWrite and WIC are source-data paths for shaping, metrics, raster, fallback, and glyph image decode.
-- Post-foundation design work: style layers, animation ownership, and future GPU composition contracts.
+- Post-foundation architecture work: style layers, animation ownership, and D3D12-first GPU composition.
 
 The repository is still private and has no public compatibility target. When a boundary is wrong, migrate callers, tests, and docs directly instead of layering compatibility shims.
 
@@ -56,6 +56,7 @@ Win32 input
   -> diff/patch
   -> RenderPipeline layout + retained frame
   -> DrawCommand + FrameDrawingResources + HitTestTarget
+  -> DrawingBackendCompositor retained frame / optional CompositionAnimationPlan tick
   -> D3D12 rect pass + D3D12 GlyphAtlas text pass
   -> Present
 ```
@@ -65,7 +66,7 @@ Ownership rules:
 - The MVU/update side owns application state.
 - The render pipeline owns retained layout/render state.
 - Layout scroll diagnostics are render/layout observation; scroll feedback and scroll state remain app/control runtime state until a framework runtime owner is chosen.
-- Future compositor presentation state is not app state unless a commit/cancel contract says so.
+- Compositor presentation state is not app state unless a commit/cancel contract says so.
 - `FrameDrawingResources` owns frame-local text/resource payloads.
 - `TextSlice` is only a frame-local reference into resolver-owned text; retained/core paths must not hold raw source `string`.
 - Cross-boundary data should be value typed, immutable after publication, and explicit about lifetime.
@@ -79,7 +80,8 @@ Post-foundation architecture work is design-first, but implementation should be 
 | [Post-Foundation-Roadmap.md](Post-Foundation-Roadmap.md) | Overall roadmap for style, animation, GPU composition, and runtime ownership planning. |
 | [Style-System-v0.md](Style-System-v0.md) | Splits layout style, visual style, text shaping style, composition style, and control-state style. |
 | [Animation-Composition-v0.md](Animation-Composition-v0.md) | Splits UI-runtime animation, compositor animation, hybrid animation, and backend-internal animation. |
-| [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | Defines future platform-neutral composition IR, backend capabilities, and GPU offload phases. |
+| [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | Defines platform-neutral composition IR, backend capabilities, and GPU offload phases. |
+| [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | Tracks the active D3D12 transform/opacity composition implementation gate. |
 
 High-level rules:
 
@@ -89,7 +91,7 @@ High-level rules:
 - Composition style covers transform, opacity, layer clip, and presented scroll offset.
 - Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
 - Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
-- The first composition implementation should target a D3D12-backed layer path. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
+- The first composition implementation targets a D3D12-backed transform/opacity tick path. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
 
 ## Renderer Contract
 

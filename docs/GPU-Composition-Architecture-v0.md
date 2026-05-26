@@ -1,12 +1,12 @@
 # GPU Composition Architecture v0
 
-> Design contract for the future composition layer. D3D12 remains the only implemented backend today, but the contract should map to modern explicit GPU APIs such as D3D12, Vulkan, and Metal.
+> Design contract for the composition layer. D3D12 is the implemented backend today, and the contract should map to modern explicit GPU APIs such as D3D12, Vulkan, and Metal later.
 
 ## Goals
 
 - Define a platform-neutral composition model above backend-specific D3D12/Vulkan/Metal objects.
 - Enable compositor-eligible animation without rebuilding UI/layout/draw commands every tick.
-- Make D3D12/GPU-backed composition the first implementation target after the contract is accepted.
+- Keep D3D12/GPU-backed composition as the implementation path.
 - Keep device/resource ownership inside platform backends.
 - Prepare for GPU offload while preserving retained publication and diagnostics contracts.
 - Keep the D3D12 renderer path as the first implementation target instead of adding a separate immediate-mode renderer architecture.
@@ -14,7 +14,7 @@
 ## Non-Goals
 
 - No Vulkan or Metal backend implementation.
-- No full compositor implementation.
+- No full composition tree implementation.
 - No shader/effect graph implementation.
 - No retained-array pooling.
 - No public composition API.
@@ -32,11 +32,11 @@ RenderPipeline
   -> Present
 ```
 
-This remains valid. The composition architecture adds a future layer model that can sit between retained draw output and backend execution; it does not remove the current D3D12 renderer path immediately.
+This remains valid. The composition architecture adds layer animation and backend composition capability between retained draw output and backend execution; it does not remove the current D3D12 renderer path.
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The first implementation should target a D3D12-backed composition spine with real layer ids, compositor-updated properties, and diagnostics over that path.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties and diagnostics. The next architectural gap is real layer ids from retained UI output.
 
 Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
 
@@ -51,7 +51,7 @@ Fallback must be explicit and diagnostic-visible:
 
 ## Composition IR
 
-A future composition IR should describe retained visual/layer intent without exposing backend resources.
+Composition IR should describe retained visual/layer intent without exposing backend resources.
 
 | Concept | Purpose |
 |---------|---------|
@@ -65,7 +65,7 @@ A future composition IR should describe retained visual/layer intent without exp
 | Dirty region | Optional invalidation region for content update. |
 | Animation descriptors | Data-driven compositor animations on eligible properties. |
 
-The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles.
+The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal animation descriptor is `CompositionAnimationPlan`, evaluated by `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` over the retained frame and consumed by `ICompositionDrawingBackend.ExecuteComposition`.
 
 ## Backend Capability Model
 
@@ -73,7 +73,7 @@ Backends should report capabilities instead of forcing one feature baseline:
 
 | Capability | Meaning |
 |------------|---------|
-| `SupportsCompositorAnimations` | Backend can advance at least transform/opacity animations without UI rebuild. |
+| `TransformOpacity` | Backend can advance transform/opacity composition ticks without UI rebuild. Implemented by D3D12 through `ICompositionDrawingBackend`. |
 | `SupportsIndependentScrollTransform` | Backend can apply presented scroll offset under a clip. |
 | `SupportsLayerOpacity` | Backend can apply per-layer opacity without re-recording content. |
 | `SupportsLayerClip` | Backend can clip a layer independently of content generation. |
@@ -103,12 +103,13 @@ The composition contract should not expose these backend objects to `Irix.Render
 | Phase | Work | Rationale |
 |-------|------|-----------|
 | 0 | Keep current D3D12 rectangle/GlyphAtlas passes. | Stable baseline. |
-| 1 | Add a D3D12-first composition spine: layer ids, immutable IR publication, backend handoff, and diagnostics, with the current renderer as explicit fallback. | Validates ownership against the real GPU path instead of a compatibility scaffold. |
-| 2 | Layer transform/opacity property updates on the D3D12 path. | Lowest-risk compositor animation path. |
-| 3 | Independent scroll presentation transform. | First major UI benefit; avoids per-tick layout/draw rebuild. |
-| 4 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
-| 5 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
-| 6 | Effects/material graph. | Deferred until style/material contract exists. |
+| 1 | Add a D3D12-first composition spine: immutable IR publication, backend handoff, and diagnostics. | Implemented for demo-owned command ranges and transform/opacity. |
+| 2 | Layer transform/opacity property updates on the D3D12 path. | Implemented as compositor-owned ticks over the retained frame. |
+| 3 | Stable retained layer identity from normal UI output. | Needed before runtime animation declarations can target real UI layers. |
+| 4 | Independent scroll presentation transform. | First major UI benefit; avoids per-tick layout/draw rebuild. |
+| 5 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
+| 6 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
+| 7 | Effects/material graph. | Deferred until style/material contract exists. |
 
 ## Work Placement
 

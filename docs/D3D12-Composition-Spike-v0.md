@@ -4,26 +4,27 @@
 
 ## Goal
 
-Prove the first composition IR can be handed to the active D3D12 backend without changing the normal draw-command renderer path.
+Prove the first composition IR and compositor-owned animation tick can be handed to the active D3D12 backend without rebuilding UI/runtime state, layout, or draw commands per animation tick.
 
-The first spike owns only:
+The current spike owns:
 
 - One composition layer referencing a contiguous draw-command range.
 - Layer translation in logical pixels.
 - Layer opacity in normalized `[0, 1]`.
-- D3D12 backend consumption through an explicit diagnostic execution path.
-- A PoC demo that rebuilds draw commands once, then updates only `CompositionFrame` transform/opacity per frame.
+- `CompositionAnimationPlan` data in `Irix.Rendering`.
+- `DrawingBackendCompositor.RenderCompositionAnimationTickAsync`, which advances the animation over the retained frame.
+- D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
+- A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
 - Stable machine-readable diagnostics.
 
 ## Non-Goals
 
 - No public composition API.
-- No scheduler or animation clock.
 - No scroll presentation model.
 - No hit-test coordinate remapping.
 - No retained layer cache or intermediate render target.
 - No Vulkan/Metal work.
-- No replacement of `ICompositor.RenderAsync`.
+- No replacement of normal UI frame publication. `ICompositor.RenderAsync` remains the content-update path; compositor ticks are a separate retained-frame presentation path.
 
 ## IR Contract
 
@@ -36,6 +37,7 @@ The first spike owns only:
 | `CompositionOpacity` | Strong normalized opacity value. |
 | `CompositionLayer` | Layer id, command range, transform, and opacity. |
 | `CompositionFrame` | Single-layer v0 frame wrapper. |
+| `CompositionAnimationPlan` | Data-driven transform/opacity animation descriptor for the layer. |
 
 The layer references existing `RenderFrameBatch` command ranges; it does not copy commands or own frame resources.
 
@@ -45,14 +47,16 @@ The D3D12 spike materializes translation and opacity at backend execution time:
 
 ```text
 RenderFrameBatch commands/resources
-  + CompositionFrame single layer
-  -> D3D12DrawingBackend.ExecuteComposition
+  -> DrawingBackendCompositor retained frame
+  + CompositionAnimationPlan tick
+  -> CompositionFrame single layer
+  -> ICompositionDrawingBackend.ExecuteComposition
   -> transformed rect/text payloads
   -> existing D3D12 rectangle/GlyphAtlas passes
   -> Present
 ```
 
-This is intentionally a D3D12-backed diagnostic path. The normal compositor path remains unchanged until layer identity, animation ticking, and hit-test mapping contracts are ready.
+This is intentionally D3D12-backed. Non-composition backends do not receive a CPU compatibility implementation for this tick path; they fail fast until a written blocker justifies a secondary path.
 
 ## Diagnostics
 
@@ -66,8 +70,8 @@ This is intentionally a D3D12-backed diagnostic path. The normal compositor path
 - opacity-applied command count is nonzero
 - no layout rebuild or draw-command regeneration is required inside the backend path
 
-`--composition-demo [frames]` is the visible PoC sample. It creates a static command/resource set once, then animates translation and opacity by publishing a new `CompositionFrame` each frame through the D3D12 execution path. It is intentionally separate from the normal app loop until animation scheduling and hit-test mapping are contracted.
+`--composition-demo [frames]` is the visible PoC sample. It renders a static retained frame once, installs a `CompositionAnimationPlan`, then calls compositor-only ticks for transform/opacity presentation on the D3D12 execution path. The machine line includes `renderCount=1` and `compositionTicks=<frames>` to prove UI frame publication is not driving each animation frame.
 
 ## Next Gate
 
-After this spike is stable, the next implementation step is compositor-owned ticking for transform/opacity. That should update `CompositionFrame` properties between frames without rebuilding `VirtualNode`, layout, or draw commands.
+The next implementation gate is real retained layer identity from normal UI output, followed by a runtime-owned animation declaration that publishes `CompositionAnimationPlan` without POC-specific demo construction. Hit-test coordinate remapping remains separate and must be designed before compositor-presented transforms affect input dispatch.
