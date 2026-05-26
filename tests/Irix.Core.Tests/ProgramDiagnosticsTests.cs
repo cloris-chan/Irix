@@ -1899,6 +1899,43 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Composition_transform_demo_updates_composition_frame_without_rebuilding_commands()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        using var resources = FrameDrawingResources.Rent();
+        var commands = CompositionTransformDiagnosticRunner.BuildCommands(resources);
+        resources.Seal();
+        var first = CompositionTransformDemoRunner.BuildAnimatedCompositionFrame(commands.Length, frameIndex: 0, frameCount: 120);
+        var middle = CompositionTransformDemoRunner.BuildAnimatedCompositionFrame(commands.Length, frameIndex: 30, frameCount: 120);
+        var summary = CompositionTransformDemoRunner.FormatDemoSummary(
+            new D3D12CompositionExecuteDiagnostics(
+                D3D12Backed: true,
+                LayerCount: 1,
+                CommandCount: commands.Length,
+                LayerCommandStart: 1,
+                LayerCommandCount: commands.Length - 1,
+                TranslatedCommands: commands.Length - 1,
+                OpacityAppliedCommands: commands.Length - 1,
+                first.Layer.Transform,
+                first.Layer.Opacity,
+                default),
+            frameSerial: 120,
+            presentSerial: 120,
+            syncWaits: 0,
+            deviceRemoved: false);
+
+        Assert.Contains("--composition-demo", programSource);
+        Assert.Contains("CompositionTransformDemoRunner.RunAsync", programSource);
+        Assert.Equal(1, first.Layer.Id.Value);
+        Assert.Equal(1, first.Layer.CommandStart);
+        Assert.Equal(commands.Length - 1, first.Layer.CommandCount);
+        Assert.NotEqual(first.Layer.Transform, middle.Layer.Transform);
+        Assert.NotEqual(first.Layer.Opacity, middle.Layer.Opacity);
+        Assert.Equal("composition.demo finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 translatedCommands=2 opacityAppliedCommands=2 frameSerial=120 presentSerial=120 syncWaits=0 deviceRemoved=False", summary);
+    }
+
+    [Fact]
     public void Glyph_atlas_regression_script_runs_fixed_matrix_soak_and_oracle_lane()
     {
         var root = FindRepoRoot();

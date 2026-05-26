@@ -181,6 +181,19 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--composition-demo"))
+        {
+            var frameCount = 240;
+            var frameArg = args.SkipWhile(a => a != "--composition-demo").Skip(1).FirstOrDefault();
+            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            await CompositionTransformDemoRunner.RunAsync(
+                diagnosticOutput ?? Console.Out,
+                frameCount,
+                ParseDiagnosticScale(args));
+            return;
+        }
+
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
         window.ExternalRenderingEnabled = true;

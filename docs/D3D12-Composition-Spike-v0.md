@@ -12,6 +12,7 @@ The first spike owns only:
 - Layer translation in logical pixels.
 - Layer opacity in normalized `[0, 1]`.
 - D3D12 backend consumption through an explicit diagnostic execution path.
+- A PoC demo that rebuilds draw commands once, then updates only `CompositionFrame` transform/opacity per frame.
 - Stable machine-readable diagnostics.
 
 ## Non-Goals
@@ -64,6 +65,8 @@ This is intentionally a D3D12-backed diagnostic path. The normal compositor path
 - translated command count is nonzero
 - opacity-applied command count is nonzero
 - no layout rebuild or draw-command regeneration is required inside the backend path
+
+`--composition-demo [frames]` is the visible PoC sample. It creates a static command/resource set once, then animates translation and opacity by publishing a new `CompositionFrame` each frame through the D3D12 execution path. It is intentionally separate from the normal app loop until animation scheduling and hit-test mapping are contracted.
 
 ## Next Gate
 
