@@ -21,7 +21,7 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 |-------|---------|----------------|---------------|
 | Style system | Define layout, visual, text, control-state, and composition style boundaries. | [Style-System-v0.md](Style-System-v0.md) | No initial code movement. |
 | Animation system | Define UI-runtime animation vs compositor/GPU animation ownership. | [Animation-Composition-v0.md](Animation-Composition-v0.md) | No initial code movement. |
-| GPU composition | Define a platform-neutral composition model and drive the first implementation through D3D12/GPU-backed layer updates. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | First code movement should be a narrow D3D12-backed spike. |
+| GPU composition | Define a platform-neutral composition model and drive the first implementation through D3D12/GPU-backed layer updates. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md), [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | First code movement is the narrow D3D12-backed transform/opacity diagnostic path. |
 | Scroll/compositor bridge | Use scroll as the first hybrid case: runtime owns logical target; compositor owns presented offset. | Future scroll compositor design | Only after style/animation/composition contracts are accepted. |
 | Runtime/control extraction | Decide whether scroll/input/control state needs a new runtime/control package. | Future ownership design | Only after Counter-specific assumptions are removed. |
 

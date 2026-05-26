@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform.Windows;
+using Irix.Rendering;
 using Xunit;
 
 namespace Irix.Core.Tests;
@@ -215,6 +216,92 @@ public sealed class D3D12DrawingBackendScissorTests
 
         Assert.Equal(0, allocated);
         Assert.Equal(commands.Length, rects.Count);
+    }
+
+    [Fact]
+    public void ExecuteCompositionDiagnosticCore_applies_layer_translation_and_opacity_on_d3d12_path()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        var style = resources.AddTextStyle(TextStyle.Default);
+        var text = resources.AddText("composition");
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 80), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 40, 24), ClipBounds: new DrawRect(10, 10, 80, 60), Color: DrawColor.Opaque(100, 120, 140)),
+            new(DrawCommandKind.DrawTextRun, Rect: new DrawRect(20, 24, 120, 28), Resource: style, Text: text, ClipBounds: new DrawRect(10, 10, 160, 60), Color: DrawColor.Opaque(240, 240, 240))
+        };
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(7),
+            CommandStart: 1,
+            CommandCount: 2,
+            new CompositionTransform(12, 8),
+            new CompositionOpacity(0.5f)));
+
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.True(diagnostics.D3D12Backed);
+        Assert.Equal(1, diagnostics.LayerCount);
+        Assert.Equal(3, diagnostics.CommandCount);
+        Assert.Equal(1, diagnostics.LayerCommandStart);
+        Assert.Equal(2, diagnostics.LayerCommandCount);
+        Assert.Equal(2, diagnostics.TranslatedCommands);
+        Assert.Equal(2, diagnostics.OpacityAppliedCommands);
+        Assert.Equal(new CompositionTransform(12, 8), diagnostics.AppliedTransform);
+        Assert.Equal(0.5f, diagnostics.AppliedOpacity.Normalized);
+        Assert.Equal(2, rects.Count);
+        Assert.Equal(1, texts.Count);
+
+        var transformedRect = rects.Span[1];
+        Assert.Equal(28, transformedRect.X);
+        Assert.Equal(28, transformedRect.Y);
+        Assert.Equal(128f / 255f, transformedRect.A);
+        Assert.Equal(new IntegerScissorRect(22, 18, 102, 78), transformedRect.Scissor);
+        Assert.Equal(new DrawRect(22, 18, 160, 60), diagnostics.ExecuteResult.TextClipDiagnostics.LastEffectiveTextClip.Bounds);
+    }
+
+    [Fact]
+    public void ExecuteCompositionDiagnosticCore_keeps_transform_in_logical_space_before_backend_scale()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(10, 10, 20, 20), ClipBounds: new DrawRect(10, 10, 20, 20), Color: DrawColor.Opaque(1, 2, 3))
+        };
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionTransform(10, 5),
+            CompositionOpacity.Opaque));
+
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 200, 160),
+            commands,
+            resources,
+            frame,
+            new DisplayScale(2f, 2f),
+            rects,
+            texts);
+
+        var transformedRect = rects.Span[0];
+        Assert.Equal(40, transformedRect.X);
+        Assert.Equal(30, transformedRect.Y);
+        Assert.Equal(new DrawRect(40, 30, 40, 40), diagnostics.ExecuteResult.FillRectDiagnostics.LastEffectiveScissor.Bounds);
     }
 
     private static DrawCommand Fill(DrawRect clipBounds)

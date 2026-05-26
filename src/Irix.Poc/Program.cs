@@ -172,6 +172,15 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-composition-transform"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            CompositionTransformDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                ParseDiagnosticScale(args));
+            return;
+        }
+
         using var platformHost = new WindowsPlatformHost();
         using var window = platformHost.CreateSubViewport(CreatePrimaryWindowRegion(platformHost.Screens[0]));
         window.ExternalRenderingEnabled = true;

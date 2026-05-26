@@ -124,6 +124,52 @@ internal readonly struct D3D12ExecuteCoreResult(
     public static bool operator !=(D3D12ExecuteCoreResult left, D3D12ExecuteCoreResult right) => !left.Equals(right);
 }
 
+internal readonly struct D3D12CompositionExecuteDiagnostics(
+    bool D3D12Backed,
+    int LayerCount,
+    int CommandCount,
+    int LayerCommandStart,
+    int LayerCommandCount,
+    int TranslatedCommands,
+    int OpacityAppliedCommands,
+    CompositionTransform AppliedTransform,
+    CompositionOpacity AppliedOpacity,
+    D3D12ExecuteCoreResult ExecuteResult) : IEquatable<D3D12CompositionExecuteDiagnostics>
+{
+    public bool D3D12Backed { get; } = D3D12Backed;
+    public int LayerCount { get; } = LayerCount;
+    public int CommandCount { get; } = CommandCount;
+    public int LayerCommandStart { get; } = LayerCommandStart;
+    public int LayerCommandCount { get; } = LayerCommandCount;
+    public int TranslatedCommands { get; } = TranslatedCommands;
+    public int OpacityAppliedCommands { get; } = OpacityAppliedCommands;
+    public CompositionTransform AppliedTransform { get; } = AppliedTransform;
+    public CompositionOpacity AppliedOpacity { get; } = AppliedOpacity;
+    public D3D12ExecuteCoreResult ExecuteResult { get; } = ExecuteResult;
+
+    public bool Equals(D3D12CompositionExecuteDiagnostics other)
+    {
+        return D3D12Backed == other.D3D12Backed
+            && LayerCount == other.LayerCount
+            && CommandCount == other.CommandCount
+            && LayerCommandStart == other.LayerCommandStart
+            && LayerCommandCount == other.LayerCommandCount
+            && TranslatedCommands == other.TranslatedCommands
+            && OpacityAppliedCommands == other.OpacityAppliedCommands
+            && AppliedTransform == other.AppliedTransform
+            && AppliedOpacity == other.AppliedOpacity
+            && ExecuteResult == other.ExecuteResult;
+    }
+
+    public override bool Equals(object? obj) => obj is D3D12CompositionExecuteDiagnostics other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(D3D12Backed, LayerCount, CommandCount, LayerCommandStart, LayerCommandCount, TranslatedCommands, OpacityAppliedCommands, HashCode.Combine(AppliedTransform, AppliedOpacity, ExecuteResult));
+
+    public static bool operator ==(D3D12CompositionExecuteDiagnostics left, D3D12CompositionExecuteDiagnostics right) => left.Equals(right);
+
+    public static bool operator !=(D3D12CompositionExecuteDiagnostics left, D3D12CompositionExecuteDiagnostics right) => !left.Equals(right);
+}
+
 /// <summary>
 /// D3D12 backend: renders FillRect commands as colored rectangles via D3D12Renderer2D.
 /// Falls back to clear color for the background.
@@ -349,6 +395,35 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         }
     }
 
+    internal D3D12CompositionExecuteDiagnostics ExecuteCompositionDiagnostic(
+        ReadOnlySpan<DrawCommand> commands,
+        IFrameResourceResolver resources,
+        in CompositionFrame compositionFrame)
+    {
+        _resources = resources;
+        var viewportWidth = _renderer.Width;
+        var viewportHeight = _renderer.Height;
+        var viewport = new DrawRect(0, 0, viewportWidth, viewportHeight);
+        var diagnostics = ExecuteCompositionDiagnosticCore(ClipMode, viewport, commands, resources, compositionFrame, _frameContext.Scale, _rects, _texts);
+        var result = diagnostics.ExecuteResult;
+        _clippedCommandCount = result.FillRectDiagnostics.ClippedCommandCount;
+        _emptyIntersectionSkippedCount = result.FillRectDiagnostics.EmptyIntersectionSkippedCount;
+        _scissorStateChangeCount = result.FillRectDiagnostics.ScissorStateChangeCount;
+        _lastEffectiveScissor = result.FillRectDiagnostics.LastEffectiveScissor;
+        _textClipSkippedCount = result.TextClipDiagnostics.TextClipSkippedCount;
+        _lastEffectiveTextClip = result.TextClipDiagnostics.LastEffectiveTextClip;
+
+        if (result.HasBackgroundColor)
+        {
+            _bgR = result.BackgroundColor.R / 255f;
+            _bgG = result.BackgroundColor.G / 255f;
+            _bgB = result.BackgroundColor.B / 255f;
+            _bgA = result.BackgroundColor.A / 255f;
+        }
+
+        return diagnostics;
+    }
+
     internal static D3D12ExecuteCoreResult ExecuteCore(
         DrawingBackendClipMode clipMode,
         in DrawRect viewport,
@@ -430,6 +505,78 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             backgroundColor);
     }
 
+    internal static D3D12CompositionExecuteDiagnostics ExecuteCompositionDiagnosticCore(
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        ReadOnlySpan<DrawCommand> commands,
+        IFrameResourceResolver resources,
+        in CompositionFrame compositionFrame,
+        DisplayScale scale,
+        FrameRenderList<D3D12Renderer2D.RectData> rects,
+        FrameRenderList<D3D12TextRun> texts)
+    {
+        if (!compositionFrame.IsValidForCommandCount(commands.Length))
+        {
+            throw new ArgumentException("Composition frame layer range must reference a non-empty range inside the command span.", nameof(compositionFrame));
+        }
+
+        scale = scale.Normalize();
+        var layer = compositionFrame.Layer;
+        var transform = layer.Transform;
+        var opacity = layer.Opacity;
+        Span<DrawCommand> inlineCommands = stackalloc DrawCommand[64];
+        Span<DrawCommand> composedCommands = commands.Length <= inlineCommands.Length ? inlineCommands[..commands.Length] : new DrawCommand[commands.Length];
+        var translatedCommands = 0;
+        var opacityAppliedCommands = 0;
+
+        for (var i = 0; i < commands.Length; i++)
+        {
+            var command = commands[i];
+            if ((uint)(i - layer.CommandStart) < (uint)layer.CommandCount)
+            {
+                command = ApplyComposition(command, transform, opacity);
+                if (!transform.IsIdentity)
+                {
+                    translatedCommands++;
+                }
+
+                if (!opacity.IsOpaque)
+                {
+                    opacityAppliedCommands++;
+                }
+            }
+
+            composedCommands[i] = command;
+        }
+
+        var executeResult = ExecuteCore(clipMode, viewport, composedCommands, resources, scale, rects, texts);
+        return new D3D12CompositionExecuteDiagnostics(
+            D3D12Backed: true,
+            LayerCount: 1,
+            CommandCount: commands.Length,
+            LayerCommandStart: layer.CommandStart,
+            LayerCommandCount: layer.CommandCount,
+            TranslatedCommands: translatedCommands,
+            OpacityAppliedCommands: opacityAppliedCommands,
+            AppliedTransform: transform,
+            AppliedOpacity: opacity,
+            ExecuteResult: executeResult);
+    }
+
+    private static DrawCommand ApplyComposition(in DrawCommand command, in CompositionTransform transform, CompositionOpacity opacity)
+    {
+        return new DrawCommand(
+            command.Kind,
+            Translate(command.Rect, transform),
+            ApplyOpacity(command.Color, opacity),
+            command.Resource,
+            command.Text,
+            Translate(command.ClipBounds, transform),
+            command.StrokeWidth,
+            command.Transform,
+            command.ZIndex);
+    }
+
     internal static TextStyle ScaleTextStyleToPhysicalPixels(TextStyle style, DisplayScale scale)
     {
         scale = scale.Normalize();
@@ -452,6 +599,19 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     private static DrawCommand ScaleCommandToPhysicalPixels(in DrawCommand command, DisplayScale scale)
     {
         return scale.IsIdentity ? command : command.Scale(scale);
+    }
+
+    private static DrawRect Translate(in DrawRect rect, in CompositionTransform transform)
+    {
+        return rect.Width == 0f && rect.Height == 0f
+            ? rect
+            : new DrawRect(rect.X + transform.TranslateX, rect.Y + transform.TranslateY, rect.Width, rect.Height);
+    }
+
+    private static DrawColor ApplyOpacity(DrawColor color, CompositionOpacity opacity)
+    {
+        var normalized = opacity.Normalized;
+        return normalized == 1f ? color : new DrawColor((byte)Math.Clamp(MathF.Round(color.A * normalized), 0f, 255f), color.R, color.G, color.B);
     }
 
     private static TextStyle ResolvePhysicalTextStyle(IFrameResourceResolver resources, ResourceHandle handle, DisplayScale scale)
