@@ -202,16 +202,16 @@ function Assert-RegressionSummaries([object]$Matrix, [object]$Soak, [object]$Col
     $matrixExpectedFields = ConvertTo-MachineFields $matrixExpectedLine
     $matrixActualFields = ConvertTo-MachineFields $matrixActualLine
     Assert-FieldEquals $matrixExpectedFields "degradedRuns" "0" "matrix.expected" $matrixExpectedLine
-    Assert-FieldEquals $matrixExpectedFields "overlayFallback" "False" "matrix.expected" $matrixExpectedLine
+    Assert-FieldEquals $matrixExpectedFields "finalComposition" "D3D12" "matrix.expected" $matrixExpectedLine
     Assert-FieldEquals $matrixActualFields "glyphAtlasInitialized" "True" "matrix.actual" $matrixActualLine
     Assert-FieldEquals $matrixActualFields "degradedRuns" "0" "matrix.actual" $matrixActualLine
-    Assert-FieldEquals $matrixActualFields "overlaySync" "False" "matrix.actual" $matrixActualLine
+    Assert-FieldEquals $matrixActualFields "finalComposition" "D3D12" "matrix.actual" $matrixActualLine
 
     $soakActualLine = Get-RequiredSummaryLine $Soak "soak.actual"
     $soakGlyphLine = Get-RequiredSummaryLine $Soak "Glyph atlas:"
     $soakFields = ConvertTo-MachineFields $soakActualLine
     Assert-FieldEquals $soakFields "deviceLost" "False" "soak.actual" $soakActualLine
-    Assert-FieldEquals $soakFields "overlaySync" "False" "soak.actual" $soakActualLine
+    Assert-FieldEquals $soakFields "finalComposition" "D3D12" "soak.actual" $soakActualLine
     Assert-FieldEquals $soakFields "syncWaits" "0" "soak.actual" $soakActualLine
     Assert-FieldEquals $soakFields "hardFullWithoutReuse" "0" "soak.actual" $soakActualLine
     Assert-FieldEquals $soakFields "countersPresent" "True" "soak.actual" $soakActualLine
@@ -225,14 +225,14 @@ function Assert-RegressionSummaries([object]$Matrix, [object]$Soak, [object]$Col
     $bidiActualLine = Get-RequiredSummaryLine $BidiOracle "bidi-oracle.actual"
     $bidiExpectedFields = ConvertTo-MachineFields $bidiExpectedLine
     $bidiActualFields = ConvertTo-MachineFields $bidiActualLine
-    Assert-FieldsMatch $bidiExpectedFields $bidiActualFields @("probes", "labels", "layoutOracle", "pixelOracle", "overlayFallback") "bidi-oracle" $bidiExpectedLine $bidiActualLine
+    Assert-FieldsMatch $bidiExpectedFields $bidiActualFields @("probes", "labels", "layoutOracle", "pixelOracle", "finalComposition") "bidi-oracle" $bidiExpectedLine $bidiActualLine
     Assert-FieldEquals $bidiActualFields "failedProbes" "0" "bidi-oracle.actual" $bidiActualLine
 
     $glyphExpectedLine = Get-RequiredSummaryLine $GlyphOracle "glyph-oracle.expected"
     $glyphActualLine = Get-RequiredSummaryLine $GlyphOracle "glyph-oracle.actual"
     $glyphExpectedFields = ConvertTo-MachineFields $glyphExpectedLine
     $glyphActualFields = ConvertTo-MachineFields $glyphActualLine
-    Assert-FieldsMatch $glyphExpectedFields $glyphActualFields @("probes", "labels", "layoutOracle", "pixelOracle", "overlayFallback") "glyph-oracle" $glyphExpectedLine $glyphActualLine
+    Assert-FieldsMatch $glyphExpectedFields $glyphActualFields @("probes", "labels", "layoutOracle", "pixelOracle", "finalComposition") "glyph-oracle" $glyphExpectedLine $glyphActualLine
     Assert-FieldEquals $glyphActualFields "failedProbes" "0" "glyph-oracle.actual" $glyphActualLine
     Assert-FieldPositive $glyphActualFields "totalGlyphs" "glyph-oracle.actual" $glyphActualLine
 

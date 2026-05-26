@@ -4,7 +4,7 @@
 
 ## Goal
 
-Diagnostics snapshot v0 adds an internal data model behind existing stdout diagnostics and debug UI rows. It does not change the stable text output for `--diagnose*` or `--debug-ui`.
+Diagnostics snapshot v0 adds an internal data model behind existing stdout diagnostics and debug UI rows. It keeps current text output unless a task intentionally migrates diagnostics text, tests, and docs together.
 
 The model answers:
 
@@ -15,7 +15,7 @@ The model answers:
 ## Non-Goals
 
 - No new diagnostics surfaces.
-- No unified diagnostics channel, event bus, registry, subscription API, or debug overlay replacement.
+- No unified diagnostics channel, event bus, registry, subscription API, or debug UI replacement.
 - No diagnostics runner migration.
 - No scroll/input/clip/backend ownership move.
 - No intentional CLI text change.
@@ -33,10 +33,10 @@ The model answers:
 | `StyleOnlyPatchPlanDiagnosticSnapshot` | `Irix.Rendering.StyleOnlyPatchPlanBuilder` | `--diagnose` style-only plan smoke | Planner data is explicit input/output and does not need PoC statics. |
 | `DebugUiDiagnosticsSnapshot` | `DefaultDebugDiagnosticsSnapshotBridge` | Current debug header rows | Bridge is read-only and local; it must not mutate scroll/input/backend state. |
 
-## Text Freeze
+## Diagnostic Text Guard
 
-- Existing `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input` output text remains frozen.
-- Existing `ProgramDiagnosticsTests` formatter/smoke assertions remain the compatibility contract.
+- Existing `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input` output text is guarded by tests, not a public compatibility promise.
+- Existing `ProgramDiagnosticsTests` formatter/smoke assertions are local regression guards.
 - CLI implementations build snapshot values first, then format through the same formatter logic.
 - Any intentional CLI text change must be staged separately with explicit test updates and a migration note.
 

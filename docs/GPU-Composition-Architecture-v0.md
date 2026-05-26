@@ -6,9 +6,10 @@
 
 - Define a platform-neutral composition model above backend-specific D3D12/Vulkan/Metal objects.
 - Enable compositor-eligible animation without rebuilding UI/layout/draw commands every tick.
+- Make D3D12/GPU-backed composition the first implementation target after the contract is accepted.
 - Keep device/resource ownership inside platform backends.
 - Prepare for GPU offload while preserving retained publication and diagnostics contracts.
-- Avoid reintroducing D3D11On12, Direct2D final overlay, or immediate-mode 2D rendering as architecture centers.
+- Keep the D3D12 renderer path as the first implementation target instead of adding a separate immediate-mode renderer architecture.
 
 ## Non-Goals
 
@@ -32,6 +33,21 @@ RenderPipeline
 ```
 
 This remains valid. The composition architecture adds a future layer model that can sit between retained draw output and backend execution; it does not remove the current D3D12 renderer path immediately.
+
+## Implementation Bias
+
+The project should move aggressively toward the GPU path once ownership contracts are clear. The first implementation should target a D3D12-backed composition spine with real layer ids, compositor-updated properties, and diagnostics over that path.
+
+Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
+
+New fallback code is justified only when a D3D12/GPU-first spike exposes a concrete short-term blocker such as missing retained layer identity, unsafe hit-test mapping, or unresolved resource lifetime.
+
+Fallback must be explicit and diagnostic-visible:
+
+- State which GPU path was attempted.
+- State the blocker or unsupported capability.
+- Preserve current D3D12 rectangle/GlyphAtlas behavior.
+- Avoid adding a second long-term renderer architecture that competes with the GPU composition path.
 
 ## Composition IR
 
@@ -67,7 +83,7 @@ Backends should report capabilities instead of forcing one feature baseline:
 | `SupportsComputePasses` | Backend can run compute culling, compaction, or effects. |
 | `SupportsTimelineSynchronization` | Backend has timeline semaphore/fence style synchronization suitable for async work. |
 
-Unsupported capabilities should fall back to draw-command updates, CPU-side batching, or explicit degradation depending on the feature.
+Unsupported capabilities should fall back to draw-command updates, CPU-side batching, or explicit degradation only after the D3D12/GPU-backed path has been attempted or a written blocker says it cannot be attempted safely.
 
 ## API Mapping Notes
 
@@ -87,8 +103,8 @@ The composition contract should not expose these backend objects to `Irix.Render
 | Phase | Work | Rationale |
 |-------|------|-----------|
 | 0 | Keep current D3D12 rectangle/GlyphAtlas passes. | Stable baseline. |
-| 1 | Add composition IR design and diagnostics only. | Lets style/animation contracts settle before code. |
-| 2 | Layer transform/opacity property updates. | Lowest-risk compositor animation path. |
+| 1 | Add a D3D12-first composition spine: layer ids, immutable IR publication, backend handoff, and diagnostics, with the current renderer as explicit fallback. | Validates ownership against the real GPU path instead of a compatibility scaffold. |
+| 2 | Layer transform/opacity property updates on the D3D12 path. | Lowest-risk compositor animation path. |
 | 3 | Independent scroll presentation transform. | First major UI benefit; avoids per-tick layout/draw rebuild. |
 | 4 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
 | 5 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
@@ -102,7 +118,7 @@ The composition contract should not expose these backend objects to `Irix.Render
 | Logical scroll target and clamp | App/control runtime using layout observation. |
 | Layout measurement and hit-test metadata | `Irix.Rendering`. |
 | Draw command generation | `Irix.Rendering` / `Irix.Drawing`. |
-| Composition IR construction | Future rendering/composition layer, platform neutral. |
+| Composition IR construction | Platform-neutral rendering/composition layer, consumed first by `Irix.Platform.Windows`. |
 | GPU resource lifetime | Platform backend, such as `Irix.Platform.Windows`. |
 | Compositor animation advancement | Backend/compositor, with runtime-owned logical state. |
 | Diagnostics formatting | PoC/diagnostics or future diagnostics channel. |
@@ -135,9 +151,9 @@ Compositor owns:
 
 ## Advanced GPU Features
 
-Do not design the framework around advanced GPU features before the composition IR is stable. The intended order is:
+Do not wait for a broad compatibility abstraction before exercising the D3D12 GPU path. The intended order is:
 
-1. CPU-built retained command lists.
+1. CPU-built retained command lists feeding explicit D3D12 layer updates.
 2. Backend-side batching and persistent upload rings.
 3. Descriptor-indexed material/resource tables.
 4. GPU culling/compaction for large retained scenes.
@@ -164,4 +180,4 @@ Diagnostics must not own composition state.
 - Platform backends must not own app/control state.
 - Compositor animation must not mutate logical app state without a commit/cancel contract.
 - Retained publication arrays and snapshots must not expose mutable pooled storage.
-- D3D11On12/Direct2D final overlay must not return as a composition layer implementation.
+- Composition layer implementation must build on the active D3D12 backend path first.

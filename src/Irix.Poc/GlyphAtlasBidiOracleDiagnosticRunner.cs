@@ -30,7 +30,7 @@ internal static class GlyphAtlasBidiOracleDiagnosticRunner
     }
 
     internal static string FormatExpectedSnapshot() =>
-        "bidi-oracle.expected probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed fields=levels|logicalRuns|visualRuns|charOrder layoutOracle=False pixelOracle=False overlayFallback=False";
+        "bidi-oracle.expected probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed fields=levels|logicalRuns|visualRuns|charOrder layoutOracle=False pixelOracle=False finalComposition=D3D12";
 
     internal static string FormatActualSnapshot(BidiOracleDiagnosticSnapshot snapshot)
     {
@@ -46,8 +46,8 @@ internal static class GlyphAtlasBidiOracleDiagnosticRunner
         }
 
         return string.IsNullOrEmpty(snapshot.Failure)
-            ? $"bidi-oracle.actual probes={snapshot.ProbeCount} labels={labels} mixedLevelProbes={snapshot.MixedLevelProbes} visualReorderedProbes={snapshot.VisualReorderedProbes} failedProbes={snapshot.FailedProbes} layoutOracle=False pixelOracle=False overlayFallback=False"
-            : $"bidi-oracle.actual probes={snapshot.ProbeCount} labels={labels} failure={snapshot.Failure} mixedLevelProbes=0 visualReorderedProbes=0 failedProbes=0 layoutOracle=False pixelOracle=False overlayFallback=False";
+            ? $"bidi-oracle.actual probes={snapshot.ProbeCount} labels={labels} mixedLevelProbes={snapshot.MixedLevelProbes} visualReorderedProbes={snapshot.VisualReorderedProbes} failedProbes={snapshot.FailedProbes} layoutOracle=False pixelOracle=False finalComposition=D3D12"
+            : $"bidi-oracle.actual probes={snapshot.ProbeCount} labels={labels} failure={snapshot.Failure} mixedLevelProbes=0 visualReorderedProbes=0 failedProbes=0 layoutOracle=False pixelOracle=False finalComposition=D3D12";
     }
 
     internal static string FormatProbe(BidiOracleProbeResult result)

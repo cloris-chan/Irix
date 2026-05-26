@@ -217,7 +217,7 @@ Move invariants:
 - Preserve test visibility for `ResolveFillRectScissor`, `ResolveTextClip`, `ComputeFillRectScissorDiagnostics`, `ComputeTextClipDiagnostics`, `ExecuteCore`, and `ScaleTextStyleToPhysicalPixels`.
 - Keep `FrameRenderList<T>` in `Irix.Drawing`.
 - Keep `IDrawingBackend`, `IDirtyRangeAware`, `IClipScissorCapability`, and `IDeviceRecovery` contracts in their current owning projects.
-- Keep D3D12-only final composition; do not add overlay fallback.
+- Keep D3D12 final composition; do not add a second text composition path.
 
 Mechanical move status: complete.
 

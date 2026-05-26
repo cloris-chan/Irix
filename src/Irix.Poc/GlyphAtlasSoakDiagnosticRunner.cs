@@ -142,7 +142,7 @@ internal static class GlyphAtlasSoakDiagnosticRunner
 
     internal static string FormatThresholds()
     {
-        return "Soak thresholds: noDeviceLost=True, overlaySync=False, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes";
+        return "Soak thresholds: noDeviceLost=True, finalComposition=D3D12, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes";
     }
 
     internal static string FormatThresholdActual(bool deviceLost, long syncWaits, GlyphAtlasSoakSummary summary)
@@ -153,7 +153,7 @@ internal static class GlyphAtlasSoakDiagnosticRunner
             && summary.MaxAtlasFragmentedPixels >= 0
             && summary.AtlasEvictions >= 0
             && summary.AtlasPageReuseRequests >= 0;
-        return $"soak.actual deviceLost={deviceLost} overlaySync=False syncWaits={syncWaits} hardFullWithoutReuse={summary.AtlasFullWithoutPageReuse} countersPresent={countersPresent}";
+        return $"soak.actual deviceLost={deviceLost} finalComposition=D3D12 syncWaits={syncWaits} hardFullWithoutReuse={summary.AtlasFullWithoutPageReuse} countersPresent={countersPresent}";
     }
 
     private static DrawCommand TextRun(

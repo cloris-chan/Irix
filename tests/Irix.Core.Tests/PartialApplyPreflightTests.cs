@@ -3578,7 +3578,7 @@ public sealed class PartialApplyPreflightTests
             Assert.False(string.IsNullOrWhiteSpace(status.NoChangeRegressionEvidence));
             Assert.False(string.IsNullOrWhiteSpace(status.RuntimePromotionCondition));
             Assert.DoesNotContain("None; no", status.ProductionRuntimeEvidence);
-            Assert.Contains("Satisfied for V1 core", status.BlockingCondition);
+            Assert.Contains("Satisfied for current baseline", status.BlockingCondition);
             Assert.Contains("Internal/default-off selected path is promoted", status.RuntimePromotionCondition);
         }
     }
@@ -3589,9 +3589,9 @@ public sealed class PartialApplyPreflightTests
         var gates = PartialApplyIntegrationGateChecklist.RequiredGates;
 
         Assert.True(PartialApplyIntegrationGateChecklist.CanHookUpPartialApply);
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.RuntimePromotionCondition.Contains("public API") && gate.RuntimePromotionCondition.Contains("postponed"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.RuntimePromotionCondition.Contains("D3D12-specific") && gate.RuntimePromotionCondition.Contains("postponed"));
-        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RetainedRootUpdate && gate.RuntimePromotionCondition.Contains("layout-skip") && gate.RuntimePromotionCondition.Contains("postponed"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceResolverOwnership && gate.RuntimePromotionCondition.Contains("external API shape") && gate.RuntimePromotionCondition.Contains("separate target work"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.ResourceDisposePolicy && gate.RuntimePromotionCondition.Contains("D3D12-specific") && gate.RuntimePromotionCondition.Contains("separate target work"));
+        Assert.Contains(gates, gate => gate.Gate == PartialApplyIntegrationGate.RetainedRootUpdate && gate.RuntimePromotionCondition.Contains("layout-skip") && gate.RuntimePromotionCondition.Contains("separate target work"));
         foreach (var gate in gates)
         {
             Assert.True(gate.Satisfied);

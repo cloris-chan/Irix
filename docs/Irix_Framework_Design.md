@@ -1,6 +1,6 @@
 # Irix Framework Design
 
-> Current architecture boundary for the private Windows PoC and later framework extraction work. This document is intentionally not a process log; historical evidence lives in the specific evidence docs listed by [Project_Status_and_Todo.md](Project_Status_and_Todo.md).
+> Current architecture boundary for the private Windows PoC and later framework extraction work. This document is intentionally not a process log; current evidence lives in local gates and the status document.
 
 ## Current Scope
 
@@ -12,7 +12,18 @@ Irix is a native .NET UI framework prototype focused on a small, high-performanc
 - D3D12 text path: GlyphAtlas only. DirectWrite and WIC are source-data paths for shaping, metrics, raster, fallback, and glyph image decode.
 - Post-foundation design work: style layers, animation ownership, and future GPU composition contracts.
 
-The repository is still private. Public API compatibility is not frozen; when a boundary is wrong, migrate callers, tests, and docs directly instead of layering compatibility shims.
+The repository is still private and has no public compatibility target. When a boundary is wrong, migrate callers, tests, and docs directly instead of layering compatibility shims.
+
+## Private Execution Mode
+
+This is a personal private repository. Milestone labels are planning snapshots and evidence checkpoints; they are not release gates, compatibility promises, or reasons to preserve weak APIs.
+
+Default execution mode is target-architecture first:
+
+- Prefer the intended architecture directly: typed value models, explicit ownership, retained publication safety, D3D12/GPU-first rendering, and high-performance hot paths.
+- Break internal APIs when the boundary is wrong, then migrate callers, tests, scripts, and docs in the same change.
+- Do not add compatibility shims, legacy aliases, or generic fallback layers unless they are explicit diagnostic rollback paths or unblock a documented short-term architecture blocker.
+- Treat local gates and evidence as regression guards, not as a product-release freeze.
 
 ## Project Boundaries
 
@@ -61,7 +72,7 @@ Ownership rules:
 
 ## Style, Animation, And Composition
 
-Post-foundation architecture work is design-first:
+Post-foundation architecture work is design-first, but implementation should be GPU-first once a narrow contract is accepted:
 
 | Doc | Purpose |
 |-----|---------|
@@ -78,6 +89,7 @@ High-level rules:
 - Composition style covers transform, opacity, layer clip, and presented scroll offset.
 - Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
 - Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
+- The first composition implementation should target a D3D12-backed layer path. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
 
 ## Renderer Contract
 
@@ -87,21 +99,27 @@ The active Windows renderer is D3D12-only for final composition:
 - Accepted text is drawn in the D3D12 GlyphAtlas pass.
 - DirectWrite may shape, measure, map fallback fonts, raster glyphs, and expose color glyph image data.
 - WIC may decode PNG/JPEG/TIFF glyph image data for upload into BGRA atlas pages.
-- DirectWrite/WIC output is source data only; final text composition must not go through Direct2D.
+- DirectWrite/WIC output is source data only; final text composition stays in the D3D12 command stream.
 
-Hard removal boundaries:
+Hard renderer boundaries:
 
-- No D3D11On12 final composition.
-- No Direct2D factory/device/context final overlay.
-- No `TextOverlaySyncStrategy`, `D3D12TextRenderer`, explicit overlay mode, hidden overlay CLI alias, or overlay fallback.
-- No `IDWriteTextLayout` in active renderer/oracle paths.
+- GlyphAtlas is the only active text composition mode.
+- DirectWrite analyzer/font/raster data can feed the atlas, but does not own final composition.
+- WIC decode can feed BGRA atlas pages, but does not own final composition.
 - No runtime shader compilation in active D3D12 renderer source.
 
-Glyph atlas coverage is frozen until oracle/regression split is stable. Allowed work is bugfix, guard, diagnostics, tests, evidence updates, renderer structure cleanup, and documentation. New script or glyph-image-format support requires a matching oracle/regression case first. The detailed contract lives in [Glyph-Atlas-Post-GA-Design.md](Glyph-Atlas-Post-GA-Design.md).
+Glyph atlas coverage is guard-gated, not milestone-frozen. New script or glyph-image-format support should move forward when it carries matching oracle/regression coverage and explicit degradation behavior. Opportunistic unguarded coverage expansion is still rejected. The detailed contract lives in [Glyph-Atlas-Design.md](Glyph-Atlas-Design.md).
 
 ## GPU / Composition Direction
 
 Irix should target modern explicit GPU APIs for future backends. D3D12 remains the implemented backend, but design should map to Vulkan and Metal without exposing backend device objects above platform backends.
+
+Implementation bias:
+
+- Validate layer identity, immutable composition IR publication, compositor property updates, and diagnostics against the active D3D12 backend first.
+- Do not build a generic CPU/compatibility compositor as the initial route.
+- Add fallback compatibility only for documented blockers found while exercising the D3D12 path.
+- Keep fallback behind diagnostics so it does not become a second unowned renderer architecture.
 
 Preferred GPU offload order:
 
@@ -125,21 +143,21 @@ Clip/scissor v0 is default-on:
 - Scroll container descendants receive intersected clip bounds.
 - FillRect uses D3D12 rasterizer scissor.
 - Accepted GlyphAtlas text runs use D3D12 text clip.
-- Unsupported text degrades explicitly; it does not route to Direct2D/D3D11On12 overlay composition.
+- Unsupported text degrades explicitly.
 
 Diagnostic snapshots are stable formatter contracts, not renderer ownership models. They should describe current state without becoming a second source of truth. See [Diagnostics-Snapshot-v0.md](Diagnostics-Snapshot-v0.md).
 
-## Version Boundary
+## Execution Baseline
 
-Current v1/private baseline:
+Current private baseline:
 
 - Windows 10 1703 / `10.0.15063.0` runtime floor.
 - `IDWriteFactory4` is assumed available.
 - Single Windows D3D12 backend is the only active graphics backend.
-- Minimal control/workflow surface remains focused on text, rectangles, button, scroll, input, layout, diagnostics, and local PoC execution.
+- Current control/workflow surface remains focused on text, rectangles, button, scroll, input, layout, diagnostics, and local PoC execution.
 - GitHub Actions quota is currently exhausted; local gates are authoritative until quota returns.
 
-Deferred:
+Not currently selected unless an explicit target-architecture task pulls them forward:
 
 - Vulkan/Metal backend implementation.
 - Public composition API.
@@ -164,6 +182,7 @@ Deferred:
 - Compositor animation does not mutate logical app state without a commit/cancel contract.
 - `Irix.Poc` code is not promoted without a contract.
 - Workflow/CI churn is deferred while Actions quota is exhausted.
+- Composition fallback paths must be explicit, diagnostic-visible, and secondary to the D3D12/GPU-backed path.
 
 ## Current Backlog Shape
 
@@ -171,19 +190,19 @@ The active backlog is intentionally narrow:
 
 - Keep local Smoke gate authoritative for broad changes.
 - Use the post-foundation roadmap before new runtime/composition implementation.
-- Treat style, animation, and GPU composition as design-first tracks.
+- Treat style, animation, and GPU composition as design-first tracks with a D3D12/GPU-first implementation bias.
 - Treat allocation measurement/hardening as closed for this stage; reopen only with an ownership design and one measured target bucket.
 - Use the scroll and input/control ownership contracts before extracting runtime state from Poc.
-- Maintain GlyphAtlas inside the coverage freeze.
+- Maintain and expand GlyphAtlas only through guarded oracle/regression-backed changes.
 - Keep entry eviction and pixel/layout oracle as future work.
 
-The actionable backlog lives in [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md); the current status source is [Project_Status_and_Todo.md](Project_Status_and_Todo.md).
+The actionable backlog lives in [Private-Execution-Backlog.md](Private-Execution-Backlog.md); the current status source is [Project_Status_and_Todo.md](Project_Status_and_Todo.md).
 
 ## ADR Index
 
 | ADR | Decision | Status |
 |-----|----------|--------|
-| ADR-001 | D3D12 is the v1 Windows graphics backend. | Accepted |
+| ADR-001 | D3D12 is the active Windows graphics backend. | Accepted |
 | ADR-002 | `DrawCommand` isolates UI semantics from backend APIs. | Accepted |
 | ADR-003 | Cross-thread/render payload ownership is explicit. | Accepted |
 | ADR-004 | `HitTestTarget` travels beside drawing data. | Accepted |
@@ -191,15 +210,15 @@ The actionable backlog lives in [Post-V1-MVP-Backlog.md](Post-V1-MVP-Backlog.md)
 | ADR-006 | Skia is not the active architecture center; it remains a possible future backend adapter. | Accepted |
 | ADR-007 | MVVM/XAML-style authoring, if added, is compile-time bridge work, not a runtime binding engine. | Deferred |
 | ADR-008 | Local UI remoting is deferred until local framework boundaries are stable. | Deferred |
-| ADR-009 | Runtime XAML/IXAML parsing is out of v1 scope. | Accepted |
+| ADR-009 | Runtime XAML/IXAML parsing is outside the current selected scope. | Accepted |
 | ADR-010 | `VirtualNode` stays a lightweight immutable value model, not an all-`ref struct` tree. | Accepted |
 | ADR-011 | `DrawCommand` does not inline text; it uses `TextSlice` and frame resource resolution. | Accepted |
 | ADR-012 | Patch/root metadata is explicit; consumers do not infer roots from buffers. | Accepted |
 | ADR-013 | Windows interop uses CsWin32-generated COM wrappers where practical. | Accepted |
-| ADR-014 | DirectWrite/Direct2D-over-D3D11On12 overlay was a bootstrap path and is replaced. | Replaced |
+| ADR-014 | GlyphAtlas is the active D3D12 text composition path; DirectWrite/WIC are source-data providers. | Accepted |
 | ADR-015 | Text content uses frame-local arena/slice boundaries, not a global raw string pool. | Accepted |
 | ADR-016 | `TextStyle` is referenced through resource handles and backend cache ownership. | Accepted |
-| ADR-017 | Cross-frame partial rendering needs stable resource snapshots; v1 keeps same-frame/full-resource ownership. | Design-only |
+| ADR-017 | Cross-frame partial rendering needs stable resource snapshots; the current baseline keeps same-frame/full-resource ownership. | Design-only |
 | ADR-018 | D3D12 scissor/clipping v0 is default-on with diagnostic rollback. | Accepted |
 | ADR-019 | Style layers are split into layout, visual, text shaping, composition, and control-state categories. | Design-only |
 | ADR-020 | Animation ownership is split between UI runtime, compositor, hybrid, and backend-internal classes. | Design-only |

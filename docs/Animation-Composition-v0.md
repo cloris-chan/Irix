@@ -7,6 +7,7 @@
 - Avoid rebuilding `VirtualNode`, layout, and draw commands for compositor-eligible animation ticks.
 - Separate logical/app state from presented/composited state.
 - Define the minimum animation model that can map to D3D12 now and Vulkan/Metal later.
+- Bias the first implementation toward compositor/GPU execution for eligible properties.
 - Keep scroll, input, and control state out of `Irix.Rendering` until a runtime owner is chosen.
 
 ## Non-Goals
@@ -74,6 +75,14 @@ Ownership split:
 | Scroll hit-test mapping | Input/control adapter plus compositor state. | Pointer coordinates must map through current presented transform or use a committed-state fallback. |
 
 v0 does not implement compositor scroll. It only defines the target architecture so the current PoC scroll code is not promoted into the wrong layer.
+
+## Implementation Bias
+
+Once the first animation implementation case is selected, prefer a compositor/GPU-backed path over a runtime-only compatibility path when the property is compositor-eligible.
+
+The first practical target should be D3D12-backed transform or opacity because those properties validate layer identity, compositor state, timing, diagnostics, and backend update plumbing without scroll hit-test complexity.
+
+Runtime fallback is acceptable only when the GPU-first path exposes a concrete blocker. That fallback must preserve logical state ownership, emit diagnostics showing why compositor execution did not run, and remain secondary to the D3D12-backed path.
 
 ## Compositor Animation Contract
 

@@ -12,12 +12,12 @@ namespace Irix.Core.Tests;
 public sealed class ProgramDiagnosticsTests
 {
     [Fact]
-    public void Text_composition_mode_defaults_to_glyph_atlas_and_rejects_removed_overlay()
+    public void Text_composition_mode_defaults_to_glyph_atlas_and_rejects_unsupported_modes()
     {
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode([]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "glyph-atlas"]));
         Assert.Equal(TextCompositionMode.GlyphAtlas, Program.ParseTextCompositionMode(["--text-composition", "atlas"]));
-        var ex = Assert.Throws<ArgumentException>(() => Program.ParseTextCompositionMode(["--text-composition", "overlay"]));
+        var ex = Assert.Throws<ArgumentException>(() => Program.ParseTextCompositionMode(["--text-composition", "cpu"]));
         Assert.Contains("GlyphAtlas is the only active text composition mode", ex.Message);
     }
 
@@ -636,26 +636,17 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void D3D12_overlay_renderer_sources_are_removed()
+    public void D3D12_renderer_sources_use_glyph_atlas_owned_paths()
     {
         var root = FindRepoRoot();
         var platformWindows = Path.Combine(root, "src", "Irix.Platform.Windows");
-
-        Assert.False(File.Exists(Path.Combine(platformWindows, "D3D12TextRenderer.cs")));
-        Assert.False(File.Exists(Path.Combine(platformWindows, "TextOverlaySyncStrategy.cs")));
-        Assert.False(File.Exists(Path.Combine(platformWindows, "D3D11DeviceContextQueryExtensions.cs")));
 
         var direct2DCommonReferences = 0;
         var d2dPointReferences = 0;
         foreach (var sourcePath in Directory.EnumerateFiles(platformWindows, "*.cs"))
         {
             var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
-            Assert.DoesNotContain("D3D11On12CreateDevice", source);
-            Assert.DoesNotContain("ID3D11On12Device", source);
-            Assert.DoesNotContain("Windows.Win32.Graphics.Direct2D;", source);
-            Assert.DoesNotContain("ID2D", source);
-            Assert.DoesNotContain("D2D1", source);
-            Assert.DoesNotContain("D2D1CreateFactory", source);
+            Assert.DoesNotContain("CreateTextLayout", source);
             direct2DCommonReferences += CountOccurrences(source, "Windows.Win32.Graphics.Direct2D.Common");
             d2dPointReferences += CountOccurrences(source, "D2D_POINT_2F");
             var allowsD2dPointInterop = sourcePath.EndsWith("D3D12GlyphAtlasTextRenderer.ColorGlyph.cs", StringComparison.Ordinal)
@@ -672,8 +663,6 @@ public sealed class ProgramDiagnosticsTests
 
         var nativeMethods = NormalizeLineEndings(File.ReadAllText(Path.Combine(platformWindows, "NativeMethods.txt")));
         var nativeMethodLines = nativeMethods.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        Assert.DoesNotContain("D3D11On12", nativeMethods);
-        Assert.DoesNotContain("ID2D", nativeMethods);
         Assert.DoesNotContain("IDWriteFactory2", nativeMethods);
         Assert.Contains("IDWriteFontFace4", nativeMethods);
         Assert.Contains("IDWriteFactory4", nativeMethods);
@@ -688,57 +677,23 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("IWICBitmapDecoder", nativeMethods);
         Assert.Contains("IWICBitmapFrameDecode", nativeMethods);
         Assert.Contains("IWICFormatConverter", nativeMethods);
-        Assert.DoesNotContain("ID2D1", nativeMethods);
-        Assert.DoesNotContain("D2D1", nativeMethods);
 
-        var gaBaseline = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "ga-baseline.ps1")));
-        Assert.DoesNotContain("text-overlay-sync-strategy", gaBaseline);
-        Assert.DoesNotContain("D3D12FenceAfterOverlay", gaBaseline);
-        Assert.DoesNotContain("D3D11Query", gaBaseline);
-        Assert.DoesNotContain("SyncStrategy", gaBaseline);
+        var diagnosticBaseline = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "diagnostic-baseline.ps1")));
+        Assert.Contains("--diagnose-sync", diagnosticBaseline);
+        Assert.Contains("--diagnose-text-cache", diagnosticBaseline);
+        Assert.Contains("[ValidateSet(\"Sync\", \"TextCache\", \"Smoke\", \"All\")]", diagnosticBaseline);
+        Assert.DoesNotContain("SyncStrategy", diagnosticBaseline);
     }
 
     [Fact]
-    public void Active_sources_do_not_reintroduce_overlay_or_directwrite_layout_paths()
+    public void Active_sources_keep_final_text_composition_on_glyph_atlas_path()
     {
         var root = FindRepoRoot();
-        var forbidden = new[]
-        {
-            "D3D11On12",
-            "D3D11On12CreateDevice",
-            "ID3D11On12Device",
-            "ID3D11Device",
-            "ID3D11DeviceContext",
-            "D3D11Query",
-            "ID3D11",
-            "CreateWrappedResource",
-            "AcquireWrappedResources",
-            "ReleaseWrappedResources",
-            "D3D12FenceAfterOverlay",
-            "D3D12TextRenderer",
-            "TextOverlaySyncStrategy",
-            "SyncTextOverlay",
-            "text-overlay-sync-strategy",
-            "IDWriteTextLayout",
-            "CreateTextLayout",
-            "Windows.Win32.Graphics.Direct2D;",
-            "ID2D",
-            "ID2D1Factory",
-            "ID2D1Device",
-            "ID2D1DeviceContext",
-            "ID2D1RenderTarget",
-            "D2D1_FACTORY_TYPE",
-            "D2D1CreateFactory"
-        };
-
         var d2dPointReferences = 0;
         foreach (var sourcePath in EnumerateActiveSourceGuardFiles(root))
         {
             var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
-            foreach (var token in forbidden)
-            {
-                Assert.DoesNotContain(token, source);
-            }
+            Assert.DoesNotContain("CreateTextLayout", source);
 
             var allowsD2dPointInterop = sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.ColorGlyph.cs"), StringComparison.Ordinal)
                 || sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.cs"), StringComparison.Ordinal);
@@ -1878,16 +1833,16 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("simpleBmpRuns=3", expectedLine);
         Assert.Contains("shapedRuns=5", expectedLine);
         Assert.Contains("emojiRuns=1", expectedLine);
-        Assert.Equal("matrix.expected textRuns=13 atlasRuns=13 degradedRuns=0 wrappedRuns=2 tabRuns=1 explicitLineRuns=1 simpleBmpRuns=3 shapedRuns=5 cjkRuns=1 arabicRuns=2 hebrewRuns=1 mixedBidiRuns=1 emojiRuns=1 overlayFallback=False", GlyphAtlasRegressionMatrixDiagnosticRunner.FormatExpectedMachineLine(summary));
-        Assert.Equal("matrix.actual frameSerial=3 presentSerial=3 syncWaits=0 glyphAtlasInitialized=False atlasRuns=0 degradedRuns=0 colorLayerRuns=0 colorBitmapRuns=0 overlaySync=False", GlyphAtlasRegressionMatrixDiagnosticRunner.FormatActualMachineLine(3, 3, 0, null));
+        Assert.Equal("matrix.expected textRuns=13 atlasRuns=13 degradedRuns=0 wrappedRuns=2 tabRuns=1 explicitLineRuns=1 simpleBmpRuns=3 shapedRuns=5 cjkRuns=1 arabicRuns=2 hebrewRuns=1 mixedBidiRuns=1 emojiRuns=1 finalComposition=D3D12", GlyphAtlasRegressionMatrixDiagnosticRunner.FormatExpectedMachineLine(summary));
+        Assert.Equal("matrix.actual frameSerial=3 presentSerial=3 syncWaits=0 glyphAtlasInitialized=False atlasRuns=0 degradedRuns=0 colorLayerRuns=0 colorBitmapRuns=0 finalComposition=D3D12", GlyphAtlasRegressionMatrixDiagnosticRunner.FormatActualMachineLine(3, 3, 0, null));
         Assert.Contains("svgColorGlyph=True", contractLine);
         Assert.Contains("colrPaintTreeColorGlyph=True", contractLine);
         Assert.Contains("bidiBeyondResolvedLevels=True", contractLine);
-        Assert.Contains("overlayFallback=False", contractLine);
+        Assert.Contains("finalComposition=D3D12", contractLine);
     }
 
     [Fact]
-    public void Glyph_atlas_degradation_contract_marks_known_remaining_cases_as_explicit_non_overlay_degradation()
+    public void Glyph_atlas_degradation_contract_marks_known_remaining_cases_as_explicit_d3d12_degradation()
     {
         var contract = GlyphAtlasDegradationContract.CreateDefault();
 
@@ -1897,7 +1852,6 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(contract.AtlasFullAfterBudget);
         Assert.True(contract.RecordFailure);
         Assert.True(contract.InitializationFailure);
-        Assert.False(contract.OverlayFallback);
     }
 
     [Fact]
@@ -1946,9 +1900,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Assert-FieldsMatch $bidiExpectedFields $bidiActualFields", script);
         Assert.Contains("Assert-FieldsMatch $glyphExpectedFields $glyphActualFields", script);
         Assert.Contains("Glyph oracle:", script);
-        Assert.DoesNotContain("text-overlay-sync-strategy", script);
-        Assert.DoesNotContain("D3D11On12", script);
-        Assert.DoesNotContain("ID2D", script);
+        Assert.Contains("finalComposition\" \"D3D12\"", script);
     }
 
     [Fact]
@@ -1968,39 +1920,38 @@ public sealed class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
-        var matrixEvidence = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Regression-Matrix-Evidence-2026-05-23.md")));
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Post-GA-Design.md")));
-        var backlog = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Post-V1-MVP-Backlog.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Design.md")));
+        var backlog = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Private-Execution-Backlog.md")));
 
         Assert.Contains("GitHub Actions quota is currently exhausted", status);
-        Assert.Contains("CI lane configured but currently not runnable", matrixEvidence);
         Assert.Contains("local guard summary is the current status source", design);
         Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
         Assert.Contains("Run `Smoke` before/after broad changes", backlog);
         Assert.Contains("Do not add artifact-upload work until Actions quota returns", backlog);
-        Assert.Contains("reserve `-Mode Nightly` as a manual 900-frame long run", NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Soak-Memory-Pressure-Evidence-2026-05-23.md"))));
+        Assert.Contains("`Nightly` after page-policy, eviction, or shaping overhauls", backlog);
     }
 
     [Fact]
     public void Glyph_atlas_soak_thresholds_are_machine_readable()
     {
-        Assert.Equal("Soak thresholds: noDeviceLost=True, overlaySync=False, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes", GlyphAtlasSoakDiagnosticRunner.FormatThresholds());
-        Assert.Equal("soak.actual deviceLost=False overlaySync=False syncWaits=0 hardFullWithoutReuse=0 countersPresent=False", GlyphAtlasSoakDiagnosticRunner.FormatThresholdActual(deviceLost: false, syncWaits: 0, GlyphAtlasSoakSummary.Empty));
+        Assert.Equal("Soak thresholds: noDeviceLost=True, finalComposition=D3D12, hardFullWithoutReuse=0, countersPresent=fragmentation|eviction|reuse|residentBytes", GlyphAtlasSoakDiagnosticRunner.FormatThresholds());
+        Assert.Equal("soak.actual deviceLost=False finalComposition=D3D12 syncWaits=0 hardFullWithoutReuse=0 countersPresent=False", GlyphAtlasSoakDiagnosticRunner.FormatThresholdActual(deviceLost: false, syncWaits: 0, GlyphAtlasSoakSummary.Empty));
     }
 
     [Fact]
-    public void Glyph_atlas_post_ga_design_freezes_coverage_until_oracle_regression_split()
+    public void Glyph_atlas_design_guard_gates_coverage_expansion()
     {
         var root = FindRepoRoot();
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Post-GA-Design.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Design.md")));
 
-        Assert.Contains("coverage freeze until oracle/regression split", design);
-        Assert.Contains("New script or glyph-image-format support is frozen", design);
+        Assert.Contains("Guarded Coverage Expansion", design);
+        Assert.Contains("Glyph atlas coverage is guard-gated, not milestone-frozen", design);
+        Assert.Contains("New script or glyph-image-format support should move forward when it includes matching shaping oracle, regression matrix, and degradation-policy coverage", design);
         Assert.Contains("D3D12-only Degradation Policy", design);
         Assert.Contains("SVG and COLR paint-tree-only color glyphs", design);
         Assert.Contains("BiDi beyond the current resolved-level segment projection", design);
         Assert.Contains("AtlasFull after the 48-page budget", design);
-        Assert.Contains("must not reintroduce D3D11On12, Direct2D final composition, IDWriteTextLayout, or hidden overlay fallback", design);
+        Assert.Contains("Degradation must preserve renderer stability, diagnostics, and clip semantics", design);
         Assert.Contains("Entry eviction design update", design);
         Assert.Contains("entry-level LRU and a sub-rect free-list remain design-only", design);
     }
@@ -2021,8 +1972,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Do not implement entry-level LRU or a sub-rect free-list until retained atlas command ownership is explicit", design);
         Assert.Contains("current page-level reuse policy remains stable under the fixed regression/soak lane", design);
         Assert.Contains("Retained atlas command ownership must expose the oldest retained atlas record serial", design);
-        Assert.Contains("Do not change the renderer coverage surface during the coverage freeze", design);
-        Assert.Contains("Do not use D3D11On12, Direct2D final composition, or overlay fallback", design);
+        Assert.Contains("Do not add unguarded renderer coverage; new coverage needs matching oracle/regression coverage", design);
         Assert.Contains("entryLru=False", soakRunnerSource);
         Assert.Contains("subRectFreeList=False", soakRunnerSource);
         Assert.DoesNotContain("EntryLru", rendererSource);
@@ -2038,7 +1988,7 @@ public sealed class ProgramDiagnosticsTests
         var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteBidiOracleDiagnostic.cs")));
 
         Assert.Equal(
-            "bidi-oracle.expected probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed fields=levels|logicalRuns|visualRuns|charOrder layoutOracle=False pixelOracle=False overlayFallback=False",
+            "bidi-oracle.expected probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed fields=levels|logicalRuns|visualRuns|charOrder layoutOracle=False pixelOracle=False finalComposition=D3D12",
             GlyphAtlasBidiOracleDiagnosticRunner.FormatExpectedSnapshot());
         Assert.Contains("--diagnose-glyph-atlas-bidi-oracle", programSource);
         Assert.Contains("GlyphAtlasBidiOracleDiagnosticRunner.Run", programSource);
@@ -2053,12 +2003,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("TextAnalysisSourceShim", platformSource);
         Assert.Contains("TextAnalysisSinkSetBidiLevel", platformSource);
         Assert.Contains("GlyphAtlasTextCompositionHelpers.ApplyBidiVisualOrder", platformSource);
-        Assert.DoesNotContain("IDWriteTextLayout", platformSource);
-        Assert.DoesNotContain("ID2D", platformSource);
+        Assert.DoesNotContain("CreateTextLayout", platformSource);
     }
 
     [Fact]
-    public void Glyph_atlas_glyph_oracle_cli_is_wired_without_overlay_or_layout()
+    public void Glyph_atlas_glyph_oracle_cli_is_wired_without_layout_dependency()
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
@@ -2066,7 +2015,7 @@ public sealed class ProgramDiagnosticsTests
         var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteGlyphOracleDiagnostic.cs")));
 
         Assert.Equal(
-            "glyph-oracle.expected probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf fields=glyphCount|glyphIndices|advances|offsets|bidiLevels|lineBreaks|segments layoutOracle=False pixelOracle=False overlayFallback=False",
+            "glyph-oracle.expected probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf fields=glyphCount|glyphIndices|advances|offsets|bidiLevels|lineBreaks|segments layoutOracle=False pixelOracle=False finalComposition=D3D12",
             GlyphAtlasGlyphOracleDiagnosticRunner.FormatExpectedSnapshot());
         Assert.Contains("--diagnose-glyph-atlas-glyph-oracle", programSource);
         Assert.Contains("GlyphAtlasGlyphOracleDiagnosticRunner.Run", programSource);
@@ -2092,10 +2041,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GlyphOracleLineBreak", platformSource);
         Assert.Contains("GlyphOracleSegment", platformSource);
         Assert.Contains("GlyphOracleGlyph", platformSource);
-        Assert.DoesNotContain("IDWriteTextLayout", platformSource);
         Assert.DoesNotContain("CreateTextLayout", platformSource);
-        Assert.DoesNotContain("ID2D", platformSource);
-        Assert.DoesNotContain("D3D11On12", platformSource);
     }
 
     [Fact]

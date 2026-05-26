@@ -31,5 +31,5 @@ Scope: design-only follow-up for the glyph atlas page-policy milestone. Do not i
 
 - Do not add same-record reuse of entries that were touched by the current record.
 - Do not add retained atlas command caching as part of eviction.
-- Do not change the renderer coverage surface during the coverage freeze.
-- Do not use D3D11On12, Direct2D final composition, or overlay fallback to hide eviction failures.
+- Do not add unguarded renderer coverage; new coverage needs matching oracle/regression coverage.
+- Do not hide eviction failures with a second text composition path; expand the D3D12 atlas path or degrade explicitly.

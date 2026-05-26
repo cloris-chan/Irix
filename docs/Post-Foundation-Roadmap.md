@@ -21,7 +21,7 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 |-------|---------|----------------|---------------|
 | Style system | Define layout, visual, text, control-state, and composition style boundaries. | [Style-System-v0.md](Style-System-v0.md) | No initial code movement. |
 | Animation system | Define UI-runtime animation vs compositor/GPU animation ownership. | [Animation-Composition-v0.md](Animation-Composition-v0.md) | No initial code movement. |
-| GPU composition | Define a platform-neutral composition model that can map to D3D12 now and Vulkan/Metal later. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | No initial code movement. |
+| GPU composition | Define a platform-neutral composition model and drive the first implementation through D3D12/GPU-backed layer updates. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | First code movement should be a narrow D3D12-backed spike. |
 | Scroll/compositor bridge | Use scroll as the first hybrid case: runtime owns logical target; compositor owns presented offset. | Future scroll compositor design | Only after style/animation/composition contracts are accepted. |
 | Runtime/control extraction | Decide whether scroll/input/control state needs a new runtime/control package. | Future ownership design | Only after Counter-specific assumptions are removed. |
 
@@ -31,12 +31,13 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 2. **Animation/composition model**: use the property classification to decide which animations are UI-runtime animations and which can run independently in the compositor.
 3. **GPU composition architecture**: define composition IR, layer boundaries, backend capability reporting, and GPU offload phases.
 4. **Scroll compositor design**: specify logical vs presented scroll, hit-test mapping, invalidation, and compositor timeline ownership.
-5. **Implementation spikes**: only after the contracts above are written and the narrowest first case is chosen.
+5. **D3D12-first implementation spike**: after the contracts above are written, target a real D3D12/GPU-backed composition path first. Add fallback compatibility only when that spike exposes an explicit short-term blocker.
 
 ## Principles
 
 - Prefer design contracts before code migration from `Irix.Poc`.
-- Do not add a cross-platform backend before the D3D12 composition contract is abstract enough to map to Vulkan/Metal.
+- Keep the first implementation GPU-first and D3D12-backed; do not spend the first implementation pass on a generic compatibility compositor.
+- Do not add a cross-platform backend before the D3D12 composition contract proves the layer model against the active backend.
 - Do not make every visual property a layout property. Layout invalidation and composition invalidation must be separate.
 - Do not drive compositor-eligible animations by rebuilding `VirtualNode` / layout / draw commands every frame.
 - Do not put app/control state inside `Irix.Rendering` just because layout produces observation data.
@@ -47,8 +48,9 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 - No Vulkan or Metal implementation.
 - No full theme/resource dictionary implementation.
 - No generalized animation public API.
+- No generic CPU/compatibility compositor as the first implementation route.
 - No new GlyphAtlas script/format expansion.
-- No D3D11On12/Direct2D overlay revival.
+- No second text composition path.
 - No retained-array pooling or snapshot reuse without ownership design.
 - No `WindowBackend` promotion.
 - No scroll/input code extraction until ownership contracts are ready.

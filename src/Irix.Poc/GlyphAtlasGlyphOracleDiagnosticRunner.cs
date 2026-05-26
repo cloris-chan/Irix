@@ -30,7 +30,7 @@ internal static class GlyphAtlasGlyphOracleDiagnosticRunner
     }
 
     internal static string FormatExpectedSnapshot() =>
-        "glyph-oracle.expected probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf fields=glyphCount|glyphIndices|advances|offsets|bidiLevels|lineBreaks|segments layoutOracle=False pixelOracle=False overlayFallback=False";
+        "glyph-oracle.expected probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf fields=glyphCount|glyphIndices|advances|offsets|bidiLevels|lineBreaks|segments layoutOracle=False pixelOracle=False finalComposition=D3D12";
 
     internal static string FormatActualSnapshot(GlyphOracleDiagnosticSnapshot snapshot)
     {
@@ -46,8 +46,8 @@ internal static class GlyphAtlasGlyphOracleDiagnosticRunner
         }
 
         return string.IsNullOrEmpty(snapshot.Failure)
-            ? $"glyph-oracle.actual probes={snapshot.ProbeCount} labels={labels} failedProbes={snapshot.FailedProbes} fallbackFontProbes={snapshot.FallbackFontProbes} mixedBidiProbes={snapshot.MixedBidiProbes} lineBreakProbes={snapshot.LineBreakProbes} totalGlyphs={snapshot.TotalGlyphs} layoutOracle=False pixelOracle=False overlayFallback=False"
-            : $"glyph-oracle.actual probes={snapshot.ProbeCount} labels={labels} failure={snapshot.Failure} failedProbes=0 fallbackFontProbes=0 mixedBidiProbes=0 lineBreakProbes=0 totalGlyphs=0 layoutOracle=False pixelOracle=False overlayFallback=False";
+            ? $"glyph-oracle.actual probes={snapshot.ProbeCount} labels={labels} failedProbes={snapshot.FailedProbes} fallbackFontProbes={snapshot.FallbackFontProbes} mixedBidiProbes={snapshot.MixedBidiProbes} lineBreakProbes={snapshot.LineBreakProbes} totalGlyphs={snapshot.TotalGlyphs} layoutOracle=False pixelOracle=False finalComposition=D3D12"
+            : $"glyph-oracle.actual probes={snapshot.ProbeCount} labels={labels} failure={snapshot.Failure} failedProbes=0 fallbackFontProbes=0 mixedBidiProbes=0 lineBreakProbes=0 totalGlyphs=0 layoutOracle=False pixelOracle=False finalComposition=D3D12";
     }
 
     internal static string FormatProbe(GlyphOracleProbeResult result)

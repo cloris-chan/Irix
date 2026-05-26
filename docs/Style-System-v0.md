@@ -28,7 +28,7 @@
 | Text shaping style | Font family, weight, style, stretch, size, fallback policy, shaping flags, color glyph policy. | Rendering text pipeline plus platform glyph source. | Text shaping/glyph cache invalidation; layout may rebuild if metrics change. |
 | Composition style | Transform, opacity, layer clip, z-order within a composition parent, presented scroll offset, effect parameters. | Composition layer / platform backend. | Compositor property update; no layout or draw rebuild if source content is unchanged. |
 | Control-state style | Hover, pressed, focused, disabled, selected, active gesture state. | App/control runtime. | Projects state into layout/visual/composition style; state itself is not rendering-owned. |
-| Diagnostic style | Debug overlays, diagnostic text, guard visualization. | Poc/diagnostics. | Output-boundary only; must not become a core style owner. |
+| Diagnostic style | Debug UI surfaces, diagnostic text, guard visualization. | Poc/diagnostics. | Output-boundary only; must not become a core style owner. |
 
 ## Invalidation Rules
 
@@ -135,4 +135,4 @@ The style model must map to D3D12, Vulkan, and Metal without baking in a single 
 - Composition style should be expressed in platform-neutral value types.
 - Backend capability flags decide which composition styles can be updated independently.
 - Unsupported compositor properties fall back to draw-command update or explicit degradation.
-- Style ownership must not depend on Direct2D, D3D11On12, or platform-specific immediate-mode rendering.
+- Style ownership must not depend on platform-specific immediate-mode rendering.

@@ -39,7 +39,7 @@ internal static class GlyphAtlasRegressionMatrixDiagnosticRunner
             output.WriteLine(FormatExpectedMachineLine(summary));
             output.WriteLine(FormatContract(summary.Contract));
             output.WriteLine("Matrix cases: ASCII=True LatinExtended=True Greek=True Cyrillic=True CJK=True Arabic=True Hebrew=True MixedBidi=True Emoji=True Wrap=True Tab=True CRLF=True");
-            output.WriteLine("Accepted degradation: overlay=False svgColorGlyph=True colrPaintTreeColorGlyph=True bidiBeyondResolvedLevels=True atlasFullAfterBudget=True recordFailure=True initializationFailure=True");
+            output.WriteLine("Accepted degradation: finalComposition=D3D12 svgColorGlyph=True colrPaintTreeColorGlyph=True bidiBeyondResolvedLevels=True atlasFullAfterBudget=True recordFailure=True initializationFailure=True");
             output.WriteLine();
         }
         finally
@@ -197,7 +197,7 @@ internal static class GlyphAtlasRegressionMatrixDiagnosticRunner
 
     internal static string FormatExpectedMachineLine(GlyphAtlasRegressionMatrixSummary summary)
     {
-        return $"matrix.expected textRuns={summary.TextRuns} atlasRuns={summary.AtlasRuns} degradedRuns={summary.DegradedRuns} wrappedRuns={summary.WrappedRuns} tabRuns={summary.TabRuns} explicitLineRuns={summary.ExplicitLineRuns} simpleBmpRuns={summary.SimpleBmpRuns} shapedRuns={summary.ShapedRuns} cjkRuns={summary.CjkRuns} arabicRuns={summary.ArabicRuns} hebrewRuns={summary.HebrewRuns} mixedBidiRuns={summary.MixedBidiRuns} emojiRuns={summary.EmojiRuns} overlayFallback={summary.Contract.OverlayFallback}";
+        return $"matrix.expected textRuns={summary.TextRuns} atlasRuns={summary.AtlasRuns} degradedRuns={summary.DegradedRuns} wrappedRuns={summary.WrappedRuns} tabRuns={summary.TabRuns} explicitLineRuns={summary.ExplicitLineRuns} simpleBmpRuns={summary.SimpleBmpRuns} shapedRuns={summary.ShapedRuns} cjkRuns={summary.CjkRuns} arabicRuns={summary.ArabicRuns} hebrewRuns={summary.HebrewRuns} mixedBidiRuns={summary.MixedBidiRuns} emojiRuns={summary.EmojiRuns} finalComposition=D3D12";
     }
 
     internal static string FormatActualMachineLine(
@@ -207,13 +207,13 @@ internal static class GlyphAtlasRegressionMatrixDiagnosticRunner
         D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics? diagnostics)
     {
         return diagnostics.HasValue
-            ? $"matrix.actual frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} glyphAtlasInitialized=True atlasRuns={diagnostics.Value.AtlasRuns} degradedRuns={diagnostics.Value.UnsupportedRuns} colorLayerRuns={diagnostics.Value.ColorLayerRuns} colorBitmapRuns={diagnostics.Value.ColorBitmapRuns} overlaySync=False"
-            : $"matrix.actual frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} glyphAtlasInitialized=False atlasRuns=0 degradedRuns=0 colorLayerRuns=0 colorBitmapRuns=0 overlaySync=False";
+            ? $"matrix.actual frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} glyphAtlasInitialized=True atlasRuns={diagnostics.Value.AtlasRuns} degradedRuns={diagnostics.Value.UnsupportedRuns} colorLayerRuns={diagnostics.Value.ColorLayerRuns} colorBitmapRuns={diagnostics.Value.ColorBitmapRuns} finalComposition=D3D12"
+            : $"matrix.actual frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} glyphAtlasInitialized=False atlasRuns=0 degradedRuns=0 colorLayerRuns=0 colorBitmapRuns=0 finalComposition=D3D12";
     }
 
     internal static string FormatContract(GlyphAtlasDegradationContract contract)
     {
-        return $"Degradation contract: svgColorGlyph={contract.SvgColorGlyph}, colrPaintTreeColorGlyph={contract.ColrPaintTreeColorGlyph}, bidiBeyondResolvedLevels={contract.BidiBeyondResolvedLevels}, atlasFullAfterBudget={contract.AtlasFullAfterBudget}, recordFailure={contract.RecordFailure}, initializationFailure={contract.InitializationFailure}, overlayFallback={contract.OverlayFallback}";
+        return $"Degradation contract: svgColorGlyph={contract.SvgColorGlyph}, colrPaintTreeColorGlyph={contract.ColrPaintTreeColorGlyph}, bidiBeyondResolvedLevels={contract.BidiBeyondResolvedLevels}, atlasFullAfterBudget={contract.AtlasFullAfterBudget}, recordFailure={contract.RecordFailure}, initializationFailure={contract.InitializationFailure}, finalComposition=D3D12";
     }
 
     private static bool CanShapeAsAtlasRun(ReadOnlySpan<char> text, TextStyle style, float width)
@@ -487,8 +487,7 @@ internal readonly struct GlyphAtlasDegradationContract(
     bool BidiBeyondResolvedLevels,
     bool AtlasFullAfterBudget,
     bool RecordFailure,
-    bool InitializationFailure,
-    bool OverlayFallback) : IEquatable<GlyphAtlasDegradationContract>
+    bool InitializationFailure) : IEquatable<GlyphAtlasDegradationContract>
 {
     public bool SvgColorGlyph { get; } = SvgColorGlyph;
     public bool ColrPaintTreeColorGlyph { get; } = ColrPaintTreeColorGlyph;
@@ -496,7 +495,6 @@ internal readonly struct GlyphAtlasDegradationContract(
     public bool AtlasFullAfterBudget { get; } = AtlasFullAfterBudget;
     public bool RecordFailure { get; } = RecordFailure;
     public bool InitializationFailure { get; } = InitializationFailure;
-    public bool OverlayFallback { get; } = OverlayFallback;
 
     public static GlyphAtlasDegradationContract CreateDefault() =>
         new(
@@ -505,8 +503,7 @@ internal readonly struct GlyphAtlasDegradationContract(
             BidiBeyondResolvedLevels: true,
             AtlasFullAfterBudget: true,
             RecordFailure: true,
-            InitializationFailure: true,
-            OverlayFallback: false);
+            InitializationFailure: true);
 
     public bool Equals(GlyphAtlasDegradationContract other)
     {
@@ -515,13 +512,12 @@ internal readonly struct GlyphAtlasDegradationContract(
             && BidiBeyondResolvedLevels == other.BidiBeyondResolvedLevels
             && AtlasFullAfterBudget == other.AtlasFullAfterBudget
             && RecordFailure == other.RecordFailure
-            && InitializationFailure == other.InitializationFailure
-            && OverlayFallback == other.OverlayFallback;
+            && InitializationFailure == other.InitializationFailure;
     }
 
     public override bool Equals(object? obj) => obj is GlyphAtlasDegradationContract other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(SvgColorGlyph, ColrPaintTreeColorGlyph, BidiBeyondResolvedLevels, AtlasFullAfterBudget, RecordFailure, InitializationFailure, OverlayFallback);
+    public override int GetHashCode() => HashCode.Combine(SvgColorGlyph, ColrPaintTreeColorGlyph, BidiBeyondResolvedLevels, AtlasFullAfterBudget, RecordFailure, InitializationFailure);
 
     public static bool operator ==(GlyphAtlasDegradationContract left, GlyphAtlasDegradationContract right) => left.Equals(right);
 

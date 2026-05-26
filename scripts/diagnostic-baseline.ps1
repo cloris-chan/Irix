@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-    Runs local GA performance diagnostics with repeatable file names.
+    Runs local diagnostic baselines with repeatable file names.
 
 .EXAMPLE
-    .\scripts\ga-baseline.ps1 -Mode Sync -RefreshLabel 60Hz -ScalePercent 150
+    .\scripts\diagnostic-baseline.ps1 -Mode Sync -RefreshLabel 60Hz -ScalePercent 150
 
 .EXAMPLE
-    .\scripts\ga-baseline.ps1 -Mode All -RefreshLabel 240Hz -ScalePercent 150 -Aot
+    .\scripts\diagnostic-baseline.ps1 -Mode All -RefreshLabel 240Hz -ScalePercent 150 -Aot
 
 .EXAMPLE
-    .\scripts\ga-baseline.ps1 -Mode Smoke -RefreshLabel 60Hz -ScalePercent 150 -PartialMode NoPartialApply
+    .\scripts\diagnostic-baseline.ps1 -Mode Smoke -RefreshLabel 60Hz -ScalePercent 150 -PartialMode NoPartialApply
 #>
 
 param(
@@ -179,7 +179,7 @@ $refresh = ConvertTo-Label $RefreshLabel
 $scale = if ($ScalePercent -gt 0) { "$ScalePercent`pct" } else { "current-scale" }
 $runtime = if ($Aot) { "aot" } else { "non-aot" }
 
-Write-Host "GA baseline context: refresh=$RefreshLabel, scale=$scale, runtime=$runtime, partial=$PartialMode"
+Write-Host "Diagnostic baseline context: refresh=$RefreshLabel, scale=$scale, runtime=$runtime, partial=$PartialMode"
 Write-Host ""
 
 if ($Mode -eq "Sync" -or $Mode -eq "All") {

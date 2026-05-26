@@ -71,12 +71,11 @@ Safe allocation work must preserve this contract:
 
 Current implementation: empty `DirtyElementRanges` and absent `ScrollDiagnostics` explicitly publish `Array.Empty<T>()`.
 
-## Stage Freeze
+## Stage Guard
 
-- Layout dirty v1 diagnostics are complete for this stage.
-- Do not expand dirty diagnostics unless fixing a concrete regression in existing outputs.
-- Do not skip `StyleOnly` layout in this stage.
-- Do not implement partial layout, local subtree layout, or a `LayoutTreeBuilder` rewrite as part of layout dirty v1 closure.
+- Layout dirty v1 diagnostics are complete as the current baseline.
+- Expand dirty diagnostics only when a target implementation needs the additional signal or an existing output regresses.
+- `StyleOnly` layout skip, partial layout, local subtree layout, and `LayoutTreeBuilder` rewrites should be reopened as explicit target-architecture work, not as incidental cleanup.
 
 ## StyleOnly Patch Design
 

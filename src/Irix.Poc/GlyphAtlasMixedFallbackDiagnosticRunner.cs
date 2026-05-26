@@ -43,7 +43,7 @@ internal static class GlyphAtlasMixedFallbackDiagnosticRunner
                 + $"degradedRuns={expected.DegradedCandidateRuns}, NonAscii={expected.NonAsciiFallbackRuns}, "
                 + $"clippedAtlasRuns={expected.ClippedAtlasCandidateRuns}, clippedDegradedRuns={expected.ClippedDegradedCandidateRuns}");
             output.WriteLine($"Ordering: {BuildOrderingLine(expected)}");
-            output.WriteLine("Unsupported text degradation: overlay=False resolver=True style=True clip=True scale=True");
+            output.WriteLine("Unsupported text degradation: finalComposition=D3D12 resolver=True style=True clip=True scale=True");
             output.WriteLine();
         }
         finally

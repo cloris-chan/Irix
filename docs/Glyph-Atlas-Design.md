@@ -1,6 +1,6 @@
 # Glyph Atlas Renderer Design
 
-> Current D3D12-only text renderer contract. D3D11On12 / Direct2D final text overlay has been removed from active Windows renderer source; DirectWrite and WIC remain source-data paths only.
+> Current D3D12 text renderer contract. DirectWrite and WIC provide source data; final text composition stays in the D3D12 command stream.
 
 ## Goal
 
@@ -13,14 +13,14 @@ Keep Windows text final composition in the D3D12 command stream through a glyph 
 | Final composition | `D3D12 rect pass -> D3D12 GlyphAtlas text pass -> Present`. |
 | Public API | No public backend or drawing API change. |
 | Text source | DirectWrite may provide shaping, metrics, fallback font mapping, glyph raster data, and color glyph source data. WIC may decode PNG/JPEG/TIFF glyph image data. |
-| Unsupported text | Unsupported or unsafe renderable runs degrade explicitly. They are counted and not drawn; they do not invoke an overlay fallback. |
+| Unsupported text | Unsupported or unsafe renderable runs degrade explicitly. They are counted and not drawn. |
 | Clip | FillRect scissor and accepted GlyphAtlas text clip are default-on; diagnostic rollback remains available. |
 | Shader packaging | D3D12 rectangle and glyph atlas passes use embedded DXBC bytecode. Runtime `D3DCompile` / `d3dcompiler_47.dll` must not return. |
 | Text state | Renderer/core paths must not retain source strings. Frame text resolves through `TextSlice` / resolver boundaries; glyph cache keys use value glyph atoms and native glyph identity. |
 
-## Coverage Freeze
+## Guarded Coverage Expansion
 
-coverage freeze until oracle/regression split: New script or glyph-image-format support is frozen until the shaping oracle, regression matrix lane, and degradation-policy tests are split and stable. Allowed changes during this freeze are bug fixes, source guards, diagnostics, tests, local evidence updates, renderer structure cleanup, and documentation. New accepted coverage must not be added opportunistically in `D3D12GlyphAtlasTextRenderer`; it needs a matching oracle/regression case first.
+Glyph atlas coverage is guard-gated, not milestone-frozen. New script or glyph-image-format support should move forward when it includes matching shaping oracle, regression matrix, and degradation-policy coverage. New accepted coverage must not be added opportunistically in `D3D12GlyphAtlasTextRenderer`; it needs a matching oracle/regression case first.
 
 Current accepted coverage includes:
 
@@ -57,21 +57,21 @@ Diagnostics expose total and format-split page counts, resident CPU shadow bytes
 
 ## Regression Lane
 
-`scripts/glyph-atlas-regression.ps1` is the fixed local gate for the coverage freeze and is configured in Windows CI as `Glyph atlas regression lane`. GitHub Actions quota is currently exhausted, so the CI lane is configured but not runnable as status. Keep `.github/workflows/ci.yml`, but do not rely on Actions until quota returns.
+`scripts/glyph-atlas-regression.ps1` is the fixed local gate for guarded coverage changes and is configured in Windows CI as `Glyph atlas regression lane`. GitHub Actions quota is currently exhausted, so the CI lane is configured but not runnable as status. Keep `.github/workflows/ci.yml`, but do not rely on Actions until quota returns.
 
 - `-Mode Smoke`: matrix, 60-frame soak, color-format natural coverage probe, BiDi oracle, and glyph oracle. Run before/after broad changes.
 - `-Mode Local`: extends soak to 300 frames. Run after glyph/page/shaping changes.
 - `-Mode Nightly`: extends soak to 900 frames. Run manually after page-policy, eviction, or shaping overhauls.
 
-The script writes `TestResults\glyph-atlas-regression-*-*.guard.summary.txt`; that local guard summary is the current status source while Actions quota is unavailable. Matrix actual must keep `degradedRuns=0`, `glyphAtlasInitialized=True`, and `overlaySync=False`. Soak must keep `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`, and `recordFailurePhase=None`. BiDi/glyph oracle expected and actual probe labels/counts must match with `overlayFallback=False`.
+The script writes `TestResults\glyph-atlas-regression-*-*.guard.summary.txt`; that local guard summary is the current status source while Actions quota is unavailable. Matrix actual must keep `degradedRuns=0`, `glyphAtlasInitialized=True`, and `finalComposition=D3D12`. Soak must keep `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`, and `recordFailurePhase=None`. BiDi/glyph oracle expected and actual probe labels/counts must match with `finalComposition=D3D12`.
 
 ## Structural Oracles
 
 The current oracle layer is structural, not a pixel/layout golden system:
 
 - `--diagnose-glyph-atlas-matrix` pins ASCII, Latin Extended, Greek, Cyrillic, CJK, Arabic, Hebrew, mixed BiDi, emoji, wrap, tab, and CRLF coverage in one smoke scene.
-- `--diagnose-glyph-atlas-bidi-oracle` uses `IDWriteTextAnalyzer.AnalyzeBidi` and feeds DirectWrite-resolved levels into the atlas visual-order helper. It does not use `IDWriteTextLayout`, Direct2D rendering, D3D11On12, or overlay fallback.
-- `--diagnose-glyph-atlas-glyph-oracle` uses DirectWrite analyzer/font fallback data for glyph count, glyph indices, advances, offsets, resolved bidi levels, line-break flags, and fallback-font segments. It does not expand renderer coverage during the coverage freeze.
+- `--diagnose-glyph-atlas-bidi-oracle` uses `IDWriteTextAnalyzer.AnalyzeBidi` and feeds DirectWrite-resolved levels into the atlas visual-order helper.
+- `--diagnose-glyph-atlas-glyph-oracle` uses DirectWrite analyzer/font fallback data for glyph count, glyph indices, advances, offsets, resolved bidi levels, line-break flags, and fallback-font segments. It does not by itself expand renderer coverage; coverage expansion needs the matching guarded regression case.
 - Pixel/layout oracle remains future work.
 
 ## Color Glyph Natural Coverage
@@ -80,7 +80,7 @@ Default local Segoe UI Emoji currently exposes DirectWrite-renderable COLR/layer
 
 ## D3D12-only Degradation Policy
 
-Accepted atlas runs draw through D3D12. Unsupported/failure cases degrade explicitly and are counted. This is not an overlay fallback contract.
+Accepted atlas runs draw through D3D12. Unsupported/failure cases degrade explicitly and are counted.
 
 Accepted degradation cases:
 
@@ -90,18 +90,9 @@ Accepted degradation cases:
 - Glyph atlas record or initialization failure.
 - Full LRU/entry-level eviction is not yet implemented; AtlasFull degrades the current run after scheduling safe format-scoped page reuse when possible.
 
-Degradation must preserve renderer stability, diagnostics, and clip semantics, and must not reintroduce D3D11On12, Direct2D final composition, IDWriteTextLayout, or hidden overlay fallback. NonAscii, complex shaping, color glyph, atlas-full safety, and runtime failure cases are either handled by D3D12 atlas or reported as D3D12-only degradation.
+Degradation must preserve renderer stability, diagnostics, and clip semantics. NonAscii, complex shaping, color glyph, atlas-full safety, and runtime failure cases are either handled by D3D12 atlas or reported as D3D12-only degradation.
 
-## Overlay Removal Status
-
-D3D11On12 / Direct2D overlay deletion is active in the renderer source:
-
-- `D3D12TextRenderer`, `TextOverlaySyncStrategy`, and D3D11 query extensions are removed.
-- `NativeMethods.txt` no longer requests D3D11On12 or Direct2D generation.
-- The only remaining Direct2D-named active symbol is the `Direct2D.Common` `D2D_POINT_2F` value type required by `IDWriteFactory4.TranslateColorGlyphRun`; no Direct2D factory/device/context or D3D11On12 overlay API is generated or used.
-- `TextCompositionMode` has no overlay mode; `--text-composition overlay` is rejected, and `GlyphAtlas` is the only active text composition mode.
-
-Remaining work is reducing `DegradedRuns` without reintroducing D3D11On12 / D2D as a hidden dependency.
+Remaining work is reducing `DegradedRuns` by expanding the D3D12 atlas path with matching oracle/regression coverage.
 
 ## Entry Eviction
 
@@ -109,7 +100,7 @@ Entry eviction design update: entry-level LRU and a sub-rect free-list remain de
 
 ## Future Work
 
-- Promotion of glyph resource contracts beyond Windows D3D12 only after a public API review.
+- Promotion of glyph resource contracts beyond Windows D3D12 only after an ownership/API review.
 - Build-time shader asset pipeline if embedded shader bytecode becomes too large to maintain inline.
 - Pixel/layout oracle after the structural oracle and regression lane remain stable.
 - Entry-level eviction only after retained atlas command ownership and sub-rect ownership are explicit.

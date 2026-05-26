@@ -411,7 +411,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         }
         catch (D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed, degrading text without overlay: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[D3D12Renderer] Glyph atlas initialization failed; degrading unsupported text runs in the D3D12 path: {ex.Message}");
             var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(textRuns, resources);
             RecordGlyphAtlasInitializationDegradation(
                 ex.Phase == D3D12GlyphAtlasTextRenderer.GlyphAtlasInitializationPhase.ShaderCompile

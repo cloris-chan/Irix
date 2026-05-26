@@ -36,7 +36,7 @@ internal static class GlyphAtlasWrapDiagnosticRunner
             output.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
             output.WriteLine($"Text composition mode: {textCompositionMode}");
             output.WriteLine(FormatExpectedLine(expected));
-            output.WriteLine("Wrap degradation: overlay=False asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True overHeightClip=True shapedWrap=True ltrComplex=True rtlNoWrap=True rtlWrap=True mixedBidi=True rtlMixedBase=True rtlLeadingWeak=True");
+            output.WriteLine("Wrap degradation: finalComposition=D3D12 asciiSpaceWrap=True explicitLineBreak=True tab=True simpleBmp=True hardWordClip=True overHeightClip=True shapedWrap=True ltrComplex=True rtlNoWrap=True rtlWrap=True mixedBidi=True rtlMixedBase=True rtlLeadingWeak=True");
             output.WriteLine();
         }
         finally
