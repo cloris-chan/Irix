@@ -17,6 +17,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
     private readonly Lock _hitTargetsLock = new();
     private readonly Lock _compositionStateLock = new();
+    private readonly Lock _compositionMarkerLock = new();
     private readonly RetainedRenderFrame _retainedFrame = new();
     private RetainedRenderFrameHandoffHarness? _handoffCandidateHarness;
     private HitTestTarget[] _hitTargets = [];
@@ -35,6 +36,13 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private CompositionScrollPresentationPlan? _compositionScrollPresentationPlan;
     private CompositionFrame _lastCompositionFrame;
     private CompositionBackendExecutionResult _lastCompositionExecutionResult;
+    private readonly List<CompositionAnimationMarkerEvent> _compositionMarkerEvents = [];
+    private CompositionAnimationMarkerPlaybackState[] _compositionAnimationMarkerStates = [];
+    private CompositionAnimationMarkerPlaybackState[] _compositionScrollMarkerStates = [];
+    private CompositionTimelineSample _lastCompositionAnimationSample;
+    private CompositionTimelineSample _lastCompositionScrollSample;
+    private bool _hasLastCompositionAnimationSample;
+    private bool _hasLastCompositionScrollSample;
     private long _compositionTickCount;
     private long _lastCompositionTickTimeTicks;
     private long _totalCompositionTickTimeTicks;
@@ -156,6 +164,40 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     internal CompositionScrollPresentationPlan? CompositionScrollPresentationPlan => _compositionScrollPresentationPlan;
 
+    internal int PendingCompositionMarkerEventCount
+    {
+        get
+        {
+            lock (_compositionMarkerLock)
+            {
+                return _compositionMarkerEvents.Count;
+            }
+        }
+    }
+
+    internal int DrainCompositionMarkerEvents(Span<CompositionAnimationMarkerEvent> destination)
+    {
+        lock (_compositionMarkerLock)
+        {
+            var count = Math.Min(destination.Length, _compositionMarkerEvents.Count);
+            for (var i = 0; i < count; i++)
+            {
+                destination[i] = _compositionMarkerEvents[i];
+            }
+
+            if (count == _compositionMarkerEvents.Count)
+            {
+                _compositionMarkerEvents.Clear();
+            }
+            else if (count > 0)
+            {
+                _compositionMarkerEvents.RemoveRange(0, count);
+            }
+
+            return count;
+        }
+    }
+
     internal void SetCompositionAnimationPlan(in CompositionAnimationPlan plan)
     {
         if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
@@ -165,6 +207,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         _compositionScrollPresentationPlan = null;
         _compositionAnimationPlan = plan;
+        _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
+        _compositionScrollMarkerStates = [];
         ClearCompositionPresentationState();
     }
 
@@ -190,6 +234,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         _compositionScrollPresentationPlan = null;
         _compositionAnimationPlan = plan;
+        _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
+        _compositionScrollMarkerStates = [];
         ClearCompositionPresentationState();
     }
 
@@ -197,7 +243,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     {
         _compositionAnimationPlan = null;
         _compositionScrollPresentationPlan = null;
+        _compositionAnimationMarkerStates = [];
+        _compositionScrollMarkerStates = [];
         ClearCompositionPresentationState();
+        ClearCompositionMarkerEvents();
     }
 
     internal void SetCompositionScrollPresentationPlan(in CompositionScrollPresentationPlan plan)
@@ -209,6 +258,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         _compositionAnimationPlan = null;
         _compositionScrollPresentationPlan = plan;
+        _compositionAnimationMarkerStates = [];
+        _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
         ClearCompositionPresentationState();
     }
 
@@ -234,6 +285,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         _compositionAnimationPlan = null;
         _compositionScrollPresentationPlan = plan;
+        _compositionAnimationMarkerStates = [];
+        _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
         ClearCompositionPresentationState();
     }
 
@@ -407,7 +460,32 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
 
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
-        return RenderCompositionFrameAtAsync(compositionBackend, commands, resources, compositionFrame, timestamp);
+        var sample = plan.LayerAnimation.Timeline.SampleAt(timestamp);
+        return RenderCompositionFrameAtAsync(
+            compositionBackend,
+            commands,
+            resources,
+            compositionFrame,
+            timestamp,
+            static (DrawingBackendCompositor compositor, in CompositionMarkerEventContext context) =>
+            {
+                var plan = context.AnimationPlan.GetValueOrDefault();
+                var sample = context.Sample;
+                CompositionAnimationMarkerEvaluator.EvaluateTransformOpacity(
+                    plan.LayerAnimation,
+                    compositor._hasLastCompositionAnimationSample,
+                    plan.LayerAnimation.Timeline.StartTimestamp,
+                    compositor._lastCompositionAnimationSample,
+                    sample,
+                    compositor._compositionAnimationMarkerStates,
+                    compositor._compositionMarkerEvents);
+                compositor._lastCompositionAnimationSample = sample;
+                compositor._hasLastCompositionAnimationSample = true;
+            },
+            new CompositionMarkerEventContext(
+                plan,
+                default,
+                sample));
     }
 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAsync(
@@ -442,7 +520,32 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
 
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
-        return RenderCompositionFrameAtAsync(compositionBackend, commands, resources, compositionFrame, timestamp);
+        var sample = plan.LayerAnimation.Timeline.SampleAt(timestamp);
+        return RenderCompositionFrameAtAsync(
+            compositionBackend,
+            commands,
+            resources,
+            compositionFrame,
+            timestamp,
+            static (DrawingBackendCompositor compositor, in CompositionMarkerEventContext context) =>
+            {
+                var plan = context.ScrollPresentationPlan.GetValueOrDefault();
+                var sample = context.Sample;
+                CompositionAnimationMarkerEvaluator.EvaluateScrollPresentation(
+                    plan.LayerAnimation,
+                    compositor._hasLastCompositionScrollSample,
+                    plan.LayerAnimation.Timeline.StartTimestamp,
+                    compositor._lastCompositionScrollSample,
+                    sample,
+                    compositor._compositionScrollMarkerStates,
+                    compositor._compositionMarkerEvents);
+                compositor._lastCompositionScrollSample = sample;
+                compositor._hasLastCompositionScrollSample = true;
+            },
+            new CompositionMarkerEventContext(
+                default,
+                plan,
+                sample));
     }
 
     private ValueTask<CompositionBackendExecutionResult> RenderCompositionFrameAtAsync(
@@ -450,7 +553,9 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         ReadOnlySpan<DrawCommand> commands,
         IFrameResourceResolver resources,
         in CompositionFrame compositionFrame,
-        CompositionTimestamp timestamp)
+        CompositionTimestamp timestamp,
+        CompositionMarkerEventPublisher publishMarkerEvents,
+        in CompositionMarkerEventContext markerEventContext)
     {
         var sw = Stopwatch.StartNew();
         var frameContext = CreateBackendFrameContext(timestamp.StopwatchTicks);
@@ -471,6 +576,10 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             throw;
         }
 
+        lock (_compositionMarkerLock)
+        {
+            publishMarkerEvents.Invoke(this, markerEventContext);
+        }
         SetCompositionPresentationState(compositionFrame, result);
         Interlocked.Increment(ref _compositionTickCount);
         RecordCompositionTickTime(sw);
@@ -848,6 +957,22 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             && y < bounds.Y + bounds.Height;
     }
 
+    private static CompositionAnimationMarkerPlaybackState[] CreateMarkerPlaybackStates(ReadOnlySpan<CompositionAnimationMarker> markers)
+    {
+        if (markers.Length == 0)
+        {
+            return [];
+        }
+
+        var states = new CompositionAnimationMarkerPlaybackState[markers.Length];
+        for (var i = 0; i < markers.Length; i++)
+        {
+            states[i] = new CompositionAnimationMarkerPlaybackState(markers[i].Id);
+        }
+
+        return states;
+    }
+
     private void SetCompositionPresentationState(
         in CompositionFrame frame,
         in CompositionBackendExecutionResult result)
@@ -865,6 +990,17 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             _lastCompositionFrame = default;
             _lastCompositionExecutionResult = default;
+        }
+
+        _hasLastCompositionAnimationSample = false;
+        _hasLastCompositionScrollSample = false;
+    }
+
+    private void ClearCompositionMarkerEvents()
+    {
+        lock (_compositionMarkerLock)
+        {
+            _compositionMarkerEvents.Clear();
         }
     }
 
@@ -944,5 +1080,19 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         _retainedFrame.ReleaseResources();
         _retainedFrame.Dispose();
         _backend.Dispose();
+    }
+
+    private delegate void CompositionMarkerEventPublisher(
+        DrawingBackendCompositor compositor,
+        in CompositionMarkerEventContext context);
+
+    private readonly struct CompositionMarkerEventContext(
+        CompositionAnimationPlan? AnimationPlan,
+        CompositionScrollPresentationPlan? ScrollPresentationPlan,
+        CompositionTimelineSample Sample)
+    {
+        public CompositionAnimationPlan? AnimationPlan { get; } = AnimationPlan;
+        public CompositionScrollPresentationPlan? ScrollPresentationPlan { get; } = ScrollPresentationPlan;
+        public CompositionTimelineSample Sample { get; } = Sample;
     }
 }

@@ -519,6 +519,244 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task CompositionAnimationMarker_progress_crossing_publishes_after_successful_tick()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f),
+            new CompositionAnimationInstanceId(10),
+            new NodeKey(20),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(1),
+                new CompositionRuntimeEventId(100),
+                CompositionAnimationMarkerTrigger.AtProgress(0.5f))])));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(20), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(80), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var count = compositor.DrainCompositionMarkerEvents(events);
+        Assert.Equal(1, count);
+        Assert.Equal(new CompositionAnimationInstanceId(10), events[0].InstanceId);
+        Assert.Equal(new CompositionAnimationMarkerId(1), events[0].MarkerId);
+        Assert.Equal(new CompositionRuntimeEventId(100), events[0].RuntimeEventId);
+        Assert.Equal(CompositionAnimationMarkerEventKind.Progress, events[0].Kind);
+        Assert.Equal(CompositionAnimationMarkerOwnerKind.TransformOpacity, events[0].OwnerKind);
+        Assert.Equal(new CompositionLayerId(1), events[0].LayerId);
+        Assert.Equal(new NodeKey(20), events[0].TargetKey);
+        Assert.Equal(0.8f, events[0].Progress);
+        Assert.Equal(CompositionTimestamp.FromStopwatchTicks(80), events[0].Timestamp);
+        Assert.Equal(0, compositor.PendingCompositionMarkerEventCount);
+    }
+
+    [Fact]
+    public async Task CompositionAnimationMarker_once_does_not_publish_duplicate_after_crossing()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f),
+            new CompositionAnimationInstanceId(11),
+            new NodeKey(21),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(2),
+                new CompositionRuntimeEventId(101),
+                CompositionAnimationMarkerTrigger.AtProgress(0.5f))])));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(20), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(80), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(90), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(100), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        Assert.Equal(1, compositor.DrainCompositionMarkerEvents(events));
+    }
+
+    [Fact]
+    public async Task CompositionAnimationMarker_loop_once_per_iteration_fires_each_iteration()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(10), CompositionAnimationRepeatMode.Loop),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f),
+            new CompositionAnimationInstanceId(12),
+            new NodeKey(22),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(3),
+                new CompositionRuntimeEventId(102),
+                CompositionAnimationMarkerTrigger.AtProgress(0.5f),
+                CompositionAnimationMarkerRepeatPolicy.OncePerIteration)])));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(6), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(16), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var count = compositor.DrainCompositionMarkerEvents(events);
+        Assert.Equal(2, count);
+        Assert.Equal(0, events[0].Iteration);
+        Assert.Equal(1, events[1].Iteration);
+    }
+
+    [Fact]
+    public async Task CompositionAnimationMarker_alternate_reverse_crossing_publishes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(10), CompositionAnimationRepeatMode.Alternate),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f),
+            new CompositionAnimationInstanceId(13),
+            new NodeKey(23),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(4),
+                new CompositionRuntimeEventId(103),
+                CompositionAnimationMarkerTrigger.AtProgress(0.5f),
+                CompositionAnimationMarkerRepeatPolicy.OncePerIteration)])));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(11), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(16), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var count = compositor.DrainCompositionMarkerEvents(events);
+        Assert.Equal(1, count);
+        Assert.Equal(1, events[0].Iteration);
+        Assert.Equal(CompositionPlaybackDirection.Reverse, events[0].Direction);
+    }
+
+    [Fact]
+    public async Task CompositionAnimationMarker_every_tick_publishes_each_successful_tick()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f),
+            new CompositionAnimationInstanceId(14),
+            new NodeKey(24),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(5),
+                new CompositionRuntimeEventId(104),
+                CompositionAnimationMarkerTrigger.EveryTick())])));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(2), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(3), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var count = compositor.DrainCompositionMarkerEvents(events);
+        Assert.Equal(3, count);
+        Assert.All(events[..count].ToArray(), e => Assert.Equal(CompositionAnimationMarkerEventKind.Tick, e.Kind));
+    }
+
+    [Fact]
+    public async Task CompositionScrollPresentationMarker_progress_range_publishes_scroll_owner()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(40, 10),
+            new CompositionAnimationInstanceId(15),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(6),
+                new CompositionRuntimeEventId(105),
+                CompositionAnimationMarkerTrigger.EnterProgressRange(0.4f, 0.6f))]), pipeline.LastRetainedInputSnapshot!);
+
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(20), cancellationToken);
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(80), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var count = compositor.DrainCompositionMarkerEvents(events);
+        Assert.Equal(1, count);
+        Assert.Equal(CompositionAnimationMarkerOwnerKind.ScrollPresentation, events[0].OwnerKind);
+        Assert.Equal(new NodeKey(1), events[0].TargetKey);
+        Assert.Equal(CompositionAnimationMarkerEventKind.ProgressRangeEntered, events[0].Kind);
+    }
+
+    [Fact]
+    public async Task CompositionAnimationMarker_skipped_before_first_tick_does_not_backfill()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f),
+            new CompositionAnimationInstanceId(16),
+            new NodeKey(26),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(7),
+                new CompositionRuntimeEventId(106),
+                CompositionAnimationMarkerTrigger.AtProgress(0.5f))])));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(80), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        Assert.Equal(0, compositor.DrainCompositionMarkerEvents(events));
+    }
+
+    [Fact]
     public void CompositionAnimationDeclaration_resolves_normal_ui_node_key()
     {
         var pipeline = new RenderPipeline();
@@ -946,6 +1184,19 @@ public sealed class DrawingBackendCompositorTests
         public void Show() { }
         public event Action<int, int>? SizeChanged { add { } remove { } }
         public event Action<DisplayScale>? DpiChanged { add { } remove { } }
+    }
+
+    private static RenderFrameBatch CreateSingleRectFrame()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        return new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 80), Color: DrawColor.Opaque(1, 2, 3))
+            ]), 1),
+            [],
+            resources);
     }
 
     private sealed class DirtyRangeTrackingBackend : IDrawingBackend, IDirtyRangeAware

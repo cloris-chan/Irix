@@ -98,6 +98,21 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 
 The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` and `RenderCompositionScrollPresentationTickAtAsync` paths with typed timestamps. Normal render pipeline snapshots resolve internal `NodeKey`-addressable `CompositionTarget` and `ScrollCompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. `DrawingBackendCompositor.SetCompositionAnimationDeclaration` and `SetCompositionScrollPresentationDeclaration` install runtime declarations only after the declaration resolves against the retained frame, so the runtime path no longer guesses command ranges.
 
+## Animation Markers
+
+Compositor/GPU animations can publish runtime-facing marker events without letting the backend call runtime callbacks. A marker is immutable data attached to the animation declaration:
+
+| Field | Purpose |
+|-------|---------|
+| `CompositionAnimationMarkerId` | Stable marker identity inside one animation instance. |
+| `CompositionRuntimeEventId` | Runtime-owned event key; the runtime maps it to app messages at its own boundary. |
+| Trigger | Progress threshold, elapsed time threshold, progress range entry, or explicit every-tick delivery. |
+| Repeat policy | Once or once per iteration. |
+
+The declaration carries a `CompositionAnimationInstanceId`; after resolution the plan carries instance, target `NodeKey`, `CompositionLayerId`, and markers. A successful compositor tick evaluates the previous and current `CompositionTimelineSample` interval and appends `CompositionAnimationMarkerEvent` values to the compositor queue. The runtime drains that queue later on its own update path. `ICompositionDrawingBackend` and `D3D12DrawingBackend` do not know about runtime messages and never invoke runtime delegates.
+
+Marker timing is interval-based, not point-sampled. If progress jumps from `0.2` to `0.8`, markers at `0.3`, `0.5`, and `0.7` are considered crossed even when no rendered tick sampled those exact values. Loop and alternate timelines include iteration and playback direction in the emitted event. Progress-range markers model keyframe/segment entry for the current linear timeline shape; future keyframe structs should compile keyframe markers to the same range-entry trigger. `EveryTick` is explicit and should be treated as presentation sampling/diagnostic delivery, not as a reliable high-level app scheduler.
+
 ## Invalidation Rules
 
 | Event | Required action |

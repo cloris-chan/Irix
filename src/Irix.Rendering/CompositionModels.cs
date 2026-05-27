@@ -187,24 +187,45 @@ internal readonly struct CompositionAnimationTimeline(
 
     public float ProgressAt(CompositionTimestamp timestamp)
     {
+        return SampleAt(timestamp).Progress;
+    }
+
+    public CompositionTimelineSample SampleAt(CompositionTimestamp timestamp)
+    {
         var durationTicks = Duration.StopwatchTicks;
+        var rawElapsed = (timestamp - StartTimestamp).StopwatchTicks;
+        var elapsedTicks = Math.Max(0, rawElapsed);
+        var elapsed = CompositionDuration.FromStopwatchTicks(elapsedTicks);
         if (durationTicks <= 0)
         {
-            return 1f;
+            return new CompositionTimelineSample(timestamp, elapsed, 1f, 0, CompositionPlaybackDirection.Forward);
         }
 
-        var elapsed = (timestamp - StartTimestamp).StopwatchTicks;
-        if (elapsed <= 0)
+        if (elapsedTicks <= 0)
         {
-            return 0f;
+            return new CompositionTimelineSample(timestamp, elapsed, 0f, 0, CompositionPlaybackDirection.Forward);
         }
 
-        return RepeatMode switch
+        if (RepeatMode == CompositionAnimationRepeatMode.Loop)
         {
-            CompositionAnimationRepeatMode.Loop => (elapsed % durationTicks) / (float)durationTicks,
-            CompositionAnimationRepeatMode.Alternate => ResolveAlternateProgress(elapsed, durationTicks),
-            _ => Math.Clamp(elapsed / (float)durationTicks, 0f, 1f)
-        };
+            var iteration = ClampIteration(elapsedTicks / durationTicks);
+            var progress = (elapsedTicks % durationTicks) / (float)durationTicks;
+            return new CompositionTimelineSample(timestamp, elapsed, progress, iteration, CompositionPlaybackDirection.Forward);
+        }
+
+        if (RepeatMode == CompositionAnimationRepeatMode.Alternate)
+        {
+            var iteration = ClampIteration(elapsedTicks / durationTicks);
+            var direction = (iteration & 1) == 0 ? CompositionPlaybackDirection.Forward : CompositionPlaybackDirection.Reverse;
+            return new CompositionTimelineSample(timestamp, elapsed, ResolveAlternateProgress(elapsedTicks, durationTicks), iteration, direction);
+        }
+
+        return new CompositionTimelineSample(
+            timestamp,
+            elapsed,
+            Math.Clamp(elapsedTicks / (float)durationTicks, 0f, 1f),
+            0,
+            CompositionPlaybackDirection.Forward);
     }
 
     public bool Equals(CompositionAnimationTimeline other)
@@ -227,6 +248,11 @@ internal readonly struct CompositionAnimationTimeline(
         var cycle = elapsed / durationTicks;
         var progress = (elapsed % durationTicks) / (float)durationTicks;
         return (cycle & 1L) == 0 ? progress : 1f - progress;
+    }
+
+    private static int ClampIteration(long iteration)
+    {
+        return iteration > int.MaxValue ? int.MaxValue : (int)iteration;
     }
 }
 
@@ -305,14 +331,23 @@ internal readonly struct CompositionLayerAnimation(
     int CommandCount,
     CompositionAnimationTimeline Timeline,
     CompositionTransformAnimation Transform,
-    CompositionScalarAnimation Opacity) : IEquatable<CompositionLayerAnimation>
+    CompositionScalarAnimation Opacity,
+    CompositionAnimationInstanceId InstanceId = default,
+    NodeKey TargetKey = default,
+    CompositionAnimationMarker[]? Markers = null) : IEquatable<CompositionLayerAnimation>
 {
+    private readonly CompositionAnimationMarker[] _markers = CompositionAnimationMarker.NormalizeArray(Markers);
+
     public CompositionLayerId LayerId { get; } = LayerId;
     public int CommandStart { get; } = CommandStart;
     public int CommandCount { get; } = CommandCount;
     public CompositionAnimationTimeline Timeline { get; } = Timeline;
     public CompositionTransformAnimation Transform { get; } = Transform;
     public CompositionScalarAnimation Opacity { get; } = Opacity;
+    public CompositionAnimationInstanceId InstanceId { get; } = InstanceId;
+    public NodeKey TargetKey { get; } = TargetKey;
+    public ReadOnlySpan<CompositionAnimationMarker> Markers => _markers;
+    public bool HasMarkers => Markers.Length != 0;
 
     public CompositionLayer Evaluate(CompositionTimestamp timestamp)
     {
@@ -341,12 +376,28 @@ internal readonly struct CompositionLayerAnimation(
             && CommandCount == other.CommandCount
             && Timeline == other.Timeline
             && Transform == other.Transform
-            && Opacity == other.Opacity;
+            && Opacity == other.Opacity
+            && InstanceId == other.InstanceId
+            && TargetKey == other.TargetKey
+            && CompositionAnimationMarker.SequenceEqual(Markers, other.Markers);
     }
 
     public override bool Equals(object? obj) => obj is CompositionLayerAnimation other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(LayerId, CommandStart, CommandCount, Timeline, Transform, Opacity);
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        hashCode.Add(LayerId);
+        hashCode.Add(CommandStart);
+        hashCode.Add(CommandCount);
+        hashCode.Add(Timeline);
+        hashCode.Add(Transform);
+        hashCode.Add(Opacity);
+        hashCode.Add(InstanceId);
+        hashCode.Add(TargetKey);
+        CompositionAnimationMarker.AddHashCode(ref hashCode, Markers);
+        return hashCode.ToHashCode();
+    }
 
     public static bool operator ==(CompositionLayerAnimation left, CompositionLayerAnimation right) => left.Equals(right);
 
@@ -361,8 +412,13 @@ internal readonly struct CompositionScrollLayerAnimation(
     float RetainedScrollY,
     float MaxScrollY,
     CompositionAnimationTimeline Timeline,
-    CompositionScalarAnimation PresentedScrollY) : IEquatable<CompositionScrollLayerAnimation>
+    CompositionScalarAnimation PresentedScrollY,
+    CompositionAnimationInstanceId InstanceId = default,
+    NodeKey TargetKey = default,
+    CompositionAnimationMarker[]? Markers = null) : IEquatable<CompositionScrollLayerAnimation>
 {
+    private readonly CompositionAnimationMarker[] _markers = CompositionAnimationMarker.NormalizeArray(Markers);
+
     public CompositionLayerId LayerId { get; } = LayerId;
     public int CommandStart { get; } = CommandStart;
     public int CommandCount { get; } = CommandCount;
@@ -371,6 +427,10 @@ internal readonly struct CompositionScrollLayerAnimation(
     public float MaxScrollY { get; } = MaxScrollY;
     public CompositionAnimationTimeline Timeline { get; } = Timeline;
     public CompositionScalarAnimation PresentedScrollY { get; } = PresentedScrollY;
+    public CompositionAnimationInstanceId InstanceId { get; } = InstanceId;
+    public NodeKey TargetKey { get; } = TargetKey;
+    public ReadOnlySpan<CompositionAnimationMarker> Markers => _markers;
+    public bool HasMarkers => Markers.Length != 0;
 
     public CompositionLayer Evaluate(CompositionTimestamp timestamp)
     {
@@ -412,12 +472,30 @@ internal readonly struct CompositionScrollLayerAnimation(
             && RetainedScrollY.Equals(other.RetainedScrollY)
             && MaxScrollY.Equals(other.MaxScrollY)
             && Timeline == other.Timeline
-            && PresentedScrollY == other.PresentedScrollY;
+            && PresentedScrollY == other.PresentedScrollY
+            && InstanceId == other.InstanceId
+            && TargetKey == other.TargetKey
+            && CompositionAnimationMarker.SequenceEqual(Markers, other.Markers);
     }
 
     public override bool Equals(object? obj) => obj is CompositionScrollLayerAnimation other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(LayerId, CommandStart, CommandCount, ClipBounds, HashCode.Combine(RetainedScrollY, MaxScrollY, Timeline, PresentedScrollY));
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        hashCode.Add(LayerId);
+        hashCode.Add(CommandStart);
+        hashCode.Add(CommandCount);
+        hashCode.Add(ClipBounds);
+        hashCode.Add(RetainedScrollY);
+        hashCode.Add(MaxScrollY);
+        hashCode.Add(Timeline);
+        hashCode.Add(PresentedScrollY);
+        hashCode.Add(InstanceId);
+        hashCode.Add(TargetKey);
+        CompositionAnimationMarker.AddHashCode(ref hashCode, Markers);
+        return hashCode.ToHashCode();
+    }
 
     public static bool operator ==(CompositionScrollLayerAnimation left, CompositionScrollLayerAnimation right) => left.Equals(right);
 
@@ -497,12 +575,18 @@ internal readonly struct CompositionAnimationDeclaration(
     NodeKey TargetKey,
     CompositionAnimationTimeline Timeline,
     CompositionTransformAnimation Transform,
-    CompositionScalarAnimation Opacity) : IEquatable<CompositionAnimationDeclaration>
+    CompositionScalarAnimation Opacity,
+    CompositionAnimationInstanceId InstanceId = default,
+    CompositionAnimationMarker[]? Markers = null) : IEquatable<CompositionAnimationDeclaration>
 {
+    private readonly CompositionAnimationMarker[] _markers = CompositionAnimationMarker.NormalizeArray(Markers);
+
     public NodeKey TargetKey { get; } = TargetKey;
     public CompositionAnimationTimeline Timeline { get; } = Timeline;
     public CompositionTransformAnimation Transform { get; } = Transform;
     public CompositionScalarAnimation Opacity { get; } = Opacity;
+    public CompositionAnimationInstanceId InstanceId { get; } = InstanceId;
+    public ReadOnlySpan<CompositionAnimationMarker> Markers => _markers;
 
     public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, out CompositionAnimationPlan plan)
     {
@@ -527,7 +611,10 @@ internal readonly struct CompositionAnimationDeclaration(
             target.CommandCount,
             Timeline,
             Transform,
-            Opacity));
+            Opacity,
+            InstanceId,
+            TargetKey,
+            _markers));
         return true;
     }
 
@@ -536,12 +623,24 @@ internal readonly struct CompositionAnimationDeclaration(
         return TargetKey == other.TargetKey
             && Timeline == other.Timeline
             && Transform == other.Transform
-            && Opacity == other.Opacity;
+            && Opacity == other.Opacity
+            && InstanceId == other.InstanceId
+            && CompositionAnimationMarker.SequenceEqual(Markers, other.Markers);
     }
 
     public override bool Equals(object? obj) => obj is CompositionAnimationDeclaration other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(TargetKey, Timeline, Transform, Opacity);
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        hashCode.Add(TargetKey);
+        hashCode.Add(Timeline);
+        hashCode.Add(Transform);
+        hashCode.Add(Opacity);
+        hashCode.Add(InstanceId);
+        CompositionAnimationMarker.AddHashCode(ref hashCode, Markers);
+        return hashCode.ToHashCode();
+    }
 
     public static bool operator ==(CompositionAnimationDeclaration left, CompositionAnimationDeclaration right) => left.Equals(right);
 
@@ -551,11 +650,17 @@ internal readonly struct CompositionAnimationDeclaration(
 internal readonly struct CompositionScrollPresentationDeclaration(
     NodeKey TargetKey,
     CompositionAnimationTimeline Timeline,
-    CompositionScalarAnimation PresentedScrollY) : IEquatable<CompositionScrollPresentationDeclaration>
+    CompositionScalarAnimation PresentedScrollY,
+    CompositionAnimationInstanceId InstanceId = default,
+    CompositionAnimationMarker[]? Markers = null) : IEquatable<CompositionScrollPresentationDeclaration>
 {
+    private readonly CompositionAnimationMarker[] _markers = CompositionAnimationMarker.NormalizeArray(Markers);
+
     public NodeKey TargetKey { get; } = TargetKey;
     public CompositionAnimationTimeline Timeline { get; } = Timeline;
     public CompositionScalarAnimation PresentedScrollY { get; } = PresentedScrollY;
+    public CompositionAnimationInstanceId InstanceId { get; } = InstanceId;
+    public ReadOnlySpan<CompositionAnimationMarker> Markers => _markers;
 
     public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, out CompositionScrollPresentationPlan plan)
     {
@@ -582,7 +687,10 @@ internal readonly struct CompositionScrollPresentationDeclaration(
             target.RetainedScrollY,
             target.MaxScrollY,
             Timeline,
-            PresentedScrollY);
+            PresentedScrollY,
+            InstanceId,
+            TargetKey,
+            _markers);
         if (!animation.IsValidForCommandCount(commandCount))
         {
             plan = default;
@@ -597,12 +705,23 @@ internal readonly struct CompositionScrollPresentationDeclaration(
     {
         return TargetKey == other.TargetKey
             && Timeline == other.Timeline
-            && PresentedScrollY == other.PresentedScrollY;
+            && PresentedScrollY == other.PresentedScrollY
+            && InstanceId == other.InstanceId
+            && CompositionAnimationMarker.SequenceEqual(Markers, other.Markers);
     }
 
     public override bool Equals(object? obj) => obj is CompositionScrollPresentationDeclaration other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(TargetKey, Timeline, PresentedScrollY);
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        hashCode.Add(TargetKey);
+        hashCode.Add(Timeline);
+        hashCode.Add(PresentedScrollY);
+        hashCode.Add(InstanceId);
+        CompositionAnimationMarker.AddHashCode(ref hashCode, Markers);
+        return hashCode.ToHashCode();
+    }
 
     public static bool operator ==(CompositionScrollPresentationDeclaration left, CompositionScrollPresentationDeclaration right) => left.Equals(right);
 
