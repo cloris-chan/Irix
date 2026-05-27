@@ -183,13 +183,13 @@ internal static class Program
 
         if (args.Contains("--composition-demo"))
         {
-            var frameCount = 240;
-            var frameArg = args.SkipWhile(a => a != "--composition-demo").Skip(1).FirstOrDefault();
-            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
+            var durationMs = 4000;
+            var durationArg = args.SkipWhile(a => a != "--composition-demo").Skip(1).FirstOrDefault();
+            if (int.TryParse(durationArg, out var n) && n > 0) durationMs = n;
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
             await CompositionTransformDemoRunner.RunAsync(
                 diagnosticOutput ?? Console.Out,
-                frameCount,
+                durationMs,
                 ParseDiagnosticScale(args));
             return;
         }
