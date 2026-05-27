@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Irix.Rendering;
 
 namespace Irix.Poc;
@@ -5,8 +6,10 @@ namespace Irix.Poc;
 internal sealed class ScrollPresentationFramePump
 {
     private const int AnimationDurationMs = 160;
-    private const int FrameDelayMs = 8;
+    private const int TargetFrameRate = 240;
     private const int IdleTickExitThreshold = 2;
+    private const CompositionAnimationEasing RetargetEasing = CompositionAnimationEasing.SineOut;
+    private static readonly CompositionDuration TargetFrameInterval = CompositionDuration.FromStopwatchTicks(Math.Max(1, Stopwatch.Frequency / TargetFrameRate));
 
     private int _loopRunning;
     private long _pendingPixelsBits;
@@ -123,7 +126,16 @@ internal sealed class ScrollPresentationFramePump
                         hasActiveSegment = false;
                     }
 
-                    await Task.Delay(FrameDelayMs, cancellationToken);
+                    var delayMs = ComputeNextTickDelayMilliseconds(now, CompositionTimestamp.Now(), TargetFrameInterval);
+                    if (delayMs > 0)
+                    {
+                        await Task.Delay(delayMs, cancellationToken);
+                    }
+                    else
+                    {
+                        await Task.Yield();
+                    }
+
                     continue;
                 }
 
@@ -183,7 +195,7 @@ internal sealed class ScrollPresentationFramePump
         var declaration = new CompositionScrollPresentationDeclaration(
             scrollTargetKey,
             new CompositionAnimationTimeline(segmentStart, segmentDuration),
-            new CompositionScalarAnimation((float)from, retainedScrollY, CompositionAnimationEasing.SineInOut));
+            new CompositionScalarAnimation((float)from, retainedScrollY, RetargetEasing));
         compositor.SetCompositionScrollPresentationDeclaration(declaration, snapshot);
         _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(segmentStart, cancellationToken);
         Interlocked.Increment(ref _compositionTickCount);
@@ -224,6 +236,22 @@ internal sealed class ScrollPresentationFramePump
     private static void WriteDouble(ref long bits, double value)
     {
         Interlocked.Exchange(ref bits, BitConverter.DoubleToInt64Bits(value));
+    }
+
+    internal static int ComputeNextTickDelayMilliseconds(
+        CompositionTimestamp tickTimestamp,
+        CompositionTimestamp afterRenderTimestamp,
+        CompositionDuration targetFrameInterval)
+    {
+        var nextTick = tickTimestamp + targetFrameInterval;
+        var remainingTicks = (nextTick - afterRenderTimestamp).StopwatchTicks;
+        if (remainingTicks <= 0)
+        {
+            return 0;
+        }
+
+        var milliseconds = remainingTicks * 1000 / Stopwatch.Frequency;
+        return milliseconds > int.MaxValue ? int.MaxValue : Math.Max(1, (int)milliseconds);
     }
 
     private readonly struct ScrollPresentationRetargetResult(

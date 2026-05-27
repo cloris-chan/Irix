@@ -78,7 +78,8 @@ internal enum CompositionAnimationRepeatMode : byte
 internal enum CompositionAnimationEasing : byte
 {
     Linear,
-    SineInOut
+    SineInOut,
+    SineOut
 }
 
 internal enum CompositionClipMode : byte
@@ -273,6 +274,10 @@ internal readonly struct CompositionScalarAnimation(
         if (Easing == CompositionAnimationEasing.SineInOut)
         {
             progress = 0.5f - MathF.Cos(progress * MathF.PI) * 0.5f;
+        }
+        else if (Easing == CompositionAnimationEasing.SineOut)
+        {
+            progress = MathF.Sin(progress * MathF.PI * 0.5f);
         }
 
         return From + (To - From) * progress;

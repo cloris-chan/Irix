@@ -659,6 +659,11 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(15, forward.Transform.TranslateY);
         Assert.Equal(0.5f, forward.Opacity.Normalized);
         Assert.Equal(50, reverse.Transform.TranslateX);
+
+        var sineOut = new CompositionScalarAnimation(0, 100, CompositionAnimationEasing.SineOut);
+        Assert.Equal(0, sineOut.Evaluate(0));
+        Assert.InRange(sineOut.Evaluate(0.5f), 70.7f, 70.8f);
+        Assert.Equal(100, sineOut.Evaluate(1));
     }
 
     [Fact]

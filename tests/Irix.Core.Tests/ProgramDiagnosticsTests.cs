@@ -2017,6 +2017,26 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Scroll_presentation_frame_pacing_does_not_add_delay_after_backend_overruns_interval()
+    {
+        var frameInterval = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 100);
+        var tick = CompositionTimestamp.FromStopwatchTicks(1_000);
+
+        Assert.Equal(5, ScrollPresentationFramePump.ComputeNextTickDelayMilliseconds(
+            tick,
+            tick + CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 200),
+            frameInterval));
+        Assert.Equal(0, ScrollPresentationFramePump.ComputeNextTickDelayMilliseconds(
+            tick,
+            tick + frameInterval,
+            frameInterval));
+        Assert.Equal(0, ScrollPresentationFramePump.ComputeNextTickDelayMilliseconds(
+            tick,
+            tick + CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 50),
+            frameInterval));
+    }
+
+    [Fact]
     public void Composition_transform_demo_updates_composition_frame_without_rebuilding_commands()
     {
         var root = FindRepoRoot();
