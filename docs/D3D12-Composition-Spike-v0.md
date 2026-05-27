@@ -31,7 +31,7 @@ The current spike owns:
 
 - No public composition API.
 - No automatic nested/multi-clip scroll target decomposition from retained UI yet.
-- No scroll commit/cancel policy in runtime.
+- No live input integration for scroll presentation commit/cancel policy.
 - No retained layer cache or intermediate render target.
 - No Vulkan/Metal work.
 - No replacement of normal UI frame publication. `ICompositor.RenderAsync` remains the content-update path; compositor ticks are a separate retained-frame presentation path.
@@ -120,4 +120,4 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 
 ## Next Gate
 
-Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing map pointer coordinates through the active presented layer transform. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime, including a PoC diagnostic that dispatches a marker into `CounterMessage`. Multi-layer `CompositionFrame` execution now exists on the D3D12 path, and retained nested/mixed-clip scroll targets decompose into ordered fixed-clip layers. The next gate is runtime commit/cancel policy for presented scroll state, then layer caching.
+Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing map pointer coordinates through the active presented layer transform. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime, including a PoC diagnostic that dispatches a marker into `CounterMessage`. Multi-layer `CompositionFrame` execution now exists on the D3D12 path, retained nested/mixed-clip scroll targets decompose into ordered fixed-clip layers, and PoC runtime policy defines commit/cancel/retarget behavior for presented scroll interruption. The next gate is wiring that policy to live input/compositor scroll presentation, then layer caching.

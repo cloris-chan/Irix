@@ -1491,6 +1491,66 @@ public sealed class CounterInputRouterTests
         Assert.Contains("max=0(known-zero)", debugText);
     }
 
+    [Fact]
+    public void ScrollPresentationInterrupt_commit_presented_value_to_runtime_state()
+    {
+        var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 240, HasMaxScrollY = true };
+
+        var next = ScrollController.CommitPresented(state, 132);
+
+        Assert.Equal(132, next.Position);
+        Assert.Equal(132, next.TargetPosition);
+        Assert.False(next.IsAnimating);
+        Assert.Equal(0, next.Accumulator);
+    }
+
+    [Fact]
+    public void ScrollPresentationInterrupt_cancel_returns_to_logical_target()
+    {
+        var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, Accumulator = 0.5, MaxScrollY = 240, HasMaxScrollY = true };
+
+        var next = ScrollController.CancelPresentation(state);
+
+        Assert.Equal(180, next.Position);
+        Assert.Equal(180, next.TargetPosition);
+        Assert.False(next.IsAnimating);
+        Assert.Equal(0, next.Accumulator);
+    }
+
+    [Fact]
+    public void ScrollPresentationInterrupt_retarget_uses_presented_value_as_new_origin()
+    {
+        var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 240, HasMaxScrollY = true };
+
+        var next = ScrollController.RetargetFromPresented(
+            state,
+            132,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, 54),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+
+        Assert.Equal(132, next.Position);
+        Assert.Equal(186, next.TargetPosition);
+        Assert.True(next.IsAnimating);
+    }
+
+    [Fact]
+    public void ScrollPresentationInterrupt_retarget_clamps_to_known_max()
+    {
+        var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 160, HasMaxScrollY = true };
+
+        var next = ScrollController.RetargetFromPresented(
+            state,
+            150,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, 54),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+
+        Assert.Equal(150, next.Position);
+        Assert.Equal(160, next.TargetPosition);
+        Assert.True(next.IsAnimating);
+    }
+
     // ── HasMaxScrollY tests ────────────────────────────────────────────
 
     [Fact]

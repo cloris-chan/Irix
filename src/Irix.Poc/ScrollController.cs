@@ -77,6 +77,21 @@ internal readonly record struct ScrollState
     public static ScrollState Default => default;
 }
 
+internal enum ScrollPresentationInterruptPolicy : byte
+{
+    CommitPresented,
+    CancelToLogicalTarget,
+    RetargetFromPresented
+}
+
+internal readonly record struct ScrollPresentationInterruptDecision(
+    ScrollPresentationInterruptPolicy Policy,
+    ScrollState NextState,
+    double PresentedScrollY,
+    double LogicalTargetScrollY,
+    double AppliedDeltaPixels,
+    bool DispatchesLayoutFrame);
+
 // ─── Controller ──────────────────────────────────────────────────────
 
 /// <summary>
@@ -226,5 +241,107 @@ internal static class ScrollController
             Position = clampedPos,
             IsAnimating = clampedTarget != clampedPos && state.IsAnimating,
         };
+    }
+
+    public static ScrollPresentationInterruptDecision ResolvePresentationInterrupt(
+        ScrollState state,
+        double presentedScrollY,
+        ScrollDelta delta,
+        in ScrollMetrics metrics,
+        in SystemScrollSettings settings,
+        ScrollPresentationInterruptPolicy policy)
+    {
+        var normalizedPresented = ClampToKnownRange(presentedScrollY, state);
+        return policy switch
+        {
+            ScrollPresentationInterruptPolicy.CommitPresented => ResolveCommitPresented(state, normalizedPresented),
+            ScrollPresentationInterruptPolicy.CancelToLogicalTarget => ResolveCancelToLogicalTarget(state),
+            ScrollPresentationInterruptPolicy.RetargetFromPresented => ResolveRetargetFromPresented(state, normalizedPresented, delta, metrics, settings),
+            _ => throw new ArgumentOutOfRangeException(nameof(policy))
+        };
+    }
+
+    public static ScrollState CommitPresented(ScrollState state, double presentedScrollY)
+    {
+        var committed = ClampToKnownRange(presentedScrollY, state);
+        return state with
+        {
+            Accumulator = 0,
+            TargetPosition = committed,
+            Position = committed,
+            IsAnimating = false,
+        };
+    }
+
+    public static ScrollState CancelPresentation(ScrollState state)
+    {
+        var target = ClampToKnownRange(state.TargetPosition, state);
+        return state with
+        {
+            Accumulator = 0,
+            TargetPosition = target,
+            Position = target,
+            IsAnimating = false,
+        };
+    }
+
+    public static ScrollState RetargetFromPresented(
+        ScrollState state,
+        double presentedScrollY,
+        ScrollDelta delta,
+        in ScrollMetrics metrics,
+        in SystemScrollSettings settings)
+    {
+        return ApplyScrollDelta(CommitPresented(state, presentedScrollY), delta, metrics, settings);
+    }
+
+    private static ScrollPresentationInterruptDecision ResolveCommitPresented(
+        ScrollState state,
+        double presentedScrollY)
+    {
+        var next = CommitPresented(state, presentedScrollY);
+        return new ScrollPresentationInterruptDecision(
+            ScrollPresentationInterruptPolicy.CommitPresented,
+            next,
+            presentedScrollY,
+            next.TargetPosition,
+            0,
+            DispatchesLayoutFrame: true);
+    }
+
+    private static ScrollPresentationInterruptDecision ResolveCancelToLogicalTarget(ScrollState state)
+    {
+        var next = CancelPresentation(state);
+        return new ScrollPresentationInterruptDecision(
+            ScrollPresentationInterruptPolicy.CancelToLogicalTarget,
+            next,
+            next.Position,
+            next.TargetPosition,
+            0,
+            DispatchesLayoutFrame: true);
+    }
+
+    private static ScrollPresentationInterruptDecision ResolveRetargetFromPresented(
+        ScrollState state,
+        double presentedScrollY,
+        ScrollDelta delta,
+        in ScrollMetrics metrics,
+        in SystemScrollSettings settings)
+    {
+        var pixels = ConvertToPixels(delta, metrics, settings);
+        var next = ApplyScrollDelta(CommitPresented(state, presentedScrollY), delta, metrics, settings);
+        return new ScrollPresentationInterruptDecision(
+            ScrollPresentationInterruptPolicy.RetargetFromPresented,
+            next,
+            presentedScrollY,
+            next.TargetPosition,
+            pixels,
+            DispatchesLayoutFrame: true);
+    }
+
+    private static double ClampToKnownRange(double value, ScrollState state)
+    {
+        var finite = double.IsFinite(value) ? value : 0;
+        return state.HasMaxScrollY ? Math.Clamp(finite, 0, state.MaxScrollY) : Math.Max(finite, 0);
     }
 }

@@ -1975,6 +1975,21 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Scroll_presentation_policy_diagnostic_has_cli_and_machine_readable_fields()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition-v0.md")));
+
+        var diagnostics = ScrollPresentationPolicyDiagnosticRunner.RunCore();
+
+        Assert.Contains("--diagnose-scroll-presentation-policy", programSource);
+        Assert.Contains("ScrollPresentationPolicyDiagnosticRunner.Run", programSource);
+        Assert.Contains("commit", design);
+        Assert.Equal("scroll-presentation-policy actual initialPos=120 initialTarget=180 presented=132 deltaPx=54 commitPos=132 commitTarget=132 commitAnimating=False cancelPos=180 cancelTarget=180 cancelAnimating=False retargetPos=132 retargetTarget=186 retargetAnimating=True", ScrollPresentationPolicyDiagnosticRunner.Format(diagnostics));
+    }
+
+    [Fact]
     public void Composition_transform_demo_updates_composition_frame_without_rebuilding_commands()
     {
         var root = FindRepoRoot();

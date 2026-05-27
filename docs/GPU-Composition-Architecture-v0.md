@@ -36,7 +36,7 @@ This remains valid. The composition architecture adds layer animation and backen
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, inverse-transform hit-test remapping for active transform layers, fixed-clip scroll presentation for retained scroll containers, retained nested/mixed-clip scroll decomposition into ordered composition layers, a marker-event pump that maps compositor-produced runtime event ids to UI runtime messages outside the backend, and first-slice multi-layer composition frame execution on D3D12. The next architectural gap is layer caching and runtime commit/cancel policy.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, inverse-transform hit-test remapping for active transform layers, fixed-clip scroll presentation for retained scroll containers, retained nested/mixed-clip scroll decomposition into ordered composition layers, a marker-event pump that maps compositor-produced runtime event ids to UI runtime messages outside the backend, PoC commit/cancel/retarget policy for presented scroll interruption, and first-slice multi-layer composition frame execution on D3D12. The next architectural gap is layer caching and live input wiring for compositor scroll presentation.
 
 Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
 
@@ -149,7 +149,7 @@ Runtime still owns:
 - Clamp against max scroll.
 - Gesture/input interpretation.
 - Accessibility/logical state.
-- Cancellation/retarget policy.
+- Live input wiring for cancellation/retarget policy.
 
 Compositor owns:
 

@@ -15,7 +15,7 @@
 - No public animation API.
 - No public timeline scheduler.
 - No scroll code extraction from `Irix.Poc`.
-- No public scroll animation API or runtime commit/cancel policy.
+- No public scroll animation API.
 - No retained-array or snapshot ownership changes.
 
 ## Animation Ownership Classes
@@ -74,7 +74,7 @@ Ownership split:
 | `presentedScrollY` | Compositor. | Interpolated visual offset. Should not require layout rebuild per tick. |
 | Scroll hit-test mapping | Input/control adapter plus compositor state. | Pointer coordinates must map through current presented transform or use a committed-state fallback. |
 
-The current implementation supports scroll presentation for retained scroll containers by resolving child draw-command runs into one or more fixed-clip composition layers. The compositor moves content by `retainedScrollY - presentedScrollY` while each resolved clip remains fixed; nested/mixed-clip scroll targets are decomposed into ordered `CompositionFrame` layers on the D3D12 path. Logical scroll target/clamp still belongs to app/control runtime.
+The current implementation supports scroll presentation for retained scroll containers by resolving child draw-command runs into one or more fixed-clip composition layers. The compositor moves content by `retainedScrollY - presentedScrollY` while each resolved clip remains fixed; nested/mixed-clip scroll targets are decomposed into ordered `CompositionFrame` layers on the D3D12 path. Logical scroll target/clamp still belongs to app/control runtime. The first PoC runtime interrupt policy lives in `ScrollController`: commit writes the presented value back to runtime state, cancel discards presentation and returns to the logical target, and retarget commits the presented value as the new origin before applying the next input delta.
 
 ## Implementation Bias
 
@@ -130,7 +130,7 @@ The first runtime integration slice is internal and PoC-backed: `CounterComposit
 
 Transform/opacity compositor animation remaps hit testing by applying the inverse of active layer transforms before testing retained target bounds and clips. The current implementation keeps the authoritative hit-test data in the render pipeline and records retained command ranges on `HitTestTarget`, so only targets inside active composition layers receive inverse-transform mapping. Static targets in the same retained frame keep normal logical hit testing.
 
-Fixed-clip scroll presentation first filters pointer coordinates against the fixed clip in presentation space, then applies the inverse content transform before testing retained target bounds. This keeps clipped-out presented content non-interactive while avoiding a per-tick layout rebuild. Runtime still owns whether new input commits, cancels, or retargets presented scroll state.
+Fixed-clip scroll presentation first filters pointer coordinates against the fixed clip in presentation space, then applies the inverse content transform before testing retained target bounds. This keeps clipped-out presented content non-interactive while avoiding a per-tick layout rebuild. Runtime interrupt handling is explicit: new input may commit, cancel, or retarget presented scroll state before dispatching the next layout frame.
 
 ## GPU Offload Expectations
 

@@ -33,6 +33,13 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-scroll-presentation-policy"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            ScrollPresentationPolicyDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
+            return;
+        }
+
         if (args.Contains("--diagnose-input"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
