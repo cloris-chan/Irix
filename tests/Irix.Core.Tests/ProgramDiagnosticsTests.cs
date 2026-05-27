@@ -1907,8 +1907,8 @@ public sealed class ProgramDiagnosticsTests
         using var resources = FrameDrawingResources.Rent();
         var commands = CompositionTransformDiagnosticRunner.BuildCommands(resources);
         resources.Seal();
-        var first = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(commands.Length, elapsedTicks: 0);
-        var middle = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(commands.Length, elapsedTicks: Stopwatch.Frequency);
+        var first = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(commands.Length, CompositionDuration.Zero);
+        var middle = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(commands.Length, CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency));
         var summary = CompositionTransformDemoRunner.FormatDemoSummary(
             new CompositionBackendExecutionResult(
                 D3D12Backed: true,
@@ -1940,12 +1940,12 @@ public sealed class ProgramDiagnosticsTests
         using var resources = FrameDrawingResources.Rent();
         var commands = CompositionTransformDiagnosticRunner.BuildCommands(resources);
         resources.Seal();
-        var duration = Stopwatch.Frequency;
-        var plan60Hz = CompositionTransformDemoRunner.BuildAnimationPlan(commands.Length, startTimestamp: 0, durationTicks: duration);
-        var plan240Hz = CompositionTransformDemoRunner.BuildAnimationPlan(commands.Length, startTimestamp: 0, durationTicks: duration);
-        var halfSecondTicks = Stopwatch.Frequency / 2;
-        var frameAt60Hz = plan60Hz.Evaluate(commands.Length, halfSecondTicks).Layer;
-        var frameAt240Hz = plan240Hz.Evaluate(commands.Length, halfSecondTicks).Layer;
+        var duration = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency);
+        var plan60Hz = CompositionTransformDemoRunner.BuildAnimationPlan(commands.Length, CompositionTimestamp.Zero, duration);
+        var plan240Hz = CompositionTransformDemoRunner.BuildAnimationPlan(commands.Length, CompositionTimestamp.Zero, duration);
+        var halfSecond = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 2);
+        var frameAt60Hz = plan60Hz.Evaluate(commands.Length, CompositionTimestamp.Zero + halfSecond).Layer;
+        var frameAt240Hz = plan240Hz.Evaluate(commands.Length, CompositionTimestamp.Zero + halfSecond).Layer;
 
         Assert.Equal(frameAt60Hz.Transform, frameAt240Hz.Transform);
         Assert.Equal(frameAt60Hz.Opacity, frameAt240Hz.Opacity);

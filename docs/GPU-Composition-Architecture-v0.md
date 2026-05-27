@@ -65,7 +65,7 @@ Composition IR should describe retained visual/layer intent without exposing bac
 | Dirty region | Optional invalidation region for content update. |
 | Animation descriptors | Data-driven compositor animations on eligible properties. |
 
-The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal animation descriptor is `CompositionAnimationPlan`, evaluated by `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` over the retained frame and consumed by `ICompositionDrawingBackend.ExecuteComposition`.
+The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal animation descriptor is `CompositionAnimationPlan`, evaluated by `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` over the retained frame and consumed by `ICompositionDrawingBackend.ExecuteComposition`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time.
 
 ## Backend Capability Model
 

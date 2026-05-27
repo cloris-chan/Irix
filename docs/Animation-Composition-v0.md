@@ -92,11 +92,11 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 | Property | Transform, opacity, presented scroll offset, etc. |
 | From/to or keyframes | Values in platform-neutral units. |
 | Timing | Duration, delay, easing, repeat/cancel policy. |
-| Clock domain | Runtime clock or backend/compositor clock. |
+| Clock domain | Explicit composition clock values. Current internal units are `Stopwatch.GetTimestamp()` ticks carried by `CompositionTimestamp` and `CompositionDuration`, not frame indexes. |
 | Commit policy | Whether and when final presented state updates logical runtime state. |
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 
-The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The next missing contract is how normal UI output publishes stable layer ids so runtime declarations can target real retained layers instead of demo command ranges.
+The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` path with typed timestamps. The next missing contract is how normal UI output publishes stable layer ids so runtime declarations can target real retained layers instead of demo command ranges.
 
 ## Invalidation Rules
 

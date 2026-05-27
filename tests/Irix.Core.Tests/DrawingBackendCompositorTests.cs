@@ -223,13 +223,15 @@ public sealed class DrawingBackendCompositorTests
             new CompositionLayerId(42),
             CommandStart: 1,
             CommandCount: 1,
-            new CompositionAnimationTimeline(0, 10),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
             new CompositionTransformAnimation(
                 new CompositionScalarAnimation(0, 20),
                 new CompositionScalarAnimation(0, 10)),
             new CompositionScalarAnimation(1f, 0.5f))));
 
-        var result = await compositor.RenderCompositionAnimationTickAsync(5, cancellationToken);
+        var result = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(5), cancellationToken);
 
         Assert.Equal(1, compositor.RenderCount);
         Assert.Equal(1, compositor.CompositionTickCount);
@@ -240,6 +242,41 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(new CompositionLayerId(42), backend.LastCompositionFrame.Layer.Id);
         Assert.Equal(2, result.CommandCount);
         Assert.Same(resources, backend.LastCompositionResources);
+    }
+
+    [Fact]
+    public async Task RenderCompositionAnimationTickAsync_uses_compositor_clock()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        using var frame = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 80), Color: DrawColor.Opaque(1, 2, 3)),
+            ]), 1),
+            [],
+            resources);
+
+        await compositor.RenderAsync(frame, cancellationToken);
+        var start = CompositionTimestamp.Now();
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(
+                start,
+                CompositionDuration.FromStopwatchTicks(10)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f))));
+
+        _ = await compositor.RenderCompositionAnimationTickAsync(cancellationToken);
+        var end = CompositionTimestamp.Now();
+
+        Assert.Equal(1, backend.ExecuteCompositionCount);
+        Assert.InRange(backend.LastBeginFrameContext.Timestamp, start.StopwatchTicks, end.StopwatchTicks);
     }
 
     [Fact]
@@ -261,11 +298,13 @@ public sealed class DrawingBackendCompositorTests
             new CompositionLayerId(1),
             CommandStart: 0,
             CommandCount: 1,
-            new CompositionAnimationTimeline(0, 1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
             CompositionTransformAnimation.Identity,
             CompositionScalarAnimation.Constant(1f))));
 
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderCompositionAnimationTickAsync(1, cancellationToken));
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken));
         Assert.Contains("transform/opacity composition execution", exception.Message);
     }
 
@@ -276,14 +315,17 @@ public sealed class DrawingBackendCompositorTests
             new CompositionLayerId(7),
             CommandStart: 2,
             CommandCount: 3,
-            new CompositionAnimationTimeline(10, 20, CompositionAnimationRepeatMode.Alternate),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(10),
+                CompositionDuration.FromStopwatchTicks(20),
+                CompositionAnimationRepeatMode.Alternate),
             new CompositionTransformAnimation(
                 new CompositionScalarAnimation(0, 100),
                 new CompositionScalarAnimation(10, 20, CompositionAnimationEasing.SineInOut)),
             new CompositionScalarAnimation(1f, 0f)));
 
-        var forward = plan.Evaluate(8, 20).Layer;
-        var reverse = plan.Evaluate(8, 40).Layer;
+        var forward = plan.Evaluate(8, CompositionTimestamp.FromStopwatchTicks(20)).Layer;
+        var reverse = plan.Evaluate(8, CompositionTimestamp.FromStopwatchTicks(40)).Layer;
 
         Assert.Equal(new CompositionLayerId(7), forward.Id);
         Assert.Equal(50, forward.Transform.TranslateX);

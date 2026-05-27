@@ -13,6 +13,7 @@ The current spike owns:
 - Layer opacity in normalized `[0, 1]`.
 - `CompositionAnimationPlan` data in `Irix.Rendering`.
 - `DrawingBackendCompositor.RenderCompositionAnimationTickAsync`, which advances the animation over the retained frame.
+- Typed composition clock values: `CompositionTimestamp` and `CompositionDuration` carry `Stopwatch.GetTimestamp()` ticks and keep frame indexes out of animation progress.
 - D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
 - A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
 - Stable machine-readable diagnostics.
@@ -70,7 +71,7 @@ This is intentionally D3D12-backed. Non-composition backends do not receive a CP
 - opacity-applied command count is nonzero
 - no layout rebuild or draw-command regeneration is required inside the backend path
 
-`--composition-demo [durationMs]` is the visible PoC sample. It renders a static retained frame once, installs a `CompositionAnimationPlan`, then calls compositor-only ticks for transform/opacity presentation on the D3D12 execution path until the wall-clock duration expires. The animation clock is `Stopwatch`, so display refresh changes tick density but not movement speed. The machine line includes `renderCount=1`, `demoDurationMs=<durationMs>`, and `compositionTicks=<actualTicks>` to prove UI frame publication is not driving each animation frame.
+`--composition-demo [durationMs]` is the visible PoC sample. It renders a static retained frame once, installs a `CompositionAnimationPlan`, then calls compositor-only ticks for transform/opacity presentation on the D3D12 execution path until the wall-clock duration expires. The animation clock is `Stopwatch`; the internal renderer boundary is typed as `CompositionTimestamp`/`CompositionDuration`, so display refresh changes tick density but not movement speed. The machine line includes `renderCount=1`, `demoDurationMs=<durationMs>`, and `compositionTicks=<actualTicks>` to prove UI frame publication is not driving each animation frame.
 
 ## Next Gate
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Irix.Drawing;
 
 namespace Irix.Rendering;
@@ -79,23 +80,113 @@ internal enum CompositionAnimationEasing : byte
     SineInOut
 }
 
+internal readonly struct CompositionTimestamp(long StopwatchTicks) : IEquatable<CompositionTimestamp>, IComparable<CompositionTimestamp>
+{
+    public long StopwatchTicks { get; } = StopwatchTicks;
+
+    public static CompositionTimestamp Zero => default;
+
+    public static CompositionTimestamp Now() => new(Stopwatch.GetTimestamp());
+
+    public static CompositionTimestamp FromStopwatchTicks(long ticks) => new(ticks);
+
+    public CompositionTimestamp Add(CompositionDuration duration) => new(StopwatchTicks + duration.StopwatchTicks);
+
+    public CompositionDuration ElapsedSince(CompositionTimestamp start) => new(StopwatchTicks - start.StopwatchTicks);
+
+    public int CompareTo(CompositionTimestamp other) => StopwatchTicks.CompareTo(other.StopwatchTicks);
+
+    public bool Equals(CompositionTimestamp other) => StopwatchTicks == other.StopwatchTicks;
+
+    public override bool Equals(object? obj) => obj is CompositionTimestamp other && Equals(other);
+
+    public override int GetHashCode() => StopwatchTicks.GetHashCode();
+
+    public static CompositionTimestamp operator +(CompositionTimestamp timestamp, CompositionDuration duration) => timestamp.Add(duration);
+
+    public static CompositionDuration operator -(CompositionTimestamp timestamp, CompositionTimestamp start) => timestamp.ElapsedSince(start);
+
+    public static bool operator ==(CompositionTimestamp left, CompositionTimestamp right) => left.Equals(right);
+
+    public static bool operator !=(CompositionTimestamp left, CompositionTimestamp right) => !left.Equals(right);
+
+    public static bool operator <(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks < right.StopwatchTicks;
+
+    public static bool operator <=(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks <= right.StopwatchTicks;
+
+    public static bool operator >(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks > right.StopwatchTicks;
+
+    public static bool operator >=(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks >= right.StopwatchTicks;
+}
+
+internal readonly struct CompositionDuration(long StopwatchTicks) : IEquatable<CompositionDuration>, IComparable<CompositionDuration>
+{
+    public long StopwatchTicks { get; } = StopwatchTicks;
+
+    public static CompositionDuration Zero => default;
+
+    public bool IsPositive => StopwatchTicks > 0;
+
+    public static CompositionDuration FromStopwatchTicks(long ticks) => new(ticks);
+
+    public static CompositionDuration FromMilliseconds(int milliseconds)
+    {
+        var ticks = Stopwatch.Frequency * (long)Math.Max(1, milliseconds) / 1000;
+        return new CompositionDuration(Math.Max(1, ticks));
+    }
+
+    public int ToPositiveMillisecondsCeiling()
+    {
+        if (StopwatchTicks <= 0)
+        {
+            return 0;
+        }
+
+        var wholeMilliseconds = StopwatchTicks / Stopwatch.Frequency * 1000;
+        var remainderTicks = StopwatchTicks % Stopwatch.Frequency;
+        var milliseconds = wholeMilliseconds + (remainderTicks > 0 ? 1 : 0);
+        return milliseconds > int.MaxValue ? int.MaxValue : Math.Max(1, (int)milliseconds);
+    }
+
+    public int CompareTo(CompositionDuration other) => StopwatchTicks.CompareTo(other.StopwatchTicks);
+
+    public bool Equals(CompositionDuration other) => StopwatchTicks == other.StopwatchTicks;
+
+    public override bool Equals(object? obj) => obj is CompositionDuration other && Equals(other);
+
+    public override int GetHashCode() => StopwatchTicks.GetHashCode();
+
+    public static bool operator ==(CompositionDuration left, CompositionDuration right) => left.Equals(right);
+
+    public static bool operator !=(CompositionDuration left, CompositionDuration right) => !left.Equals(right);
+
+    public static bool operator <(CompositionDuration left, CompositionDuration right) => left.StopwatchTicks < right.StopwatchTicks;
+
+    public static bool operator <=(CompositionDuration left, CompositionDuration right) => left.StopwatchTicks <= right.StopwatchTicks;
+
+    public static bool operator >(CompositionDuration left, CompositionDuration right) => left.StopwatchTicks > right.StopwatchTicks;
+
+    public static bool operator >=(CompositionDuration left, CompositionDuration right) => left.StopwatchTicks >= right.StopwatchTicks;
+}
+
 internal readonly struct CompositionAnimationTimeline(
-    long StartTimestamp,
-    long DurationTicks,
+    CompositionTimestamp StartTimestamp,
+    CompositionDuration Duration,
     CompositionAnimationRepeatMode RepeatMode = CompositionAnimationRepeatMode.Once) : IEquatable<CompositionAnimationTimeline>
 {
-    public long StartTimestamp { get; } = StartTimestamp;
-    public long DurationTicks { get; } = DurationTicks;
+    public CompositionTimestamp StartTimestamp { get; } = StartTimestamp;
+    public CompositionDuration Duration { get; } = Duration;
     public CompositionAnimationRepeatMode RepeatMode { get; } = RepeatMode;
 
-    public float ProgressAt(long timestamp)
+    public float ProgressAt(CompositionTimestamp timestamp)
     {
-        if (DurationTicks <= 0)
+        var durationTicks = Duration.StopwatchTicks;
+        if (durationTicks <= 0)
         {
             return 1f;
         }
 
-        var elapsed = timestamp - StartTimestamp;
+        var elapsed = (timestamp - StartTimestamp).StopwatchTicks;
         if (elapsed <= 0)
         {
             return 0f;
@@ -103,31 +194,31 @@ internal readonly struct CompositionAnimationTimeline(
 
         return RepeatMode switch
         {
-            CompositionAnimationRepeatMode.Loop => (elapsed % DurationTicks) / (float)DurationTicks,
-            CompositionAnimationRepeatMode.Alternate => ResolveAlternateProgress(elapsed),
-            _ => Math.Clamp(elapsed / (float)DurationTicks, 0f, 1f)
+            CompositionAnimationRepeatMode.Loop => (elapsed % durationTicks) / (float)durationTicks,
+            CompositionAnimationRepeatMode.Alternate => ResolveAlternateProgress(elapsed, durationTicks),
+            _ => Math.Clamp(elapsed / (float)durationTicks, 0f, 1f)
         };
     }
 
     public bool Equals(CompositionAnimationTimeline other)
     {
         return StartTimestamp == other.StartTimestamp
-            && DurationTicks == other.DurationTicks
+            && Duration == other.Duration
             && RepeatMode == other.RepeatMode;
     }
 
     public override bool Equals(object? obj) => obj is CompositionAnimationTimeline other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(StartTimestamp, DurationTicks, RepeatMode);
+    public override int GetHashCode() => HashCode.Combine(StartTimestamp, Duration, RepeatMode);
 
     public static bool operator ==(CompositionAnimationTimeline left, CompositionAnimationTimeline right) => left.Equals(right);
 
     public static bool operator !=(CompositionAnimationTimeline left, CompositionAnimationTimeline right) => !left.Equals(right);
 
-    private float ResolveAlternateProgress(long elapsed)
+    private static float ResolveAlternateProgress(long elapsed, long durationTicks)
     {
-        var cycle = elapsed / DurationTicks;
-        var progress = (elapsed % DurationTicks) / (float)DurationTicks;
+        var cycle = elapsed / durationTicks;
+        var progress = (elapsed % durationTicks) / (float)durationTicks;
         return (cycle & 1L) == 0 ? progress : 1f - progress;
     }
 }
@@ -216,7 +307,7 @@ internal readonly struct CompositionLayerAnimation(
     public CompositionTransformAnimation Transform { get; } = Transform;
     public CompositionScalarAnimation Opacity { get; } = Opacity;
 
-    public CompositionLayer Evaluate(long timestamp)
+    public CompositionLayer Evaluate(CompositionTimestamp timestamp)
     {
         var progress = Timeline.ProgressAt(timestamp);
         return new CompositionLayer(
@@ -261,7 +352,7 @@ internal readonly struct CompositionAnimationPlan(CompositionLayerAnimation Laye
 
     public bool IsValidForCommandCount(int commandCount) => LayerAnimation.IsValidForCommandCount(commandCount);
 
-    public CompositionFrame Evaluate(int commandCount, long timestamp)
+    public CompositionFrame Evaluate(int commandCount, CompositionTimestamp timestamp)
     {
         if (!IsValidForCommandCount(commandCount))
         {

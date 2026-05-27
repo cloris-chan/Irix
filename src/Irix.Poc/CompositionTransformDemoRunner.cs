@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -46,7 +45,7 @@ internal static class CompositionTransformDemoRunner
                 [],
                 resources);
             await compositor.RenderAsync(staticFrame, cancellationToken);
-            var animationStartTimestamp = Stopwatch.GetTimestamp();
+            var animationStartTimestamp = CompositionTimestamp.Now();
             var animationPlan = BuildAnimationPlan(commands.Length, animationStartTimestamp);
             compositor.SetCompositionAnimationPlan(animationPlan);
 
@@ -58,13 +57,13 @@ internal static class CompositionTransformDemoRunner
             output.WriteLine("Demo model: static retained frame, compositor-owned transform/opacity animation ticks, D3D12-backed presentation.");
 
             var frameDelayMs = ResolveFrameDelayMilliseconds(screen.RefreshRateHz);
-            var demoEndTimestamp = animationStartTimestamp + DurationToTimestampTicks(demoDurationMs);
+            var demoEndTimestamp = animationStartTimestamp + CompositionDuration.FromMilliseconds(demoDurationMs);
             var lastExecution = default(CompositionBackendExecutionResult);
             var tickIndex = 0;
             while (true)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var timestamp = Stopwatch.GetTimestamp();
+                var timestamp = CompositionTimestamp.Now();
                 if (tickIndex > 0 && timestamp >= demoEndTimestamp)
                 {
                     break;
@@ -72,23 +71,22 @@ internal static class CompositionTransformDemoRunner
 
                 _ = d3d12Renderer.ApplyPendingResize();
                 compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
-                lastExecution = await compositor.RenderCompositionAnimationTickAsync(timestamp, cancellationToken);
+                lastExecution = await compositor.RenderCompositionAnimationTickAsync(cancellationToken);
                 tickIndex++;
                 if (d3d12Renderer.IsDeviceRemoved)
                 {
                     break;
                 }
 
-                var remainingTicks = demoEndTimestamp - Stopwatch.GetTimestamp();
-                if (remainingTicks <= 0)
+                var remaining = demoEndTimestamp - CompositionTimestamp.Now();
+                if (!remaining.IsPositive)
                 {
                     break;
                 }
 
                 if (frameDelayMs > 0)
                 {
-                    var remainingMs = Math.Max(1, (int)(remainingTicks * 1000 / Stopwatch.Frequency));
-                    await Task.Delay(Math.Min(frameDelayMs, remainingMs), cancellationToken);
+                    await Task.Delay(Math.Min(frameDelayMs, remaining.ToPositiveMillisecondsCeiling()), cancellationToken);
                 }
             }
 
@@ -110,27 +108,27 @@ internal static class CompositionTransformDemoRunner
         }
     }
 
-    internal static CompositionAnimationPlan BuildAnimationPlan(int commandCount, long startTimestamp)
+    internal static CompositionAnimationPlan BuildAnimationPlan(int commandCount, CompositionTimestamp startTimestamp)
     {
-        return BuildAnimationPlan(commandCount, startTimestamp, AnimationDurationTicks);
+        return BuildAnimationPlan(commandCount, startTimestamp, AnimationDuration);
     }
 
-    internal static CompositionAnimationPlan BuildAnimationPlan(int commandCount, long startTimestamp, long durationTicks)
+    internal static CompositionAnimationPlan BuildAnimationPlan(int commandCount, CompositionTimestamp startTimestamp, CompositionDuration duration)
     {
         return new CompositionAnimationPlan(new CompositionLayerAnimation(
             new CompositionLayerId(1),
             CommandStart: 1,
             CommandCount: commandCount - 1,
-            new CompositionAnimationTimeline(startTimestamp, Math.Max(1, durationTicks), CompositionAnimationRepeatMode.Alternate),
+            new CompositionAnimationTimeline(startTimestamp, duration.IsPositive ? duration : CompositionDuration.FromMilliseconds(AnimationDurationMs), CompositionAnimationRepeatMode.Alternate),
             new CompositionTransformAnimation(
                 new CompositionScalarAnimation(24f, 120f, CompositionAnimationEasing.SineInOut),
                 new CompositionScalarAnimation(18f, 42f, CompositionAnimationEasing.SineInOut)),
             new CompositionScalarAnimation(0.95f, 0.55f, CompositionAnimationEasing.SineInOut)));
     }
 
-    internal static CompositionFrame BuildAnimatedCompositionFrameAt(int commandCount, long elapsedTicks)
+    internal static CompositionFrame BuildAnimatedCompositionFrameAt(int commandCount, CompositionDuration elapsed)
     {
-        return BuildAnimationPlan(commandCount, 0).Evaluate(commandCount, elapsedTicks);
+        return BuildAnimationPlan(commandCount, CompositionTimestamp.Zero).Evaluate(commandCount, CompositionTimestamp.Zero + elapsed);
     }
 
     internal static string FormatDemoSummary(
@@ -146,12 +144,7 @@ internal static class CompositionTransformDemoRunner
         return $"composition.demo finalComposition=D3D12 d3d12Backed={execution.D3D12Backed} layers={execution.LayerCount} commands={execution.CommandCount} translatedCommands={execution.TranslatedCommands} opacityAppliedCommands={execution.OpacityAppliedCommands} clock=Stopwatch demoDurationMs={demoDurationMs} animationDurationMs={AnimationDurationMs} renderCount={renderCount} compositionTicks={compositionTickCount} frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} deviceRemoved={deviceRemoved}";
     }
 
-    private static long AnimationDurationTicks => DurationToTimestampTicks(AnimationDurationMs);
-
-    private static long DurationToTimestampTicks(int durationMs)
-    {
-        return Math.Max(1, Stopwatch.Frequency * (long)Math.Max(1, durationMs) / 1000);
-    }
+    private static CompositionDuration AnimationDuration => CompositionDuration.FromMilliseconds(AnimationDurationMs);
 
     private static int ResolveFrameDelayMilliseconds(int refreshRateHz)
     {

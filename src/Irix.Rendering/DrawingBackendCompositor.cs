@@ -289,7 +289,13 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     }
 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAsync(
-        long timestamp,
+        CancellationToken cancellationToken = default)
+    {
+        return RenderCompositionAnimationTickAtAsync(CompositionTimestamp.Now(), cancellationToken);
+    }
+
+    internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAtAsync(
+        CompositionTimestamp timestamp,
         CancellationToken cancellationToken = default)
     {
         if (cancellationToken.IsCancellationRequested)
@@ -315,7 +321,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
         var sw = Stopwatch.StartNew();
-        var frameContext = CreateBackendFrameContext(timestamp);
+        var frameContext = CreateBackendFrameContext(timestamp.StopwatchTicks);
         var result = default(CompositionBackendExecutionResult);
         try
         {
