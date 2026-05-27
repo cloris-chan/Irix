@@ -190,6 +190,14 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-composition-marker-runtime"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            await CompositionMarkerRuntimeDiagnosticRunner.RunAsync(
+                diagnosticOutput ?? Console.Out);
+            return;
+        }
+
         if (args.Contains("--composition-demo"))
         {
             var durationMs = 4000;

@@ -19,7 +19,7 @@ The current spike owns:
 - `DrawingBackendCompositor.RenderCompositionScrollPresentationTickAsync`, which advances presented scroll offset over the retained frame.
 - Composition-aware hit testing for transform/opacity and fixed-clip scroll layers by inverse-mapping input through the active presented transform.
 - Typed composition clock values: `CompositionTimestamp` and `CompositionDuration` carry `Stopwatch.GetTimestamp()` ticks and keep frame indexes out of animation progress.
-- Animation marker events for transform/opacity and fixed-clip scroll presentation. Markers are data on the declaration, evaluated by timeline interval crossing after a successful compositor tick, and drained by runtime/test code from the compositor queue.
+- Animation marker events for transform/opacity and fixed-clip scroll presentation. Markers are data on the declaration, evaluated by timeline interval crossing after a successful compositor tick, and drained through a runtime-facing pump that maps typed runtime event ids to app messages outside the backend.
 - D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
 - A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
 - A `--diagnose-composition-scroll` diagnostic that exercises D3D12 fixed-clip scroll presentation.
@@ -75,7 +75,7 @@ For scroll presentation, the retained draw output already contains content at th
 
 This is intentionally D3D12-backed. Non-composition backends do not receive a CPU compatibility implementation for this tick path; they fail fast until a written blocker justifies a secondary path.
 
-Marker delivery is intentionally above the backend. `DrawingBackendCompositor` evaluates markers only after `ICompositionDrawingBackend.ExecuteComposition` returns successfully, records typed `CompositionAnimationMarkerEvent` values, and leaves message mapping to the UI runtime. Device-lost/recovered skipped ticks do not publish marker events because presentation did not commit.
+Marker delivery is intentionally above the backend. `DrawingBackendCompositor` evaluates markers only after `ICompositionDrawingBackend.ExecuteComposition` returns successfully, records typed `CompositionAnimationMarkerEvent` values, and leaves message mapping to the UI runtime. `CompositionMarkerEventPump` drains queued events into an app-owned mapper and dispatches mapped messages through `IMessageDispatcher<TMessage>`. Device-lost/recovered skipped ticks do not publish marker events because presentation did not commit.
 
 ## Diagnostics
 
@@ -100,6 +100,14 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - opacity-applied command count is zero for scroll presentation
 - fixed clip remains in presentation space while content rect/text positions move
 
+`--diagnose-composition-marker-runtime` must prove:
+
+- marker queue drain count
+- dispatched runtime message count
+- unmapped marker count
+- final runtime model state after dispatch
+- compositor execution count for the marker-producing ticks
+
 ## Next Gate
 
-Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing map pointer coordinates through the active presented layer transform. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime. The next gate is multi-layer composition for nested/mixed-clip scroll containers, followed by runtime commit/cancel policy for presented scroll state.
+Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing map pointer coordinates through the active presented layer transform. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime, including a PoC diagnostic that dispatches a marker into `CounterMessage`. The next gate is multi-layer composition for nested/mixed-clip scroll containers, followed by runtime commit/cancel policy for presented scroll state.

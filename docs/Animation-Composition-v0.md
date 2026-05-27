@@ -1,6 +1,6 @@
 # Animation / Composition v0
 
-> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets and remap hit testing through the active presented transform; the internal scroll presentation path can resolve retained scroll container `NodeKey` declarations to fixed-clip composition plans. A public animation API does not exist.
+> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets, remap hit testing through the active presented transform, and publish marker events back to runtime-owned messages through an explicit drain pump; the internal scroll presentation path can resolve retained scroll container `NodeKey` declarations to fixed-clip composition plans. A public animation API does not exist.
 
 ## Goals
 
@@ -109,9 +109,11 @@ Compositor/GPU animations can publish runtime-facing marker events without letti
 | Trigger | Progress threshold, elapsed time threshold, progress range entry, or explicit every-tick delivery. |
 | Repeat policy | Once or once per iteration. |
 
-The declaration carries a `CompositionAnimationInstanceId`; after resolution the plan carries instance, target `NodeKey`, `CompositionLayerId`, and markers. A successful compositor tick evaluates the previous and current `CompositionTimelineSample` interval and appends `CompositionAnimationMarkerEvent` values to the compositor queue. The runtime drains that queue later on its own update path. `ICompositionDrawingBackend` and `D3D12DrawingBackend` do not know about runtime messages and never invoke runtime delegates.
+The declaration carries a `CompositionAnimationInstanceId`; after resolution the plan carries instance, target `NodeKey`, `CompositionLayerId`, and markers. A successful compositor tick evaluates the previous and current `CompositionTimelineSample` interval and appends `CompositionAnimationMarkerEvent` values to the compositor queue. Runtime-facing code drains that queue through `CompositionMarkerEventPump`, maps `CompositionRuntimeEventId` with an app-owned `ICompositionMarkerEventMapper<TMessage>`, and dispatches the resulting messages through the UI runtime dispatcher. `ICompositionDrawingBackend` and `D3D12DrawingBackend` do not know about runtime messages and never invoke runtime delegates.
 
 Marker timing is interval-based, not point-sampled. If progress jumps from `0.2` to `0.8`, markers at `0.3`, `0.5`, and `0.7` are considered crossed even when no rendered tick sampled those exact values. Loop and alternate timelines include iteration and playback direction in the emitted event. Progress-range markers model keyframe/segment entry for the current linear timeline shape; future keyframe structs should compile keyframe markers to the same range-entry trigger. `EveryTick` is explicit and should be treated as presentation sampling/diagnostic delivery, not as a reliable high-level app scheduler.
+
+The first runtime integration slice is internal and PoC-backed: `CounterCompositionMarkerMapper` maps marker runtime event ids to `CounterMessage` values, and `--diagnose-composition-marker-runtime` proves drain, dispatch, unmapped count, final runtime state, and compositor execution count. This is the generic boundary shape; app-specific marker ids and message mapping remain outside `Irix.Rendering`.
 
 ## Invalidation Rules
 
@@ -148,6 +150,7 @@ Animation diagnostics should remain observation, not ownership:
 - Active compositor animations by layer/property.
 - Runtime logical vs presented values for hybrid animations.
 - Cancel/retarget counts.
+- Marker drain/dispatch/unmapped counts at the runtime boundary.
 - Backend capability fallbacks.
 - Whether an animation ran compositor-only or forced UI frames.
 

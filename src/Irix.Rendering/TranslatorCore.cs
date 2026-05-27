@@ -19,6 +19,8 @@ internal sealed class TranslatorCore
 
     public RetainedRenderFrameSegmentOwnership? SegmentOwnership => _ownerFeed?.SegmentOwnership;
 
+    public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot => _renderPipeline.LastRetainedInputSnapshot;
+
     public TranslatorRetainedState Apply(in PatchBatch patchBatch)
     {
         if (patchBatch.Kind == PatchBatchKind.RenderRequest)

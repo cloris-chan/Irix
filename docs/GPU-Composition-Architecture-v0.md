@@ -36,7 +36,7 @@ This remains valid. The composition architecture adds layer animation and backen
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, inverse-transform hit-test remapping for active transform layers, and fixed-clip scroll presentation for retained scroll containers whose content shares one clip. The next architectural gap is multi-layer composition for nested/mixed-clip scroll and later layer caching.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, inverse-transform hit-test remapping for active transform layers, fixed-clip scroll presentation for retained scroll containers whose content shares one clip, and a marker-event pump that maps compositor-produced runtime event ids to UI runtime messages outside the backend. The next architectural gap is multi-layer composition for nested/mixed-clip scroll and later layer caching.
 
 Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
 
@@ -65,7 +65,7 @@ Composition IR should describe retained visual/layer intent without exposing bac
 | Dirty region | Optional invalidation region for content update. |
 | Animation descriptors | Data-driven compositor animations on eligible properties. |
 
-The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal runtime descriptors are `CompositionAnimationDeclaration` for transform/opacity and `CompositionScrollPresentationDeclaration` for fixed-clip scroll presentation; both target stable `NodeKey` values and resolve against `RenderPipelineRetainedInputSnapshot` into compositor plans. Declarations can include typed animation markers (`CompositionAnimationMarker`) and a `CompositionAnimationInstanceId`; marker evaluation stays in the compositor, emits `CompositionAnimationMarkerEvent` records into a queue, and never enters backend callback code. `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` and `RenderCompositionScrollPresentationTickAsync` evaluate those plans over the retained frame, and `ICompositionDrawingBackend.ExecuteComposition` consumes the resulting `CompositionFrame`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time.
+The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal runtime descriptors are `CompositionAnimationDeclaration` for transform/opacity and `CompositionScrollPresentationDeclaration` for fixed-clip scroll presentation; both target stable `NodeKey` values and resolve against `RenderPipelineRetainedInputSnapshot` into compositor plans. Declarations can include typed animation markers (`CompositionAnimationMarker`) and a `CompositionAnimationInstanceId`; marker evaluation stays in the compositor, emits `CompositionAnimationMarkerEvent` records into a queue, and never enters backend callback code. Runtime-facing code drains those events with `CompositionMarkerEventPump` and app-owned mapping to `IMessageDispatcher<TMessage>`, keeping `Irix.Rendering` generic and the backend unaware of app messages. `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` and `RenderCompositionScrollPresentationTickAsync` evaluate those plans over the retained frame, and `ICompositionDrawingBackend.ExecuteComposition` consumes the resulting `CompositionFrame`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time.
 
 ## Backend Capability Model
 
@@ -110,10 +110,11 @@ The composition contract should not expose these backend objects to `Irix.Render
 | 5 | Compositor-aware hit-test remapping. | Implemented for transform/opacity layers by retaining hit-target command ranges and inverse-mapping active layer transforms. |
 | 6 | Independent scroll presentation transform. | Implemented for single fixed-clip retained scroll targets; nested/mixed-clip scroll needs multi-layer composition. |
 | 7 | Compositor marker event queue. | Implemented for transform/opacity and scroll presentation; marker triggers use timeline interval crossing and runtime-owned event ids. |
-| 8 | Multi-layer composition / nested clip tree. | Needed before nested scroll and mixed clips can use the same presentation path. |
-| 9 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
-| 10 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
-| 11 | Effects/material graph. | Deferred until style/material contract exists. |
+| 8 | Runtime marker event dispatch bridge. | Implemented internally through `CompositionMarkerEventPump`, `ICompositionMarkerEventMapper<TMessage>`, and a PoC `--diagnose-composition-marker-runtime` proof. |
+| 9 | Multi-layer composition / nested clip tree. | Needed before nested scroll and mixed clips can use the same presentation path. |
+| 10 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
+| 11 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
+| 12 | Effects/material graph. | Deferred until style/material contract exists. |
 
 ## Work Placement
 
@@ -186,6 +187,7 @@ Composition diagnostics should answer:
 - Which backend capabilities are active or missing.
 - Whether a scroll animation ran independently or forced UI frames.
 - Which compositor marker events were produced, including animation instance, target, iteration, progress, and playback direction.
+- Which marker events were drained, dispatched, or left unmapped by runtime-owned mapping.
 - GPU memory retained by layer caches and atlas pages.
 
 Diagnostics must not own composition state.

@@ -47,6 +47,8 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
 
     internal RetainedRenderFrameSegmentOwnership? SegmentOwnership => _translatorCore.SegmentOwnership;
 
+    internal RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot => _translatorCore.LastRetainedInputSnapshot;
+
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null, renderPipelineFactory: null)
     {

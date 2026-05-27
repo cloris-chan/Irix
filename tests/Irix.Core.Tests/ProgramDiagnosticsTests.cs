@@ -1930,6 +1930,21 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public async Task Composition_marker_runtime_diagnostic_maps_marker_event_to_counter_message()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+
+        var diagnostics = await CompositionMarkerRuntimeDiagnosticRunner.RunCoreAsync(cancellationToken);
+        var summary = CompositionMarkerRuntimeDiagnosticRunner.Format(diagnostics);
+
+        Assert.Contains("--diagnose-composition-marker-runtime", programSource);
+        Assert.Contains("CompositionMarkerRuntimeDiagnosticRunner.RunAsync", programSource);
+        Assert.Equal("composition-marker-runtime actual drainedEvents=1 dispatchedMessages=1 unmappedEvents=0 finalCount=1 executeCompositionCount=2 layerId=6", summary);
+    }
+
+    [Fact]
     public void Composition_transform_demo_updates_composition_frame_without_rebuilding_commands()
     {
         var root = FindRepoRoot();
