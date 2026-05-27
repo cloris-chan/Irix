@@ -143,27 +143,18 @@ internal static class ScrollController
 
         if (wholePixels == 0)
         {
-            return state with { Accumulator = remainder };
+            return state with { Accumulator = ClampBoundaryAccumulator(state, newAccumulator) };
         }
 
-        var newTarget = state.TargetPosition + wholePixels;
-        // Clamp: only apply MaxScrollY upper bound when layout has reported it.
-        // HasMaxScrollY=false → max unknown, don't clamp (target may grow freely).
-        // HasMaxScrollY=true → clamp to [0, MaxScrollY].
-        if (state.HasMaxScrollY)
-        {
-            newTarget = Math.Clamp(newTarget, 0, state.MaxScrollY);
-        }
-        else
-        {
-            newTarget = Math.Max(newTarget, 0);
-        }
+        var unclampedTarget = state.TargetPosition + wholePixels;
+        var newTarget = ClampToKnownRange(unclampedTarget, state);
+        var accumulator = newTarget == state.TargetPosition && IsBoundaryOverscroll(unclampedTarget, state) ? 0 : remainder;
 
         return state with
         {
             TargetPosition = newTarget,
-            Accumulator = remainder,
-            IsAnimating = true,
+            Accumulator = accumulator,
+            IsAnimating = newTarget != state.Position,
         };
     }
 
@@ -349,5 +340,22 @@ internal static class ScrollController
     {
         var finite = double.IsFinite(value) ? value : 0;
         return state.HasMaxScrollY ? Math.Clamp(finite, 0, state.MaxScrollY) : Math.Max(finite, 0);
+    }
+
+    private static double ClampBoundaryAccumulator(ScrollState state, double accumulator)
+    {
+        if ((state.TargetPosition <= 0 && accumulator < 0)
+            || (state.HasMaxScrollY && state.TargetPosition >= state.MaxScrollY && accumulator > 0))
+        {
+            return 0;
+        }
+
+        return accumulator;
+    }
+
+    private static bool IsBoundaryOverscroll(double unclampedTarget, ScrollState state)
+    {
+        return unclampedTarget < 0
+            || (state.HasMaxScrollY && unclampedTarget > state.MaxScrollY);
     }
 }

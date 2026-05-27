@@ -8,6 +8,7 @@ internal sealed class ScrollPresentationFramePump
     private const int AnimationDurationMs = 160;
     private const int TargetFrameRate = 240;
     private const int IdleTickExitThreshold = 2;
+    private const double TargetEpsilon = 0.001;
     private const CompositionAnimationEasing RetargetEasing = CompositionAnimationEasing.SineOut;
     private static readonly CompositionDuration TargetFrameInterval = CompositionDuration.FromStopwatchTicks(Math.Max(1, Stopwatch.Frequency / TargetFrameRate));
 
@@ -103,9 +104,13 @@ internal sealed class ScrollPresentationFramePump
                         return;
                     }
 
-                    hasActiveSegment = true;
-                    segmentStart = retarget.SegmentStart;
-                    segmentDuration = retarget.SegmentDuration;
+                    if (retarget.StartedSegment)
+                    {
+                        hasActiveSegment = true;
+                        segmentStart = retarget.SegmentStart;
+                        segmentDuration = retarget.SegmentDuration;
+                    }
+
                     idleTicks = 0;
                 }
 
@@ -181,6 +186,11 @@ internal sealed class ScrollPresentationFramePump
                 ScrollMetrics.DefaultText,
                 SystemScrollSettings.Default,
                 ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
+        if (!ShouldStartRetargetSegment(state, decision))
+        {
+            return ScrollPresentationRetargetResult.Ignored;
+        }
+
         var layoutState = ScrollController.CommitPresented(decision.NextState, decision.NextState.TargetPosition);
         await runtime.DispatchAndStageRetainedFrameAsync(new CounterMessage.ScrollPresentationInterrupted(decision with { NextState = layoutState }), cancellationToken);
         var snapshot = translator.LastRetainedInputSnapshot;
@@ -201,7 +211,12 @@ internal sealed class ScrollPresentationFramePump
         Interlocked.Increment(ref _compositionTickCount);
         RecordPresented(compositor, scrollTargetKey);
         Interlocked.Increment(ref _retargetCount);
-        return new ScrollPresentationRetargetResult(true, segmentStart, segmentDuration);
+        return ScrollPresentationRetargetResult.Started(segmentStart, segmentDuration);
+    }
+
+    internal static bool ShouldStartRetargetSegment(in ScrollState currentState, in ScrollPresentationInterruptDecision decision)
+    {
+        return Math.Abs(currentState.TargetPosition - decision.NextState.TargetPosition) > TargetEpsilon;
     }
 
     private void RecordPresented(DrawingBackendCompositor compositor, NodeKey scrollTargetKey)
@@ -256,23 +271,30 @@ internal sealed class ScrollPresentationFramePump
 
     private readonly struct ScrollPresentationRetargetResult(
         bool Succeeded,
+        bool StartedSegment,
         CompositionTimestamp SegmentStart,
         CompositionDuration SegmentDuration) : IEquatable<ScrollPresentationRetargetResult>
     {
         public bool Succeeded { get; } = Succeeded;
+        public bool StartedSegment { get; } = StartedSegment;
         public CompositionTimestamp SegmentStart { get; } = SegmentStart;
         public CompositionDuration SegmentDuration { get; } = SegmentDuration;
+
+        public static ScrollPresentationRetargetResult Ignored => new(true, false, CompositionTimestamp.Zero, CompositionDuration.Zero);
+
+        public static ScrollPresentationRetargetResult Started(CompositionTimestamp segmentStart, CompositionDuration segmentDuration) => new(true, true, segmentStart, segmentDuration);
 
         public bool Equals(ScrollPresentationRetargetResult other)
         {
             return Succeeded == other.Succeeded
+                && StartedSegment == other.StartedSegment
                 && SegmentStart == other.SegmentStart
                 && SegmentDuration == other.SegmentDuration;
         }
 
         public override bool Equals(object? obj) => obj is ScrollPresentationRetargetResult other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(Succeeded, SegmentStart, SegmentDuration);
+        public override int GetHashCode() => HashCode.Combine(Succeeded, StartedSegment, SegmentStart, SegmentDuration);
 
         public static bool operator ==(ScrollPresentationRetargetResult left, ScrollPresentationRetargetResult right) => left.Equals(right);
 
