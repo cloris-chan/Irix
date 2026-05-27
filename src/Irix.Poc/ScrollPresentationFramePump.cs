@@ -170,7 +170,7 @@ internal sealed class ScrollPresentationFramePump
                 SystemScrollSettings.Default,
                 ScrollPresentationInterruptPolicy.RetargetFromPresented);
         var layoutState = ScrollController.CommitPresented(decision.NextState, decision.NextState.TargetPosition);
-        await runtime.DispatchAndWaitAsync(new CounterMessage.ScrollPresentationInterrupted(decision with { NextState = layoutState }), cancellationToken);
+        await runtime.DispatchAndStageRetainedFrameAsync(new CounterMessage.ScrollPresentationInterrupted(decision with { NextState = layoutState }), cancellationToken);
         var snapshot = translator.LastRetainedInputSnapshot;
         if (snapshot is null)
         {
@@ -185,6 +185,9 @@ internal sealed class ScrollPresentationFramePump
             new CompositionAnimationTimeline(segmentStart, segmentDuration),
             new CompositionScalarAnimation((float)from, retainedScrollY, CompositionAnimationEasing.SineInOut));
         compositor.SetCompositionScrollPresentationDeclaration(declaration, snapshot);
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(segmentStart, cancellationToken);
+        Interlocked.Increment(ref _compositionTickCount);
+        RecordPresented(compositor, scrollTargetKey);
         Interlocked.Increment(ref _retargetCount);
         return new ScrollPresentationRetargetResult(true, segmentStart, segmentDuration);
     }

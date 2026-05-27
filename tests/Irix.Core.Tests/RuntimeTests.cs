@@ -41,6 +41,27 @@ public sealed class RuntimeTests
         await dispatchTask.WaitAsync(cancellationToken);
     }
 
+    [Fact]
+    public async Task DispatchAndStageRetainedFrameAsync_completes_after_retained_frame_stage()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var patchSink = new BlockingRetainedFramePatchSink();
+        await using var runtime = new Runtime<TestModel, TestMessage>(new TestApplication(), patchSink);
+
+        await runtime.StartAsync(cancellationToken);
+
+        var dispatchTask = runtime.DispatchAndStageRetainedFrameAsync(new TestMessage.Increment(), cancellationToken);
+        await patchSink.WaitForStagedPatchAsync(cancellationToken);
+
+        Assert.False(dispatchTask.IsCompleted);
+        Assert.Equal(1, runtime.CurrentModel.Count);
+        Assert.Equal(0, patchSink.WaitedRenderCount);
+        Assert.Equal(1, patchSink.WaitedStageCount);
+
+        patchSink.CompleteStage();
+        await dispatchTask.WaitAsync(cancellationToken);
+    }
+
     private sealed record TestModel(int Count);
 
     private abstract record TestMessage
@@ -130,6 +151,46 @@ public sealed class RuntimeTests
         public void CompleteRender()
         {
             _renderCompleted.TrySetResult();
+        }
+    }
+
+    private sealed class BlockingRetainedFramePatchSink : IRetainedFramePatchSink
+    {
+        private readonly TaskCompletionSource _stagedPatchPublished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _stageCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int WaitedRenderCount { get; private set; }
+        public int WaitedStageCount { get; private set; }
+
+        public ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            patchBatch.Dispose();
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            patchBatch.Dispose();
+            WaitedRenderCount++;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask PublishAndWaitRetainedFrameAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            patchBatch.Dispose();
+            WaitedStageCount++;
+            _stagedPatchPublished.TrySetResult();
+            return new ValueTask(_stageCompleted.Task.WaitAsync(cancellationToken));
+        }
+
+        public Task WaitForStagedPatchAsync(CancellationToken cancellationToken)
+        {
+            return _stagedPatchPublished.Task.WaitAsync(cancellationToken);
+        }
+
+        public void CompleteStage()
+        {
+            _stageCompleted.TrySetResult();
         }
     }
 }

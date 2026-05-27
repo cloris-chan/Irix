@@ -155,6 +155,30 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_publish_and_wait_retained_frame_stages_without_render_async()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new StageRecordingCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var patchOwner = new TrackingMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(1)))
+        ]);
+        var patchBatch = new PatchBatch(patchOwner, 1);
+
+        await loop.PublishAndWaitRetainedFrameAsync(patchBatch, cancellationToken);
+
+        Assert.Equal(1, translator.TranslateCallCount);
+        Assert.Equal(0, compositor.RenderCallCount);
+        Assert.Equal(1, compositor.StageCallCount);
+        Assert.Equal(1, patchOwner.DisposeCallCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_skips_regular_empty_diffs()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -296,6 +320,27 @@ public sealed class BatchOwnershipTests
         public Task WaitForRenderCountAsync(int expectedCount, CancellationToken cancellationToken)
         {
             return WaitForConditionAsync(() => RenderCallCount >= expectedCount, cancellationToken);
+        }
+    }
+
+    private sealed class StageRecordingCompositor : ICompositor, IRetainedFrameStagingCompositor
+    {
+        public int RenderCallCount { get; private set; }
+        public int StageCallCount { get; private set; }
+
+        public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
+        {
+            RenderCallCount++;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask StageRetainedFrameAsync(
+            RenderFrameBatch renderFrameBatch,
+            RetainedRenderFrameSegmentOwnership? ownership,
+            CancellationToken cancellationToken = default)
+        {
+            StageCallCount++;
+            return ValueTask.CompletedTask;
         }
     }
 

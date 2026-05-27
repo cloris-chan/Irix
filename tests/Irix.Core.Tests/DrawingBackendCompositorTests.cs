@@ -294,6 +294,52 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task StageRetainedFrameAsync_updates_scroll_retained_frame_without_regular_execute()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        using var firstFrame = pipeline.Build(CreateScrollRoot(0), new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(firstFrame, cancellationToken);
+        using var stagedFrame = pipeline.Build(CreateScrollRoot(54), new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        var stagedSnapshot = pipeline.LastRetainedInputSnapshot!;
+
+        await compositor.StageRetainedFrameAsync(stagedFrame, null, cancellationToken);
+
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(1, compositor.RenderCount);
+        Assert.Equal(1, compositor.RetainedStageCount);
+        Assert.True(stagedSnapshot.TryGetScrollCompositionTarget(new NodeKey(1), out _));
+
+        var start = CompositionTimestamp.FromStopwatchTicks(100);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(start, CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(0, 54, CompositionAnimationEasing.SineInOut)), stagedSnapshot);
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(start, cancellationToken);
+
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(1, backend.ExecuteCompositionCount);
+        Assert.True(compositor.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(0, presentedScrollY);
+
+        VirtualNode CreateScrollRoot(double scrollY)
+        {
+            return new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(scrollY)],
+                children:
+                [
+                    VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                    VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                    VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                ]);
+        }
+    }
+
+    [Fact]
     public async Task RenderCompositionScrollPresentationTickAsync_decomposes_nested_scroll_clips_into_ordered_layers()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

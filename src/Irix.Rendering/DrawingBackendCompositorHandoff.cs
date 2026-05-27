@@ -29,7 +29,8 @@ internal enum DrawingBackendCompositorHandoffResultKind : byte
     MissingOwner,
     Executed,
     FallbackFull,
-    Rejected
+    Rejected,
+    RetainedFrameStaged
 }
 
 internal enum DrawingBackendCompositorHandoffReason : byte
@@ -107,6 +108,15 @@ internal readonly struct DrawingBackendCompositorHandoffResult(
             ownerResult,
             EmptyCandidateResult,
             reason);
+    }
+
+    public static DrawingBackendCompositorHandoffResult RetainedFrameStaged(SegmentedRetainedFrameProductionOwnerFeedResult ownerResult)
+    {
+        return new DrawingBackendCompositorHandoffResult(
+            DrawingBackendCompositorHandoffResultKind.RetainedFrameStaged,
+            ownerResult,
+            EmptyCandidateResult,
+            DrawingBackendCompositorHandoffReason.None);
     }
 
     public bool Equals(DrawingBackendCompositorHandoffResult other)

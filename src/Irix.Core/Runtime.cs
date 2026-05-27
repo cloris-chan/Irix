@@ -59,6 +59,16 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
 
     internal Task DispatchAndWaitAsync(TMessage message, CancellationToken cancellationToken = default)
     {
+        return DispatchAndWaitCoreAsync(message, stageRetainedFrame: false, cancellationToken);
+    }
+
+    internal Task DispatchAndStageRetainedFrameAsync(TMessage message, CancellationToken cancellationToken = default)
+    {
+        return DispatchAndWaitCoreAsync(message, stageRetainedFrame: true, cancellationToken);
+    }
+
+    private Task DispatchAndWaitCoreAsync(TMessage message, bool stageRetainedFrame, CancellationToken cancellationToken)
+    {
         ObjectDisposedException.ThrowIf(_cancellationTokenSource.IsCancellationRequested, this);
 
         if (cancellationToken.IsCancellationRequested)
@@ -67,7 +77,7 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
         }
 
         var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_messageChannel.Writer.TryWrite(new QueuedMessage(message, processed)))
+        if (!_messageChannel.Writer.TryWrite(new QueuedMessage(message, processed, stageRetainedFrame)))
         {
             throw new InvalidOperationException("Unable to enqueue message.");
         }
@@ -108,6 +118,16 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
                 {
                     await _patchSink.PublishAsync(patchBatch, _cancellationTokenSource.Token);
                 }
+                else if (queuedMessage.StageRetainedFrame)
+                {
+                    if (_patchSink is not IRetainedFramePatchSink retainedFramePatchSink)
+                    {
+                        patchBatch.Dispose();
+                        throw new InvalidOperationException("The current patch sink does not support retained-frame staging.");
+                    }
+
+                    await retainedFramePatchSink.PublishAndWaitRetainedFrameAsync(patchBatch, _cancellationTokenSource.Token);
+                }
                 else
                 {
                     await _patchSink.PublishAndWaitRenderAsync(patchBatch, _cancellationTokenSource.Token);
@@ -124,20 +144,22 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
         }
     }
 
-    private readonly struct QueuedMessage(TMessage Message, TaskCompletionSource? Processed) : IEquatable<QueuedMessage>
+    private readonly struct QueuedMessage(TMessage Message, TaskCompletionSource? Processed, bool StageRetainedFrame = false) : IEquatable<QueuedMessage>
     {
         public TMessage Message { get; } = Message;
         public TaskCompletionSource? Processed { get; } = Processed;
+        public bool StageRetainedFrame { get; } = StageRetainedFrame;
 
         public bool Equals(QueuedMessage other)
         {
             return EqualityComparer<TMessage>.Default.Equals(Message, other.Message)
-                && EqualityComparer<TaskCompletionSource?>.Default.Equals(Processed, other.Processed);
+                && EqualityComparer<TaskCompletionSource?>.Default.Equals(Processed, other.Processed)
+                && StageRetainedFrame == other.StageRetainedFrame;
         }
 
         public override bool Equals(object? obj) => obj is QueuedMessage other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(Message, Processed);
+        public override int GetHashCode() => HashCode.Combine(Message, Processed, StageRetainedFrame);
 
         public static bool operator ==(QueuedMessage left, QueuedMessage right) => left.Equals(right);
 

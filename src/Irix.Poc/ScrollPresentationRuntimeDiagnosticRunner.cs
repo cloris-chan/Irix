@@ -34,6 +34,7 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
             runtime.CurrentModel.Scroll.TargetPosition,
             runtime.CurrentModel.Scroll.IsAnimating,
             compositor.RenderCount,
+            compositor.RetainedStageCount,
             compositor.CompositionTickCount,
             pump.CompositionTickCount,
             pump.RetargetCount,
@@ -44,7 +45,7 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
 
     internal static string Format(in ScrollPresentationRuntimeDiagnostics diagnostics)
     {
-        return $"scroll-presentation-runtime actual position={diagnostics.Position:0.##} target={diagnostics.TargetPosition:0.##} animating={diagnostics.IsAnimating} renderCount={diagnostics.RenderCount} compositorTicks={diagnostics.CompositorTickCount} pumpTicks={diagnostics.PumpTickCount} retargets={diagnostics.RetargetCount} execute={diagnostics.ExecuteCount} executeComposition={diagnostics.ExecuteCompositionCount} lastPresented={diagnostics.LastPresentedScrollY:0.##}";
+        return $"scroll-presentation-runtime actual position={diagnostics.Position:0.##} target={diagnostics.TargetPosition:0.##} animating={diagnostics.IsAnimating} renderCount={diagnostics.RenderCount} retainedStages={diagnostics.RetainedStageCount} compositorTicks={diagnostics.CompositorTickCount} pumpTicks={diagnostics.PumpTickCount} retargets={diagnostics.RetargetCount} execute={diagnostics.ExecuteCount} executeComposition={diagnostics.ExecuteCompositionCount} lastPresented={diagnostics.LastPresentedScrollY:0.##}";
     }
 
     private sealed class DiagnosticWindow(ScreenRegion region) : INativeWindow
@@ -109,6 +110,7 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
     double TargetPosition,
     bool IsAnimating,
     long RenderCount,
+    long RetainedStageCount,
     long CompositorTickCount,
     long PumpTickCount,
     long RetargetCount,
@@ -120,6 +122,7 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
     public double TargetPosition { get; } = TargetPosition;
     public bool IsAnimating { get; } = IsAnimating;
     public long RenderCount { get; } = RenderCount;
+    public long RetainedStageCount { get; } = RetainedStageCount;
     public long CompositorTickCount { get; } = CompositorTickCount;
     public long PumpTickCount { get; } = PumpTickCount;
     public long RetargetCount { get; } = RetargetCount;
@@ -133,6 +136,7 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
             && TargetPosition.Equals(other.TargetPosition)
             && IsAnimating == other.IsAnimating
             && RenderCount == other.RenderCount
+            && RetainedStageCount == other.RetainedStageCount
             && CompositorTickCount == other.CompositorTickCount
             && PumpTickCount == other.PumpTickCount
             && RetargetCount == other.RetargetCount
@@ -150,6 +154,7 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
         hash.Add(TargetPosition);
         hash.Add(IsAnimating);
         hash.Add(RenderCount);
+        hash.Add(RetainedStageCount);
         hash.Add(CompositorTickCount);
         hash.Add(PumpTickCount);
         hash.Add(RetargetCount);

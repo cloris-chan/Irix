@@ -2,7 +2,7 @@ using System.Threading.Channels;
 
 namespace Irix.Rendering;
 
-public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
+public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchSink, IAsyncDisposable
 {
     private readonly ICompositor _compositor;
     private readonly IPatchBatchTranslator _translator;
@@ -33,7 +33,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
 
     public ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
     {
-        return _channel.Writer.WriteAsync(new CompositorWorkItem(patchBatch, null), cancellationToken);
+        return _channel.Writer.WriteAsync(new CompositorWorkItem(patchBatch, null, CompositorWorkMode.Render), cancellationToken);
     }
 
     public ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
@@ -45,10 +45,28 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
 
         var waitGroup = new RenderCompletionWaitGroup();
         var waitTask = waitGroup.AddWaiter();
-        if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup)))
+        if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup, CompositorWorkMode.Render)))
         {
             patchBatch.Dispose();
             waitGroup.Complete(new InvalidOperationException("Unable to enqueue patch batch."));
+        }
+
+        return new ValueTask(waitTask.WaitAsync(cancellationToken));
+    }
+
+    public ValueTask PublishAndWaitRetainedFrameAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        var waitGroup = new RenderCompletionWaitGroup();
+        var waitTask = waitGroup.AddWaiter();
+        if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup, CompositorWorkMode.RetainedFrameStage)))
+        {
+            patchBatch.Dispose();
+            waitGroup.Complete(new InvalidOperationException("Unable to enqueue retained-frame patch batch."));
         }
 
         return new ValueTask(waitTask.WaitAsync(cancellationToken));
@@ -133,7 +151,17 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
                 using (patchBatch)
                 {
                     using var renderFrameBatch = _translator.Translate(patchBatch);
-                    if (_ownershipProvider?.Invoke() is { } ownership
+                    var ownership = _ownershipProvider?.Invoke();
+                    if (workItem.Mode == CompositorWorkMode.RetainedFrameStage)
+                    {
+                        if (_compositor is not IRetainedFrameStagingCompositor stagingCompositor)
+                        {
+                            throw new InvalidOperationException("The current compositor does not support retained-frame staging.");
+                        }
+
+                        await stagingCompositor.StageRetainedFrameAsync(renderFrameBatch, ownership);
+                    }
+                    else if (ownership is not null
                         && _compositor is DrawingBackendCompositor drawingBackendCompositor)
                     {
                         await drawingBackendCompositor.RenderAsync(renderFrameBatch, ownership);
@@ -159,7 +187,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
     private void ScheduleRenderRequest(RenderCompletionWaitGroup waitGroup)
     {
         var patchBatch = PatchBatch.CreateRenderRequest();
-        if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup)))
+        if (!_channel.Writer.TryWrite(new CompositorWorkItem(patchBatch, waitGroup, CompositorWorkMode.Render)))
         {
             patchBatch.Dispose();
             MarkRenderRequestScheduleFailed(waitGroup);
@@ -192,20 +220,28 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IAsyncDisposable
         }
     }
 
-    private readonly struct CompositorWorkItem(PatchBatch PatchBatch, CompositorLoop.RenderCompletionWaitGroup? RenderCompletionWaitGroup) : IEquatable<CompositorWorkItem>
+    private enum CompositorWorkMode : byte
+    {
+        Render,
+        RetainedFrameStage
+    }
+
+    private readonly struct CompositorWorkItem(PatchBatch PatchBatch, CompositorLoop.RenderCompletionWaitGroup? RenderCompletionWaitGroup, CompositorLoop.CompositorWorkMode Mode) : IEquatable<CompositorWorkItem>
     {
         public PatchBatch PatchBatch { get; } = PatchBatch;
         public RenderCompletionWaitGroup? RenderCompletionWaitGroup { get; } = RenderCompletionWaitGroup;
+        public CompositorWorkMode Mode { get; } = Mode;
 
         public bool Equals(CompositorWorkItem other)
         {
             return PatchBatch.Equals(other.PatchBatch)
-                && EqualityComparer<RenderCompletionWaitGroup?>.Default.Equals(RenderCompletionWaitGroup, other.RenderCompletionWaitGroup);
+                && EqualityComparer<RenderCompletionWaitGroup?>.Default.Equals(RenderCompletionWaitGroup, other.RenderCompletionWaitGroup)
+                && Mode == other.Mode;
         }
 
         public override bool Equals(object? obj) => obj is CompositorWorkItem other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(PatchBatch, RenderCompletionWaitGroup);
+        public override int GetHashCode() => HashCode.Combine(PatchBatch, RenderCompletionWaitGroup, Mode);
 
         public static bool operator ==(CompositorWorkItem left, CompositorWorkItem right) => left.Equals(right);
 

@@ -2006,9 +2006,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(54, diagnostics.TargetPosition);
         Assert.False(diagnostics.IsAnimating);
         Assert.Equal(1, diagnostics.RetargetCount);
+        Assert.Equal(1, diagnostics.RetainedStageCount);
+        Assert.Equal(2, diagnostics.ExecuteCount);
         Assert.True(diagnostics.ExecuteCompositionCount > 0);
         Assert.True(diagnostics.PumpTickCount > 0);
         Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False", summary);
+        Assert.Contains("retainedStages=1", summary);
+        Assert.Contains("execute=2", summary);
         Assert.Contains("lastPresented=54", summary);
     }
 

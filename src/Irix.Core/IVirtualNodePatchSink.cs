@@ -6,3 +6,8 @@ public interface IVirtualNodePatchSink
 
     ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default);
 }
+
+internal interface IRetainedFramePatchSink : IVirtualNodePatchSink
+{
+    ValueTask PublishAndWaitRetainedFrameAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default);
+}

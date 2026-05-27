@@ -11,7 +11,7 @@ namespace Irix.Rendering;
 /// Caches hit targets from the frame for input routing.
 /// This is the bridge between the RenderFrameBatch world and the IDrawingBackend world.
 /// </summary>
-public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IDisposable
+public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, IDisposable
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
@@ -26,6 +26,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private long _partialApplyCount;
     private long _fullApplyCount;
     private long _emptyFrameCount;
+    private long _retainedStageCount;
     private DisplayScale _displayScale = DisplayScale.Identity;
     private PixelRectangle _physicalViewport;
     private long _lastFrameTimeTicks;
@@ -82,6 +83,9 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     /// <summary>Number of empty frames received (commands.Count == 0).</summary>
     public long EmptyFrameCount => _emptyFrameCount;
+
+    /// <summary>Number of retained frames staged without a regular backend present.</summary>
+    public long RetainedStageCount => Volatile.Read(ref _retainedStageCount);
 
     /// <summary>Number of compositor-only animation ticks executed over the retained frame.</summary>
     public long CompositionTickCount => Volatile.Read(ref _compositionTickCount);
@@ -342,67 +346,23 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         FrameContext frameContext,
         CancellationToken cancellationToken = default)
     {
-        if (renderFrameBatch.Commands.Count == 0)
+        if (cancellationToken.IsCancellationRequested)
         {
-            lock (_hitTargetsLock)
-            {
-                _hitTargets = [];
-            }
-
-            Interlocked.Increment(ref _emptyFrameCount);
-            _retainedFrame.ReleaseResources();
-            _retainedFrame.Invalidate();
-            _lastAppliedFrameId = 0;
-            ClearCompositionPlan();
-            LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
-            LastPartialApplySucceeded = false;
-            LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
-            return ValueTask.CompletedTask;
+            return ValueTask.FromCanceled(cancellationToken);
         }
 
         var sw = Stopwatch.StartNew();
-
-        // Cross-frame partial apply guard: only allow partial apply when the batch's
-        // resources are the same FrameDrawingResources instance AND same rental cycle
-        // (FrameId) as the last apply. This prevents a recycled pooled instance from
-        // being misidentified as "same frame scope".
-        var batchFrameId = renderFrameBatch.Resources is FrameDrawingResources fdr ? fdr.FrameId : 0ul;
-        var isSameFrameScope = batchFrameId != 0 && batchFrameId == _lastAppliedFrameId;
-
-        var retainedPartialApplySucceeded = false;
-        if (isSameFrameScope && renderFrameBatch.DirtyCommandRanges.Count > 0)
+        var stage = ApplyRetainedFrame(renderFrameBatch, ownership);
+        if (!stage.HasCommands)
         {
-            retainedPartialApplySucceeded = _retainedFrame.TryApplyPartial(renderFrameBatch);
+            return ValueTask.CompletedTask;
         }
 
-        if (!retainedPartialApplySucceeded)
+        if (stage.HandoffSelection.Selected)
         {
-            // Release old retained resources before taking new ones
-            _retainedFrame.ReleaseResources();
-            _retainedFrame.ApplyFull(renderFrameBatch);
-            // Take ownership: prevent batch.Dispose() from returning resources to pool
-            _retainedFrame.RetainResources();
-        }
-
-        _lastAppliedFrameId = batchFrameId;
-        LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
-        ClearCompositionPresentationState();
-
-        var handoffSelection = ResolveHandoffSelection(renderFrameBatch, ownership);
-        if (handoffSelection.Selected)
-        {
-            LastHandoffResult = ExecuteSelectedHandoffFrame(ownership!, handoffSelection.OwnerResult, frameContext);
+            LastHandoffResult = ExecuteSelectedHandoffFrame(ownership!, stage.HandoffSelection.OwnerResult, frameContext);
             LastPartialApplySucceeded = LastHandoffResult.CandidateResult.Counters.LastPartialApplySucceeded;
-            Interlocked.Increment(ref _renderCount);
-            if (LastPartialApplySucceeded)
-            {
-                Interlocked.Increment(ref _partialApplyCount);
-            }
-            else
-            {
-                Interlocked.Increment(ref _fullApplyCount);
-            }
-
+            RecordRenderedApply(LastPartialApplySucceeded);
             RecordFrameTime(sw);
 
             lock (_hitTargetsLock)
@@ -413,17 +373,9 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return ValueTask.CompletedTask;
         }
 
-        LastHandoffResult = handoffSelection.Result;
-        LastPartialApplySucceeded = retainedPartialApplySucceeded;
-        Interlocked.Increment(ref _renderCount);
-        if (LastPartialApplySucceeded)
-        {
-            Interlocked.Increment(ref _partialApplyCount);
-        }
-        else
-        {
-            Interlocked.Increment(ref _fullApplyCount);
-        }
+        LastHandoffResult = stage.HandoffSelection.Result;
+        LastPartialApplySucceeded = stage.RetainedPartialApplySucceeded;
+        RecordRenderedApply(LastPartialApplySucceeded);
 
         // Execute backend from the retained frame (zero-alloc: no ToBatch copy).
         if (_retainedFrame.TryReadFrame(out var commands, out var resources))
@@ -459,6 +411,106 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _hitTargets = [.. _retainedFrame.HitTargets];
         }
         return ValueTask.CompletedTask;
+    }
+
+    ValueTask IRetainedFrameStagingCompositor.StageRetainedFrameAsync(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership,
+        CancellationToken cancellationToken)
+    {
+        return StageRetainedFrameAsync(renderFrameBatch, ownership, cancellationToken);
+    }
+
+    internal ValueTask StageRetainedFrameAsync(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership,
+        CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        var stage = ApplyRetainedFrame(renderFrameBatch, ownership);
+        Interlocked.Increment(ref _retainedStageCount);
+        if (!stage.HasCommands)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        LastHandoffResult = stage.HandoffSelection.Selected
+            ? DrawingBackendCompositorHandoffResult.RetainedFrameStaged(stage.HandoffSelection.OwnerResult)
+            : stage.HandoffSelection.Result;
+        LastPartialApplySucceeded = stage.RetainedPartialApplySucceeded;
+
+        lock (_hitTargetsLock)
+        {
+            _hitTargets = [.. _retainedFrame.HitTargets];
+        }
+
+        return ValueTask.CompletedTask;
+    }
+
+    private RetainedFrameStageResult ApplyRetainedFrame(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership)
+    {
+        if (renderFrameBatch.Commands.Count == 0)
+        {
+            lock (_hitTargetsLock)
+            {
+                _hitTargets = [];
+            }
+
+            Interlocked.Increment(ref _emptyFrameCount);
+            _retainedFrame.ReleaseResources();
+            _retainedFrame.Invalidate();
+            _lastAppliedFrameId = 0;
+            ClearCompositionPlan();
+            LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
+            LastPartialApplySucceeded = false;
+            LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
+            return default;
+        }
+
+        // Cross-frame partial apply guard: only allow partial apply when the batch's
+        // resources are the same FrameDrawingResources instance AND same rental cycle
+        // (FrameId) as the last apply. This prevents a recycled pooled instance from
+        // being misidentified as "same frame scope".
+        var batchFrameId = renderFrameBatch.Resources is FrameDrawingResources fdr ? fdr.FrameId : 0ul;
+        var isSameFrameScope = batchFrameId != 0 && batchFrameId == _lastAppliedFrameId;
+
+        var retainedPartialApplySucceeded = false;
+        if (isSameFrameScope && renderFrameBatch.DirtyCommandRanges.Count > 0)
+        {
+            retainedPartialApplySucceeded = _retainedFrame.TryApplyPartial(renderFrameBatch);
+        }
+
+        if (!retainedPartialApplySucceeded)
+        {
+            // Release old retained resources before taking new ones.
+            _retainedFrame.ReleaseResources();
+            _retainedFrame.ApplyFull(renderFrameBatch);
+            _retainedFrame.RetainResources();
+        }
+
+        _lastAppliedFrameId = batchFrameId;
+        LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
+        ClearCompositionPresentationState();
+        return new RetainedFrameStageResult(true, retainedPartialApplySucceeded, ResolveHandoffSelection(renderFrameBatch, ownership));
+    }
+
+    private void RecordRenderedApply(bool partialApplySucceeded)
+    {
+        Interlocked.Increment(ref _renderCount);
+        if (partialApplySucceeded)
+        {
+            Interlocked.Increment(ref _partialApplyCount);
+        }
+        else
+        {
+            Interlocked.Increment(ref _fullApplyCount);
+        }
     }
 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAsync(
@@ -711,6 +763,31 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
                 DrawingBackendCompositorHandoffReason.BackendThrewBeforeCommit);
             throw;
         }
+    }
+
+    private readonly struct RetainedFrameStageResult(
+        bool HasCommands,
+        bool RetainedPartialApplySucceeded,
+        HandoffSelection HandoffSelection) : IEquatable<RetainedFrameStageResult>
+    {
+        public bool HasCommands { get; } = HasCommands;
+        public bool RetainedPartialApplySucceeded { get; } = RetainedPartialApplySucceeded;
+        public HandoffSelection HandoffSelection { get; } = HandoffSelection;
+
+        public bool Equals(RetainedFrameStageResult other)
+        {
+            return HasCommands == other.HasCommands
+                && RetainedPartialApplySucceeded == other.RetainedPartialApplySucceeded
+                && HandoffSelection.Equals(other.HandoffSelection);
+        }
+
+        public override bool Equals(object? obj) => obj is RetainedFrameStageResult other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(HasCommands, RetainedPartialApplySucceeded, HandoffSelection);
+
+        public static bool operator ==(RetainedFrameStageResult left, RetainedFrameStageResult right) => left.Equals(right);
+
+        public static bool operator !=(RetainedFrameStageResult left, RetainedFrameStageResult right) => !left.Equals(right);
     }
 
     private readonly struct HandoffSelection(
