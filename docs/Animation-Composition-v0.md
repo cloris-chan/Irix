@@ -1,6 +1,6 @@
 # Animation / Composition v0
 
-> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. A narrow transform/opacity compositor tick exists; a public animation API does not.
+> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets; a public animation API does not exist.
 
 ## Goals
 
@@ -84,7 +84,7 @@ Runtime fallback is acceptable only when the GPU-first path exposes a concrete b
 
 ## Compositor Animation Contract
 
-Compositor animation entries are expressed as data, not as callbacks into app/runtime each tick. The current internal form is `CompositionAnimationPlan` for a single transform/opacity layer:
+Compositor animation entries are expressed as data, not as callbacks into app/runtime each tick. Runtime-facing internal code declares target intent with `CompositionAnimationDeclaration`; the compositor resolves that through `RenderPipelineRetainedInputSnapshot` into a `CompositionAnimationPlan` for a single transform/opacity layer:
 
 | Field | Purpose |
 |-------|---------|
@@ -96,7 +96,7 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 | Commit policy | Whether and when final presented state updates logical runtime state. |
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 
-The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` path with typed timestamps. Normal render pipeline snapshots now resolve internal `NodeKey`-addressable `CompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. The next missing contract is the runtime-owned animation declaration that consumes those targets.
+The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` path with typed timestamps. Normal render pipeline snapshots resolve internal `NodeKey`-addressable `CompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. `DrawingBackendCompositor.SetCompositionAnimationDeclaration` installs runtime declarations only after the declaration resolves against the retained frame, so the runtime path no longer guesses command ranges.
 
 ## Invalidation Rules
 

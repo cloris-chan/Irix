@@ -335,7 +335,7 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
-    public void CompositionAnimationPlan_can_target_normal_ui_node_key()
+    public void CompositionAnimationDeclaration_resolves_normal_ui_node_key()
     {
         var pipeline = new RenderPipeline();
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
@@ -345,24 +345,70 @@ public sealed class DrawingBackendCompositorTests
         var snapshot = pipeline.LastRetainedInputSnapshot!;
 
         Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(3), out var target));
-        var plan = new CompositionAnimationPlan(new CompositionLayerAnimation(
-            target.LayerId,
-            target.CommandStart,
-            target.CommandCount,
+        var declaration = new CompositionAnimationDeclaration(
+            new NodeKey(3),
             new CompositionAnimationTimeline(
                 CompositionTimestamp.Zero,
                 CompositionDuration.FromStopwatchTicks(10)),
             new CompositionTransformAnimation(
                 new CompositionScalarAnimation(0, 20),
                 CompositionScalarAnimation.Constant(0)),
-            CompositionScalarAnimation.Constant(1f)));
+            CompositionScalarAnimation.Constant(1f));
 
+        Assert.True(declaration.TryResolve(snapshot, out var plan));
         var layer = plan.Evaluate(frame.Commands.Count, CompositionTimestamp.FromStopwatchTicks(5)).Layer;
 
         Assert.Equal(target.LayerId, layer.Id);
         Assert.Equal(target.CommandStart, layer.CommandStart);
         Assert.Equal(target.CommandCount, layer.CommandCount);
         Assert.Equal(10, layer.Transform.TranslateX);
+    }
+
+    [Fact]
+    public void CompositionAnimationDeclaration_rejects_missing_target()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Static", new NodeKey(2)));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        var declaration = new CompositionAnimationDeclaration(
+            new NodeKey(404),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f));
+
+        Assert.False(declaration.TryResolve(pipeline.LastRetainedInputSnapshot!, frame.Commands.Count, out _));
+    }
+
+    [Fact]
+    public async Task SetCompositionAnimationDeclaration_installs_resolved_plan_for_tick()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(3)));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var declaration = new CompositionAnimationDeclaration(
+            new NodeKey(3),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(0, 20),
+                CompositionScalarAnimation.Constant(0)),
+            CompositionScalarAnimation.Constant(1f));
+
+        compositor.SetCompositionAnimationDeclaration(declaration, pipeline.LastRetainedInputSnapshot!);
+        var result = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(5), cancellationToken);
+
+        Assert.Equal(1, result.LayerCount);
+        Assert.Equal(new CompositionLayerId(3), backend.LastCompositionFrame.Layer.Id);
+        Assert.Equal(10, backend.LastCompositionFrame.Layer.Transform.TranslateX);
     }
 
     [Fact]

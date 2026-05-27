@@ -9,6 +9,9 @@ internal static class CompositionTransformDemoRunner
 {
     private const int DefaultDemoDurationMs = 4000;
     private const int AnimationDurationMs = 1600;
+    private static readonly NodeKey DemoRootKey = new(2001);
+    private static readonly NodeKey DemoBackdropKey = new(2002);
+    private static readonly NodeKey DemoAnimatedTargetKey = new(2003);
 
     internal static async Task RunAsync(
         TextWriter output,
@@ -34,101 +37,102 @@ internal static class CompositionTransformDemoRunner
             compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
         };
 
-        var resources = FrameDrawingResources.Rent();
-        try
+        var arena = new VirtualTextArena();
+        var pipeline = new RenderPipeline();
+        var root = BuildDemoRoot(arena);
+        using var staticFrame = pipeline.Build(root, new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), arena.GetOrCreateSnapshot());
+        compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
+        await compositor.RenderAsync(staticFrame, cancellationToken);
+
+        var animationStartTimestamp = CompositionTimestamp.Now();
+        var declaration = BuildAnimationDeclaration(animationStartTimestamp);
+        compositor.SetCompositionAnimationDeclaration(declaration, pipeline.LastRetainedInputSnapshot!);
+
+        output.WriteLine("=== D3D12 Composition Transform Demo ===");
+        output.WriteLine($"Duration: {demoDurationMs}ms");
+        output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
+        output.WriteLine($"Initial display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
+        output.WriteLine($"Animation clock: Stopwatch, duration: {AnimationDurationMs}ms, repeat: alternate");
+        output.WriteLine("Demo model: retained UI frame, NodeKey-targeted animation declaration, compositor-owned transform/opacity ticks, D3D12-backed presentation.");
+
+        var frameDelayMs = ResolveFrameDelayMilliseconds(screen.RefreshRateHz);
+        var demoEndTimestamp = animationStartTimestamp + CompositionDuration.FromMilliseconds(demoDurationMs);
+        var lastExecution = default(CompositionBackendExecutionResult);
+        var tickIndex = 0;
+        while (true)
         {
-            var commands = CompositionTransformDiagnosticRunner.BuildCommands(resources);
-            resources.Seal();
-            compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
-            using var staticFrame = new RenderFrameBatch(
-                new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(commands), commands.Length),
-                [],
-                resources);
-            await compositor.RenderAsync(staticFrame, cancellationToken);
-            var animationStartTimestamp = CompositionTimestamp.Now();
-            var animationPlan = BuildAnimationPlan(commands.Length, animationStartTimestamp);
-            compositor.SetCompositionAnimationPlan(animationPlan);
-
-            output.WriteLine("=== D3D12 Composition Transform Demo ===");
-            output.WriteLine($"Duration: {demoDurationMs}ms");
-            output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
-            output.WriteLine($"Initial display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
-            output.WriteLine($"Animation clock: Stopwatch, duration: {AnimationDurationMs}ms, repeat: alternate");
-            output.WriteLine("Demo model: static retained frame, compositor-owned transform/opacity animation ticks, D3D12-backed presentation.");
-
-            var frameDelayMs = ResolveFrameDelayMilliseconds(screen.RefreshRateHz);
-            var demoEndTimestamp = animationStartTimestamp + CompositionDuration.FromMilliseconds(demoDurationMs);
-            var lastExecution = default(CompositionBackendExecutionResult);
-            var tickIndex = 0;
-            while (true)
+            cancellationToken.ThrowIfCancellationRequested();
+            var timestamp = CompositionTimestamp.Now();
+            if (tickIndex > 0 && timestamp >= demoEndTimestamp)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var timestamp = CompositionTimestamp.Now();
-                if (tickIndex > 0 && timestamp >= demoEndTimestamp)
-                {
-                    break;
-                }
-
-                _ = d3d12Renderer.ApplyPendingResize();
-                compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
-                lastExecution = await compositor.RenderCompositionAnimationTickAsync(cancellationToken);
-                tickIndex++;
-                if (d3d12Renderer.IsDeviceRemoved)
-                {
-                    break;
-                }
-
-                var remaining = demoEndTimestamp - CompositionTimestamp.Now();
-                if (!remaining.IsPositive)
-                {
-                    break;
-                }
-
-                if (frameDelayMs > 0)
-                {
-                    await Task.Delay(Math.Min(frameDelayMs, remaining.ToPositiveMillisecondsCeiling()), cancellationToken);
-                }
+                break;
             }
 
-            var frameSerial = d3d12Backend.FrameSerialDiagnostics;
-            output.WriteLine(FormatDemoSummary(
-                lastExecution,
-                demoDurationMs,
-                compositor.RenderCount,
-                compositor.CompositionTickCount,
-                frameSerial.FrameSerial,
-                frameSerial.PresentSerial,
-                frameSerial.SyncWaitCount,
-                d3d12Renderer.IsDeviceRemoved));
-            output.WriteLine("=== d3d12 composition transform demo complete ===");
+            _ = d3d12Renderer.ApplyPendingResize();
+            compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
+            lastExecution = await compositor.RenderCompositionAnimationTickAsync(cancellationToken);
+            tickIndex++;
+            if (d3d12Renderer.IsDeviceRemoved)
+            {
+                break;
+            }
+
+            var remaining = demoEndTimestamp - CompositionTimestamp.Now();
+            if (!remaining.IsPositive)
+            {
+                break;
+            }
+
+            if (frameDelayMs > 0)
+            {
+                await Task.Delay(Math.Min(frameDelayMs, remaining.ToPositiveMillisecondsCeiling()), cancellationToken);
+            }
         }
-        finally
-        {
-            FrameDrawingResources.Return(resources);
-        }
+
+        var frameSerial = d3d12Backend.FrameSerialDiagnostics;
+        output.WriteLine(FormatDemoSummary(
+            lastExecution,
+            demoDurationMs,
+            compositor.RenderCount,
+            compositor.CompositionTickCount,
+            frameSerial.FrameSerial,
+            frameSerial.PresentSerial,
+            frameSerial.SyncWaitCount,
+            d3d12Renderer.IsDeviceRemoved));
+        output.WriteLine("=== d3d12 composition transform demo complete ===");
     }
 
-    internal static CompositionAnimationPlan BuildAnimationPlan(int commandCount, CompositionTimestamp startTimestamp)
+    internal static VirtualNode BuildDemoRoot(VirtualTextArena arena)
     {
-        return BuildAnimationPlan(commandCount, startTimestamp, AnimationDuration);
+        return VirtualNodeFactory.ScrollContainer(DemoRootKey,
+            VirtualNodeFactory.Rectangle(DemoBackdropKey, VirtualNodeProperty.Width(280), VirtualNodeProperty.Height(84)),
+            VirtualNodeBuilder.Button(arena, "composition d3d12", DemoAnimatedTargetKey, VirtualNodeProperty.Width(220)));
     }
 
-    internal static CompositionAnimationPlan BuildAnimationPlan(int commandCount, CompositionTimestamp startTimestamp, CompositionDuration duration)
+    internal static CompositionAnimationDeclaration BuildAnimationDeclaration(CompositionTimestamp startTimestamp)
     {
-        return new CompositionAnimationPlan(new CompositionLayerAnimation(
-            new CompositionLayerId(1),
-            CommandStart: 1,
-            CommandCount: commandCount - 1,
+        return BuildAnimationDeclaration(startTimestamp, AnimationDuration);
+    }
+
+    internal static CompositionAnimationDeclaration BuildAnimationDeclaration(CompositionTimestamp startTimestamp, CompositionDuration duration)
+    {
+        return new CompositionAnimationDeclaration(
+            DemoAnimatedTargetKey,
             new CompositionAnimationTimeline(startTimestamp, duration.IsPositive ? duration : CompositionDuration.FromMilliseconds(AnimationDurationMs), CompositionAnimationRepeatMode.Alternate),
             new CompositionTransformAnimation(
                 new CompositionScalarAnimation(24f, 120f, CompositionAnimationEasing.SineInOut),
                 new CompositionScalarAnimation(18f, 42f, CompositionAnimationEasing.SineInOut)),
-            new CompositionScalarAnimation(0.95f, 0.55f, CompositionAnimationEasing.SineInOut)));
+            new CompositionScalarAnimation(0.95f, 0.55f, CompositionAnimationEasing.SineInOut));
     }
 
-    internal static CompositionFrame BuildAnimatedCompositionFrameAt(int commandCount, CompositionDuration elapsed)
+    internal static CompositionFrame BuildAnimatedCompositionFrameAt(RenderPipelineRetainedInputSnapshot snapshot, CompositionDuration elapsed)
     {
-        return BuildAnimationPlan(commandCount, CompositionTimestamp.Zero).Evaluate(commandCount, CompositionTimestamp.Zero + elapsed);
+        if (!BuildAnimationDeclaration(CompositionTimestamp.Zero).TryResolve(snapshot, out var plan))
+        {
+            throw new ArgumentException("Composition demo animation target must resolve from the retained input snapshot.", nameof(snapshot));
+        }
+
+        return plan.Evaluate(snapshot.CommandCount, CompositionTimestamp.Zero + elapsed);
     }
 
     internal static string FormatDemoSummary(

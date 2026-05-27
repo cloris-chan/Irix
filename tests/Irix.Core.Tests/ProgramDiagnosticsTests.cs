@@ -1904,18 +1904,21 @@ public sealed class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        using var resources = FrameDrawingResources.Rent();
-        var commands = CompositionTransformDiagnosticRunner.BuildCommands(resources);
-        resources.Seal();
-        var first = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(commands.Length, CompositionDuration.Zero);
-        var middle = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(commands.Length, CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency));
+        var arena = new VirtualTextArena();
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            CompositionTransformDemoRunner.BuildDemoRoot(arena),
+            new PixelRectangle(0, 0, 640, 360),
+            arena.GetOrCreateSnapshot());
+        var first = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(pipeline.LastRetainedInputSnapshot!, CompositionDuration.Zero);
+        var middle = CompositionTransformDemoRunner.BuildAnimatedCompositionFrameAt(pipeline.LastRetainedInputSnapshot!, CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency));
         var summary = CompositionTransformDemoRunner.FormatDemoSummary(
             new CompositionBackendExecutionResult(
                 D3D12Backed: true,
                 LayerCount: 1,
-                CommandCount: commands.Length,
-                TranslatedCommands: commands.Length - 1,
-                OpacityAppliedCommands: commands.Length - 1),
+                CommandCount: frame.Commands.Count,
+                TranslatedCommands: first.Layer.CommandCount,
+                OpacityAppliedCommands: first.Layer.CommandCount),
             demoDurationMs: 4000,
             renderCount: 1,
             compositionTickCount: 120,
@@ -1926,26 +1929,33 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--composition-demo", programSource);
         Assert.Contains("CompositionTransformDemoRunner.RunAsync", programSource);
-        Assert.Equal(1, first.Layer.Id.Value);
-        Assert.Equal(1, first.Layer.CommandStart);
-        Assert.Equal(commands.Length - 1, first.Layer.CommandCount);
+        Assert.Equal(2003, first.Layer.Id.Value);
+        Assert.True(first.Layer.CommandStart >= 0);
+        Assert.True(first.Layer.CommandCount > 0);
         Assert.NotEqual(first.Layer.Transform, middle.Layer.Transform);
         Assert.NotEqual(first.Layer.Opacity, middle.Layer.Opacity);
-        Assert.Equal("composition.demo finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 translatedCommands=2 opacityAppliedCommands=2 clock=Stopwatch demoDurationMs=4000 animationDurationMs=1600 renderCount=1 compositionTicks=120 frameSerial=120 presentSerial=120 syncWaits=0 deviceRemoved=False", summary);
+        Assert.Equal($"composition.demo finalComposition=D3D12 d3d12Backed=True layers=1 commands={frame.Commands.Count} translatedCommands={first.Layer.CommandCount} opacityAppliedCommands={first.Layer.CommandCount} clock=Stopwatch demoDurationMs=4000 animationDurationMs=1600 renderCount=1 compositionTicks=120 frameSerial=120 presentSerial=120 syncWaits=0 deviceRemoved=False", summary);
     }
 
     [Fact]
     public void Composition_transform_demo_progress_is_elapsed_time_based_not_frame_rate_based()
     {
-        using var resources = FrameDrawingResources.Rent();
-        var commands = CompositionTransformDiagnosticRunner.BuildCommands(resources);
-        resources.Seal();
+        var arena = new VirtualTextArena();
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            CompositionTransformDemoRunner.BuildDemoRoot(arena),
+            new PixelRectangle(0, 0, 640, 360),
+            arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
         var duration = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency);
-        var plan60Hz = CompositionTransformDemoRunner.BuildAnimationPlan(commands.Length, CompositionTimestamp.Zero, duration);
-        var plan240Hz = CompositionTransformDemoRunner.BuildAnimationPlan(commands.Length, CompositionTimestamp.Zero, duration);
+        var declaration60Hz = CompositionTransformDemoRunner.BuildAnimationDeclaration(CompositionTimestamp.Zero, duration);
+        var declaration240Hz = CompositionTransformDemoRunner.BuildAnimationDeclaration(CompositionTimestamp.Zero, duration);
         var halfSecond = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 2);
-        var frameAt60Hz = plan60Hz.Evaluate(commands.Length, CompositionTimestamp.Zero + halfSecond).Layer;
-        var frameAt240Hz = plan240Hz.Evaluate(commands.Length, CompositionTimestamp.Zero + halfSecond).Layer;
+
+        Assert.True(declaration60Hz.TryResolve(snapshot, frame.Commands.Count, out var plan60Hz));
+        Assert.True(declaration240Hz.TryResolve(snapshot, frame.Commands.Count, out var plan240Hz));
+        var frameAt60Hz = plan60Hz.Evaluate(frame.Commands.Count, CompositionTimestamp.Zero + halfSecond).Layer;
+        var frameAt240Hz = plan240Hz.Evaluate(frame.Commands.Count, CompositionTimestamp.Zero + halfSecond).Layer;
 
         Assert.Equal(frameAt60Hz.Transform, frameAt240Hz.Transform);
         Assert.Equal(frameAt60Hz.Opacity, frameAt240Hz.Opacity);

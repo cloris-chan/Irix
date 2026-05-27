@@ -373,6 +373,61 @@ internal readonly struct CompositionAnimationPlan(CompositionLayerAnimation Laye
     public static bool operator !=(CompositionAnimationPlan left, CompositionAnimationPlan right) => !left.Equals(right);
 }
 
+internal readonly struct CompositionAnimationDeclaration(
+    NodeKey TargetKey,
+    CompositionAnimationTimeline Timeline,
+    CompositionTransformAnimation Transform,
+    CompositionScalarAnimation Opacity) : IEquatable<CompositionAnimationDeclaration>
+{
+    public NodeKey TargetKey { get; } = TargetKey;
+    public CompositionAnimationTimeline Timeline { get; } = Timeline;
+    public CompositionTransformAnimation Transform { get; } = Transform;
+    public CompositionScalarAnimation Opacity { get; } = Opacity;
+
+    public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, out CompositionAnimationPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return TryResolve(snapshot, snapshot.CommandCount, out plan);
+    }
+
+    public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, int commandCount, out CompositionAnimationPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (TargetKey == NodeKey.None
+            || !snapshot.TryGetCompositionTarget(TargetKey, commandCount, out var target)
+            || !target.IsValidForCommandCount(commandCount))
+        {
+            plan = default;
+            return false;
+        }
+
+        plan = new CompositionAnimationPlan(new CompositionLayerAnimation(
+            target.LayerId,
+            target.CommandStart,
+            target.CommandCount,
+            Timeline,
+            Transform,
+            Opacity));
+        return true;
+    }
+
+    public bool Equals(CompositionAnimationDeclaration other)
+    {
+        return TargetKey == other.TargetKey
+            && Timeline == other.Timeline
+            && Transform == other.Transform
+            && Opacity == other.Opacity;
+    }
+
+    public override bool Equals(object? obj) => obj is CompositionAnimationDeclaration other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(TargetKey, Timeline, Transform, Opacity);
+
+    public static bool operator ==(CompositionAnimationDeclaration left, CompositionAnimationDeclaration right) => left.Equals(right);
+
+    public static bool operator !=(CompositionAnimationDeclaration left, CompositionAnimationDeclaration right) => !left.Equals(right);
+}
+
 internal readonly struct CompositionLayer(
     CompositionLayerId Id,
     int CommandStart,

@@ -595,12 +595,19 @@ internal sealed record RenderPipelineRetainedInputSnapshot(
     TextBufferSnapshot? PreviousTextSnapshot = null,
     TextBufferSnapshot? TextSnapshot = null)
 {
+    public int CommandCount => ResolveCommandCount(ElementCommandRanges);
+
     public bool TryGetCompositionTarget(NodeKey key, out CompositionTarget target)
+    {
+        return TryGetCompositionTarget(key, CommandCount, out target);
+    }
+
+    internal bool TryGetCompositionTarget(NodeKey key, int commandCount, out CompositionTarget target)
     {
         return RenderPipeline.TryResolveCompositionTarget(
             LayoutResult.TreeNodes,
             ElementCommandRanges,
-            ResolveCommandCount(ElementCommandRanges),
+            commandCount,
             key,
             out target);
     }

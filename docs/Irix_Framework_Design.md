@@ -56,7 +56,7 @@ Win32 input
   -> diff/patch
   -> RenderPipeline layout + retained frame
   -> DrawCommand + FrameDrawingResources + HitTestTarget
-  -> DrawingBackendCompositor retained frame / optional CompositionAnimationPlan tick
+  -> DrawingBackendCompositor retained frame / optional CompositionAnimationDeclaration tick
   -> D3D12 rect pass + D3D12 GlyphAtlas text pass
   -> Present
 ```
@@ -91,7 +91,7 @@ High-level rules:
 - Composition style covers transform, opacity, layer clip, and presented scroll offset.
 - Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
 - Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
-- The first composition implementation targets a D3D12-backed transform/opacity tick path. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
+- The first composition implementation targets a D3D12-backed transform/opacity tick path resolved from retained `NodeKey` animation declarations. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
 
 ## Renderer Contract
 
@@ -126,12 +126,13 @@ Implementation bias:
 Preferred GPU offload order:
 
 1. Layer transform and opacity property updates.
-2. Presented scroll offset under a layer clip.
-3. Layer content caching / render target reuse.
-4. Backend-side batching and persistent upload rings.
-5. GPU culling/compaction for large retained scenes.
-6. Indirect draw and descriptor-indexed resource tables.
-7. Effects/material graph after style/material contracts exist.
+2. Compositor-aware hit-test remapping.
+3. Presented scroll offset under a layer clip.
+4. Layer content caching / render target reuse.
+5. Backend-side batching and persistent upload rings.
+6. GPU culling/compaction for large retained scenes.
+7. Indirect draw and descriptor-indexed resource tables.
+8. Effects/material graph after style/material contracts exist.
 
 Do not implement Vulkan/Metal or advanced GPU paths until the platform-neutral composition contract is stable.
 

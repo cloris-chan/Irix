@@ -144,6 +144,29 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         _compositionAnimationPlan = plan;
     }
 
+    internal void SetCompositionAnimationDeclaration(
+        in CompositionAnimationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (_retainedFrame.CommandCount <= 0)
+        {
+            throw new InvalidOperationException("A retained render frame must exist before installing a composition animation declaration.");
+        }
+
+        if (snapshot.CommandCount != _retainedFrame.CommandCount)
+        {
+            throw new ArgumentException("Composition animation declaration snapshot must match the retained command frame.", nameof(snapshot));
+        }
+
+        if (!declaration.TryResolve(snapshot, _retainedFrame.CommandCount, out var plan))
+        {
+            throw new ArgumentException("Composition animation declaration target must resolve to a retained command range.", nameof(declaration));
+        }
+
+        _compositionAnimationPlan = plan;
+    }
+
     internal void ClearCompositionAnimationPlan()
     {
         _compositionAnimationPlan = null;
