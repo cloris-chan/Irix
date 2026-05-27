@@ -269,7 +269,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public DrawingBackendClipMode ClipMode { get; private set; } = clipMode;
 
-    public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation;
+    public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation | CompositionBackendCapabilities.MultiLayer;
 
     /// <summary>Frame serial diagnostics from the D3D12 renderer (sync wait count, timing, etc.).</summary>
     internal D3D12Renderer.FrameSerialDiagnostics FrameSerialDiagnostics => _renderer.GetFrameSerialDiagnostics();
@@ -549,9 +549,8 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         }
 
         scale = scale.Normalize();
-        var layer = compositionFrame.Layer;
-        var transform = layer.Transform;
-        var opacity = layer.Opacity;
+        var layerCount = compositionFrame.LayerCount;
+        var firstLayer = compositionFrame.Layer;
         Span<DrawCommand> inlineCommands = stackalloc DrawCommand[64];
         Span<DrawCommand> composedCommands = commands.Length <= inlineCommands.Length ? inlineCommands[..commands.Length] : new DrawCommand[commands.Length];
         var translatedCommands = 0;
@@ -560,15 +559,21 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         for (var i = 0; i < commands.Length; i++)
         {
             var command = commands[i];
-            if ((uint)(i - layer.CommandStart) < (uint)layer.CommandCount)
+            for (var layerIndex = 0; layerIndex < layerCount; layerIndex++)
             {
+                var layer = compositionFrame.GetLayer(layerIndex);
+                if ((uint)(i - layer.CommandStart) >= (uint)layer.CommandCount)
+                {
+                    continue;
+                }
+
                 command = ApplyComposition(command, layer);
-                if (!transform.IsIdentity)
+                if (!layer.Transform.IsIdentity)
                 {
                     translatedCommands++;
                 }
 
-                if (!opacity.IsOpaque)
+                if (!layer.Opacity.IsOpaque)
                 {
                     opacityAppliedCommands++;
                 }
@@ -580,14 +585,14 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         var executeResult = ExecuteCore(clipMode, viewport, composedCommands, resources, scale, rects, texts);
         return new D3D12CompositionExecuteDiagnostics(
             D3D12Backed: true,
-            LayerCount: 1,
+            LayerCount: layerCount,
             CommandCount: commands.Length,
-            LayerCommandStart: layer.CommandStart,
-            LayerCommandCount: layer.CommandCount,
+            LayerCommandStart: firstLayer.CommandStart,
+            LayerCommandCount: firstLayer.CommandCount,
             TranslatedCommands: translatedCommands,
             OpacityAppliedCommands: opacityAppliedCommands,
-            AppliedTransform: transform,
-            AppliedOpacity: opacity,
+            AppliedTransform: firstLayer.Transform,
+            AppliedOpacity: firstLayer.Opacity,
             ExecuteResult: executeResult);
     }
 
@@ -601,10 +606,30 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             ApplyOpacity(command.Color, opacity),
             command.Resource,
             command.Text,
-            layer.HasFixedClip ? layer.ClipBounds : Translate(command.ClipBounds, transform),
+            ResolveComposedClip(command.ClipBounds, layer),
             command.StrokeWidth,
             command.Transform,
             command.ZIndex);
+    }
+
+    private static DrawRect ResolveComposedClip(in DrawRect clipBounds, in CompositionLayer layer)
+    {
+        if (!layer.HasFixedClip)
+        {
+            return Translate(clipBounds, layer.Transform);
+        }
+
+        if (clipBounds == default)
+        {
+            return layer.ClipBounds;
+        }
+
+        if (clipBounds.Width <= 0f || clipBounds.Height <= 0f)
+        {
+            return clipBounds;
+        }
+
+        return Intersect(clipBounds, layer.ClipBounds);
     }
 
     internal static TextStyle ScaleTextStyleToPhysicalPixels(TextStyle style, DisplayScale scale)
@@ -636,6 +661,15 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return rect.Width == 0f && rect.Height == 0f
             ? rect
             : new DrawRect(rect.X + transform.TranslateX, rect.Y + transform.TranslateY, rect.Width, rect.Height);
+    }
+
+    private static DrawRect Intersect(in DrawRect left, in DrawRect right)
+    {
+        var x0 = MathF.Max(left.X, right.X);
+        var y0 = MathF.Max(left.Y, right.Y);
+        var x1 = MathF.Min(left.X + left.Width, right.X + right.Width);
+        var y1 = MathF.Min(left.Y + left.Height, right.Y + right.Height);
+        return x1 <= x0 || y1 <= y0 ? new DrawRect(x0, y0, -1f, -1f) : new DrawRect(x0, y0, x1 - x0, y1 - y0);
     }
 
     private static DrawColor ApplyOpacity(DrawColor color, CompositionOpacity opacity)

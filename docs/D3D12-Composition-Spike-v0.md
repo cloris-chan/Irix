@@ -1,6 +1,6 @@
 # D3D12 Composition Spike v0
 
-> Narrow implementation contract for the first composition/GPU-offload code path. This is not a generic compositor design; it validates D3D12-backed layer updates for translation, opacity, and single-layer scroll presentation under a fixed clip.
+> Narrow implementation contract for the first composition/GPU-offload code path. This is not a generic compositor design; it validates D3D12-backed layer updates for translation, opacity, fixed-clip scroll presentation, and the first multi-layer composition frame.
 
 ## Goal
 
@@ -12,6 +12,7 @@ The current spike owns:
 - Layer translation in logical pixels.
 - Layer opacity in normalized `[0, 1]`.
 - Fixed layer clip mode for single scroll containers whose retained children share one scroll clip.
+- Multi-layer `CompositionFrame` publication with ordered `CompositionLayer` application on the D3D12 execution path.
 - `CompositionAnimationPlan` data in `Irix.Rendering`.
 - `CompositionAnimationDeclaration` data that targets stable retained `NodeKey` values and resolves through the retained input snapshot.
 - `CompositionScrollPresentationDeclaration` data that targets a retained scroll container `NodeKey` and resolves to a fixed-clip `CompositionScrollPresentationPlan`.
@@ -23,12 +24,13 @@ The current spike owns:
 - D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
 - A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
 - A `--diagnose-composition-scroll` diagnostic that exercises D3D12 fixed-clip scroll presentation.
+- A `--diagnose-composition-multilayer` diagnostic that exercises two D3D12 composition layers in one frame.
 - Stable machine-readable diagnostics.
 
 ## Non-Goals
 
 - No public composition API.
-- No nested/multi-clip scroll composition tree.
+- No automatic nested/multi-clip scroll target decomposition from retained UI yet.
 - No scroll commit/cancel policy in runtime.
 - No retained layer cache or intermediate render target.
 - No Vulkan/Metal work.
@@ -44,7 +46,7 @@ The current spike owns:
 | `CompositionTransform` | Translation-only v0 transform. |
 | `CompositionOpacity` | Strong normalized opacity value. |
 | `CompositionLayer` | Layer id, command range, transform, opacity, and clip mode. |
-| `CompositionFrame` | Single-layer v0 frame wrapper. |
+| `CompositionFrame` | Ordered multi-layer frame wrapper; single-layer frames remain allocation-free. |
 | `CompositionAnimationDeclaration` | Runtime-facing internal descriptor keyed by retained `NodeKey`, with transform/opacity timeline data and no command-range knowledge. |
 | `CompositionAnimationPlan` | Resolved data-driven transform/opacity animation descriptor for the layer command range. |
 | `CompositionScrollPresentationDeclaration` | Runtime-facing internal descriptor keyed by retained scroll container `NodeKey`, with presented scroll timeline data and no command-range knowledge. |
@@ -64,7 +66,7 @@ The D3D12 spike materializes translation and opacity at backend execution time:
 RenderFrameBatch commands/resources
   -> DrawingBackendCompositor retained frame
   + CompositionAnimationDeclaration resolved to CompositionAnimationPlan
-  -> CompositionFrame single layer
+  -> CompositionFrame ordered layer set
   -> ICompositionDrawingBackend.ExecuteComposition
   -> transformed rect/text payloads
   -> existing D3D12 rectangle/GlyphAtlas passes
@@ -100,6 +102,14 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - opacity-applied command count is zero for scroll presentation
 - fixed clip remains in presentation space while content rect/text positions move
 
+`--diagnose-composition-multilayer` must prove:
+
+- `finalComposition=D3D12`
+- `d3d12Backed=True`
+- two layers were consumed in one composition frame
+- a command can receive more than one layer application
+- fixed clip layer count is diagnostic-visible
+
 `--diagnose-composition-marker-runtime` must prove:
 
 - marker queue drain count
@@ -110,4 +120,4 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 
 ## Next Gate
 
-Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing map pointer coordinates through the active presented layer transform. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime, including a PoC diagnostic that dispatches a marker into `CounterMessage`. The next gate is multi-layer composition for nested/mixed-clip scroll containers, followed by runtime commit/cancel policy for presented scroll state.
+Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing map pointer coordinates through the active presented layer transform. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime, including a PoC diagnostic that dispatches a marker into `CounterMessage`. Multi-layer `CompositionFrame` execution now exists on the D3D12 path; the next gate is retained target decomposition for nested/mixed-clip scroll containers, followed by runtime commit/cancel policy for presented scroll state.

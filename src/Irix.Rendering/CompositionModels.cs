@@ -777,21 +777,121 @@ internal readonly struct CompositionLayer(
     public static bool operator !=(CompositionLayer left, CompositionLayer right) => !left.Equals(right);
 }
 
-internal readonly struct CompositionFrame(CompositionLayer Layer) : IEquatable<CompositionFrame>
+internal readonly struct CompositionFrame : IEquatable<CompositionFrame>
 {
-    public CompositionLayer Layer { get; } = Layer;
+    private readonly CompositionLayer _layer;
+    private readonly CompositionLayer[]? _additionalLayers;
 
-    public bool IsValidForCommandCount(int commandCount) => Layer.IsValidForCommandCount(commandCount);
+    public CompositionFrame(CompositionLayer layer)
+    {
+        _layer = layer;
+        _additionalLayers = null;
+    }
 
-    public bool Equals(CompositionFrame other) => Layer == other.Layer;
+    public CompositionFrame(CompositionLayer layer, ReadOnlySpan<CompositionLayer> additionalLayers)
+    {
+        _layer = layer;
+        _additionalLayers = additionalLayers.IsEmpty ? null : additionalLayers.ToArray();
+    }
+
+    public CompositionLayer Layer => _layer;
+
+    public int LayerCount => _layer.Id.IsValid ? 1 + (_additionalLayers?.Length ?? 0) : 0;
+
+    public static CompositionFrame FromLayers(ReadOnlySpan<CompositionLayer> layers)
+    {
+        return layers.Length switch
+        {
+            0 => default,
+            1 => new CompositionFrame(layers[0]),
+            _ => new CompositionFrame(layers[0], layers[1..])
+        };
+    }
+
+    public CompositionLayer GetLayer(int index)
+    {
+        if (index == 0 && LayerCount > 0)
+        {
+            return _layer;
+        }
+
+        if (_additionalLayers is not null && (uint)(index - 1) < (uint)_additionalLayers.Length)
+        {
+            return _additionalLayers[index - 1];
+        }
+
+        throw new ArgumentOutOfRangeException(nameof(index));
+    }
+
+    public bool IsValidForCommandCount(int commandCount)
+    {
+        var layerCount = LayerCount;
+        if (layerCount == 0)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < layerCount; i++)
+        {
+            var layer = GetLayer(i);
+            if (!layer.IsValidForCommandCount(commandCount) || HasDuplicateLayerId(i, layer.Id))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public bool Equals(CompositionFrame other)
+    {
+        var layerCount = LayerCount;
+        if (layerCount != other.LayerCount)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < layerCount; i++)
+        {
+            if (GetLayer(i) != other.GetLayer(i))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     public override bool Equals(object? obj) => obj is CompositionFrame other && Equals(other);
 
-    public override int GetHashCode() => Layer.GetHashCode();
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        var layerCount = LayerCount;
+        for (var i = 0; i < layerCount; i++)
+        {
+            hashCode.Add(GetLayer(i));
+        }
+
+        return hashCode.ToHashCode();
+    }
 
     public static bool operator ==(CompositionFrame left, CompositionFrame right) => left.Equals(right);
 
     public static bool operator !=(CompositionFrame left, CompositionFrame right) => !left.Equals(right);
+
+    private bool HasDuplicateLayerId(int currentIndex, CompositionLayerId layerId)
+    {
+        for (var i = 0; i < currentIndex; i++)
+        {
+            if (GetLayer(i).Id == layerId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 [Flags]
@@ -801,6 +901,7 @@ internal enum CompositionBackendCapabilities : byte
     Transform = 1,
     Opacity = 2,
     FixedClip = 4,
+    MultiLayer = 8,
     TransformOpacity = Transform | Opacity,
     ScrollPresentation = Transform | FixedClip
 }

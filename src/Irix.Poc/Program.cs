@@ -190,6 +190,15 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-composition-multilayer"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            CompositionMultiLayerDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                ParseDiagnosticScale(args));
+            return;
+        }
+
         if (args.Contains("--diagnose-composition-marker-runtime"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);

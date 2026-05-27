@@ -1235,7 +1235,7 @@ public sealed class DrawingBackendCompositorTests
         public FrameContext LastBeginFrameContext { get; private set; }
         public CompositionFrame LastCompositionFrame { get; private set; }
         public IFrameResourceResolver? LastCompositionResources { get; private set; }
-        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation;
+        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation | CompositionBackendCapabilities.MultiLayer;
 
         public void BeginFrame(in FrameContext frameContext)
         {
@@ -1257,15 +1257,45 @@ public sealed class DrawingBackendCompositorTests
             LastCompositionResources = resources;
             return new CompositionBackendExecutionResult(
                 D3D12Backed: true,
-                LayerCount: 1,
+                LayerCount: compositionFrame.LayerCount,
                 CommandCount: commands.Length,
-                TranslatedCommands: compositionFrame.Layer.Transform.IsIdentity ? 0 : compositionFrame.Layer.CommandCount,
-                OpacityAppliedCommands: compositionFrame.Layer.Opacity.IsOpaque ? 0 : compositionFrame.Layer.CommandCount);
+                TranslatedCommands: CountTranslatedCommands(compositionFrame),
+                OpacityAppliedCommands: CountOpacityCommands(compositionFrame));
         }
 
         public void EndFrame() { }
 
         public void Dispose() { }
+
+        private static int CountTranslatedCommands(in CompositionFrame frame)
+        {
+            var count = 0;
+            for (var i = 0; i < frame.LayerCount; i++)
+            {
+                var layer = frame.GetLayer(i);
+                if (!layer.Transform.IsIdentity)
+                {
+                    count += layer.CommandCount;
+                }
+            }
+
+            return count;
+        }
+
+        private static int CountOpacityCommands(in CompositionFrame frame)
+        {
+            var count = 0;
+            for (var i = 0; i < frame.LayerCount; i++)
+            {
+                var layer = frame.GetLayer(i);
+                if (!layer.Opacity.IsOpaque)
+                {
+                    count += layer.CommandCount;
+                }
+            }
+
+            return count;
+        }
     }
 
     [Fact]

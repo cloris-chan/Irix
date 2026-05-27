@@ -271,6 +271,65 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_applies_multiple_layers_on_d3d12_path()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(10, 10, 40, 24), Color: DrawColor.Opaque(100, 120, 140)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(20, 20, 40, 24), Color: DrawColor.Opaque(160, 180, 200))
+        };
+        Span<CompositionLayer> layers =
+        [
+            new CompositionLayer(
+                new CompositionLayerId(10),
+                CommandStart: 1,
+                CommandCount: 2,
+                new CompositionTransform(10, 0),
+                new CompositionOpacity(0.5f)),
+            new CompositionLayer(
+                new CompositionLayerId(11),
+                CommandStart: 2,
+                CommandCount: 1,
+                new CompositionTransform(0, 20),
+                CompositionOpacity.Opaque,
+                CompositionClipMode.Fixed,
+                new DrawRect(0, 0, 80, 80))
+        ];
+        var frame = CompositionFrame.FromLayers(layers);
+
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.True(diagnostics.D3D12Backed);
+        Assert.Equal(2, diagnostics.LayerCount);
+        Assert.Equal(3, diagnostics.CommandCount);
+        Assert.Equal(1, diagnostics.LayerCommandStart);
+        Assert.Equal(2, diagnostics.LayerCommandCount);
+        Assert.Equal(3, diagnostics.TranslatedCommands);
+        Assert.Equal(2, diagnostics.OpacityAppliedCommands);
+        Assert.Equal(3, rects.Count);
+        Assert.Equal(20, rects.Span[1].X);
+        Assert.Equal(10, rects.Span[1].Y);
+        Assert.Equal(128f / 255f, rects.Span[1].A);
+        Assert.Equal(30, rects.Span[2].X);
+        Assert.Equal(40, rects.Span[2].Y);
+        Assert.Equal(128f / 255f, rects.Span[2].A);
+        Assert.Equal(new IntegerScissorRect(0, 0, 80, 80), rects.Span[2].Scissor);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_keeps_transform_in_logical_space_before_backend_scale()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

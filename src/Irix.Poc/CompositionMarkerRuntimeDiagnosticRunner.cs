@@ -91,7 +91,7 @@ internal static class CompositionMarkerRuntimeDiagnosticRunner
         public int ExecuteCount { get; private set; }
         public int ExecuteCompositionCount { get; private set; }
         public CompositionFrame LastCompositionFrame { get; private set; }
-        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation;
+        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation | CompositionBackendCapabilities.MultiLayer;
 
         public void BeginFrame(in FrameContext frameContext) { }
 
@@ -109,9 +109,9 @@ internal static class CompositionMarkerRuntimeDiagnosticRunner
             LastCompositionFrame = compositionFrame;
             return new CompositionBackendExecutionResult(
                 D3D12Backed: true,
-                LayerCount: 1,
+                LayerCount: compositionFrame.LayerCount,
                 CommandCount: commands.Length,
-                TranslatedCommands: compositionFrame.Layer.CommandCount,
+                TranslatedCommands: compositionFrame.Layer.Transform.IsIdentity ? 0 : compositionFrame.Layer.CommandCount,
                 OpacityAppliedCommands: 0);
         }
 

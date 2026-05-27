@@ -884,23 +884,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// </summary>
     internal bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
-        var hasActiveLayer = TryGetActiveHitTestLayer(out var activeLayer);
+        var activeFrame = GetActiveCompositionFrame();
         lock (_hitTargetsLock)
         {
             foreach (var hitTarget in _hitTargets)
             {
-                var targetX = (float)x;
-                var targetY = (float)y;
-                var inActiveLayer = hasActiveLayer && IsHitTargetInLayer(hitTarget, activeLayer);
-                if (inActiveLayer)
+                if (!TryMapCompositionHitTarget(hitTarget, activeFrame, x, y, out var targetX, out var targetY, out var mappedThroughFixedClip))
                 {
-                    if (activeLayer.HasFixedClip && !Contains(activeLayer.ClipBounds, targetX, targetY))
-                    {
-                        continue;
-                    }
-
-                    targetX -= activeLayer.Transform.TranslateX;
-                    targetY -= activeLayer.Transform.TranslateY;
+                    continue;
                 }
 
                 if (targetX < hitTarget.Bounds.X
@@ -913,8 +904,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
                 if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
                 {
-                    var clipX = inActiveLayer && activeLayer.HasFixedClip ? x : targetX;
-                    var clipY = inActiveLayer && activeLayer.HasFixedClip ? y : targetY;
+                    var clipX = mappedThroughFixedClip ? x : targetX;
+                    var clipY = mappedThroughFixedClip ? y : targetY;
                     if (clipX < hitTarget.ClipBounds.X
                         || clipY < hitTarget.ClipBounds.Y
                         || clipX >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
@@ -933,13 +924,57 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return false;
     }
 
-    private bool TryGetActiveHitTestLayer(out CompositionLayer layer)
+    private CompositionFrame GetActiveCompositionFrame()
     {
         lock (_compositionStateLock)
         {
-            layer = _lastCompositionFrame.Layer;
-            return layer.IsValidForCommandCount(_retainedFrame.CommandCount) && !layer.Transform.IsIdentity;
+            return _lastCompositionFrame;
         }
+    }
+
+    private bool TryMapCompositionHitTarget(
+        in HitTestTarget hitTarget,
+        in CompositionFrame compositionFrame,
+        int x,
+        int y,
+        out float targetX,
+        out float targetY,
+        out bool mappedThroughFixedClip)
+    {
+        targetX = x;
+        targetY = y;
+        mappedThroughFixedClip = false;
+
+        var layerCount = compositionFrame.LayerCount;
+        if (layerCount == 0)
+        {
+            return true;
+        }
+
+        var commandCount = _retainedFrame.CommandCount;
+        for (var i = layerCount - 1; i >= 0; i--)
+        {
+            var layer = compositionFrame.GetLayer(i);
+            if (!layer.IsValidForCommandCount(commandCount) || !IsHitTargetInLayer(hitTarget, layer))
+            {
+                continue;
+            }
+
+            if (layer.HasFixedClip)
+            {
+                if (!Contains(layer.ClipBounds, targetX, targetY))
+                {
+                    return false;
+                }
+
+                mappedThroughFixedClip = true;
+            }
+
+            targetX -= layer.Transform.TranslateX;
+            targetY -= layer.Transform.TranslateY;
+        }
+
+        return true;
     }
 
     private static bool IsHitTargetInLayer(in HitTestTarget hitTarget, in CompositionLayer layer)

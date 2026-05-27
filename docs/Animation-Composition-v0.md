@@ -1,6 +1,6 @@
 # Animation / Composition v0
 
-> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets, remap hit testing through the active presented transform, and publish marker events back to runtime-owned messages through an explicit drain pump; the internal scroll presentation path can resolve retained scroll container `NodeKey` declarations to fixed-clip composition plans. A public animation API does not exist.
+> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets, remap hit testing through active presented transforms, and publish marker events back to runtime-owned messages through an explicit drain pump; the internal scroll presentation path can resolve retained scroll container `NodeKey` declarations to fixed-clip composition plans. A public animation API does not exist.
 
 ## Goals
 
@@ -74,7 +74,7 @@ Ownership split:
 | `presentedScrollY` | Compositor. | Interpolated visual offset. Should not require layout rebuild per tick. |
 | Scroll hit-test mapping | Input/control adapter plus compositor state. | Pointer coordinates must map through current presented transform or use a committed-state fallback. |
 
-The current implementation supports the first scroll presentation slice: a retained scroll container whose child draw commands share one clip can resolve to a fixed-clip `CompositionScrollPresentationPlan`. The compositor moves content by `retainedScrollY - presentedScrollY` while the clip remains fixed. Logical scroll target/clamp still belongs to app/control runtime.
+The current implementation supports the first scroll presentation slice: a retained scroll container whose child draw commands share one clip can resolve to a fixed-clip `CompositionScrollPresentationPlan`. The compositor moves content by `retainedScrollY - presentedScrollY` while the clip remains fixed. `CompositionFrame` can now carry multiple ordered layers on the D3D12 path, but retained nested/mixed-clip scroll targets still need decomposition into those layers. Logical scroll target/clamp still belongs to app/control runtime.
 
 ## Implementation Bias
 
@@ -128,7 +128,7 @@ The first runtime integration slice is internal and PoC-backed: `CounterComposit
 
 ## Hit Testing During Compositor Animation
 
-Transform/opacity compositor animation remaps hit testing by applying the inverse of the active layer transform before testing retained target bounds and clips. The current implementation keeps the authoritative hit-test data in the render pipeline and records retained command ranges on `HitTestTarget`, so only targets inside the active composition layer receive inverse-transform mapping. Static targets in the same retained frame keep normal logical hit testing.
+Transform/opacity compositor animation remaps hit testing by applying the inverse of active layer transforms before testing retained target bounds and clips. The current implementation keeps the authoritative hit-test data in the render pipeline and records retained command ranges on `HitTestTarget`, so only targets inside active composition layers receive inverse-transform mapping. Static targets in the same retained frame keep normal logical hit testing.
 
 Fixed-clip scroll presentation first filters pointer coordinates against the fixed clip in presentation space, then applies the inverse content transform before testing retained target bounds. This keeps clipped-out presented content non-interactive while avoiding a per-tick layout rebuild. Runtime still owns whether new input commits, cancels, or retargets presented scroll state.
 
