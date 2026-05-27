@@ -15,6 +15,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
+    private readonly Lock _frameGate = new();
     private readonly Lock _hitTargetsLock = new();
     private readonly Lock _compositionStateLock = new();
     private readonly Lock _compositionMarkerLock = new();
@@ -237,16 +238,19 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     internal void SetCompositionAnimationPlan(in CompositionAnimationPlan plan)
     {
-        if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
+        lock (_frameGate)
         {
-            throw new ArgumentException("Composition animation plan layer range must fit the retained command frame.", nameof(plan));
-        }
+            if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
+            {
+                throw new ArgumentException("Composition animation plan layer range must fit the retained command frame.", nameof(plan));
+            }
 
-        _compositionScrollPresentationPlan = null;
-        _compositionAnimationPlan = plan;
-        _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
-        _compositionScrollMarkerStates = [];
-        ClearCompositionPresentationState();
+            _compositionScrollPresentationPlan = null;
+            _compositionAnimationPlan = plan;
+            _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
+            _compositionScrollMarkerStates = [];
+            ClearCompositionPresentationState();
+        }
     }
 
     internal void SetCompositionAnimationDeclaration(
@@ -254,29 +258,40 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         RenderPipelineRetainedInputSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (_retainedFrame.CommandCount <= 0)
+        lock (_frameGate)
         {
-            throw new InvalidOperationException("A retained render frame must exist before installing a composition animation declaration.");
-        }
+            if (_retainedFrame.CommandCount <= 0)
+            {
+                throw new InvalidOperationException("A retained render frame must exist before installing a composition animation declaration.");
+            }
 
-        if (snapshot.CommandCount != _retainedFrame.CommandCount)
-        {
-            throw new ArgumentException("Composition animation declaration snapshot must match the retained command frame.", nameof(snapshot));
-        }
+            if (snapshot.CommandCount != _retainedFrame.CommandCount)
+            {
+                throw new ArgumentException("Composition animation declaration snapshot must match the retained command frame.", nameof(snapshot));
+            }
 
-        if (!declaration.TryResolve(snapshot, _retainedFrame.CommandCount, out var plan))
-        {
-            throw new ArgumentException("Composition animation declaration target must resolve to a retained command range.", nameof(declaration));
-        }
+            if (!declaration.TryResolve(snapshot, _retainedFrame.CommandCount, out var plan))
+            {
+                throw new ArgumentException("Composition animation declaration target must resolve to a retained command range.", nameof(declaration));
+            }
 
-        _compositionScrollPresentationPlan = null;
-        _compositionAnimationPlan = plan;
-        _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
-        _compositionScrollMarkerStates = [];
-        ClearCompositionPresentationState();
+            _compositionScrollPresentationPlan = null;
+            _compositionAnimationPlan = plan;
+            _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
+            _compositionScrollMarkerStates = [];
+            ClearCompositionPresentationState();
+        }
     }
 
     internal void ClearCompositionPlan()
+    {
+        lock (_frameGate)
+        {
+            ClearCompositionPlanCore();
+        }
+    }
+
+    private void ClearCompositionPlanCore()
     {
         _compositionAnimationPlan = null;
         _compositionScrollPresentationPlan = null;
@@ -288,16 +303,19 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     internal void SetCompositionScrollPresentationPlan(in CompositionScrollPresentationPlan plan)
     {
-        if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
+        lock (_frameGate)
         {
-            throw new ArgumentException("Composition scroll presentation plan layer range must fit the retained command frame.", nameof(plan));
-        }
+            if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
+            {
+                throw new ArgumentException("Composition scroll presentation plan layer range must fit the retained command frame.", nameof(plan));
+            }
 
-        _compositionAnimationPlan = null;
-        _compositionScrollPresentationPlan = plan;
-        _compositionAnimationMarkerStates = [];
-        _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
-        ClearCompositionPresentationState();
+            _compositionAnimationPlan = null;
+            _compositionScrollPresentationPlan = plan;
+            _compositionAnimationMarkerStates = [];
+            _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
+            ClearCompositionPresentationState();
+        }
     }
 
     internal void SetCompositionScrollPresentationDeclaration(
@@ -305,26 +323,29 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         RenderPipelineRetainedInputSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (_retainedFrame.CommandCount <= 0)
+        lock (_frameGate)
         {
-            throw new InvalidOperationException("A retained render frame must exist before installing a composition scroll presentation declaration.");
-        }
+            if (_retainedFrame.CommandCount <= 0)
+            {
+                throw new InvalidOperationException("A retained render frame must exist before installing a composition scroll presentation declaration.");
+            }
 
-        if (snapshot.CommandCount != _retainedFrame.CommandCount)
-        {
-            throw new ArgumentException("Composition scroll presentation declaration snapshot must match the retained command frame.", nameof(snapshot));
-        }
+            if (snapshot.CommandCount != _retainedFrame.CommandCount)
+            {
+                throw new ArgumentException("Composition scroll presentation declaration snapshot must match the retained command frame.", nameof(snapshot));
+            }
 
-        if (!declaration.TryResolve(snapshot, _retainedFrame.CommandCount, out var plan))
-        {
-            throw new ArgumentException("Composition scroll presentation declaration target must resolve to a retained scroll command range.", nameof(declaration));
-        }
+            if (!declaration.TryResolve(snapshot, _retainedFrame.CommandCount, out var plan))
+            {
+                throw new ArgumentException("Composition scroll presentation declaration target must resolve to a retained scroll command range.", nameof(declaration));
+            }
 
-        _compositionAnimationPlan = null;
-        _compositionScrollPresentationPlan = plan;
-        _compositionAnimationMarkerStates = [];
-        _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
-        ClearCompositionPresentationState();
+            _compositionAnimationPlan = null;
+            _compositionScrollPresentationPlan = plan;
+            _compositionAnimationMarkerStates = [];
+            _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
+            ClearCompositionPresentationState();
+        }
     }
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
@@ -351,10 +372,38 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return ValueTask.FromCanceled(cancellationToken);
         }
 
+        lock (_frameGate)
+        {
+            return RenderCore(renderFrameBatch, ownership, frameContext);
+        }
+    }
+
+    private ValueTask RenderCore(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership,
+        in FrameContext frameContext)
+    {
         var sw = Stopwatch.StartNew();
         var stage = ApplyRetainedFrame(renderFrameBatch, ownership);
         if (!stage.HasCommands)
         {
+            return ValueTask.CompletedTask;
+        }
+
+        if (TryRenderActiveScrollPresentationAfterRetainedUpdate(out _))
+        {
+            LastHandoffResult = stage.HandoffSelection.Selected
+                ? DrawingBackendCompositorHandoffResult.RetainedFrameStaged(stage.HandoffSelection.OwnerResult)
+                : stage.HandoffSelection.Result;
+            LastPartialApplySucceeded = stage.RetainedPartialApplySucceeded;
+            RecordRenderedApply(LastPartialApplySucceeded);
+            RecordFrameTime(sw);
+
+            lock (_hitTargetsLock)
+            {
+                _hitTargets = [.. _retainedFrame.HitTargets];
+            }
+
             return ValueTask.CompletedTask;
         }
 
@@ -431,6 +480,16 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return ValueTask.FromCanceled(cancellationToken);
         }
 
+        lock (_frameGate)
+        {
+            return StageRetainedFrameCore(renderFrameBatch, ownership);
+        }
+    }
+
+    private ValueTask StageRetainedFrameCore(
+        RenderFrameBatch renderFrameBatch,
+        RetainedRenderFrameSegmentOwnership? ownership)
+    {
         var stage = ApplyRetainedFrame(renderFrameBatch, ownership);
         Interlocked.Increment(ref _retainedStageCount);
         if (!stage.HasCommands)
@@ -466,7 +525,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _retainedFrame.ReleaseResources();
             _retainedFrame.Invalidate();
             _lastAppliedFrameId = 0;
-            ClearCompositionPlan();
+            ClearCompositionPlanCore();
             LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
             LastPartialApplySucceeded = false;
             LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
@@ -528,6 +587,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return ValueTask.FromCanceled<CompositionBackendExecutionResult>(cancellationToken);
         }
 
+        lock (_frameGate)
+        {
+            return RenderCompositionAnimationTickAtCore(timestamp);
+        }
+    }
+
+    private ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAtCore(CompositionTimestamp timestamp)
+    {
         if (_compositionAnimationPlan is not { } plan)
         {
             throw new InvalidOperationException("A composition animation plan must be set before compositor-only animation ticks can be rendered.");
@@ -588,6 +655,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return ValueTask.FromCanceled<CompositionBackendExecutionResult>(cancellationToken);
         }
 
+        lock (_frameGate)
+        {
+            return RenderCompositionScrollPresentationTickAtCore(timestamp);
+        }
+    }
+
+    private ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtCore(CompositionTimestamp timestamp)
+    {
         if (_compositionScrollPresentationPlan is not { } plan)
         {
             throw new InvalidOperationException("A composition scroll presentation plan must be set before compositor-only scroll ticks can be rendered.");
@@ -606,6 +681,44 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
         var sample = plan.LayerAnimation.Timeline.SampleAt(timestamp);
+        return RenderCompositionScrollPresentationFrameAtAsync(compositionBackend, commands, resources, plan, compositionFrame, sample, timestamp);
+    }
+
+    private bool TryRenderActiveScrollPresentationAfterRetainedUpdate(out CompositionBackendExecutionResult result)
+    {
+        result = default;
+        if (_compositionScrollPresentationPlan is not { } plan
+            || _backend is not ICompositionDrawingBackend compositionBackend
+            || (compositionBackend.CompositionCapabilities & CompositionBackendCapabilities.ScrollPresentation) != CompositionBackendCapabilities.ScrollPresentation
+            || !_retainedFrame.TryReadFrame(out var commands, out var resources)
+            || !plan.IsValidForCommandCount(commands.Length))
+        {
+            return false;
+        }
+
+        var timestamp = CompositionTimestamp.Now();
+        var compositionFrame = plan.Evaluate(commands.Length, timestamp);
+        var sample = plan.LayerAnimation.Timeline.SampleAt(timestamp);
+        result = RenderCompositionScrollPresentationFrameAtAsync(
+            compositionBackend,
+            commands,
+            resources,
+            plan,
+            compositionFrame,
+            sample,
+            timestamp).GetAwaiter().GetResult();
+        return true;
+    }
+
+    private ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationFrameAtAsync(
+        ICompositionDrawingBackend compositionBackend,
+        ReadOnlySpan<DrawCommand> commands,
+        IFrameResourceResolver resources,
+        in CompositionScrollPresentationPlan plan,
+        in CompositionFrame compositionFrame,
+        in CompositionTimelineSample sample,
+        CompositionTimestamp timestamp)
+    {
         return RenderCompositionFrameAtAsync(
             compositionBackend,
             commands,

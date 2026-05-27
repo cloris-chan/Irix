@@ -340,6 +340,81 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task Composition_scroll_tick_waits_for_in_flight_regular_render()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new BlockingCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(40, 10)), pipeline.LastRetainedInputSnapshot!);
+        using var hoverFrame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+
+        backend.BlockNextBeginFrame();
+        var renderTask = Task.Run(async () => await compositor.RenderAsync(hoverFrame, cancellationToken), cancellationToken);
+        await backend.WaitForBlockedBeginFrameAsync(cancellationToken);
+
+        var tickTask = Task.Run(async () => await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(10), cancellationToken), cancellationToken);
+        await Task.Delay(50, cancellationToken);
+
+        Assert.Equal(2, backend.BeginFrameCount);
+        Assert.Equal(0, backend.ExecuteCompositionCount);
+
+        backend.ReleaseBlockedBeginFrame();
+        await renderTask.WaitAsync(cancellationToken);
+        _ = await tickTask.WaitAsync(cancellationToken);
+
+        Assert.Equal(3, backend.BeginFrameCount);
+        Assert.Equal(2, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
+    public async Task RenderAsync_during_active_scroll_presentation_composes_updated_retained_frame()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(40, 10)), pipeline.LastRetainedInputSnapshot!);
+        using var hoverFrame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+
+        await compositor.RenderAsync(hoverFrame, cancellationToken);
+
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(1, backend.ExecuteCompositionCount);
+        Assert.True(compositor.TryGetPresentedScrollY(new NodeKey(1), out _));
+    }
+
+    [Fact]
     public async Task RenderCompositionScrollPresentationTickAsync_decomposes_nested_scroll_clips_into_ordered_layers()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1483,6 +1558,75 @@ public sealed class DrawingBackendCompositorTests
             }
 
             return count;
+        }
+    }
+
+    private sealed class BlockingCompositionBackend : IDrawingBackend, ICompositionDrawingBackend
+    {
+        private int _blockNextBeginFrame;
+        private TaskCompletionSource _blockedBeginFrame = NewCompletionSource();
+        private TaskCompletionSource _releaseBeginFrame = NewCompletionSource();
+
+        public int BeginFrameCount { get; private set; }
+        public int ExecuteCount { get; private set; }
+        public int ExecuteCompositionCount { get; private set; }
+        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation | CompositionBackendCapabilities.MultiLayer;
+
+        public void BlockNextBeginFrame()
+        {
+            _blockedBeginFrame = NewCompletionSource();
+            _releaseBeginFrame = NewCompletionSource();
+            Volatile.Write(ref _blockNextBeginFrame, 1);
+        }
+
+        public Task WaitForBlockedBeginFrameAsync(CancellationToken cancellationToken)
+        {
+            return _blockedBeginFrame.Task.WaitAsync(cancellationToken);
+        }
+
+        public void ReleaseBlockedBeginFrame()
+        {
+            _releaseBeginFrame.TrySetResult();
+        }
+
+        public void BeginFrame(in FrameContext frameContext)
+        {
+            BeginFrameCount++;
+            if (Interlocked.Exchange(ref _blockNextBeginFrame, 0) == 0)
+            {
+                return;
+            }
+
+            _blockedBeginFrame.TrySetResult();
+            _releaseBeginFrame.Task.GetAwaiter().GetResult();
+        }
+
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+            ExecuteCount++;
+        }
+
+        public CompositionBackendExecutionResult ExecuteComposition(
+            ReadOnlySpan<DrawCommand> commands,
+            IFrameResourceResolver resources,
+            in CompositionFrame compositionFrame)
+        {
+            ExecuteCompositionCount++;
+            return new CompositionBackendExecutionResult(
+                D3D12Backed: true,
+                LayerCount: compositionFrame.LayerCount,
+                CommandCount: commands.Length,
+                TranslatedCommands: 0,
+                OpacityAppliedCommands: 0);
+        }
+
+        public void EndFrame() { }
+
+        public void Dispose() { }
+
+        private static TaskCompletionSource NewCompletionSource()
+        {
+            return new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
     }
 
