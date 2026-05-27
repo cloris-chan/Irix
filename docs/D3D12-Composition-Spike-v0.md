@@ -1,6 +1,6 @@
 # D3D12 Composition Spike v0
 
-> Narrow implementation contract for the first composition/GPU-offload code path. This is not a generic compositor design; it validates a D3D12-backed layer update path for translation and opacity.
+> Narrow implementation contract for the first composition/GPU-offload code path. This is not a generic compositor design; it validates D3D12-backed layer updates for translation, opacity, and single-layer scroll presentation under a fixed clip.
 
 ## Goal
 
@@ -11,20 +11,24 @@ The current spike owns:
 - One composition layer referencing a contiguous draw-command range.
 - Layer translation in logical pixels.
 - Layer opacity in normalized `[0, 1]`.
+- Fixed layer clip mode for single scroll containers whose retained children share one scroll clip.
 - `CompositionAnimationPlan` data in `Irix.Rendering`.
 - `CompositionAnimationDeclaration` data that targets stable retained `NodeKey` values and resolves through the retained input snapshot.
+- `CompositionScrollPresentationDeclaration` data that targets a retained scroll container `NodeKey` and resolves to a fixed-clip `CompositionScrollPresentationPlan`.
 - `DrawingBackendCompositor.RenderCompositionAnimationTickAsync`, which advances the animation over the retained frame.
-- Composition-aware hit testing for transform/opacity layers by inverse-mapping input through the active presented transform.
+- `DrawingBackendCompositor.RenderCompositionScrollPresentationTickAsync`, which advances presented scroll offset over the retained frame.
+- Composition-aware hit testing for transform/opacity and fixed-clip scroll layers by inverse-mapping input through the active presented transform.
 - Typed composition clock values: `CompositionTimestamp` and `CompositionDuration` carry `Stopwatch.GetTimestamp()` ticks and keep frame indexes out of animation progress.
 - D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
 - A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
+- A `--diagnose-composition-scroll` diagnostic that exercises D3D12 fixed-clip scroll presentation.
 - Stable machine-readable diagnostics.
 
 ## Non-Goals
 
 - No public composition API.
-- No scroll presentation model.
-- No scroll hit-test coordinate remapping.
+- No nested/multi-clip scroll composition tree.
+- No scroll commit/cancel policy in runtime.
 - No retained layer cache or intermediate render target.
 - No Vulkan/Metal work.
 - No replacement of normal UI frame publication. `ICompositor.RenderAsync` remains the content-update path; compositor ticks are a separate retained-frame presentation path.
@@ -38,11 +42,14 @@ The current spike owns:
 | `CompositionLayerId` | Stable layer identity for diagnostics and future retained mapping. |
 | `CompositionTransform` | Translation-only v0 transform. |
 | `CompositionOpacity` | Strong normalized opacity value. |
-| `CompositionLayer` | Layer id, command range, transform, and opacity. |
+| `CompositionLayer` | Layer id, command range, transform, opacity, and clip mode. |
 | `CompositionFrame` | Single-layer v0 frame wrapper. |
 | `CompositionAnimationDeclaration` | Runtime-facing internal descriptor keyed by retained `NodeKey`, with transform/opacity timeline data and no command-range knowledge. |
 | `CompositionAnimationPlan` | Resolved data-driven transform/opacity animation descriptor for the layer command range. |
+| `CompositionScrollPresentationDeclaration` | Runtime-facing internal descriptor keyed by retained scroll container `NodeKey`, with presented scroll timeline data and no command-range knowledge. |
+| `CompositionScrollPresentationPlan` | Resolved data-driven fixed-clip scroll presentation descriptor for the retained scroll content command range. |
 | `CompositionTarget` | Internal retained UI target resolved by `RenderPipelineRetainedInputSnapshot`, keyed by `NodeKey` and mapped to a command range plus `CompositionLayerId`. |
+| `ScrollCompositionTarget` | Internal retained scroll target resolved by `RenderPipelineRetainedInputSnapshot`, keyed by scroll container `NodeKey` and mapped to command range, fixed clip, retained scroll position, and max scroll. |
 
 The layer references existing `RenderFrameBatch` command ranges; it does not copy commands or own frame resources.
 
@@ -61,6 +68,8 @@ RenderFrameBatch commands/resources
   -> Present
 ```
 
+For scroll presentation, the retained draw output already contains content at the committed logical scroll position. The compositor applies `retainedScrollY - presentedScrollY` as a content transform while keeping the layer clip fixed. This preserves the viewport clip while allowing content to move without layout/draw rebuild.
+
 This is intentionally D3D12-backed. Non-composition backends do not receive a CPU compatibility implementation for this tick path; they fail fast until a written blocker justifies a secondary path.
 
 ## Diagnostics
@@ -77,6 +86,15 @@ This is intentionally D3D12-backed. Non-composition backends do not receive a CP
 
 `--composition-demo [durationMs]` is the visible PoC sample. It builds normal retained UI output once, installs a `CompositionAnimationDeclaration` targeting a retained `NodeKey`, resolves it to a `CompositionAnimationPlan`, then calls compositor-only ticks for transform/opacity presentation on the D3D12 execution path until the wall-clock duration expires. The animation clock is `Stopwatch`; the internal renderer boundary is typed as `CompositionTimestamp`/`CompositionDuration`, so display refresh changes tick density but not movement speed. The machine line includes `renderCount=1`, `demoDurationMs=<durationMs>`, and `compositionTicks=<actualTicks>` to prove UI frame publication is not driving each animation frame.
 
+`--diagnose-composition-scroll` must prove:
+
+- `finalComposition=D3D12`
+- `d3d12Backed=True`
+- one fixed-clip layer was consumed
+- translated command count is nonzero
+- opacity-applied command count is zero for scroll presentation
+- fixed clip remains in presentation space while content rect/text positions move
+
 ## Next Gate
 
-Normal UI output snapshots resolve retained `CompositionTarget` values, runtime-owned animation declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances, and transform/opacity hit testing maps pointer coordinates through the active presented layer transform. The next gate is scroll presentation: it needs a scroll-specific clip/target/commit contract before presented scroll offset uses the same retained composition spine.
+Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing map pointer coordinates through the active presented layer transform. The next gate is multi-layer composition for nested/mixed-clip scroll containers, followed by runtime commit/cancel policy for presented scroll state.

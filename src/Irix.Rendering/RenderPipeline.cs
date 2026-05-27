@@ -561,6 +561,84 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return false;
     }
 
+    internal static bool TryResolveScrollCompositionTarget(
+        LayoutTreeResult layoutResult,
+        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        int commandCount,
+        NodeKey key,
+        out ScrollCompositionTarget target)
+    {
+        if (key == NodeKey.None || layoutResult.TreeNodes.Length == 0 || elementCommandRanges.IsEmpty || commandCount <= 0)
+        {
+            target = default;
+            return false;
+        }
+
+        foreach (ref readonly var node in layoutResult.TreeNodes.AsSpan())
+        {
+            if (node.Key != key
+                || node.Kind != VirtualNodeKind.ScrollContainer
+                || !TryResolveCommandRange(node, elementCommandRanges, commandCount, out var commandStart, out var resolvedCommandCount)
+                || !TryFindScrollDiagnostic(layoutResult.ScrollDiagnostics, node.DfsIndex, out var diagnostic)
+                || !HasUniformClip(layoutResult.Elements, node.ElementStart, node.ElementCount, diagnostic.ClipBounds))
+            {
+                continue;
+            }
+
+            target = new ScrollCompositionTarget(
+                new CompositionLayerId(checked((int)node.Key.Value)),
+                node.Key,
+                node.DfsIndex,
+                commandStart,
+                resolvedCommandCount,
+                diagnostic.ClipBounds,
+                diagnostic.ScrollY,
+                diagnostic.MaxScrollY);
+            return target.IsValidForCommandCount(commandCount);
+        }
+
+        target = default;
+        return false;
+    }
+
+    private static bool HasUniformClip(IReadOnlyList<LayoutElement> elements, int elementStart, int elementCount, in PixelRectangle clipBounds)
+    {
+        if (clipBounds.Width <= 0
+            || clipBounds.Height <= 0
+            || elementStart < 0
+            || elementCount <= 0
+            || elementStart >= elements.Count
+            || elementStart + elementCount > elements.Count)
+        {
+            return false;
+        }
+
+        for (var i = elementStart; i < elementStart + elementCount; i++)
+        {
+            if (elements[i].ClipBounds != clipBounds)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryFindScrollDiagnostic(IReadOnlyList<ScrollContainerDiag> diagnostics, int dfsIndex, out ScrollContainerDiag diagnostic)
+    {
+        foreach (var candidate in diagnostics)
+        {
+            if (candidate.DfsIndex == dfsIndex)
+            {
+                diagnostic = candidate;
+                return true;
+            }
+        }
+
+        diagnostic = default;
+        return false;
+    }
+
     private static bool TryResolveCommandRange(
         in LayoutTreeNode node,
         ReadOnlySpan<ElementCommandRange> elementCommandRanges,
@@ -621,6 +699,21 @@ internal sealed record RenderPipelineRetainedInputSnapshot(
     {
         return RenderPipeline.TryResolveCompositionTarget(
             LayoutResult.TreeNodes,
+            ElementCommandRanges,
+            commandCount,
+            key,
+            out target);
+    }
+
+    public bool TryGetScrollCompositionTarget(NodeKey key, out ScrollCompositionTarget target)
+    {
+        return TryGetScrollCompositionTarget(key, CommandCount, out target);
+    }
+
+    internal bool TryGetScrollCompositionTarget(NodeKey key, int commandCount, out ScrollCompositionTarget target)
+    {
+        return RenderPipeline.TryResolveScrollCompositionTarget(
+            LayoutResult,
             ElementCommandRanges,
             commandCount,
             key,

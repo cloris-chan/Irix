@@ -275,7 +275,8 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 scrollY,
                 maxScrollY,
                 visibleCount,
-                clippedCount));
+                clippedCount,
+                containerClip));
 
             _cursorY = contentTop + containerVisibleHeight + _ctx.Style.ItemSpacing;
 

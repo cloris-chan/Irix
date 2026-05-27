@@ -304,6 +304,47 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(new DrawRect(40, 30, 40, 40), diagnostics.ExecuteResult.FillRectDiagnostics.LastEffectiveScissor.Bounds);
     }
 
+    [Fact]
+    public void ExecuteCompositionDiagnosticCore_keeps_fixed_clip_in_place_for_scroll_presentation()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        var style = resources.AddTextStyle(TextStyle.Default);
+        var text = resources.AddText("scroll");
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, -24, 140, 40), ClipBounds: new DrawRect(0, 0, 200, 60), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.DrawTextRun, Rect: new DrawRect(16, -24, 140, 40), Resource: style, Text: text, ClipBounds: new DrawRect(0, 0, 200, 60), Color: DrawColor.Opaque(240, 240, 240))
+        };
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 2,
+            new CompositionTransform(0, 30),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            new DrawRect(0, 0, 200, 60)));
+
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.Equal(2, diagnostics.TranslatedCommands);
+        Assert.Equal(0, diagnostics.OpacityAppliedCommands);
+        Assert.Equal(16, rects.Span[0].X);
+        Assert.Equal(6, rects.Span[0].Y);
+        Assert.Equal(new IntegerScissorRect(0, 0, 200, 60), rects.Span[0].Scissor);
+        Assert.Equal(new DrawRect(0, 0, 200, 60), diagnostics.ExecuteResult.TextClipDiagnostics.LastEffectiveTextClip.Bounds);
+    }
+
     private static DrawCommand Fill(DrawRect clipBounds)
     {
         return new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 50, 50), ClipBounds: clipBounds, Color: DrawColor.Opaque(1, 2, 3));

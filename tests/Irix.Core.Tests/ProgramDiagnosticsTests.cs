@@ -1893,10 +1893,40 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-composition-transform", programSource);
         Assert.Contains("CompositionTransformDiagnosticRunner.Run", programSource);
-        Assert.Contains("D3D12-backed layer update path for translation and opacity", design);
+        Assert.Contains("D3D12-backed layer updates for translation, opacity, and single-layer scroll presentation", design);
         Assert.Contains("D3D12-Composition-Spike-v0.md", status);
         Assert.Equal("composition.expected finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 layerStart=1 layerCommands=2 translatedCommands=2 opacityAppliedCommands=2 translate=(24,18) opacity=0.75", CompositionTransformDiagnosticRunner.FormatExpected(diagnostics));
         Assert.Equal("composition.actual finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 translatedCommands=2 opacityAppliedCommands=2 frameSerial=1 presentSerial=1 syncWaits=0 deviceRemoved=False", CompositionTransformDiagnosticRunner.FormatActual(diagnostics, 1, 1, 0, false));
+    }
+
+    [Fact]
+    public void D3D12_composition_scroll_spike_has_cli_and_machine_readable_fields()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition-Spike-v0.md")));
+
+        using var resources = FrameDrawingResources.Rent();
+        var commands = CompositionScrollDiagnosticRunner.BuildCommands(resources);
+        resources.Seal();
+        var frame = CompositionScrollDiagnosticRunner.BuildCompositionFrame(commands.Length);
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 640, 360),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.Contains("--diagnose-composition-scroll", programSource);
+        Assert.Contains("CompositionScrollDiagnosticRunner.Run", programSource);
+        Assert.Contains("fixed clip", design);
+        Assert.Equal("composition-scroll.expected finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 layerStart=1 layerCommands=2 translatedCommands=2 opacityAppliedCommands=0 fixedClip=True clip=(24,24,280,96) translate=(0,42)", CompositionScrollDiagnosticRunner.FormatExpected(diagnostics));
+        Assert.Equal("composition-scroll.actual finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 translatedCommands=2 opacityAppliedCommands=0 fixedClip=True frameSerial=1 presentSerial=1 syncWaits=0 deviceRemoved=False", CompositionScrollDiagnosticRunner.FormatActual(diagnostics, 1, 1, 0, false));
     }
 
     [Fact]

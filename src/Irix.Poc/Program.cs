@@ -181,6 +181,15 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-composition-scroll"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            CompositionScrollDiagnosticRunner.Run(
+                diagnosticOutput ?? Console.Out,
+                ParseDiagnosticScale(args));
+            return;
+        }
+
         if (args.Contains("--composition-demo"))
         {
             var durationMs = 4000;

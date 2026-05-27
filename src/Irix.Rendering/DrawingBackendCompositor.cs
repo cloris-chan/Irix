@@ -32,6 +32,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private long _frameTimeSampleCount;
     private long _maxFrameTimeTicks;
     private CompositionAnimationPlan? _compositionAnimationPlan;
+    private CompositionScrollPresentationPlan? _compositionScrollPresentationPlan;
     private CompositionFrame _lastCompositionFrame;
     private CompositionBackendExecutionResult _lastCompositionExecutionResult;
     private long _compositionTickCount;
@@ -153,6 +154,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     internal CompositionAnimationPlan? CompositionAnimationPlan => _compositionAnimationPlan;
 
+    internal CompositionScrollPresentationPlan? CompositionScrollPresentationPlan => _compositionScrollPresentationPlan;
+
     internal void SetCompositionAnimationPlan(in CompositionAnimationPlan plan)
     {
         if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
@@ -160,7 +163,9 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             throw new ArgumentException("Composition animation plan layer range must fit the retained command frame.", nameof(plan));
         }
 
+        _compositionScrollPresentationPlan = null;
         _compositionAnimationPlan = plan;
+        ClearCompositionPresentationState();
     }
 
     internal void SetCompositionAnimationDeclaration(
@@ -183,12 +188,52 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             throw new ArgumentException("Composition animation declaration target must resolve to a retained command range.", nameof(declaration));
         }
 
+        _compositionScrollPresentationPlan = null;
         _compositionAnimationPlan = plan;
+        ClearCompositionPresentationState();
     }
 
-    internal void ClearCompositionAnimationPlan()
+    internal void ClearCompositionPlan()
     {
         _compositionAnimationPlan = null;
+        _compositionScrollPresentationPlan = null;
+        ClearCompositionPresentationState();
+    }
+
+    internal void SetCompositionScrollPresentationPlan(in CompositionScrollPresentationPlan plan)
+    {
+        if (_retainedFrame.CommandCount > 0 && !plan.IsValidForCommandCount(_retainedFrame.CommandCount))
+        {
+            throw new ArgumentException("Composition scroll presentation plan layer range must fit the retained command frame.", nameof(plan));
+        }
+
+        _compositionAnimationPlan = null;
+        _compositionScrollPresentationPlan = plan;
+        ClearCompositionPresentationState();
+    }
+
+    internal void SetCompositionScrollPresentationDeclaration(
+        in CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (_retainedFrame.CommandCount <= 0)
+        {
+            throw new InvalidOperationException("A retained render frame must exist before installing a composition scroll presentation declaration.");
+        }
+
+        if (snapshot.CommandCount != _retainedFrame.CommandCount)
+        {
+            throw new ArgumentException("Composition scroll presentation declaration snapshot must match the retained command frame.", nameof(snapshot));
+        }
+
+        if (!declaration.TryResolve(snapshot, _retainedFrame.CommandCount, out var plan))
+        {
+            throw new ArgumentException("Composition scroll presentation declaration target must resolve to a retained scroll command range.", nameof(declaration));
+        }
+
+        _compositionAnimationPlan = null;
+        _compositionScrollPresentationPlan = plan;
         ClearCompositionPresentationState();
     }
 
@@ -222,7 +267,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _retainedFrame.ReleaseResources();
             _retainedFrame.Invalidate();
             _lastAppliedFrameId = 0;
-            ClearCompositionAnimationPlan();
+            ClearCompositionPlan();
             LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
             LastPartialApplySucceeded = false;
             LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
@@ -362,6 +407,51 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
 
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
+        return RenderCompositionFrameAtAsync(compositionBackend, commands, resources, compositionFrame, timestamp);
+    }
+
+    internal ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.Now(), cancellationToken);
+    }
+
+    internal ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled<CompositionBackendExecutionResult>(cancellationToken);
+        }
+
+        if (_compositionScrollPresentationPlan is not { } plan)
+        {
+            throw new InvalidOperationException("A composition scroll presentation plan must be set before compositor-only scroll ticks can be rendered.");
+        }
+
+        if (_backend is not ICompositionDrawingBackend compositionBackend
+            || (compositionBackend.CompositionCapabilities & CompositionBackendCapabilities.ScrollPresentation) != CompositionBackendCapabilities.ScrollPresentation)
+        {
+            throw new InvalidOperationException("The drawing backend must expose fixed-clip scroll presentation execution for compositor-only scroll ticks.");
+        }
+
+        if (!_retainedFrame.TryReadFrame(out var commands, out var resources))
+        {
+            throw new InvalidOperationException("A retained render frame must exist before compositor-only scroll ticks can be rendered.");
+        }
+
+        var compositionFrame = plan.Evaluate(commands.Length, timestamp);
+        return RenderCompositionFrameAtAsync(compositionBackend, commands, resources, compositionFrame, timestamp);
+    }
+
+    private ValueTask<CompositionBackendExecutionResult> RenderCompositionFrameAtAsync(
+        ICompositionDrawingBackend compositionBackend,
+        ReadOnlySpan<DrawCommand> commands,
+        IFrameResourceResolver resources,
+        in CompositionFrame compositionFrame,
+        CompositionTimestamp timestamp)
+    {
         var sw = Stopwatch.StartNew();
         var frameContext = CreateBackendFrameContext(timestamp.StopwatchTicks);
         var result = default(CompositionBackendExecutionResult);
@@ -692,8 +782,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             {
                 var targetX = (float)x;
                 var targetY = (float)y;
-                if (hasActiveLayer && IsHitTargetInLayer(hitTarget, activeLayer))
+                var inActiveLayer = hasActiveLayer && IsHitTargetInLayer(hitTarget, activeLayer);
+                if (inActiveLayer)
                 {
+                    if (activeLayer.HasFixedClip && !Contains(activeLayer.ClipBounds, targetX, targetY))
+                    {
+                        continue;
+                    }
+
                     targetX -= activeLayer.Transform.TranslateX;
                     targetY -= activeLayer.Transform.TranslateY;
                 }
@@ -708,10 +804,12 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
                 if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
                 {
-                    if (targetX < hitTarget.ClipBounds.X
-                        || targetY < hitTarget.ClipBounds.Y
-                        || targetX >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
-                        || targetY >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
+                    var clipX = inActiveLayer && activeLayer.HasFixedClip ? x : targetX;
+                    var clipY = inActiveLayer && activeLayer.HasFixedClip ? y : targetY;
+                    if (clipX < hitTarget.ClipBounds.X
+                        || clipY < hitTarget.ClipBounds.Y
+                        || clipX >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
+                        || clipY >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
                     {
                         continue;
                     }
@@ -740,6 +838,14 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         var layerEnd = layer.CommandStart + layer.CommandCount;
         var hitTargetEnd = hitTarget.CommandStart + hitTarget.CommandCount;
         return hitTarget.HasCommandRange && hitTarget.CommandStart >= layer.CommandStart && hitTargetEnd <= layerEnd;
+    }
+
+    private static bool Contains(in DrawRect bounds, float x, float y)
+    {
+        return x >= bounds.X
+            && y >= bounds.Y
+            && x < bounds.X + bounds.Width
+            && y < bounds.Y + bounds.Height;
     }
 
     private void SetCompositionPresentationState(

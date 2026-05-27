@@ -1,6 +1,6 @@
 # Animation / Composition v0
 
-> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets and remap hit testing through the active presented transform; a public animation API does not exist.
+> Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets and remap hit testing through the active presented transform; the internal scroll presentation path can resolve retained scroll container `NodeKey` declarations to fixed-clip composition plans. A public animation API does not exist.
 
 ## Goals
 
@@ -14,8 +14,8 @@
 
 - No public animation API.
 - No public timeline scheduler.
-- No scroll compositor implementation in this document.
 - No scroll code extraction from `Irix.Poc`.
+- No public scroll animation API or runtime commit/cancel policy.
 - No retained-array or snapshot ownership changes.
 
 ## Animation Ownership Classes
@@ -74,11 +74,11 @@ Ownership split:
 | `presentedScrollY` | Compositor. | Interpolated visual offset. Should not require layout rebuild per tick. |
 | Scroll hit-test mapping | Input/control adapter plus compositor state. | Pointer coordinates must map through current presented transform or use a committed-state fallback. |
 
-v0 does not implement compositor scroll. It only defines the target architecture so the current PoC scroll code is not promoted into the wrong layer.
+The current implementation supports the first scroll presentation slice: a retained scroll container whose child draw commands share one clip can resolve to a fixed-clip `CompositionScrollPresentationPlan`. The compositor moves content by `retainedScrollY - presentedScrollY` while the clip remains fixed. Logical scroll target/clamp still belongs to app/control runtime.
 
 ## Implementation Bias
 
-The first implementation case is D3D12-backed transform/opacity. It validates compositor state, timing, diagnostics, and backend update plumbing without scroll hit-test complexity.
+The first implementation cases are D3D12-backed transform/opacity and fixed-clip scroll presentation. They validate compositor state, timing, diagnostics, backend update plumbing, and hit-test remapping without extracting scroll state into `Irix.Rendering`.
 
 Runtime fallback is acceptable only when the GPU-first path exposes a concrete blocker. That fallback must preserve logical state ownership, emit diagnostics showing why compositor execution did not run, and remain secondary to the D3D12-backed path.
 
@@ -96,7 +96,7 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 | Commit policy | Whether and when final presented state updates logical runtime state. |
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 
-The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` path with typed timestamps. Normal render pipeline snapshots resolve internal `NodeKey`-addressable `CompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. `DrawingBackendCompositor.SetCompositionAnimationDeclaration` installs runtime declarations only after the declaration resolves against the retained frame, so the runtime path no longer guesses command ranges.
+The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` and `RenderCompositionScrollPresentationTickAtAsync` paths with typed timestamps. Normal render pipeline snapshots resolve internal `NodeKey`-addressable `CompositionTarget` and `ScrollCompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. `DrawingBackendCompositor.SetCompositionAnimationDeclaration` and `SetCompositionScrollPresentationDeclaration` install runtime declarations only after the declaration resolves against the retained frame, so the runtime path no longer guesses command ranges.
 
 ## Invalidation Rules
 
@@ -113,7 +113,7 @@ The runtime may create, cancel, or retarget animations. The backend/compositor a
 
 Transform/opacity compositor animation remaps hit testing by applying the inverse of the active layer transform before testing retained target bounds and clips. The current implementation keeps the authoritative hit-test data in the render pipeline and records retained command ranges on `HitTestTarget`, so only targets inside the active composition layer receive inverse-transform mapping. Static targets in the same retained frame keep normal logical hit testing.
 
-Scroll hit testing still needs the dedicated scroll presentation contract because scroll combines clipping, logical scroll target ownership, and possible input retarget/cancel policy.
+Fixed-clip scroll presentation first filters pointer coordinates against the fixed clip in presentation space, then applies the inverse content transform before testing retained target bounds. This keeps clipped-out presented content non-interactive while avoiding a per-tick layout rebuild. Runtime still owns whether new input commits, cancels, or retargets presented scroll state.
 
 ## GPU Offload Expectations
 

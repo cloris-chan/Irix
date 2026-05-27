@@ -248,6 +248,63 @@ internal readonly struct CompositionTarget(
     public static bool operator !=(CompositionTarget left, CompositionTarget right) => !left.Equals(right);
 }
 
+internal readonly struct ScrollCompositionTarget(
+    CompositionLayerId LayerId,
+    NodeKey Key,
+    int DfsIndex,
+    int CommandStart,
+    int CommandCount,
+    PixelRectangle ClipBounds,
+    float RetainedScrollY,
+    float MaxScrollY) : IEquatable<ScrollCompositionTarget>
+{
+    public CompositionLayerId LayerId { get; } = LayerId;
+    public NodeKey Key { get; } = Key;
+    public int DfsIndex { get; } = DfsIndex;
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+    public PixelRectangle ClipBounds { get; } = ClipBounds;
+    public float RetainedScrollY { get; } = RetainedScrollY;
+    public float MaxScrollY { get; } = MaxScrollY;
+
+    public bool IsValidForCommandCount(int commandCount)
+    {
+        return LayerId.IsValid
+            && Key != NodeKey.None
+            && CommandStart >= 0
+            && CommandCount > 0
+            && CommandStart <= commandCount
+            && CommandStart + CommandCount <= commandCount
+            && ClipBounds.Width > 0
+            && ClipBounds.Height > 0
+            && float.IsFinite(RetainedScrollY)
+            && float.IsFinite(MaxScrollY)
+            && RetainedScrollY >= 0f
+            && MaxScrollY >= 0f
+            && RetainedScrollY <= MaxScrollY;
+    }
+
+    public bool Equals(ScrollCompositionTarget other)
+    {
+        return LayerId == other.LayerId
+            && Key == other.Key
+            && DfsIndex == other.DfsIndex
+            && CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount
+            && ClipBounds == other.ClipBounds
+            && RetainedScrollY.Equals(other.RetainedScrollY)
+            && MaxScrollY.Equals(other.MaxScrollY);
+    }
+
+    public override bool Equals(object? obj) => obj is ScrollCompositionTarget other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(LayerId, Key, DfsIndex, CommandStart, CommandCount, ClipBounds, HashCode.Combine(RetainedScrollY, MaxScrollY));
+
+    public static bool operator ==(ScrollCompositionTarget left, ScrollCompositionTarget right) => left.Equals(right);
+
+    public static bool operator !=(ScrollCompositionTarget left, ScrollCompositionTarget right) => !left.Equals(right);
+}
+
 /// <summary>
 /// Result of building a layout tree: the flat element array, the flat tree structure
 /// for DFS-index lookups, and the dirty element ranges for incremental re-recording.
@@ -313,7 +370,8 @@ internal readonly struct ScrollContainerDiag(
     int ScrollY,
     int MaxScrollY,
     int VisibleElementCount,
-    int ClippedElementCount) : IEquatable<ScrollContainerDiag>
+    int ClippedElementCount,
+    PixelRectangle ClipBounds = default) : IEquatable<ScrollContainerDiag>
 {
 
     public int DfsIndex { get; } = DfsIndex;
@@ -323,6 +381,7 @@ internal readonly struct ScrollContainerDiag(
     public int MaxScrollY { get; } = MaxScrollY;
     public int VisibleElementCount { get; } = VisibleElementCount;
     public int ClippedElementCount { get; } = ClippedElementCount;
+    public PixelRectangle ClipBounds { get; } = ClipBounds;
 
     public bool Equals(ScrollContainerDiag other)
     {
@@ -332,12 +391,13 @@ internal readonly struct ScrollContainerDiag(
             && ScrollY == other.ScrollY
             && MaxScrollY == other.MaxScrollY
             && VisibleElementCount == other.VisibleElementCount
-            && ClippedElementCount == other.ClippedElementCount;
+            && ClippedElementCount == other.ClippedElementCount
+            && ClipBounds == other.ClipBounds;
     }
 
     public override bool Equals(object? obj) => obj is ScrollContainerDiag other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(DfsIndex, VisibleHeight, ContentHeight, ScrollY, MaxScrollY, VisibleElementCount, ClippedElementCount);
+    public override int GetHashCode() => HashCode.Combine(DfsIndex, VisibleHeight, ContentHeight, ScrollY, MaxScrollY, VisibleElementCount, ClippedElementCount, ClipBounds);
 
     public static bool operator ==(ScrollContainerDiag left, ScrollContainerDiag right) => left.Equals(right);
 

@@ -36,7 +36,7 @@ This remains valid. The composition architecture adds layer animation and backen
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, and inverse-transform hit-test remapping for active transform layers. The next architectural gap is scroll presentation.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, inverse-transform hit-test remapping for active transform layers, and fixed-clip scroll presentation for retained scroll containers whose content shares one clip. The next architectural gap is multi-layer composition for nested/mixed-clip scroll and later layer caching.
 
 Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
 
@@ -65,7 +65,7 @@ Composition IR should describe retained visual/layer intent without exposing bac
 | Dirty region | Optional invalidation region for content update. |
 | Animation descriptors | Data-driven compositor animations on eligible properties. |
 
-The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal runtime descriptor is `CompositionAnimationDeclaration`, which targets a stable `NodeKey` and resolves against `RenderPipelineRetainedInputSnapshot` into a `CompositionAnimationPlan`. `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` evaluates the plan over the retained frame and `ICompositionDrawingBackend.ExecuteComposition` consumes the resulting `CompositionFrame`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time.
+The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal runtime descriptors are `CompositionAnimationDeclaration` for transform/opacity and `CompositionScrollPresentationDeclaration` for fixed-clip scroll presentation; both target stable `NodeKey` values and resolve against `RenderPipelineRetainedInputSnapshot` into compositor plans. `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` and `RenderCompositionScrollPresentationTickAsync` evaluate those plans over the retained frame, and `ICompositionDrawingBackend.ExecuteComposition` consumes the resulting `CompositionFrame`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time.
 
 ## Backend Capability Model
 
@@ -74,7 +74,7 @@ Backends should report capabilities instead of forcing one feature baseline:
 | Capability | Meaning |
 |------------|---------|
 | `TransformOpacity` | Backend can advance transform/opacity composition ticks without UI rebuild. Implemented by D3D12 through `ICompositionDrawingBackend`. |
-| `SupportsIndependentScrollTransform` | Backend can apply presented scroll offset under a clip. |
+| `ScrollPresentation` / `SupportsIndependentScrollTransform` | Backend can apply presented scroll offset under a fixed clip. Implemented by D3D12 for single-layer retained scroll targets. |
 | `SupportsLayerOpacity` | Backend can apply per-layer opacity without re-recording content. |
 | `SupportsLayerClip` | Backend can clip a layer independently of content generation. |
 | `SupportsRenderTargetCaching` | Backend can cache layer content into GPU textures/render targets. |
@@ -108,10 +108,11 @@ The composition contract should not expose these backend objects to `Irix.Render
 | 3 | Stable retained layer identity from normal UI output. | Implemented as internal `CompositionTarget` resolution on retained input snapshots. |
 | 4 | Runtime animation declarations targeting retained `NodeKey`/`CompositionTarget` values. | Implemented internally for transform/opacity and used by the visible composition demo. |
 | 5 | Compositor-aware hit-test remapping. | Implemented for transform/opacity layers by retaining hit-target command ranges and inverse-mapping active layer transforms. |
-| 6 | Independent scroll presentation transform. | Next major UI benefit; avoids per-tick layout/draw rebuild. |
-| 7 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
-| 8 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
-| 9 | Effects/material graph. | Deferred until style/material contract exists. |
+| 6 | Independent scroll presentation transform. | Implemented for single fixed-clip retained scroll targets; nested/mixed-clip scroll needs multi-layer composition. |
+| 7 | Multi-layer composition / nested clip tree. | Needed before nested scroll and mixed clips can use the same presentation path. |
+| 8 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
+| 9 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
+| 10 | Effects/material graph. | Deferred until style/material contract exists. |
 
 ## Work Placement
 
@@ -151,6 +152,15 @@ Compositor owns:
 - Presented scroll offset interpolation.
 - Content transform under clip.
 - Optional frame pacing independent of UI rebuild.
+
+Current implementation scope:
+
+- Single retained scroll container.
+- One contiguous command range.
+- Uniform clip across the target range.
+- Fixed clip in presentation space and translated content underneath.
+
+Nested scroll, mixed child clips, and independently animated descendant layers require multi-layer composition instead of widening the single-layer contract.
 
 ## Advanced GPU Features
 

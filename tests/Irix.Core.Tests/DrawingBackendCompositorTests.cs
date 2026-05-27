@@ -252,6 +252,83 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task RenderCompositionScrollPresentationTickAsync_uses_fixed_clip_layer_without_regular_execute()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        Assert.True(snapshot.TryGetScrollCompositionTarget(new NodeKey(1), out var target));
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionScalarAnimation(40, 10)), snapshot);
+
+        var result = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(10), cancellationToken);
+
+        Assert.Equal(1, compositor.RenderCount);
+        Assert.Equal(1, compositor.CompositionTickCount);
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(1, backend.ExecuteCompositionCount);
+        Assert.Equal(CompositionClipMode.Fixed, backend.LastCompositionFrame.Layer.ClipMode);
+        Assert.Equal(new DrawRect(target.ClipBounds.X, target.ClipBounds.Y, target.ClipBounds.Width, target.ClipBounds.Height), backend.LastCompositionFrame.Layer.ClipBounds);
+        Assert.Equal(new CompositionTransform(0, 30), backend.LastCompositionFrame.Layer.Transform);
+        Assert.Equal(CompositionOpacity.Opaque, backend.LastCompositionFrame.Layer.Opacity);
+        Assert.Equal(frame.Commands.Count, result.CommandCount);
+        Assert.Same(frame.Resources, backend.LastCompositionResources);
+    }
+
+    [Fact]
+    public async Task TryGetActionIdAtLogicalPixel_maps_presented_scroll_offset_under_fixed_clip()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        Assert.True(snapshot.TryGetScrollCompositionTarget(new NodeKey(1), out _));
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionScalarAnimation(40, 10)), snapshot);
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(10), cancellationToken);
+
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(20, -4, out _));
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(20, 28, out var actionId));
+        Assert.Equal(new ActionId(100), actionId);
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(20, 88, out _));
+    }
+
+    [Fact]
     public void Dispose_disposes_backend()
     {
         var window = new FakeWindow();
@@ -487,6 +564,42 @@ public sealed class DrawingBackendCompositorTests
             CompositionScalarAnimation.Constant(1f));
 
         Assert.False(declaration.TryResolve(pipeline.LastRetainedInputSnapshot!, frame.Commands.Count, out _));
+    }
+
+    [Fact]
+    public void CompositionScrollPresentationDeclaration_resolves_scroll_container_to_fixed_clip_plan()
+    {
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        Assert.True(snapshot.TryGetScrollCompositionTarget(new NodeKey(1), out var target));
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionScalarAnimation(40, 10));
+
+        Assert.True(declaration.TryResolve(snapshot, out var plan));
+        var layer = plan.Evaluate(frame.Commands.Count, CompositionTimestamp.FromStopwatchTicks(10)).Layer;
+
+        Assert.Equal(target.LayerId, layer.Id);
+        Assert.Equal(target.CommandStart, layer.CommandStart);
+        Assert.Equal(target.CommandCount, layer.CommandCount);
+        Assert.Equal(CompositionClipMode.Fixed, layer.ClipMode);
+        Assert.Equal(new DrawRect(target.ClipBounds.X, target.ClipBounds.Y, target.ClipBounds.Width, target.ClipBounds.Height), layer.ClipBounds);
+        Assert.Equal(30, layer.Transform.TranslateY);
     }
 
     [Fact]
@@ -871,7 +984,7 @@ public sealed class DrawingBackendCompositorTests
         public FrameContext LastBeginFrameContext { get; private set; }
         public CompositionFrame LastCompositionFrame { get; private set; }
         public IFrameResourceResolver? LastCompositionResources { get; private set; }
-        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity;
+        public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation;
 
         public void BeginFrame(in FrameContext frameContext)
         {

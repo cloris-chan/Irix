@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Irix.Drawing;
+using Irix.Platform;
 
 namespace Irix.Rendering;
 
@@ -78,6 +79,12 @@ internal enum CompositionAnimationEasing : byte
 {
     Linear,
     SineInOut
+}
+
+internal enum CompositionClipMode : byte
+{
+    TransformWithContent,
+    Fixed
 }
 
 internal readonly struct CompositionTimestamp(long StopwatchTicks) : IEquatable<CompositionTimestamp>, IComparable<CompositionTimestamp>
@@ -346,6 +353,92 @@ internal readonly struct CompositionLayerAnimation(
     public static bool operator !=(CompositionLayerAnimation left, CompositionLayerAnimation right) => !left.Equals(right);
 }
 
+internal readonly struct CompositionScrollLayerAnimation(
+    CompositionLayerId LayerId,
+    int CommandStart,
+    int CommandCount,
+    PixelRectangle ClipBounds,
+    float RetainedScrollY,
+    float MaxScrollY,
+    CompositionAnimationTimeline Timeline,
+    CompositionScalarAnimation PresentedScrollY) : IEquatable<CompositionScrollLayerAnimation>
+{
+    public CompositionLayerId LayerId { get; } = LayerId;
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+    public PixelRectangle ClipBounds { get; } = ClipBounds;
+    public float RetainedScrollY { get; } = RetainedScrollY;
+    public float MaxScrollY { get; } = MaxScrollY;
+    public CompositionAnimationTimeline Timeline { get; } = Timeline;
+    public CompositionScalarAnimation PresentedScrollY { get; } = PresentedScrollY;
+
+    public CompositionLayer Evaluate(CompositionTimestamp timestamp)
+    {
+        var progress = Timeline.ProgressAt(timestamp);
+        var presentedScrollY = PresentedScrollY.Evaluate(progress);
+        return new CompositionLayer(
+            LayerId,
+            CommandStart,
+            CommandCount,
+            new CompositionTransform(0f, RetainedScrollY - presentedScrollY),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            ToDrawRect(ClipBounds));
+    }
+
+    public bool IsValidForCommandCount(int commandCount)
+    {
+        return LayerId.IsValid
+            && CommandStart >= 0
+            && CommandCount > 0
+            && CommandStart <= commandCount
+            && CommandStart + CommandCount <= commandCount
+            && ClipBounds.Width > 0
+            && ClipBounds.Height > 0
+            && float.IsFinite(RetainedScrollY)
+            && RetainedScrollY >= 0f
+            && float.IsFinite(MaxScrollY)
+            && MaxScrollY >= 0f
+            && RetainedScrollY <= MaxScrollY
+            && IsPresentedScrollInRange(PresentedScrollY, MaxScrollY);
+    }
+
+    public bool Equals(CompositionScrollLayerAnimation other)
+    {
+        return LayerId == other.LayerId
+            && CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount
+            && ClipBounds == other.ClipBounds
+            && RetainedScrollY.Equals(other.RetainedScrollY)
+            && MaxScrollY.Equals(other.MaxScrollY)
+            && Timeline == other.Timeline
+            && PresentedScrollY == other.PresentedScrollY;
+    }
+
+    public override bool Equals(object? obj) => obj is CompositionScrollLayerAnimation other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(LayerId, CommandStart, CommandCount, ClipBounds, HashCode.Combine(RetainedScrollY, MaxScrollY, Timeline, PresentedScrollY));
+
+    public static bool operator ==(CompositionScrollLayerAnimation left, CompositionScrollLayerAnimation right) => left.Equals(right);
+
+    public static bool operator !=(CompositionScrollLayerAnimation left, CompositionScrollLayerAnimation right) => !left.Equals(right);
+
+    private static bool IsPresentedScrollInRange(in CompositionScalarAnimation animation, float maxScrollY)
+    {
+        return float.IsFinite(animation.From)
+            && float.IsFinite(animation.To)
+            && animation.From >= 0f
+            && animation.To >= 0f
+            && animation.From <= maxScrollY
+            && animation.To <= maxScrollY;
+    }
+
+    private static DrawRect ToDrawRect(in PixelRectangle bounds)
+    {
+        return new DrawRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+    }
+}
+
 internal readonly struct CompositionAnimationPlan(CompositionLayerAnimation LayerAnimation) : IEquatable<CompositionAnimationPlan>
 {
     public CompositionLayerAnimation LayerAnimation { get; } = LayerAnimation;
@@ -371,6 +464,33 @@ internal readonly struct CompositionAnimationPlan(CompositionLayerAnimation Laye
     public static bool operator ==(CompositionAnimationPlan left, CompositionAnimationPlan right) => left.Equals(right);
 
     public static bool operator !=(CompositionAnimationPlan left, CompositionAnimationPlan right) => !left.Equals(right);
+}
+
+internal readonly struct CompositionScrollPresentationPlan(CompositionScrollLayerAnimation LayerAnimation) : IEquatable<CompositionScrollPresentationPlan>
+{
+    public CompositionScrollLayerAnimation LayerAnimation { get; } = LayerAnimation;
+
+    public bool IsValidForCommandCount(int commandCount) => LayerAnimation.IsValidForCommandCount(commandCount);
+
+    public CompositionFrame Evaluate(int commandCount, CompositionTimestamp timestamp)
+    {
+        if (!IsValidForCommandCount(commandCount))
+        {
+            throw new ArgumentException("Composition scroll presentation layer range must reference a non-empty range inside the command span.", nameof(commandCount));
+        }
+
+        return new CompositionFrame(LayerAnimation.Evaluate(timestamp));
+    }
+
+    public bool Equals(CompositionScrollPresentationPlan other) => LayerAnimation == other.LayerAnimation;
+
+    public override bool Equals(object? obj) => obj is CompositionScrollPresentationPlan other && Equals(other);
+
+    public override int GetHashCode() => LayerAnimation.GetHashCode();
+
+    public static bool operator ==(CompositionScrollPresentationPlan left, CompositionScrollPresentationPlan right) => left.Equals(right);
+
+    public static bool operator !=(CompositionScrollPresentationPlan left, CompositionScrollPresentationPlan right) => !left.Equals(right);
 }
 
 internal readonly struct CompositionAnimationDeclaration(
@@ -428,18 +548,85 @@ internal readonly struct CompositionAnimationDeclaration(
     public static bool operator !=(CompositionAnimationDeclaration left, CompositionAnimationDeclaration right) => !left.Equals(right);
 }
 
+internal readonly struct CompositionScrollPresentationDeclaration(
+    NodeKey TargetKey,
+    CompositionAnimationTimeline Timeline,
+    CompositionScalarAnimation PresentedScrollY) : IEquatable<CompositionScrollPresentationDeclaration>
+{
+    public NodeKey TargetKey { get; } = TargetKey;
+    public CompositionAnimationTimeline Timeline { get; } = Timeline;
+    public CompositionScalarAnimation PresentedScrollY { get; } = PresentedScrollY;
+
+    public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, out CompositionScrollPresentationPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return TryResolve(snapshot, snapshot.CommandCount, out plan);
+    }
+
+    public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, int commandCount, out CompositionScrollPresentationPlan plan)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (TargetKey == NodeKey.None
+            || !snapshot.TryGetScrollCompositionTarget(TargetKey, commandCount, out var target)
+            || !target.IsValidForCommandCount(commandCount))
+        {
+            plan = default;
+            return false;
+        }
+
+        var animation = new CompositionScrollLayerAnimation(
+            target.LayerId,
+            target.CommandStart,
+            target.CommandCount,
+            target.ClipBounds,
+            target.RetainedScrollY,
+            target.MaxScrollY,
+            Timeline,
+            PresentedScrollY);
+        if (!animation.IsValidForCommandCount(commandCount))
+        {
+            plan = default;
+            return false;
+        }
+
+        plan = new CompositionScrollPresentationPlan(animation);
+        return true;
+    }
+
+    public bool Equals(CompositionScrollPresentationDeclaration other)
+    {
+        return TargetKey == other.TargetKey
+            && Timeline == other.Timeline
+            && PresentedScrollY == other.PresentedScrollY;
+    }
+
+    public override bool Equals(object? obj) => obj is CompositionScrollPresentationDeclaration other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(TargetKey, Timeline, PresentedScrollY);
+
+    public static bool operator ==(CompositionScrollPresentationDeclaration left, CompositionScrollPresentationDeclaration right) => left.Equals(right);
+
+    public static bool operator !=(CompositionScrollPresentationDeclaration left, CompositionScrollPresentationDeclaration right) => !left.Equals(right);
+}
+
 internal readonly struct CompositionLayer(
     CompositionLayerId Id,
     int CommandStart,
     int CommandCount,
     CompositionTransform Transform,
-    CompositionOpacity Opacity) : IEquatable<CompositionLayer>
+    CompositionOpacity Opacity,
+    CompositionClipMode ClipMode = CompositionClipMode.TransformWithContent,
+    DrawRect ClipBounds = default) : IEquatable<CompositionLayer>
 {
     public CompositionLayerId Id { get; } = Id;
     public int CommandStart { get; } = CommandStart;
     public int CommandCount { get; } = CommandCount;
     public CompositionTransform Transform { get; } = Transform;
     public CompositionOpacity Opacity { get; } = Opacity;
+    public CompositionClipMode ClipMode { get; } = ClipMode;
+    public DrawRect ClipBounds { get; } = ClipBounds;
+
+    public bool HasFixedClip => ClipMode == CompositionClipMode.Fixed && ClipBounds.Width > 0f && ClipBounds.Height > 0f;
 
     public bool IsValidForCommandCount(int commandCount)
     {
@@ -447,7 +634,8 @@ internal readonly struct CompositionLayer(
             && CommandStart >= 0
             && CommandCount > 0
             && CommandStart <= commandCount
-            && CommandStart + CommandCount <= commandCount;
+            && CommandStart + CommandCount <= commandCount
+            && (ClipMode != CompositionClipMode.Fixed || HasFixedClip);
     }
 
     public bool Equals(CompositionLayer other)
@@ -456,12 +644,14 @@ internal readonly struct CompositionLayer(
             && CommandStart == other.CommandStart
             && CommandCount == other.CommandCount
             && Transform == other.Transform
-            && Opacity == other.Opacity;
+            && Opacity == other.Opacity
+            && ClipMode == other.ClipMode
+            && ClipBounds == other.ClipBounds;
     }
 
     public override bool Equals(object? obj) => obj is CompositionLayer other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Id, CommandStart, CommandCount, Transform, Opacity);
+    public override int GetHashCode() => HashCode.Combine(Id, CommandStart, CommandCount, Transform, Opacity, ClipMode, ClipBounds);
 
     public static bool operator ==(CompositionLayer left, CompositionLayer right) => left.Equals(right);
 
@@ -491,7 +681,9 @@ internal enum CompositionBackendCapabilities : byte
     None = 0,
     Transform = 1,
     Opacity = 2,
-    TransformOpacity = Transform | Opacity
+    FixedClip = 4,
+    TransformOpacity = Transform | Opacity,
+    ScrollPresentation = Transform | FixedClip
 }
 
 internal readonly struct CompositionBackendExecutionResult(

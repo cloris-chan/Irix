@@ -269,7 +269,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public DrawingBackendClipMode ClipMode { get; private set; } = clipMode;
 
-    public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity;
+    public CompositionBackendCapabilities CompositionCapabilities => CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation;
 
     /// <summary>Frame serial diagnostics from the D3D12 renderer (sync wait count, timing, etc.).</summary>
     internal D3D12Renderer.FrameSerialDiagnostics FrameSerialDiagnostics => _renderer.GetFrameSerialDiagnostics();
@@ -562,7 +562,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             var command = commands[i];
             if ((uint)(i - layer.CommandStart) < (uint)layer.CommandCount)
             {
-                command = ApplyComposition(command, transform, opacity);
+                command = ApplyComposition(command, layer);
                 if (!transform.IsIdentity)
                 {
                     translatedCommands++;
@@ -591,15 +591,17 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             ExecuteResult: executeResult);
     }
 
-    private static DrawCommand ApplyComposition(in DrawCommand command, in CompositionTransform transform, CompositionOpacity opacity)
+    private static DrawCommand ApplyComposition(in DrawCommand command, in CompositionLayer layer)
     {
+        var transform = layer.Transform;
+        var opacity = layer.Opacity;
         return new DrawCommand(
             command.Kind,
             Translate(command.Rect, transform),
             ApplyOpacity(command.Color, opacity),
             command.Resource,
             command.Text,
-            Translate(command.ClipBounds, transform),
+            layer.HasFixedClip ? layer.ClipBounds : Translate(command.ClipBounds, transform),
             command.StrokeWidth,
             command.Transform,
             command.ZIndex);
