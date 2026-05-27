@@ -294,6 +294,62 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task RenderCompositionScrollPresentationTickAsync_decomposes_nested_scroll_clips_into_ordered_layers()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(120), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "Outer", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                new VirtualNode(
+                    VirtualNodeKind.ScrollContainer,
+                    key: 3,
+                    properties: [VirtualNodeProperty.Height(48)],
+                    children:
+                    [
+                        VirtualNodeBuilder.Button(_arena, "Inner A", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(200))),
+                        VirtualNodeBuilder.Button(_arena, "Inner B", new NodeKey(5), VirtualNodeProperty.Action(new ActionId(300)))
+                    ]),
+                VirtualNodeBuilder.Button(_arena, "Outer tail", new NodeKey(6), VirtualNodeProperty.Action(new ActionId(400)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 260, 180), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        Assert.True(snapshot.TryGetScrollCompositionTarget(new NodeKey(1), out var target));
+        Assert.True(target.LayerCount >= 3);
+        Assert.NotEqual(target.GetLayer(0).ClipBounds, target.GetLayer(1).ClipBounds);
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionScalarAnimation(40, 10)), snapshot);
+
+        var result = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(10), cancellationToken);
+
+        Assert.Equal(target.LayerCount, result.LayerCount);
+        Assert.Equal(target.LayerCount, backend.LastCompositionFrame.LayerCount);
+        for (var i = 0; i < target.LayerCount; i++)
+        {
+            var expectedTargetLayer = target.GetLayer(i);
+            var actualLayer = backend.LastCompositionFrame.GetLayer(i);
+            Assert.Equal(expectedTargetLayer.LayerId, actualLayer.Id);
+            Assert.Equal(expectedTargetLayer.CommandStart, actualLayer.CommandStart);
+            Assert.Equal(expectedTargetLayer.CommandCount, actualLayer.CommandCount);
+            Assert.Equal(new DrawRect(expectedTargetLayer.ClipBounds.X, expectedTargetLayer.ClipBounds.Y, expectedTargetLayer.ClipBounds.Width, expectedTargetLayer.ClipBounds.Height), actualLayer.ClipBounds);
+            Assert.Equal(CompositionClipMode.Fixed, actualLayer.ClipMode);
+            Assert.Equal(new CompositionTransform(0, 30), actualLayer.Transform);
+        }
+    }
+
+    [Fact]
     public async Task TryGetActionIdAtLogicalPixel_maps_presented_scroll_offset_under_fixed_clip()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -838,6 +894,46 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(CompositionClipMode.Fixed, layer.ClipMode);
         Assert.Equal(new DrawRect(target.ClipBounds.X, target.ClipBounds.Y, target.ClipBounds.Width, target.ClipBounds.Height), layer.ClipBounds);
         Assert.Equal(30, layer.Transform.TranslateY);
+    }
+
+    [Fact]
+    public void CompositionScrollPresentationDeclaration_resolves_nested_scroll_clip_runs_to_multilayer_plan()
+    {
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(120), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "Outer", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                new VirtualNode(
+                    VirtualNodeKind.ScrollContainer,
+                    key: 3,
+                    properties: [VirtualNodeProperty.Height(48)],
+                    children:
+                    [
+                        VirtualNodeBuilder.Button(_arena, "Inner A", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(200))),
+                        VirtualNodeBuilder.Button(_arena, "Inner B", new NodeKey(5), VirtualNodeProperty.Action(new ActionId(300)))
+                    ]),
+                VirtualNodeBuilder.Button(_arena, "Outer tail", new NodeKey(6), VirtualNodeProperty.Action(new ActionId(400)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 260, 180), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionScalarAnimation(40, 10));
+
+        Assert.True(snapshot.TryGetScrollCompositionTarget(new NodeKey(1), out var target));
+        Assert.True(declaration.TryResolve(snapshot, out var plan));
+        var compositionFrame = plan.Evaluate(frame.Commands.Count, CompositionTimestamp.FromStopwatchTicks(10));
+
+        Assert.True(compositionFrame.LayerCount >= 3);
+        Assert.Equal(target.LayerCount, compositionFrame.LayerCount);
+        Assert.NotEqual(compositionFrame.GetLayer(0).ClipBounds, compositionFrame.GetLayer(1).ClipBounds);
     }
 
     [Fact]

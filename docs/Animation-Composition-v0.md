@@ -74,7 +74,7 @@ Ownership split:
 | `presentedScrollY` | Compositor. | Interpolated visual offset. Should not require layout rebuild per tick. |
 | Scroll hit-test mapping | Input/control adapter plus compositor state. | Pointer coordinates must map through current presented transform or use a committed-state fallback. |
 
-The current implementation supports the first scroll presentation slice: a retained scroll container whose child draw commands share one clip can resolve to a fixed-clip `CompositionScrollPresentationPlan`. The compositor moves content by `retainedScrollY - presentedScrollY` while the clip remains fixed. `CompositionFrame` can now carry multiple ordered layers on the D3D12 path, but retained nested/mixed-clip scroll targets still need decomposition into those layers. Logical scroll target/clamp still belongs to app/control runtime.
+The current implementation supports scroll presentation for retained scroll containers by resolving child draw-command runs into one or more fixed-clip composition layers. The compositor moves content by `retainedScrollY - presentedScrollY` while each resolved clip remains fixed; nested/mixed-clip scroll targets are decomposed into ordered `CompositionFrame` layers on the D3D12 path. Logical scroll target/clamp still belongs to app/control runtime.
 
 ## Implementation Bias
 

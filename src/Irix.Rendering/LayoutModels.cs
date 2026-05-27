@@ -249,60 +249,196 @@ internal readonly struct CompositionTarget(
 }
 
 internal readonly struct ScrollCompositionTarget(
-    CompositionLayerId LayerId,
     NodeKey Key,
     int DfsIndex,
-    int CommandStart,
-    int CommandCount,
-    PixelRectangle ClipBounds,
     float RetainedScrollY,
-    float MaxScrollY) : IEquatable<ScrollCompositionTarget>
+    float MaxScrollY,
+    ScrollCompositionLayerTarget Layer,
+    ScrollCompositionLayerTarget[]? AdditionalLayers = null) : IEquatable<ScrollCompositionTarget>
 {
-    public CompositionLayerId LayerId { get; } = LayerId;
+    private readonly ScrollCompositionLayerTarget[]? _additionalLayers = AdditionalLayers;
+
     public NodeKey Key { get; } = Key;
     public int DfsIndex { get; } = DfsIndex;
+    public float RetainedScrollY { get; } = RetainedScrollY;
+    public float MaxScrollY { get; } = MaxScrollY;
+    public ScrollCompositionLayerTarget Layer { get; } = Layer;
+    public int LayerCount => Layer.LayerId.IsValid ? 1 + (_additionalLayers?.Length ?? 0) : 0;
+
+    public CompositionLayerId LayerId => Layer.LayerId;
+    public int CommandStart => ResolveCommandStart();
+    public int CommandCount => ResolveCommandEnd() - CommandStart;
+    public PixelRectangle ClipBounds => Layer.ClipBounds;
+
+    public ScrollCompositionLayerTarget GetLayer(int index)
+    {
+        if (index == 0 && LayerCount > 0)
+        {
+            return Layer;
+        }
+
+        if (_additionalLayers is not null && (uint)(index - 1) < (uint)_additionalLayers.Length)
+        {
+            return _additionalLayers[index - 1];
+        }
+
+        throw new ArgumentOutOfRangeException(nameof(index));
+    }
+
+    public bool IsValidForCommandCount(int commandCount)
+    {
+        if (Key == NodeKey.None
+            || !float.IsFinite(RetainedScrollY)
+            || !float.IsFinite(MaxScrollY)
+            || RetainedScrollY < 0f
+            || MaxScrollY < 0f
+            || RetainedScrollY > MaxScrollY
+            || LayerCount == 0)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < LayerCount; i++)
+        {
+            var layer = GetLayer(i);
+            if (!layer.IsValidForCommandCount(commandCount) || HasDuplicateLayerId(i, layer.LayerId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public bool Equals(ScrollCompositionTarget other)
+    {
+        if (Key != other.Key
+            || DfsIndex != other.DfsIndex
+            || !RetainedScrollY.Equals(other.RetainedScrollY)
+            || !MaxScrollY.Equals(other.MaxScrollY)
+            || LayerCount != other.LayerCount)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < LayerCount; i++)
+        {
+            if (GetLayer(i) != other.GetLayer(i))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is ScrollCompositionTarget other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        hashCode.Add(Key);
+        hashCode.Add(DfsIndex);
+        hashCode.Add(RetainedScrollY);
+        hashCode.Add(MaxScrollY);
+        for (var i = 0; i < LayerCount; i++)
+        {
+            hashCode.Add(GetLayer(i));
+        }
+
+        return hashCode.ToHashCode();
+    }
+
+    public static bool operator ==(ScrollCompositionTarget left, ScrollCompositionTarget right) => left.Equals(right);
+
+    public static bool operator !=(ScrollCompositionTarget left, ScrollCompositionTarget right) => !left.Equals(right);
+
+    private bool HasDuplicateLayerId(int currentIndex, CompositionLayerId layerId)
+    {
+        for (var i = 0; i < currentIndex; i++)
+        {
+            if (GetLayer(i).LayerId == layerId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int ResolveCommandStart()
+    {
+        var layerCount = LayerCount;
+        if (layerCount == 0)
+        {
+            return 0;
+        }
+
+        var start = GetLayer(0).CommandStart;
+        for (var i = 1; i < layerCount; i++)
+        {
+            start = Math.Min(start, GetLayer(i).CommandStart);
+        }
+
+        return start;
+    }
+
+    private int ResolveCommandEnd()
+    {
+        var layerCount = LayerCount;
+        if (layerCount == 0)
+        {
+            return 0;
+        }
+
+        var end = 0;
+        for (var i = 0; i < layerCount; i++)
+        {
+            var layer = GetLayer(i);
+            end = Math.Max(end, layer.CommandStart + layer.CommandCount);
+        }
+
+        return end;
+    }
+}
+
+internal readonly struct ScrollCompositionLayerTarget(
+    CompositionLayerId LayerId,
+    int CommandStart,
+    int CommandCount,
+    PixelRectangle ClipBounds) : IEquatable<ScrollCompositionLayerTarget>
+{
+    public CompositionLayerId LayerId { get; } = LayerId;
     public int CommandStart { get; } = CommandStart;
     public int CommandCount { get; } = CommandCount;
     public PixelRectangle ClipBounds { get; } = ClipBounds;
-    public float RetainedScrollY { get; } = RetainedScrollY;
-    public float MaxScrollY { get; } = MaxScrollY;
 
     public bool IsValidForCommandCount(int commandCount)
     {
         return LayerId.IsValid
-            && Key != NodeKey.None
             && CommandStart >= 0
             && CommandCount > 0
             && CommandStart <= commandCount
             && CommandStart + CommandCount <= commandCount
             && ClipBounds.Width > 0
-            && ClipBounds.Height > 0
-            && float.IsFinite(RetainedScrollY)
-            && float.IsFinite(MaxScrollY)
-            && RetainedScrollY >= 0f
-            && MaxScrollY >= 0f
-            && RetainedScrollY <= MaxScrollY;
+            && ClipBounds.Height > 0;
     }
 
-    public bool Equals(ScrollCompositionTarget other)
+    public bool Equals(ScrollCompositionLayerTarget other)
     {
         return LayerId == other.LayerId
-            && Key == other.Key
-            && DfsIndex == other.DfsIndex
             && CommandStart == other.CommandStart
             && CommandCount == other.CommandCount
-            && ClipBounds == other.ClipBounds
-            && RetainedScrollY.Equals(other.RetainedScrollY)
-            && MaxScrollY.Equals(other.MaxScrollY);
+            && ClipBounds == other.ClipBounds;
     }
 
-    public override bool Equals(object? obj) => obj is ScrollCompositionTarget other && Equals(other);
+    public override bool Equals(object? obj) => obj is ScrollCompositionLayerTarget other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(LayerId, Key, DfsIndex, CommandStart, CommandCount, ClipBounds, HashCode.Combine(RetainedScrollY, MaxScrollY));
+    public override int GetHashCode() => HashCode.Combine(LayerId, CommandStart, CommandCount, ClipBounds);
 
-    public static bool operator ==(ScrollCompositionTarget left, ScrollCompositionTarget right) => left.Equals(right);
+    public static bool operator ==(ScrollCompositionLayerTarget left, ScrollCompositionLayerTarget right) => left.Equals(right);
 
-    public static bool operator !=(ScrollCompositionTarget left, ScrollCompositionTarget right) => !left.Equals(right);
+    public static bool operator !=(ScrollCompositionLayerTarget left, ScrollCompositionLayerTarget right) => !left.Equals(right);
 }
 
 /// <summary>

@@ -36,7 +36,7 @@ This remains valid. The composition architecture adds layer animation and backen
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, inverse-transform hit-test remapping for active transform layers, fixed-clip scroll presentation for retained scroll containers whose content shares one clip, a marker-event pump that maps compositor-produced runtime event ids to UI runtime messages outside the backend, and first-slice multi-layer composition frame execution on D3D12. The next architectural gap is retained target decomposition for nested/mixed-clip scroll and later layer caching.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, inverse-transform hit-test remapping for active transform layers, fixed-clip scroll presentation for retained scroll containers, retained nested/mixed-clip scroll decomposition into ordered composition layers, a marker-event pump that maps compositor-produced runtime event ids to UI runtime messages outside the backend, and first-slice multi-layer composition frame execution on D3D12. The next architectural gap is layer caching and runtime commit/cancel policy.
 
 Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
 
@@ -74,7 +74,7 @@ Backends should report capabilities instead of forcing one feature baseline:
 | Capability | Meaning |
 |------------|---------|
 | `TransformOpacity` | Backend can advance transform/opacity composition ticks without UI rebuild. Implemented by D3D12 through `ICompositionDrawingBackend`. |
-| `ScrollPresentation` / `SupportsIndependentScrollTransform` | Backend can apply presented scroll offset under a fixed clip. Implemented by D3D12 for single-layer retained scroll targets. |
+| `ScrollPresentation` / `SupportsIndependentScrollTransform` | Backend can apply presented scroll offset under fixed clips. Implemented by D3D12 for single-layer and decomposed nested/mixed-clip retained scroll targets. |
 | `SupportsLayerOpacity` | Backend can apply per-layer opacity without re-recording content. |
 | `SupportsLayerClip` | Backend can clip a layer independently of content generation. |
 | `SupportsRenderTargetCaching` | Backend can cache layer content into GPU textures/render targets. |
@@ -108,11 +108,11 @@ The composition contract should not expose these backend objects to `Irix.Render
 | 3 | Stable retained layer identity from normal UI output. | Implemented as internal `CompositionTarget` resolution on retained input snapshots. |
 | 4 | Runtime animation declarations targeting retained `NodeKey`/`CompositionTarget` values. | Implemented internally for transform/opacity and used by the visible composition demo. |
 | 5 | Compositor-aware hit-test remapping. | Implemented for transform/opacity layers by retaining hit-target command ranges and inverse-mapping active layer transforms. |
-| 6 | Independent scroll presentation transform. | Implemented for single fixed-clip retained scroll targets; nested/mixed-clip scroll needs generated multi-layer target decomposition. |
+| 6 | Independent scroll presentation transform. | Implemented for single fixed-clip retained scroll targets and nested/mixed clips through generated multi-layer target decomposition. |
 | 7 | Compositor marker event queue. | Implemented for transform/opacity and scroll presentation; marker triggers use timeline interval crossing and runtime-owned event ids. |
 | 8 | Runtime marker event dispatch bridge. | Implemented internally through `CompositionMarkerEventPump`, `ICompositionMarkerEventMapper<TMessage>`, and a PoC `--diagnose-composition-marker-runtime` proof. |
 | 9 | Multi-layer composition frame execution. | Implemented on the D3D12 execution path with ordered layer application and `--diagnose-composition-multilayer`. |
-| 10 | Nested/mixed-clip retained target decomposition. | Needed before nested scroll and mixed clips can use generated multi-layer presentation. |
+| 10 | Nested/mixed-clip retained target decomposition. | Implemented by splitting retained scroll target command runs by fixed clip into ordered composition layers. |
 | 11 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
 | 12 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
 | 13 | Effects/material graph. | Deferred until style/material contract exists. |

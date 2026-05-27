@@ -578,22 +578,27 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         {
             if (node.Key != key
                 || node.Kind != VirtualNodeKind.ScrollContainer
-                || !TryResolveCommandRange(node, elementCommandRanges, commandCount, out var commandStart, out var resolvedCommandCount)
                 || !TryFindScrollDiagnostic(layoutResult.ScrollDiagnostics, node.DfsIndex, out var diagnostic)
-                || !HasUniformClip(layoutResult.Elements, node.ElementStart, node.ElementCount, diagnostic.ClipBounds))
+                || !TryResolveScrollCompositionLayers(
+                    layoutResult.Elements,
+                    elementCommandRanges,
+                    commandCount,
+                    node.ElementStart,
+                    node.ElementCount,
+                    checked((int)node.Key.Value),
+                    out var firstLayer,
+                    out var additionalLayers))
             {
                 continue;
             }
 
             target = new ScrollCompositionTarget(
-                new CompositionLayerId(checked((int)node.Key.Value)),
                 node.Key,
                 node.DfsIndex,
-                commandStart,
-                resolvedCommandCount,
-                diagnostic.ClipBounds,
                 diagnostic.ScrollY,
-                diagnostic.MaxScrollY);
+                diagnostic.MaxScrollY,
+                firstLayer,
+                additionalLayers);
             return target.IsValidForCommandCount(commandCount);
         }
 
@@ -601,26 +606,123 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         return false;
     }
 
-    private static bool HasUniformClip(IReadOnlyList<LayoutElement> elements, int elementStart, int elementCount, in PixelRectangle clipBounds)
+    private static bool TryResolveScrollCompositionLayers(
+        IReadOnlyList<LayoutElement> elements,
+        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        int commandCount,
+        int elementStart,
+        int elementCount,
+        int baseLayerId,
+        out ScrollCompositionLayerTarget firstLayer,
+        out ScrollCompositionLayerTarget[] additionalLayers)
     {
-        if (clipBounds.Width <= 0
-            || clipBounds.Height <= 0
+        firstLayer = default;
+        additionalLayers = [];
+        if (baseLayerId <= 0
             || elementStart < 0
             || elementCount <= 0
             || elementStart >= elements.Count
-            || elementStart + elementCount > elements.Count)
+            || elementStart + elementCount > elements.Count
+            || elementStart + elementCount > elementCommandRanges.Length)
         {
             return false;
         }
 
+        var layers = new List<ScrollCompositionLayerTarget>(4);
+        var currentClip = default(PixelRectangle);
+        var currentStart = 0;
+        var currentEnd = 0;
+        var hasCurrent = false;
         for (var i = elementStart; i < elementStart + elementCount; i++)
         {
-            if (elements[i].ClipBounds != clipBounds)
+            var commandRange = elementCommandRanges[i];
+            if (commandRange.CommandCount <= 0)
+            {
+                continue;
+            }
+
+            var commandStart = commandRange.CommandStart;
+            var commandEnd = commandStart + commandRange.CommandCount;
+            var clipBounds = elements[i].ClipBounds;
+            if (clipBounds.Width <= 0
+                || clipBounds.Height <= 0
+                || commandStart < 0
+                || commandEnd <= commandStart
+                || commandEnd > commandCount)
+            {
+                return false;
+            }
+
+            if (!hasCurrent)
+            {
+                currentClip = clipBounds;
+                currentStart = commandStart;
+                currentEnd = commandEnd;
+                hasCurrent = true;
+                continue;
+            }
+
+            if (clipBounds == currentClip && commandStart == currentEnd)
+            {
+                currentEnd = commandEnd;
+                continue;
+            }
+
+            if (!TryAppendScrollCompositionLayer(layers, baseLayerId, currentStart, currentEnd - currentStart, currentClip))
+            {
+                return false;
+            }
+
+            currentClip = clipBounds;
+            currentStart = commandStart;
+            currentEnd = commandEnd;
+        }
+
+        if (!hasCurrent || !TryAppendScrollCompositionLayer(layers, baseLayerId, currentStart, currentEnd - currentStart, currentClip))
+        {
+            return false;
+        }
+
+        firstLayer = layers[0];
+        if (layers.Count > 1)
+        {
+            additionalLayers = new ScrollCompositionLayerTarget[layers.Count - 1];
+            for (var i = 1; i < layers.Count; i++)
+            {
+                additionalLayers[i - 1] = layers[i];
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryAppendScrollCompositionLayer(
+        List<ScrollCompositionLayerTarget> layers,
+        int baseLayerId,
+        int commandStart,
+        int commandCount,
+        in PixelRectangle clipBounds)
+    {
+        var layerIdValue = baseLayerId + layers.Count;
+        if (layerIdValue <= 0)
+        {
+            return false;
+        }
+
+        var layer = new ScrollCompositionLayerTarget(
+            new CompositionLayerId(layerIdValue),
+            commandStart,
+            commandCount,
+            clipBounds);
+        for (var i = 0; i < layers.Count; i++)
+        {
+            if (layers[i].LayerId == layer.LayerId)
             {
                 return false;
             }
         }
 
+        layers.Add(layer);
         return true;
     }
 

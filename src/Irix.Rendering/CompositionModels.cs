@@ -544,11 +544,59 @@ internal readonly struct CompositionAnimationPlan(CompositionLayerAnimation Laye
     public static bool operator !=(CompositionAnimationPlan left, CompositionAnimationPlan right) => !left.Equals(right);
 }
 
-internal readonly struct CompositionScrollPresentationPlan(CompositionScrollLayerAnimation LayerAnimation) : IEquatable<CompositionScrollPresentationPlan>
+internal readonly struct CompositionScrollPresentationPlan : IEquatable<CompositionScrollPresentationPlan>
 {
-    public CompositionScrollLayerAnimation LayerAnimation { get; } = LayerAnimation;
+    private readonly CompositionScrollLayerAnimation[]? _additionalLayerAnimations;
 
-    public bool IsValidForCommandCount(int commandCount) => LayerAnimation.IsValidForCommandCount(commandCount);
+    public CompositionScrollPresentationPlan(CompositionScrollLayerAnimation layerAnimation)
+    {
+        LayerAnimation = layerAnimation;
+        _additionalLayerAnimations = null;
+    }
+
+    public CompositionScrollPresentationPlan(CompositionScrollLayerAnimation layerAnimation, ReadOnlySpan<CompositionScrollLayerAnimation> additionalLayerAnimations)
+    {
+        LayerAnimation = layerAnimation;
+        _additionalLayerAnimations = additionalLayerAnimations.IsEmpty ? null : additionalLayerAnimations.ToArray();
+    }
+
+    public CompositionScrollLayerAnimation LayerAnimation { get; }
+    public int LayerCount => LayerAnimation.LayerId.IsValid ? 1 + (_additionalLayerAnimations?.Length ?? 0) : 0;
+
+    public CompositionScrollLayerAnimation GetLayerAnimation(int index)
+    {
+        if (index == 0 && LayerCount > 0)
+        {
+            return LayerAnimation;
+        }
+
+        if (_additionalLayerAnimations is not null && (uint)(index - 1) < (uint)_additionalLayerAnimations.Length)
+        {
+            return _additionalLayerAnimations[index - 1];
+        }
+
+        throw new ArgumentOutOfRangeException(nameof(index));
+    }
+
+    public bool IsValidForCommandCount(int commandCount)
+    {
+        var layerCount = LayerCount;
+        if (layerCount == 0)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < layerCount; i++)
+        {
+            var layer = GetLayerAnimation(i);
+            if (!layer.IsValidForCommandCount(commandCount) || HasDuplicateLayerId(i, layer.LayerId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     public CompositionFrame Evaluate(int commandCount, CompositionTimestamp timestamp)
     {
@@ -557,18 +605,68 @@ internal readonly struct CompositionScrollPresentationPlan(CompositionScrollLaye
             throw new ArgumentException("Composition scroll presentation layer range must reference a non-empty range inside the command span.", nameof(commandCount));
         }
 
-        return new CompositionFrame(LayerAnimation.Evaluate(timestamp));
+        var layerCount = LayerCount;
+        if (layerCount == 1)
+        {
+            return new CompositionFrame(LayerAnimation.Evaluate(timestamp));
+        }
+
+        Span<CompositionLayer> layers = layerCount <= 8 ? stackalloc CompositionLayer[layerCount] : new CompositionLayer[layerCount];
+        for (var i = 0; i < layerCount; i++)
+        {
+            layers[i] = GetLayerAnimation(i).Evaluate(timestamp);
+        }
+
+        return CompositionFrame.FromLayers(layers);
     }
 
-    public bool Equals(CompositionScrollPresentationPlan other) => LayerAnimation == other.LayerAnimation;
+    public bool Equals(CompositionScrollPresentationPlan other)
+    {
+        if (LayerCount != other.LayerCount)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < LayerCount; i++)
+        {
+            if (GetLayerAnimation(i) != other.GetLayerAnimation(i))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     public override bool Equals(object? obj) => obj is CompositionScrollPresentationPlan other && Equals(other);
 
-    public override int GetHashCode() => LayerAnimation.GetHashCode();
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        for (var i = 0; i < LayerCount; i++)
+        {
+            hashCode.Add(GetLayerAnimation(i));
+        }
+
+        return hashCode.ToHashCode();
+    }
 
     public static bool operator ==(CompositionScrollPresentationPlan left, CompositionScrollPresentationPlan right) => left.Equals(right);
 
     public static bool operator !=(CompositionScrollPresentationPlan left, CompositionScrollPresentationPlan right) => !left.Equals(right);
+
+    private bool HasDuplicateLayerId(int currentIndex, CompositionLayerId layerId)
+    {
+        for (var i = 0; i < currentIndex; i++)
+        {
+            if (GetLayerAnimation(i).LayerId == layerId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 internal readonly struct CompositionAnimationDeclaration(
@@ -679,25 +777,39 @@ internal readonly struct CompositionScrollPresentationDeclaration(
             return false;
         }
 
-        var animation = new CompositionScrollLayerAnimation(
-            target.LayerId,
-            target.CommandStart,
-            target.CommandCount,
-            target.ClipBounds,
-            target.RetainedScrollY,
-            target.MaxScrollY,
-            Timeline,
-            PresentedScrollY,
-            InstanceId,
-            TargetKey,
-            _markers);
-        if (!animation.IsValidForCommandCount(commandCount))
+        var layerCount = target.LayerCount;
+        if (layerCount <= 0)
         {
             plan = default;
             return false;
         }
 
-        plan = new CompositionScrollPresentationPlan(animation);
+        var firstAnimation = CreateLayerAnimation(target.GetLayer(0), target, _markers);
+        if (!firstAnimation.IsValidForCommandCount(commandCount))
+        {
+            plan = default;
+            return false;
+        }
+
+        if (layerCount == 1)
+        {
+            plan = new CompositionScrollPresentationPlan(firstAnimation);
+            return true;
+        }
+
+        var additionalAnimations = new CompositionScrollLayerAnimation[layerCount - 1];
+        for (var i = 1; i < layerCount; i++)
+        {
+            additionalAnimations[i - 1] = CreateLayerAnimation(target.GetLayer(i), target, null);
+        }
+
+        plan = new CompositionScrollPresentationPlan(firstAnimation, additionalAnimations);
+        if (!plan.IsValidForCommandCount(commandCount))
+        {
+            plan = default;
+            return false;
+        }
+
         return true;
     }
 
@@ -726,6 +838,25 @@ internal readonly struct CompositionScrollPresentationDeclaration(
     public static bool operator ==(CompositionScrollPresentationDeclaration left, CompositionScrollPresentationDeclaration right) => left.Equals(right);
 
     public static bool operator !=(CompositionScrollPresentationDeclaration left, CompositionScrollPresentationDeclaration right) => !left.Equals(right);
+
+    private CompositionScrollLayerAnimation CreateLayerAnimation(
+        in ScrollCompositionLayerTarget layer,
+        in ScrollCompositionTarget target,
+        CompositionAnimationMarker[]? markers)
+    {
+        return new CompositionScrollLayerAnimation(
+            layer.LayerId,
+            layer.CommandStart,
+            layer.CommandCount,
+            layer.ClipBounds,
+            target.RetainedScrollY,
+            target.MaxScrollY,
+            Timeline,
+            PresentedScrollY,
+            InstanceId,
+            TargetKey,
+            markers);
+    }
 }
 
 internal readonly struct CompositionLayer(
