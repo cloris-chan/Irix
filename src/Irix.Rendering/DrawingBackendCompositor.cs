@@ -164,6 +164,39 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
     internal CompositionScrollPresentationPlan? CompositionScrollPresentationPlan => _compositionScrollPresentationPlan;
 
+    internal bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
+    {
+        presentedScrollY = 0;
+        if (targetKey == NodeKey.None || _compositionScrollPresentationPlan is not { } plan)
+        {
+            return false;
+        }
+
+        var layerAnimation = plan.LayerAnimation;
+        if (layerAnimation.TargetKey != targetKey)
+        {
+            return false;
+        }
+
+        CompositionFrame activeFrame;
+        lock (_compositionStateLock)
+        {
+            activeFrame = _lastCompositionFrame;
+        }
+
+        for (var i = 0; i < activeFrame.LayerCount; i++)
+        {
+            var layer = activeFrame.GetLayer(i);
+            if (layer.Id == layerAnimation.LayerId)
+            {
+                presentedScrollY = layerAnimation.RetainedScrollY - layer.Transform.TranslateY;
+                return double.IsFinite(presentedScrollY);
+            }
+        }
+
+        return false;
+    }
+
     internal int PendingCompositionMarkerEventCount
     {
         get

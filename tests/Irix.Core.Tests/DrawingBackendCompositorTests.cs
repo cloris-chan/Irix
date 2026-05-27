@@ -385,6 +385,47 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task TryGetPresentedScrollY_reads_active_scroll_presentation_value()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionScalarAnimation(40, 10)), pipeline.LastRetainedInputSnapshot!);
+
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(10), cancellationToken);
+
+        Assert.True(compositor.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(10, presentedScrollY);
+        Assert.True(ScrollPresentationInputBridge.TryResolveWheelRetarget(
+            compositor,
+            new NodeKey(1),
+            new ScrollState { Position = 40, TargetPosition = 40, MaxScrollY = 120, HasMaxScrollY = true },
+            54,
+            out var decision));
+        Assert.Equal(10, decision.Interrupt.PresentedScrollY);
+        Assert.Equal(64, decision.Interrupt.NextState.TargetPosition);
+        Assert.False(compositor.TryGetPresentedScrollY(new NodeKey(404), out _));
+    }
+
+    [Fact]
     public void Dispose_disposes_backend()
     {
         var window = new FakeWindow();

@@ -1985,6 +1985,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-scroll-presentation-policy", programSource);
         Assert.Contains("ScrollPresentationPolicyDiagnosticRunner.Run", programSource);
+        Assert.Contains("ScrollPresentationInputBridge.TryResolveWheelRetarget", programSource);
         Assert.Contains("commit", design);
         Assert.Equal("scroll-presentation-policy actual initialPos=120 initialTarget=180 presented=132 deltaPx=54 commitPos=132 commitTarget=132 commitAnimating=False cancelPos=180 cancelTarget=180 cancelAnimating=False retargetPos=132 retargetTarget=186 retargetAnimating=True", ScrollPresentationPolicyDiagnosticRunner.Format(diagnostics));
     }

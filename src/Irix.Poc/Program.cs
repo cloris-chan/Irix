@@ -365,6 +365,20 @@ internal static class Program
                         new ScrollDelta(ScrollDeltaUnit.WheelRaw, wheel.RawDelta),
                         ScrollMetrics.DefaultText,
                         SystemScrollSettings.Default);
+                    if (ScrollPresentationInputBridge.TryResolveWheelRetarget(
+                        d3d12Compositor,
+                        new NodeKey(1),
+                        runtime.CurrentModel.Scroll,
+                        pixels,
+                        out var presentationDecision))
+                    {
+                        runtime.Dispatch(new CounterMessage.ScrollPresentationInterrupted(presentationDecision.Interrupt));
+                        scrollFramePump.EnsureRunning(
+                            (frame, cancellationToken) => runtime.DispatchAndWaitAsync(frame, cancellationToken),
+                            () => runtime.CurrentModel.Scroll);
+                        return;
+                    }
+
                     scrollFramePump.AddPendingPixels(pixels);
                     scrollFramePump.EnsureRunning(
                         (frame, cancellationToken) => runtime.DispatchAndWaitAsync(frame, cancellationToken),

@@ -1551,6 +1551,29 @@ public sealed class CounterInputRouterTests
         Assert.True(next.IsAnimating);
     }
 
+    [Fact]
+    public void ScrollPresentationInterrupted_message_applies_policy_state()
+    {
+        var app = new CounterApplication();
+        var model = app.Initialize() with
+        {
+            Scroll = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 240, HasMaxScrollY = true }
+        };
+        var decision = ScrollController.ResolvePresentationInterrupt(
+            model.Scroll,
+            132,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, 54),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default,
+            ScrollPresentationInterruptPolicy.RetargetFromPresented);
+
+        model = app.Update(model, new CounterMessage.ScrollPresentationInterrupted(decision)).NextModel;
+
+        Assert.Equal(132, model.Scroll.Position);
+        Assert.Equal(186, model.Scroll.TargetPosition);
+        Assert.True(model.Scroll.IsAnimating);
+    }
+
     // ── HasMaxScrollY tests ────────────────────────────────────────────
 
     [Fact]

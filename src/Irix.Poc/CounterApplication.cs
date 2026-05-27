@@ -98,6 +98,8 @@ internal abstract record CounterMessage
     /// <summary>Apply a coalesced scroll delta and advance animation for one rendered frame.</summary>
     public sealed record ScrollFrame(ScrollDelta Delta, double DeltaTime) : CounterMessage;
 
+    public sealed record ScrollPresentationInterrupted(ScrollPresentationInterruptDecision Decision) : CounterMessage;
+
     /// <summary>Update MaxScrollY from the layout pass.</summary>
     public sealed record UpdateMaxScrollY(double MaxScrollY) : CounterMessage;
 
@@ -139,6 +141,10 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
                         ScrollMetrics.DefaultText,
                         SystemScrollSettings.Default),
                     frame.DeltaTime),
+            }),
+            CounterMessage.ScrollPresentationInterrupted interrupted => new UpdateResult<CounterModel, CounterMessage>(model with
+            {
+                Scroll = interrupted.Decision.NextState,
             }),
             CounterMessage.UpdateMaxScrollY update => new UpdateResult<CounterModel, CounterMessage>(model with
             {
