@@ -81,7 +81,7 @@ internal enum ScrollPresentationInterruptPolicy : byte
 {
     CommitPresented,
     CancelToLogicalTarget,
-    RetargetFromPresented
+    RetargetFromPresentedToLogicalTarget
 }
 
 internal readonly record struct ScrollPresentationInterruptDecision(
@@ -256,7 +256,7 @@ internal static class ScrollController
         {
             ScrollPresentationInterruptPolicy.CommitPresented => ResolveCommitPresented(state, normalizedPresented),
             ScrollPresentationInterruptPolicy.CancelToLogicalTarget => ResolveCancelToLogicalTarget(state),
-            ScrollPresentationInterruptPolicy.RetargetFromPresented => ResolveRetargetFromPresented(state, normalizedPresented, delta, metrics, settings),
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget => ResolveRetargetFromPresentedToLogicalTarget(state, normalizedPresented, delta, metrics, settings),
             _ => throw new ArgumentOutOfRangeException(nameof(policy))
         };
     }
@@ -285,14 +285,20 @@ internal static class ScrollController
         };
     }
 
-    public static ScrollState RetargetFromPresented(
+    public static ScrollState RetargetFromPresentedToLogicalTarget(
         ScrollState state,
         double presentedScrollY,
         ScrollDelta delta,
         in ScrollMetrics metrics,
         in SystemScrollSettings settings)
     {
-        return ApplyScrollDelta(CommitPresented(state, presentedScrollY), delta, metrics, settings);
+        var normalizedPresented = ClampToKnownRange(presentedScrollY, state);
+        var targetState = ApplyScrollDelta(state, delta, metrics, settings);
+        return targetState with
+        {
+            Position = normalizedPresented,
+            IsAnimating = targetState.TargetPosition != normalizedPresented,
+        };
     }
 
     private static ScrollPresentationInterruptDecision ResolveCommitPresented(
@@ -321,7 +327,7 @@ internal static class ScrollController
             DispatchesLayoutFrame: true);
     }
 
-    private static ScrollPresentationInterruptDecision ResolveRetargetFromPresented(
+    private static ScrollPresentationInterruptDecision ResolveRetargetFromPresentedToLogicalTarget(
         ScrollState state,
         double presentedScrollY,
         ScrollDelta delta,
@@ -329,9 +335,9 @@ internal static class ScrollController
         in SystemScrollSettings settings)
     {
         var pixels = ConvertToPixels(delta, metrics, settings);
-        var next = ApplyScrollDelta(CommitPresented(state, presentedScrollY), delta, metrics, settings);
+        var next = RetargetFromPresentedToLogicalTarget(state, presentedScrollY, delta, metrics, settings);
         return new ScrollPresentationInterruptDecision(
-            ScrollPresentationInterruptPolicy.RetargetFromPresented,
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget,
             next,
             presentedScrollY,
             next.TargetPosition,

@@ -42,7 +42,7 @@ internal static class ScrollPresentationPolicyDiagnosticRunner
             delta,
             ScrollMetrics.DefaultText,
             SystemScrollSettings.Default,
-            ScrollPresentationInterruptPolicy.RetargetFromPresented);
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
         return new ScrollPresentationPolicyDiagnostics(state, presentedScrollY, delta, commit, cancel, retarget);
     }
 

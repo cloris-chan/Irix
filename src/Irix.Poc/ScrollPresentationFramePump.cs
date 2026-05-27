@@ -180,7 +180,7 @@ internal sealed class ScrollPresentationFramePump
                 new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels),
                 ScrollMetrics.DefaultText,
                 SystemScrollSettings.Default,
-                ScrollPresentationInterruptPolicy.RetargetFromPresented);
+                ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
         var layoutState = ScrollController.CommitPresented(decision.NextState, decision.NextState.TargetPosition);
         await runtime.DispatchAndStageRetainedFrameAsync(new CounterMessage.ScrollPresentationInterrupted(decision with { NextState = layoutState }), cancellationToken);
         var snapshot = translator.LastRetainedInputSnapshot;

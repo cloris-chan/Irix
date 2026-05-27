@@ -1518,11 +1518,11 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void ScrollPresentationInterrupt_retarget_uses_presented_value_as_new_origin()
+    public void ScrollPresentationInterrupt_retarget_uses_presented_value_as_visual_origin_and_preserves_logical_target()
     {
         var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 240, HasMaxScrollY = true };
 
-        var next = ScrollController.RetargetFromPresented(
+        var next = ScrollController.RetargetFromPresentedToLogicalTarget(
             state,
             132,
             new ScrollDelta(ScrollDeltaUnit.Pixel, 54),
@@ -1530,7 +1530,24 @@ public sealed class CounterInputRouterTests
             SystemScrollSettings.Default);
 
         Assert.Equal(132, next.Position);
-        Assert.Equal(186, next.TargetPosition);
+        Assert.Equal(234, next.TargetPosition);
+        Assert.True(next.IsAnimating);
+    }
+
+    [Fact]
+    public void ScrollPresentationInterrupt_retarget_accumulates_repeated_deltas_against_logical_target()
+    {
+        var state = new ScrollState { Position = 54, TargetPosition = 54, MaxScrollY = 240, HasMaxScrollY = true };
+
+        var next = ScrollController.RetargetFromPresentedToLogicalTarget(
+            state,
+            18,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, 54),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+
+        Assert.Equal(18, next.Position);
+        Assert.Equal(108, next.TargetPosition);
         Assert.True(next.IsAnimating);
     }
 
@@ -1539,7 +1556,7 @@ public sealed class CounterInputRouterTests
     {
         var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 160, HasMaxScrollY = true };
 
-        var next = ScrollController.RetargetFromPresented(
+        var next = ScrollController.RetargetFromPresentedToLogicalTarget(
             state,
             150,
             new ScrollDelta(ScrollDeltaUnit.Pixel, 54),
@@ -1565,12 +1582,12 @@ public sealed class CounterInputRouterTests
             new ScrollDelta(ScrollDeltaUnit.Pixel, 54),
             ScrollMetrics.DefaultText,
             SystemScrollSettings.Default,
-            ScrollPresentationInterruptPolicy.RetargetFromPresented);
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
 
         model = app.Update(model, new CounterMessage.ScrollPresentationInterrupted(decision)).NextModel;
 
         Assert.Equal(132, model.Scroll.Position);
-        Assert.Equal(186, model.Scroll.TargetPosition);
+        Assert.Equal(234, model.Scroll.TargetPosition);
         Assert.True(model.Scroll.IsAnimating);
     }
 

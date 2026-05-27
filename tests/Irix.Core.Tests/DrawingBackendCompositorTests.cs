@@ -467,7 +467,7 @@ public sealed class DrawingBackendCompositorTests
             54,
             out var decision));
         Assert.Equal(10, decision.Interrupt.PresentedScrollY);
-        Assert.Equal(64, decision.Interrupt.NextState.TargetPosition);
+        Assert.Equal(94, decision.Interrupt.NextState.TargetPosition);
         Assert.False(compositor.TryGetPresentedScrollY(new NodeKey(404), out _));
     }
 

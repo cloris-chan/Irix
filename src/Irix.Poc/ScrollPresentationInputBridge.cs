@@ -24,7 +24,7 @@ internal static class ScrollPresentationInputBridge
             new ScrollDelta(ScrollDeltaUnit.Pixel, pixelDelta),
             ScrollMetrics.DefaultText,
             SystemScrollSettings.Default,
-            ScrollPresentationInterruptPolicy.RetargetFromPresented);
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
         decision = new ScrollPresentationInputDecision(scrollTargetKey, interrupt);
         return true;
     }

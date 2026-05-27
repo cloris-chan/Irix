@@ -1987,7 +1987,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("ScrollPresentationPolicyDiagnosticRunner.Run", programSource);
         Assert.Contains("ScrollPresentationFramePump", programSource);
         Assert.Contains("commit", design);
-        Assert.Equal("scroll-presentation-policy actual initialPos=120 initialTarget=180 presented=132 deltaPx=54 commitPos=132 commitTarget=132 commitAnimating=False cancelPos=180 cancelTarget=180 cancelAnimating=False retargetPos=132 retargetTarget=186 retargetAnimating=True", ScrollPresentationPolicyDiagnosticRunner.Format(diagnostics));
+        Assert.Equal("scroll-presentation-policy actual initialPos=120 initialTarget=180 presented=132 deltaPx=54 commitPos=132 commitTarget=132 commitAnimating=False cancelPos=180 cancelTarget=180 cancelAnimating=False retargetPos=132 retargetTarget=234 retargetAnimating=True", ScrollPresentationPolicyDiagnosticRunner.Format(diagnostics));
     }
 
     [Fact]
