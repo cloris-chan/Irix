@@ -511,6 +511,75 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
             LayoutRebuildReason: layoutRebuildReason,
             PreviousTextSnapshot: previousTextSnapshot,
             TextSnapshot: textSnapshot);
+
+    internal static bool TryResolveCompositionTarget(
+        ReadOnlySpan<LayoutTreeNode> treeNodes,
+        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        int commandCount,
+        NodeKey key,
+        out CompositionTarget target)
+    {
+        if (key == NodeKey.None || treeNodes.IsEmpty || elementCommandRanges.IsEmpty || commandCount <= 0)
+        {
+            target = default;
+            return false;
+        }
+
+        foreach (ref readonly var node in treeNodes)
+        {
+            if (node.Key != key || !TryResolveCommandRange(node, elementCommandRanges, commandCount, out var commandStart, out var resolvedCommandCount))
+            {
+                continue;
+            }
+
+            target = new CompositionTarget(
+                new CompositionLayerId(checked((int)node.Key.Value)),
+                node.Key,
+                node.Kind,
+                node.DfsIndex,
+                commandStart,
+                resolvedCommandCount);
+            return true;
+        }
+
+        target = default;
+        return false;
+    }
+
+    private static bool TryResolveCommandRange(
+        in LayoutTreeNode node,
+        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        int commandCount,
+        out int commandStart,
+        out int resolvedCommandCount)
+    {
+        commandStart = 0;
+        resolvedCommandCount = 0;
+        if (node.ElementCount <= 0
+            || node.ElementStart < 0
+            || node.ElementStart >= elementCommandRanges.Length
+            || node.ElementStart + node.ElementCount > elementCommandRanges.Length)
+        {
+            return false;
+        }
+
+        var firstRange = elementCommandRanges[node.ElementStart];
+        var lastRange = elementCommandRanges[node.ElementStart + node.ElementCount - 1];
+        var start = firstRange.CommandStart;
+        var end = lastRange.CommandStart + lastRange.CommandCount;
+        if (firstRange.CommandCount <= 0
+            || lastRange.CommandCount <= 0
+            || start < 0
+            || end <= start
+            || end > commandCount)
+        {
+            return false;
+        }
+
+        commandStart = start;
+        resolvedCommandCount = end - start;
+        return true;
+    }
 }
 
 internal sealed record RenderPipelineRetainedInputSnapshot(
@@ -524,7 +593,29 @@ internal sealed record RenderPipelineRetainedInputSnapshot(
     IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
     LayoutRebuildReason LayoutRebuildReason,
     TextBufferSnapshot? PreviousTextSnapshot = null,
-    TextBufferSnapshot? TextSnapshot = null);
+    TextBufferSnapshot? TextSnapshot = null)
+{
+    public bool TryGetCompositionTarget(NodeKey key, out CompositionTarget target)
+    {
+        return RenderPipeline.TryResolveCompositionTarget(
+            LayoutResult.TreeNodes,
+            ElementCommandRanges,
+            ResolveCommandCount(ElementCommandRanges),
+            key,
+            out target);
+    }
+
+    private static int ResolveCommandCount(ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+    {
+        var commandCount = 0;
+        foreach (ref readonly var range in elementCommandRanges)
+        {
+            commandCount = Math.Max(commandCount, range.CommandStart + Math.Max(range.CommandCount, 0));
+        }
+
+        return commandCount;
+    }
+}
 
 internal readonly struct RenderPipelineBuildAllocationAttribution(
     long ClassificationBytes,

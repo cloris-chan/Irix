@@ -126,6 +126,7 @@ internal readonly struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildRe
 /// </summary>
 internal readonly struct LayoutTreeNode(
     int DfsIndex,
+    NodeKey Key,
     VirtualNodeKind Kind,
     int ElementStart,
     int ElementCount,
@@ -134,6 +135,7 @@ internal readonly struct LayoutTreeNode(
 {
 
     public int DfsIndex { get; } = DfsIndex;
+    public NodeKey Key { get; } = Key;
     public VirtualNodeKind Kind { get; } = Kind;
     public int ElementStart { get; } = ElementStart;
     public int ElementCount { get; } = ElementCount;
@@ -143,6 +145,7 @@ internal readonly struct LayoutTreeNode(
     public bool Equals(LayoutTreeNode other)
     {
         return DfsIndex == other.DfsIndex
+            && Key == other.Key
             && Kind == other.Kind
             && ElementStart == other.ElementStart
             && ElementCount == other.ElementCount
@@ -152,7 +155,7 @@ internal readonly struct LayoutTreeNode(
 
     public override bool Equals(object? obj) => obj is LayoutTreeNode other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(DfsIndex, Kind, ElementStart, ElementCount, SubtreeStart, SubtreeCount);
+    public override int GetHashCode() => HashCode.Combine(DfsIndex, Key, Kind, ElementStart, ElementCount, SubtreeStart, SubtreeCount);
 
     public static bool operator ==(LayoutTreeNode left, LayoutTreeNode right) => left.Equals(right);
 
@@ -199,6 +202,50 @@ internal readonly struct ElementCommandRange(int CommandStart, int CommandCount)
     public static bool operator ==(ElementCommandRange left, ElementCommandRange right) => left.Equals(right);
 
     public static bool operator !=(ElementCommandRange left, ElementCommandRange right) => !left.Equals(right);
+}
+
+internal readonly struct CompositionTarget(
+    CompositionLayerId LayerId,
+    NodeKey Key,
+    VirtualNodeKind Kind,
+    int DfsIndex,
+    int CommandStart,
+    int CommandCount) : IEquatable<CompositionTarget>
+{
+    public CompositionLayerId LayerId { get; } = LayerId;
+    public NodeKey Key { get; } = Key;
+    public VirtualNodeKind Kind { get; } = Kind;
+    public int DfsIndex { get; } = DfsIndex;
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+
+    public bool IsValidForCommandCount(int commandCount)
+    {
+        return LayerId.IsValid
+            && Key != NodeKey.None
+            && CommandStart >= 0
+            && CommandCount > 0
+            && CommandStart <= commandCount
+            && CommandStart + CommandCount <= commandCount;
+    }
+
+    public bool Equals(CompositionTarget other)
+    {
+        return LayerId == other.LayerId
+            && Key == other.Key
+            && Kind == other.Kind
+            && DfsIndex == other.DfsIndex
+            && CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount;
+    }
+
+    public override bool Equals(object? obj) => obj is CompositionTarget other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(LayerId, Key, Kind, DfsIndex, CommandStart, CommandCount);
+
+    public static bool operator ==(CompositionTarget left, CompositionTarget right) => left.Equals(right);
+
+    public static bool operator !=(CompositionTarget left, CompositionTarget right) => !left.Equals(right);
 }
 
 /// <summary>

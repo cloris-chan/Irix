@@ -281,12 +281,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
 
             if (subtreeCount == 0)
             {
-                _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, 0, 0, subtreeStart, 0);
+                _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.ScrollContainer, 0, 0, subtreeStart, 0);
                 RegisterElementRange(dfsIndex, 0, 0);
                 return consumedCount;
             }
 
-            _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, VirtualNodeKind.ScrollContainer, elementStart, elementCount, subtreeStart, subtreeCount);
+            _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.ScrollContainer, elementStart, elementCount, subtreeStart, subtreeCount);
             RegisterElementRange(dfsIndex, elementStart, elementCount);
             return consumedCount;
         }
@@ -307,7 +307,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 ClipBounds: _ctx.ClipBounds,
                 Text: content));
             _cursorY += _ctx.Style.TextHeight + _ctx.Style.ItemSpacing;
-            _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Text, elementIndex, 1, 0, 0));
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Text, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
             return 1;
         }
@@ -323,7 +323,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             var elementIndex = _elements.Count;
             _elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: _ctx.ClipBounds));
             _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
-            _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
             return 1;
         }
@@ -360,7 +360,7 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
                 ActionId: actionId,
                 ButtonState: buttonState));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
-            _treeNodes.Add(new LayoutTreeNode(dfsIndex, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
 
             var childCount = node.Children.Length;

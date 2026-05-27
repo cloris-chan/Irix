@@ -39,6 +39,7 @@ The current spike owns:
 | `CompositionLayer` | Layer id, command range, transform, and opacity. |
 | `CompositionFrame` | Single-layer v0 frame wrapper. |
 | `CompositionAnimationPlan` | Data-driven transform/opacity animation descriptor for the layer. |
+| `CompositionTarget` | Internal retained UI target resolved by `RenderPipelineRetainedInputSnapshot`, keyed by `NodeKey` and mapped to a command range plus `CompositionLayerId`. |
 
 The layer references existing `RenderFrameBatch` command ranges; it does not copy commands or own frame resources.
 
@@ -75,4 +76,4 @@ This is intentionally D3D12-backed. Non-composition backends do not receive a CP
 
 ## Next Gate
 
-The next implementation gate is real retained layer identity from normal UI output, followed by a runtime-owned animation declaration that publishes `CompositionAnimationPlan` without POC-specific demo construction. Hit-test coordinate remapping remains separate and must be designed before compositor-presented transforms affect input dispatch.
+Normal UI output snapshots now resolve retained `CompositionTarget` values, so animation construction no longer needs to guess command ranges from the demo. The next implementation gate is a runtime-owned animation declaration that resolves `NodeKey` targets into `CompositionAnimationPlan` instances. Hit-test coordinate remapping remains separate and must be designed before compositor-presented transforms affect input dispatch.

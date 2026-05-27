@@ -2521,6 +2521,38 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void RenderPipeline_retained_snapshot_maps_node_keys_to_composition_targets()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "hello", new NodeKey(2)),
+            VirtualNodeBuilder.Button(_arena, "click", new NodeKey(3)));
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+
+        using var frame = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(1), out var rootTarget));
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(2), out var textTarget));
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(3), out var buttonTarget));
+        Assert.False(snapshot.TryGetCompositionTarget(NodeKey.None, out _));
+        Assert.False(snapshot.TryGetCompositionTarget(new NodeKey(404), out _));
+        Assert.Equal(new CompositionLayerId(1), rootTarget.LayerId);
+        Assert.Equal(VirtualNodeKind.ScrollContainer, rootTarget.Kind);
+        Assert.Equal(0, rootTarget.CommandStart);
+        Assert.Equal(3, rootTarget.CommandCount);
+        Assert.Equal(new CompositionLayerId(2), textTarget.LayerId);
+        Assert.Equal(VirtualNodeKind.Text, textTarget.Kind);
+        Assert.Equal(0, textTarget.CommandStart);
+        Assert.Equal(1, textTarget.CommandCount);
+        Assert.Equal(new CompositionLayerId(3), buttonTarget.LayerId);
+        Assert.Equal(VirtualNodeKind.Button, buttonTarget.Kind);
+        Assert.Equal(1, buttonTarget.CommandStart);
+        Assert.Equal(2, buttonTarget.CommandCount);
+        Assert.True(buttonTarget.IsValidForCommandCount(frame.Commands.Count));
+    }
+
+    [Fact]
     public void RangeUtils_merge_combines_adjacent_ranges()
     {
         var ranges = new List<(int, int)> { (0, 1), (1, 2), (4, 2) };

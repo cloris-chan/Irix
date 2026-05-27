@@ -36,11 +36,11 @@ This remains valid. The composition architecture adds layer animation and backen
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties and diagnostics. The next architectural gap is real layer ids from retained UI output.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, and internal `NodeKey`-addressable composition targets from retained UI output. The next architectural gap is runtime animation declaration.
 
 Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
 
-New fallback code is justified only when a D3D12/GPU-first spike exposes a concrete short-term blocker such as missing retained layer identity, unsafe hit-test mapping, or unresolved resource lifetime.
+New fallback code is justified only when a D3D12/GPU-first spike exposes a concrete short-term blocker such as unsafe hit-test mapping, unresolved resource lifetime, or a missing backend capability.
 
 Fallback must be explicit and diagnostic-visible:
 
@@ -65,7 +65,7 @@ Composition IR should describe retained visual/layer intent without exposing bac
 | Dirty region | Optional invalidation region for content update. |
 | Animation descriptors | Data-driven compositor animations on eligible properties. |
 
-The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal animation descriptor is `CompositionAnimationPlan`, evaluated by `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` over the retained frame and consumed by `ICompositionDrawingBackend.ExecuteComposition`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time.
+The IR must be immutable after publication for a frame or version. Backend implementations may cache translated GPU objects behind stable handles. The current internal animation descriptor is `CompositionAnimationPlan`, evaluated by `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` over the retained frame and consumed by `ICompositionDrawingBackend.ExecuteComposition`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time. `RenderPipelineRetainedInputSnapshot` resolves `CompositionTarget` values so runtime code can map stable `NodeKey` values to retained command ranges and `CompositionLayerId` values.
 
 ## Backend Capability Model
 
@@ -105,11 +105,12 @@ The composition contract should not expose these backend objects to `Irix.Render
 | 0 | Keep current D3D12 rectangle/GlyphAtlas passes. | Stable baseline. |
 | 1 | Add a D3D12-first composition spine: immutable IR publication, backend handoff, and diagnostics. | Implemented for demo-owned command ranges and transform/opacity. |
 | 2 | Layer transform/opacity property updates on the D3D12 path. | Implemented as compositor-owned ticks over the retained frame. |
-| 3 | Stable retained layer identity from normal UI output. | Needed before runtime animation declarations can target real UI layers. |
-| 4 | Independent scroll presentation transform. | First major UI benefit; avoids per-tick layout/draw rebuild. |
-| 5 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
-| 6 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
-| 7 | Effects/material graph. | Deferred until style/material contract exists. |
+| 3 | Stable retained layer identity from normal UI output. | Implemented as internal `CompositionTarget` resolution on retained input snapshots. |
+| 4 | Runtime animation declarations targeting retained `NodeKey`/`CompositionTarget` values. | Needed before app/runtime code can drive transform/opacity without demo construction. |
+| 5 | Independent scroll presentation transform. | First major UI benefit; avoids per-tick layout/draw rebuild. |
+| 6 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
+| 7 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
+| 8 | Effects/material graph. | Deferred until style/material contract exists. |
 
 ## Work Placement
 

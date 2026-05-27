@@ -335,6 +335,37 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public void CompositionAnimationPlan_can_target_normal_ui_node_key()
+    {
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Static", new NodeKey(2)),
+            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(3)));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(3), out var target));
+        var plan = new CompositionAnimationPlan(new CompositionLayerAnimation(
+            target.LayerId,
+            target.CommandStart,
+            target.CommandCount,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(0, 20),
+                CompositionScalarAnimation.Constant(0)),
+            CompositionScalarAnimation.Constant(1f)));
+
+        var layer = plan.Evaluate(frame.Commands.Count, CompositionTimestamp.FromStopwatchTicks(5)).Layer;
+
+        Assert.Equal(target.LayerId, layer.Id);
+        Assert.Equal(target.CommandStart, layer.CommandStart);
+        Assert.Equal(target.CommandCount, layer.CommandCount);
+        Assert.Equal(10, layer.Transform.TranslateX);
+    }
+
+    [Fact]
     public async Task RenderAsync_falls_back_to_full_apply_when_resources_differ()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

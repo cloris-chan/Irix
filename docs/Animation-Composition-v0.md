@@ -96,7 +96,7 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 | Commit policy | Whether and when final presented state updates logical runtime state. |
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 
-The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` path with typed timestamps. The next missing contract is how normal UI output publishes stable layer ids so runtime declarations can target real retained layers instead of demo command ranges.
+The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` path with typed timestamps. Normal render pipeline snapshots now resolve internal `NodeKey`-addressable `CompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. The next missing contract is the runtime-owned animation declaration that consumes those targets.
 
 ## Invalidation Rules
 
