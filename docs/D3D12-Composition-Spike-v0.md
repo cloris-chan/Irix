@@ -14,6 +14,7 @@ The current spike owns:
 - `CompositionAnimationPlan` data in `Irix.Rendering`.
 - `CompositionAnimationDeclaration` data that targets stable retained `NodeKey` values and resolves through the retained input snapshot.
 - `DrawingBackendCompositor.RenderCompositionAnimationTickAsync`, which advances the animation over the retained frame.
+- Composition-aware hit testing for transform/opacity layers by inverse-mapping input through the active presented transform.
 - Typed composition clock values: `CompositionTimestamp` and `CompositionDuration` carry `Stopwatch.GetTimestamp()` ticks and keep frame indexes out of animation progress.
 - D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
 - A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
@@ -23,7 +24,7 @@ The current spike owns:
 
 - No public composition API.
 - No scroll presentation model.
-- No hit-test coordinate remapping.
+- No scroll hit-test coordinate remapping.
 - No retained layer cache or intermediate render target.
 - No Vulkan/Metal work.
 - No replacement of normal UI frame publication. `ICompositor.RenderAsync` remains the content-update path; compositor ticks are a separate retained-frame presentation path.
@@ -78,4 +79,4 @@ This is intentionally D3D12-backed. Non-composition backends do not receive a CP
 
 ## Next Gate
 
-Normal UI output snapshots resolve retained `CompositionTarget` values, and runtime-owned animation declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances. Hit-test coordinate remapping remains separate and must be designed before compositor-presented transforms affect input dispatch; after that, presented scroll offset can use the same declaration/resolution spine.
+Normal UI output snapshots resolve retained `CompositionTarget` values, runtime-owned animation declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances, and transform/opacity hit testing maps pointer coordinates through the active presented layer transform. The next gate is scroll presentation: it needs a scroll-specific clip/target/commit contract before presented scroll offset uses the same retained composition spine.

@@ -145,6 +145,113 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task TryGetActionIdAtLogicalPixel_maps_active_composition_transform_to_target_layer_only()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+            VirtualNodeBuilder.Button(_arena, "Still", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(2), out var animatedTarget));
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(3), out var staticTarget));
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            animatedTarget.LayerId,
+            animatedTarget.CommandStart,
+            animatedTarget.CommandCount,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
+            new CompositionTransformAnimation(
+                CompositionScalarAnimation.Constant(160),
+                CompositionScalarAnimation.Constant(12)),
+            CompositionScalarAnimation.Constant(1f))));
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(20, 20, out _));
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(180, 32, out var actionId));
+        Assert.Equal(new ActionId(100), actionId);
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(20, 72, out actionId));
+        Assert.Equal(new ActionId(200), actionId);
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(180, 84, out _));
+        Assert.Equal(2, animatedTarget.CommandCount);
+        Assert.Equal(2, staticTarget.CommandCount);
+        Assert.Equal(animatedTarget.CommandStart + animatedTarget.CommandCount, staticTarget.CommandStart);
+    }
+
+    [Fact]
+    public async Task TryGetActionIdAtPhysicalPixel_maps_scaled_input_through_active_composition_transform()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        compositor.SetViewport(new PixelRectangle(0, 0, 1920, 1080), new DisplayScale(2f, 2f));
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(2), out var target));
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            target.LayerId,
+            target.CommandStart,
+            target.CommandCount,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
+            new CompositionTransformAnimation(
+                CompositionScalarAnimation.Constant(160),
+                CompositionScalarAnimation.Constant(12)),
+            CompositionScalarAnimation.Constant(1f))));
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        Assert.True(compositor.TryGetActionIdAtPhysicalPixel(360, 64, out var actionId));
+        Assert.Equal(new ActionId(100), actionId);
+        Assert.False(compositor.TryGetActionIdAtPhysicalPixel(40, 40, out _));
+    }
+
+    [Fact]
+    public async Task RenderAsync_clears_composition_hit_test_transform()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(2), out var target));
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            target.LayerId,
+            target.CommandStart,
+            target.CommandCount,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
+            new CompositionTransformAnimation(
+                CompositionScalarAnimation.Constant(160),
+                CompositionScalarAnimation.Constant(12)),
+            CompositionScalarAnimation.Constant(1f))));
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(180, 32, out _));
+
+        using var nextFrame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(nextFrame, cancellationToken);
+
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(180, 32, out _));
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(20, 20, out var actionId));
+        Assert.Equal(new ActionId(100), actionId);
+    }
+
+    [Fact]
     public void Dispose_disposes_backend()
     {
         var window = new FakeWindow();

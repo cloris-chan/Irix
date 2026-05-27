@@ -91,7 +91,7 @@ High-level rules:
 - Composition style covers transform, opacity, layer clip, and presented scroll offset.
 - Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
 - Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
-- The first composition implementation targets a D3D12-backed transform/opacity tick path resolved from retained `NodeKey` animation declarations. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
+- The first composition implementation targets a D3D12-backed transform/opacity tick path resolved from retained `NodeKey` animation declarations, with active-transform hit-test remapping. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
 
 ## Renderer Contract
 

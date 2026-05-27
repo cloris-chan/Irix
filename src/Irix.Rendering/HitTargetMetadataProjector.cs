@@ -72,7 +72,12 @@ internal static class HitTargetMetadataProjector
             if (Contains(dirtySet[..dirtyCount], actionNode.DfsIndex))
             {
                 projectedDirtyCount++;
-                patched[i] = new HitTestTarget(retainedHitTarget.Bounds, actionNode.ActionId, retainedHitTarget.ClipBounds);
+                patched[i] = new HitTestTarget(
+                    retainedHitTarget.Bounds,
+                    actionNode.ActionId,
+                    retainedHitTarget.ClipBounds,
+                    retainedHitTarget.CommandStart,
+                    retainedHitTarget.CommandCount);
                 continue;
             }
 

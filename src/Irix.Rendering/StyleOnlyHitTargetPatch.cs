@@ -39,7 +39,12 @@ internal static class StyleOnlyHitTargetPatch
 
             if (RangeUtils.Contains(dirtyRanges, elementIndex))
             {
-                patched[hitTargetIndex] = new HitTestTarget(retainedHitTarget.Bounds, element.ActionId, retainedHitTarget.ClipBounds);
+                patched[hitTargetIndex] = new HitTestTarget(
+                    retainedHitTarget.Bounds,
+                    element.ActionId,
+                    retainedHitTarget.ClipBounds,
+                    retainedHitTarget.CommandStart,
+                    retainedHitTarget.CommandCount);
             }
 
             hitTargetIndex++;

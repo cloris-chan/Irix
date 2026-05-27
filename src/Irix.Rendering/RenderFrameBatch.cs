@@ -3,12 +3,21 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-public readonly struct HitTestTarget(PixelRectangle Bounds, ActionId ActionId, PixelRectangle ClipBounds = default) : IEquatable<HitTestTarget>
+public readonly struct HitTestTarget(
+    PixelRectangle Bounds,
+    ActionId ActionId,
+    PixelRectangle ClipBounds = default,
+    int CommandStart = -1,
+    int CommandCount = 0) : IEquatable<HitTestTarget>
 {
 
     public PixelRectangle Bounds { get; } = Bounds;
     public ActionId ActionId { get; } = ActionId;
     public PixelRectangle ClipBounds { get; } = ClipBounds;
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+
+    internal bool HasCommandRange => CommandStart >= 0 && CommandCount > 0;
 
     public HitTestTarget Scale(DisplayScale scale)
     {
@@ -25,19 +34,23 @@ public readonly struct HitTestTarget(PixelRectangle Bounds, ActionId ActionId, P
                 (int)(ClipBounds.X * scale.ScaleX),
                 (int)(ClipBounds.Y * scale.ScaleY),
                 (int)(ClipBounds.Width * scale.ScaleX),
-                (int)(ClipBounds.Height * scale.ScaleY)));
+                (int)(ClipBounds.Height * scale.ScaleY)),
+            CommandStart,
+            CommandCount);
     }
 
     public bool Equals(HitTestTarget other)
     {
         return Bounds == other.Bounds
             && ActionId.Equals(other.ActionId)
-            && ClipBounds == other.ClipBounds;
+            && ClipBounds == other.ClipBounds
+            && CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount;
     }
 
     public override bool Equals(object? obj) => obj is HitTestTarget other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Bounds, ActionId, ClipBounds);
+    public override int GetHashCode() => HashCode.Combine(Bounds, ActionId, ClipBounds, CommandStart, CommandCount);
 
     public static bool operator ==(HitTestTarget left, HitTestTarget right) => left.Equals(right);
 

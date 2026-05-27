@@ -21,8 +21,8 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 |-------|---------|----------------|---------------|
 | Style system | Define layout, visual, text, control-state, and composition style boundaries. | [Style-System-v0.md](Style-System-v0.md) | No initial code movement. |
 | Animation system | Define UI-runtime animation vs compositor/GPU animation ownership. | [Animation-Composition-v0.md](Animation-Composition-v0.md) | Runtime `NodeKey` declarations resolve to retained transform/opacity composition plans. |
-| GPU composition | Define a platform-neutral composition model and drive implementation through D3D12/GPU-backed layer updates. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md), [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | D3D12-backed compositor tick for transform/opacity exists on retained UI output. |
-| Scroll/compositor bridge | Use scroll as the first hybrid case: runtime owns logical target; compositor owns presented offset. | Future scroll compositor design | After hit-test mapping is contracted. |
+| GPU composition | Define a platform-neutral composition model and drive implementation through D3D12/GPU-backed layer updates. | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md), [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | D3D12-backed compositor tick and hit-test remapping for transform/opacity exist on retained UI output. |
+| Scroll/compositor bridge | Use scroll as the first hybrid case: runtime owns logical target; compositor owns presented offset. | Future scroll compositor design | Next implementation gate. |
 | Runtime/control extraction | Decide whether scroll/input/control state needs a new runtime/control package. | Future ownership design | Only after Counter-specific assumptions are removed. |
 
 ## Design Order
@@ -31,7 +31,7 @@ This phase should not reopen renderer migration, GlyphAtlas coverage, or retaine
 2. **Animation/composition model**: use the property classification to decide which animations are UI-runtime animations and which can run independently in the compositor.
 3. **GPU composition architecture**: define composition IR, layer boundaries, backend capability reporting, and GPU offload phases.
 4. **Scroll compositor design**: specify logical vs presented scroll, hit-test mapping, invalidation, and compositor timeline ownership.
-5. **D3D12-first implementation spike**: current transform/opacity tick is in place with retained layer identity and runtime `NodeKey` declarations. Continue with compositor-aware hit-test remapping, then scroll presentation. Add fallback compatibility only when the D3D12 path exposes an explicit short-term blocker.
+5. **D3D12-first implementation spike**: current transform/opacity tick is in place with retained layer identity, runtime `NodeKey` declarations, and active-transform hit-test remapping. Continue with scroll presentation. Add fallback compatibility only when the D3D12 path exposes an explicit short-term blocker.
 
 ## Principles
 

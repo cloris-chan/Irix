@@ -16,6 +16,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
     private readonly Lock _hitTargetsLock = new();
+    private readonly Lock _compositionStateLock = new();
     private readonly RetainedRenderFrame _retainedFrame = new();
     private RetainedRenderFrameHandoffHarness? _handoffCandidateHarness;
     private HitTestTarget[] _hitTargets = [];
@@ -128,9 +129,27 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// <summary>Maximum elapsed time of any compositor-only animation tick in microseconds.</summary>
     public long MaxCompositionTickTimeUs => Volatile.Read(ref _maxCompositionTickTimeTicks) * 1_000_000 / Stopwatch.Frequency;
 
-    internal CompositionFrame LastCompositionFrame => _lastCompositionFrame;
+    internal CompositionFrame LastCompositionFrame
+    {
+        get
+        {
+            lock (_compositionStateLock)
+            {
+                return _lastCompositionFrame;
+            }
+        }
+    }
 
-    internal CompositionBackendExecutionResult LastCompositionExecutionResult => _lastCompositionExecutionResult;
+    internal CompositionBackendExecutionResult LastCompositionExecutionResult
+    {
+        get
+        {
+            lock (_compositionStateLock)
+            {
+                return _lastCompositionExecutionResult;
+            }
+        }
+    }
 
     internal CompositionAnimationPlan? CompositionAnimationPlan => _compositionAnimationPlan;
 
@@ -170,8 +189,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     internal void ClearCompositionAnimationPlan()
     {
         _compositionAnimationPlan = null;
-        _lastCompositionFrame = default;
-        _lastCompositionExecutionResult = default;
+        ClearCompositionPresentationState();
     }
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
@@ -237,6 +255,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         _lastAppliedFrameId = batchFrameId;
         LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
+        ClearCompositionPresentationState();
 
         var handoffSelection = ResolveHandoffSelection(renderFrameBatch, ownership);
         if (handoffSelection.Selected)
@@ -362,8 +381,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             throw;
         }
 
-        _lastCompositionFrame = compositionFrame;
-        _lastCompositionExecutionResult = result;
+        SetCompositionPresentationState(compositionFrame, result);
         Interlocked.Increment(ref _compositionTickCount);
         RecordCompositionTickTime(sw);
         return ValueTask.FromResult(result);
@@ -667,24 +685,33 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// </summary>
     internal bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
+        var hasActiveLayer = TryGetActiveHitTestLayer(out var activeLayer);
         lock (_hitTargetsLock)
         {
             foreach (var hitTarget in _hitTargets)
             {
-                if (x < hitTarget.Bounds.X
-                    || y < hitTarget.Bounds.Y
-                    || x >= hitTarget.Bounds.X + hitTarget.Bounds.Width
-                    || y >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
+                var targetX = (float)x;
+                var targetY = (float)y;
+                if (hasActiveLayer && IsHitTargetInLayer(hitTarget, activeLayer))
+                {
+                    targetX -= activeLayer.Transform.TranslateX;
+                    targetY -= activeLayer.Transform.TranslateY;
+                }
+
+                if (targetX < hitTarget.Bounds.X
+                    || targetY < hitTarget.Bounds.Y
+                    || targetX >= hitTarget.Bounds.X + hitTarget.Bounds.Width
+                    || targetY >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
                 {
                     continue;
                 }
 
                 if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
                 {
-                    if (x < hitTarget.ClipBounds.X
-                        || y < hitTarget.ClipBounds.Y
-                        || x >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
-                        || y >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
+                    if (targetX < hitTarget.ClipBounds.X
+                        || targetY < hitTarget.ClipBounds.Y
+                        || targetX >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
+                        || targetY >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
                     {
                         continue;
                     }
@@ -697,6 +724,42 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         actionId = ActionId.None;
         return false;
+    }
+
+    private bool TryGetActiveHitTestLayer(out CompositionLayer layer)
+    {
+        lock (_compositionStateLock)
+        {
+            layer = _lastCompositionFrame.Layer;
+            return layer.IsValidForCommandCount(_retainedFrame.CommandCount) && !layer.Transform.IsIdentity;
+        }
+    }
+
+    private static bool IsHitTargetInLayer(in HitTestTarget hitTarget, in CompositionLayer layer)
+    {
+        var layerEnd = layer.CommandStart + layer.CommandCount;
+        var hitTargetEnd = hitTarget.CommandStart + hitTarget.CommandCount;
+        return hitTarget.HasCommandRange && hitTarget.CommandStart >= layer.CommandStart && hitTargetEnd <= layerEnd;
+    }
+
+    private void SetCompositionPresentationState(
+        in CompositionFrame frame,
+        in CompositionBackendExecutionResult result)
+    {
+        lock (_compositionStateLock)
+        {
+            _lastCompositionFrame = frame;
+            _lastCompositionExecutionResult = result;
+        }
+    }
+
+    private void ClearCompositionPresentationState()
+    {
+        lock (_compositionStateLock)
+        {
+            _lastCompositionFrame = default;
+            _lastCompositionExecutionResult = default;
+        }
     }
 
     private FrameContext CreateBackendFrameContext(long timestamp = 0)

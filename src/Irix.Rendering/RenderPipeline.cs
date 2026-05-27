@@ -156,7 +156,7 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
         attribution = attribution.WithRecordAttribution(recordAttribution);
 
         var beforeHitTargets = GetAllocatedBytes(measureAllocation);
-        var hitTargets = BuildHitTargets(layout);
+        var hitTargets = BuildHitTargets(layout, result.ElementCommandRanges);
         attribution = attribution.WithHitTargets(AllocatedDelta(measureAllocation, beforeHitTargets));
 
         var beforeSnapshot = GetAllocatedBytes(measureAllocation);
@@ -455,6 +455,13 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
     internal static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
     {
+        return BuildHitTargets(layoutElements, []);
+    }
+
+    internal static IReadOnlyList<HitTestTarget> BuildHitTargets(
+        IReadOnlyList<LayoutElement> layoutElements,
+        ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+    {
         if (layoutElements.Count == 0)
         {
             return [];
@@ -476,11 +483,19 @@ internal sealed class RenderPipeline(LayoutStyle layoutStyle, DrawingStyle drawi
 
         var hitTargets = new HitTestTarget[hitTargetCount];
         var index = 0;
-        foreach (var element in layoutElements)
+        for (var i = 0; i < layoutElements.Count; i++)
         {
+            var element = layoutElements[i];
             if (!element.ActionId.IsNone)
             {
-                hitTargets[index++] = new HitTestTarget(element.Bounds, element.ActionId, element.ClipBounds);
+                var commandRange = (uint)i < (uint)elementCommandRanges.Length ? elementCommandRanges[i] : default;
+                var commandStart = commandRange.CommandCount > 0 ? commandRange.CommandStart : -1;
+                hitTargets[index++] = new HitTestTarget(
+                    element.Bounds,
+                    element.ActionId,
+                    element.ClipBounds,
+                    commandStart,
+                    commandRange.CommandCount);
             }
         }
 

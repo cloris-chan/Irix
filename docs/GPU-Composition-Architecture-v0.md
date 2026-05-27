@@ -36,7 +36,7 @@ This remains valid. The composition architecture adds layer animation and backen
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, and runtime animation declarations that resolve through those targets. The next architectural gap is compositor-aware hit-test remapping.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, and inverse-transform hit-test remapping for active transform layers. The next architectural gap is scroll presentation.
 
 Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
 
@@ -107,8 +107,8 @@ The composition contract should not expose these backend objects to `Irix.Render
 | 2 | Layer transform/opacity property updates on the D3D12 path. | Implemented as compositor-owned ticks over the retained frame. |
 | 3 | Stable retained layer identity from normal UI output. | Implemented as internal `CompositionTarget` resolution on retained input snapshots. |
 | 4 | Runtime animation declarations targeting retained `NodeKey`/`CompositionTarget` values. | Implemented internally for transform/opacity and used by the visible composition demo. |
-| 5 | Compositor-aware hit-test remapping. | Needed before compositor-presented transforms affect input dispatch. |
-| 6 | Independent scroll presentation transform. | First major UI benefit; avoids per-tick layout/draw rebuild. |
+| 5 | Compositor-aware hit-test remapping. | Implemented for transform/opacity layers by retaining hit-target command ranges and inverse-mapping active layer transforms. |
+| 6 | Independent scroll presentation transform. | Next major UI benefit; avoids per-tick layout/draw rebuild. |
 | 7 | Layer content caching / render target reuse. | Enables larger compositor animation payoff. |
 | 8 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
 | 9 | Effects/material graph. | Deferred until style/material contract exists. |
