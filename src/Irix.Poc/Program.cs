@@ -40,6 +40,13 @@ internal static class Program
             return;
         }
 
+        if (args.Contains("--diagnose-scroll-presentation-runtime"))
+        {
+            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+            await ScrollPresentationRuntimeDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out);
+            return;
+        }
+
         if (args.Contains("--diagnose-input"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
@@ -281,6 +288,7 @@ internal static class Program
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor, ownershipProvider);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator, displayScale), CounterLayoutDiagnostics.Empty), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
+        var scrollPresentationFramePump = new ScrollPresentationFramePump();
         _scrollFramePump = scrollFramePump;
         var inputOwnershipState = new InputOwnershipState();
         _inputOwnershipState = inputOwnershipState;
@@ -360,29 +368,12 @@ internal static class Program
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
-                    // Coalesce: accumulate raw delta, don't dispatch to Runtime
                     var pixels = ScrollController.ConvertToPixels(
                         new ScrollDelta(ScrollDeltaUnit.WheelRaw, wheel.RawDelta),
                         ScrollMetrics.DefaultText,
                         SystemScrollSettings.Default);
-                    if (ScrollPresentationInputBridge.TryResolveWheelRetarget(
-                        d3d12Compositor,
-                        new NodeKey(1),
-                        runtime.CurrentModel.Scroll,
-                        pixels,
-                        out var presentationDecision))
-                    {
-                        runtime.Dispatch(new CounterMessage.ScrollPresentationInterrupted(presentationDecision.Interrupt));
-                        scrollFramePump.EnsureRunning(
-                            (frame, cancellationToken) => runtime.DispatchAndWaitAsync(frame, cancellationToken),
-                            () => runtime.CurrentModel.Scroll);
-                        return;
-                    }
-
-                    scrollFramePump.AddPendingPixels(pixels);
-                    scrollFramePump.EnsureRunning(
-                        (frame, cancellationToken) => runtime.DispatchAndWaitAsync(frame, cancellationToken),
-                        () => runtime.CurrentModel.Scroll);
+                    scrollPresentationFramePump.AddPendingPixels(pixels);
+                    scrollPresentationFramePump.EnsureRunning(runtime, d3d12Compositor, drawCommandTranslator, new NodeKey(1));
                 }
                 else if (message is not null)
                 {

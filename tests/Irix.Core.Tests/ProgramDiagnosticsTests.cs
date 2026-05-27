@@ -1985,9 +1985,31 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-scroll-presentation-policy", programSource);
         Assert.Contains("ScrollPresentationPolicyDiagnosticRunner.Run", programSource);
-        Assert.Contains("ScrollPresentationInputBridge.TryResolveWheelRetarget", programSource);
+        Assert.Contains("ScrollPresentationFramePump", programSource);
         Assert.Contains("commit", design);
         Assert.Equal("scroll-presentation-policy actual initialPos=120 initialTarget=180 presented=132 deltaPx=54 commitPos=132 commitTarget=132 commitAnimating=False cancelPos=180 cancelTarget=180 cancelAnimating=False retargetPos=132 retargetTarget=186 retargetAnimating=True", ScrollPresentationPolicyDiagnosticRunner.Format(diagnostics));
+    }
+
+    [Fact]
+    public async Task Scroll_presentation_runtime_diagnostic_runs_compositor_ticks_after_logical_render()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+
+        var diagnostics = await ScrollPresentationRuntimeDiagnosticRunner.RunCoreAsync(cancellationToken);
+        var summary = ScrollPresentationRuntimeDiagnosticRunner.Format(diagnostics);
+
+        Assert.Contains("--diagnose-scroll-presentation-runtime", programSource);
+        Assert.Contains("ScrollPresentationRuntimeDiagnosticRunner.RunAsync", programSource);
+        Assert.Equal(54, diagnostics.Position);
+        Assert.Equal(54, diagnostics.TargetPosition);
+        Assert.False(diagnostics.IsAnimating);
+        Assert.Equal(1, diagnostics.RetargetCount);
+        Assert.True(diagnostics.ExecuteCompositionCount > 0);
+        Assert.True(diagnostics.PumpTickCount > 0);
+        Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False", summary);
+        Assert.Contains("lastPresented=54", summary);
     }
 
     [Fact]
