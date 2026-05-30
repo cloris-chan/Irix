@@ -1039,6 +1039,7 @@ internal enum CompositionBackendCapabilities : byte
     FixedClip = 4,
     MultiLayer = 8,
     LayerContentCache = 16,
+    RenderTargetCache = 32,
     TransformOpacity = Transform | Opacity,
     ScrollPresentation = Transform | FixedClip
 }
@@ -1051,7 +1052,11 @@ internal readonly struct CompositionBackendExecutionResult(
     int OpacityAppliedCommands,
     int LayerCacheHits = 0,
     int LayerCacheMisses = 0,
-    int CachedLayerCommands = 0) : IEquatable<CompositionBackendExecutionResult>
+    int CachedLayerCommands = 0,
+    bool RenderTargetBacked = false,
+    int RenderTargetCacheHits = 0,
+    int RenderTargetCacheMisses = 0,
+    int CachedRenderTargetCommands = 0) : IEquatable<CompositionBackendExecutionResult>
 {
     public bool D3D12Backed { get; } = D3D12Backed;
     public int LayerCount { get; } = LayerCount;
@@ -1061,6 +1066,10 @@ internal readonly struct CompositionBackendExecutionResult(
     public int LayerCacheHits { get; } = LayerCacheHits;
     public int LayerCacheMisses { get; } = LayerCacheMisses;
     public int CachedLayerCommands { get; } = CachedLayerCommands;
+    public bool RenderTargetBacked { get; } = RenderTargetBacked;
+    public int RenderTargetCacheHits { get; } = RenderTargetCacheHits;
+    public int RenderTargetCacheMisses { get; } = RenderTargetCacheMisses;
+    public int CachedRenderTargetCommands { get; } = CachedRenderTargetCommands;
 
     public bool Equals(CompositionBackendExecutionResult other)
     {
@@ -1071,12 +1080,16 @@ internal readonly struct CompositionBackendExecutionResult(
             && OpacityAppliedCommands == other.OpacityAppliedCommands
             && LayerCacheHits == other.LayerCacheHits
             && LayerCacheMisses == other.LayerCacheMisses
-            && CachedLayerCommands == other.CachedLayerCommands;
+            && CachedLayerCommands == other.CachedLayerCommands
+            && RenderTargetBacked == other.RenderTargetBacked
+            && RenderTargetCacheHits == other.RenderTargetCacheHits
+            && RenderTargetCacheMisses == other.RenderTargetCacheMisses
+            && CachedRenderTargetCommands == other.CachedRenderTargetCommands;
     }
 
     public override bool Equals(object? obj) => obj is CompositionBackendExecutionResult other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(D3D12Backed, LayerCount, CommandCount, TranslatedCommands, OpacityAppliedCommands, LayerCacheHits, LayerCacheMisses, CachedLayerCommands);
+    public override int GetHashCode() => HashCode.Combine(D3D12Backed, LayerCount, CommandCount, TranslatedCommands, OpacityAppliedCommands, LayerCacheHits, LayerCacheMisses, HashCode.Combine(CachedLayerCommands, RenderTargetBacked, RenderTargetCacheHits, RenderTargetCacheMisses, CachedRenderTargetCommands));
 
     public static bool operator ==(CompositionBackendExecutionResult left, CompositionBackendExecutionResult right) => left.Equals(right);
 

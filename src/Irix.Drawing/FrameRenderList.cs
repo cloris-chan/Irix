@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Irix.Drawing;
 
@@ -23,6 +24,11 @@ public sealed class FrameRenderList<T> : IDisposable where T : struct
 
     public void Reset()
     {
+        if (_buffer is not null && RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+        {
+            Array.Clear(_buffer, 0, _count);
+        }
+
         _count = 0;
     }
 
@@ -36,7 +42,7 @@ public sealed class FrameRenderList<T> : IDisposable where T : struct
 
         _buffer = null;
         _count = 0;
-        ArrayPool<T>.Shared.Return(buffer);
+        ArrayPool<T>.Shared.Return(buffer, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
     }
 
     private void EnsureCapacity(int required)

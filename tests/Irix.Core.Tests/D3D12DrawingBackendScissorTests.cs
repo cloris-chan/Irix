@@ -343,6 +343,116 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void TryExecuteCompositionWithRenderTargetCache_builds_rect_only_suffix_layer_plan()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 40, 24), Color: DrawColor.Opaque(100, 120, 140)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(64, 20, 32, 24), Color: DrawColor.Opaque(120, 140, 160))
+        };
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(7),
+            CommandStart: 1,
+            CommandCount: 2,
+            new CompositionTransform(12, 8),
+            new CompositionOpacity(0.5f)));
+
+        var planned = D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
+            new D3D12CompositionLayerContentCache(),
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            layerTargets,
+            out var diagnostics);
+
+        Assert.True(planned);
+        Assert.Equal(1, rects.Count);
+        Assert.Equal(0, texts.Count);
+        Assert.Equal(1, layerTargets.Count);
+        Assert.True(layerTargets.Span[0].Content.SupportsRenderTargetCache);
+        Assert.Equal(2, diagnostics.CachedLayerCommands);
+        Assert.Equal(2, diagnostics.TranslatedCommands);
+        Assert.Equal(2, diagnostics.OpacityAppliedCommands);
+        Assert.False(diagnostics.RenderTargetBacked);
+    }
+
+    [Fact]
+    public void TryExecuteCompositionWithRenderTargetCache_rejects_non_suffix_or_text_layers()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
+        using var resources = FrameDrawingResources.Rent();
+        var style = resources.AddTextStyle(TextStyle.Default);
+        var text = resources.AddText("text");
+        resources.Seal();
+        var textCommands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.DrawTextRun, Rect: new DrawRect(16, 20, 120, 24), Resource: style, Text: text, Color: DrawColor.Opaque(240, 240, 240))
+        };
+        var textFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(7),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionTransform(12, 8),
+            CompositionOpacity.Opaque));
+
+        Assert.False(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
+            new D3D12CompositionLayerContentCache(),
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            textCommands,
+            resources,
+            textFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            layerTargets,
+            out _));
+        Assert.Equal(0, rects.Count);
+        Assert.Equal(0, texts.Count);
+        Assert.Equal(0, layerTargets.Count);
+
+        var interleavedCommands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 40, 24), Color: DrawColor.Opaque(100, 120, 140)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(180, 20, 40, 24), Color: DrawColor.Opaque(200, 120, 80))
+        };
+        var interleavedFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(8),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionTransform(8, 0),
+            CompositionOpacity.Opaque));
+
+        Assert.False(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
+            new D3D12CompositionLayerContentCache(),
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            interleavedCommands,
+            resources,
+            interleavedFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            layerTargets,
+            out _));
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_invalidates_layer_content_cache_when_source_commands_change()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

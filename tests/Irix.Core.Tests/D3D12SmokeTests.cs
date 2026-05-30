@@ -1,4 +1,7 @@
 using System.Runtime.InteropServices;
+using Irix.Drawing;
+using Irix.Platform.Windows;
+using Irix.Rendering;
 using Windows.Win32;
 using Windows.Win32.Graphics.Direct3D;
 using Windows.Win32.Graphics.Direct3D12;
@@ -184,4 +187,46 @@ public sealed unsafe class D3D12SmokeTests
         device->Release();
     }
 
+    [Fact]
+    public void Layer_render_target_cache_creates_texture_rtv_and_srv()
+    {
+        var device = CreateDeviceOrSkip();
+        try
+        {
+            using var resources = FrameDrawingResources.Rent();
+            resources.Seal();
+            var commands = new[]
+            {
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 32, 32), Color: DrawColor.Opaque(10, 20, 30))
+            };
+            var layer = new CompositionLayer(
+                new CompositionLayerId(1),
+                CommandStart: 0,
+                CommandCount: 1,
+                CompositionTransform.Identity,
+                CompositionOpacity.Opaque);
+            var content = D3D12CompositionLayerContent.Build(commands, resources, DisplayScale.Identity);
+            var key = D3D12CompositionLayerContentCacheKey.Create(commands, resources, layer, DisplayScale.Identity);
+
+            using var cache = new D3D12CompositionLayerRenderTargetCache(device);
+            var first = cache.GetOrCreate(key, content, 64, 48, out var firstHit);
+            var second = cache.GetOrCreate(key, content, 64, 48, out var secondHit);
+
+            Assert.False(firstHit);
+            Assert.True(secondHit);
+            Assert.Same(first, second);
+            Assert.Equal(64, first.Width);
+            Assert.Equal(48, first.Height);
+            Assert.Equal(1, cache.Count);
+            Assert.True((nint)first.Texture != 0);
+            Assert.True((nint)first.RtvHeap != 0);
+            Assert.True((nint)first.SrvHeap != 0);
+            Assert.True(first.Rtv.ptr != 0);
+            Assert.True(first.SrvGpu.ptr != 0);
+        }
+        finally
+        {
+            device->Release();
+        }
+    }
 }

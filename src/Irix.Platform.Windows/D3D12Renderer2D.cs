@@ -27,7 +27,8 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
     private ID3D12PipelineState* _pso;
     private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];
     private readonly D3D12_VERTEX_BUFFER_VIEW[] _vbvs = new D3D12_VERTEX_BUFFER_VIEW[UploadFrameCount];
-    private const int MaxVerts = 6 * 1024; // 1024 quads
+    private readonly int[] _usedVertices = new int[UploadFrameCount];
+    private const int MaxVerts = 6 * 4096;
     private bool _disposed;
 
     public D3D12Renderer2D(ID3D12Device* device)
@@ -209,11 +210,23 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
     /// Render colored rectangles. Returns the number of quads drawn.
     /// Coordinates are in screen pixels, converted to NDC internally.
     /// </summary>
+    public void BeginFrame(int frameResourceIndex)
+    {
+        _usedVertices[frameResourceIndex % UploadFrameCount] = 0;
+    }
+
     public int RenderRectangles(ID3D12GraphicsCommandList* list, ReadOnlySpan<RectData> rects, float vpW, float vpH, int frameResourceIndex)
     {
         if (rects.Length == 0) return 0;
 
         var uploadSlot = frameResourceIndex % UploadFrameCount;
+        var baseVertex = _usedVertices[uploadSlot];
+        var remainingVertices = MaxVerts - baseVertex;
+        if (remainingVertices < 6)
+        {
+            return 0;
+        }
+
         var vbuf = _vbufs[uploadSlot];
         void* mapped = null;
         try
@@ -234,7 +247,7 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         var count = 0;
         try
         {
-            for (var i = 0; i < rects.Length && count + 6 <= MaxVerts; i++)
+            for (var i = 0; i < rects.Length && count + 6 <= remainingVertices; i++)
             {
                 var r = rects[i];
                 var x1 = (r.X / vpW) * 2f - 1f;
@@ -243,12 +256,12 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
                 var y2 = 1f - ((r.Y + r.Height) / vpH) * 2f;
                 var c = new Vector4(r.R, r.G, r.B, r.A);
 
-                verts[count++] = new Vertex { Position = new Vector2(x1, y1), Color = c };
-                verts[count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
-                verts[count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
-                verts[count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
-                verts[count++] = new Vertex { Position = new Vector2(x2, y2), Color = c };
-                verts[count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y1), Color = c };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y2), Color = c };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
             }
         }
         finally
@@ -256,6 +269,7 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
             vbuf->Unmap(0, null);
         }
 
+        _usedVertices[uploadSlot] = baseVertex + count;
         list->SetPipelineState(_pso);
         list->SetGraphicsRootSignature(_rootSig);
         list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY.D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -291,7 +305,7 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
                 bottom = integerScissor.Bottom
             };
             list->RSSetScissorRects(1, &scissor);
-            list->DrawInstanced((uint)(rectCountInRun * 6), 1, (uint)(startRect * 6), 0);
+            list->DrawInstanced((uint)(rectCountInRun * 6), 1, (uint)(baseVertex + startRect * 6), 0);
         }
     }
 
