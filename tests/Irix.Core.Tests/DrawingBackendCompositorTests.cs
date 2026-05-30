@@ -535,8 +535,9 @@ public sealed class DrawingBackendCompositorTests
 
         Assert.True(compositor.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
         Assert.Equal(10, presentedScrollY);
+        await using var compositorLoop = new CompositorLoop(new EmptyTranslator(), compositor);
         Assert.True(ScrollPresentationInputBridge.TryResolveWheelRetarget(
-            compositor,
+            compositorLoop,
             new NodeKey(1),
             new ScrollState { Position = 40, TargetPosition = 40, MaxScrollY = 120, HasMaxScrollY = true },
             54,
@@ -1479,6 +1480,16 @@ public sealed class DrawingBackendCompositorTests
         }
         public void EndFrame() { }
         public void Dispose() { }
+    }
+
+    private sealed class EmptyTranslator : IPatchBatchTranslator
+    {
+        public RenderFrameBatch Translate(PatchBatch patchBatch)
+        {
+            var resources = FrameDrawingResources.Rent();
+            resources.Seal();
+            return new RenderFrameBatch(new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>([]), 0), [], resources);
+        }
     }
 
     private sealed class ClipCapabilityBackend(DrawingBackendClipMode clipMode) : IDrawingBackend, IClipScissorCapability

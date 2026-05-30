@@ -1,6 +1,6 @@
 namespace Irix.Rendering;
 
-public sealed class CompositeCompositor(params ICompositor[] compositors) : ICompositor, IRetainedFrameStagingCompositor
+public sealed class CompositeCompositor(params ICompositor[] compositors) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor
 {
     public async ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
@@ -29,5 +29,63 @@ public sealed class CompositeCompositor(params ICompositor[] compositors) : ICom
         {
             throw new InvalidOperationException("Composite compositor does not contain a retained-frame staging compositor.");
         }
+    }
+
+    void ICompositionScrollPresentationCompositor.SetCompositionScrollPresentationDeclaration(
+        in CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        var installed = false;
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor)
+            {
+                scrollPresentationCompositor.SetCompositionScrollPresentationDeclaration(declaration, snapshot);
+                installed = true;
+            }
+        }
+
+        if (!installed)
+        {
+            throw new InvalidOperationException("Composite compositor does not contain a composition scroll presentation compositor.");
+        }
+    }
+
+    async ValueTask<CompositionBackendExecutionResult> ICompositionScrollPresentationCompositor.RenderCompositionScrollPresentationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken)
+    {
+        var rendered = false;
+        var result = default(CompositionBackendExecutionResult);
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor)
+            {
+                result = await scrollPresentationCompositor.RenderCompositionScrollPresentationTickAtAsync(timestamp, cancellationToken);
+                rendered = true;
+            }
+        }
+
+        if (!rendered)
+        {
+            throw new InvalidOperationException("Composite compositor does not contain a composition scroll presentation compositor.");
+        }
+
+        return result;
+    }
+
+    bool ICompositionScrollPresentationCompositor.TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
+    {
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor
+                && scrollPresentationCompositor.TryGetPresentedScrollY(targetKey, out presentedScrollY))
+            {
+                return true;
+            }
+        }
+
+        presentedScrollY = 0;
+        return false;
     }
 }

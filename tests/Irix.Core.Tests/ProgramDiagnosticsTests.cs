@@ -1985,7 +1985,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-scroll-presentation-policy", programSource);
         Assert.Contains("ScrollPresentationPolicyDiagnosticRunner.Run", programSource);
-        Assert.Contains("ScrollPresentationFramePump", programSource);
+        Assert.Contains("ScrollPresentationCoordinator", programSource);
         Assert.Contains("commit", design);
         Assert.Equal("scroll-presentation-policy actual initialPos=120 initialTarget=180 presented=132 deltaPx=54 commitPos=132 commitTarget=132 commitAnimating=False cancelPos=180 cancelTarget=180 cancelAnimating=False retargetPos=132 retargetTarget=234 retargetAnimating=True", ScrollPresentationPolicyDiagnosticRunner.Format(diagnostics));
     }
@@ -2009,7 +2009,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(1, diagnostics.RetainedStageCount);
         Assert.Equal(2, diagnostics.ExecuteCount);
         Assert.True(diagnostics.ExecuteCompositionCount > 0);
-        Assert.True(diagnostics.PumpTickCount > 0);
+        Assert.True(diagnostics.LoopTickCount > 0);
+        Assert.Contains("loopTicks=", summary);
         Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False", summary);
         Assert.Contains("retainedStages=1", summary);
         Assert.Contains("execute=2", summary);
@@ -2022,15 +2023,15 @@ public sealed class ProgramDiagnosticsTests
         var frameInterval = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 100);
         var tick = CompositionTimestamp.FromStopwatchTicks(1_000);
 
-        Assert.Equal(5, ScrollPresentationFramePump.ComputeNextTickDelayMilliseconds(
+        Assert.Equal(5, CompositorLoop.ComputeNextTickDelayMilliseconds(
             tick,
             tick + CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 200),
             frameInterval));
-        Assert.Equal(0, ScrollPresentationFramePump.ComputeNextTickDelayMilliseconds(
+        Assert.Equal(0, CompositorLoop.ComputeNextTickDelayMilliseconds(
             tick,
             tick + frameInterval,
             frameInterval));
-        Assert.Equal(0, ScrollPresentationFramePump.ComputeNextTickDelayMilliseconds(
+        Assert.Equal(0, CompositorLoop.ComputeNextTickDelayMilliseconds(
             tick,
             tick + CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 50),
             frameInterval));

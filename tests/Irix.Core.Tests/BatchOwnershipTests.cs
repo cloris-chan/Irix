@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using Irix.Drawing;
+using Irix.Platform;
 using Irix.Rendering;
 using Xunit;
 
@@ -179,6 +180,38 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_scroll_presentation_scheduler_installs_and_ticks_until_idle()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var start = CompositionTimestamp.Now();
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(start, CompositionDuration.FromStopwatchTicks(1)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        await loop.WaitForScrollPresentationIdleAsync(cancellationToken);
+
+        Assert.Equal(1, compositor.InstallCount);
+        Assert.True(compositor.TickCount >= 2);
+        Assert.Equal(compositor.TickCount, loop.ScrollPresentationTickCount);
+        Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(54, presentedScrollY);
+    }
+
+    [Fact]
     public async Task CompositorLoop_skips_regular_empty_diffs()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -341,6 +374,51 @@ public sealed class BatchOwnershipTests
         {
             StageCallCount++;
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class ScrollPresentationSchedulerCompositor : ICompositor, ICompositionScrollPresentationCompositor
+    {
+        private CompositionScrollPresentationDeclaration _declaration;
+        private double _presentedScrollY;
+
+        public int RenderCallCount { get; private set; }
+        public int InstallCount { get; private set; }
+        public long TickCount { get; private set; }
+
+        public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
+        {
+            RenderCallCount++;
+            return ValueTask.CompletedTask;
+        }
+
+        public void SetCompositionScrollPresentationDeclaration(
+            in CompositionScrollPresentationDeclaration declaration,
+            RenderPipelineRetainedInputSnapshot snapshot)
+        {
+            _declaration = declaration;
+            InstallCount++;
+        }
+
+        public ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(
+            CompositionTimestamp timestamp,
+            CancellationToken cancellationToken = default)
+        {
+            TickCount++;
+            _presentedScrollY = _declaration.PresentedScrollY.Evaluate(_declaration.Timeline.ProgressAt(timestamp));
+            return ValueTask.FromResult(default(CompositionBackendExecutionResult));
+        }
+
+        public bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
+        {
+            if (InstallCount > 0 && targetKey == _declaration.TargetKey)
+            {
+                presentedScrollY = _presentedScrollY;
+                return true;
+            }
+
+            presentedScrollY = 0;
+            return false;
         }
     }
 

@@ -11,7 +11,7 @@ namespace Irix.Rendering;
 /// Caches hit targets from the frame for input routing.
 /// This is the bridge between the RenderFrameBatch world and the IDrawingBackend world.
 /// </summary>
-public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, IDisposable
+public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, IDisposable
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
@@ -202,6 +202,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         return false;
     }
 
+    bool ICompositionScrollPresentationCompositor.TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY) => TryGetPresentedScrollY(targetKey, out presentedScrollY);
+
     internal int PendingCompositionMarkerEventCount
     {
         get
@@ -346,6 +348,13 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
             ClearCompositionPresentationState();
         }
+    }
+
+    void ICompositionScrollPresentationCompositor.SetCompositionScrollPresentationDeclaration(
+        in CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        SetCompositionScrollPresentationDeclaration(declaration, snapshot);
     }
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
@@ -659,6 +668,13 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             return RenderCompositionScrollPresentationTickAtCore(timestamp);
         }
+    }
+
+    ValueTask<CompositionBackendExecutionResult> ICompositionScrollPresentationCompositor.RenderCompositionScrollPresentationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken)
+    {
+        return RenderCompositionScrollPresentationTickAtAsync(timestamp, cancellationToken);
     }
 
     private ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtCore(CompositionTimestamp timestamp)

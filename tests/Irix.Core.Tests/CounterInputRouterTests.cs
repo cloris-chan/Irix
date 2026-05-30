@@ -1569,7 +1569,7 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void ScrollPresentationFramePump_boundary_delta_does_not_restart_same_target_segment()
+    public void ScrollPresentationCoordinator_boundary_delta_does_not_restart_same_target_segment()
     {
         var state = new ScrollState { Position = 240, TargetPosition = 240, MaxScrollY = 240, HasMaxScrollY = true };
         var decision = ScrollController.ResolvePresentationInterrupt(
@@ -1583,11 +1583,11 @@ public sealed class CounterInputRouterTests
         Assert.Equal(210, decision.NextState.Position);
         Assert.Equal(240, decision.NextState.TargetPosition);
         Assert.True(decision.NextState.IsAnimating);
-        Assert.False(ScrollPresentationFramePump.ShouldStartRetargetSegment(state, decision));
+        Assert.False(ScrollPresentationCoordinator.ShouldStartRetargetSegment(state, decision));
     }
 
     [Fact]
-    public void ScrollPresentationFramePump_first_delta_to_boundary_starts_target_segment()
+    public void ScrollPresentationCoordinator_first_delta_to_boundary_starts_target_segment()
     {
         var state = new ScrollState { Position = 186, TargetPosition = 186, MaxScrollY = 240, HasMaxScrollY = true };
         var decision = ScrollController.ResolvePresentationInterrupt(
@@ -1599,7 +1599,7 @@ public sealed class CounterInputRouterTests
             ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
 
         Assert.Equal(240, decision.NextState.TargetPosition);
-        Assert.True(ScrollPresentationFramePump.ShouldStartRetargetSegment(state, decision));
+        Assert.True(ScrollPresentationCoordinator.ShouldStartRetargetSegment(state, decision));
     }
 
     [Fact]

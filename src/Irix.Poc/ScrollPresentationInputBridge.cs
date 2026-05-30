@@ -5,14 +5,14 @@ namespace Irix.Poc;
 internal static class ScrollPresentationInputBridge
 {
     public static bool TryResolveWheelRetarget(
-        DrawingBackendCompositor compositor,
+        CompositorLoop compositorLoop,
         NodeKey scrollTargetKey,
         ScrollState state,
         double pixelDelta,
         out ScrollPresentationInputDecision decision)
     {
-        ArgumentNullException.ThrowIfNull(compositor);
-        if (!compositor.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY))
+        ArgumentNullException.ThrowIfNull(compositorLoop);
+        if (!compositorLoop.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY))
         {
             decision = default;
             return false;

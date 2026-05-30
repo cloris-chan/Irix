@@ -288,7 +288,7 @@ internal static class Program
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor, ownershipProvider);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator, displayScale), CounterLayoutDiagnostics.Empty), compositorLoop);
         var scrollFramePump = new ScrollFramePump();
-        var scrollPresentationFramePump = new ScrollPresentationFramePump();
+        var scrollPresentationCoordinator = new ScrollPresentationCoordinator();
         _scrollFramePump = scrollFramePump;
         var inputOwnershipState = new InputOwnershipState();
         _inputOwnershipState = inputOwnershipState;
@@ -372,8 +372,8 @@ internal static class Program
                         new ScrollDelta(ScrollDeltaUnit.WheelRaw, wheel.RawDelta),
                         ScrollMetrics.DefaultText,
                         SystemScrollSettings.Default);
-                    scrollPresentationFramePump.AddPendingPixels(pixels);
-                    scrollPresentationFramePump.EnsureRunning(runtime, d3d12Compositor, drawCommandTranslator, new NodeKey(1));
+                    scrollPresentationCoordinator.AddPendingPixels(pixels);
+                    scrollPresentationCoordinator.EnsureRunning(runtime, compositorLoop, drawCommandTranslator, new NodeKey(1));
                 }
                 else if (message is not null)
                 {

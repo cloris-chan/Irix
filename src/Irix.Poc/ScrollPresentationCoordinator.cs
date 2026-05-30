@@ -1,26 +1,21 @@
-using System.Diagnostics;
 using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed class ScrollPresentationFramePump
+internal sealed class ScrollPresentationCoordinator
 {
     private const int AnimationDurationMs = 160;
-    private const int TargetFrameRate = 240;
     private const int IdleTickExitThreshold = 2;
     private const double TargetEpsilon = 0.001;
     private const CompositionAnimationEasing RetargetEasing = CompositionAnimationEasing.SineOut;
-    private static readonly CompositionDuration TargetFrameInterval = CompositionDuration.FromStopwatchTicks(Math.Max(1, Stopwatch.Frequency / TargetFrameRate));
 
     private int _loopRunning;
     private long _pendingPixelsBits;
-    private long _compositionTickCount;
     private long _retargetCount;
     private long _lastPresentedScrollYBits;
 
     public bool IsLoopRunning => Volatile.Read(ref _loopRunning) != 0;
     public double PendingPixels => ReadDouble(ref _pendingPixelsBits);
-    public long CompositionTickCount => Volatile.Read(ref _compositionTickCount);
     public long RetargetCount => Volatile.Read(ref _retargetCount);
     public double LastPresentedScrollY => ReadDouble(ref _lastPresentedScrollYBits);
 
@@ -38,20 +33,20 @@ internal sealed class ScrollPresentationFramePump
 
     public bool EnsureRunning(
         Runtime<CounterModel, CounterMessage> runtime,
-        DrawingBackendCompositor compositor,
+        CompositorLoop compositorLoop,
         WindowDrawCommandTranslator translator,
         NodeKey scrollTargetKey,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(runtime);
-        ArgumentNullException.ThrowIfNull(compositor);
+        ArgumentNullException.ThrowIfNull(compositorLoop);
         ArgumentNullException.ThrowIfNull(translator);
         if (Interlocked.Exchange(ref _loopRunning, 1) != 0)
         {
             return false;
         }
 
-        var runTask = RunAsync(runtime, compositor, translator, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
+        var runTask = RunAsync(runtime, compositorLoop, translator, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
         _ = runTask.ContinueWith(
             static task => _ = task.Exception,
             CancellationToken.None,
@@ -62,33 +57,30 @@ internal sealed class ScrollPresentationFramePump
 
     internal Task RunUntilIdleAsync(
         Runtime<CounterModel, CounterMessage> runtime,
-        DrawingBackendCompositor compositor,
+        CompositorLoop compositorLoop,
         WindowDrawCommandTranslator translator,
         NodeKey scrollTargetKey,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(runtime);
-        ArgumentNullException.ThrowIfNull(compositor);
+        ArgumentNullException.ThrowIfNull(compositorLoop);
         ArgumentNullException.ThrowIfNull(translator);
         if (Interlocked.Exchange(ref _loopRunning, 1) != 0)
         {
-            throw new InvalidOperationException("A scroll presentation frame pump is already running.");
+            throw new InvalidOperationException("A scroll presentation coordinator is already running.");
         }
 
-        return RunAsync(runtime, compositor, translator, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
+        return RunAsync(runtime, compositorLoop, translator, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
     }
 
     private async Task RunAsync(
         Runtime<CounterModel, CounterMessage> runtime,
-        DrawingBackendCompositor compositor,
+        CompositorLoop compositorLoop,
         WindowDrawCommandTranslator translator,
         NodeKey scrollTargetKey,
         CancellationToken cancellationToken,
         bool releaseLoopFlag)
     {
-        var hasActiveSegment = false;
-        var segmentStart = CompositionTimestamp.Zero;
-        var segmentDuration = CompositionDuration.Zero;
         try
         {
             var idleTicks = 0;
@@ -98,49 +90,13 @@ internal sealed class ScrollPresentationFramePump
                 var pendingPixels = DrainPendingPixels();
                 if (pendingPixels != 0)
                 {
-                    var retarget = await RetargetAsync(runtime, compositor, translator, scrollTargetKey, pendingPixels, cancellationToken);
-                    if (!retarget.Succeeded)
+                    if (!await RetargetAsync(runtime, compositorLoop, translator, scrollTargetKey, pendingPixels, cancellationToken))
                     {
                         return;
                     }
 
-                    if (retarget.StartedSegment)
-                    {
-                        hasActiveSegment = true;
-                        segmentStart = retarget.SegmentStart;
-                        segmentDuration = retarget.SegmentDuration;
-                    }
-
                     idleTicks = 0;
-                }
-
-                if (hasActiveSegment)
-                {
-                    var now = CompositionTimestamp.Now();
-                    var end = segmentStart + segmentDuration;
-                    if (now > end)
-                    {
-                        now = end;
-                    }
-
-                    _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(now, cancellationToken);
-                    Interlocked.Increment(ref _compositionTickCount);
-                    RecordPresented(compositor, scrollTargetKey);
-                    if (now >= end)
-                    {
-                        hasActiveSegment = false;
-                    }
-
-                    var delayMs = ComputeNextTickDelayMilliseconds(now, CompositionTimestamp.Now(), TargetFrameInterval);
-                    if (delayMs > 0)
-                    {
-                        await Task.Delay(delayMs, cancellationToken);
-                    }
-                    else
-                    {
-                        await Task.Yield();
-                    }
-
+                    await Task.Yield();
                     continue;
                 }
 
@@ -157,23 +113,23 @@ internal sealed class ScrollPresentationFramePump
 
             if (PendingPixels != 0 && !cancellationToken.IsCancellationRequested)
             {
-                EnsureRunning(runtime, compositor, translator, scrollTargetKey, cancellationToken);
+                EnsureRunning(runtime, compositorLoop, translator, scrollTargetKey, cancellationToken);
             }
         }
     }
 
-    private async Task<ScrollPresentationRetargetResult> RetargetAsync(
+    private async Task<bool> RetargetAsync(
         Runtime<CounterModel, CounterMessage> runtime,
-        DrawingBackendCompositor compositor,
+        CompositorLoop compositorLoop,
         WindowDrawCommandTranslator translator,
         NodeKey scrollTargetKey,
         double pendingPixels,
         CancellationToken cancellationToken)
     {
         var state = runtime.CurrentModel.Scroll;
-        var from = ResolvePresentedOrPosition(compositor, scrollTargetKey, state);
+        var from = ResolvePresentedOrPosition(compositorLoop, scrollTargetKey, state);
         var decision = ScrollPresentationInputBridge.TryResolveWheelRetarget(
-            compositor,
+            compositorLoop,
             scrollTargetKey,
             state,
             pendingPixels,
@@ -188,7 +144,7 @@ internal sealed class ScrollPresentationFramePump
                 ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
         if (!ShouldStartRetargetSegment(state, decision))
         {
-            return ScrollPresentationRetargetResult.Ignored;
+            return true;
         }
 
         var layoutState = ScrollController.CommitPresented(decision.NextState, decision.NextState.TargetPosition);
@@ -196,7 +152,7 @@ internal sealed class ScrollPresentationFramePump
         var snapshot = translator.LastRetainedInputSnapshot;
         if (snapshot is null)
         {
-            return default;
+            return false;
         }
 
         var retainedScrollY = ScrollController.GetScrollY(runtime.CurrentModel.Scroll);
@@ -206,12 +162,10 @@ internal sealed class ScrollPresentationFramePump
             scrollTargetKey,
             new CompositionAnimationTimeline(segmentStart, segmentDuration),
             new CompositionScalarAnimation((float)from, retainedScrollY, RetargetEasing));
-        compositor.SetCompositionScrollPresentationDeclaration(declaration, snapshot);
-        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(segmentStart, cancellationToken);
-        Interlocked.Increment(ref _compositionTickCount);
-        RecordPresented(compositor, scrollTargetKey);
+        await compositorLoop.StartCompositionScrollPresentationAsync(declaration, snapshot, cancellationToken);
+        RecordPresented(compositorLoop, scrollTargetKey);
         Interlocked.Increment(ref _retargetCount);
-        return ScrollPresentationRetargetResult.Started(segmentStart, segmentDuration);
+        return true;
     }
 
     internal static bool ShouldStartRetargetSegment(in ScrollState currentState, in ScrollPresentationInterruptDecision decision)
@@ -219,9 +173,9 @@ internal sealed class ScrollPresentationFramePump
         return Math.Abs(currentState.TargetPosition - decision.NextState.TargetPosition) > TargetEpsilon;
     }
 
-    private void RecordPresented(DrawingBackendCompositor compositor, NodeKey scrollTargetKey)
+    private void RecordPresented(CompositorLoop compositorLoop, NodeKey scrollTargetKey)
     {
-        if (compositor.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY))
+        if (compositorLoop.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY))
         {
             WriteDouble(ref _lastPresentedScrollYBits, presentedScrollY);
         }
@@ -234,11 +188,11 @@ internal sealed class ScrollPresentationFramePump
     }
 
     private static double ResolvePresentedOrPosition(
-        DrawingBackendCompositor compositor,
+        CompositorLoop compositorLoop,
         NodeKey scrollTargetKey,
         ScrollState state)
     {
-        return compositor.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY)
+        return compositorLoop.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY)
             ? presentedScrollY
             : state.Position;
     }
@@ -253,51 +207,4 @@ internal sealed class ScrollPresentationFramePump
         Interlocked.Exchange(ref bits, BitConverter.DoubleToInt64Bits(value));
     }
 
-    internal static int ComputeNextTickDelayMilliseconds(
-        CompositionTimestamp tickTimestamp,
-        CompositionTimestamp afterRenderTimestamp,
-        CompositionDuration targetFrameInterval)
-    {
-        var nextTick = tickTimestamp + targetFrameInterval;
-        var remainingTicks = (nextTick - afterRenderTimestamp).StopwatchTicks;
-        if (remainingTicks <= 0)
-        {
-            return 0;
-        }
-
-        var milliseconds = remainingTicks * 1000 / Stopwatch.Frequency;
-        return milliseconds > int.MaxValue ? int.MaxValue : Math.Max(1, (int)milliseconds);
-    }
-
-    private readonly struct ScrollPresentationRetargetResult(
-        bool Succeeded,
-        bool StartedSegment,
-        CompositionTimestamp SegmentStart,
-        CompositionDuration SegmentDuration) : IEquatable<ScrollPresentationRetargetResult>
-    {
-        public bool Succeeded { get; } = Succeeded;
-        public bool StartedSegment { get; } = StartedSegment;
-        public CompositionTimestamp SegmentStart { get; } = SegmentStart;
-        public CompositionDuration SegmentDuration { get; } = SegmentDuration;
-
-        public static ScrollPresentationRetargetResult Ignored => new(true, false, CompositionTimestamp.Zero, CompositionDuration.Zero);
-
-        public static ScrollPresentationRetargetResult Started(CompositionTimestamp segmentStart, CompositionDuration segmentDuration) => new(true, true, segmentStart, segmentDuration);
-
-        public bool Equals(ScrollPresentationRetargetResult other)
-        {
-            return Succeeded == other.Succeeded
-                && StartedSegment == other.StartedSegment
-                && SegmentStart == other.SegmentStart
-                && SegmentDuration == other.SegmentDuration;
-        }
-
-        public override bool Equals(object? obj) => obj is ScrollPresentationRetargetResult other && Equals(other);
-
-        public override int GetHashCode() => HashCode.Combine(Succeeded, StartedSegment, SegmentStart, SegmentDuration);
-
-        public static bool operator ==(ScrollPresentationRetargetResult left, ScrollPresentationRetargetResult right) => left.Equals(right);
-
-        public static bool operator !=(ScrollPresentationRetargetResult left, ScrollPresentationRetargetResult right) => !left.Equals(right);
-    }
 }
