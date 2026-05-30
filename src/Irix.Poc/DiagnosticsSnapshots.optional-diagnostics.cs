@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -477,3 +478,4 @@ internal readonly struct InputDirtyReasonDiagnostic(
 
     public static bool operator !=(InputDirtyReasonDiagnostic left, InputDirtyReasonDiagnostic right) => !left.Equals(right);
 }
+#endif

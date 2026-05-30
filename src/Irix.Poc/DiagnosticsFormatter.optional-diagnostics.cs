@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
@@ -446,3 +447,4 @@ internal static class DiagnosticsFormatter
             : $"RenderStylePreset({presetId.Value})";
     }
 }
+#endif

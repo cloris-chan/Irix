@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 
 namespace Irix.Poc;
@@ -70,3 +71,4 @@ internal sealed class DefaultDebugDiagnosticsSnapshotBridge(
             Program.DiagBackendClipMode);
     }
 }
+#endif

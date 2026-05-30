@@ -1,11 +1,26 @@
 #if IRIX_DIAGNOSTICS
 using Irix.Drawing;
+using Irix.Platform;
 using Irix.Platform.Windows;
+using Irix.Rendering;
 
 namespace Irix.Poc;
 
 internal static partial class Program
 {
+    private static bool _debugUiEnabled;
+    private static bool _manualDebugLayoutRefresh;
+    private static bool _suppressNextDebugLayoutRefresh;
+    private static Runtime<CounterModel, CounterMessage>? _debugRuntime;
+    private static INativeWindow? _debugWindow;
+    private static D3D12Renderer? _debugRenderer;
+    private static WindowDrawCommandTranslator? _debugTranslator;
+    private static DisplayScale _debugDisplayScale;
+    private static ScrollFramePump? _debugScrollFramePump;
+    private static InputOwnershipState? _debugInputOwnershipState;
+    private static DrawingBackendClipMode _debugBackendClipMode = DrawingBackendClipMode.Scissor;
+    private static CounterLayoutDiagnostics _lastDispatchedLayoutDiagnostics = CounterLayoutDiagnostics.Empty;
+
     static partial void CreateDiagnosticCliTask(string[] args, ref Task? task)
     {
         if (args.Contains("--diagnose"))
@@ -132,6 +147,165 @@ internal static partial class Program
         {
             task = RunCompositionMarkerRuntimeDiagnosticsAsync(args);
         }
+    }
+
+    static partial void ConfigureDebugUi(
+        string[] args,
+        CounterApplication application,
+        INativeWindow window,
+        D3D12Renderer renderer,
+        WindowDrawCommandTranslator translator,
+        DisplayScale displayScale)
+    {
+        _debugUiEnabled = args.Contains("--debug-ui");
+        if (!_debugUiEnabled)
+        {
+            return;
+        }
+
+        UpdateDebugUiViewportContext(window, renderer, translator, displayScale);
+        application.ConfigureDiagnostics(true, CreateViewportDiagnostics(), CounterLayoutDiagnostics.Empty);
+    }
+
+    static partial void SetDebugUiRuntime(Runtime<CounterModel, CounterMessage> runtime)
+    {
+        _debugRuntime = runtime;
+    }
+
+    static partial void SetDebugUiRuntimeSources(
+        ScrollFramePump scrollFramePump,
+        InputOwnershipState inputOwnershipState,
+        DrawingBackendClipMode backendClipMode)
+    {
+        _debugScrollFramePump = scrollFramePump;
+        _debugInputOwnershipState = inputOwnershipState;
+        _debugBackendClipMode = backendClipMode;
+    }
+
+    static partial void RefreshDebugUiLayoutDiagnosticsAfterFrame(WindowDrawCommandTranslator? translator)
+    {
+        if (!_debugUiEnabled || _manualDebugLayoutRefresh || translator is null)
+        {
+            return;
+        }
+
+        DispatchLayoutDiagnostics(CreateLayoutDiagnostics(translator));
+    }
+
+    static partial void UpdateDebugUiViewportContext(
+        INativeWindow window,
+        D3D12Renderer renderer,
+        WindowDrawCommandTranslator translator,
+        DisplayScale displayScale)
+    {
+        _debugWindow = window;
+        _debugRenderer = renderer;
+        _debugTranslator = translator;
+        _debugDisplayScale = displayScale.Normalize();
+    }
+
+    static partial void RequestDebugUiRenderAfterViewportChange(CompositorLoop compositorLoop, ref bool handled)
+    {
+        if (!_debugUiEnabled)
+        {
+            return;
+        }
+
+        handled = true;
+        _ = RequestResizeRenderAndRefreshDiagnosticsAsync(compositorLoop);
+    }
+
+    internal static double DiagPendingPx => _debugScrollFramePump?.PendingPixels ?? 0;
+    internal static bool DiagScrollFrameQueued => _debugScrollFramePump?.IsFrameQueued ?? false;
+    internal static bool DiagTickLoopRunning => _debugScrollFramePump?.IsLoopRunning ?? false;
+    internal static long DiagScrollDispatchedFrameCount => _debugScrollFramePump?.DispatchedFrameCount ?? 0;
+    internal static double DiagScrollRenderWaitMs => _debugScrollFramePump?.RenderWaitMs ?? 0;
+    internal static double DiagScrollLastDt => _debugScrollFramePump?.LastDt ?? 0;
+    internal static double DiagScrollDrainedPixels => _debugScrollFramePump?.DrainedPixels ?? 0;
+    internal static OwnershipSnapshot DiagInputOwnership => _debugInputOwnershipState?.Snapshot ?? default;
+    internal static DrawingBackendClipMode DiagBackendClipMode => _debugBackendClipMode;
+
+    private static async Task RequestResizeRenderAndRefreshDiagnosticsAsync(CompositorLoop compositorLoop)
+    {
+        try
+        {
+            _manualDebugLayoutRefresh = true;
+            await compositorLoop.RequestRenderAndWaitAsync();
+            _manualDebugLayoutRefresh = false;
+            if (_debugWindow is not null && _debugRenderer is not null && _debugTranslator is not null)
+            {
+                DispatchDebugDiagnostics(CreateViewportDiagnostics(), CreateLayoutDiagnostics(_debugTranslator));
+            }
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            _manualDebugLayoutRefresh = false;
+        }
+    }
+
+    private static void DispatchLayoutDiagnostics(CounterLayoutDiagnostics diagnostics)
+    {
+        if (!_debugUiEnabled || _debugRuntime is null)
+        {
+            return;
+        }
+
+        if (_suppressNextDebugLayoutRefresh)
+        {
+            _suppressNextDebugLayoutRefresh = false;
+            return;
+        }
+
+        if (diagnostics == _lastDispatchedLayoutDiagnostics)
+        {
+            return;
+        }
+
+        _lastDispatchedLayoutDiagnostics = diagnostics;
+        _suppressNextDebugLayoutRefresh = true;
+        _debugRuntime.Dispatch(new CounterMessage.LayoutDiagnosticsChanged(diagnostics));
+    }
+
+    private static void DispatchDebugDiagnostics(CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
+    {
+        if (!_debugUiEnabled || _debugRuntime is null)
+        {
+            return;
+        }
+
+        _lastDispatchedLayoutDiagnostics = layoutDiagnostics;
+        _suppressNextDebugLayoutRefresh = true;
+        _debugRuntime.Dispatch(new CounterMessage.DebugDiagnosticsChanged(viewportDiagnostics, layoutDiagnostics));
+    }
+
+    private static CounterViewportDiagnostics CreateViewportDiagnostics()
+    {
+        if (_debugWindow is null || _debugRenderer is null)
+        {
+            return default;
+        }
+
+        var bounds = _debugWindow.Region.PhysicalBounds;
+        var rendererViewport = new PixelRectangle(bounds.X, bounds.Y, _debugRenderer.Width, _debugRenderer.Height);
+        var layoutViewport = _debugTranslator?.LastLayoutViewport ?? rendererViewport;
+        if (layoutViewport.Width <= 0 || layoutViewport.Height <= 0)
+        {
+            layoutViewport = rendererViewport;
+        }
+
+        var logicalViewport = _debugDisplayScale.IsIdentity
+            ? rendererViewport
+            : new PixelRectangle(0, 0, (int)(rendererViewport.Width / _debugDisplayScale.ScaleX), (int)(rendererViewport.Height / _debugDisplayScale.ScaleY));
+
+        return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ViewportScaleMode.PhysicalPixelsV0, _debugDisplayScale, logicalViewport);
+    }
+
+    private static CounterLayoutDiagnostics CreateLayoutDiagnostics(WindowDrawCommandTranslator translator)
+    {
+        return new CounterLayoutDiagnostics(translator.LayoutRebuildCount, translator.LastLayoutRebuildReason, translator.LastDirtyClassifications);
     }
 
     private static Task RunFullDiagnosticsAsync(string[] args)

@@ -38,15 +38,11 @@ internal static partial class Program
         var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
         var clipMode = ParseClipMode(args);
         var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, clipMode);
-        _backendClipMode = d3d12Backend.ClipMode;
-        var showDiagnostics = args.Contains("--debug-ui");
         var enablePartialApply = !args.Contains("--no-partial-apply");
         d3d12Renderer.TextCompositionMode = ParseTextCompositionMode(args);
         var displayScale = platformHost.Screens[0].Scale.Normalize();
 
         Action<double>? maxScrollYCallback = null;
-        Action<CounterLayoutDiagnostics>? layoutDiagnosticsCallback = null;
-        var manualLayoutDiagnosticsRefresh = false;
         WindowDrawCommandTranslator? drawCommandTranslator = null;
         var ownerOptions = enablePartialApply
             ? RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled
@@ -62,10 +58,7 @@ internal static partial class Program
             postFrameCallback: maxScrollY =>
             {
                 maxScrollYCallback?.Invoke(maxScrollY);
-                if (showDiagnostics && !manualLayoutDiagnosticsRefresh && drawCommandTranslator is not null)
-                {
-                    layoutDiagnosticsCallback?.Invoke(CreateLayoutDiagnostics(drawCommandTranslator));
-                }
+                RefreshDebugUiLayoutDiagnosticsAfterFrame(drawCommandTranslator);
             },
             ownerOptions: ownerOptions,
             displayScale: displayScale);
@@ -81,29 +74,14 @@ internal static partial class Program
             ? () => drawCommandTranslator?.SegmentOwnership
             : null;
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor, ownershipProvider);
-        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(showDiagnostics, CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator, displayScale), CounterLayoutDiagnostics.Empty), compositorLoop);
+        var counterApplication = new CounterApplication();
+        ConfigureDebugUi(args, counterApplication, window, d3d12Renderer, drawCommandTranslator, displayScale);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(counterApplication, compositorLoop);
+        SetDebugUiRuntime(runtime);
         var scrollFramePump = new ScrollFramePump();
         var scrollPresentationCoordinator = new ScrollPresentationCoordinator();
-        _scrollFramePump = scrollFramePump;
         var inputOwnershipState = new InputOwnershipState();
-        _inputOwnershipState = inputOwnershipState;
-        var lastDispatchedLayoutDiagnostics = CounterLayoutDiagnostics.Empty;
-        var suppressNextLayoutDiagnosticsRefresh = false;
-
-        layoutDiagnosticsCallback = diagnostics =>
-        {
-            if (suppressNextLayoutDiagnosticsRefresh)
-            {
-                if (runtime.CurrentModel.LayoutDiagnostics == lastDispatchedLayoutDiagnostics)
-                {
-                    suppressNextLayoutDiagnosticsRefresh = false;
-                }
-
-                return;
-            }
-
-            DispatchLayoutDiagnostics(diagnostics);
-        };
+        SetDebugUiRuntimeSources(scrollFramePump, inputOwnershipState, d3d12Backend.ClipMode);
 
         // Wire up MaxScrollY feedback after runtime is created
         double? lastKnownMaxScrollY = null;
@@ -122,11 +100,9 @@ internal static partial class Program
             _ = compositorLoop.CancelCompositionScrollPresentationAsync();
             d3d12Renderer.Resize(w, h);
             d3d12Compositor.SetViewport(new PixelRectangle(0, 0, w, h), displayScale);
-            if (showDiagnostics)
-            {
-                _ = RequestResizeRenderAndRefreshDiagnosticsAsync();
-            }
-            else
+            var handledByDebugUi = false;
+            RequestDebugUiRenderAfterViewportChange(compositorLoop, ref handledByDebugUi);
+            if (!handledByDebugUi)
             {
                 _ = compositorLoop.RequestRenderAsync();
             }
@@ -138,11 +114,10 @@ internal static partial class Program
             displayScale = newScale.Normalize();
             drawCommandTranslator.SetDisplayScale(displayScale);
             d3d12Compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
-            if (showDiagnostics)
-            {
-                _ = RequestResizeRenderAndRefreshDiagnosticsAsync();
-            }
-            else
+            UpdateDebugUiViewportContext(window, d3d12Renderer, drawCommandTranslator, displayScale);
+            var handledByDebugUi = false;
+            RequestDebugUiRenderAfterViewportChange(compositorLoop, ref handledByDebugUi);
+            if (!handledByDebugUi)
             {
                 _ = compositorLoop.RequestRenderAsync();
             }
@@ -194,72 +169,7 @@ internal static partial class Program
             Console.WriteLine($"Topology changed. Screen count: {args.Screens.Count}");
         }
 
-        async Task RequestResizeRenderAndRefreshDiagnosticsAsync()
-        {
-            try
-            {
-                manualLayoutDiagnosticsRefresh = true;
-                await compositorLoop.RequestRenderAndWaitAsync();
-                manualLayoutDiagnosticsRefresh = false;
-                DispatchDebugDiagnostics(CreateViewportDiagnostics(window, d3d12Renderer, drawCommandTranslator, displayScale), CreateLayoutDiagnostics(drawCommandTranslator));
-            }
-            catch (ObjectDisposedException)
-            {
-            }
-            finally
-            {
-                manualLayoutDiagnosticsRefresh = false;
-            }
-        }
-
-        void DispatchLayoutDiagnostics(CounterLayoutDiagnostics diagnostics)
-        {
-            if (!showDiagnostics || diagnostics == lastDispatchedLayoutDiagnostics)
-            {
-                return;
-            }
-
-            lastDispatchedLayoutDiagnostics = diagnostics;
-            suppressNextLayoutDiagnosticsRefresh = true;
-            runtime.Dispatch(new CounterMessage.LayoutDiagnosticsChanged(diagnostics));
-        }
-
-        void DispatchDebugDiagnostics(CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
-        {
-            if (!showDiagnostics)
-            {
-                return;
-            }
-
-            lastDispatchedLayoutDiagnostics = layoutDiagnostics;
-            suppressNextLayoutDiagnosticsRefresh = true;
-            runtime.Dispatch(new CounterMessage.DebugDiagnosticsChanged(viewportDiagnostics, layoutDiagnostics));
-        }
-
         platformHost.TopologyChanged -= OnTopologyChanged;
-    }
-
-    private static CounterViewportDiagnostics CreateViewportDiagnostics(INativeWindow window, D3D12Renderer renderer, WindowDrawCommandTranslator? translator, DisplayScale displayScale = default)
-    {
-        displayScale = displayScale.Normalize();
-        var bounds = window.Region.PhysicalBounds;
-        var rendererViewport = new PixelRectangle(bounds.X, bounds.Y, renderer.Width, renderer.Height);
-        var layoutViewport = translator?.LastLayoutViewport ?? rendererViewport;
-        if (layoutViewport.Width <= 0 || layoutViewport.Height <= 0)
-        {
-            layoutViewport = rendererViewport;
-        }
-
-        var logicalViewport = displayScale.IsIdentity
-            ? rendererViewport
-            : new PixelRectangle(0, 0, (int)(rendererViewport.Width / displayScale.ScaleX), (int)(rendererViewport.Height / displayScale.ScaleY));
-
-        return new CounterViewportDiagnostics(rendererViewport, layoutViewport, ViewportScaleMode.PhysicalPixelsV0, displayScale, logicalViewport);
-    }
-
-    private static CounterLayoutDiagnostics CreateLayoutDiagnostics(WindowDrawCommandTranslator translator)
-    {
-        return new CounterLayoutDiagnostics(translator.LayoutRebuildCount, translator.LastLayoutRebuildReason, translator.LastDirtyClassifications);
     }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
@@ -280,6 +190,31 @@ internal static partial class Program
     }
 
     static partial void CreateDiagnosticCliTask(string[] args, ref Task? task);
+
+    static partial void ConfigureDebugUi(
+        string[] args,
+        CounterApplication application,
+        INativeWindow window,
+        D3D12Renderer renderer,
+        WindowDrawCommandTranslator translator,
+        DisplayScale displayScale);
+
+    static partial void SetDebugUiRuntime(Runtime<CounterModel, CounterMessage> runtime);
+
+    static partial void SetDebugUiRuntimeSources(
+        ScrollFramePump scrollFramePump,
+        InputOwnershipState inputOwnershipState,
+        DrawingBackendClipMode backendClipMode);
+
+    static partial void RefreshDebugUiLayoutDiagnosticsAfterFrame(WindowDrawCommandTranslator? translator);
+
+    static partial void UpdateDebugUiViewportContext(
+        INativeWindow window,
+        D3D12Renderer renderer,
+        WindowDrawCommandTranslator translator,
+        DisplayScale displayScale);
+
+    static partial void RequestDebugUiRenderAfterViewportChange(CompositorLoop compositorLoop, ref bool handled);
 
     private static StreamWriter? TryCreateDiagnosticOutput(string[] args)
     {
@@ -359,22 +294,6 @@ internal static partial class Program
             onNext(value);
         }
     }
-
-    private static ScrollFramePump? _scrollFramePump;
-    private static InputOwnershipState? _inputOwnershipState;
-    private static DrawingBackendClipMode _backendClipMode = DrawingBackendClipMode.Scissor;
-
-    // ── Diagnostic readouts ────────────────────────────────────────────
-
-    internal static double DiagPendingPx => _scrollFramePump?.PendingPixels ?? 0;
-    internal static bool DiagScrollFrameQueued => _scrollFramePump?.IsFrameQueued ?? false;
-    internal static bool DiagTickLoopRunning => _scrollFramePump?.IsLoopRunning ?? false;
-    internal static long DiagScrollDispatchedFrameCount => _scrollFramePump?.DispatchedFrameCount ?? 0;
-    internal static double DiagScrollRenderWaitMs => _scrollFramePump?.RenderWaitMs ?? 0;
-    internal static double DiagScrollLastDt => _scrollFramePump?.LastDt ?? 0;
-    internal static double DiagScrollDrainedPixels => _scrollFramePump?.DrainedPixels ?? 0;
-    internal static OwnershipSnapshot DiagInputOwnership => _inputOwnershipState?.Snapshot ?? default;
-    internal static DrawingBackendClipMode DiagBackendClipMode => _backendClipMode;
 
     internal static bool TryMapInputForRuntime<THitTestResolver>(
         RawInputEvent inputEvent,

@@ -2657,17 +2657,25 @@ public sealed class ProgramDiagnosticsTests
         var targets = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "Directory.Build.targets")));
         var mainProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
         var diagnosticProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var counterApplicationSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterApplication.cs")));
+        var diagnosticCounterApplicationSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterApplication.optional-diagnostics.cs")));
 
         Assert.Contains("<Compile Remove=\"**\\*.optional-diagnostics.cs\" />", targets);
         Assert.DoesNotContain("<Compile Remove=\"**\\*.diagnostics.cs\" />", targets);
         Assert.True(File.Exists(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.Diagnostics.cs")));
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticProgramSource, StringComparison.Ordinal);
+        Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticCounterApplicationSource, StringComparison.Ordinal);
         Assert.Contains("static partial void CreateDiagnosticCliTask", mainProgramSource);
         Assert.Contains("static partial void CreateDiagnosticCliTask", diagnosticProgramSource);
+        Assert.Contains("partial void TryBuildOptionalHeaderRows", counterApplicationSource);
+        Assert.Contains("CounterViewportDiagnostics", diagnosticCounterApplicationSource);
         Assert.DoesNotContain("FullDiagnosticRunner", mainProgramSource);
+        Assert.DoesNotContain("--debug-ui", mainProgramSource);
         Assert.DoesNotContain("--diagnose-glyph-atlas", mainProgramSource);
         Assert.DoesNotContain("--diagnose-text-cache", mainProgramSource);
         Assert.DoesNotContain("--diagnose-composition", mainProgramSource);
+        Assert.DoesNotContain("CounterViewportDiagnostics", counterApplicationSource);
+        Assert.DoesNotContain("DebugDiagnosticsChanged", counterApplicationSource);
 
         var offenders = new List<string>();
         foreach (var sourcePath in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))

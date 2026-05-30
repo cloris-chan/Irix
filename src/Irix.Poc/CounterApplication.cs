@@ -4,90 +4,9 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal readonly record struct CounterViewportDiagnostics(
-    PixelRectangle RendererViewport,
-    PixelRectangle LayoutViewport,
-    ViewportScaleMode ScaleMode,
-    DisplayScale Scale = default,
-    PixelRectangle LogicalViewport = default);
+internal sealed record CounterModel(int Count, ScrollState Scroll, OwnershipSnapshot InputOwnership);
 
-internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiagnostics>
-{
-    public CounterLayoutDiagnostics(
-        long layoutRebuildCount,
-        LayoutRebuildReason lastLayoutRebuildReason,
-        IReadOnlyList<LayoutDirtyClassification> lastDirtyClassifications)
-    {
-        LayoutRebuildCount = layoutRebuildCount;
-        LastLayoutRebuildReason = lastLayoutRebuildReason;
-        LastDirtyClassifications = lastDirtyClassifications.Count == 0 ? [] : lastDirtyClassifications.ToArray();
-    }
-
-    public long LayoutRebuildCount { get; }
-    public LayoutRebuildReason LastLayoutRebuildReason { get; }
-    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; }
-
-    public static CounterLayoutDiagnostics Empty => new(0, LayoutRebuildReason.None, []);
-
-    public bool Equals(CounterLayoutDiagnostics other)
-    {
-        return LayoutRebuildCount == other.LayoutRebuildCount
-            && LastLayoutRebuildReason == other.LastLayoutRebuildReason
-            && LayoutDirtyClassificationsEqual(LastDirtyClassifications, other.LastDirtyClassifications);
-    }
-
-    public override bool Equals(object? obj) => obj is CounterLayoutDiagnostics other && Equals(other);
-
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-        hash.Add(LayoutRebuildCount);
-        hash.Add(LastLayoutRebuildReason);
-        AddLayoutDirtyClassificationsHash(ref hash, LastDirtyClassifications);
-        return hash.ToHashCode();
-    }
-
-    public static bool operator ==(CounterLayoutDiagnostics left, CounterLayoutDiagnostics right) => left.Equals(right);
-
-    public static bool operator !=(CounterLayoutDiagnostics left, CounterLayoutDiagnostics right) => !left.Equals(right);
-
-    private static bool LayoutDirtyClassificationsEqual(
-        IReadOnlyList<LayoutDirtyClassification> left,
-        IReadOnlyList<LayoutDirtyClassification> right)
-    {
-        if (ReferenceEquals(left, right))
-        {
-            return true;
-        }
-
-        if (left.Count != right.Count)
-        {
-            return false;
-        }
-
-        for (var i = 0; i < left.Count; i++)
-        {
-            if (left[i] != right[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static void AddLayoutDirtyClassificationsHash(ref HashCode hash, IReadOnlyList<LayoutDirtyClassification> classifications)
-    {
-        for (var i = 0; i < classifications.Count; i++)
-        {
-            hash.Add(classifications[i]);
-        }
-    }
-}
-
-internal sealed record CounterModel(int Count, ScrollState Scroll, OwnershipSnapshot InputOwnership, CounterViewportDiagnostics ViewportDiagnostics, CounterLayoutDiagnostics LayoutDiagnostics);
-
-internal abstract record CounterMessage
+internal abstract partial record CounterMessage
 {
     public sealed record Increment : CounterMessage;
 
@@ -108,26 +27,30 @@ internal abstract record CounterMessage
 
     public sealed record InputVisualStateChanged(OwnershipSnapshot Snapshot) : CounterMessage;
 
-    public sealed record ViewportDiagnosticsChanged(CounterViewportDiagnostics Diagnostics) : CounterMessage;
-
-    public sealed record LayoutDiagnosticsChanged(CounterLayoutDiagnostics Diagnostics) : CounterMessage;
-
-    public sealed record DebugDiagnosticsChanged(CounterViewportDiagnostics ViewportDiagnostics, CounterLayoutDiagnostics LayoutDiagnostics) : CounterMessage;
-
     public sealed record RoutedInput(CounterMessage? Action, OwnershipSnapshot Snapshot) : CounterMessage;
 }
 
-internal sealed class CounterApplication(bool showDiagnostics = false, CounterViewportDiagnostics initialViewportDiagnostics = default, CounterLayoutDiagnostics initialLayoutDiagnostics = default) : IApplication<CounterModel, CounterMessage>
+internal sealed partial class CounterApplication : IApplication<CounterModel, CounterMessage>
 {
-    private readonly bool _showDiagnostics = showDiagnostics;
-    private readonly CounterViewportDiagnostics _initialViewportDiagnostics = initialViewportDiagnostics;
-    private readonly CounterLayoutDiagnostics _initialLayoutDiagnostics = NormalizeLayoutDiagnostics(initialLayoutDiagnostics);
     internal readonly VirtualTextArena _arena = new();
 
-    public CounterModel Initialize() => new(0, ScrollState.Default, default, _initialViewportDiagnostics, _initialLayoutDiagnostics);
+    internal CounterApplication()
+    {
+    }
 
-    public UpdateResult<CounterModel, CounterMessage> Update(CounterModel model, CounterMessage message) =>
-        message switch
+    public CounterModel Initialize() => new(0, ScrollState.Default, default);
+
+    public UpdateResult<CounterModel, CounterMessage> Update(CounterModel model, CounterMessage message)
+    {
+        var optionalHandled = false;
+        var optionalResult = default(UpdateResult<CounterModel, CounterMessage>);
+        TryUpdateOptional(model, message, ref optionalHandled, ref optionalResult);
+        if (optionalHandled)
+        {
+            return optionalResult;
+        }
+
+        return message switch
         {
             CounterMessage.Increment => new UpdateResult<CounterModel, CounterMessage>(model with { Count = model.Count + 1 }),
             CounterMessage.Decrement => new UpdateResult<CounterModel, CounterMessage>(model with { Count = model.Count - 1 }),
@@ -154,31 +77,19 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
             {
                 InputOwnership = input.Snapshot,
             }),
-            CounterMessage.ViewportDiagnosticsChanged viewport => new UpdateResult<CounterModel, CounterMessage>(model with
-            {
-                ViewportDiagnostics = viewport.Diagnostics,
-            }),
-            CounterMessage.LayoutDiagnosticsChanged layout => new UpdateResult<CounterModel, CounterMessage>(model with
-            {
-                LayoutDiagnostics = NormalizeLayoutDiagnostics(layout.Diagnostics),
-            }),
-            CounterMessage.DebugDiagnosticsChanged diagnostics => new UpdateResult<CounterModel, CounterMessage>(model with
-            {
-                ViewportDiagnostics = diagnostics.ViewportDiagnostics,
-                LayoutDiagnostics = NormalizeLayoutDiagnostics(diagnostics.LayoutDiagnostics),
-            }),
             CounterMessage.RoutedInput input => ApplyRoutedInput(model, input),
             _ => throw new NotSupportedException($"Unsupported message type: {message.GetType().Name}")
         };
+    }
 
     public VirtualNodeTree BuildView(CounterModel model)
     {
         _arena.BeginFrame();
         var scrollY = ScrollController.GetScrollY(model.Scroll);
         var inputOwnership = model.InputOwnership;
-        var headerRows = _showDiagnostics
-            ? BuildDiagnosticHeaderRows(_arena, model.Count, model.Scroll, inputOwnership, model.ViewportDiagnostics, model.LayoutDiagnostics)
-            :
+        VirtualNode[]? headerRows = null;
+        TryBuildOptionalHeaderRows(_arena, model, ref headerRows);
+        headerRows ??=
             [
                 VirtualNodeBuilder.Text(_arena, $"Count: {model.Count}", new NodeKey(2)),
                 VirtualNodeBuilder.Text(_arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4))
@@ -201,25 +112,9 @@ internal sealed class CounterApplication(bool showDiagnostics = false, CounterVi
         return new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
     }
 
-    private static VirtualNode[] BuildDiagnosticHeaderRows(VirtualTextArena arena, int count, ScrollState scroll, OwnershipSnapshot inputOwnership, CounterViewportDiagnostics viewportDiagnostics, CounterLayoutDiagnostics layoutDiagnostics)
-    {
-        var debugDiagnostics = new DefaultDebugDiagnosticsSnapshotBridge(viewportDiagnostics, layoutDiagnostics, scroll, inputOwnership).Capture();
+    partial void TryUpdateOptional(CounterModel model, CounterMessage message, ref bool handled, ref UpdateResult<CounterModel, CounterMessage> result);
 
-        return [
-            VirtualNodeBuilder.Text(arena, $"Count: {count}", new NodeKey(2)),
-            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatScrollDiagnosticRow(debugDiagnostics), new NodeKey(3)),
-            VirtualNodeBuilder.Text(arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4)),
-            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatInputDiagnosticRow(debugDiagnostics), new NodeKey(9)),
-            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatClipModeDiagnosticRow(debugDiagnostics), new NodeKey(10)),
-            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatViewportDiagnosticRow(debugDiagnostics), new NodeKey(11)),
-            VirtualNodeBuilder.Text(arena, DebugDiagnosticsFormatter.FormatLayoutDirtyDiagnosticRow(debugDiagnostics), new NodeKey(12))
-        ];
-    }
-
-    private static CounterLayoutDiagnostics NormalizeLayoutDiagnostics(CounterLayoutDiagnostics diagnostics)
-    {
-        return diagnostics.LastDirtyClassifications is null ? CounterLayoutDiagnostics.Empty : diagnostics;
-    }
+    partial void TryBuildOptionalHeaderRows(VirtualTextArena arena, CounterModel model, ref VirtualNode[]? headerRows);
 
     internal static ButtonVisualState DeriveButtonState(OwnershipSnapshot ownership, ActionId actionId)
     {

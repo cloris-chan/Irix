@@ -696,6 +696,7 @@ public class TypedIdAllocationGuardTests
         {
             "ControlVisualState.cs",
             "CounterApplication.cs",
+            "CounterApplication.optional-diagnostics.cs",
             "ScrollController.cs",
             "ScrollFeedback.cs"
         };
@@ -1214,7 +1215,7 @@ public class TypedIdAllocationGuardTests
     [Fact]
     public void CounterLayoutDiagnostics_uses_typed_dirty_classifications()
     {
-        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.optional-diagnostics.cs"));
 
         Assert.Contains("internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiagnostics>", source);
         Assert.Contains("IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications", source);
@@ -1225,8 +1226,8 @@ public class TypedIdAllocationGuardTests
     [Fact]
     public void Viewport_diagnostics_use_typed_scale_and_rebuild_state()
     {
-        var counterSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
-        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+        var counterSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.optional-diagnostics.cs"));
+        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.optional-diagnostics.cs"));
 
         Assert.Contains("ViewportScaleMode ScaleMode", counterSource);
         Assert.DoesNotContain("string ScaleMode", counterSource);
@@ -1257,7 +1258,7 @@ public class TypedIdAllocationGuardTests
     public void Render_style_preset_diagnostics_use_typed_id_not_string_name()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "RenderStylePreset.cs"));
-        var formatterSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsFormatter.cs"));
+        var formatterSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsFormatter.optional-diagnostics.cs"));
 
         Assert.Contains("internal readonly struct RenderStylePresetId", source);
         Assert.Contains("RenderStylePresetId Default", source);
@@ -1271,7 +1272,7 @@ public class TypedIdAllocationGuardTests
     [Fact]
     public void Input_diagnostics_snapshot_uses_typed_events_not_string_lines()
     {
-        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+        var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.optional-diagnostics.cs"));
         var runnerSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "InputDiagnosticRunner.optional-diagnostics.cs"));
 
         Assert.Contains("IReadOnlyList<InputDiagnosticButtonState> ButtonStates", snapshotSource);
@@ -1290,7 +1291,7 @@ public class TypedIdAllocationGuardTests
     public void Backend_clip_text_diagnostics_use_platform_device_error_value()
     {
         var root = FindRepoRoot();
-        var snapshotSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
+        var snapshotSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "DiagnosticsSnapshots.optional-diagnostics.cs"));
         var diagnosticSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Platform", "DeviceErrorDiagnostic.cs"));
         var platformWindowsSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Platform.Windows"), "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
         var pocSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Poc"), "*.cs", SearchOption.AllDirectories).Select(File.ReadAllText));
