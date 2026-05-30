@@ -1,4 +1,4 @@
-# Animation / Composition v0
+# Animation / Composition
 
 > Design contract for animation ownership. This document separates UI-runtime animation from compositor/GPU animation and uses scroll as the first hybrid case. The internal transform/opacity path can resolve `NodeKey` animation declarations to retained composition targets, publish active layer state into `CompositorHitTestSnapshot`, and publish marker events back to runtime-owned messages through an explicit drain pump; the internal scroll presentation path can resolve retained scroll container `NodeKey` declarations to fixed-clip composition plans. A public animation API does not exist.
 

@@ -267,6 +267,6 @@ Classes and structs in `Irix.Poc` that are not purely app model or CLI entrypoin
 
 Recommended move order:
 
-1. Keep allocation measurement/hardening closed for this stage; reopen only with an ownership design and one measured target bucket.
+1. Keep allocation measurement/hardening on hold; reopen only with an ownership design and one measured target bucket.
 2. Use the scroll and input/control contracts above before extracting app/control runtime state from Poc.
 3. Keep `WindowBackend`, `WindowVisualCompositor`, and `PoCDrawingBackend` as legacy/debug presentation until replaced.

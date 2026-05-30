@@ -1,4 +1,4 @@
-# Style System v0
+# Style System
 
 > Design contract for style ownership after the renderer foundation. This file defines style categories and invalidation boundaries. It does not introduce a public styling API or theme system.
 
@@ -61,7 +61,7 @@ Visual style changes pixels but not layout. Examples:
 - Corner radius when it does not alter layout bounds.
 - Non-animated visual clip parameters already reflected in command clip bounds.
 
-Visual style can be either draw-recorded or promoted to composition style if the backend can update it without re-recording the content. The v0 rule is conservative: keep draw-command ownership unless the composition contract explicitly says the property is layer-owned.
+Visual style can be either draw-recorded or promoted to composition style if the backend can update it without re-recording the content. The current rule is conservative: keep draw-command ownership unless the composition contract explicitly says the property is layer-owned.
 
 ## Text Shaping Style
 

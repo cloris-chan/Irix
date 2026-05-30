@@ -1874,11 +1874,11 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void D3D12_composition_transform_spike_has_doc_cli_and_machine_readable_fields()
+    public void D3D12_composition_transform_implementation_has_doc_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition-Spike-v0.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
         var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
 
         using var resources = FrameDrawingResources.Rent();
@@ -1899,18 +1899,18 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-composition-transform", programSource);
         Assert.Contains("CompositionTransformDiagnosticRunner.Run", programSource);
-        Assert.Contains("D3D12-backed layer updates for translation, opacity, fixed-clip scroll presentation, and the first multi-layer composition frame", design);
-        Assert.Contains("D3D12-Composition-Spike-v0.md", status);
+        Assert.Contains("D3D12-backed layer updates for translation, opacity, fixed-clip scroll presentation, and multi-layer composition frames", design);
+        Assert.Contains("D3D12-Composition.md", status);
         Assert.Equal("composition.expected finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 layerStart=1 layerCommands=2 translatedCommands=2 opacityAppliedCommands=2 translate=(24,18) opacity=0.75", CompositionTransformDiagnosticRunner.FormatExpected(diagnostics));
         Assert.Equal("composition.actual finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 translatedCommands=2 opacityAppliedCommands=2 frameSerial=1 presentSerial=1 syncWaits=0 deviceRemoved=False", CompositionTransformDiagnosticRunner.FormatActual(diagnostics, 1, 1, 0, false));
     }
 
     [Fact]
-    public void D3D12_composition_scroll_spike_has_cli_and_machine_readable_fields()
+    public void D3D12_composition_scroll_implementation_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition-Spike-v0.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
 
         using var resources = FrameDrawingResources.Rent();
         var commands = CompositionScrollDiagnosticRunner.BuildCommands(resources);
@@ -1936,11 +1936,11 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void D3D12_composition_multilayer_spike_has_cli_and_machine_readable_fields()
+    public void D3D12_composition_multilayer_implementation_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition-Spike-v0.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
 
         using var resources = FrameDrawingResources.Rent();
         var commands = CompositionMultiLayerDiagnosticRunner.BuildCommands(resources);
@@ -1966,11 +1966,11 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void D3D12_composition_layer_cache_spike_has_cli_and_machine_readable_fields()
+    public void D3D12_composition_layer_cache_implementation_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition-Spike-v0.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
 
         var diagnostics = CompositionLayerCacheDiagnosticRunner.RunCore();
 
@@ -2001,7 +2001,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition-v0.md")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition.md")));
 
         var diagnostics = ScrollPresentationPolicyDiagnosticRunner.RunCore();
 
@@ -2176,15 +2176,80 @@ public sealed class ProgramDiagnosticsTests
         var root = FindRepoRoot();
         var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Design.md")));
-        var backlog = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Private-Execution-Backlog.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
 
         Assert.Contains("GitHub Actions quota is currently exhausted", status);
         Assert.Contains("local guard summary is the current status source", design);
         Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
-        Assert.Contains("Run `Smoke` before/after broad changes", backlog);
-        Assert.Contains("Do not add artifact-upload work until Actions quota returns", backlog);
-        Assert.Contains("`Nightly` after page-policy, eviction, or shaping overhauls", backlog);
+        Assert.Contains("Run `Smoke` before/after broad changes", worklist);
+        Assert.Contains("Do not add artifact-upload work until Actions quota returns", worklist);
+        Assert.Contains("`Nightly` after page-policy, eviction, or shaping overhauls", worklist);
     }
+
+    [Fact]
+    public void Project_docs_do_not_use_obsolete_release_or_version_stage_labels()
+    {
+        var root = FindRepoRoot();
+        var docsRoot = Path.Combine(root, "docs");
+        var obsoleteTerms = new[]
+        {
+            "v0",
+            "v1",
+            "V1",
+            "Roadmap",
+            "roadmap",
+            "Backlog",
+            "backlog",
+            "milestone",
+            "Milestone",
+            "D3D11On12",
+            "D2D overlay",
+        };
+        var offenders = new List<string>();
+
+        foreach (var path in Directory.EnumerateFiles(docsRoot, "*.md", SearchOption.TopDirectoryOnly))
+        {
+            var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+            var text = File.ReadAllText(path);
+            if (ContainsWholeWord(relative, "GA") || ContainsWholeWord(text, "GA"))
+            {
+                offenders.Add($"{relative}: GA");
+            }
+            if (ContainsWholeWord(relative, "MVP") || ContainsWholeWord(text, "MVP"))
+            {
+                offenders.Add($"{relative}: MVP");
+            }
+            foreach (var term in obsoleteTerms)
+            {
+                if (relative.Contains(term, StringComparison.Ordinal) || text.Contains(term, StringComparison.Ordinal))
+                {
+                    offenders.Add($"{relative}: {term}");
+                }
+            }
+        }
+
+        Assert.Empty(offenders);
+    }
+
+    private static bool ContainsWholeWord(string text, string word)
+    {
+        var index = -1;
+        while ((index = text.IndexOf(word, index + 1, StringComparison.Ordinal)) >= 0)
+        {
+            var before = index == 0 ? '\0' : text[index - 1];
+            var afterIndex = index + word.Length;
+            var after = afterIndex >= text.Length ? '\0' : text[afterIndex];
+            if (!IsAsciiLetterOrDigit(before) && !IsAsciiLetterOrDigit(after))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsAsciiLetterOrDigit(char c) =>
+        c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9';
 
     [Fact]
     public void Glyph_atlas_soak_thresholds_are_machine_readable()
@@ -2200,7 +2265,7 @@ public sealed class ProgramDiagnosticsTests
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Design.md")));
 
         Assert.Contains("Guarded Coverage Expansion", design);
-        Assert.Contains("Glyph atlas coverage is guard-gated, not milestone-frozen", design);
+        Assert.Contains("Glyph atlas coverage is guard-gated", design);
         Assert.Contains("New script or glyph-image-format support should move forward when it includes matching shaping oracle, regression matrix, and degradation-policy coverage", design);
         Assert.Contains("D3D12-only Degradation Policy", design);
         Assert.Contains("SVG and COLR paint-tree-only color glyphs", design);

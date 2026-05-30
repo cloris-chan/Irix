@@ -20,7 +20,7 @@ Keep Windows text final composition in the D3D12 command stream through a glyph 
 
 ## Guarded Coverage Expansion
 
-Glyph atlas coverage is guard-gated, not milestone-frozen. New script or glyph-image-format support should move forward when it includes matching shaping oracle, regression matrix, and degradation-policy coverage. New accepted coverage must not be added opportunistically in `D3D12GlyphAtlasTextRenderer`; it needs a matching oracle/regression case first.
+Glyph atlas coverage is guard-gated. New script or glyph-image-format support should move forward when it includes matching shaping oracle, regression matrix, and degradation-policy coverage. New accepted coverage must not be added opportunistically in `D3D12GlyphAtlasTextRenderer`; it needs a matching oracle/regression case first.
 
 Current accepted coverage includes:
 

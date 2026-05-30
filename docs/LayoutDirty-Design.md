@@ -1,10 +1,10 @@
-# Layout Dirty v1
+# Layout Dirty Classification
 
 > Diagnostic and planning boundary for layout invalidation. The current implementation still rebuilds the full `LayoutTreeBuilder` result whenever layout is invalidated.
 
 ## Goal
 
-Layout dirty v1 classifies why layout is dirty and records enough diagnostics to make future partial layout auditable before behavior changes. It does not skip layout today.
+Layout dirty classification records why layout is dirty and keeps enough diagnostics to make future partial layout auditable before behavior changes. It does not skip layout today.
 
 ## Dirty Categories
 
@@ -73,13 +73,13 @@ Current implementation: empty `DirtyElementRanges` and absent `ScrollDiagnostics
 
 ## Stage Guard
 
-- Layout dirty v1 diagnostics are complete as the current baseline.
+- Layout dirty diagnostics are complete as the current baseline.
 - Expand dirty diagnostics only when a target implementation needs the additional signal or an existing output regresses.
 - `StyleOnly` layout skip, partial layout, local subtree layout, and `LayoutTreeBuilder` rewrites should be reopened as explicit target-architecture work, not as incidental cleanup.
 
 ## StyleOnly Patch Design
 
-This section is design-only. It is not implemented in layout dirty v1 and must not change `RenderPipeline.Build` behavior in the current stage.
+This section is design-only. It is not implemented and must not change `RenderPipeline.Build` behavior until retained layout/resource ownership is explicit.
 
 A future style-only patch may reuse retained layout only when every dirty classification is `StyleOnly` and retained layout context is otherwise identical:
 

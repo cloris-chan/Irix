@@ -1,6 +1,6 @@
 # Glyph Atlas Entry Eviction Design
 
-Scope: design-only follow-up for the glyph atlas page-policy milestone. Do not implement entry-level LRU or a sub-rect free-list until retained atlas command ownership is explicit and the current page-level reuse policy remains stable under the fixed regression/soak lane.
+Scope: design-only follow-up for glyph atlas page-policy work. Do not implement entry-level LRU or a sub-rect free-list until retained atlas command ownership is explicit and the current page-level reuse policy remains stable under the fixed regression/soak lane.
 
 ## Current Policy
 

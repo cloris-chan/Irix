@@ -1,6 +1,6 @@
-# ADR: Scissor Clipping v0
+# ADR: Scissor Clipping
 
-Status: Accepted; v0 complete and default-on
+Status: Accepted; default-on
 
 Date: 2026-05-10
 

@@ -1,12 +1,12 @@
-# D3D12 Composition Spike v0
+# D3D12 Composition
 
-> Narrow implementation contract for the first composition/GPU-offload code path. This is not a generic compositor design; it validates D3D12-backed layer updates for translation, opacity, fixed-clip scroll presentation, and the first multi-layer composition frame.
+> Narrow implementation contract for the current composition/GPU-offload code path. This is not a generic compositor design; it validates D3D12-backed layer updates for translation, opacity, fixed-clip scroll presentation, and multi-layer composition frames.
 
 ## Goal
 
 Prove the first composition IR and compositor-owned animation tick can be handed to the active D3D12 backend without rebuilding UI/runtime state, layout, or draw commands per animation tick.
 
-The current spike owns:
+The current implementation owns:
 
 - Composition layers referencing retained draw-command ranges.
 - Layer translation in logical pixels.
@@ -45,7 +45,7 @@ The current spike owns:
 | Type | Role |
 |------|------|
 | `CompositionLayerId` | Stable layer identity for diagnostics and future retained mapping. |
-| `CompositionTransform` | Translation-only v0 transform. |
+| `CompositionTransform` | Translation transform. |
 | `CompositionOpacity` | Strong normalized opacity value. |
 | `CompositionLayer` | Layer id, command range, transform, opacity, and clip mode. |
 | `CompositionFrame` | Ordered multi-layer frame wrapper; single-layer frames remain allocation-free. |
@@ -63,7 +63,7 @@ The layer references existing `RenderFrameBatch` command ranges; it does not cop
 
 ## D3D12 Execution
 
-The D3D12 spike materializes translation and opacity at backend execution time:
+The D3D12 path materializes translation and opacity at backend execution time:
 
 ```text
 RenderFrameBatch commands/resources

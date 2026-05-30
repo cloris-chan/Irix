@@ -1,10 +1,10 @@
-# Diagnostics Snapshot v0
+# Diagnostics Snapshot
 
-> v0 data boundary for CLI diagnostics and debug UI rows. This line is sealed; future work should fix regressions only unless a new diagnostics channel design is opened.
+> Current data boundary for CLI diagnostics and debug UI rows. Change this only when the diagnostics channel, tests, and docs are migrated together.
 
 ## Goal
 
-Diagnostics snapshot v0 adds an internal data model behind existing stdout diagnostics and debug UI rows. It keeps current text output unless a task intentionally migrates diagnostics text, tests, and docs together.
+Diagnostics snapshots provide an internal data model behind stdout diagnostics and debug UI rows. They keep current text output unless a task intentionally migrates diagnostics text, tests, and docs together.
 
 The model answers:
 
@@ -28,7 +28,7 @@ The model answers:
 | `RenderingPipelineDiagnosticSnapshot` | `Irix.Rendering` counters from `RenderPipeline` / `DrawingBackendCompositor` | `--diagnose` compositor and layout pipeline blocks | Pipeline counters must come from pipeline/compositor state, not retained PoC statics. |
 | `BackendClipTextDiagnosticSnapshot` | Backend adapter owner; currently `Irix.Platform.Windows.D3D12DrawingBackend` plus `D3D12Renderer` device state | `--diagnose` scissor/text clip smokes and debug clip row | Device errors remain typed until CLI/debug formatting. |
 | `ViewportDiagnosticsSnapshot` | Platform/render bridge owner; current data crosses window, renderer, and translator | `--diagnose-resize` and debug viewport row | Dimensions must come from window/renderer/translator source-of-truth fields. |
-| `ScrollDiagnosticsSnapshot` | Scroll service owner; currently PoC scroll pump/controller | `--diagnose-scroll` and debug scroll row | PoC statics are read-only v0 adapters until scroll ownership is extracted. |
+| `ScrollDiagnosticsSnapshot` | Scroll service owner; currently PoC scroll pump/controller | `--diagnose-scroll` and debug scroll row | PoC statics are read-only adapters until scroll ownership is extracted. |
 | `InputDiagnosticsSnapshot` | Input routing/focus owner; currently PoC input ownership/router | `--diagnose-input` and debug input row | Ownership state is value data; diagnostics history remains bounded. |
 | `StyleOnlyPatchPlanDiagnosticSnapshot` | `Irix.Rendering.StyleOnlyPatchPlanBuilder` | `--diagnose` style-only plan smoke | Planner data is explicit input/output and does not need PoC statics. |
 | `DebugUiDiagnosticsSnapshot` | `DefaultDebugDiagnosticsSnapshotBridge` | Current debug header rows | Bridge is read-only and local; it must not mutate scroll/input/backend state. |
@@ -53,7 +53,7 @@ Bridge rules:
 
 ## Files That Stay Put
 
-Snapshot v0 does not move runtime ownership or core behavior. These files stay where they are until a separate migration contract exists:
+Snapshot extraction does not move runtime ownership or core behavior. These files stay where they are until a separate migration contract exists:
 
 - `src/Irix.Poc/Program.cs` diagnostics runners
 - `src/Irix.Poc/ScrollController.cs`
@@ -65,4 +65,4 @@ Snapshot v0 does not move runtime ownership or core behavior. These files stay w
 
 ## Completion State
 
-Snapshot type extraction is complete for the v0 CLI-facing PoC snapshots. `DiagnosticsFormatter` no longer depends on `Program.XSnapshot` nested types. Debug bridge v0 is complete for the current debug header rows. Unified diagnostics channel work remains postponed.
+Snapshot type extraction is complete for the CLI-facing PoC snapshots. `DiagnosticsFormatter` no longer depends on `Program.XSnapshot` nested types. The debug bridge covers the current debug header rows. Unified diagnostics channel work remains postponed.
