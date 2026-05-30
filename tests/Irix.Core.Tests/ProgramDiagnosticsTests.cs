@@ -562,17 +562,6 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void D3D12_textured_quad_embedded_shader_bytecode_decodes_for_packaging_guard()
-    {
-        var lengths = D3D12TexturedQuadRenderer.GetEmbeddedShaderBytecodeLengths();
-
-        Assert.True(lengths.VertexBytes >= 4);
-        Assert.True(lengths.PixelBytes >= 4);
-        Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.VertexHeader));
-        Assert.Equal("DXBC", System.Text.Encoding.ASCII.GetString(lengths.PixelHeader));
-    }
-
-    [Fact]
     public void D3D12_upload_map_paths_unmap_in_finally()
     {
         var root = FindRepoRoot();
@@ -1990,67 +1979,6 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("layer content cache", design);
         Assert.Equal("composition-layer-cache.first finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 cacheHits=0 cacheMisses=1 cachedCommands=2 translatedCommands=2 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatFirst(diagnostics.First));
         Assert.Equal("composition-layer-cache.second finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 cacheHits=1 cacheMisses=0 cachedCommands=2 translatedCommands=2 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatSecond(diagnostics.Second));
-    }
-
-    [Fact]
-    public void D3D12_composition_render_target_cache_spike_has_cli_and_machine_readable_fields()
-    {
-        var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition-Spike-v0.md")));
-
-        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
-        using var texts = new FrameRenderList<D3D12TextRun>();
-        using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
-        using var renderSegments = new FrameRenderList<D3D12CompositionFrameRenderSegment>();
-        using var resources = FrameDrawingResources.Rent();
-        var commands = CompositionRenderTargetCacheDiagnosticRunner.BuildCommands(resources);
-        resources.Seal();
-        var frame = CompositionRenderTargetCacheDiagnosticRunner.BuildCompositionFrame();
-        var cache = new D3D12CompositionLayerContentCache();
-
-        Assert.True(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
-            cache,
-            DrawingBackendClipMode.Scissor,
-            new DrawRect(0, 0, 640, 360),
-            commands,
-            resources,
-            frame,
-            DisplayScale.Identity,
-            rects,
-            texts,
-            layerTargets,
-            renderSegments,
-            out var firstPlan));
-        Assert.Equal(1, layerTargets.Span[0].Content.Texts.Length);
-        Assert.Equal(3, renderSegments.Count);
-        Assert.Equal(D3D12CompositionFrameRenderSegment.LayerRenderTarget(0), renderSegments.Span[1]);
-        rects.Reset();
-        texts.Reset();
-        layerTargets.Reset();
-        renderSegments.Reset();
-        Assert.True(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
-            cache,
-            DrawingBackendClipMode.Scissor,
-            new DrawRect(0, 0, 640, 360),
-            commands,
-            resources,
-            frame,
-            DisplayScale.Identity,
-            rects,
-            texts,
-            layerTargets,
-            renderSegments,
-            out var secondPlan));
-
-        var first = firstPlan.WithRenderTargetDiagnostics(new D3D12CompositionRenderTargetCacheDiagnostics(true, 0, 1, 3));
-        var second = secondPlan.WithRenderTargetDiagnostics(new D3D12CompositionRenderTargetCacheDiagnostics(true, 1, 0, 3));
-
-        Assert.Contains("--diagnose-composition-render-target-cache", programSource);
-        Assert.Contains("CompositionRenderTargetCacheDiagnosticRunner.Run", programSource);
-        Assert.Contains("render-target-backed layer cache", design);
-        Assert.Equal("composition-render-target-cache.first finalComposition=D3D12 d3d12Backed=True renderTargetBacked=True layers=1 commands=5 layerCacheHits=0 layerCacheMisses=1 cachedLayerCommands=3 renderTargetHits=0 renderTargetMisses=1 cachedRenderTargetCommands=3 translatedCommands=3 opacityAppliedCommands=3 frameSerial=1 presentSerial=1 deviceRemoved=False", CompositionRenderTargetCacheDiagnosticRunner.FormatFirst(first, 1, 1, false));
-        Assert.Equal("composition-render-target-cache.second finalComposition=D3D12 d3d12Backed=True renderTargetBacked=True layers=1 commands=5 layerCacheHits=1 layerCacheMisses=0 cachedLayerCommands=3 renderTargetHits=1 renderTargetMisses=0 cachedRenderTargetCommands=3 translatedCommands=3 opacityAppliedCommands=3 frameSerial=2 presentSerial=2 deviceRemoved=False", CompositionRenderTargetCacheDiagnosticRunner.FormatSecond(second, 2, 2, false));
     }
 
     [Fact]

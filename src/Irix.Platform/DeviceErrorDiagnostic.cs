@@ -12,8 +12,7 @@ internal enum DeviceErrorSite : byte
     WaitForGpu,
     RecoveryReinitialize,
     GlyphAtlasInitialization,
-    GlyphAtlasRecord,
-    LayerRenderTargetRecord
+    GlyphAtlasRecord
 }
 
 internal enum DeviceErrorKind : byte
@@ -117,7 +116,6 @@ internal readonly struct DeviceErrorDiagnostic : IEquatable<DeviceErrorDiagnosti
             DeviceErrorSite.RecoveryReinitialize => "Recovery reinitialize",
             DeviceErrorSite.GlyphAtlasInitialization => "Glyph atlas initialization",
             DeviceErrorSite.GlyphAtlasRecord => "Glyph atlas record",
-            DeviceErrorSite.LayerRenderTargetRecord => "Layer render target record",
             _ => "unknown device error"
         };
     }

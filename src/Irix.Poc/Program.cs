@@ -222,15 +222,6 @@ internal static class Program
             return;
         }
 
-        if (args.Contains("--diagnose-composition-render-target-cache"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            CompositionRenderTargetCacheDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                ParseDiagnosticScale(args));
-            return;
-        }
-
         if (args.Contains("--diagnose-composition-marker-runtime"))
         {
             using var diagnosticOutput = TryCreateDiagnosticOutput(args);
