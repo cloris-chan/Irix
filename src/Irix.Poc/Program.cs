@@ -317,12 +317,14 @@ internal static class Program
             if (!lastKnownMaxScrollY.HasValue || Math.Abs(maxScrollY - lastKnownMaxScrollY.Value) > 0.5)
             {
                 lastKnownMaxScrollY = maxScrollY;
+                _ = compositorLoop.CancelCompositionScrollPresentationAsync();
                 runtime.Dispatch(new CounterMessage.UpdateMaxScrollY(maxScrollY));
             }
         };
 
         window.SizeChanged += (w, h) =>
         {
+            _ = compositorLoop.CancelCompositionScrollPresentationAsync();
             d3d12Renderer.Resize(w, h);
             d3d12Compositor.SetViewport(new PixelRectangle(0, 0, w, h), displayScale);
             if (showDiagnostics)
@@ -337,9 +339,19 @@ internal static class Program
 
         window.DpiChanged += newScale =>
         {
+            _ = compositorLoop.CancelCompositionScrollPresentationAsync();
             displayScale = newScale.Normalize();
             drawCommandTranslator.SetDisplayScale(displayScale);
             d3d12Compositor.SetViewport(new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height), displayScale);
+            if (showDiagnostics)
+            {
+                _ = RequestResizeRenderAndRefreshDiagnosticsAsync();
+            }
+            else
+            {
+                _ = compositorLoop.RequestRenderAsync();
+            }
+
             Console.WriteLine($"DPI changed: scale={displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         };
 

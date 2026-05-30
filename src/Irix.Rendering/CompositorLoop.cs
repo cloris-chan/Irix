@@ -21,6 +21,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
     private bool _scrollPresentationTickQueued;
     private int _scrollPresentationGeneration;
     private long _scrollPresentationTickCount;
+    private long _scrollPresentationCancelCount;
     private RenderCompletionWaitGroup? _scrollPresentationIdleWaitGroup;
 
     public CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor)
@@ -94,6 +95,8 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
 
     internal long ScrollPresentationTickCount => Volatile.Read(ref _scrollPresentationTickCount);
 
+    internal long ScrollPresentationCancelCount => Volatile.Read(ref _scrollPresentationCancelCount);
+
     internal bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
     {
         if (_compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor)
@@ -146,6 +149,23 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
         return waitTask is null
             ? ValueTask.CompletedTask
             : new ValueTask(waitTask.WaitAsync(cancellationToken));
+    }
+
+    internal ValueTask CancelCompositionScrollPresentationAsync(CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        var waitGroup = new RenderCompletionWaitGroup();
+        var waitTask = waitGroup.AddWaiter();
+        if (!_channel.Writer.TryWrite(CompositorWorkItem.CancelScrollPresentation(waitGroup)))
+        {
+            waitGroup.Complete(new InvalidOperationException("Unable to enqueue composition scroll presentation cancellation."));
+        }
+
+        return new ValueTask(waitTask.WaitAsync(cancellationToken));
     }
 
     public async ValueTask DisposeAsync()
@@ -212,6 +232,12 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
                 continue;
             }
 
+            if (workItem.Kind == CompositorWorkKind.CancelScrollPresentation)
+            {
+                CancelScrollPresentationWorkItem(workItem);
+                continue;
+            }
+
             await ProcessRenderWorkItemAsync(workItem);
         }
     }
@@ -237,6 +263,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
             using (patchBatch)
             {
                 using var renderFrameBatch = _translator.Translate(patchBatch);
+                CancelScrollPresentationForInvalidation(ResolveCompositionInvalidation());
                 var ownership = _ownershipProvider?.Invoke();
                 if (workItem.Mode == CompositorWorkMode.RetainedFrameStage)
                 {
@@ -335,6 +362,53 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
         ScheduleNextScrollPresentationTick(timestamp, workItem.CompositionGeneration);
     }
 
+    private void CancelScrollPresentationWorkItem(CompositorWorkItem workItem)
+    {
+        Exception? error = null;
+        try
+        {
+            CancelScrollPresentationCore(countCancellation: true);
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+            throw;
+        }
+        finally
+        {
+            workItem.RenderCompletionWaitGroup?.Complete(error);
+        }
+    }
+
+    private CompositionRenderInvalidation ResolveCompositionInvalidation()
+    {
+        return _translator is ICompositionInvalidationProvider invalidationProvider
+            ? invalidationProvider.LastCompositionInvalidation
+            : CompositionRenderInvalidation.None;
+    }
+
+    private void CancelScrollPresentationForInvalidation(in CompositionRenderInvalidation invalidation)
+    {
+        if (invalidation.CancelsScrollPresentation)
+        {
+            CancelScrollPresentationCore(countCancellation: true);
+        }
+    }
+
+    private void CancelScrollPresentationCore(bool countCancellation)
+    {
+        if (_compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor)
+        {
+            scrollPresentationCompositor.ClearCompositionScrollPresentation();
+        }
+
+        var canceled = CancelScrollPresentationSchedule();
+        if (countCancellation && canceled)
+        {
+            Interlocked.Increment(ref _scrollPresentationCancelCount);
+        }
+    }
+
     private int ActivateScrollPresentationSchedule(
         in CompositionScrollPresentationDeclaration declaration)
     {
@@ -393,6 +467,32 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
         }
 
         idleWaitGroup?.Complete(null);
+    }
+
+    private bool CancelScrollPresentationSchedule()
+    {
+        RenderCompletionWaitGroup? idleWaitGroup;
+        var canceled = false;
+        lock (_compositionScheduleGate)
+        {
+            canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
+            _scrollPresentationSchedule = default;
+            _scrollPresentationTickQueued = false;
+            unchecked
+            {
+                _scrollPresentationGeneration++;
+                if (_scrollPresentationGeneration == 0)
+                {
+                    _scrollPresentationGeneration++;
+                }
+            }
+
+            idleWaitGroup = _scrollPresentationIdleWaitGroup;
+            _scrollPresentationIdleWaitGroup = null;
+        }
+
+        idleWaitGroup?.Complete(null);
+        return canceled;
     }
 
     private void CompleteScrollPresentationSchedulerOnDispose()
@@ -536,7 +636,8 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
     {
         Render,
         InstallScrollPresentation,
-        TickScrollPresentation
+        TickScrollPresentation,
+        CancelScrollPresentation
     }
 
     private readonly struct CompositionScrollPresentationSchedule(
@@ -620,6 +721,18 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
                 default,
                 null,
                 generation);
+        }
+
+        public static CompositorWorkItem CancelScrollPresentation(RenderCompletionWaitGroup renderCompletionWaitGroup)
+        {
+            return new CompositorWorkItem(
+                CompositorWorkKind.CancelScrollPresentation,
+                null,
+                renderCompletionWaitGroup,
+                CompositorWorkMode.Render,
+                default,
+                null,
+                0);
         }
     }
 

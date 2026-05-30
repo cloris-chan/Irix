@@ -19,9 +19,45 @@ internal interface ICompositionScrollPresentationCompositor
         in CompositionScrollPresentationDeclaration declaration,
         RenderPipelineRetainedInputSnapshot snapshot);
 
+    void ClearCompositionScrollPresentation();
+
     ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(
         CompositionTimestamp timestamp,
         CancellationToken cancellationToken = default);
 
     bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY);
+}
+
+internal readonly struct CompositionRenderInvalidation(bool CancelsScrollPresentation) : IEquatable<CompositionRenderInvalidation>
+{
+    public bool CancelsScrollPresentation { get; } = CancelsScrollPresentation;
+
+    public static CompositionRenderInvalidation None => default;
+
+    public static CompositionRenderInvalidation ScrollPresentation => new(CancelsScrollPresentation: true);
+
+    public static CompositionRenderInvalidation FromLayoutRebuildReason(LayoutRebuildReason reason)
+    {
+        return reason is LayoutRebuildReason.ViewportChanged
+            or LayoutRebuildReason.TreeStructure
+            or LayoutRebuildReason.LayoutAffecting
+            or LayoutRebuildReason.TextSizeAffecting
+            ? ScrollPresentation
+            : None;
+    }
+
+    public bool Equals(CompositionRenderInvalidation other) => CancelsScrollPresentation == other.CancelsScrollPresentation;
+
+    public override bool Equals(object? obj) => obj is CompositionRenderInvalidation other && Equals(other);
+
+    public override int GetHashCode() => CancelsScrollPresentation.GetHashCode();
+
+    public static bool operator ==(CompositionRenderInvalidation left, CompositionRenderInvalidation right) => left.Equals(right);
+
+    public static bool operator !=(CompositionRenderInvalidation left, CompositionRenderInvalidation right) => !left.Equals(right);
+}
+
+internal interface ICompositionInvalidationProvider
+{
+    CompositionRenderInvalidation LastCompositionInvalidation { get; }
 }

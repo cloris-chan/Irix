@@ -4,7 +4,7 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
+internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator, ICompositionInvalidationProvider
 {
     private readonly TranslatorViewportProvider _translatorViewportProvider;
     private readonly TranslatorFeedbackSink _feedbackSink;
@@ -44,6 +44,8 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
     public LayoutRebuildReason LastLayoutRebuildReason => _lastLayoutRebuildReason;
 
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications => _lastDirtyClassifications;
+
+    public CompositionRenderInvalidation LastCompositionInvalidation { get; private set; }
 
     internal RetainedRenderFrameSegmentOwnership? SegmentOwnership => _translatorCore.SegmentOwnership;
 
@@ -111,6 +113,18 @@ internal sealed class WindowDrawCommandTranslator : IPatchBatchTranslator
         _layoutRebuildCount = output.LayoutRebuildCount;
         _lastLayoutRebuildReason = output.LastLayoutRebuildReason;
         _lastDirtyClassifications = output.LastDirtyClassifications;
+        LastCompositionInvalidation = ResolveCompositionInvalidation(output.LastLayoutRebuildReason, output.MaxScrollY);
+    }
+
+    private CompositionRenderInvalidation ResolveCompositionInvalidation(LayoutRebuildReason reason, double maxScrollY)
+    {
+        var invalidation = CompositionRenderInvalidation.FromLayoutRebuildReason(reason);
+        if (invalidation.CancelsScrollPresentation || Math.Abs(maxScrollY - _feedbackSink.LastMaxScrollY) <= 0.5)
+        {
+            return invalidation;
+        }
+
+        return CompositionRenderInvalidation.ScrollPresentation;
     }
 }
 

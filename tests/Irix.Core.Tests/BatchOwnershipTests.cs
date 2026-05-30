@@ -212,6 +212,76 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_cancel_scroll_presentation_clears_active_schedule()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(CompositionTimestamp.Now(), CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        var ticksAfterStart = loop.ScrollPresentationTickCount;
+        await loop.CancelCompositionScrollPresentationAsync(cancellationToken);
+        await loop.WaitForScrollPresentationIdleAsync(cancellationToken);
+        await Task.Delay(20, cancellationToken);
+
+        Assert.Equal(1, compositor.ClearCount);
+        Assert.Equal(1, loop.ScrollPresentationCancelCount);
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+        Assert.Equal(ticksAfterStart, loop.ScrollPresentationTickCount);
+    }
+
+    [Fact]
+    public async Task CompositorLoop_render_invalidation_cancels_scroll_presentation_before_render()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new InvalidatingTranslator(CompositionRenderInvalidation.ScrollPresentation);
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(CompositionTimestamp.Now(), CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+
+        var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Next", new NodeKey(1)))
+        ]), 1);
+        await loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken);
+
+        Assert.Equal(1, compositor.RenderCallCount);
+        Assert.Equal(1, compositor.ClearCount);
+        Assert.False(compositor.PresentationActiveDuringLastRender);
+        Assert.Equal(1, loop.ScrollPresentationCancelCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_skips_regular_empty_diffs()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -308,6 +378,25 @@ public sealed class BatchOwnershipTests
         }
     }
 
+    private sealed class InvalidatingTranslator(CompositionRenderInvalidation invalidation) : IPatchBatchTranslator, ICompositionInvalidationProvider
+    {
+        public int TranslateCallCount { get; private set; }
+        public CompositionRenderInvalidation LastCompositionInvalidation { get; private set; }
+
+        public RenderFrameBatch Translate(PatchBatch patchBatch)
+        {
+            TranslateCallCount++;
+            LastCompositionInvalidation = invalidation;
+            var owner = new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(
+                    DrawCommandKind.DrawTextRun,
+                    Rect: new DrawRect(16, 16, 928, 32))
+            ]);
+            return new RenderFrameBatch(new DrawCommandBatch(owner, 1), []);
+        }
+    }
+
     private sealed class RecordingCompositor : ICompositor
     {
         private readonly TaskCompletionSource _rendered = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -381,14 +470,18 @@ public sealed class BatchOwnershipTests
     {
         private CompositionScrollPresentationDeclaration _declaration;
         private double _presentedScrollY;
+        private bool _presentationActive;
 
         public int RenderCallCount { get; private set; }
         public int InstallCount { get; private set; }
+        public int ClearCount { get; private set; }
         public long TickCount { get; private set; }
+        public bool PresentationActiveDuringLastRender { get; private set; }
 
         public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
         {
             RenderCallCount++;
+            PresentationActiveDuringLastRender = _presentationActive;
             return ValueTask.CompletedTask;
         }
 
@@ -397,7 +490,15 @@ public sealed class BatchOwnershipTests
             RenderPipelineRetainedInputSnapshot snapshot)
         {
             _declaration = declaration;
+            _presentationActive = true;
             InstallCount++;
+        }
+
+        public void ClearCompositionScrollPresentation()
+        {
+            _presentationActive = false;
+            _presentedScrollY = 0;
+            ClearCount++;
         }
 
         public ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(
@@ -411,7 +512,7 @@ public sealed class BatchOwnershipTests
 
         public bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
         {
-            if (InstallCount > 0 && targetKey == _declaration.TargetKey)
+            if (_presentationActive && targetKey == _declaration.TargetKey)
             {
                 presentedScrollY = _presentedScrollY;
                 return true;

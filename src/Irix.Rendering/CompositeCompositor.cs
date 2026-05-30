@@ -51,6 +51,17 @@ public sealed class CompositeCompositor(params ICompositor[] compositors) : ICom
         }
     }
 
+    void ICompositionScrollPresentationCompositor.ClearCompositionScrollPresentation()
+    {
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor)
+            {
+                scrollPresentationCompositor.ClearCompositionScrollPresentation();
+            }
+        }
+    }
+
     async ValueTask<CompositionBackendExecutionResult> ICompositionScrollPresentationCompositor.RenderCompositionScrollPresentationTickAtAsync(
         CompositionTimestamp timestamp,
         CancellationToken cancellationToken)

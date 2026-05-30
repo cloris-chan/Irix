@@ -293,6 +293,27 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
     }
 
+    internal void ClearCompositionScrollPresentation()
+    {
+        lock (_frameGate)
+        {
+            if (_compositionScrollPresentationPlan is null)
+            {
+                return;
+            }
+
+            _compositionScrollPresentationPlan = null;
+            _compositionScrollMarkerStates = [];
+            ClearCompositionPresentationState();
+            ClearCompositionMarkerEvents();
+        }
+    }
+
+    void ICompositionScrollPresentationCompositor.ClearCompositionScrollPresentation()
+    {
+        ClearCompositionScrollPresentation();
+    }
+
     private void ClearCompositionPlanCore()
     {
         _compositionAnimationPlan = null;
