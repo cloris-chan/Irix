@@ -22,7 +22,7 @@ Default execution mode is target-architecture first:
 
 - Prefer the intended architecture directly: typed value models, explicit ownership, retained publication safety, D3D12/GPU-first rendering, and high-performance hot paths.
 - Break internal APIs when the boundary is wrong, then migrate callers, tests, scripts, and docs in the same change.
-- Do not add compatibility shims, legacy aliases, or generic fallback layers unless they are explicit diagnostic rollback paths or unblock a documented short-term architecture blocker.
+- Do not add compatibility shims, legacy aliases, or generic fallback layers. Secondary paths are allowed only as explicit diagnostic rollback paths or to unblock a documented short-term architecture blocker.
 - Treat local gates and evidence as regression guards, not as a product-release freeze.
 
 ## Project Boundaries
@@ -81,7 +81,7 @@ Post-foundation architecture work is design-first, but implementation should be 
 | [Style-System-v0.md](Style-System-v0.md) | Splits layout style, visual style, text shaping style, composition style, and control-state style. |
 | [Animation-Composition-v0.md](Animation-Composition-v0.md) | Splits UI-runtime animation, compositor animation, hybrid animation, and backend-internal animation. |
 | [GPU-Composition-Architecture-v0.md](GPU-Composition-Architecture-v0.md) | Defines platform-neutral composition IR, backend capabilities, and GPU offload phases. |
-| [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | Tracks the active D3D12 transform/opacity composition implementation gate. |
+| [D3D12-Composition-Spike-v0.md](D3D12-Composition-Spike-v0.md) | Tracks the active D3D12 transform/opacity and fixed-clip scroll composition implementation gate. |
 
 High-level rules:
 
@@ -91,7 +91,7 @@ High-level rules:
 - Composition style covers transform, opacity, layer clip, and presented scroll offset.
 - Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
 - Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
-- The first composition implementation targets D3D12-backed transform/opacity ticks and fixed-clip scroll presentation resolved from retained `NodeKey` declarations, with active hit-test remapping. The existing draw-command renderer is the compatibility fallback when a GPU-first spike exposes an explicit blocker.
+- The first composition implementation targets D3D12-backed transform/opacity ticks and fixed-clip scroll presentation resolved from retained `NodeKey` declarations, with active hit-test remapping. Normal retained-frame rendering remains the secondary path when a GPU-first spike exposes an explicit blocker.
 
 ## Renderer Contract
 
@@ -120,8 +120,8 @@ Implementation bias:
 
 - Validate layer identity, immutable composition IR publication, compositor property updates, and diagnostics against the active D3D12 backend first.
 - Do not build a generic CPU/compatibility compositor as the initial route.
-- Add fallback compatibility only for documented blockers found while exercising the D3D12 path.
-- Keep fallback behind diagnostics so it does not become a second unowned renderer architecture.
+- Add secondary-path code only for documented blockers found while exercising the D3D12 path.
+- Keep secondary paths behind diagnostics so they do not become a second unowned renderer architecture.
 
 Preferred GPU offload order:
 
@@ -132,7 +132,7 @@ Preferred GPU offload order:
 5. Layer content payload caching.
 6. Backend-side batching and persistent upload rings.
 7. GPU culling/compaction for large retained scenes.
-8. Content-space internal offscreen surfaces only after bounds/origin/clip semantics are designed.
+8. Content-space internal offscreen surfaces only after bounds/origin/clip semantics are designed and direct composition still needs them.
 9. Indirect draw and descriptor-indexed resource tables.
 10. Effects/material graph after style/material contracts exist.
 
@@ -187,7 +187,7 @@ Not currently selected unless an explicit target-architecture task pulls them fo
 - Compositor animation does not mutate logical app state without a commit/cancel contract.
 - `Irix.Poc` code is not promoted without a contract.
 - Workflow/CI churn is deferred while Actions quota is exhausted.
-- Composition fallback paths must be explicit, diagnostic-visible, and secondary to the D3D12/GPU-backed path.
+- Composition skip and secondary-path behavior must be explicit, diagnostic-visible, and secondary to the D3D12/GPU-backed path.
 
 ## Current Backlog Shape
 

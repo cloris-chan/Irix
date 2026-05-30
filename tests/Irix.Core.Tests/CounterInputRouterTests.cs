@@ -14,35 +14,77 @@ public sealed class CounterInputRouterTests
     [Fact]
     public void TryMapInput_maps_left_click_to_button_action()
     {
-        var inputEvent = new RawInputEvent(
-            RawInputEventKind.PointerReleased,
-            Timestamp: 1,
-            X: 32,
-            Y: 140,
-            Button: PointerButton.Left);
-
-        var mapped = CounterInputRouter.TryMapInput(
-            inputEvent,
-            (x, y) => x == 32 && y == 140 ? new ActionId(1) : ActionId.None,
+        var ownershipState = new InputOwnershipState();
+        var pressMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+        var releaseMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
             out var message);
 
-        Assert.True(mapped);
+        Assert.False(pressMapped);
+        Assert.True(releaseMapped);
         Assert.IsType<CounterMessage.Increment>(message);
+    }
+
+    [Fact]
+    public void TryMapInput_does_not_map_release_without_pressed_ownership()
+    {
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            new InputOwnershipState(),
+            HitIncrementAtButton,
+            out _);
+
+        Assert.False(mapped);
     }
 
     [Fact]
     public void TryMapInput_does_not_map_left_click_without_hit_target()
     {
-        var inputEvent = new RawInputEvent(
-            RawInputEventKind.PointerReleased,
-            Timestamp: 1,
-            X: 500,
-            Y: 500,
-            Button: PointerButton.Left);
+        var ownershipState = new InputOwnershipState();
+        var pressMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
+        var releaseMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 2,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementAtButton,
+            out _);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out _);
-
-        Assert.False(mapped);
+        Assert.False(pressMapped);
+        Assert.False(releaseMapped);
     }
 
     [Fact]
@@ -919,7 +961,7 @@ public sealed class CounterInputRouterTests
             Y: 0,
             KeyCode: keyCode);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out var message);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, new InputOwnershipState(), static (_, _) => ActionId.None, out var message);
 
         Assert.True(mapped);
         Assert.IsType(expectedMessageType, message);
@@ -939,7 +981,7 @@ public sealed class CounterInputRouterTests
             Y: 0,
             Delta: delta);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out var message);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, new InputOwnershipState(), static (_, _) => ActionId.None, out var message);
 
         Assert.True(mapped);
         var wheel = Assert.IsType<CounterMessage.WheelRaw>(message);
@@ -958,7 +1000,7 @@ public sealed class CounterInputRouterTests
             Y: 0,
             Character: character);
 
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, (_, _) => ActionId.None, out var message);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, new InputOwnershipState(), static (_, _) => ActionId.None, out var message);
 
         var reset = Assert.IsType<CounterMessage.Reset>(message);
         Assert.True(mapped);
@@ -1334,10 +1376,13 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void ApplyWheel_backward_compatible()
+    public void ApplyScrollDelta_wheel_raw_uses_default_settings()
     {
-        // ApplyWheel uses Windows raw wheel direction: -120 scrolls down by 54px.
-        var state = ScrollController.ApplyWheel(ScrollState.Default, -120);
+        var state = ScrollController.ApplyScrollDelta(
+            ScrollState.Default,
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
         Assert.Equal(54, state.TargetPosition);
     }
 

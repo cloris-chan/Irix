@@ -78,12 +78,6 @@ public sealed class VirtualTextArena
         return true;
     }
 
-    [Obsolete("Use GetOrCreateSnapshot(). Snapshot() returns the cached snapshot for compatibility.")]
-    public TextBufferSnapshot Snapshot()
-    {
-        return GetOrCreateSnapshot();
-    }
-
     /// <summary>
     /// Returns a cached snapshot of the current buffer, creating one if needed.
     /// The cache is invalidated when text is added.

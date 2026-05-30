@@ -72,7 +72,7 @@ Ownership split:
 | `ScrollContainerDiag` / max scroll observation | Rendering/layout. | Published observation only. Rendering does not own scroll state. |
 | `ScrollFeedback` | App/control feedback. | Projection from layout diagnostics to runtime. |
 | `presentedScrollY` | Compositor. | Interpolated visual offset. Should not require layout rebuild per tick. |
-| Scroll hit-test mapping | Input/control adapter plus compositor snapshot. | Pointer coordinates map through the current presented transform in `CompositorHitTestSnapshot`; committed-state fallback is only for cases with no active compositor presentation. |
+| Scroll hit-test mapping | Input/control adapter plus compositor snapshot. | Pointer coordinates map through the current presented transform in `CompositorHitTestSnapshot`; the committed-state path is used only when no compositor presentation is active. |
 
 The current implementation supports scroll presentation for retained scroll containers by resolving child draw-command runs into one or more fixed-clip composition layers. The compositor moves content by `retainedScrollY - presentedScrollY` while each resolved clip remains fixed; nested/mixed-clip scroll targets are decomposed into ordered `CompositionFrame` layers on the D3D12 path. Hit testing is centralized through `CompositorHitTestSnapshot`, which combines retained hit targets, command-range-backed layer nodes, current presented transforms, fixed clips, and reverse paint-order selection. Logical scroll target/clamp still belongs to app/control runtime. The first PoC runtime interrupt policy lives in `ScrollController`: commit writes the presented value back to runtime state, cancel discards presentation and returns to the logical target, and retarget uses the presented value only as the visual animation origin while applying new input deltas to the accumulated logical target. Main-app wheel input now runs through `ScrollPresentationCoordinator`: it coalesces input, commits the logical/layout target with retained-frame staging, and installs a retained `CompositionScrollPresentationDeclaration`. `CompositorLoop` owns the presentation clock, pacing, queued compositor-only ticks, and idle waiting. Live wheel input queries active compositor scroll presentation through `CompositorLoop.TryGetPresentedScrollY` and uses `ScrollPresentationInputBridge` to retarget when another delta arrives during presentation.
 
@@ -80,7 +80,7 @@ The current implementation supports scroll presentation for retained scroll cont
 
 The first implementation cases are D3D12-backed transform/opacity and fixed-clip scroll presentation. They validate compositor state, timing, diagnostics, backend update plumbing, and hit-test remapping without extracting scroll state into `Irix.Rendering`.
 
-Runtime fallback is acceptable only when the GPU-first path exposes a concrete blocker. That fallback must preserve logical state ownership, emit diagnostics showing why compositor execution did not run, and remain secondary to the D3D12-backed path.
+Secondary runtime execution is acceptable only when the GPU-first path exposes a concrete blocker. That path must preserve logical state ownership, emit diagnostics showing why compositor execution did not run, and remain secondary to the D3D12-backed path.
 
 ## Compositor Animation Contract
 
@@ -130,7 +130,7 @@ The first runtime integration slice is internal and PoC-backed: `CounterComposit
 
 Transform/opacity compositor animation remaps hit testing by applying the inverse of active layer transforms before testing retained target bounds and clips. The current implementation keeps the authoritative hit-test data in the render pipeline and records retained command ranges on `HitTestTarget`, so only targets inside active composition layers receive inverse-transform mapping. Static targets in the same retained frame keep normal logical hit testing.
 
-Fixed-clip scroll presentation first filters pointer coordinates against the fixed clip in presentation space, then applies the inverse content transform before testing retained target bounds. This keeps clipped-out presented content non-interactive while avoiding a per-tick layout rebuild. Runtime interrupt handling is explicit: new input may commit, cancel, or retarget presented scroll state before dispatching the next layout frame. Wheel retarget keeps the visible origin continuous but accumulates distance on the logical target, so rapid N-notch input covers the same total distance as N separate one-notch inputs. Geometry and layout lifecycle invalidation is now explicit: `WindowDrawCommandTranslator` publishes a `CompositionRenderInvalidation` when viewport, tree, layout, text measurement, or max-scroll feedback changes; `CompositorLoop` clears active scroll presentation before rendering that retained frame. Window resize, DPI change, and max-scroll feedback also enqueue scroll presentation cancellation directly. Fallback diagnostics still need hardening.
+Fixed-clip scroll presentation first filters pointer coordinates against the fixed clip in presentation space, then applies the inverse content transform before testing retained target bounds. This keeps clipped-out presented content non-interactive while avoiding a per-tick layout rebuild. Runtime interrupt handling is explicit: new input may commit, cancel, or retarget presented scroll state before dispatching the next layout frame. Wheel retarget keeps the visible origin continuous but accumulates distance on the logical target, so rapid N-notch input covers the same total distance as N separate one-notch inputs. Geometry and layout lifecycle invalidation is now explicit: `WindowDrawCommandTranslator` publishes a `CompositionRenderInvalidation` when viewport, tree, layout, text measurement, or max-scroll feedback changes; `CompositorLoop` clears active scroll presentation before rendering that retained frame. Window resize, DPI change, and max-scroll feedback also enqueue scroll presentation cancellation directly. Skipped-compositor diagnostics still need hardening.
 
 ## GPU Offload Expectations
 
@@ -151,7 +151,7 @@ Animation diagnostics should remain observation, not ownership:
 - Runtime logical vs presented values for hybrid animations.
 - Cancel/retarget counts.
 - Marker drain/dispatch/unmapped counts at the runtime boundary.
-- Backend capability fallbacks.
+- Backend capability skips and unsupported compositor producer reasons.
 - Whether an animation ran compositor-only or forced UI frames.
 
 Diagnostics must not become the animation scheduler.

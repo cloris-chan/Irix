@@ -5,21 +5,6 @@ namespace Irix.Poc;
 internal static class CounterInputRouter
 {
     /// <summary>
-    /// Maps one input event without preserving ownership state.
-    /// This overload exists for legacy unit tests and simple one-shot routing only;
-    /// it cannot model hover, focus, or pointer capture across events.
-    /// Use the overload that accepts <see cref="InputOwnershipState"/> for PoC input ownership v0.
-    /// </summary>
-    public static bool TryMapInput(
-        RawInputEvent inputEvent,
-        Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
-        out CounterMessage message)
-    {
-        var resolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
-        return TryMapInput(inputEvent, new InputOwnershipState(), resolver, out message);
-    }
-
-    /// <summary>
     /// Maps one input event using Counter PoC ownership v0: single pointer, left-button
     /// pressed/captured target, hover diagnostics, and focused keyboard activation.
     /// </summary>

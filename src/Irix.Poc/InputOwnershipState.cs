@@ -279,26 +279,13 @@ internal sealed class InputOwnershipState
         }
     }
 
-    /// <summary>
-    /// Ends left-button ownership and returns the action target, if any. Captured target wins;
-    /// a release without a prior stateful press falls back to release-point hit testing for
-    /// compatibility with the legacy stateless router overload.
-    /// </summary>
-    public ActionId ReleasePointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel)
-    {
-        var resolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
-        return ReleasePointer(inputEvent, ref resolver);
-    }
-
     public ActionId ReleasePointer<THitTestResolver>(RawInputEvent inputEvent, ref THitTestResolver hitTestResolver)
         where THitTestResolver : struct, IActionHitTestResolver
     {
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
         var wasPointerPressed = _isPointerPressed;
-        var target = _isPointerPressed
-            ? CapturedTarget
-            : hitTestResolver.Resolve(inputEvent.X, inputEvent.Y);
+        var target = _isPointerPressed ? CapturedTarget : ActionId.None;
         _isPointerPressed = false;
         PressedTarget = ActionId.None;
         CapturedTarget = ActionId.None;

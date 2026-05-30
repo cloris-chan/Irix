@@ -120,19 +120,6 @@ internal static class ScrollController
         return ApplyPixelDelta(state, pixels);
     }
 
-    /// <summary>
-    /// Backward-compatible overload: apply a raw wheel delta using default settings
-    /// and default text metrics (LineExtent = 18px).
-    /// </summary>
-    public static ScrollState ApplyWheel(ScrollState state, int rawDelta)
-    {
-        return ApplyScrollDelta(
-            state,
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, rawDelta),
-            ScrollMetrics.DefaultText,
-            SystemScrollSettings.Default);
-    }
-
     // ── pixel accumulator ────────────────────────────────────────────
 
     private static ScrollState ApplyPixelDelta(ScrollState state, double pixelDelta)

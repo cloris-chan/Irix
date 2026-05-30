@@ -36,13 +36,13 @@ This remains valid. The composition architecture adds layer animation and backen
 
 ## Implementation Bias
 
-The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, `CompositorHitTestSnapshot` publication for active transform/fixed-clip hit testing, fixed-clip scroll presentation for retained scroll containers, retained nested/mixed-clip scroll decomposition into ordered composition layers, a marker-event pump that maps compositor-produced runtime event ids to UI runtime messages outside the backend, PoC commit/cancel/retarget policy for presented scroll interruption, live wheel retarget wiring from active compositor scroll presentation back to runtime state, a main-app scroll presentation producer that advances compositor-only ticks after one logical render, scroll lifecycle invalidation through `CompositionRenderInvalidation`, first-slice multi-layer composition frame execution on D3D12, and a D3D12 layer content cache for disjoint composition layers. Internal offscreen/render-target caching is intentionally not active; it must return as content-space surfaces with explicit bounds/origin/clip semantics if the direct path proves it is needed.
+The project should move aggressively toward the GPU path once ownership contracts are clear. The current implementation has a D3D12-backed transform/opacity composition spine with compositor-updated properties, diagnostics, typed composition clock values, internal `NodeKey`-addressable composition targets from retained UI output, runtime animation declarations that resolve through those targets, `CompositorHitTestSnapshot` publication for active transform/fixed-clip hit testing, fixed-clip scroll presentation for retained scroll containers, retained nested/mixed-clip scroll decomposition into ordered composition layers, a marker-event pump that maps compositor-produced runtime event ids to UI runtime messages outside the backend, PoC commit/cancel/retarget policy for presented scroll interruption, live wheel retarget wiring from active compositor scroll presentation back to runtime state, a main-app scroll presentation producer that advances compositor-only ticks after one logical render, scroll lifecycle invalidation through `CompositionRenderInvalidation`, first-slice multi-layer composition frame execution on D3D12, and a D3D12 layer content cache for disjoint composition layers. Internal offscreen/render-target caching is intentionally not active; if the direct path later proves a real need, it may return only as content-space surfaces with explicit bounds/origin/clip semantics.
 
-Do not build a broad CPU/generic compatibility compositor as the first implementation step. The existing draw-command renderer is the compatibility fallback.
+Do not build a broad CPU/generic compatibility compositor as the first implementation step. Normal retained-frame rendering is the explicit secondary path when compositor execution is unsupported.
 
-New fallback code is justified only when a D3D12/GPU-first spike exposes a concrete short-term blocker such as unsafe hit-test mapping, unresolved resource lifetime, or a missing backend capability.
+New secondary-path code is justified only when a D3D12/GPU-first spike exposes a concrete short-term blocker such as unsafe hit-test mapping, unresolved resource lifetime, or a missing backend capability.
 
-Fallback must be explicit and diagnostic-visible:
+Skipped compositor execution must be explicit and diagnostic-visible:
 
 - State which GPU path was attempted.
 - State the blocker or unsupported capability.
@@ -150,7 +150,7 @@ Runtime still owns:
 - Clamp against max scroll.
 - Gesture/input interpretation.
 - Accessibility/logical state.
-- Producer fallback/degradation diagnostics.
+- Producer skip/degradation diagnostics.
 
 Compositor owns:
 
@@ -160,12 +160,12 @@ Compositor owns:
 
 Current implementation scope:
 
-- Single retained scroll container.
-- One contiguous command range.
-- Uniform clip across the target range.
-- Fixed clip in presentation space and translated content underneath.
+- Retained scroll containers resolve into one or more ordered fixed-clip composition layers.
+- Single-range/uniform-clip scroll remains the simple one-layer case.
+- Nested or mixed child clips decompose into ordered layer ranges instead of widening the scroll contract.
+- Fixed clips stay in presentation space while content translates underneath.
 
-Nested scroll, mixed child clips, and independently animated descendant layers should be decomposed into ordered composition layers instead of widening the single-layer scroll contract.
+Independently animated descendant layers should use additional ordered composition layers instead of becoming special cases inside the scroll contract.
 
 ## Advanced GPU Features
 
@@ -190,7 +190,7 @@ Composition diagnostics should answer:
 - Whether a scroll animation ran independently or forced UI frames.
 - Which compositor marker events were produced, including animation instance, target, iteration, progress, and playback direction.
 - Which marker events were drained, dispatched, or left unmapped by runtime-owned mapping.
-- GPU memory retained by future offscreen surfaces and atlas pages.
+- GPU memory retained by atlas pages and any explicitly reintroduced content-space offscreen surfaces.
 
 Diagnostics must not own composition state.
 
