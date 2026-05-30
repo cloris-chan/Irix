@@ -194,7 +194,20 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
             _ => DXGI_FORMAT.DXGI_FORMAT_R8_UNORM
         };
 
-    private void UploadVertices(ReadOnlySpan<Vertex> vertices, int frameResourceIndex)
+    private int AllocateVertexUploadRange(int vertexCount, int frameResourceIndex)
+    {
+        var uploadSlot = frameResourceIndex % UploadFrameCount;
+        var baseVertex = _usedVertices[uploadSlot];
+        if (vertexCount > MaxGlyphVertices - baseVertex)
+        {
+            return -1;
+        }
+
+        _usedVertices[uploadSlot] = baseVertex + vertexCount;
+        return baseVertex;
+    }
+
+    private void UploadVertices(ReadOnlySpan<Vertex> vertices, int frameResourceIndex, int baseVertex)
     {
         var uploadSlot = frameResourceIndex % UploadFrameCount;
         var vbuf = _vbufs[uploadSlot];
@@ -227,7 +240,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
 
         try
         {
-            vertices.CopyTo(new Span<Vertex>(mapped, MaxGlyphVertices));
+            vertices.CopyTo(new Span<Vertex>(mapped, MaxGlyphVertices).Slice(baseVertex, vertices.Length));
         }
         finally
         {
@@ -328,7 +341,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
         _diagnostics = _diagnostics.WithUploadedBytes(uploadBytes);
     }
 
-    private void DrawGlyphs(ID3D12GraphicsCommandList* list, GlyphFrame frame, int viewportWidth, int viewportHeight, int frameResourceIndex)
+    private void DrawGlyphs(ID3D12GraphicsCommandList* list, GlyphFrame frame, int viewportWidth, int viewportHeight, int frameResourceIndex, int baseVertex)
     {
         if (!GlyphAtlasTextCompositionHelpers.HasGlyphPipelineResources(_pso != null && _bgraPso != null, _rootSig != null))
         {
@@ -369,7 +382,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
             list->SetGraphicsRootDescriptorTable(0, page.SrvHeap->GetGPUDescriptorHandleForHeapStart());
             var scissor = ToRect(batch.Scissor);
             list->RSSetScissorRects(1, &scissor);
-            list->DrawInstanced((uint)batch.VertexCount, 1, (uint)batch.StartVertex, 0);
+            list->DrawInstanced((uint)batch.VertexCount, 1, (uint)(baseVertex + batch.StartVertex), 0);
         }
     }
 

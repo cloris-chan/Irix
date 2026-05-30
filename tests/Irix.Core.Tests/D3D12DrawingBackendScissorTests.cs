@@ -388,7 +388,7 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
-    public void TryExecuteCompositionWithRenderTargetCache_rejects_non_suffix_or_text_layers()
+    public void TryExecuteCompositionWithRenderTargetCache_builds_rect_and_text_suffix_layer_plan()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
         using var texts = new FrameRenderList<D3D12TextRun>();
@@ -400,16 +400,17 @@ public sealed class D3D12DrawingBackendScissorTests
         var textCommands = new DrawCommand[]
         {
             new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
-            new(DrawCommandKind.DrawTextRun, Rect: new DrawRect(16, 20, 120, 24), Resource: style, Text: text, Color: DrawColor.Opaque(240, 240, 240))
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 80, 24), Color: DrawColor.Opaque(80, 120, 180)),
+            new(DrawCommandKind.DrawTextRun, Rect: new DrawRect(16, 52, 120, 24), Resource: style, Text: text, Color: DrawColor.Opaque(240, 240, 240))
         };
         var textFrame = new CompositionFrame(new CompositionLayer(
             new CompositionLayerId(7),
             CommandStart: 1,
-            CommandCount: 1,
+            CommandCount: 2,
             new CompositionTransform(12, 8),
             CompositionOpacity.Opaque));
 
-        Assert.False(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
+        Assert.True(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
             new D3D12CompositionLayerContentCache(),
             DrawingBackendClipMode.Scissor,
             new DrawRect(0, 0, 240, 160),
@@ -420,10 +421,25 @@ public sealed class D3D12DrawingBackendScissorTests
             rects,
             texts,
             layerTargets,
-            out _));
-        Assert.Equal(0, rects.Count);
+            out var diagnostics));
+        Assert.Equal(1, rects.Count);
         Assert.Equal(0, texts.Count);
-        Assert.Equal(0, layerTargets.Count);
+        Assert.Equal(1, layerTargets.Count);
+        Assert.True(layerTargets.Span[0].Content.SupportsRenderTargetCache);
+        Assert.Equal(1, layerTargets.Span[0].Content.Rects.Length);
+        Assert.Equal(1, layerTargets.Span[0].Content.Texts.Length);
+        Assert.Equal(2, diagnostics.CachedLayerCommands);
+        Assert.Equal(2, diagnostics.TranslatedCommands);
+    }
+
+    [Fact]
+    public void TryExecuteCompositionWithRenderTargetCache_rejects_non_suffix_layers()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
 
         var interleavedCommands = new DrawCommand[]
         {

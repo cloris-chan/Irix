@@ -594,7 +594,8 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("var frameResourceIndex = (int)_frameIndex;", rendererSource);
         Assert.Contains("RenderRectangles(_list, rects, width, height, frameResourceIndex)", rendererSource);
-        Assert.Contains("TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex)", rendererSource);
+        Assert.Contains("TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex, width, height)", rendererSource);
+        Assert.Contains("_glyphAtlasTextRenderer?.BeginFrame(frameResourceIndex);", rendererSource);
         Assert.DoesNotContain("WaitForReusableUploadResources", rendererSource);
         Assert.DoesNotContain("ReusableUploadResourceWait", rendererSource);
 
@@ -736,6 +737,7 @@ public sealed class ProgramDiagnosticsTests
             "public D3D12GlyphAtlasTextRenderer(",
             "public bool IsDisabled",
             "public DeviceErrorDiagnostic DeviceError",
+            "public void BeginFrame",
             "public GlyphAtlasTextRendererDiagnostics GetDiagnostics",
             "public void ResetDiagnostics",
             "public GlyphAtlasRecordResult TryRecord",
@@ -754,6 +756,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("internal D3D12GlyphAtlasTextRenderer(", glyphSource);
         Assert.Contains("internal bool IsDisabled", glyphSource);
         Assert.Contains("internal DeviceErrorDiagnostic DeviceError", glyphSource);
+        Assert.Contains("internal void BeginFrame", glyphSource);
         Assert.Contains("internal GlyphAtlasTextRendererDiagnostics GetDiagnostics", glyphSource);
         Assert.Contains("internal void ResetDiagnostics", glyphSource);
         Assert.Contains("internal GlyphAtlasRecordResult TryRecord", glyphSource);
@@ -764,6 +767,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("internal enum GlyphAtlasFallbackReason", glyphSource);
         Assert.Contains("internal readonly struct GlyphAtlasFallbackReasonCounts", glyphSource);
         Assert.Contains("internal readonly struct GlyphAtlasTextRendererDiagnostics", glyphSource);
+        Assert.Contains("private readonly int[] _usedVertices", glyphSource);
+        Assert.Contains("private int AllocateVertexUploadRange", glyphSource);
+        Assert.Contains("(uint)(baseVertex + batch.StartVertex)", glyphSource);
         Assert.DoesNotContain("public struct Vertex", renderer2DSource);
         Assert.DoesNotContain("public readonly struct RectData", renderer2DSource);
         Assert.Contains("private struct Vertex", renderer2DSource);
@@ -1997,7 +2003,7 @@ public sealed class ProgramDiagnosticsTests
         using var texts = new FrameRenderList<D3D12TextRun>();
         using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
         using var resources = FrameDrawingResources.Rent();
-        var commands = CompositionRenderTargetCacheDiagnosticRunner.BuildCommands();
+        var commands = CompositionRenderTargetCacheDiagnosticRunner.BuildCommands(resources);
         resources.Seal();
         var frame = CompositionRenderTargetCacheDiagnosticRunner.BuildCompositionFrame();
         var cache = new D3D12CompositionLayerContentCache();
@@ -2014,6 +2020,7 @@ public sealed class ProgramDiagnosticsTests
             texts,
             layerTargets,
             out var firstPlan));
+        Assert.Equal(1, layerTargets.Span[0].Content.Texts.Length);
         rects.Reset();
         texts.Reset();
         layerTargets.Reset();
@@ -2030,14 +2037,14 @@ public sealed class ProgramDiagnosticsTests
             layerTargets,
             out var secondPlan));
 
-        var first = firstPlan.WithRenderTargetDiagnostics(new D3D12CompositionRenderTargetCacheDiagnostics(true, 0, 1, 2));
-        var second = secondPlan.WithRenderTargetDiagnostics(new D3D12CompositionRenderTargetCacheDiagnostics(true, 1, 0, 2));
+        var first = firstPlan.WithRenderTargetDiagnostics(new D3D12CompositionRenderTargetCacheDiagnostics(true, 0, 1, 3));
+        var second = secondPlan.WithRenderTargetDiagnostics(new D3D12CompositionRenderTargetCacheDiagnostics(true, 1, 0, 3));
 
         Assert.Contains("--diagnose-composition-render-target-cache", programSource);
         Assert.Contains("CompositionRenderTargetCacheDiagnosticRunner.Run", programSource);
         Assert.Contains("render-target-backed layer cache", design);
-        Assert.Equal("composition-render-target-cache.first finalComposition=D3D12 d3d12Backed=True renderTargetBacked=True layers=1 commands=3 layerCacheHits=0 layerCacheMisses=1 cachedLayerCommands=2 renderTargetHits=0 renderTargetMisses=1 cachedRenderTargetCommands=2 translatedCommands=2 opacityAppliedCommands=2 frameSerial=1 presentSerial=1 deviceRemoved=False", CompositionRenderTargetCacheDiagnosticRunner.FormatFirst(first, 1, 1, false));
-        Assert.Equal("composition-render-target-cache.second finalComposition=D3D12 d3d12Backed=True renderTargetBacked=True layers=1 commands=3 layerCacheHits=1 layerCacheMisses=0 cachedLayerCommands=2 renderTargetHits=1 renderTargetMisses=0 cachedRenderTargetCommands=2 translatedCommands=2 opacityAppliedCommands=2 frameSerial=2 presentSerial=2 deviceRemoved=False", CompositionRenderTargetCacheDiagnosticRunner.FormatSecond(second, 2, 2, false));
+        Assert.Equal("composition-render-target-cache.first finalComposition=D3D12 d3d12Backed=True renderTargetBacked=True layers=1 commands=4 layerCacheHits=0 layerCacheMisses=1 cachedLayerCommands=3 renderTargetHits=0 renderTargetMisses=1 cachedRenderTargetCommands=3 translatedCommands=3 opacityAppliedCommands=3 frameSerial=1 presentSerial=1 deviceRemoved=False", CompositionRenderTargetCacheDiagnosticRunner.FormatFirst(first, 1, 1, false));
+        Assert.Equal("composition-render-target-cache.second finalComposition=D3D12 d3d12Backed=True renderTargetBacked=True layers=1 commands=4 layerCacheHits=1 layerCacheMisses=0 cachedLayerCommands=3 renderTargetHits=1 renderTargetMisses=0 cachedRenderTargetCommands=3 translatedCommands=3 opacityAppliedCommands=3 frameSerial=2 presentSerial=2 deviceRemoved=False", CompositionRenderTargetCacheDiagnosticRunner.FormatSecond(second, 2, 2, false));
     }
 
     [Fact]

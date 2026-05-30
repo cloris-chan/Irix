@@ -44,6 +44,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private D3D12GlyphAtlasTextRenderer? _glyphAtlasTextRenderer;
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasTextRendererDiagnostics _glyphAtlasTextDiagnostics;
     private readonly FrameRenderList<D3D12Renderer2D.RectData> _layerRenderTargetRects = new();
+    private readonly FrameRenderList<D3D12TextRun> _layerRenderTargetTexts = new();
     private readonly nint _hwnd;
     private readonly Lock _resizeLock = new();
     private int _width;
@@ -310,6 +311,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var frameResourceIndex = (int)_frameIndex;
         _renderer2D?.BeginFrame(frameResourceIndex);
         _textureQuadRenderer?.BeginFrame(frameResourceIndex);
+        _glyphAtlasTextRenderer?.BeginFrame(frameResourceIndex);
     }
 
     public void ClearAndPresent(float r, float g, float b, float a = 1.0f)
@@ -412,7 +414,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         var hasText = textRuns.Length > 0;
         if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
         {
-            _ = TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex);
+            _ = TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex, width, height);
             if (_deviceRemoved)
             {
                 return;
@@ -421,7 +423,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         if (layerRenderTargets.Length > 0)
         {
-            CompositeLayerRenderTargets(layerRenderTargets, scale, width, height, frameResourceIndex);
+            CompositeLayerRenderTargets(layerRenderTargets, resources, scale, width, height, frameResourceIndex);
             if (_deviceRemoved)
             {
                 return;
@@ -444,6 +446,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
     internal D3D12CompositionRenderTargetCacheDiagnostics PrepareCompositionLayerRenderTargets(
         ReadOnlySpan<D3D12CompositionLayerRenderTargetRequest> requests,
+        IFrameResourceResolver resources,
         DisplayScale scale)
     {
         if (_deviceRemoved || requests.Length == 0)
@@ -471,7 +474,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
                 else
                 {
                     misses++;
-                    RecordLayerRenderTarget(target, request, scale, frameResourceIndex);
+                    RecordLayerRenderTarget(target, request, resources, scale, frameResourceIndex);
                 }
 
                 cachedCommands += request.Content.SourceCommandCount;
@@ -492,7 +495,9 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     private D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult TryRecordGlyphAtlasTextPass(
         ReadOnlySpan<D3D12TextRun> textRuns,
         IFrameResourceResolver resources,
-        int frameResourceIndex)
+        int frameResourceIndex,
+        int viewportWidth,
+        int viewportHeight)
     {
         D3D12GlyphAtlasTextRenderer glyphAtlasTextRenderer;
         try
@@ -512,12 +517,13 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             return D3D12GlyphAtlasTextRenderer.GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
         }
 
-        return glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, Width, Height, frameResourceIndex);
+        return glyphAtlasTextRenderer.TryRecord(_list, textRuns, resources, viewportWidth, viewportHeight, frameResourceIndex);
     }
 
     private void RecordLayerRenderTarget(
         D3D12CompositionLayerRenderTarget target,
         in D3D12CompositionLayerRenderTargetRequest request,
+        IFrameResourceResolver resources,
         DisplayScale scale,
         int frameResourceIndex)
     {
@@ -535,6 +541,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _list->RSSetScissorRects(1, &scissor);
 
         _layerRenderTargetRects.Reset();
+        _layerRenderTargetTexts.Reset();
         D3D12DrawingBackend.AppendLayerSourceRectContent(
             request.Content,
             request.ClipMode,
@@ -543,12 +550,25 @@ internal sealed unsafe class D3D12Renderer : IDisposable
             _layerRenderTargetRects);
         _renderer2D!.RenderRectangles(_list, _layerRenderTargetRects.Span, target.Width, target.Height, frameResourceIndex);
 
+        D3D12DrawingBackend.AppendLayerSourceTextContent(
+            request.Content,
+            request.ClipMode,
+            new DrawRect(0, 0, target.Width, target.Height),
+            scale,
+            resources,
+            _layerRenderTargetTexts);
+        if (_layerRenderTargetTexts.Count > 0 && TextCompositionMode == TextCompositionMode.GlyphAtlas)
+        {
+            _ = TryRecordGlyphAtlasTextPass(_layerRenderTargetTexts.Span, resources, frameResourceIndex, target.Width, target.Height);
+        }
+
         TransitionResource(target.Texture, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
         target.State = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     }
 
     private void CompositeLayerRenderTargets(
         ReadOnlySpan<D3D12CompositionLayerRenderTargetRequest> requests,
+        IFrameResourceResolver resources,
         DisplayScale scale,
         int width,
         int height,
@@ -565,7 +585,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
                 var target = cache.GetOrCreate(request.Key, request.Content, width, height, out var hit);
                 if (!hit)
                 {
-                    RecordLayerRenderTarget(target, request, scale, frameResourceIndex);
+                    RecordLayerRenderTarget(target, request, resources, scale, frameResourceIndex);
                 }
 
                 SetCurrentBackBufferRenderTarget(width, height);
@@ -1032,6 +1052,7 @@ internal sealed unsafe class D3D12Renderer : IDisposable
     {
         if (_disposed) return;
         ReleaseDeviceResources(waitForGpu: true);
+        _layerRenderTargetTexts.Dispose();
         _layerRenderTargetRects.Dispose();
         _disposed = true;
     }

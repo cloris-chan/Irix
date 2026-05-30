@@ -130,8 +130,8 @@ Preferred GPU offload order:
 3. Presented scroll offset under a fixed layer clip.
 4. Multi-layer composition for nested/mixed clips.
 5. Layer content payload caching.
-6. First render-target-backed layer reuse for rect-only suffix layers.
-7. Broader render target content/order coverage.
+6. Render-target-backed layer reuse for rect/GlyphAtlas text suffix layers.
+7. Broader render target image/vector content and order coverage.
 8. Backend-side batching and persistent upload rings.
 9. GPU culling/compaction for large retained scenes.
 10. Indirect draw and descriptor-indexed resource tables.

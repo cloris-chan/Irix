@@ -324,7 +324,7 @@ internal sealed class D3D12CompositionLayerContent
     public ReadOnlySpan<D3D12CompositionLayerRectPayload> Rects => _rects;
     public ReadOnlySpan<D3D12CompositionLayerTextPayload> Texts => _texts;
     public int SourceCommandCount { get; }
-    public bool SupportsRenderTargetCache => _rects.Length > 0 && _texts.Length == 0;
+    public bool SupportsRenderTargetCache => _rects.Length + _texts.Length == SourceCommandCount && SourceCommandCount > 0;
 
     public bool SourceEquals(ReadOnlySpan<DrawCommand> commands)
     {
@@ -789,7 +789,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             _compositionLayerRenderTargets,
             out var renderTargetDiagnostics))
         {
-            var cacheDiagnostics = _renderer.PrepareCompositionLayerRenderTargets(_compositionLayerRenderTargets.Span, _frameContext.Scale);
+            var cacheDiagnostics = _renderer.PrepareCompositionLayerRenderTargets(_compositionLayerRenderTargets.Span, resources, _frameContext.Scale);
             diagnostics = renderTargetDiagnostics.WithRenderTargetDiagnostics(cacheDiagnostics);
         }
         else
@@ -1330,6 +1330,21 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             diagnostics.AddCommandClip(command);
             diagnostics.AddFillRectPlan(clipMode, ResolveFillRectScissor(clipMode, viewport, command.ClipBounds));
         }
+
+        var textPayloads = content.Texts;
+        for (var i = 0; i < textPayloads.Length; i++)
+        {
+            var payload = textPayloads[i];
+            var command = ScaleCommandToPhysicalPixels(new DrawCommand(
+                DrawCommandKind.DrawTextRun,
+                Translate(payload.Rect, layer.Transform),
+                ApplyOpacity(payload.Color, layer.Opacity),
+                payload.Resource,
+                payload.Text,
+                ResolveComposedClip(payload.ClipBounds, layer)), scale);
+            diagnostics.AddCommandClip(command);
+            diagnostics.AddTextClipPlan(ResolveTextClip(clipMode, viewport, command.ClipBounds));
+        }
     }
 
     private static bool HasOverlappingLayerCommandRanges(in CompositionFrame compositionFrame)
@@ -1463,6 +1478,49 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 command.Color.B / 255f,
                 command.Color.A / 255f,
                 scissorPlan.RenderScissor));
+        }
+    }
+
+    internal static void AppendLayerSourceTextContent(
+        D3D12CompositionLayerContent content,
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        DisplayScale scale,
+        IFrameResourceResolver resources,
+        FrameRenderList<D3D12TextRun> texts)
+    {
+        var textPayloads = content.Texts;
+        for (var i = 0; i < textPayloads.Length; i++)
+        {
+            var payload = textPayloads[i];
+            var command = ScaleCommandToPhysicalPixels(new DrawCommand(
+                DrawCommandKind.DrawTextRun,
+                payload.Rect,
+                payload.Color,
+                payload.Resource,
+                payload.Text,
+                payload.ClipBounds), scale);
+            var textClipPlan = ResolveTextClip(clipMode, viewport, command.ClipBounds);
+            if (textClipPlan.Skip || !payload.HasText)
+            {
+                continue;
+            }
+
+            texts.Add(new D3D12TextRun(
+                command.Rect.X,
+                command.Rect.Y,
+                command.Rect.Width,
+                command.Rect.Height,
+                command.Color.R / 255f,
+                command.Color.G / 255f,
+                command.Color.B / 255f,
+                command.Color.A / 255f,
+                payload.Text,
+                payload.Resource,
+                textClipPlan.EffectiveClip,
+                textClipPlan.ClipEnabled,
+                payload.ResolvedStyle,
+                resources));
         }
     }
 

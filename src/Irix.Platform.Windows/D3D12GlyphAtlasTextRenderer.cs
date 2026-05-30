@@ -46,6 +46,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
     private ID3D12PipelineState* _bgraPso;
     private readonly ID3D12Resource*[] _vbufs = new ID3D12Resource*[UploadFrameCount];
     private readonly D3D12_VERTEX_BUFFER_VIEW[] _vbvs = new D3D12_VERTEX_BUFFER_VIEW[UploadFrameCount];
+    private readonly int[] _usedVertices = new int[UploadFrameCount];
     private byte[] _vertexShaderBytecode = [];
     private byte[] _pixelShaderBytecode = [];
     private byte[] _bgraPixelShaderBytecode = [];
@@ -153,6 +154,11 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
     internal bool IsDisabled => _disabled;
     internal DeviceErrorDiagnostic DeviceError => _deviceError;
 
+    internal void BeginFrame(int frameResourceIndex)
+    {
+        _usedVertices[frameResourceIndex % UploadFrameCount] = 0;
+    }
+
     internal GlyphAtlasTextRendererDiagnostics GetDiagnostics()
     {
         var pageUsage = GetAtlasPageUsage();
@@ -257,7 +263,15 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
                 return new GlyphAtlasRecordResult(true, frame.AtlasRunCount, frame.DegradedRunCount);
             }
 
-            UploadVertices(_vertices.AsSpan(0, frame.VertexCount), frameResourceIndex);
+            var baseVertex = AllocateVertexUploadRange(frame.VertexCount, frameResourceIndex);
+            if (baseVertex < 0)
+            {
+                var degradedRunCount = GlyphAtlasTextCompositionHelpers.CountRenderableRuns(textRuns, resources);
+                RecordDegradation(degradedRunCount, GlyphAtlasFallbackReason.VertexLimit);
+                return GlyphAtlasRecordResult.DegradedOnly(degradedRunCount);
+            }
+
+            UploadVertices(_vertices.AsSpan(0, frame.VertexCount), frameResourceIndex, baseVertex);
 
             for (var i = 0; i < _atlasPages.Count; i++)
             {
@@ -268,7 +282,7 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
                 }
             }
 
-            DrawGlyphs(list, frame, viewportWidth, viewportHeight, frameResourceIndex);
+            DrawGlyphs(list, frame, viewportWidth, viewportHeight, frameResourceIndex, baseVertex);
             _diagnostics = _diagnostics
                 .WithDrawnGlyphs(frame.VertexCount / 6)
                 .WithAtlasRuns(frame.AtlasRunCount)

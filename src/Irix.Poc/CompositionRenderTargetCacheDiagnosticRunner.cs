@@ -23,7 +23,7 @@ internal static class CompositionRenderTargetCacheDiagnosticRunner
         var resources = FrameDrawingResources.Rent();
         try
         {
-            var commands = BuildCommands();
+            var commands = BuildCommands(resources);
             resources.Seal();
             var compositionFrame = BuildCompositionFrame();
 
@@ -51,13 +51,25 @@ internal static class CompositionRenderTargetCacheDiagnosticRunner
         }
     }
 
-    internal static DrawCommand[] BuildCommands()
+    internal static DrawCommand[] BuildCommands(FrameDrawingResources resources)
     {
+        var style = resources.AddTextStyle(new TextStyle(
+            TextFontFamily.SegoeUi,
+            18,
+            TextFontWeight.Normal,
+            TextFontStyle.Normal,
+            TextFontStretch.Normal,
+            TextHorizontalAlignment.Leading,
+            TextVerticalAlignment.Top,
+            TextWrapping.NoWrap));
+        var text = resources.AddText("render target text");
+
         return
         [
             new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 640, 360), Color: DrawColor.Opaque(18, 24, 32)),
             new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(44, 52, 180, 76), ClipBounds: new DrawRect(32, 40, 360, 160), Color: DrawColor.Opaque(72, 150, 210)),
-            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(72, 144, 240, 42), ClipBounds: new DrawRect(32, 40, 360, 160), Color: new DrawColor(224, 235, 190, 90))
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(72, 144, 240, 42), ClipBounds: new DrawRect(32, 40, 360, 160), Color: new DrawColor(224, 235, 190, 90)),
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(64, 76, 220, 32), Resource: style, Text: text, ClipBounds: new DrawRect(32, 40, 360, 160), Color: DrawColor.Opaque(245, 248, 255))
         ];
     }
 
@@ -66,7 +78,7 @@ internal static class CompositionRenderTargetCacheDiagnosticRunner
         return new CompositionFrame(new CompositionLayer(
             new CompositionLayerId(21),
             CommandStart: 1,
-            CommandCount: 2,
+            CommandCount: 3,
             new CompositionTransform(28, 18),
             new CompositionOpacity(0.72f),
             CompositionClipMode.Fixed,
