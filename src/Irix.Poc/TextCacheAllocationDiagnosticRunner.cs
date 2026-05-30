@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -109,7 +110,7 @@ internal static class TextCacheAllocationDiagnosticRunner
                 attribution = attribution.AddDiff(afterDiff - beforeDiff);
 
                 var beforeTranslate = GC.GetTotalAllocatedBytes(false);
-                using var batch = translator.Translate(patch, out var translateFrameAttribution);
+                using var batch = translator.TranslateWithAllocationAttribution(patch, out var translateFrameAttribution);
                 var afterTranslate = GC.GetTotalAllocatedBytes(false);
                 attribution = attribution.AddTranslate(afterTranslate - beforeTranslate);
                 translateAttribution = translateAttribution.Add(translateFrameAttribution);
@@ -352,7 +353,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithBuildRoot(AllocatedDelta(measureAllocation, beforeBuildRoot), buildRootAttribution);
 
         var beforeSnapshot = GetAllocatedBytes(measureAllocation);
-        var snapshot = arena.GetOrCreateSnapshot(measureAllocation, out var snapshotAttribution);
+        var snapshot = arena.GetOrCreateSnapshotWithAllocationAttribution(out var snapshotAttribution);
         attribution = attribution.WithSnapshot(AllocatedDelta(measureAllocation, beforeSnapshot), snapshotAttribution);
         return new VirtualNodeTree(root, snapshot);
     }
@@ -644,3 +645,4 @@ internal static class TextCacheAllocationDiagnosticRunner
         public override int GetHashCode() => HashCode.Combine(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyArrayBytes, ButtonNodeBytes, MeasuredBytes);
     }
 }
+#endif

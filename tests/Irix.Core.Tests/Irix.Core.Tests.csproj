@@ -5,6 +5,7 @@
     <TargetFramework>$(IrixWindowsTargetFramework)</TargetFramework>
     <SupportedOSPlatformVersion>$(IrixWindowsSupportedOSPlatformVersion)</SupportedOSPlatformVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IrixDiagnostics>true</IrixDiagnostics>
   </PropertyGroup>
 
   <ItemGroup>
@@ -17,10 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Irix.Core\Irix.Core.csproj" />
-    <ProjectReference Include="..\..\src\Irix.Drawing\Irix.Drawing.csproj" />
-    <ProjectReference Include="..\..\src\Irix.Platform\Irix.Platform.csproj" />
-    <ProjectReference Include="..\..\src\Irix.Poc\Irix.Poc.csproj" />
-    <ProjectReference Include="..\..\src\Irix.Rendering\Irix.Rendering.csproj" />
+    <ProjectReference Include="..\..\src\Irix.Core\Irix.Core.csproj" AdditionalProperties="IrixDiagnostics=true" />
+    <ProjectReference Include="..\..\src\Irix.Drawing\Irix.Drawing.csproj" AdditionalProperties="IrixDiagnostics=true" />
+    <ProjectReference Include="..\..\src\Irix.Platform\Irix.Platform.csproj" AdditionalProperties="IrixDiagnostics=true" />
+    <ProjectReference Include="..\..\src\Irix.Poc\Irix.Poc.csproj" AdditionalProperties="IrixDiagnostics=true" />
+    <ProjectReference Include="..\..\src\Irix.Rendering\Irix.Rendering.csproj" AdditionalProperties="IrixDiagnostics=true" />
   </ItemGroup>
 </Project>

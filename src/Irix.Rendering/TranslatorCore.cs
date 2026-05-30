@@ -3,7 +3,7 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal sealed class TranslatorCore
+internal sealed partial class TranslatorCore
 {
     private readonly RenderPipeline _renderPipeline;
     private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;
@@ -42,26 +42,18 @@ internal sealed class TranslatorCore
 
     public TranslatorOutput BuildOutput(
         in TranslatorInput input,
-        in TranslatorRetainedState retained,
-        bool measureAllocation,
-        out RenderPipelineBuildAllocationAttribution pipelineAttribution)
+        in TranslatorRetainedState retained)
     {
         var textSnapshot = _retainedTree.Tree.TextSnapshot;
-        RenderFrameBatch batch;
-        pipelineAttribution = default;
-        if (_ownerFeed is not null)
-        {
-            batch = _ownerFeed.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot);
-        }
-        else if (measureAllocation)
-        {
-            batch = _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot, out pipelineAttribution);
-        }
-        else
-        {
-            batch = _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot);
-        }
+        var batch = _ownerFeed is not null
+            ? _ownerFeed.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot)
+            : _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot);
 
+        return CreateOutput(in input, batch);
+    }
+
+    private TranslatorOutput CreateOutput(in TranslatorInput input, RenderFrameBatch batch)
+    {
         return new TranslatorOutput(
             batch,
             input.PhysicalViewport,

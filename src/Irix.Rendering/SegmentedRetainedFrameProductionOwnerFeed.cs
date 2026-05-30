@@ -87,8 +87,9 @@ internal readonly struct SegmentedRetainedFrameProductionOwnerFeedResult(
     public static bool operator !=(SegmentedRetainedFrameProductionOwnerFeedResult left, SegmentedRetainedFrameProductionOwnerFeedResult right) => !left.Equals(right);
 }
 
-internal sealed class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline pipeline, RenderPipelineProductionOwnerOptions options = default) : IDisposable
+internal sealed partial class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline pipeline, RenderPipelineProductionOwnerOptions options = default) : IDisposable
 {
+    private readonly RenderPipeline _pipeline = pipeline;
     private readonly RetainedRenderFrameSegmentOwnership? _segmentOwnership = options.EnableSegmentedRetainedFrameRuntimeOwner
         ? new RetainedRenderFrameSegmentOwnership(pipeline.RetainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled)
         : null;
@@ -103,14 +104,14 @@ internal sealed class SegmentedRetainedFrameProductionOwnerFeed(RenderPipeline p
 
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, TextBufferSnapshot textSnapshot, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? prevTextSnapshot = null, VirtualNode previousRoot = default)
     {
-        var batch = pipeline.Build(root, viewportBounds, textSnapshot, dirtyNodes, prevTextSnapshot, previousRoot);
+        var batch = _pipeline.Build(root, viewportBounds, textSnapshot, dirtyNodes, prevTextSnapshot, previousRoot);
         LastResult = UpdateRuntimeOwner(root, viewportBounds, batch);
         return batch;
     }
 
     private SegmentedRetainedFrameProductionOwnerFeedResult UpdateRuntimeOwner(VirtualNode root, PixelRectangle viewportBounds, RenderFrameBatch batch)
     {
-        return _segmentOwnership?.Update(pipeline.LastRetainedInputSnapshot, root, viewportBounds, batch)
+        return _segmentOwnership?.Update(_pipeline.LastRetainedInputSnapshot, root, viewportBounds, batch)
             ?? SegmentedRetainedFrameProductionOwnerFeedResult.Disabled;
     }
 

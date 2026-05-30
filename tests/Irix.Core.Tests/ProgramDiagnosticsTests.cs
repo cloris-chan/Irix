@@ -2557,7 +2557,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
         Assert.Contains("arena.BeginFrame();", source);
-        Assert.Contains("var snapshot = arena.GetOrCreateSnapshot(measureAllocation, out var snapshotAttribution);", source);
+        Assert.Contains("var snapshot = arena.GetOrCreateSnapshotWithAllocationAttribution(out var snapshotAttribution);", source);
         Assert.Contains("return new VirtualNodeTree(root, snapshot);", source);
         Assert.Contains("out var treeFrameAttribution", source);
         Assert.Contains("treeAttribution = treeAttribution.Add(treeFrameAttribution);", source);
@@ -2573,7 +2573,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("attribution = attribution.WithScrollProperty", source);
         Assert.Contains("attribution = attribution.WithChildren", source);
         Assert.Contains("attribution = attribution.WithContainer", source);
-        Assert.Contains("using var batch = translator.Translate(patch, out var translateFrameAttribution);", source);
+        Assert.Contains("using var batch = translator.TranslateWithAllocationAttribution(patch, out var translateFrameAttribution);", source);
         Assert.Contains("output.WriteLine(FormatTreeAllocationAttribution(treeAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatTranslateAllocationAttribution(translateAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatPipelineAllocationAttribution(translateAttribution.PipelineAttribution, frameCount));", source);
@@ -2582,6 +2582,43 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));", source);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
+    }
+
+    [Fact]
+    public void Allocation_attribution_diagnostics_are_optional_compile_items()
+    {
+        var root = FindRepoRoot();
+        var targets = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "Directory.Build.targets")));
+
+        Assert.Contains("<Compile Remove=\"**\\*.optional-diagnostics.cs\" />", targets);
+        Assert.DoesNotContain("<Compile Remove=\"**\\*.diagnostics.cs\" />", targets);
+        Assert.True(File.Exists(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.Diagnostics.cs")));
+
+        var offenders = new List<string>();
+        foreach (var sourcePath in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
+        {
+            var fileName = Path.GetFileName(sourcePath);
+            var isOptionalDiagnostics = fileName.EndsWith(".optional-diagnostics.cs", StringComparison.OrdinalIgnoreCase);
+            if (isOptionalDiagnostics)
+            {
+                var optionalSource = NormalizeLineEndings(File.ReadAllText(sourcePath));
+                Assert.StartsWith("#if IRIX_DIAGNOSTICS", optionalSource, StringComparison.Ordinal);
+                continue;
+            }
+
+            if (fileName.Equals("TextCacheAllocationDiagnosticRunner.cs", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var source = File.ReadAllText(sourcePath);
+            if (source.Contains("AllocationAttribution", StringComparison.Ordinal))
+            {
+                offenders.Add(Path.GetRelativePath(root, sourcePath));
+            }
+        }
+
+        Assert.Empty(offenders);
     }
 
     [Fact]

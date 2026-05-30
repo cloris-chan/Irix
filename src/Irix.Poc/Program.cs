@@ -172,6 +172,7 @@ internal static class Program
             return;
         }
 
+#if IRIX_DIAGNOSTICS
         if (args.Contains("--diagnose-text-cache"))
         {
             var frameCount = 180;
@@ -185,6 +186,7 @@ internal static class Program
                 ParseDiagnosticScale(args));
             return;
         }
+#endif
 
         if (args.Contains("--diagnose-composition-transform"))
         {

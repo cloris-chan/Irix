@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Irix;
 
-public sealed class VirtualTextArena
+public sealed partial class VirtualTextArena
 {
     private readonly List<char> _buffer = [];
     private uint _nextBufferId = 1;
@@ -87,27 +87,6 @@ public sealed class VirtualTextArena
         return _cachedSnapshot ??= new TextBufferSnapshot(CurrentBufferId, [.. _buffer]);
     }
 
-    internal TextBufferSnapshot GetOrCreateSnapshot(bool measureAllocation, out TextBufferSnapshotAllocationAttribution attribution)
-    {
-        attribution = default;
-        if (_cachedSnapshot is { } cached)
-        {
-            return cached;
-        }
-
-        var beforeTotal = GetAllocatedBytes(measureAllocation);
-        var beforeCharBuffer = GetAllocatedBytes(measureAllocation);
-        char[] buffer = [.. _buffer];
-        attribution = attribution.WithCharBuffer(AllocatedDelta(measureAllocation, beforeCharBuffer));
-
-        var beforeSnapshotShell = GetAllocatedBytes(measureAllocation);
-        var snapshot = new TextBufferSnapshot(CurrentBufferId, buffer);
-        _cachedSnapshot = snapshot;
-        attribution = attribution.WithSnapshotShell(AllocatedDelta(measureAllocation, beforeSnapshotShell));
-        attribution = attribution.WithMeasured(AllocatedDelta(measureAllocation, beforeTotal));
-        return snapshot;
-    }
-
     /// <summary>
     /// Begins a new frame: captures the current buffer as <see cref="PreviousSnapshot"/>,
     /// then clears the buffer for fresh text. Call this before <c>BuildView</c>.
@@ -129,47 +108,6 @@ public sealed class VirtualTextArena
         PreviousSnapshot = null;
     }
 
-    private static long GetAllocatedBytes(bool enabled) => enabled ? GC.GetTotalAllocatedBytes(false) : 0;
-
-    private static long AllocatedDelta(bool enabled, long before) => enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
-}
-
-internal readonly struct TextBufferSnapshotAllocationAttribution(
-    long CharBufferBytes,
-    long SnapshotShellBytes,
-    long MeasuredBytes) : IEquatable<TextBufferSnapshotAllocationAttribution>
-{
-    public long CharBufferBytes { get; } = CharBufferBytes;
-    public long SnapshotShellBytes { get; } = SnapshotShellBytes;
-    public long MeasuredBytes { get; } = MeasuredBytes;
-    public long DetailBytes => CharBufferBytes + SnapshotShellBytes;
-    public long DetailGapBytes => MeasuredBytes - DetailBytes;
-
-    public TextBufferSnapshotAllocationAttribution Add(TextBufferSnapshotAllocationAttribution other) =>
-        new(
-            CharBufferBytes + other.CharBufferBytes,
-            SnapshotShellBytes + other.SnapshotShellBytes,
-            MeasuredBytes + other.MeasuredBytes);
-
-    public TextBufferSnapshotAllocationAttribution WithCharBuffer(long bytes) =>
-        new(CharBufferBytes + bytes, SnapshotShellBytes, MeasuredBytes);
-
-    public TextBufferSnapshotAllocationAttribution WithSnapshotShell(long bytes) =>
-        new(CharBufferBytes, SnapshotShellBytes + bytes, MeasuredBytes);
-
-    public TextBufferSnapshotAllocationAttribution WithMeasured(long bytes) =>
-        new(CharBufferBytes, SnapshotShellBytes, MeasuredBytes + bytes);
-
-    public bool Equals(TextBufferSnapshotAllocationAttribution other)
-    {
-        return CharBufferBytes == other.CharBufferBytes
-            && SnapshotShellBytes == other.SnapshotShellBytes
-            && MeasuredBytes == other.MeasuredBytes;
-    }
-
-    public override bool Equals(object? obj) => obj is TextBufferSnapshotAllocationAttribution other && Equals(other);
-
-    public override int GetHashCode() => HashCode.Combine(CharBufferBytes, SnapshotShellBytes, MeasuredBytes);
 }
 
 public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) : IEquatable<TextBufferSnapshot>

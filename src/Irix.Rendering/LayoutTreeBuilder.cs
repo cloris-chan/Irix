@@ -32,7 +32,7 @@ internal ref struct LayoutContext
     }
 }
 
-internal sealed class LayoutTreeBuilder(LayoutStyle style)
+internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 {
     private static readonly (int Start, int Count)[] EmptyDirtyElementRanges = Array.Empty<(int Start, int Count)>();
     private static readonly ScrollContainerDiag[] EmptyScrollDiagnostics = Array.Empty<ScrollContainerDiag>();
@@ -56,17 +56,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
     /// </summary>
     public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
-        return BuildLayoutTreeCore(root, viewportBounds, dirtyNodes, measureAllocation: false, out _);
+        return BuildLayoutTreeCore(root, viewportBounds, dirtyNodes);
     }
 
-    internal LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes, out LayoutBuildAllocationAttribution attribution)
+    private LayoutTreeResult BuildLayoutTreeCore(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes)
     {
-        return BuildLayoutTreeCore(root, viewportBounds, dirtyNodes, measureAllocation: true, out attribution);
-    }
-
-    private LayoutTreeResult BuildLayoutTreeCore(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes, bool measureAllocation, out LayoutBuildAllocationAttribution attribution)
-    {
-        attribution = default;
+        OnLayoutAllocationStarted();
         var scratch = new RenderScratchBuffer();
         Span<LayoutElement> elementStorage = stackalloc LayoutElement[InlineLayoutElementCapacity];
         Span<LayoutTreeNode> treeNodeStorage = stackalloc LayoutTreeNode[InlineLayoutTreeNodeCapacity];
@@ -80,31 +75,31 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
             style);
         try
         {
-            var beforeNodeWalk = GetAllocatedBytes(measureAllocation);
+            OnLayoutAllocationPhaseStarted();
             state.LayoutRoot(root, viewportBounds);
-            attribution = attribution.WithNodeWalk(AllocatedDelta(measureAllocation, beforeNodeWalk));
+            OnLayoutNodeWalkAllocated();
 
-            var beforeDirtyRanges = GetAllocatedBytes(measureAllocation);
+            OnLayoutAllocationPhaseStarted();
             var dirtyRanges = dirtyNodes is { Count: > 0 }
                 ? CollectDirtyRanges(state.ElementRanges, dirtyNodes, scratch)
                 : EmptyDirtyElementRanges;
-            attribution = attribution.WithDirtyRanges(AllocatedDelta(measureAllocation, beforeDirtyRanges));
+            OnLayoutDirtyRangesAllocated();
 
-            var beforeElementsArray = GetAllocatedBytes(measureAllocation);
+            OnLayoutAllocationPhaseStarted();
             var elements = state.ElementsToArray();
-            attribution = attribution.WithElementArray(AllocatedDelta(measureAllocation, beforeElementsArray));
+            OnLayoutElementArrayAllocated();
 
-            var beforeTreeNodesArray = GetAllocatedBytes(measureAllocation);
+            OnLayoutAllocationPhaseStarted();
             var treeNodes = state.TreeNodesToArray();
-            attribution = attribution.WithTreeNodeArray(AllocatedDelta(measureAllocation, beforeTreeNodesArray));
+            OnLayoutTreeNodeArrayAllocated();
 
-            var beforeScrollDiagnosticsArray = GetAllocatedBytes(measureAllocation);
+            OnLayoutAllocationPhaseStarted();
             var scrollDiagnostics = state.ScrollDiagnosticsToArray();
-            attribution = attribution.WithScrollDiagnosticsArray(AllocatedDelta(measureAllocation, beforeScrollDiagnosticsArray));
+            OnLayoutScrollObservationsArrayAllocated();
 
-            var beforeResult = GetAllocatedBytes(measureAllocation);
+            OnLayoutAllocationPhaseStarted();
             var result = new LayoutTreeResult(elements, treeNodes, dirtyRanges, scrollDiagnostics);
-            attribution = attribution.WithResult(AllocatedDelta(measureAllocation, beforeResult));
+            OnLayoutResultAllocated();
             return result;
         }
         finally
@@ -555,59 +550,12 @@ internal sealed class LayoutTreeBuilder(LayoutStyle style)
         return new PixelRectangle(x, y, width, height);
     }
 
-    private static long GetAllocatedBytes(bool enabled) => enabled ? GC.GetTotalAllocatedBytes(false) : 0;
-
-    private static long AllocatedDelta(bool enabled, long before) => enabled ? GC.GetTotalAllocatedBytes(false) - before : 0;
-}
-
-internal readonly struct LayoutBuildAllocationAttribution(
-    long NodeWalkBytes,
-    long DirtyRangeBytes,
-    long ElementArrayBytes,
-    long TreeNodeArrayBytes,
-    long ScrollDiagnosticsArrayBytes,
-    long ResultBytes) : IEquatable<LayoutBuildAllocationAttribution>
-{
-    public long NodeWalkBytes { get; } = NodeWalkBytes;
-    public long DirtyRangeBytes { get; } = DirtyRangeBytes;
-    public long ElementArrayBytes { get; } = ElementArrayBytes;
-    public long TreeNodeArrayBytes { get; } = TreeNodeArrayBytes;
-    public long ScrollDiagnosticsArrayBytes { get; } = ScrollDiagnosticsArrayBytes;
-    public long ResultBytes { get; } = ResultBytes;
-    public long TotalBytes => NodeWalkBytes + DirtyRangeBytes + ElementArrayBytes + TreeNodeArrayBytes + ScrollDiagnosticsArrayBytes + ResultBytes;
-
-    public LayoutBuildAllocationAttribution Add(LayoutBuildAllocationAttribution other) =>
-        new(
-            NodeWalkBytes + other.NodeWalkBytes,
-            DirtyRangeBytes + other.DirtyRangeBytes,
-            ElementArrayBytes + other.ElementArrayBytes,
-            TreeNodeArrayBytes + other.TreeNodeArrayBytes,
-            ScrollDiagnosticsArrayBytes + other.ScrollDiagnosticsArrayBytes,
-            ResultBytes + other.ResultBytes);
-
-    public LayoutBuildAllocationAttribution WithNodeWalk(long bytes) => new(NodeWalkBytes + bytes, DirtyRangeBytes, ElementArrayBytes, TreeNodeArrayBytes, ScrollDiagnosticsArrayBytes, ResultBytes);
-
-    public LayoutBuildAllocationAttribution WithDirtyRanges(long bytes) => new(NodeWalkBytes, DirtyRangeBytes + bytes, ElementArrayBytes, TreeNodeArrayBytes, ScrollDiagnosticsArrayBytes, ResultBytes);
-
-    public LayoutBuildAllocationAttribution WithElementArray(long bytes) => new(NodeWalkBytes, DirtyRangeBytes, ElementArrayBytes + bytes, TreeNodeArrayBytes, ScrollDiagnosticsArrayBytes, ResultBytes);
-
-    public LayoutBuildAllocationAttribution WithTreeNodeArray(long bytes) => new(NodeWalkBytes, DirtyRangeBytes, ElementArrayBytes, TreeNodeArrayBytes + bytes, ScrollDiagnosticsArrayBytes, ResultBytes);
-
-    public LayoutBuildAllocationAttribution WithScrollDiagnosticsArray(long bytes) => new(NodeWalkBytes, DirtyRangeBytes, ElementArrayBytes, TreeNodeArrayBytes, ScrollDiagnosticsArrayBytes + bytes, ResultBytes);
-
-    public LayoutBuildAllocationAttribution WithResult(long bytes) => new(NodeWalkBytes, DirtyRangeBytes, ElementArrayBytes, TreeNodeArrayBytes, ScrollDiagnosticsArrayBytes, ResultBytes + bytes);
-
-    public bool Equals(LayoutBuildAllocationAttribution other)
-    {
-        return NodeWalkBytes == other.NodeWalkBytes
-            && DirtyRangeBytes == other.DirtyRangeBytes
-            && ElementArrayBytes == other.ElementArrayBytes
-            && TreeNodeArrayBytes == other.TreeNodeArrayBytes
-            && ScrollDiagnosticsArrayBytes == other.ScrollDiagnosticsArrayBytes
-            && ResultBytes == other.ResultBytes;
-    }
-
-    public override bool Equals(object? obj) => obj is LayoutBuildAllocationAttribution other && Equals(other);
-
-    public override int GetHashCode() => HashCode.Combine(NodeWalkBytes, DirtyRangeBytes, ElementArrayBytes, TreeNodeArrayBytes, ScrollDiagnosticsArrayBytes, ResultBytes);
+    partial void OnLayoutAllocationStarted();
+    partial void OnLayoutAllocationPhaseStarted();
+    partial void OnLayoutNodeWalkAllocated();
+    partial void OnLayoutDirtyRangesAllocated();
+    partial void OnLayoutElementArrayAllocated();
+    partial void OnLayoutTreeNodeArrayAllocated();
+    partial void OnLayoutScrollObservationsArrayAllocated();
+    partial void OnLayoutResultAllocated();
 }

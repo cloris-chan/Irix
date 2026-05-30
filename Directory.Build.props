@@ -8,5 +8,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <IsAotCompatible>true</IsAotCompatible>
+    <IrixDiagnostics Condition="'$(IrixDiagnostics)' == ''">false</IrixDiagnostics>
   </PropertyGroup>
 </Project>

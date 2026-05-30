@@ -4,6 +4,14 @@
     <Error Condition="'$(SupportedOSPlatformVersion)' != '$(IrixWindowsSupportedOSPlatformVersion)'" Text="Windows-targeted projects must use SupportedOSPlatformVersion=$(IrixWindowsSupportedOSPlatformVersion) from Directory.Build.props. Project $(MSBuildProjectName) has SupportedOSPlatformVersion=$(SupportedOSPlatformVersion)." />
   </Target>
 
+  <PropertyGroup Condition="'$(IrixDiagnostics)' == 'true'">
+    <DefineConstants>$(DefineConstants);IRIX_DIAGNOSTICS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IrixDiagnostics)' != 'true'">
+    <Compile Remove="**\*.optional-diagnostics.cs" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
     <Compile Include="$(MSBuildThisFileDirectory)RepositoryInternalsVisibleTo.cs"
              Link="Generated\RepositoryInternalsVisibleTo.g.cs" />
