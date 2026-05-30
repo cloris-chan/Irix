@@ -1960,6 +1960,22 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void D3D12_composition_layer_cache_spike_has_cli_and_machine_readable_fields()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition-Spike-v0.md")));
+
+        var diagnostics = CompositionLayerCacheDiagnosticRunner.RunCore();
+
+        Assert.Contains("--diagnose-composition-layer-cache", programSource);
+        Assert.Contains("CompositionLayerCacheDiagnosticRunner.Run", programSource);
+        Assert.Contains("layer content cache", design);
+        Assert.Equal("composition-layer-cache.first finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 cacheHits=0 cacheMisses=1 cachedCommands=2 translatedCommands=2 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatFirst(diagnostics.First));
+        Assert.Equal("composition-layer-cache.second finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 cacheHits=1 cacheMisses=0 cachedCommands=2 translatedCommands=2 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatSecond(diagnostics.Second));
+    }
+
+    [Fact]
     public async Task Composition_marker_runtime_diagnostic_maps_marker_event_to_counter_message()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

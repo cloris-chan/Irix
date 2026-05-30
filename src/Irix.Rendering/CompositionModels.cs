@@ -1038,6 +1038,7 @@ internal enum CompositionBackendCapabilities : byte
     Opacity = 2,
     FixedClip = 4,
     MultiLayer = 8,
+    LayerContentCache = 16,
     TransformOpacity = Transform | Opacity,
     ScrollPresentation = Transform | FixedClip
 }
@@ -1047,13 +1048,19 @@ internal readonly struct CompositionBackendExecutionResult(
     int LayerCount,
     int CommandCount,
     int TranslatedCommands,
-    int OpacityAppliedCommands) : IEquatable<CompositionBackendExecutionResult>
+    int OpacityAppliedCommands,
+    int LayerCacheHits = 0,
+    int LayerCacheMisses = 0,
+    int CachedLayerCommands = 0) : IEquatable<CompositionBackendExecutionResult>
 {
     public bool D3D12Backed { get; } = D3D12Backed;
     public int LayerCount { get; } = LayerCount;
     public int CommandCount { get; } = CommandCount;
     public int TranslatedCommands { get; } = TranslatedCommands;
     public int OpacityAppliedCommands { get; } = OpacityAppliedCommands;
+    public int LayerCacheHits { get; } = LayerCacheHits;
+    public int LayerCacheMisses { get; } = LayerCacheMisses;
+    public int CachedLayerCommands { get; } = CachedLayerCommands;
 
     public bool Equals(CompositionBackendExecutionResult other)
     {
@@ -1061,12 +1068,15 @@ internal readonly struct CompositionBackendExecutionResult(
             && LayerCount == other.LayerCount
             && CommandCount == other.CommandCount
             && TranslatedCommands == other.TranslatedCommands
-            && OpacityAppliedCommands == other.OpacityAppliedCommands;
+            && OpacityAppliedCommands == other.OpacityAppliedCommands
+            && LayerCacheHits == other.LayerCacheHits
+            && LayerCacheMisses == other.LayerCacheMisses
+            && CachedLayerCommands == other.CachedLayerCommands;
     }
 
     public override bool Equals(object? obj) => obj is CompositionBackendExecutionResult other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(D3D12Backed, LayerCount, CommandCount, TranslatedCommands, OpacityAppliedCommands);
+    public override int GetHashCode() => HashCode.Combine(D3D12Backed, LayerCount, CommandCount, TranslatedCommands, OpacityAppliedCommands, LayerCacheHits, LayerCacheMisses, CachedLayerCommands);
 
     public static bool operator ==(CompositionBackendExecutionResult left, CompositionBackendExecutionResult right) => left.Equals(right);
 

@@ -129,11 +129,12 @@ Preferred GPU offload order:
 2. Compositor-aware hit-test remapping.
 3. Presented scroll offset under a fixed layer clip.
 4. Multi-layer composition for nested/mixed clips.
-5. Layer content caching / render target reuse.
-6. Backend-side batching and persistent upload rings.
-7. GPU culling/compaction for large retained scenes.
-8. Indirect draw and descriptor-indexed resource tables.
-9. Effects/material graph after style/material contracts exist.
+5. Layer content payload caching.
+6. Render-target-backed layer reuse.
+7. Backend-side batching and persistent upload rings.
+8. GPU culling/compaction for large retained scenes.
+9. Indirect draw and descriptor-indexed resource tables.
+10. Effects/material graph after style/material contracts exist.
 
 Do not implement Vulkan/Metal or advanced GPU paths until the platform-neutral composition contract is stable.
 
