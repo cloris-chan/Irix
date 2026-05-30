@@ -94,6 +94,61 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task TryGetActionIdAtLogicalPixel_returns_topmost_hit_target_by_paint_order()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow();
+        var backend = new PoCDrawingBackend(window);
+        var compositor = new DrawingBackendCompositor(backend);
+        var bounds = new PixelRectangle(16, 120, 140, 40);
+
+        using var frame = new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(16, 120, 140, 40)),
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(16, 120, 140, 40))
+            ]), 2),
+            [
+                new HitTestTarget(bounds, new ActionId(100), default, 0, 1),
+                new HitTestTarget(bounds, new ActionId(200), default, 1, 1)
+            ]);
+
+        await compositor.RenderAsync(frame, cancellationToken);
+
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(24, 128, out var actionId));
+        Assert.Equal(new ActionId(200), actionId);
+    }
+
+    [Fact]
+    public void CompositorHitTestSnapshot_returns_local_coordinates_after_composition_transform()
+    {
+        var hitTargets = new[]
+        {
+            new HitTestTarget(
+                new PixelRectangle(16, 20, 140, 40),
+                new ActionId(100),
+                default,
+                0,
+                1)
+        };
+        var layer = new CompositionLayer(
+            new CompositionLayerId(1),
+            0,
+            1,
+            new CompositionTransform(20, 8),
+            CompositionOpacity.Opaque);
+        var snapshot = CompositorHitTestSnapshot.Create(hitTargets, 1, new CompositionFrame(layer));
+
+        Assert.True(snapshot.TryHitTestLogicalPixel(36, 28, out var result));
+        Assert.Equal(new ActionId(100), result.ActionId);
+        Assert.Equal(16f, result.LocalX);
+        Assert.Equal(20f, result.LocalY);
+        Assert.Equal(new CompositionLayerId(1), result.LayerId);
+        Assert.True(result.MappedThroughComposition);
+        Assert.False(snapshot.TryHitTestLogicalPixel(16, 20, out _));
+    }
+
+    [Fact]
     public async Task TryGetActionIdAtPhysicalPixel_maps_physical_input_to_logical_hit_targets()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

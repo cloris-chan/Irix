@@ -22,6 +22,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     private readonly RetainedRenderFrame _retainedFrame = new();
     private RetainedRenderFrameHandoffHarness? _handoffCandidateHarness;
     private HitTestTarget[] _hitTargets = [];
+    private CompositorHitTestSnapshot _hitTestSnapshot;
     private ulong _lastAppliedFrameId;
     private long _renderCount;
     private long _partialApplyCount;
@@ -429,10 +430,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             RecordRenderedApply(LastPartialApplySucceeded);
             RecordFrameTime(sw);
 
-            lock (_hitTargetsLock)
-            {
-                _hitTargets = [.. _retainedFrame.HitTargets];
-            }
+            PublishHitTargets([.. _retainedFrame.HitTargets]);
 
             return ValueTask.CompletedTask;
         }
@@ -444,10 +442,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             RecordRenderedApply(LastPartialApplySucceeded);
             RecordFrameTime(sw);
 
-            lock (_hitTargetsLock)
-            {
-                _hitTargets = ownership!.RuntimeOwner!.HitTargets.ToArray();
-            }
+            PublishHitTargets(ownership!.RuntimeOwner!.HitTargets.ToArray());
 
             return ValueTask.CompletedTask;
         }
@@ -485,10 +480,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
 
         RecordFrameTime(sw);
 
-        lock (_hitTargetsLock)
-        {
-            _hitTargets = [.. _retainedFrame.HitTargets];
-        }
+        PublishHitTargets([.. _retainedFrame.HitTargets]);
         return ValueTask.CompletedTask;
     }
 
@@ -532,10 +524,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             : stage.HandoffSelection.Result;
         LastPartialApplySucceeded = stage.RetainedPartialApplySucceeded;
 
-        lock (_hitTargetsLock)
-        {
-            _hitTargets = [.. _retainedFrame.HitTargets];
-        }
+        PublishHitTargets([.. _retainedFrame.HitTargets]);
 
         return ValueTask.CompletedTask;
     }
@@ -546,10 +535,7 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     {
         if (renderFrameBatch.Commands.Count == 0)
         {
-            lock (_hitTargetsLock)
-            {
-                _hitTargets = [];
-            }
+            PublishHitTargets([]);
 
             Interlocked.Increment(ref _emptyFrameCount);
             _retainedFrame.ReleaseResources();
@@ -1144,44 +1130,13 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     /// </summary>
     internal bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
-        var activeFrame = GetActiveCompositionFrame();
+        CompositorHitTestSnapshot snapshot;
         lock (_hitTargetsLock)
         {
-            foreach (var hitTarget in _hitTargets)
-            {
-                if (!TryMapCompositionHitTarget(hitTarget, activeFrame, x, y, out var targetX, out var targetY, out var mappedThroughFixedClip))
-                {
-                    continue;
-                }
-
-                if (targetX < hitTarget.Bounds.X
-                    || targetY < hitTarget.Bounds.Y
-                    || targetX >= hitTarget.Bounds.X + hitTarget.Bounds.Width
-                    || targetY >= hitTarget.Bounds.Y + hitTarget.Bounds.Height)
-                {
-                    continue;
-                }
-
-                if (hitTarget.ClipBounds.Width > 0 && hitTarget.ClipBounds.Height > 0)
-                {
-                    var clipX = mappedThroughFixedClip ? x : targetX;
-                    var clipY = mappedThroughFixedClip ? y : targetY;
-                    if (clipX < hitTarget.ClipBounds.X
-                        || clipY < hitTarget.ClipBounds.Y
-                        || clipX >= hitTarget.ClipBounds.X + hitTarget.ClipBounds.Width
-                        || clipY >= hitTarget.ClipBounds.Y + hitTarget.ClipBounds.Height)
-                    {
-                        continue;
-                    }
-                }
-
-                actionId = hitTarget.ActionId;
-                return true;
-            }
+            snapshot = _hitTestSnapshot;
         }
 
-        actionId = ActionId.None;
-        return false;
+        return snapshot.TryGetActionIdAtLogicalPixel(x, y, out actionId);
     }
 
     private CompositionFrame GetActiveCompositionFrame()
@@ -1192,64 +1147,28 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         }
     }
 
-    private bool TryMapCompositionHitTarget(
-        in HitTestTarget hitTarget,
-        in CompositionFrame compositionFrame,
-        int x,
-        int y,
-        out float targetX,
-        out float targetY,
-        out bool mappedThroughFixedClip)
+    private void PublishHitTargets(HitTestTarget[] hitTargets)
     {
-        targetX = x;
-        targetY = y;
-        mappedThroughFixedClip = false;
-
-        var layerCount = compositionFrame.LayerCount;
-        if (layerCount == 0)
+        var activeFrame = GetActiveCompositionFrame();
+        lock (_hitTargetsLock)
         {
-            return true;
+            _hitTargets = hitTargets;
+            _hitTestSnapshot = CompositorHitTestSnapshot.Create(
+                _hitTargets,
+                _retainedFrame.CommandCount,
+                activeFrame);
         }
-
-        var commandCount = _retainedFrame.CommandCount;
-        for (var i = layerCount - 1; i >= 0; i--)
-        {
-            var layer = compositionFrame.GetLayer(i);
-            if (!layer.IsValidForCommandCount(commandCount) || !IsHitTargetInLayer(hitTarget, layer))
-            {
-                continue;
-            }
-
-            if (layer.HasFixedClip)
-            {
-                if (!Contains(layer.ClipBounds, targetX, targetY))
-                {
-                    return false;
-                }
-
-                mappedThroughFixedClip = true;
-            }
-
-            targetX -= layer.Transform.TranslateX;
-            targetY -= layer.Transform.TranslateY;
-        }
-
-        return true;
     }
 
-    private static bool IsHitTargetInLayer(in HitTestTarget hitTarget, in CompositionLayer layer)
+    private void RefreshHitTestSnapshot(in CompositionFrame compositionFrame)
     {
-        var layerEnd = layer.CommandStart + layer.CommandCount;
-        var hitTargetEnd = hitTarget.CommandStart + hitTarget.CommandCount;
-        return hitTarget.HasCommandRange && hitTarget.CommandStart >= layer.CommandStart && hitTargetEnd <= layerEnd;
-    }
-
-    private static bool Contains(in DrawRect bounds, float x, float y)
-    {
-        return x >= bounds.X
-            && y >= bounds.Y
-            && x < bounds.X + bounds.Width
-            && y < bounds.Y + bounds.Height;
+        lock (_hitTargetsLock)
+        {
+            _hitTestSnapshot = CompositorHitTestSnapshot.Create(
+                _hitTargets,
+                _retainedFrame.CommandCount,
+                compositionFrame);
+        }
     }
 
     private static CompositionAnimationMarkerPlaybackState[] CreateMarkerPlaybackStates(ReadOnlySpan<CompositionAnimationMarker> markers)
@@ -1277,6 +1196,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _lastCompositionFrame = frame;
             _lastCompositionExecutionResult = result;
         }
+
+        RefreshHitTestSnapshot(frame);
     }
 
     private void ClearCompositionPresentationState()
@@ -1286,6 +1207,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             _lastCompositionFrame = default;
             _lastCompositionExecutionResult = default;
         }
+
+        RefreshHitTestSnapshot(default);
 
         _hasLastCompositionAnimationSample = false;
         _hasLastCompositionScrollSample = false;
