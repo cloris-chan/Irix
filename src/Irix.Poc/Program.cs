@@ -5,230 +5,14 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal static class Program
+internal static partial class Program
 {
     public static async Task Main(string[] args)
     {
-        if (args.Contains("--diagnose"))
+        var diagnosticTask = TryCreateDiagnosticCliTask(args);
+        if (diagnosticTask is not null)
         {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            FullDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
-            return;
-        }
-
-        if (args.Contains("--diagnose-resize"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            ResizeDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                ParseTextCompositionMode(args),
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-scroll"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            await ScrollDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out, Path.Combine("TestResults", "diagnose-scroll.txt"));
-            return;
-        }
-
-        if (args.Contains("--diagnose-scroll-presentation-policy"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            ScrollPresentationPolicyDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
-            return;
-        }
-
-        if (args.Contains("--diagnose-scroll-presentation-runtime"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            await ScrollPresentationRuntimeDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out);
-            return;
-        }
-
-        if (args.Contains("--diagnose-input"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            await InputDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out, Path.Combine("TestResults", "diagnose-input.txt"));
-            return;
-        }
-
-        if (args.Contains("--diagnose-sync"))
-        {
-            var syncFrameCount = 300;
-            var syncFrameArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(1).FirstOrDefault();
-            if (int.TryParse(syncFrameArg, out var n) && n > 0) syncFrameCount = n;
-            var syncSampleCount = 1;
-            var syncSampleArg = args.SkipWhile(a => a != "--diagnose-sync").Skip(2).FirstOrDefault();
-            if (int.TryParse(syncSampleArg, out var sampleCount) && sampleCount > 0) syncSampleCount = sampleCount;
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            SyncDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                syncFrameCount,
-                syncSampleCount,
-                ParseTextCompositionMode(args),
-                args.Contains("--diagnose-sync-non-ascii"));
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-mixed-fallback"))
-        {
-            var frameCount = 30;
-            var frameArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-mixed-fallback").Skip(1).FirstOrDefault();
-            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasMixedFallbackDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                frameCount,
-                ParseTextCompositionMode(args),
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-wrap"))
-        {
-            var frameCount = 30;
-            var frameArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-wrap").Skip(1).FirstOrDefault();
-            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasWrapDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                frameCount,
-                ParseTextCompositionMode(args),
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-matrix"))
-        {
-            var frameCount = 3;
-            var frameArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-matrix").Skip(1).FirstOrDefault();
-            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasRegressionMatrixDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                frameCount,
-                ParseTextCompositionMode(args),
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-color-formats"))
-        {
-            var pixelsPerEm = 64u;
-            var pixelsPerEmArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-color-formats").Skip(1).FirstOrDefault();
-            if (uint.TryParse(pixelsPerEmArg, out var n) && n > 0) pixelsPerEm = n;
-            var familyName = args.SkipWhile(a => a != "--diagnose-color-glyph-family").Skip(1).FirstOrDefault();
-            var fontFilePath = args.SkipWhile(a => a != "--diagnose-color-glyph-font-file").Skip(1).FirstOrDefault();
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasColorFormatDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                string.IsNullOrWhiteSpace(familyName) ? "Segoe UI Emoji" : familyName,
-                pixelsPerEm,
-                fontFilePath);
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-bidi-oracle"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasBidiOracleDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-glyph-oracle"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasGlyphOracleDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-stress"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasStressDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                args.Contains("--mixed-fallback"),
-                args.Contains("--reuse-page"));
-            return;
-        }
-
-        if (args.Contains("--diagnose-glyph-atlas-soak"))
-        {
-            var frameCount = 60;
-            var frameArg = args.SkipWhile(a => a != "--diagnose-glyph-atlas-soak").Skip(1).FirstOrDefault();
-            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
-            var pressureEvery = 6;
-            var pressureArg = args.SkipWhile(a => a != "--pressure-every").Skip(1).FirstOrDefault();
-            if (int.TryParse(pressureArg, out var cadence) && cadence > 0) pressureEvery = cadence;
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            GlyphAtlasSoakDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                frameCount,
-                pressureEvery,
-                ParseTextCompositionMode(args),
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-#if IRIX_DIAGNOSTICS
-        if (args.Contains("--diagnose-text-cache"))
-        {
-            var frameCount = 180;
-            var frameArg = args.SkipWhile(a => a != "--diagnose-text-cache").Skip(1).FirstOrDefault();
-            if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            TextCacheAllocationDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                frameCount,
-                ParseTextCompositionMode(args),
-                ParseDiagnosticScale(args));
-            return;
-        }
-#endif
-
-        if (args.Contains("--diagnose-composition-transform"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            CompositionTransformDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-composition-scroll"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            CompositionScrollDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-composition-multilayer"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            CompositionMultiLayerDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-composition-layer-cache"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            CompositionLayerCacheDiagnosticRunner.Run(
-                diagnosticOutput ?? Console.Out,
-                ParseDiagnosticScale(args));
-            return;
-        }
-
-        if (args.Contains("--diagnose-composition-marker-runtime"))
-        {
-            using var diagnosticOutput = TryCreateDiagnosticOutput(args);
-            await CompositionMarkerRuntimeDiagnosticRunner.RunAsync(
-                diagnosticOutput ?? Console.Out);
+            await diagnosticTask;
             return;
         }
 
@@ -487,6 +271,15 @@ internal static class Program
         var y = bounds.Y + Math.Max((bounds.Height - windowHeight) / 2, 0);
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
     }
+
+    private static Task? TryCreateDiagnosticCliTask(string[] args)
+    {
+        Task? task = null;
+        CreateDiagnosticCliTask(args, ref task);
+        return task;
+    }
+
+    static partial void CreateDiagnosticCliTask(string[] args, ref Task? task);
 
     private static StreamWriter? TryCreateDiagnosticOutput(string[] args)
     {

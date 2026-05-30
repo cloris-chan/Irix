@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
@@ -170,3 +171,4 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
 
     public static bool operator !=(ScrollPresentationRuntimeDiagnostics left, ScrollPresentationRuntimeDiagnostics right) => !left.Equals(right);
 }
+#endif

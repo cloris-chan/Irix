@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -523,3 +524,4 @@ internal readonly struct GlyphAtlasDegradationContract(
 
     public static bool operator !=(GlyphAtlasDegradationContract left, GlyphAtlasDegradationContract right) => !left.Equals(right);
 }
+#endif

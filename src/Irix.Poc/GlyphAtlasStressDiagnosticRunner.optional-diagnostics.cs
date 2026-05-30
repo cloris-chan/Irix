@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -212,3 +213,4 @@ internal static class GlyphAtlasStressDiagnosticRunner
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
     }
 }
+#endif

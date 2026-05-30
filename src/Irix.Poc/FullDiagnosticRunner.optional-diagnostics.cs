@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -219,3 +220,4 @@ internal static class FullDiagnosticRunner
         };
     }
 }
+#endif

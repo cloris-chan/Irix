@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 namespace Irix.Poc;
 
 internal static class ScrollPresentationPolicyDiagnosticRunner
@@ -85,3 +86,4 @@ internal readonly struct ScrollPresentationPolicyDiagnostics(
 
     public static bool operator !=(ScrollPresentationPolicyDiagnostics left, ScrollPresentationPolicyDiagnostics right) => !left.Equals(right);
 }
+#endif

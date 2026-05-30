@@ -1272,7 +1272,7 @@ public class TypedIdAllocationGuardTests
     public void Input_diagnostics_snapshot_uses_typed_events_not_string_lines()
     {
         var snapshotSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "DiagnosticsSnapshots.cs"));
-        var runnerSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "InputDiagnosticRunner.cs"));
+        var runnerSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "InputDiagnosticRunner.optional-diagnostics.cs"));
 
         Assert.Contains("IReadOnlyList<InputDiagnosticButtonState> ButtonStates", snapshotSource);
         Assert.Contains("IReadOnlyList<InputDiagnosticOwnershipStep> OwnershipSteps", snapshotSource);

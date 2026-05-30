@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -400,3 +401,4 @@ internal readonly struct GlyphAtlasSoakSummary(
 
     public static bool operator !=(GlyphAtlasSoakSummary left, GlyphAtlasSoakSummary right) => !left.Equals(right);
 }
+#endif

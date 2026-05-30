@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -302,3 +303,4 @@ internal readonly struct GlyphAtlasMixedFallbackSceneSummary(
 
     public static bool operator !=(GlyphAtlasMixedFallbackSceneSummary left, GlyphAtlasMixedFallbackSceneSummary right) => !left.Equals(right);
 }
+#endif

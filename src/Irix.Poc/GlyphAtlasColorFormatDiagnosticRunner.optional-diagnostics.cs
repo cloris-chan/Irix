@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using System.Text;
 using Irix.Platform.Windows;
 
@@ -144,3 +145,4 @@ internal static class GlyphAtlasColorFormatDiagnosticRunner
         builder.Append(label);
     }
 }
+#endif

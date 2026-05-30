@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using System.Runtime.InteropServices;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -905,3 +906,4 @@ internal readonly struct ColorGlyphFormatDiagnosticSnapshot(
 
     public static bool operator !=(ColorGlyphFormatDiagnosticSnapshot left, ColorGlyphFormatDiagnosticSnapshot right) => !left.Equals(right);
 }
+#endif

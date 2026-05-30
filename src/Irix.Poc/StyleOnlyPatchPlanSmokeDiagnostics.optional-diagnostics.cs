@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Platform;
 using Irix.Rendering;
 
@@ -79,3 +80,4 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
             pipeline.LastDirtyElementRanges);
     }
 }
+#endif

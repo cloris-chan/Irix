@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Numerics;
@@ -930,3 +931,4 @@ internal readonly struct GlyphOracleDiagnosticSnapshot(
 
     public static bool operator !=(GlyphOracleDiagnosticSnapshot left, GlyphOracleDiagnosticSnapshot right) => !left.Equals(right);
 }
+#endif

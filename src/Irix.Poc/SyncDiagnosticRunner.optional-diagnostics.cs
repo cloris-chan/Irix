@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Platform;
 using Irix.Platform.Windows;
 using Irix.Rendering;
@@ -211,3 +212,4 @@ internal static class SyncDiagnosticRunner
         return new ScreenRegion(screen.Id, new PixelRectangle(x, y, windowWidth, windowHeight));
     }
 }
+#endif

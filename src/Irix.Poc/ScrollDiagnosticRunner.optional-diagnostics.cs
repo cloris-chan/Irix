@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 namespace Irix.Poc;
 
 internal static class ScrollDiagnosticRunner
@@ -75,3 +76,4 @@ internal static class ScrollDiagnosticRunner
         }
     }
 }
+#endif

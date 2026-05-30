@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -84,3 +85,4 @@ internal readonly struct CompositionLayerCacheDiagnostics(
     public D3D12CompositionExecuteDiagnostics First { get; } = First;
     public D3D12CompositionExecuteDiagnostics Second { get; } = Second;
 }
+#endif

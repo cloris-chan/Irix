@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Platform;
 using Irix.Rendering;
 
@@ -228,3 +229,4 @@ internal static class InputDiagnosticRunner
         };
     }
 }
+#endif

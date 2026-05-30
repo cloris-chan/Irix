@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Rendering;
@@ -149,3 +150,4 @@ internal readonly struct CompositionMarkerRuntimeDiagnostics(
 
     public override int GetHashCode() => HashCode.Combine(DrainedEvents, DispatchedMessages, UnmappedEvents, FinalCount, ExecuteCompositionCount, LayerId);
 }
+#endif

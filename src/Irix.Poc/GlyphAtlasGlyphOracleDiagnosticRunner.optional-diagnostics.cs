@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using System.Text;
 using Irix.Platform.Windows;
 using Windows.Win32.Graphics.DirectWrite;
@@ -202,3 +203,4 @@ internal static class GlyphAtlasGlyphOracleDiagnosticRunner
         builder.Append(']');
     }
 }
+#endif

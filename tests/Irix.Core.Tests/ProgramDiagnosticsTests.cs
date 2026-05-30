@@ -652,7 +652,7 @@ public sealed class ProgramDiagnosticsTests
             direct2DCommonReferences += CountOccurrences(source, "Windows.Win32.Graphics.Direct2D.Common");
             d2dPointReferences += CountOccurrences(source, "D2D_POINT_2F");
             var allowsD2dPointInterop = sourcePath.EndsWith("D3D12GlyphAtlasTextRenderer.ColorGlyph.cs", StringComparison.Ordinal)
-                || sourcePath.EndsWith("DWriteColorGlyphFormatDiagnostic.cs", StringComparison.Ordinal);
+                || sourcePath.EndsWith("DWriteColorGlyphFormatDiagnostic.optional-diagnostics.cs", StringComparison.Ordinal);
             if (!allowsD2dPointInterop)
             {
                 Assert.DoesNotContain("Windows.Win32.Graphics.Direct2D.Common", source);
@@ -698,7 +698,7 @@ public sealed class ProgramDiagnosticsTests
             Assert.DoesNotContain("CreateTextLayout", source);
 
             var allowsD2dPointInterop = sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.ColorGlyph.cs"), StringComparison.Ordinal)
-                || sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.cs"), StringComparison.Ordinal);
+                || sourcePath.EndsWith(Path.Combine("Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.optional-diagnostics.cs"), StringComparison.Ordinal);
             if (allowsD2dPointInterop)
             {
                 d2dPointReferences += CountOccurrences(source, "D2D_POINT_2F");
@@ -783,7 +783,7 @@ public sealed class ProgramDiagnosticsTests
             ],
             [
                 "D3D12GlyphAtlasTextRenderer.Rasterization.cs",
-                "DWriteColorGlyphFormatDiagnostic.cs"
+                "DWriteColorGlyphFormatDiagnostic.optional-diagnostics.cs"
             ]);
 
         AssertSourceTokensOnlyIn(
@@ -803,7 +803,7 @@ public sealed class ProgramDiagnosticsTests
             ["TranslateColorGlyphRun"],
             [
                 "D3D12GlyphAtlasTextRenderer.ColorGlyph.cs",
-                "DWriteColorGlyphFormatDiagnostic.cs"
+                "DWriteColorGlyphFormatDiagnostic.optional-diagnostics.cs"
             ]);
 
         AssertSourceTokensOnlyIn(
@@ -811,7 +811,7 @@ public sealed class ProgramDiagnosticsTests
             ["GetGlyphImageData"],
             [
                 "D3D12GlyphAtlasTextRenderer.Rasterization.cs",
-                "DWriteColorGlyphFormatDiagnostic.cs"
+                "DWriteColorGlyphFormatDiagnostic.optional-diagnostics.cs"
             ]);
 
         AssertSourceTokensOnlyIn(
@@ -834,8 +834,8 @@ public sealed class ProgramDiagnosticsTests
                 "analyzer->GetGlyphPlacements("
             ],
             [
-                "DWriteBidiOracleDiagnostic.cs",
-                "DWriteGlyphOracleDiagnostic.cs"
+                "DWriteBidiOracleDiagnostic.optional-diagnostics.cs",
+                "DWriteGlyphOracleDiagnostic.optional-diagnostics.cs"
             ]);
     }
 
@@ -1563,9 +1563,9 @@ public sealed class ProgramDiagnosticsTests
     public void Glyph_atlas_color_format_diagnostic_cli_is_wired()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasColorFormatDiagnosticRunner.cs")));
-        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasColorFormatDiagnosticRunner.optional-diagnostics.cs")));
+        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteColorGlyphFormatDiagnostic.optional-diagnostics.cs")));
 
         Assert.Contains("--diagnose-glyph-atlas-color-formats", programSource);
         Assert.Contains("--diagnose-color-glyph-family", programSource);
@@ -1865,7 +1865,7 @@ public sealed class ProgramDiagnosticsTests
     public void Glyph_atlas_regression_matrix_cli_is_wired()
     {
         var root = FindRepoRoot();
-        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
 
         Assert.Contains("--diagnose-glyph-atlas-matrix", source);
         Assert.Contains("GlyphAtlasRegressionMatrixDiagnosticRunner.Run", source);
@@ -1877,7 +1877,7 @@ public sealed class ProgramDiagnosticsTests
     public void D3D12_composition_transform_implementation_has_doc_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
         var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
 
@@ -1909,7 +1909,7 @@ public sealed class ProgramDiagnosticsTests
     public void D3D12_composition_scroll_implementation_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
 
         using var resources = FrameDrawingResources.Rent();
@@ -1939,7 +1939,7 @@ public sealed class ProgramDiagnosticsTests
     public void D3D12_composition_multilayer_implementation_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
 
         using var resources = FrameDrawingResources.Rent();
@@ -1969,7 +1969,7 @@ public sealed class ProgramDiagnosticsTests
     public void D3D12_composition_layer_cache_implementation_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
 
         var diagnostics = CompositionLayerCacheDiagnosticRunner.RunCore();
@@ -1986,7 +1986,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
 
         var diagnostics = await CompositionMarkerRuntimeDiagnosticRunner.RunCoreAsync(cancellationToken);
         var summary = CompositionMarkerRuntimeDiagnosticRunner.Format(diagnostics);
@@ -2000,14 +2000,15 @@ public sealed class ProgramDiagnosticsTests
     public void Scroll_presentation_policy_diagnostic_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var mainProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition.md")));
 
         var diagnostics = ScrollPresentationPolicyDiagnosticRunner.RunCore();
 
         Assert.Contains("--diagnose-scroll-presentation-policy", programSource);
         Assert.Contains("ScrollPresentationPolicyDiagnosticRunner.Run", programSource);
-        Assert.Contains("ScrollPresentationCoordinator", programSource);
+        Assert.Contains("ScrollPresentationCoordinator", mainProgramSource);
         Assert.Contains("commit", design);
         Assert.Equal("scroll-presentation-policy actual initialPos=120 initialTarget=180 presented=132 deltaPx=54 commitPos=132 commitTarget=132 commitAnimating=False cancelPos=180 cancelTarget=180 cancelAnimating=False retargetPos=132 retargetTarget=234 retargetAnimating=True", ScrollPresentationPolicyDiagnosticRunner.Format(diagnostics));
     }
@@ -2017,7 +2018,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
 
         var diagnostics = await ScrollPresentationRuntimeDiagnosticRunner.RunCoreAsync(cancellationToken);
         var summary = ScrollPresentationRuntimeDiagnosticRunner.Format(diagnostics);
@@ -2281,7 +2282,7 @@ public sealed class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Glyph-Atlas-Entry-Eviction-Design.md")));
-        var soakRunnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasSoakDiagnosticRunner.cs")));
+        var soakRunnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasSoakDiagnosticRunner.optional-diagnostics.cs")));
         var rendererSource = string.Join(
             "\n",
             Directory.EnumerateFiles(Path.Combine(root, "src", "Irix.Platform.Windows"), "D3D12GlyphAtlasTextRenderer*.cs")
@@ -2303,9 +2304,9 @@ public sealed class ProgramDiagnosticsTests
     public void Glyph_atlas_bidi_oracle_cli_is_wired()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasBidiOracleDiagnosticRunner.cs")));
-        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteBidiOracleDiagnostic.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasBidiOracleDiagnosticRunner.optional-diagnostics.cs")));
+        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteBidiOracleDiagnostic.optional-diagnostics.cs")));
 
         Assert.Equal(
             "bidi-oracle.expected probes=4 labels=ltr-arabic-ltr|rtl-leading-digits|hebrew-weak-digits|nested-mixed fields=levels|logicalRuns|visualRuns|charOrder layoutOracle=False pixelOracle=False finalComposition=D3D12",
@@ -2330,9 +2331,9 @@ public sealed class ProgramDiagnosticsTests
     public void Glyph_atlas_glyph_oracle_cli_is_wired_without_layout_dependency()
     {
         var root = FindRepoRoot();
-        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasGlyphOracleDiagnosticRunner.cs")));
-        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteGlyphOracleDiagnostic.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasGlyphOracleDiagnosticRunner.optional-diagnostics.cs")));
+        var platformSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "DWriteGlyphOracleDiagnostic.optional-diagnostics.cs")));
 
         Assert.Equal(
             "glyph-oracle.expected probes=5 labels=ascii|cjk-fallback|arabic-rtl|mixed-bidi|tab-crlf fields=glyphCount|glyphIndices|advances|offsets|bidiLevels|lineBreaks|segments layoutOracle=False pixelOracle=False finalComposition=D3D12",
@@ -2618,7 +2619,7 @@ public sealed class ProgramDiagnosticsTests
     public void Text_cache_allocation_diagnostic_uses_frame_scoped_text_arena()
     {
         var root = FindRepoRoot();
-        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "TextCacheAllocationDiagnosticRunner.cs")));
+        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "TextCacheAllocationDiagnosticRunner.optional-diagnostics.cs")));
 
         Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
         Assert.Contains("arena.BeginFrame();", source);
@@ -2650,20 +2651,34 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Allocation_attribution_diagnostics_are_optional_compile_items()
+    public void Diagnostic_only_sources_are_optional_compile_items()
     {
         var root = FindRepoRoot();
         var targets = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "Directory.Build.targets")));
+        var mainProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var diagnosticProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
 
         Assert.Contains("<Compile Remove=\"**\\*.optional-diagnostics.cs\" />", targets);
         Assert.DoesNotContain("<Compile Remove=\"**\\*.diagnostics.cs\" />", targets);
         Assert.True(File.Exists(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.Diagnostics.cs")));
+        Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticProgramSource, StringComparison.Ordinal);
+        Assert.Contains("static partial void CreateDiagnosticCliTask", mainProgramSource);
+        Assert.Contains("static partial void CreateDiagnosticCliTask", diagnosticProgramSource);
+        Assert.DoesNotContain("FullDiagnosticRunner", mainProgramSource);
+        Assert.DoesNotContain("--diagnose-glyph-atlas", mainProgramSource);
+        Assert.DoesNotContain("--diagnose-text-cache", mainProgramSource);
+        Assert.DoesNotContain("--diagnose-composition", mainProgramSource);
 
         var offenders = new List<string>();
         foreach (var sourcePath in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
         {
             var fileName = Path.GetFileName(sourcePath);
             var isOptionalDiagnostics = fileName.EndsWith(".optional-diagnostics.cs", StringComparison.OrdinalIgnoreCase);
+            var isDiagnosticOnly =
+                fileName.Contains("DiagnosticRunner", StringComparison.Ordinal)
+                || fileName.EndsWith("SmokeDiagnostics.cs", StringComparison.Ordinal)
+                || fileName.EndsWith("SmokeDiagnostics.optional-diagnostics.cs", StringComparison.Ordinal)
+                || fileName.StartsWith("DWrite", StringComparison.Ordinal) && fileName.Contains("Diagnostic", StringComparison.Ordinal);
             if (isOptionalDiagnostics)
             {
                 var optionalSource = NormalizeLineEndings(File.ReadAllText(sourcePath));
@@ -2671,8 +2686,9 @@ public sealed class ProgramDiagnosticsTests
                 continue;
             }
 
-            if (fileName.Equals("TextCacheAllocationDiagnosticRunner.cs", StringComparison.OrdinalIgnoreCase))
+            if (isDiagnosticOnly)
             {
+                offenders.Add(Path.GetRelativePath(root, sourcePath));
                 continue;
             }
 
@@ -2917,8 +2933,8 @@ public sealed class ProgramDiagnosticsTests
     public void Glyph_atlas_soak_cli_is_wired()
     {
         var root = FindRepoRoot();
-        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
-        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasSoakDiagnosticRunner.cs")));
+        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "GlyphAtlasSoakDiagnosticRunner.optional-diagnostics.cs")));
 
         Assert.Contains("--diagnose-glyph-atlas-soak", source);
         Assert.Contains("--pressure-every", source);

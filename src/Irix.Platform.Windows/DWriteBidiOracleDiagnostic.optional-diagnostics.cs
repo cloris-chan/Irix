@@ -1,3 +1,4 @@
+#if IRIX_DIAGNOSTICS
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -531,3 +532,4 @@ internal readonly struct BidiOracleDiagnosticSnapshot(
 
     public static bool operator !=(BidiOracleDiagnosticSnapshot left, BidiOracleDiagnosticSnapshot right) => !left.Equals(right);
 }
+#endif
