@@ -69,7 +69,8 @@ internal static class CompositionRenderTargetCacheDiagnosticRunner
             new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 640, 360), Color: DrawColor.Opaque(18, 24, 32)),
             new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(44, 52, 180, 76), ClipBounds: new DrawRect(32, 40, 360, 160), Color: DrawColor.Opaque(72, 150, 210)),
             new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(72, 144, 240, 42), ClipBounds: new DrawRect(32, 40, 360, 160), Color: new DrawColor(224, 235, 190, 90)),
-            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(64, 76, 220, 32), Resource: style, Text: text, ClipBounds: new DrawRect(32, 40, 360, 160), Color: DrawColor.Opaque(245, 248, 255))
+            new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(64, 76, 220, 32), Resource: style, Text: text, ClipBounds: new DrawRect(32, 40, 360, 160), Color: DrawColor.Opaque(245, 248, 255)),
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(408, 72, 148, 48), Color: new DrawColor(180, 255, 170, 96))
         ];
     }
 

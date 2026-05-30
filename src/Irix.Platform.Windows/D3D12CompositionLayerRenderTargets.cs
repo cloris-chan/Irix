@@ -30,6 +30,43 @@ internal readonly struct D3D12CompositionLayerRenderTargetRequest(
     public static bool operator !=(D3D12CompositionLayerRenderTargetRequest left, D3D12CompositionLayerRenderTargetRequest right) => !left.Equals(right);
 }
 
+internal readonly struct D3D12CompositionFrameRenderSegment(
+    int RectStart,
+    int RectCount,
+    int TextStart,
+    int TextCount,
+    int LayerRenderTargetIndex) : IEquatable<D3D12CompositionFrameRenderSegment>
+{
+    public int RectStart { get; } = RectStart;
+    public int RectCount { get; } = RectCount;
+    public int TextStart { get; } = TextStart;
+    public int TextCount { get; } = TextCount;
+    public int LayerRenderTargetIndex { get; } = LayerRenderTargetIndex;
+    public bool HasCommandContent => RectCount > 0 || TextCount > 0;
+    public bool HasLayerRenderTarget => LayerRenderTargetIndex >= 0;
+
+    public static D3D12CompositionFrameRenderSegment Commands(int rectStart, int rectCount, int textStart, int textCount) => new(rectStart, rectCount, textStart, textCount, -1);
+
+    public static D3D12CompositionFrameRenderSegment LayerRenderTarget(int layerRenderTargetIndex) => new(0, 0, 0, 0, layerRenderTargetIndex);
+
+    public bool Equals(D3D12CompositionFrameRenderSegment other)
+    {
+        return RectStart == other.RectStart
+            && RectCount == other.RectCount
+            && TextStart == other.TextStart
+            && TextCount == other.TextCount
+            && LayerRenderTargetIndex == other.LayerRenderTargetIndex;
+    }
+
+    public override bool Equals(object? obj) => obj is D3D12CompositionFrameRenderSegment other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(RectStart, RectCount, TextStart, TextCount, LayerRenderTargetIndex);
+
+    public static bool operator ==(D3D12CompositionFrameRenderSegment left, D3D12CompositionFrameRenderSegment right) => left.Equals(right);
+
+    public static bool operator !=(D3D12CompositionFrameRenderSegment left, D3D12CompositionFrameRenderSegment right) => !left.Equals(right);
+}
+
 internal readonly struct D3D12CompositionRenderTargetCacheDiagnostics(
     bool RenderTargetBacked,
     int RenderTargetCacheHits,

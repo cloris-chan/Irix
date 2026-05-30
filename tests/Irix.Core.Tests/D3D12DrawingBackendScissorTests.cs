@@ -348,6 +348,7 @@ public sealed class D3D12DrawingBackendScissorTests
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
         using var texts = new FrameRenderList<D3D12TextRun>();
         using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
+        using var renderSegments = new FrameRenderList<D3D12CompositionFrameRenderSegment>();
         using var resources = FrameDrawingResources.Rent();
         resources.Seal();
         var commands = new DrawCommand[]
@@ -374,12 +375,16 @@ public sealed class D3D12DrawingBackendScissorTests
             rects,
             texts,
             layerTargets,
+            renderSegments,
             out var diagnostics);
 
         Assert.True(planned);
         Assert.Equal(1, rects.Count);
         Assert.Equal(0, texts.Count);
         Assert.Equal(1, layerTargets.Count);
+        Assert.Equal(2, renderSegments.Count);
+        Assert.Equal(D3D12CompositionFrameRenderSegment.Commands(0, 1, 0, 0), renderSegments.Span[0]);
+        Assert.Equal(D3D12CompositionFrameRenderSegment.LayerRenderTarget(0), renderSegments.Span[1]);
         Assert.True(layerTargets.Span[0].Content.SupportsRenderTargetCache);
         Assert.Equal(2, diagnostics.CachedLayerCommands);
         Assert.Equal(2, diagnostics.TranslatedCommands);
@@ -393,6 +398,7 @@ public sealed class D3D12DrawingBackendScissorTests
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
         using var texts = new FrameRenderList<D3D12TextRun>();
         using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
+        using var renderSegments = new FrameRenderList<D3D12CompositionFrameRenderSegment>();
         using var resources = FrameDrawingResources.Rent();
         var style = resources.AddTextStyle(TextStyle.Default);
         var text = resources.AddText("text");
@@ -421,10 +427,14 @@ public sealed class D3D12DrawingBackendScissorTests
             rects,
             texts,
             layerTargets,
+            renderSegments,
             out var diagnostics));
         Assert.Equal(1, rects.Count);
         Assert.Equal(0, texts.Count);
         Assert.Equal(1, layerTargets.Count);
+        Assert.Equal(2, renderSegments.Count);
+        Assert.Equal(D3D12CompositionFrameRenderSegment.Commands(0, 1, 0, 0), renderSegments.Span[0]);
+        Assert.Equal(D3D12CompositionFrameRenderSegment.LayerRenderTarget(0), renderSegments.Span[1]);
         Assert.True(layerTargets.Span[0].Content.SupportsRenderTargetCache);
         Assert.Equal(1, layerTargets.Span[0].Content.Rects.Length);
         Assert.Equal(1, layerTargets.Span[0].Content.Texts.Length);
@@ -433,11 +443,12 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
-    public void TryExecuteCompositionWithRenderTargetCache_rejects_non_suffix_layers()
+    public void TryExecuteCompositionWithRenderTargetCache_builds_interleaved_layer_order_plan()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
         using var texts = new FrameRenderList<D3D12TextRun>();
         using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
+        using var renderSegments = new FrameRenderList<D3D12CompositionFrameRenderSegment>();
         using var resources = FrameDrawingResources.Rent();
         resources.Seal();
 
@@ -454,7 +465,7 @@ public sealed class D3D12DrawingBackendScissorTests
             new CompositionTransform(8, 0),
             CompositionOpacity.Opaque));
 
-        Assert.False(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
+        Assert.True(D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
             new D3D12CompositionLayerContentCache(),
             DrawingBackendClipMode.Scissor,
             new DrawRect(0, 0, 240, 160),
@@ -465,7 +476,17 @@ public sealed class D3D12DrawingBackendScissorTests
             rects,
             texts,
             layerTargets,
-            out _));
+            renderSegments,
+            out var diagnostics));
+        Assert.Equal(2, rects.Count);
+        Assert.Equal(0, texts.Count);
+        Assert.Equal(1, layerTargets.Count);
+        Assert.Equal(3, renderSegments.Count);
+        Assert.Equal(D3D12CompositionFrameRenderSegment.Commands(0, 1, 0, 0), renderSegments.Span[0]);
+        Assert.Equal(D3D12CompositionFrameRenderSegment.LayerRenderTarget(0), renderSegments.Span[1]);
+        Assert.Equal(D3D12CompositionFrameRenderSegment.Commands(1, 1, 0, 0), renderSegments.Span[2]);
+        Assert.Equal(1, diagnostics.CachedLayerCommands);
+        Assert.Equal(1, diagnostics.TranslatedCommands);
     }
 
     [Fact]

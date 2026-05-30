@@ -365,13 +365,14 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         float clearB,
         float clearA)
     {
-        RenderFrame(rects, textRuns, [], resources, DisplayScale.Identity, clearR, clearG, clearB, clearA);
+        RenderFrame(rects, textRuns, [], [], resources, DisplayScale.Identity, clearR, clearG, clearB, clearA);
     }
 
     public void RenderFrame(
         ReadOnlySpan<D3D12Renderer2D.RectData> rects,
         ReadOnlySpan<D3D12TextRun> textRuns,
         ReadOnlySpan<D3D12CompositionLayerRenderTargetRequest> layerRenderTargets,
+        ReadOnlySpan<D3D12CompositionFrameRenderSegment> renderSegments,
         IFrameResourceResolver resources,
         DisplayScale scale,
         float clearR,
@@ -409,25 +410,23 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         _list->RSSetScissorRects(1, &scissor);
 
         var frameResourceIndex = (int)_frameIndex;
-        _renderer2D!.RenderRectangles(_list, rects, width, height, frameResourceIndex);
-
-        var hasText = textRuns.Length > 0;
-        if (hasText && TextCompositionMode == TextCompositionMode.GlyphAtlas)
+        if (renderSegments.Length > 0)
         {
-            _ = TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex, width, height);
-            if (_deviceRemoved)
+            RenderFrameSegments(rects, textRuns, layerRenderTargets, renderSegments, resources, scale, width, height, frameResourceIndex);
+        }
+        else
+        {
+            RenderCommandSegment(rects, textRuns, resources, width, height, frameResourceIndex);
+
+            if (layerRenderTargets.Length > 0)
             {
-                return;
+                CompositeLayerRenderTargets(layerRenderTargets, resources, scale, width, height, frameResourceIndex);
             }
         }
 
-        if (layerRenderTargets.Length > 0)
+        if (_deviceRemoved)
         {
-            CompositeLayerRenderTargets(layerRenderTargets, resources, scale, width, height, frameResourceIndex);
-            if (_deviceRemoved)
-            {
-                return;
-            }
+            return;
         }
 
         barrier.Anonymous.Transition.StateBefore = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -442,6 +441,72 @@ internal sealed unsafe class D3D12Renderer : IDisposable
 
         if (!Present()) return;
         _ = MoveToNextFrame();
+    }
+
+    private void RenderFrameSegments(
+        ReadOnlySpan<D3D12Renderer2D.RectData> rects,
+        ReadOnlySpan<D3D12TextRun> textRuns,
+        ReadOnlySpan<D3D12CompositionLayerRenderTargetRequest> layerRenderTargets,
+        ReadOnlySpan<D3D12CompositionFrameRenderSegment> renderSegments,
+        IFrameResourceResolver resources,
+        DisplayScale scale,
+        int width,
+        int height,
+        int frameResourceIndex)
+    {
+        scale = scale.Normalize();
+        for (var i = 0; i < renderSegments.Length; i++)
+        {
+            var segment = renderSegments[i];
+            if (segment.HasCommandContent)
+            {
+                RenderCommandSegment(
+                    rects.Slice(segment.RectStart, segment.RectCount),
+                    textRuns.Slice(segment.TextStart, segment.TextCount),
+                    resources,
+                    width,
+                    height,
+                    frameResourceIndex);
+                if (_deviceRemoved)
+                {
+                    return;
+                }
+            }
+
+            if (segment.HasLayerRenderTarget)
+            {
+                if ((uint)segment.LayerRenderTargetIndex >= (uint)layerRenderTargets.Length)
+                {
+                    throw new InvalidOperationException("D3D12 composition render segment references a missing layer render target.");
+                }
+
+                try
+                {
+                    CompositeLayerRenderTarget(layerRenderTargets[segment.LayerRenderTargetIndex], resources, scale, width, height, frameResourceIndex);
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException)
+                {
+                    HandleDeviceError(ex, DeviceErrorSite.LayerRenderTargetRecord);
+                    return;
+                }
+            }
+        }
+    }
+
+    private void RenderCommandSegment(
+        ReadOnlySpan<D3D12Renderer2D.RectData> rects,
+        ReadOnlySpan<D3D12TextRun> textRuns,
+        IFrameResourceResolver resources,
+        int width,
+        int height,
+        int frameResourceIndex)
+    {
+        _renderer2D!.RenderRectangles(_list, rects, width, height, frameResourceIndex);
+
+        if (textRuns.Length > 0 && TextCompositionMode == TextCompositionMode.GlyphAtlas)
+        {
+            _ = TryRecordGlyphAtlasTextPass(textRuns, resources, frameResourceIndex, width, height);
+        }
     }
 
     internal D3D12CompositionRenderTargetCacheDiagnostics PrepareCompositionLayerRenderTargets(
@@ -574,54 +639,64 @@ internal sealed unsafe class D3D12Renderer : IDisposable
         int height,
         int frameResourceIndex)
     {
-        var cache = _compositionLayerRenderTargetCache ??= new D3D12CompositionLayerRenderTargetCache(_device);
-        var textureRenderer = _textureQuadRenderer ??= new D3D12TexturedQuadRenderer(_device);
         scale = scale.Normalize();
         try
         {
             for (var i = 0; i < requests.Length; i++)
             {
-                var request = requests[i];
-                var target = cache.GetOrCreate(request.Key, request.Content, width, height, out var hit);
-                if (!hit)
-                {
-                    RecordLayerRenderTarget(target, request, resources, scale, frameResourceIndex);
-                }
-
-                SetCurrentBackBufferRenderTarget(width, height);
-
-                if (target.State != D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
-                {
-                    TransitionResource(target.Texture, target.State, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-                    target.State = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
-                }
-
-                var layer = request.Layer;
-                var transform = layer.Transform.Scale(scale);
-                var scissor = ResolveLayerCompositeScissor(layer, scale, width, height);
-                if (scissor.IsEmpty)
-                {
-                    continue;
-                }
-
-                _ = textureRenderer.RenderQuad(
-                    _list,
-                    target,
-                    transform.TranslateX,
-                    transform.TranslateY,
-                    target.Width,
-                    target.Height,
-                    layer.Opacity.Normalized,
-                    scissor,
-                    width,
-                    height,
-                    frameResourceIndex);
+                CompositeLayerRenderTarget(requests[i], resources, scale, width, height, frameResourceIndex);
             }
         }
         catch (Exception ex) when (ex is COMException or InvalidOperationException)
         {
             HandleDeviceError(ex, DeviceErrorSite.LayerRenderTargetRecord);
         }
+    }
+
+    private void CompositeLayerRenderTarget(
+        in D3D12CompositionLayerRenderTargetRequest request,
+        IFrameResourceResolver resources,
+        DisplayScale scale,
+        int width,
+        int height,
+        int frameResourceIndex)
+    {
+        var cache = _compositionLayerRenderTargetCache ??= new D3D12CompositionLayerRenderTargetCache(_device);
+        var textureRenderer = _textureQuadRenderer ??= new D3D12TexturedQuadRenderer(_device);
+        var target = cache.GetOrCreate(request.Key, request.Content, width, height, out var hit);
+        if (!hit)
+        {
+            RecordLayerRenderTarget(target, request, resources, scale, frameResourceIndex);
+        }
+
+        SetCurrentBackBufferRenderTarget(width, height);
+
+        if (target.State != D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE)
+        {
+            TransitionResource(target.Texture, target.State, D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+            target.State = D3D12_RESOURCE_STATES.D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+        }
+
+        var layer = request.Layer;
+        var transform = layer.Transform.Scale(scale);
+        var scissor = ResolveLayerCompositeScissor(layer, scale, width, height);
+        if (scissor.IsEmpty)
+        {
+            return;
+        }
+
+        _ = textureRenderer.RenderQuad(
+            _list,
+            target,
+            transform.TranslateX,
+            transform.TranslateY,
+            target.Width,
+            target.Height,
+            layer.Opacity.Normalized,
+            scissor,
+            width,
+            height,
+            frameResourceIndex);
     }
 
     private static IntegerScissorRect ResolveLayerCompositeScissor(

@@ -582,6 +582,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     private readonly FrameRenderList<D3D12Renderer2D.RectData> _rects = new();
     private readonly FrameRenderList<D3D12TextRun> _texts = new();
     private readonly FrameRenderList<D3D12CompositionLayerRenderTargetRequest> _compositionLayerRenderTargets = new();
+    private readonly FrameRenderList<D3D12CompositionFrameRenderSegment> _compositionRenderSegments = new();
     private readonly D3D12CompositionLayerContentCache _compositionLayerContentCache = new();
     private IFrameResourceResolver? _resources;
     private IReadOnlyList<(int Start, int Count)> _dirtyCommandRanges = [];
@@ -725,6 +726,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         _rects.Reset();
         _texts.Reset();
         _compositionLayerRenderTargets.Reset();
+        _compositionRenderSegments.Reset();
     }
 
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
@@ -787,6 +789,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             _rects,
             _texts,
             _compositionLayerRenderTargets,
+            _compositionRenderSegments,
             out var renderTargetDiagnostics))
         {
             var cacheDiagnostics = _renderer.PrepareCompositionLayerRenderTargets(_compositionLayerRenderTargets.Span, resources, _frameContext.Scale);
@@ -1178,6 +1181,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         FrameRenderList<D3D12Renderer2D.RectData> rects,
         FrameRenderList<D3D12TextRun> texts,
         FrameRenderList<D3D12CompositionLayerRenderTargetRequest> layerRenderTargets,
+        FrameRenderList<D3D12CompositionFrameRenderSegment> renderSegments,
         out D3D12CompositionExecuteDiagnostics diagnostics)
     {
         diagnostics = default;
@@ -1186,7 +1190,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             throw new ArgumentException("Composition frame layer range must reference a non-empty range inside the command span.", nameof(compositionFrame));
         }
 
-        if (!HasRenderTargetPresentableOrder(compositionFrame, commands.Length))
+        if (compositionFrame.LayerCount == 0 || HasOverlappingLayerCommandRanges(compositionFrame))
         {
             return false;
         }
@@ -1199,17 +1203,21 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         var layerCacheHits = 0;
         var layerCacheMisses = 0;
         var cachedLayerCommands = 0;
+        var segmentRectStart = rects.Count;
+        var segmentTextStart = texts.Count;
 
         for (var commandIndex = 0; commandIndex < commands.Length;)
         {
             if (TryGetLayerStartingAt(compositionFrame, commandIndex, out var layer))
             {
+                AppendCommandRenderSegment(renderSegments, segmentRectStart, rects.Count, segmentTextStart, texts.Count);
                 var content = layerContentCache.GetOrBuild(commands, resources, layer, scale, out var cacheHit);
                 if (!content.SupportsRenderTargetCache)
                 {
                     rects.Reset();
                     texts.Reset();
                     layerRenderTargets.Reset();
+                    renderSegments.Reset();
                     return false;
                 }
 
@@ -1234,12 +1242,16 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 }
 
                 AccumulateRenderTargetLayerDiagnostics(content, layer, clipMode, viewport, scale, ref accumulator);
+                var layerRenderTargetIndex = layerRenderTargets.Count;
                 layerRenderTargets.Add(new D3D12CompositionLayerRenderTargetRequest(
                     D3D12CompositionLayerContentCacheKey.Create(commands, resources, layer, scale),
                     content,
                     layer,
                     clipMode));
+                renderSegments.Add(D3D12CompositionFrameRenderSegment.LayerRenderTarget(layerRenderTargetIndex));
                 commandIndex += layer.CommandCount;
+                segmentRectStart = rects.Count;
+                segmentTextStart = texts.Count;
                 continue;
             }
 
@@ -1256,6 +1268,8 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 ref backgroundColor);
             commandIndex++;
         }
+
+        AppendCommandRenderSegment(renderSegments, segmentRectStart, rects.Count, segmentTextStart, texts.Count);
 
         diagnostics = new D3D12CompositionExecuteDiagnostics(
             D3D12Backed: true,
@@ -1282,32 +1296,19 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return true;
     }
 
-    private static bool HasRenderTargetPresentableOrder(in CompositionFrame compositionFrame, int commandCount)
+    private static void AppendCommandRenderSegment(
+        FrameRenderList<D3D12CompositionFrameRenderSegment> renderSegments,
+        int rectStart,
+        int rectEnd,
+        int textStart,
+        int textEnd)
     {
-        if (HasOverlappingLayerCommandRanges(compositionFrame))
+        var rectCount = rectEnd - rectStart;
+        var textCount = textEnd - textStart;
+        if (rectCount > 0 || textCount > 0)
         {
-            return false;
+            renderSegments.Add(D3D12CompositionFrameRenderSegment.Commands(rectStart, rectCount, textStart, textCount));
         }
-
-        var hasLayer = false;
-        for (var commandIndex = 0; commandIndex < commandCount;)
-        {
-            if (TryGetLayerStartingAt(compositionFrame, commandIndex, out var layer))
-            {
-                hasLayer = true;
-                commandIndex += layer.CommandCount;
-                continue;
-            }
-
-            if (hasLayer)
-            {
-                return false;
-            }
-
-            commandIndex++;
-        }
-
-        return hasLayer;
     }
 
     private static void AccumulateRenderTargetLayerDiagnostics(
@@ -1616,12 +1617,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         var rects = _rects.Span;
         var texts = _texts.Span;
         var layerRenderTargets = _compositionLayerRenderTargets.Span;
+        var renderSegments = _compositionRenderSegments.Span;
         var resources = _resources ?? FrameDrawingResources.Empty;
         _resources = null;
 
         if (rects.Length > 0 || texts.Length > 0 || layerRenderTargets.Length > 0)
         {
-            _renderer.RenderFrame(rects, texts, layerRenderTargets, resources, _frameContext.Scale, _bgR, _bgG, _bgB, _bgA);
+            _renderer.RenderFrame(rects, texts, layerRenderTargets, renderSegments, resources, _frameContext.Scale, _bgR, _bgG, _bgB, _bgA);
         }
         else
         {
@@ -1636,6 +1638,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     public void Dispose()
     {
         _compositionLayerContentCache.Clear();
+        _compositionRenderSegments.Dispose();
         _compositionLayerRenderTargets.Dispose();
         _rects.Dispose();
         _texts.Dispose();
