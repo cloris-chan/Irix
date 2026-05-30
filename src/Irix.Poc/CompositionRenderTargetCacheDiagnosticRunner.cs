@@ -81,9 +81,7 @@ internal static class CompositionRenderTargetCacheDiagnosticRunner
             CommandStart: 1,
             CommandCount: 3,
             new CompositionTransform(28, 18),
-            new CompositionOpacity(0.72f),
-            CompositionClipMode.Fixed,
-            new DrawRect(24, 32, 420, 220)));
+            new CompositionOpacity(0.72f)));
     }
 
     internal static string FormatFirst(

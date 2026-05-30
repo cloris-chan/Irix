@@ -490,6 +490,49 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void TryExecuteCompositionWithRenderTargetCache_rejects_fixed_clip_scroll_layers()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var layerTargets = new FrameRenderList<D3D12CompositionLayerRenderTargetRequest>();
+        using var renderSegments = new FrameRenderList<D3D12CompositionFrameRenderSegment>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, -24, 140, 40), ClipBounds: new DrawRect(0, 0, 200, 60), Color: DrawColor.Opaque(1, 2, 3))
+        };
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(9),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionTransform(0, 30),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            new DrawRect(0, 0, 200, 60)));
+
+        var planned = D3D12DrawingBackend.TryExecuteCompositionWithRenderTargetCache(
+            new D3D12CompositionLayerContentCache(),
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            layerTargets,
+            renderSegments,
+            out _);
+
+        Assert.False(planned);
+        Assert.Equal(0, rects.Count);
+        Assert.Equal(0, texts.Count);
+        Assert.Equal(0, layerTargets.Count);
+        Assert.Equal(0, renderSegments.Count);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_invalidates_layer_content_cache_when_source_commands_change()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

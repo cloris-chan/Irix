@@ -1190,7 +1190,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             throw new ArgumentException("Composition frame layer range must reference a non-empty range inside the command span.", nameof(compositionFrame));
         }
 
-        if (compositionFrame.LayerCount == 0 || HasOverlappingLayerCommandRanges(compositionFrame))
+        if (compositionFrame.LayerCount == 0
+            || HasOverlappingLayerCommandRanges(compositionFrame)
+            || HasFixedClipLayer(compositionFrame))
         {
             return false;
         }
@@ -1363,6 +1365,19 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 {
                     return true;
                 }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasFixedClipLayer(in CompositionFrame compositionFrame)
+    {
+        for (var i = 0; i < compositionFrame.LayerCount; i++)
+        {
+            if (compositionFrame.GetLayer(i).HasFixedClip)
+            {
+                return true;
             }
         }
 
