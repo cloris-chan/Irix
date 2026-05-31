@@ -21,7 +21,7 @@ The current implementation owns:
 - `CompositorHitTestSnapshot` publication for transform/opacity and fixed-clip scroll layers, with inverse-mapped local coordinates and reverse paint-order hit selection.
 - Typed composition clock values: `CompositionTimestamp` and `CompositionDuration` carry `Stopwatch.GetTimestamp()` ticks and keep frame indexes out of animation progress.
 - Animation marker events for transform/opacity and fixed-clip scroll presentation. Markers are data on the declaration, evaluated by timeline interval crossing after a successful compositor tick, and drained through a runtime-facing pump that maps typed runtime event ids to app messages outside the backend.
-- A D3D12 layer content cache for disjoint composition layers. The cache is keyed by stable layer id, command range, source command hash, resource frame identity, and display scale; it reuses materialized backend payloads across compositor ticks while transform/opacity/fixed-clip state is applied per tick, and display-scale changes force a rebuild of scale-dependent text payloads.
+- A D3D12 layer content cache for disjoint composition layers. The cache is keyed by stable layer id, command range, source command hash, resource resolver identity/frame identity, and display scale; it reuses materialized backend payloads across compositor ticks while transform/opacity/fixed-clip state is applied per tick. Display-scale changes and resource resolver changes force a rebuild of scale- or resource-dependent text payloads.
 - D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
 - A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
 - A `--diagnose-composition-scroll` diagnostic that exercises D3D12 fixed-clip scroll presentation.
@@ -122,6 +122,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - first tick misses the layer cache and materializes the retained layer content
 - second tick hits the layer cache while applying different transform/opacity values
 - display-scale changes miss the layer cache instead of reusing text payloads shaped for the previous scale
+- resource resolver changes miss the layer cache even when command handles and source command values compare equal
 - cached command count is diagnostic-visible
 - translated and opacity-applied command counts remain stable
 
