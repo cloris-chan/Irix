@@ -26,6 +26,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         return new ScrollPresentationInteractionDiagnostics(
             await RunPointerScenarioAsync(cancellationToken),
             await RunChainScenarioAsync(cancellationToken),
+            await RunRapidEnsureScenarioAsync(cancellationToken),
             await RunBoundaryScenarioAsync(cancellationToken));
     }
 
@@ -35,6 +36,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             Environment.NewLine,
             FormatPointer(diagnostics.Pointer),
             FormatChain(diagnostics.Chain),
+            FormatRapidEnsure(diagnostics.RapidEnsure),
             FormatBoundary(diagnostics.Boundary));
     }
 
@@ -174,6 +176,65 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             lastPresented);
     }
 
+    private static async Task<ScrollPresentationRapidEnsureInteractionDiagnostics> RunRapidEnsureScenarioAsync(CancellationToken cancellationToken)
+    {
+        await using var session = await DiagnosticSession.StartAsync(cancellationToken);
+        const int notchCount = 8;
+        var wheelPixels = WheelDownPixels(1);
+        var ensureCalls = 0;
+        var ensureStartedCount = 0;
+        var ensureAlreadyRunningCount = 0;
+
+        session.Coordinator.AddPendingPixels(wheelPixels);
+        ensureCalls++;
+        if (session.Coordinator.EnsureRunning(session.Runtime, session.CompositorLoop, session.Translator, ScrollTargetKey, cancellationToken))
+        {
+            ensureStartedCount++;
+        }
+        else
+        {
+            ensureAlreadyRunningCount++;
+        }
+
+        var runningWhenBurstAdded = session.Coordinator.IsLoopRunning;
+        for (var i = 1; i < notchCount; i++)
+        {
+            session.Coordinator.AddPendingPixels(wheelPixels);
+            ensureCalls++;
+            if (session.Coordinator.EnsureRunning(session.Runtime, session.CompositorLoop, session.Translator, ScrollTargetKey, cancellationToken))
+            {
+                ensureStartedCount++;
+            }
+            else
+            {
+                ensureAlreadyRunningCount++;
+            }
+        }
+
+        await WaitForCoordinatorIdleAsync(session, cancellationToken);
+        await session.CompositorLoop.WaitForScrollPresentationIdleAsync(cancellationToken);
+        _ = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var lastPresented);
+
+        return new ScrollPresentationRapidEnsureInteractionDiagnostics(
+            notchCount,
+            wheelPixels,
+            wheelPixels * notchCount,
+            session.Runtime.CurrentModel.Scroll.Position,
+            session.Runtime.CurrentModel.Scroll.TargetPosition,
+            runningWhenBurstAdded,
+            ensureCalls,
+            ensureStartedCount,
+            ensureAlreadyRunningCount,
+            session.Coordinator.RetargetCount,
+            session.Coordinator.PendingPixels,
+            session.CompositorLoop.ScrollPresentationCancelCount,
+            session.Backend.ExecuteCount,
+            session.Backend.ExecuteCompositionCount,
+            session.Compositor.CompositionTickCount,
+            session.CompositorLoop.ScrollPresentationTickCount,
+            lastPresented);
+    }
+
     private static async Task<ScrollPresentationBoundaryInteractionDiagnostics> RunBoundaryScenarioAsync(CancellationToken cancellationToken)
     {
         await using var session = await DiagnosticSession.StartAsync(cancellationToken);
@@ -269,6 +330,19 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         ]);
     }
 
+    private static string FormatRapidEnsure(in ScrollPresentationRapidEnsureInteractionDiagnostics diagnostics)
+    {
+        return string.Join(" ", [
+            $"scroll-presentation-interaction actual scenario=rapidEnsure notches={diagnostics.NotchCount} wheelPx={diagnostics.WheelPixels:0.##} expectedTarget={diagnostics.ExpectedTargetPosition:0.##}",
+            $"finalPosition={diagnostics.FinalPosition:0.##} finalTarget={diagnostics.FinalTargetPosition:0.##}",
+            $"runningWhenBurstAdded={diagnostics.RunningWhenBurstAdded}",
+            $"ensureCalls={diagnostics.EnsureCallCount} ensureStarted={diagnostics.EnsureStartedCount} ensureAlreadyRunning={diagnostics.EnsureAlreadyRunningCount}",
+            $"retargets={diagnostics.RetargetCount} pending={diagnostics.PendingPixels:0.##} cancels={diagnostics.CancelCount}",
+            $"execute={diagnostics.ExecuteCount} executeComposition={diagnostics.ExecuteCompositionCount}",
+            $"compositionTicks={diagnostics.CompositionTickCount} loopTicks={diagnostics.LoopTickCount} lastPresented={diagnostics.LastPresentedScrollY:0.##}"
+        ]);
+    }
+
     private static string FormatBoundary(in ScrollPresentationBoundaryInteractionDiagnostics diagnostics)
     {
         return string.Join(" ", [
@@ -307,6 +381,23 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         }
 
         return new PresentedActionProbe(hit, action, presentedScrollY);
+    }
+
+    private static async Task WaitForCoordinatorIdleAsync(DiagnosticSession session, CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.ElapsedMilliseconds < 2_000)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!session.Coordinator.IsLoopRunning && session.Coordinator.PendingPixels == 0)
+            {
+                return;
+            }
+
+            await Task.Delay(1, cancellationToken);
+        }
+
+        throw new TimeoutException("Scroll presentation coordinator did not become idle.");
     }
 
     private static double WheelDownPixels(int notches)
@@ -454,10 +545,12 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
 internal readonly struct ScrollPresentationInteractionDiagnostics(
     ScrollPresentationPointerInteractionDiagnostics Pointer,
     ScrollPresentationChainInteractionDiagnostics Chain,
+    ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure,
     ScrollPresentationBoundaryInteractionDiagnostics Boundary)
 {
     public ScrollPresentationPointerInteractionDiagnostics Pointer { get; } = Pointer;
     public ScrollPresentationChainInteractionDiagnostics Chain { get; } = Chain;
+    public ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure { get; } = RapidEnsure;
     public ScrollPresentationBoundaryInteractionDiagnostics Boundary { get; } = Boundary;
 }
 
@@ -580,6 +673,44 @@ internal readonly struct ScrollPresentationChainInteractionDiagnostics(
     public long CancelCount { get; } = CancelCount;
     public ScrollPresentationCancellationReason CancelReason { get; } = CancelReason;
     public CompositionRenderInvalidationKind CancelInvalidationKind { get; } = CancelInvalidationKind;
+    public int ExecuteCount { get; } = ExecuteCount;
+    public int ExecuteCompositionCount { get; } = ExecuteCompositionCount;
+    public long CompositionTickCount { get; } = CompositionTickCount;
+    public long LoopTickCount { get; } = LoopTickCount;
+    public double LastPresentedScrollY { get; } = LastPresentedScrollY;
+}
+
+internal readonly struct ScrollPresentationRapidEnsureInteractionDiagnostics(
+    int NotchCount,
+    double WheelPixels,
+    double ExpectedTargetPosition,
+    double FinalPosition,
+    double FinalTargetPosition,
+    bool RunningWhenBurstAdded,
+    int EnsureCallCount,
+    int EnsureStartedCount,
+    int EnsureAlreadyRunningCount,
+    long RetargetCount,
+    double PendingPixels,
+    long CancelCount,
+    int ExecuteCount,
+    int ExecuteCompositionCount,
+    long CompositionTickCount,
+    long LoopTickCount,
+    double LastPresentedScrollY)
+{
+    public int NotchCount { get; } = NotchCount;
+    public double WheelPixels { get; } = WheelPixels;
+    public double ExpectedTargetPosition { get; } = ExpectedTargetPosition;
+    public double FinalPosition { get; } = FinalPosition;
+    public double FinalTargetPosition { get; } = FinalTargetPosition;
+    public bool RunningWhenBurstAdded { get; } = RunningWhenBurstAdded;
+    public int EnsureCallCount { get; } = EnsureCallCount;
+    public int EnsureStartedCount { get; } = EnsureStartedCount;
+    public int EnsureAlreadyRunningCount { get; } = EnsureAlreadyRunningCount;
+    public long RetargetCount { get; } = RetargetCount;
+    public double PendingPixels { get; } = PendingPixels;
+    public long CancelCount { get; } = CancelCount;
     public int ExecuteCount { get; } = ExecuteCount;
     public int ExecuteCompositionCount { get; } = ExecuteCompositionCount;
     public long CompositionTickCount { get; } = CompositionTickCount;

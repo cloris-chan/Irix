@@ -2231,6 +2231,24 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(chain.LoopTickCount > 0);
         Assert.Equal(108, chain.LastPresentedScrollY);
 
+        var rapidEnsure = diagnostics.RapidEnsure;
+        Assert.Equal(8, rapidEnsure.NotchCount);
+        Assert.Equal(54, rapidEnsure.WheelPixels);
+        Assert.Equal(432, rapidEnsure.ExpectedTargetPosition);
+        Assert.Equal(432, rapidEnsure.FinalPosition);
+        Assert.Equal(432, rapidEnsure.FinalTargetPosition);
+        Assert.True(rapidEnsure.RunningWhenBurstAdded);
+        Assert.Equal(8, rapidEnsure.EnsureCallCount);
+        Assert.True(rapidEnsure.EnsureStartedCount >= 1);
+        Assert.True(rapidEnsure.EnsureAlreadyRunningCount >= 1);
+        Assert.Equal(rapidEnsure.EnsureCallCount, rapidEnsure.EnsureStartedCount + rapidEnsure.EnsureAlreadyRunningCount);
+        Assert.InRange(rapidEnsure.RetargetCount, 1, rapidEnsure.NotchCount);
+        Assert.Equal(0, rapidEnsure.PendingPixels);
+        Assert.True(rapidEnsure.ExecuteCompositionCount > 0);
+        Assert.True(rapidEnsure.CompositionTickCount > 0);
+        Assert.True(rapidEnsure.LoopTickCount > 0);
+        Assert.Equal(432, rapidEnsure.LastPresentedScrollY);
+
         var boundary = diagnostics.Boundary;
         Assert.True(boundary.MaxScrollY > 1);
         Assert.Equal(boundary.MaxScrollY - 1, boundary.StartPosition);
@@ -2255,6 +2273,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("scroll-presentation-interaction actual scenario=chain wheelPx=54", summary);
         Assert.Contains("firstPosition=54 firstTarget=54 finalPosition=108 finalTarget=108", summary);
         Assert.Contains("retargets=2 pending=0 cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=rapidEnsure notches=8 wheelPx=54 expectedTarget=432", summary);
+        Assert.Contains("finalPosition=432 finalTarget=432", summary);
+        Assert.Contains("runningWhenBurstAdded=True", summary);
+        Assert.Contains("ensureCalls=8", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=boundary", summary);
         Assert.Contains("rapidWheelPx=216", summary);
         Assert.Contains("retargetsAfterClamp=1", summary);
