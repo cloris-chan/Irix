@@ -2168,6 +2168,100 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public async Task Scroll_presentation_interaction_diagnostic_covers_main_app_input_path()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+
+        var diagnostics = await ScrollPresentationInteractionDiagnosticRunner.RunCoreAsync(cancellationToken);
+        var summary = ScrollPresentationInteractionDiagnosticRunner.Format(diagnostics);
+
+        Assert.Contains("--diagnose-scroll-presentation-interaction", programSource);
+        Assert.Contains("ScrollPresentationInteractionDiagnosticRunner.RunAsync", programSource);
+
+        var pointer = diagnostics.Pointer;
+        Assert.True(pointer.BeforeHit);
+        Assert.Equal(ActionIdRegistry.Increment, pointer.BeforeAction);
+        Assert.Equal(ActionIdRegistry.Increment, pointer.StaleHoverAction);
+        Assert.True(pointer.ActiveHit);
+        Assert.Equal(ActionIdRegistry.Decrement, pointer.ActiveAction);
+        Assert.True(pointer.ActivePresentedScrollY > 0);
+        Assert.True(pointer.HoverMappedInput);
+        Assert.Equal(nameof(CounterMessage.InputVisualStateChanged), pointer.HoverMessageKind);
+        Assert.Equal(ActionIdRegistry.Decrement, pointer.HoveredAction);
+        Assert.Equal(pointer.RenderCountBeforeHoverDispatch + 1, pointer.RenderCountAfterHoverDispatch);
+        Assert.Equal(pointer.ExecuteCountBeforeHoverDispatch, pointer.ExecuteCountAfterHoverDispatch);
+        Assert.True(pointer.ExecuteCompositionCountAfterHoverDispatch > pointer.ExecuteCompositionCountBeforeHoverDispatch);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pointer.LayoutRebuildReasonAfterHoverDispatch);
+        Assert.True(pointer.ActiveAfterHover);
+        Assert.True(pointer.PressMappedInput);
+        Assert.Equal(nameof(CounterMessage.InputVisualStateChanged), pointer.PressMessageKind);
+        Assert.Equal(ActionIdRegistry.Decrement, pointer.PressHoveredAction);
+        Assert.Equal(ActionIdRegistry.Decrement, pointer.PressPressedAction);
+        Assert.Equal(ActionIdRegistry.Decrement, pointer.PressCapturedAction);
+        Assert.Equal(ActionIdRegistry.Decrement, pointer.PressFocusedAction);
+        Assert.Equal(pointer.RenderCountBeforePressDispatch + 1, pointer.RenderCountAfterPressDispatch);
+        Assert.Equal(pointer.ExecuteCountBeforePressDispatch, pointer.ExecuteCountAfterPressDispatch);
+        Assert.True(pointer.ExecuteCompositionCountAfterPressDispatch > pointer.ExecuteCompositionCountBeforePressDispatch);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pointer.LayoutRebuildReasonAfterPressDispatch);
+        Assert.True(pointer.ActiveAfterPress);
+        Assert.True(pointer.ReleaseMappedInput);
+        Assert.Equal(nameof(CounterMessage.RoutedInput), pointer.ReleaseMessageKind);
+        Assert.Equal(nameof(CounterMessage.Decrement), pointer.ReleaseActionKind);
+        Assert.Equal(-1, pointer.CountAfterRelease);
+        Assert.Equal(1, pointer.RetargetCount);
+        Assert.Equal(0, pointer.PendingPixels);
+        Assert.True(pointer.CompositionTickCount >= 3);
+        Assert.True(pointer.LoopTickCount > 0);
+
+        var chain = diagnostics.Chain;
+        Assert.Equal(54, chain.WheelPixels);
+        Assert.Equal(54, chain.FirstPosition);
+        Assert.Equal(54, chain.FirstTargetPosition);
+        Assert.Equal(108, chain.FinalPosition);
+        Assert.Equal(108, chain.FinalTargetPosition);
+        Assert.Equal(2, chain.RetargetCount);
+        Assert.Equal(0, chain.PendingPixels);
+        Assert.Equal(1, chain.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, chain.CancelReason);
+        Assert.Equal(CompositionRenderInvalidationKind.LayoutAffecting, chain.CancelInvalidationKind);
+        Assert.True(chain.ExecuteCompositionCount > 0);
+        Assert.True(chain.CompositionTickCount > 0);
+        Assert.True(chain.LoopTickCount > 0);
+        Assert.Equal(108, chain.LastPresentedScrollY);
+
+        var boundary = diagnostics.Boundary;
+        Assert.True(boundary.MaxScrollY > 1);
+        Assert.Equal(boundary.MaxScrollY - 1, boundary.StartPosition);
+        Assert.Equal(216, boundary.RapidWheelPixels);
+        Assert.Equal(boundary.MaxScrollY, boundary.TargetAfterClamp);
+        Assert.Equal(boundary.MaxScrollY, boundary.PositionAfterClamp);
+        Assert.Equal(1, boundary.RetargetsAfterClamp);
+        Assert.True(boundary.ActiveAfterClamp);
+        Assert.Equal(boundary.MaxScrollY, boundary.TargetAfterOverscroll);
+        Assert.Equal(boundary.MaxScrollY, boundary.PositionAfterOverscroll);
+        Assert.Equal(1, boundary.RetargetsAfterOverscroll);
+        Assert.Equal(boundary.CancelsAfterClamp, boundary.CancelsAfterOverscroll);
+        Assert.Equal(0, boundary.PendingPixels);
+        Assert.True(boundary.CompositionTickCount > 0);
+        Assert.True(boundary.LoopTickCount > 0);
+
+        Assert.Contains("scroll-presentation-interaction actual scenario=pointer pointer=(20,190)", summary);
+        Assert.Contains("beforeHit=True beforeAction=1 staleHover=1 activeHit=True activeAction=2", summary);
+        Assert.Contains("hoverMapped=True hoverMessage=InputVisualStateChanged hovered=2", summary);
+        Assert.Contains("pressMapped=True pressMessage=InputVisualStateChanged pressHover=2 pressPressed=2 pressCapture=2 pressFocus=2", summary);
+        Assert.Contains("releaseMapped=True releaseMessage=RoutedInput releaseAction=Decrement countAfterRelease=-1", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=chain wheelPx=54", summary);
+        Assert.Contains("firstPosition=54 firstTarget=54 finalPosition=108 finalTarget=108", summary);
+        Assert.Contains("retargets=2 pending=0 cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=boundary", summary);
+        Assert.Contains("rapidWheelPx=216", summary);
+        Assert.Contains("retargetsAfterClamp=1", summary);
+        Assert.Contains("retargetsAfterOverscroll=1", summary);
+    }
+
+    [Fact]
     public void Scroll_presentation_frame_pacing_does_not_add_delay_after_backend_overruns_interval()
     {
         var frameInterval = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 100);

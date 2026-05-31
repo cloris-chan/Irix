@@ -59,6 +59,12 @@ internal static partial class Program
             return;
         }
 
+        if (args.Contains("--diagnose-scroll-presentation-interaction"))
+        {
+            task = RunScrollPresentationInteractionDiagnosticsAsync(args);
+            return;
+        }
+
         if (args.Contains("--diagnose-input"))
         {
             task = RunInputDiagnosticsAsync(args);
@@ -360,6 +366,12 @@ internal static partial class Program
     {
         using var diagnosticOutput = TryCreateDiagnosticOutput(args);
         await ScrollPresentationHitTestDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out);
+    }
+
+    private static async Task RunScrollPresentationInteractionDiagnosticsAsync(string[] args)
+    {
+        using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+        await ScrollPresentationInteractionDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out);
     }
 
     private static async Task RunInputDiagnosticsAsync(string[] args)
