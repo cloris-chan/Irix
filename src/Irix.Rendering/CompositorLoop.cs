@@ -521,8 +521,18 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
                 return;
             }
 
-            delay = ComputeNextTickDelay(lastTickTimestamp, CompositionTimestamp.Now(), CompositionTargetFrameInterval);
+            delay = ComputeNextTickDelay(
+                lastTickTimestamp,
+                CompositionTimestamp.Now(),
+                CompositionTargetFrameInterval,
+                ResolveScrollPresentationFramePacing());
             _scrollPresentationTickQueued = true;
+        }
+
+        if (delay.StopwatchTicks <= 0)
+        {
+            _channel.Writer.TryWrite(CompositorWorkItem.TickScrollPresentation(generation));
+            return;
         }
 
         _ = ScheduleDelayedScrollPresentationTickAsync(delay, generation);
@@ -532,21 +542,10 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
     {
         try
         {
-            if (delay.StopwatchTicks > 0)
+            var delayMilliseconds = ToDelayMilliseconds(delay);
+            if (delayMilliseconds > 0)
             {
-                var delayMilliseconds = ToDelayMilliseconds(delay);
-                if (delayMilliseconds > 0)
-                {
-                    await Task.Delay(delayMilliseconds, _disposeCancellationTokenSource.Token);
-                }
-                else
-                {
-                    await Task.Yield();
-                }
-            }
-            else
-            {
-                await Task.Yield();
+                await Task.Delay(delayMilliseconds, _disposeCancellationTokenSource.Token);
             }
 
             if (!_disposeCancellationTokenSource.IsCancellationRequested)
@@ -562,16 +561,23 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
     internal static int ComputeNextTickDelayMilliseconds(
         CompositionTimestamp tickTimestamp,
         CompositionTimestamp afterRenderTimestamp,
-        CompositionDuration targetFrameInterval)
+        CompositionDuration targetFrameInterval,
+        CompositionFramePacing framePacing = CompositionFramePacing.SoftwareTimer)
     {
-        return ToDelayMilliseconds(ComputeNextTickDelay(tickTimestamp, afterRenderTimestamp, targetFrameInterval));
+        return ToDelayMilliseconds(ComputeNextTickDelay(tickTimestamp, afterRenderTimestamp, targetFrameInterval, framePacing));
     }
 
     private static CompositionDuration ComputeNextTickDelay(
         CompositionTimestamp tickTimestamp,
         CompositionTimestamp afterRenderTimestamp,
-        CompositionDuration targetFrameInterval)
+        CompositionDuration targetFrameInterval,
+        CompositionFramePacing framePacing)
     {
+        if (framePacing == CompositionFramePacing.BackendPresentation)
+        {
+            return CompositionDuration.Zero;
+        }
+
         var nextTick = tickTimestamp + targetFrameInterval;
         var remainingTicks = (nextTick - afterRenderTimestamp).StopwatchTicks;
         return remainingTicks <= 0
@@ -624,6 +630,13 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
                 _renderRequestQueued = false;
             }
         }
+    }
+
+    private CompositionFramePacing ResolveScrollPresentationFramePacing()
+    {
+        return _compositor is ICompositionFramePacingProvider framePacingProvider
+            ? framePacingProvider.FramePacing
+            : CompositionFramePacing.SoftwareTimer;
     }
 
     private enum CompositorWorkMode : byte

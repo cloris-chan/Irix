@@ -1,7 +1,24 @@
 namespace Irix.Rendering;
 
-public sealed class CompositeCompositor(params ICompositor[] compositors) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor
+public sealed class CompositeCompositor(params ICompositor[] compositors) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionFramePacingProvider
 {
+    CompositionFramePacing ICompositionFramePacingProvider.FramePacing
+    {
+        get
+        {
+            foreach (var compositor in compositors)
+            {
+                if (compositor is ICompositionFramePacingProvider provider
+                    && provider.FramePacing == CompositionFramePacing.BackendPresentation)
+                {
+                    return CompositionFramePacing.BackendPresentation;
+                }
+            }
+
+            return CompositionFramePacing.SoftwareTimer;
+        }
+    }
+
     public async ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
     {
         foreach (var compositor in compositors)

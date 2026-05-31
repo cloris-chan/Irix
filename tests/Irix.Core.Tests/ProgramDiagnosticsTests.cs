@@ -2061,10 +2061,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Scroll_presentation_frame_pacing_does_not_add_software_delay_when_backend_presents()
+    {
+        var frameInterval = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 240);
+        var tick = CompositionTimestamp.FromStopwatchTicks(1_000);
+
+        Assert.Equal(0, CompositorLoop.ComputeNextTickDelayMilliseconds(
+            tick,
+            tick + CompositionDuration.FromStopwatchTicks(1),
+            frameInterval,
+            CompositionFramePacing.BackendPresentation));
+    }
+
+    [Fact]
     public void Composition_transform_demo_updates_composition_frame_without_rebuilding_commands()
     {
         var root = FindRepoRoot();
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var demoSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionTransformDemoRunner.cs")));
         var arena = new VirtualTextArena();
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
@@ -2090,6 +2104,9 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--composition-demo", programSource);
         Assert.Contains("CompositionTransformDemoRunner.RunAsync", programSource);
+        Assert.DoesNotContain("Task.Delay", demoSource);
+        Assert.DoesNotContain("Task.Yield", demoSource);
+        Assert.DoesNotContain("ResolveFrameDelayMilliseconds", demoSource);
         Assert.Equal(2003, first.Layer.Id.Value);
         Assert.True(first.Layer.CommandStart >= 0);
         Assert.True(first.Layer.CommandCount > 0);

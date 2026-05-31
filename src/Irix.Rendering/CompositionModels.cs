@@ -1043,6 +1043,12 @@ internal enum CompositionBackendCapabilities : byte
     ScrollPresentation = Transform | FixedClip
 }
 
+internal enum CompositionFramePacing : byte
+{
+    SoftwareTimer,
+    BackendPresentation
+}
+
 internal readonly struct CompositionBackendExecutionResult(
     bool D3D12Backed,
     int LayerCount,
@@ -1086,6 +1092,8 @@ internal readonly struct CompositionBackendExecutionResult(
 internal interface ICompositionDrawingBackend
 {
     CompositionBackendCapabilities CompositionCapabilities { get; }
+
+    CompositionFramePacing FramePacing => CompositionFramePacing.SoftwareTimer;
 
     CompositionBackendExecutionResult ExecuteComposition(
         ReadOnlySpan<DrawCommand> commands,

@@ -11,7 +11,7 @@ namespace Irix.Rendering;
 /// Caches hit targets from the frame for input routing.
 /// This is the bridge between the RenderFrameBatch world and the IDrawingBackend world.
 /// </summary>
-public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, IDisposable
+public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionFramePacingProvider, IDisposable
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
@@ -95,6 +95,12 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     public DrawingBackendClipMode BackendClipMode => _backend is IClipScissorCapability capability
         ? capability.ClipMode
         : DrawingBackendClipMode.None;
+
+    internal CompositionFramePacing FramePacing => _backend is ICompositionDrawingBackend compositionBackend
+        ? compositionBackend.FramePacing
+        : CompositionFramePacing.SoftwareTimer;
+
+    CompositionFramePacing ICompositionFramePacingProvider.FramePacing => FramePacing;
 
     internal DrawingBackendCompositor(
         IDrawingBackend backend,

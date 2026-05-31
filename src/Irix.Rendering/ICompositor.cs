@@ -28,6 +28,11 @@ internal interface ICompositionScrollPresentationCompositor
     bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY);
 }
 
+internal interface ICompositionFramePacingProvider
+{
+    CompositionFramePacing FramePacing { get; }
+}
+
 internal readonly struct CompositionRenderInvalidation(bool CancelsScrollPresentation) : IEquatable<CompositionRenderInvalidation>
 {
     public bool CancelsScrollPresentation { get; } = CancelsScrollPresentation;

@@ -55,7 +55,6 @@ internal static class CompositionTransformDemoRunner
         output.WriteLine($"Animation clock: Stopwatch, duration: {AnimationDurationMs}ms, repeat: alternate");
         output.WriteLine("Demo model: retained UI frame, NodeKey-targeted animation declaration, compositor-owned transform/opacity ticks, D3D12-backed presentation.");
 
-        var frameDelayMs = ResolveFrameDelayMilliseconds(screen.RefreshRateHz);
         var demoEndTimestamp = animationStartTimestamp + CompositionDuration.FromMilliseconds(demoDurationMs);
         var lastExecution = default(CompositionBackendExecutionResult);
         var tickIndex = 0;
@@ -81,11 +80,6 @@ internal static class CompositionTransformDemoRunner
             if (!remaining.IsPositive)
             {
                 break;
-            }
-
-            if (frameDelayMs > 0)
-            {
-                await Task.Delay(Math.Min(frameDelayMs, remaining.ToPositiveMillisecondsCeiling()), cancellationToken);
             }
         }
 
@@ -149,11 +143,6 @@ internal static class CompositionTransformDemoRunner
     }
 
     private static CompositionDuration AnimationDuration => CompositionDuration.FromMilliseconds(AnimationDurationMs);
-
-    private static int ResolveFrameDelayMilliseconds(int refreshRateHz)
-    {
-        return refreshRateHz > 0 ? Math.Max(1, (int)MathF.Round(1000f / refreshRateHz)) : 16;
-    }
 
     private static ScreenRegion CreatePrimaryWindowRegion(IScreenInfo screen)
     {
