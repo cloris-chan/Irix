@@ -2107,6 +2107,45 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public async Task Scroll_presentation_hittest_diagnostic_maps_input_through_active_scroll()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+
+        var diagnostics = await ScrollPresentationHitTestDiagnosticRunner.RunCoreAsync(cancellationToken);
+        var summary = ScrollPresentationHitTestDiagnosticRunner.Format(diagnostics);
+
+        Assert.Contains("--diagnose-scroll-presentation-hittest", programSource);
+        Assert.Contains("ScrollPresentationHitTestDiagnosticRunner.RunAsync", programSource);
+        Assert.True(diagnostics.BeforeHit);
+        Assert.Equal(ActionIdRegistry.Decrement, diagnostics.BeforeAction);
+        Assert.True(diagnostics.ActiveHit);
+        Assert.Equal(ActionIdRegistry.Increment, diagnostics.ActiveAction);
+        Assert.True(diagnostics.MappedInput);
+        Assert.Equal(nameof(CounterMessage.InputVisualStateChanged), diagnostics.MessageKind);
+        Assert.Equal(ActionIdRegistry.Increment, diagnostics.HoveredAction);
+        Assert.True(diagnostics.AfterHoverHit);
+        Assert.Equal(ActionIdRegistry.Increment, diagnostics.AfterHoverAction);
+        Assert.True(diagnostics.ActiveAfterHover);
+        Assert.Equal(10, diagnostics.PresentedAfterHover);
+        Assert.Equal(2, diagnostics.RenderCountBeforeHoverDispatch);
+        Assert.Equal(3, diagnostics.RenderCountAfterHoverDispatch);
+        Assert.Equal(2, diagnostics.ExecuteCountBeforeHoverDispatch);
+        Assert.Equal(2, diagnostics.ExecuteCountAfterHoverDispatch);
+        Assert.Equal(1, diagnostics.ExecuteCompositionCountBeforeHoverDispatch);
+        Assert.Equal(2, diagnostics.ExecuteCompositionCountAfterHoverDispatch);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, diagnostics.LayoutRebuildReason);
+        Assert.True(diagnostics.CompositionTickCount >= 2);
+        Assert.Contains("scroll-presentation-hittest actual pointer=(20,28)", summary);
+        Assert.Contains("beforeHit=True beforeAction=2 activeHit=True activeAction=1", summary);
+        Assert.Contains("message=InputVisualStateChanged hovered=1", summary);
+        Assert.Contains("executeBeforeHover=2 executeAfterHover=2 executeCompositionBeforeHover=1 executeCompositionAfterHover=2", summary);
+        Assert.Contains("afterHoverHit=True afterHoverAction=1 activeAfterHover=True presentedAfterHover=10", summary);
+        Assert.Contains("layoutReason=StyleOnly", summary);
+    }
+
+    [Fact]
     public void Scroll_presentation_frame_pacing_does_not_add_delay_after_backend_overruns_interval()
     {
         var frameInterval = CompositionDuration.FromStopwatchTicks(Stopwatch.Frequency / 100);
