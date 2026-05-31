@@ -880,12 +880,18 @@ public class TypedIdAllocationGuardTests
     {
         var root = FindRepoRoot();
         var source = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.cs"));
+        var diagnosticSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.optional-diagnostics.cs"));
 
         Assert.DoesNotMatch(RecordStructPattern(), source);
-        Assert.Contains("InputOwnershipEvent[]", source);
-        Assert.DoesNotContain("RemoveAt(0)", source);
-        Assert.DoesNotContain("new List<InputOwnershipEvent>", source);
-        Assert.DoesNotContain("List<InputOwnershipEvent> _diagnosticEvents", source);
+        Assert.Contains("partial void RecordHoverChanged", source);
+        Assert.DoesNotContain("InputOwnershipEvent[]", source);
+        Assert.DoesNotContain("DiagnosticEvents", source);
+        Assert.DoesNotContain("AddDiagnosticEvent", source);
+        Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticSource);
+        Assert.Contains("InputOwnershipEvent[]", diagnosticSource);
+        Assert.DoesNotContain("RemoveAt(0)", diagnosticSource);
+        Assert.DoesNotContain("new List<InputOwnershipEvent>", diagnosticSource);
+        Assert.DoesNotContain("List<InputOwnershipEvent> _diagnosticEvents", diagnosticSource);
     }
 
     [Fact]

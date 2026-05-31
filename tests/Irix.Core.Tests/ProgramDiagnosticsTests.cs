@@ -2659,12 +2659,15 @@ public sealed class ProgramDiagnosticsTests
         var diagnosticProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
         var counterApplicationSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterApplication.cs")));
         var diagnosticCounterApplicationSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterApplication.optional-diagnostics.cs")));
+        var inputOwnershipSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.cs")));
+        var diagnosticInputOwnershipSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.optional-diagnostics.cs")));
 
         Assert.Contains("<Compile Remove=\"**\\*.optional-diagnostics.cs\" />", targets);
         Assert.DoesNotContain("<Compile Remove=\"**\\*.diagnostics.cs\" />", targets);
         Assert.True(File.Exists(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.Diagnostics.cs")));
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticProgramSource, StringComparison.Ordinal);
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticCounterApplicationSource, StringComparison.Ordinal);
+        Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticInputOwnershipSource, StringComparison.Ordinal);
         Assert.Contains("static partial void CreateDiagnosticCliTask", mainProgramSource);
         Assert.Contains("static partial void CreateDiagnosticCliTask", diagnosticProgramSource);
         Assert.Contains("partial void TryBuildOptionalHeaderRows", counterApplicationSource);
@@ -2676,6 +2679,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("--diagnose-composition", mainProgramSource);
         Assert.DoesNotContain("CounterViewportDiagnostics", counterApplicationSource);
         Assert.DoesNotContain("DebugDiagnosticsChanged", counterApplicationSource);
+        Assert.DoesNotContain("InputOwnershipEvent", inputOwnershipSource);
+        Assert.DoesNotContain("DiagnosticEvents", inputOwnershipSource);
+        Assert.Contains("InputOwnershipEvent", diagnosticInputOwnershipSource);
 
         var offenders = new List<string>();
         foreach (var sourcePath in Directory.EnumerateFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories))
