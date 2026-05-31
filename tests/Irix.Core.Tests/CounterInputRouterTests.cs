@@ -1687,6 +1687,40 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void ScrollPresentationCoordinator_top_boundary_delta_does_not_restart_same_target_segment()
+    {
+        var state = new ScrollState { Position = 0, TargetPosition = 0, MaxScrollY = 240, HasMaxScrollY = true };
+        var decision = ScrollController.ResolvePresentationInterrupt(
+            state,
+            30,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, -54),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default,
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
+
+        Assert.Equal(30, decision.NextState.Position);
+        Assert.Equal(0, decision.NextState.TargetPosition);
+        Assert.True(decision.NextState.IsAnimating);
+        Assert.False(ScrollPresentationCoordinator.ShouldStartRetargetSegment(state, decision));
+    }
+
+    [Fact]
+    public void ScrollPresentationCoordinator_first_delta_to_top_boundary_starts_target_segment()
+    {
+        var state = new ScrollState { Position = 54, TargetPosition = 54, MaxScrollY = 240, HasMaxScrollY = true };
+        var decision = ScrollController.ResolvePresentationInterrupt(
+            state,
+            54,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, -54),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default,
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
+
+        Assert.Equal(0, decision.NextState.TargetPosition);
+        Assert.True(ScrollPresentationCoordinator.ShouldStartRetargetSegment(state, decision));
+    }
+
+    [Fact]
     public void ScrollPresentationInterrupted_message_applies_policy_state()
     {
         var app = new CounterApplication();

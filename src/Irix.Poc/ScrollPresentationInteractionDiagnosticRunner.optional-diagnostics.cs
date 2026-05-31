@@ -27,7 +27,8 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             await RunPointerScenarioAsync(cancellationToken),
             await RunChainScenarioAsync(cancellationToken),
             await RunRapidEnsureScenarioAsync(cancellationToken),
-            await RunBoundaryScenarioAsync(cancellationToken));
+            await RunBoundaryScenarioAsync(cancellationToken),
+            await RunTopBoundaryScenarioAsync(cancellationToken));
     }
 
     internal static string Format(in ScrollPresentationInteractionDiagnostics diagnostics)
@@ -37,7 +38,8 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             FormatPointer(diagnostics.Pointer),
             FormatChain(diagnostics.Chain),
             FormatRapidEnsure(diagnostics.RapidEnsure),
-            FormatBoundary(diagnostics.Boundary));
+            FormatBoundary(diagnostics.Boundary),
+            FormatTopBoundary(diagnostics.TopBoundary));
     }
 
     private static async Task<ScrollPresentationPointerInteractionDiagnostics> RunPointerScenarioAsync(CancellationToken cancellationToken)
@@ -196,7 +198,6 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             ensureAlreadyRunningCount++;
         }
 
-        var runningWhenBurstAdded = session.Coordinator.IsLoopRunning;
         for (var i = 1; i < notchCount; i++)
         {
             session.Coordinator.AddPendingPixels(wheelPixels);
@@ -221,7 +222,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             wheelPixels * notchCount,
             session.Runtime.CurrentModel.Scroll.Position,
             session.Runtime.CurrentModel.Scroll.TargetPosition,
-            runningWhenBurstAdded,
+            ensureAlreadyRunningCount > 0,
             ensureCalls,
             ensureStartedCount,
             ensureAlreadyRunningCount,
@@ -235,13 +236,19 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             lastPresented);
     }
 
-    private static async Task<ScrollPresentationBoundaryInteractionDiagnostics> RunBoundaryScenarioAsync(CancellationToken cancellationToken)
+    private static Task<ScrollPresentationBoundaryInteractionDiagnostics> RunBoundaryScenarioAsync(CancellationToken cancellationToken) =>
+        RunBoundaryScenarioCoreAsync(cancellationToken, isTopBoundary: false);
+
+    private static Task<ScrollPresentationBoundaryInteractionDiagnostics> RunTopBoundaryScenarioAsync(CancellationToken cancellationToken) =>
+        RunBoundaryScenarioCoreAsync(cancellationToken, isTopBoundary: true);
+
+    private static async Task<ScrollPresentationBoundaryInteractionDiagnostics> RunBoundaryScenarioCoreAsync(CancellationToken cancellationToken, bool isTopBoundary)
     {
         await using var session = await DiagnosticSession.StartAsync(cancellationToken);
         var maxScrollY = session.Translator.LastMaxScrollY;
         await session.Runtime.DispatchAndWaitAsync(new CounterMessage.UpdateMaxScrollY(maxScrollY), cancellationToken);
 
-        var startPosition = Math.Max(maxScrollY - 1, 0);
+        var startPosition = isTopBoundary ? Math.Min(1, maxScrollY) : Math.Max(maxScrollY - 1, 0);
         var nearBoundaryState = new ScrollState
         {
             Position = startPosition,
@@ -260,7 +267,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
                     DispatchesLayoutFrame: true)),
             cancellationToken);
 
-        var rapidWheelPixels = WheelDownPixels(4);
+        var rapidWheelPixels = isTopBoundary ? WheelUpPixels(4) : WheelDownPixels(4);
         session.Coordinator.AddPendingPixels(rapidWheelPixels);
         await session.Coordinator.RunUntilIdleAsync(session.Runtime, session.CompositorLoop, session.Translator, ScrollTargetKey, cancellationToken);
         var targetAfterClamp = session.Runtime.CurrentModel.Scroll.TargetPosition;
@@ -335,7 +342,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         return string.Join(" ", [
             $"scroll-presentation-interaction actual scenario=rapidEnsure notches={diagnostics.NotchCount} wheelPx={diagnostics.WheelPixels:0.##} expectedTarget={diagnostics.ExpectedTargetPosition:0.##}",
             $"finalPosition={diagnostics.FinalPosition:0.##} finalTarget={diagnostics.FinalTargetPosition:0.##}",
-            $"runningWhenBurstAdded={diagnostics.RunningWhenBurstAdded}",
+            $"overlappedRunning={diagnostics.OverlappedRunning}",
             $"ensureCalls={diagnostics.EnsureCallCount} ensureStarted={diagnostics.EnsureStartedCount} ensureAlreadyRunning={diagnostics.EnsureAlreadyRunningCount}",
             $"retargets={diagnostics.RetargetCount} pending={diagnostics.PendingPixels:0.##} cancels={diagnostics.CancelCount}",
             $"execute={diagnostics.ExecuteCount} executeComposition={diagnostics.ExecuteCompositionCount}",
@@ -345,8 +352,18 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
 
     private static string FormatBoundary(in ScrollPresentationBoundaryInteractionDiagnostics diagnostics)
     {
+        return FormatBoundaryScenario("boundary", diagnostics);
+    }
+
+    private static string FormatTopBoundary(in ScrollPresentationBoundaryInteractionDiagnostics diagnostics)
+    {
+        return FormatBoundaryScenario("boundaryTop", diagnostics);
+    }
+
+    private static string FormatBoundaryScenario(string scenario, in ScrollPresentationBoundaryInteractionDiagnostics diagnostics)
+    {
         return string.Join(" ", [
-            $"scroll-presentation-interaction actual scenario=boundary max={diagnostics.MaxScrollY:0.##} start={diagnostics.StartPosition:0.##} rapidWheelPx={diagnostics.RapidWheelPixels:0.##}",
+            $"scroll-presentation-interaction actual scenario={scenario} max={diagnostics.MaxScrollY:0.##} start={diagnostics.StartPosition:0.##} rapidWheelPx={diagnostics.RapidWheelPixels:0.##}",
             $"targetAfterClamp={diagnostics.TargetAfterClamp:0.##} positionAfterClamp={diagnostics.PositionAfterClamp:0.##}",
             $"retargetsAfterClamp={diagnostics.RetargetsAfterClamp} cancelsAfterClamp={diagnostics.CancelsAfterClamp}",
             $"activeAfterClamp={diagnostics.ActiveAfterClamp} presentedAfterClamp={diagnostics.PresentedAfterClamp:0.##}",
@@ -404,6 +421,14 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
     {
         return ScrollController.ConvertToPixels(
             new ScrollDelta(ScrollDeltaUnit.WheelRaw, -SystemScrollSettings.Default.WheelUnitsPerNotch * notches),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+    }
+
+    private static double WheelUpPixels(int notches)
+    {
+        return ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, SystemScrollSettings.Default.WheelUnitsPerNotch * notches),
             ScrollMetrics.DefaultText,
             SystemScrollSettings.Default);
     }
@@ -546,12 +571,14 @@ internal readonly struct ScrollPresentationInteractionDiagnostics(
     ScrollPresentationPointerInteractionDiagnostics Pointer,
     ScrollPresentationChainInteractionDiagnostics Chain,
     ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure,
-    ScrollPresentationBoundaryInteractionDiagnostics Boundary)
+    ScrollPresentationBoundaryInteractionDiagnostics Boundary,
+    ScrollPresentationBoundaryInteractionDiagnostics TopBoundary)
 {
     public ScrollPresentationPointerInteractionDiagnostics Pointer { get; } = Pointer;
     public ScrollPresentationChainInteractionDiagnostics Chain { get; } = Chain;
     public ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure { get; } = RapidEnsure;
     public ScrollPresentationBoundaryInteractionDiagnostics Boundary { get; } = Boundary;
+    public ScrollPresentationBoundaryInteractionDiagnostics TopBoundary { get; } = TopBoundary;
 }
 
 internal readonly struct ScrollPresentationPointerInteractionDiagnostics(
@@ -686,7 +713,7 @@ internal readonly struct ScrollPresentationRapidEnsureInteractionDiagnostics(
     double ExpectedTargetPosition,
     double FinalPosition,
     double FinalTargetPosition,
-    bool RunningWhenBurstAdded,
+    bool OverlappedRunning,
     int EnsureCallCount,
     int EnsureStartedCount,
     int EnsureAlreadyRunningCount,
@@ -704,7 +731,7 @@ internal readonly struct ScrollPresentationRapidEnsureInteractionDiagnostics(
     public double ExpectedTargetPosition { get; } = ExpectedTargetPosition;
     public double FinalPosition { get; } = FinalPosition;
     public double FinalTargetPosition { get; } = FinalTargetPosition;
-    public bool RunningWhenBurstAdded { get; } = RunningWhenBurstAdded;
+    public bool OverlappedRunning { get; } = OverlappedRunning;
     public int EnsureCallCount { get; } = EnsureCallCount;
     public int EnsureStartedCount { get; } = EnsureStartedCount;
     public int EnsureAlreadyRunningCount { get; } = EnsureAlreadyRunningCount;

@@ -2265,7 +2265,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(432, rapidEnsure.ExpectedTargetPosition);
         Assert.Equal(432, rapidEnsure.FinalPosition);
         Assert.Equal(432, rapidEnsure.FinalTargetPosition);
-        Assert.True(rapidEnsure.RunningWhenBurstAdded);
+        Assert.True(rapidEnsure.OverlappedRunning);
         Assert.Equal(8, rapidEnsure.EnsureCallCount);
         Assert.True(rapidEnsure.EnsureStartedCount >= 1);
         Assert.True(rapidEnsure.EnsureAlreadyRunningCount >= 1);
@@ -2293,6 +2293,22 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(boundary.CompositionTickCount > 0);
         Assert.True(boundary.LoopTickCount > 0);
 
+        var topBoundary = diagnostics.TopBoundary;
+        Assert.True(topBoundary.MaxScrollY > 1);
+        Assert.Equal(1, topBoundary.StartPosition);
+        Assert.Equal(-216, topBoundary.RapidWheelPixels);
+        Assert.Equal(0, topBoundary.TargetAfterClamp);
+        Assert.Equal(0, topBoundary.PositionAfterClamp);
+        Assert.Equal(1, topBoundary.RetargetsAfterClamp);
+        Assert.True(topBoundary.ActiveAfterClamp);
+        Assert.Equal(0, topBoundary.TargetAfterOverscroll);
+        Assert.Equal(0, topBoundary.PositionAfterOverscroll);
+        Assert.Equal(1, topBoundary.RetargetsAfterOverscroll);
+        Assert.Equal(topBoundary.CancelsAfterClamp, topBoundary.CancelsAfterOverscroll);
+        Assert.Equal(0, topBoundary.PendingPixels);
+        Assert.True(topBoundary.CompositionTickCount > 0);
+        Assert.True(topBoundary.LoopTickCount > 0);
+
         Assert.Contains("scroll-presentation-interaction actual scenario=pointer pointer=(20,190)", summary);
         Assert.Contains("beforeHit=True beforeAction=1 staleHover=1 activeHit=True activeAction=2", summary);
         Assert.Contains("hoverMapped=True hoverMessage=InputVisualStateChanged hovered=2", summary);
@@ -2303,12 +2319,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("retargets=2 pending=0 cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=rapidEnsure notches=8 wheelPx=54 expectedTarget=432", summary);
         Assert.Contains("finalPosition=432 finalTarget=432", summary);
-        Assert.Contains("runningWhenBurstAdded=True", summary);
+        Assert.Contains("overlappedRunning=True", summary);
         Assert.Contains("ensureCalls=8", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=boundary", summary);
         Assert.Contains("rapidWheelPx=216", summary);
         Assert.Contains("retargetsAfterClamp=1", summary);
         Assert.Contains("retargetsAfterOverscroll=1", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=boundaryTop", summary);
+        Assert.Contains("rapidWheelPx=-216", summary);
     }
 
     [Fact]
