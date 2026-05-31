@@ -2048,11 +2048,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(diagnostics.IsAnimating);
         Assert.Equal(1, diagnostics.RetargetCount);
         Assert.Equal(1, diagnostics.RetainedStageCount);
+        Assert.Equal(0, diagnostics.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.None, diagnostics.Cancellation.LastReason);
         Assert.Equal(2, diagnostics.ExecuteCount);
         Assert.True(diagnostics.ExecuteCompositionCount > 0);
         Assert.True(diagnostics.LoopTickCount > 0);
         Assert.Contains("loopTicks=", summary);
         Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False", summary);
+        Assert.Contains("cancels=0 cancelReason=None cancelInvalidation=None", summary);
         Assert.Contains("retainedStages=1", summary);
         Assert.Contains("execute=2", summary);
         Assert.Contains("lastPresented=54", summary);

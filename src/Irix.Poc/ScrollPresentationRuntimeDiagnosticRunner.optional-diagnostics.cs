@@ -40,6 +40,8 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
             compositor.RetainedStageCount,
             compositor.CompositionTickCount,
             compositorLoop.ScrollPresentationTickCount,
+            compositorLoop.ScrollPresentationCancelCount,
+            compositorLoop.ScrollPresentationCancellationDiagnostics,
             coordinator.RetargetCount,
             backend.ExecuteCount,
             backend.ExecuteCompositionCount,
@@ -48,7 +50,8 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
 
     internal static string Format(in ScrollPresentationRuntimeDiagnostics diagnostics)
     {
-        return $"scroll-presentation-runtime actual position={diagnostics.Position:0.##} target={diagnostics.TargetPosition:0.##} animating={diagnostics.IsAnimating} renderCount={diagnostics.RenderCount} retainedStages={diagnostics.RetainedStageCount} compositorTicks={diagnostics.CompositorTickCount} loopTicks={diagnostics.LoopTickCount} retargets={diagnostics.RetargetCount} execute={diagnostics.ExecuteCount} executeComposition={diagnostics.ExecuteCompositionCount} lastPresented={diagnostics.LastPresentedScrollY:0.##}";
+        var cancellation = diagnostics.Cancellation;
+        return $"scroll-presentation-runtime actual position={diagnostics.Position:0.##} target={diagnostics.TargetPosition:0.##} animating={diagnostics.IsAnimating} renderCount={diagnostics.RenderCount} retainedStages={diagnostics.RetainedStageCount} compositorTicks={diagnostics.CompositorTickCount} loopTicks={diagnostics.LoopTickCount} cancels={diagnostics.CancelCount} cancelReason={cancellation.LastReason} cancelInvalidation={cancellation.LastInvalidationKind} explicitCancels={cancellation.ExplicitCount} invalidationCancels={cancellation.RenderInvalidationCount} retargets={diagnostics.RetargetCount} execute={diagnostics.ExecuteCount} executeComposition={diagnostics.ExecuteCompositionCount} lastPresented={diagnostics.LastPresentedScrollY:0.##}";
     }
 
     private sealed class DiagnosticWindow(ScreenRegion region) : INativeWindow
@@ -116,6 +119,8 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
     long RetainedStageCount,
     long CompositorTickCount,
     long LoopTickCount,
+    long CancelCount,
+    ScrollPresentationCancellationSnapshot Cancellation,
     long RetargetCount,
     int ExecuteCount,
     int ExecuteCompositionCount,
@@ -128,6 +133,8 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
     public long RetainedStageCount { get; } = RetainedStageCount;
     public long CompositorTickCount { get; } = CompositorTickCount;
     public long LoopTickCount { get; } = LoopTickCount;
+    public long CancelCount { get; } = CancelCount;
+    public ScrollPresentationCancellationSnapshot Cancellation { get; } = Cancellation;
     public long RetargetCount { get; } = RetargetCount;
     public int ExecuteCount { get; } = ExecuteCount;
     public int ExecuteCompositionCount { get; } = ExecuteCompositionCount;
@@ -142,6 +149,8 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
             && RetainedStageCount == other.RetainedStageCount
             && CompositorTickCount == other.CompositorTickCount
             && LoopTickCount == other.LoopTickCount
+            && CancelCount == other.CancelCount
+            && Cancellation == other.Cancellation
             && RetargetCount == other.RetargetCount
             && ExecuteCount == other.ExecuteCount
             && ExecuteCompositionCount == other.ExecuteCompositionCount
@@ -160,6 +169,8 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
         hash.Add(RetainedStageCount);
         hash.Add(CompositorTickCount);
         hash.Add(LoopTickCount);
+        hash.Add(CancelCount);
+        hash.Add(Cancellation);
         hash.Add(RetargetCount);
         hash.Add(ExecuteCount);
         hash.Add(ExecuteCompositionCount);

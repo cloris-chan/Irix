@@ -113,7 +113,7 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
             return invalidation;
         }
 
-        return CompositionRenderInvalidation.ScrollPresentation;
+        return CompositionRenderInvalidation.MaxScrollChanged;
     }
 
     partial void OnTranslateAllocationStarted();

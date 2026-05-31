@@ -33,29 +33,45 @@ internal interface ICompositionFramePacingProvider
     CompositionFramePacing FramePacing { get; }
 }
 
-internal readonly struct CompositionRenderInvalidation(bool CancelsScrollPresentation) : IEquatable<CompositionRenderInvalidation>
+internal enum CompositionRenderInvalidationKind : byte
 {
-    public bool CancelsScrollPresentation { get; } = CancelsScrollPresentation;
+    None,
+    ScrollPresentation,
+    ViewportChanged,
+    TreeStructure,
+    LayoutAffecting,
+    TextSizeAffecting,
+    MaxScrollChanged
+}
+
+internal readonly struct CompositionRenderInvalidation(CompositionRenderInvalidationKind Kind) : IEquatable<CompositionRenderInvalidation>
+{
+    public CompositionRenderInvalidationKind Kind { get; } = Kind;
+    public bool CancelsScrollPresentation => Kind != CompositionRenderInvalidationKind.None;
 
     public static CompositionRenderInvalidation None => default;
 
-    public static CompositionRenderInvalidation ScrollPresentation => new(CancelsScrollPresentation: true);
+    public static CompositionRenderInvalidation ScrollPresentation => new(CompositionRenderInvalidationKind.ScrollPresentation);
+
+    public static CompositionRenderInvalidation MaxScrollChanged => new(CompositionRenderInvalidationKind.MaxScrollChanged);
 
     public static CompositionRenderInvalidation FromLayoutRebuildReason(LayoutRebuildReason reason)
     {
-        return reason is LayoutRebuildReason.ViewportChanged
-            or LayoutRebuildReason.TreeStructure
-            or LayoutRebuildReason.LayoutAffecting
-            or LayoutRebuildReason.TextSizeAffecting
-            ? ScrollPresentation
-            : None;
+        return reason switch
+        {
+            LayoutRebuildReason.ViewportChanged => new CompositionRenderInvalidation(CompositionRenderInvalidationKind.ViewportChanged),
+            LayoutRebuildReason.TreeStructure => new CompositionRenderInvalidation(CompositionRenderInvalidationKind.TreeStructure),
+            LayoutRebuildReason.LayoutAffecting => new CompositionRenderInvalidation(CompositionRenderInvalidationKind.LayoutAffecting),
+            LayoutRebuildReason.TextSizeAffecting => new CompositionRenderInvalidation(CompositionRenderInvalidationKind.TextSizeAffecting),
+            _ => None
+        };
     }
 
-    public bool Equals(CompositionRenderInvalidation other) => CancelsScrollPresentation == other.CancelsScrollPresentation;
+    public bool Equals(CompositionRenderInvalidation other) => Kind == other.Kind;
 
     public override bool Equals(object? obj) => obj is CompositionRenderInvalidation other && Equals(other);
 
-    public override int GetHashCode() => CancelsScrollPresentation.GetHashCode();
+    public override int GetHashCode() => Kind.GetHashCode();
 
     public static bool operator ==(CompositionRenderInvalidation left, CompositionRenderInvalidation right) => left.Equals(right);
 

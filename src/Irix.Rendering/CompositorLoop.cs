@@ -3,7 +3,7 @@ using System.Threading.Channels;
 
 namespace Irix.Rendering;
 
-public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchSink, IAsyncDisposable
+public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchSink, IAsyncDisposable
 {
     private const int CompositionTargetFrameRate = 240;
     private static readonly CompositionDuration CompositionTargetFrameInterval = CompositionDuration.FromStopwatchTicks(Math.Max(1, Stopwatch.Frequency / CompositionTargetFrameRate));
@@ -96,6 +96,11 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
     internal long ScrollPresentationTickCount => Volatile.Read(ref _scrollPresentationTickCount);
 
     internal long ScrollPresentationCancelCount => Volatile.Read(ref _scrollPresentationCancelCount);
+
+    partial void RecordScrollPresentationCancellation(
+        byte reason,
+        CompositionRenderInvalidationKind invalidationKind,
+        bool canceled);
 
     internal bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
     {
@@ -367,7 +372,10 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
         Exception? error = null;
         try
         {
-            CancelScrollPresentationCore(countCancellation: true);
+            CancelScrollPresentationCore(
+                countCancellation: true,
+                1,
+                CompositionRenderInvalidationKind.None);
         }
         catch (Exception ex)
         {
@@ -391,11 +399,17 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
     {
         if (invalidation.CancelsScrollPresentation)
         {
-            CancelScrollPresentationCore(countCancellation: true);
+            CancelScrollPresentationCore(
+                countCancellation: true,
+                2,
+                invalidation.Kind);
         }
     }
 
-    private void CancelScrollPresentationCore(bool countCancellation)
+    private void CancelScrollPresentationCore(
+        bool countCancellation,
+        byte reason,
+        CompositionRenderInvalidationKind invalidationKind)
     {
         if (_compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor)
         {
@@ -403,6 +417,7 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
         }
 
         var canceled = CancelScrollPresentationSchedule();
+        RecordScrollPresentationCancellation(reason, invalidationKind, canceled);
         if (countCancellation && canceled)
         {
             Interlocked.Increment(ref _scrollPresentationCancelCount);
@@ -498,14 +513,17 @@ public sealed class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchS
     private void CompleteScrollPresentationSchedulerOnDispose()
     {
         RenderCompletionWaitGroup? idleWaitGroup;
+        var canceled = false;
         lock (_compositionScheduleGate)
         {
+            canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
             _scrollPresentationSchedule = default;
             _scrollPresentationTickQueued = false;
             idleWaitGroup = _scrollPresentationIdleWaitGroup;
             _scrollPresentationIdleWaitGroup = null;
         }
 
+        RecordScrollPresentationCancellation(3, CompositionRenderInvalidationKind.None, canceled);
         idleWaitGroup?.Complete(null);
     }
 
