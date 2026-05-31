@@ -77,7 +77,7 @@ function Get-RunnerCommand {
         throw "AOT publish failed with exit code $LASTEXITCODE."
     }
 
-    $publishRoot = Join-Path (Split-Path -Parent $pocProject) "bin\Release"
+    $publishRoot = Join-Path (Split-Path -Parent $pocProject) "bin\diagnostics\Release"
     $exe = Get-ChildItem $publishRoot -Recurse -Filter "Irix.Poc.exe" | Where-Object { $_.FullName -match '\\publish\\Irix\.Poc\.exe$' } | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
     if ($null -eq $exe) {
         throw "Published Irix.Poc.exe was not found under $publishRoot."

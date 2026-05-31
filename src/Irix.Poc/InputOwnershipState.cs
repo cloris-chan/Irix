@@ -123,18 +123,7 @@ internal sealed partial class InputOwnershipState
     public void UpdateHover<THitTestResolver>(RawInputEvent inputEvent, ref THitTestResolver hitTestResolver)
         where THitTestResolver : struct, IActionHitTestResolver
     {
-        var previousTarget = HoveredTarget;
-        var nextTarget = hitTestResolver.Resolve(inputEvent.X, inputEvent.Y);
-        if (previousTarget == nextTarget)
-        {
-            return;
-        }
-
-        HoveredTarget = nextTarget;
-        LastHoverLeftTarget = previousTarget;
-        LastHoverEnteredTarget = nextTarget;
-        HoverChangeCount++;
-        RecordHoverChanged(previousTarget, nextTarget);
+        SetHoverTarget(hitTestResolver.Resolve(inputEvent.X, inputEvent.Y));
     }
 
     /// <summary>
@@ -151,6 +140,7 @@ internal sealed partial class InputOwnershipState
         where THitTestResolver : struct, IActionHitTestResolver
     {
         var target = hitTestResolver.Resolve(inputEvent.X, inputEvent.Y);
+        SetHoverTarget(target);
         var previousFocus = FocusedTarget;
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
@@ -179,6 +169,7 @@ internal sealed partial class InputOwnershipState
     public ActionId ReleasePointer<THitTestResolver>(RawInputEvent inputEvent, ref THitTestResolver hitTestResolver)
         where THitTestResolver : struct, IActionHitTestResolver
     {
+        SetHoverTarget(hitTestResolver.Resolve(inputEvent.X, inputEvent.Y));
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
         var wasPointerPressed = _isPointerPressed;
@@ -246,4 +237,19 @@ internal sealed partial class InputOwnershipState
         ActionId previousCapturedTarget,
         ActionId currentCapturedTarget,
         bool isPointerPressed);
+
+    private void SetHoverTarget(ActionId nextTarget)
+    {
+        var previousTarget = HoveredTarget;
+        if (previousTarget == nextTarget)
+        {
+            return;
+        }
+
+        HoveredTarget = nextTarget;
+        LastHoverLeftTarget = previousTarget;
+        LastHoverEnteredTarget = nextTarget;
+        HoverChangeCount++;
+        RecordHoverChanged(previousTarget, nextTarget);
+    }
 }

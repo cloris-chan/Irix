@@ -8,6 +8,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <IsAotCompatible>true</IsAotCompatible>
+    <IrixDiagnostics Condition="'$(IrixDiagnostics)' == '' and '$(MSBuildProjectName)' == 'Irix.Core.Tests'">true</IrixDiagnostics>
     <IrixDiagnostics Condition="'$(IrixDiagnostics)' == ''">false</IrixDiagnostics>
+    <IrixBuildFlavor Condition="'$(IrixDiagnostics)' == 'true'">diagnostics</IrixBuildFlavor>
+    <IrixBuildFlavor Condition="'$(IrixDiagnostics)' != 'true'">runtime</IrixBuildFlavor>
+    <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">bin\$(IrixBuildFlavor)\</BaseOutputPath>
+    <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">obj\$(IrixBuildFlavor)\</BaseIntermediateOutputPath>
   </PropertyGroup>
 </Project>

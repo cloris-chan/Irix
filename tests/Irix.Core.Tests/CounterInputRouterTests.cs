@@ -118,6 +118,38 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void TryMapInput_press_updates_hover_target_from_current_hit()
+    {
+        var ownershipState = new InputOwnershipState();
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 1, X: 32, Y: 200),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out _);
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out _);
+
+        var snapshot = ownershipState.Snapshot;
+        Assert.False(mapped);
+        Assert.Equal(new ActionId(1), snapshot.HoveredTarget);
+        Assert.Equal(new ActionId(1), snapshot.PressedTarget);
+        Assert.Equal(new ActionId(1), snapshot.CapturedTarget);
+        Assert.Equal(new ActionId(1), snapshot.FocusedTarget);
+        Assert.Equal(new ActionId(1), snapshot.LastHoverEnteredTarget);
+        Assert.Equal(new ActionId(2), snapshot.LastHoverLeftTarget);
+        Assert.Equal(2, snapshot.HoverChangeCount);
+    }
+
+    [Fact]
     public void TryMapInput_captures_pointer_until_release()
     {
         var ownershipState = new InputOwnershipState();
@@ -151,6 +183,7 @@ public sealed class CounterInputRouterTests
 
         Assert.True(mapped);
         Assert.IsType<CounterMessage.Increment>(message);
+        Assert.True(ownershipState.HoveredTarget.IsNone);
         Assert.True(ownershipState.PressedTarget.IsNone);
         Assert.True(ownershipState.CapturedTarget.IsNone);
         Assert.Equal(new ActionId(1), ownershipState.FocusedTarget);
@@ -256,6 +289,12 @@ public sealed class CounterInputRouterTests
                 Assert.True(diagnosticEvent.PreviousPressedTarget.IsNone);
                 Assert.Equal(new ActionId(1), diagnosticEvent.CurrentPressedTarget);
                 Assert.True(diagnosticEvent.IsPointerPressed);
+            },
+            diagnosticEvent =>
+            {
+                Assert.Equal(InputOwnershipEventKind.HoverChanged, diagnosticEvent.Kind);
+                Assert.Equal(new ActionId(1), diagnosticEvent.PreviousTarget);
+                Assert.True(diagnosticEvent.CurrentTarget.IsNone);
             },
             diagnosticEvent =>
             {
@@ -656,7 +695,7 @@ public sealed class CounterInputRouterTests
         Assert.Equal(new ActionId(1), model.InputOwnership.PressedTarget);
         Assert.Equal(new ActionId(1), model.InputOwnership.CapturedTarget);
         Assert.Equal(new ActionId(1), model.InputOwnership.FocusedTarget);
-        AssertButtonState(app.BuildView(model), isHovered: false, isPressed: true, isFocused: true);
+        AssertButtonState(app.BuildView(model), isHovered: true, isPressed: true, isFocused: true);
     }
 
     [Fact]

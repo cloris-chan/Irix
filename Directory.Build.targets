@@ -12,6 +12,10 @@
     <Compile Remove="**\*.optional-diagnostics.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="obj\**\*.cs;bin\**\*.cs" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
     <Compile Include="$(MSBuildThisFileDirectory)RepositoryInternalsVisibleTo.cs"
              Link="Generated\RepositoryInternalsVisibleTo.g.cs" />

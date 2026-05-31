@@ -9,6 +9,8 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
 {
     private static readonly NodeKey ScrollTargetKey = new(1);
     private static readonly RawInputEvent FixedPointerMove = new(RawInputEventKind.PointerMoved, Timestamp: 1, X: 20, Y: 28);
+    private static readonly RawInputEvent FixedPointerPress = new(RawInputEventKind.PointerPressed, Timestamp: 2, X: 20, Y: 28, Button: PointerButton.Left);
+    private static readonly RawInputEvent FixedPointerRelease = new(RawInputEventKind.PointerReleased, Timestamp: 3, X: 20, Y: 28, Button: PointerButton.Left);
 
     internal static async Task RunAsync(TextWriter output, CancellationToken cancellationToken = default)
     {
@@ -32,6 +34,10 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
         await compositorLoop.RequestRenderAndWaitAsync(cancellationToken);
 
         var beforeHit = compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var beforeAction);
+        var stalePressOwnershipState = new InputOwnershipState();
+        var initialHitTestResolver = new DrawingBackendCompositorActionHitTestResolver(compositor);
+        _ = Program.TryMapInputForRuntime(FixedPointerMove, stalePressOwnershipState, initialHitTestResolver, out _);
+        var staleHoverAction = stalePressOwnershipState.HoveredTarget;
         var snapshot = translator.LastRetainedInputSnapshot ?? throw new InvalidOperationException("Retained input snapshot was not produced.");
         compositor.SetCompositionScrollPresentationDeclaration(
             new CompositionScrollPresentationDeclaration(
@@ -53,29 +59,72 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
             await runtime.DispatchAndWaitAsync(hoverMessage, cancellationToken);
         }
 
+        var renderCountAfterHoverDispatch = compositor.RenderCount;
+        var executeCountAfterHoverDispatch = backend.ExecuteCount;
+        var executeCompositionCountAfterHoverDispatch = backend.ExecuteCompositionCount;
         var afterHoverHit = compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var afterHoverAction);
         var activeAfterHover = compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfterHover);
+        var pressMapped = Program.TryMapInputForRuntime(FixedPointerPress, stalePressOwnershipState, hitTestResolver, out var pressMessage);
+        var pressRefresh = pressMessage as CounterMessage.InputVisualStateChanged;
+        var pressSnapshot = pressRefresh?.Snapshot ?? stalePressOwnershipState.Snapshot;
+        var renderCountBeforePressDispatch = compositor.RenderCount;
+        var executeCountBeforePressDispatch = backend.ExecuteCount;
+        var executeCompositionCountBeforePressDispatch = backend.ExecuteCompositionCount;
+        if (pressRefresh is not null)
+        {
+            await runtime.DispatchAndWaitAsync(pressRefresh, cancellationToken);
+        }
+
+        var renderCountAfterPressDispatch = compositor.RenderCount;
+        var executeCountAfterPressDispatch = backend.ExecuteCount;
+        var executeCompositionCountAfterPressDispatch = backend.ExecuteCompositionCount;
+        var activeAfterPress = compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfterPress);
+        var releaseMapped = Program.TryMapInputForRuntime(FixedPointerRelease, stalePressOwnershipState, hitTestResolver, out var releaseMessage);
+        var releaseActionKind = ResolveRoutedActionKind(releaseMessage);
+        if (releaseMessage is not null)
+        {
+            await runtime.DispatchAndWaitAsync(releaseMessage, cancellationToken);
+        }
 
         return new ScrollPresentationHitTestDiagnostics(
             FixedPointerMove.X,
             FixedPointerMove.Y,
             beforeHit,
             beforeAction,
+            staleHoverAction,
             activeHit,
             activeAction,
             mapped,
             ResolveMessageKind(message),
             hoverMessage?.Snapshot.HoveredTarget ?? ActionId.None,
             renderCountBeforeHoverDispatch,
-            compositor.RenderCount,
+            renderCountAfterHoverDispatch,
             executeCountBeforeHoverDispatch,
-            backend.ExecuteCount,
+            executeCountAfterHoverDispatch,
             executeCompositionCountBeforeHoverDispatch,
-            backend.ExecuteCompositionCount,
+            executeCompositionCountAfterHoverDispatch,
             afterHoverHit,
             afterHoverAction,
             activeAfterHover,
             presentedAfterHover,
+            pressMapped,
+            ResolveMessageKind(pressMessage),
+            pressSnapshot.HoveredTarget,
+            pressSnapshot.PressedTarget,
+            pressSnapshot.CapturedTarget,
+            pressSnapshot.FocusedTarget,
+            renderCountBeforePressDispatch,
+            renderCountAfterPressDispatch,
+            executeCountBeforePressDispatch,
+            executeCountAfterPressDispatch,
+            executeCompositionCountBeforePressDispatch,
+            executeCompositionCountAfterPressDispatch,
+            activeAfterPress,
+            presentedAfterPress,
+            releaseMapped,
+            ResolveMessageKind(releaseMessage),
+            releaseActionKind,
+            runtime.CurrentModel.Count,
             translator.LayoutRebuildCount,
             translator.LastLayoutRebuildReason,
             compositor.CompositionTickCount);
@@ -83,7 +132,27 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
 
     internal static string Format(in ScrollPresentationHitTestDiagnostics diagnostics)
     {
-        return $"scroll-presentation-hittest actual pointer=({diagnostics.PointerX},{diagnostics.PointerY}) beforeHit={diagnostics.BeforeHit} beforeAction={diagnostics.BeforeAction.Value} activeHit={diagnostics.ActiveHit} activeAction={diagnostics.ActiveAction.Value} mapped={diagnostics.MappedInput} message={diagnostics.MessageKind} hovered={diagnostics.HoveredAction.Value} renderBeforeHover={diagnostics.RenderCountBeforeHoverDispatch} renderAfterHover={diagnostics.RenderCountAfterHoverDispatch} executeBeforeHover={diagnostics.ExecuteCountBeforeHoverDispatch} executeAfterHover={diagnostics.ExecuteCountAfterHoverDispatch} executeCompositionBeforeHover={diagnostics.ExecuteCompositionCountBeforeHoverDispatch} executeCompositionAfterHover={diagnostics.ExecuteCompositionCountAfterHoverDispatch} afterHoverHit={diagnostics.AfterHoverHit} afterHoverAction={diagnostics.AfterHoverAction.Value} activeAfterHover={diagnostics.ActiveAfterHover} presentedAfterHover={diagnostics.PresentedAfterHover:0.##} layoutRebuilds={diagnostics.LayoutRebuildCount} layoutReason={diagnostics.LayoutRebuildReason} compositionTicks={diagnostics.CompositionTickCount}";
+        return string.Join(" ", [
+            $"scroll-presentation-hittest actual pointer=({diagnostics.PointerX},{diagnostics.PointerY})",
+            $"beforeHit={diagnostics.BeforeHit} beforeAction={diagnostics.BeforeAction.Value} staleHover={diagnostics.StaleHoverAction.Value}",
+            $"activeHit={diagnostics.ActiveHit} activeAction={diagnostics.ActiveAction.Value}",
+            $"mapped={diagnostics.MappedInput} message={diagnostics.MessageKind} hovered={diagnostics.HoveredAction.Value}",
+            $"renderBeforeHover={diagnostics.RenderCountBeforeHoverDispatch} renderAfterHover={diagnostics.RenderCountAfterHoverDispatch}",
+            $"executeBeforeHover={diagnostics.ExecuteCountBeforeHoverDispatch} executeAfterHover={diagnostics.ExecuteCountAfterHoverDispatch}",
+            $"executeCompositionBeforeHover={diagnostics.ExecuteCompositionCountBeforeHoverDispatch} executeCompositionAfterHover={diagnostics.ExecuteCompositionCountAfterHoverDispatch}",
+            $"afterHoverHit={diagnostics.AfterHoverHit} afterHoverAction={diagnostics.AfterHoverAction.Value}",
+            $"activeAfterHover={diagnostics.ActiveAfterHover} presentedAfterHover={diagnostics.PresentedAfterHover:0.##}",
+            $"pressMapped={diagnostics.PressMappedInput} pressMessage={diagnostics.PressMessageKind}",
+            $"pressHover={diagnostics.PressHoveredAction.Value} pressPressed={diagnostics.PressPressedAction.Value}",
+            $"pressCapture={diagnostics.PressCapturedAction.Value} pressFocus={diagnostics.PressFocusedAction.Value}",
+            $"renderBeforePress={diagnostics.RenderCountBeforePressDispatch} renderAfterPress={diagnostics.RenderCountAfterPressDispatch}",
+            $"executeBeforePress={diagnostics.ExecuteCountBeforePressDispatch} executeAfterPress={diagnostics.ExecuteCountAfterPressDispatch}",
+            $"executeCompositionBeforePress={diagnostics.ExecuteCompositionCountBeforePressDispatch} executeCompositionAfterPress={diagnostics.ExecuteCompositionCountAfterPressDispatch}",
+            $"activeAfterPress={diagnostics.ActiveAfterPress} presentedAfterPress={diagnostics.PresentedAfterPress:0.##}",
+            $"releaseMapped={diagnostics.ReleaseMappedInput} releaseMessage={diagnostics.ReleaseMessageKind}",
+            $"releaseAction={diagnostics.ReleaseActionKind} countAfterRelease={diagnostics.CountAfterRelease}",
+            $"layoutRebuilds={diagnostics.LayoutRebuildCount} layoutReason={diagnostics.LayoutRebuildReason} compositionTicks={diagnostics.CompositionTickCount}"
+        ]);
     }
 
     private static string ResolveMessageKind(CounterMessage? message)
@@ -96,6 +165,13 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
             null => "None",
             _ => message.GetType().Name
         };
+    }
+
+    private static string ResolveRoutedActionKind(CounterMessage? message)
+    {
+        return message is CounterMessage.RoutedInput routed
+            ? ResolveMessageKind(routed.Action)
+            : "None";
     }
 
     private sealed class DiagnosticApplication : IApplication<CounterModel, CounterMessage>
@@ -121,7 +197,7 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
             return message switch
             {
                 CounterMessage.InputVisualStateChanged input => new UpdateResult<CounterModel, CounterMessage>(model with { InputOwnership = input.Snapshot }),
-                CounterMessage.RoutedInput input => new UpdateResult<CounterModel, CounterMessage>(model with { InputOwnership = input.Snapshot }),
+                CounterMessage.RoutedInput input => ApplyRoutedInput(model, input),
                 _ => new UpdateResult<CounterModel, CounterMessage>(model)
             };
         }
@@ -155,6 +231,18 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
                 label,
                 key,
                 ButtonPropertyBundle.Create(actionId, ControlVisualStateProjection.Project(ownership, actionId)));
+        }
+
+        private static UpdateResult<CounterModel, CounterMessage> ApplyRoutedInput(CounterModel model, CounterMessage.RoutedInput input)
+        {
+            var modelWithInput = model with { InputOwnership = input.Snapshot };
+            return input.Action switch
+            {
+                CounterMessage.Increment => new UpdateResult<CounterModel, CounterMessage>(modelWithInput with { Count = modelWithInput.Count + 1 }),
+                CounterMessage.Decrement => new UpdateResult<CounterModel, CounterMessage>(modelWithInput with { Count = modelWithInput.Count - 1 }),
+                CounterMessage.Reset reset => new UpdateResult<CounterModel, CounterMessage>(modelWithInput with { Count = reset.Value }),
+                _ => new UpdateResult<CounterModel, CounterMessage>(modelWithInput)
+            };
         }
     }
 
@@ -220,6 +308,7 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
     int PointerY,
     bool BeforeHit,
     ActionId BeforeAction,
+    ActionId StaleHoverAction,
     bool ActiveHit,
     ActionId ActiveAction,
     bool MappedInput,
@@ -235,6 +324,24 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
     ActionId AfterHoverAction,
     bool ActiveAfterHover,
     double PresentedAfterHover,
+    bool PressMappedInput,
+    string PressMessageKind,
+    ActionId PressHoveredAction,
+    ActionId PressPressedAction,
+    ActionId PressCapturedAction,
+    ActionId PressFocusedAction,
+    long RenderCountBeforePressDispatch,
+    long RenderCountAfterPressDispatch,
+    int ExecuteCountBeforePressDispatch,
+    int ExecuteCountAfterPressDispatch,
+    int ExecuteCompositionCountBeforePressDispatch,
+    int ExecuteCompositionCountAfterPressDispatch,
+    bool ActiveAfterPress,
+    double PresentedAfterPress,
+    bool ReleaseMappedInput,
+    string ReleaseMessageKind,
+    string ReleaseActionKind,
+    int CountAfterRelease,
     long LayoutRebuildCount,
     LayoutRebuildReason LayoutRebuildReason,
     long CompositionTickCount) : IEquatable<ScrollPresentationHitTestDiagnostics>
@@ -243,6 +350,7 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
     public int PointerY { get; } = PointerY;
     public bool BeforeHit { get; } = BeforeHit;
     public ActionId BeforeAction { get; } = BeforeAction;
+    public ActionId StaleHoverAction { get; } = StaleHoverAction;
     public bool ActiveHit { get; } = ActiveHit;
     public ActionId ActiveAction { get; } = ActiveAction;
     public bool MappedInput { get; } = MappedInput;
@@ -258,6 +366,24 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
     public ActionId AfterHoverAction { get; } = AfterHoverAction;
     public bool ActiveAfterHover { get; } = ActiveAfterHover;
     public double PresentedAfterHover { get; } = PresentedAfterHover;
+    public bool PressMappedInput { get; } = PressMappedInput;
+    public string PressMessageKind { get; } = PressMessageKind;
+    public ActionId PressHoveredAction { get; } = PressHoveredAction;
+    public ActionId PressPressedAction { get; } = PressPressedAction;
+    public ActionId PressCapturedAction { get; } = PressCapturedAction;
+    public ActionId PressFocusedAction { get; } = PressFocusedAction;
+    public long RenderCountBeforePressDispatch { get; } = RenderCountBeforePressDispatch;
+    public long RenderCountAfterPressDispatch { get; } = RenderCountAfterPressDispatch;
+    public int ExecuteCountBeforePressDispatch { get; } = ExecuteCountBeforePressDispatch;
+    public int ExecuteCountAfterPressDispatch { get; } = ExecuteCountAfterPressDispatch;
+    public int ExecuteCompositionCountBeforePressDispatch { get; } = ExecuteCompositionCountBeforePressDispatch;
+    public int ExecuteCompositionCountAfterPressDispatch { get; } = ExecuteCompositionCountAfterPressDispatch;
+    public bool ActiveAfterPress { get; } = ActiveAfterPress;
+    public double PresentedAfterPress { get; } = PresentedAfterPress;
+    public bool ReleaseMappedInput { get; } = ReleaseMappedInput;
+    public string ReleaseMessageKind { get; } = ReleaseMessageKind;
+    public string ReleaseActionKind { get; } = ReleaseActionKind;
+    public int CountAfterRelease { get; } = CountAfterRelease;
     public long LayoutRebuildCount { get; } = LayoutRebuildCount;
     public LayoutRebuildReason LayoutRebuildReason { get; } = LayoutRebuildReason;
     public long CompositionTickCount { get; } = CompositionTickCount;
@@ -268,6 +394,7 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
             && PointerY == other.PointerY
             && BeforeHit == other.BeforeHit
             && BeforeAction == other.BeforeAction
+            && StaleHoverAction == other.StaleHoverAction
             && ActiveHit == other.ActiveHit
             && ActiveAction == other.ActiveAction
             && MappedInput == other.MappedInput
@@ -283,6 +410,24 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
             && AfterHoverAction == other.AfterHoverAction
             && ActiveAfterHover == other.ActiveAfterHover
             && PresentedAfterHover.Equals(other.PresentedAfterHover)
+            && PressMappedInput == other.PressMappedInput
+            && PressMessageKind == other.PressMessageKind
+            && PressHoveredAction == other.PressHoveredAction
+            && PressPressedAction == other.PressPressedAction
+            && PressCapturedAction == other.PressCapturedAction
+            && PressFocusedAction == other.PressFocusedAction
+            && RenderCountBeforePressDispatch == other.RenderCountBeforePressDispatch
+            && RenderCountAfterPressDispatch == other.RenderCountAfterPressDispatch
+            && ExecuteCountBeforePressDispatch == other.ExecuteCountBeforePressDispatch
+            && ExecuteCountAfterPressDispatch == other.ExecuteCountAfterPressDispatch
+            && ExecuteCompositionCountBeforePressDispatch == other.ExecuteCompositionCountBeforePressDispatch
+            && ExecuteCompositionCountAfterPressDispatch == other.ExecuteCompositionCountAfterPressDispatch
+            && ActiveAfterPress == other.ActiveAfterPress
+            && PresentedAfterPress.Equals(other.PresentedAfterPress)
+            && ReleaseMappedInput == other.ReleaseMappedInput
+            && ReleaseMessageKind == other.ReleaseMessageKind
+            && ReleaseActionKind == other.ReleaseActionKind
+            && CountAfterRelease == other.CountAfterRelease
             && LayoutRebuildCount == other.LayoutRebuildCount
             && LayoutRebuildReason == other.LayoutRebuildReason
             && CompositionTickCount == other.CompositionTickCount;
@@ -297,6 +442,7 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
         hash.Add(PointerY);
         hash.Add(BeforeHit);
         hash.Add(BeforeAction);
+        hash.Add(StaleHoverAction);
         hash.Add(ActiveHit);
         hash.Add(ActiveAction);
         hash.Add(MappedInput);
@@ -312,6 +458,24 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
         hash.Add(AfterHoverAction);
         hash.Add(ActiveAfterHover);
         hash.Add(PresentedAfterHover);
+        hash.Add(PressMappedInput);
+        hash.Add(PressMessageKind);
+        hash.Add(PressHoveredAction);
+        hash.Add(PressPressedAction);
+        hash.Add(PressCapturedAction);
+        hash.Add(PressFocusedAction);
+        hash.Add(RenderCountBeforePressDispatch);
+        hash.Add(RenderCountAfterPressDispatch);
+        hash.Add(ExecuteCountBeforePressDispatch);
+        hash.Add(ExecuteCountAfterPressDispatch);
+        hash.Add(ExecuteCompositionCountBeforePressDispatch);
+        hash.Add(ExecuteCompositionCountAfterPressDispatch);
+        hash.Add(ActiveAfterPress);
+        hash.Add(PresentedAfterPress);
+        hash.Add(ReleaseMappedInput);
+        hash.Add(ReleaseMessageKind);
+        hash.Add(ReleaseActionKind);
+        hash.Add(CountAfterRelease);
         hash.Add(LayoutRebuildCount);
         hash.Add(LayoutRebuildReason);
         hash.Add(CompositionTickCount);

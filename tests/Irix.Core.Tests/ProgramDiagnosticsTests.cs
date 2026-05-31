@@ -2120,6 +2120,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("ScrollPresentationHitTestDiagnosticRunner.RunAsync", programSource);
         Assert.True(diagnostics.BeforeHit);
         Assert.Equal(ActionIdRegistry.Decrement, diagnostics.BeforeAction);
+        Assert.Equal(ActionIdRegistry.Decrement, diagnostics.StaleHoverAction);
         Assert.True(diagnostics.ActiveHit);
         Assert.Equal(ActionIdRegistry.Increment, diagnostics.ActiveAction);
         Assert.True(diagnostics.MappedInput);
@@ -2135,13 +2136,34 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(2, diagnostics.ExecuteCountAfterHoverDispatch);
         Assert.Equal(1, diagnostics.ExecuteCompositionCountBeforeHoverDispatch);
         Assert.Equal(2, diagnostics.ExecuteCompositionCountAfterHoverDispatch);
+        Assert.True(diagnostics.PressMappedInput);
+        Assert.Equal(nameof(CounterMessage.InputVisualStateChanged), diagnostics.PressMessageKind);
+        Assert.Equal(ActionIdRegistry.Increment, diagnostics.PressHoveredAction);
+        Assert.Equal(ActionIdRegistry.Increment, diagnostics.PressPressedAction);
+        Assert.Equal(ActionIdRegistry.Increment, diagnostics.PressCapturedAction);
+        Assert.Equal(ActionIdRegistry.Increment, diagnostics.PressFocusedAction);
+        Assert.Equal(3, diagnostics.RenderCountBeforePressDispatch);
+        Assert.Equal(4, diagnostics.RenderCountAfterPressDispatch);
+        Assert.Equal(2, diagnostics.ExecuteCountBeforePressDispatch);
+        Assert.Equal(2, diagnostics.ExecuteCountAfterPressDispatch);
+        Assert.Equal(2, diagnostics.ExecuteCompositionCountBeforePressDispatch);
+        Assert.Equal(3, diagnostics.ExecuteCompositionCountAfterPressDispatch);
+        Assert.True(diagnostics.ActiveAfterPress);
+        Assert.Equal(10, diagnostics.PresentedAfterPress);
+        Assert.True(diagnostics.ReleaseMappedInput);
+        Assert.Equal(nameof(CounterMessage.RoutedInput), diagnostics.ReleaseMessageKind);
+        Assert.Equal(nameof(CounterMessage.Increment), diagnostics.ReleaseActionKind);
+        Assert.Equal(1, diagnostics.CountAfterRelease);
         Assert.Equal(LayoutRebuildReason.StyleOnly, diagnostics.LayoutRebuildReason);
-        Assert.True(diagnostics.CompositionTickCount >= 2);
+        Assert.True(diagnostics.CompositionTickCount >= 4);
         Assert.Contains("scroll-presentation-hittest actual pointer=(20,28)", summary);
-        Assert.Contains("beforeHit=True beforeAction=2 activeHit=True activeAction=1", summary);
+        Assert.Contains("beforeHit=True beforeAction=2 staleHover=2 activeHit=True activeAction=1", summary);
         Assert.Contains("message=InputVisualStateChanged hovered=1", summary);
         Assert.Contains("executeBeforeHover=2 executeAfterHover=2 executeCompositionBeforeHover=1 executeCompositionAfterHover=2", summary);
         Assert.Contains("afterHoverHit=True afterHoverAction=1 activeAfterHover=True presentedAfterHover=10", summary);
+        Assert.Contains("pressMapped=True pressMessage=InputVisualStateChanged pressHover=1 pressPressed=1 pressCapture=1 pressFocus=1", summary);
+        Assert.Contains("executeBeforePress=2 executeAfterPress=2 executeCompositionBeforePress=2 executeCompositionAfterPress=3", summary);
+        Assert.Contains("activeAfterPress=True presentedAfterPress=10 releaseMapped=True releaseMessage=RoutedInput releaseAction=Increment countAfterRelease=1", summary);
         Assert.Contains("layoutReason=StyleOnly", summary);
     }
 
@@ -2291,6 +2313,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("\"-p:IrixDiagnostics=true\"", diagnosticBaseline);
         Assert.Contains("dotnet publish $pocProject -c Release -r win-x64 --self-contained -p:IrixDiagnostics=true", diagnosticBaseline);
+        Assert.Contains("\"bin\\diagnostics\\Release\"", diagnosticBaseline);
         Assert.Contains("\"-p:IrixDiagnostics=true\"", glyphRegression);
         Assert.Contains("-p:IrixDiagnostics=true -- --diagnose", diagnose);
     }
@@ -2790,6 +2813,7 @@ public sealed class ProgramDiagnosticsTests
     public void Diagnostic_only_sources_are_optional_compile_items()
     {
         var root = FindRepoRoot();
+        var props = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "Directory.Build.props")));
         var targets = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "Directory.Build.targets")));
         var mainProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
         var diagnosticProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
@@ -2798,7 +2822,10 @@ public sealed class ProgramDiagnosticsTests
         var inputOwnershipSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.cs")));
         var diagnosticInputOwnershipSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.optional-diagnostics.cs")));
 
+        Assert.Contains("<BaseOutputPath Condition=\"'$(BaseOutputPath)' == ''\">bin\\$(IrixBuildFlavor)\\</BaseOutputPath>", props);
+        Assert.Contains("<BaseIntermediateOutputPath Condition=\"'$(BaseIntermediateOutputPath)' == ''\">obj\\$(IrixBuildFlavor)\\</BaseIntermediateOutputPath>", props);
         Assert.Contains("<Compile Remove=\"**\\*.optional-diagnostics.cs\" />", targets);
+        Assert.Contains("<Compile Remove=\"obj\\**\\*.cs;bin\\**\\*.cs\" />", targets);
         Assert.DoesNotContain("<Compile Remove=\"**\\*.diagnostics.cs\" />", targets);
         Assert.True(File.Exists(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.Diagnostics.cs")));
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticProgramSource, StringComparison.Ordinal);
@@ -3241,15 +3268,16 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("buttonState afterPress Increment hovered=True pressed=True focused=True priority=Pressed color=#FF245CD2", output);
         Assert.Contains("duringCaptureMove hover=Decrement focus=Increment pressed=Increment capture=Increment", output);
         Assert.Contains("buttonState duringCaptureMove Increment hovered=False pressed=True focused=True priority=Pressed color=#FF245CD2", output);
-        Assert.Contains("releaseOutside mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
+        Assert.Contains("releaseOutside mapped=True message=Increment hover=- focus=Increment pressed=- capture=-", output);
         Assert.Contains("buttonState releaseOutside Increment hovered=False pressed=False focused=True priority=Focused color=#FF54A0FF", output);
-        Assert.Contains("keyboardEnter mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
-        Assert.Contains("keyboardSpace mapped=True message=Increment hover=Decrement focus=Increment pressed=- capture=-", output);
-        Assert.Contains("pressEmpty mapped=False hover=Decrement focus=- pressed=- capture=-", output);
-        Assert.Contains("releaseAfterEmptyPress mapped=False", output);
+        Assert.Contains("keyboardEnter mapped=True message=Increment hover=- focus=Increment pressed=- capture=-", output);
+        Assert.Contains("keyboardSpace mapped=True message=Increment hover=- focus=Increment pressed=- capture=-", output);
+        Assert.Contains("pressEmpty mapped=False hover=- focus=- pressed=- capture=-", output);
+        Assert.Contains("releaseAfterEmptyPress mapped=False hover=Increment focus=- pressed=- capture=-", output);
         Assert.Contains("focusLost hover=- focus=- pressed=- capture=-", output);
         Assert.Contains("buttonState focusLost Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", output);
         Assert.Contains("HoverChanged previous=- current=Increment", output);
+        Assert.Contains("HoverChanged previous=Decrement current=-", output);
         Assert.Contains("FocusChanged previous=- current=Increment", output);
         Assert.Contains("PressedChanged previousPressed=- currentPressed=Increment", output);
         Assert.Contains("PressedChanged previousPressed=Increment currentPressed=-", output);
@@ -3269,7 +3297,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(snapshot.Ownership.FocusedTarget.IsNone);
         Assert.True(snapshot.Ownership.PressedTarget.IsNone);
         Assert.True(snapshot.Ownership.CapturedTarget.IsNone);
-        Assert.Equal(3, snapshot.Ownership.HoverChangeCount);
+        Assert.Equal(5, snapshot.Ownership.HoverChangeCount);
         Assert.False(snapshot.Ownership.IsPointerPressed);
         Assert.Contains(snapshot.OwnershipSteps, step => step.Kind == InputDiagnosticOwnershipStepKind.AfterMove && step.Ownership.HoveredTarget == ActionIdRegistry.Increment);
         Assert.Contains(snapshot.OwnershipSteps, step => step.Kind == InputDiagnosticOwnershipStepKind.KeyboardEnter && step is { HasMappedResult: true, Mapped: true } && step.Message is CounterMessage.Increment);
@@ -3284,7 +3312,7 @@ public sealed class ProgramDiagnosticsTests
         var eventLines = DiagnosticsFormatter.BuildInputEventDiagnosticLines(snapshot);
         var dirtyReasonLines = DiagnosticsFormatter.BuildInputDirtyReasonDiagnosticLines(snapshot);
         Assert.Contains("afterMove hover=Increment focus=- pressed=- capture=- hoverChanges=1 pointerPressed=False", ownershipLines);
-        Assert.Contains(ownershipLines, line => line.StartsWith("keyboardEnter mapped=True message=Increment hover=Decrement focus=Increment", StringComparison.Ordinal));
+        Assert.Contains(ownershipLines, line => line.StartsWith("keyboardEnter mapped=True message=Increment hover=- focus=Increment", StringComparison.Ordinal));
         Assert.Contains("buttonState normal Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", buttonStateLines);
         Assert.Contains("buttonState focusLost Increment hovered=False pressed=False focused=False priority=Normal color=#FF3478F6", buttonStateLines);
         Assert.Contains("  HoverChanged previous=- current=Increment", eventLines);
