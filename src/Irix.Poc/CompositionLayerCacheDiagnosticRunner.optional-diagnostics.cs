@@ -14,6 +14,7 @@ internal static class CompositionLayerCacheDiagnosticRunner
         output.WriteLine("=== D3D12 Composition Layer Cache Diagnostic ===");
         output.WriteLine(FormatFirst(diagnostics.First));
         output.WriteLine(FormatSecond(diagnostics.Second));
+        output.WriteLine(FormatScaleChanged(diagnostics.ScaleChanged));
         output.WriteLine("=== d3d12 composition layer cache diagnostic complete ===");
     }
 
@@ -59,7 +60,21 @@ internal static class CompositionLayerCacheDiagnosticRunner
                 texts,
                 cache);
 
-            return new CompositionLayerCacheDiagnostics(first, second);
+            rects.Reset();
+            texts.Reset();
+            var changedScale = new DisplayScale(displayScale.ScaleX + 1f, displayScale.ScaleY + 1f).Normalize();
+            var scaleChanged = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+                DrawingBackendClipMode.Scissor,
+                new DrawRect(0, 0, 640, 360),
+                commands,
+                resources,
+                secondFrame,
+                changedScale,
+                rects,
+                texts,
+                cache);
+
+            return new CompositionLayerCacheDiagnostics(first, second, scaleChanged);
         }
         finally
         {
@@ -76,13 +91,20 @@ internal static class CompositionLayerCacheDiagnosticRunner
     {
         return $"composition-layer-cache.second finalComposition=D3D12 d3d12Backed={diagnostics.D3D12Backed} layers={diagnostics.LayerCount} commands={diagnostics.CommandCount} cacheHits={diagnostics.LayerCacheHits} cacheMisses={diagnostics.LayerCacheMisses} cachedCommands={diagnostics.CachedLayerCommands} translatedCommands={diagnostics.TranslatedCommands} opacityAppliedCommands={diagnostics.OpacityAppliedCommands}";
     }
+
+    internal static string FormatScaleChanged(in D3D12CompositionExecuteDiagnostics diagnostics)
+    {
+        return $"composition-layer-cache.scaleChanged finalComposition=D3D12 d3d12Backed={diagnostics.D3D12Backed} layers={diagnostics.LayerCount} commands={diagnostics.CommandCount} cacheHits={diagnostics.LayerCacheHits} cacheMisses={diagnostics.LayerCacheMisses} cachedCommands={diagnostics.CachedLayerCommands} translatedCommands={diagnostics.TranslatedCommands} opacityAppliedCommands={diagnostics.OpacityAppliedCommands}";
+    }
 }
 
 internal readonly struct CompositionLayerCacheDiagnostics(
     D3D12CompositionExecuteDiagnostics First,
-    D3D12CompositionExecuteDiagnostics Second)
+    D3D12CompositionExecuteDiagnostics Second,
+    D3D12CompositionExecuteDiagnostics ScaleChanged)
 {
     public D3D12CompositionExecuteDiagnostics First { get; } = First;
     public D3D12CompositionExecuteDiagnostics Second { get; } = Second;
+    public D3D12CompositionExecuteDiagnostics ScaleChanged { get; } = ScaleChanged;
 }
 #endif
