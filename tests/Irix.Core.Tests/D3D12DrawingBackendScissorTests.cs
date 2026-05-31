@@ -523,6 +523,65 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_invalidates_layer_content_cache_when_same_resource_frame_resets()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = new FrameDrawingResources();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 40, 24), Color: DrawColor.Opaque(100, 120, 140))
+        };
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(7),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionTransform(12, 8),
+            CompositionOpacity.Opaque));
+        var cache = new D3D12CompositionLayerContentCache();
+        var firstFrameId = resources.FrameId;
+
+        var first = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+        Assert.Equal(0, first.LayerCacheHits);
+        Assert.Equal(1, first.LayerCacheMisses);
+        rects.Reset();
+        texts.Reset();
+
+        resources.Reset();
+        resources.Seal();
+
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.NotEqual(firstFrameId, resources.FrameId);
+        Assert.Equal(0, diagnostics.LayerCacheHits);
+        Assert.Equal(1, diagnostics.LayerCacheMisses);
+        Assert.Equal(1, diagnostics.CachedLayerCommands);
+        Assert.Equal(2, rects.Count);
+        Assert.Equal(28, rects.Span[1].X);
+        Assert.Equal(28, rects.Span[1].Y);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_layer_content_cache_hit_does_not_allocate()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

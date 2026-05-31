@@ -1437,11 +1437,11 @@ public sealed class DrawingBackendCompositorTests
         // Reset() must throw while retained
         Assert.Throws<InvalidOperationException>(() => resources.Reset());
 
-        // Release first, then Reset is safe
         resources.Release();
-        resources.Reset(); // no exception
 
-        FrameDrawingResources.Return(resources);
+        var owned = FrameDrawingResources.Rent();
+        owned.Reset();
+        FrameDrawingResources.Return(owned);
     }
 
     [Fact]

@@ -29,13 +29,12 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     private bool _sealed;
     private bool _returned;
     private int _retainCount;
-    private ulong _frameId;
+    private ulong _frameId = 1;
 
     /// <summary>
-    /// Monotonically increasing frame identifier, incremented each time this instance
-    /// is rented from the pool. Used by <see cref="Irix.Rendering.RetainedRenderFrame"/>
-    /// to verify that two references to the same <see cref="FrameDrawingResources"/> instance
-    /// actually belong to the same rental cycle (same frame scope).
+    /// Monotonically increasing frame identifier for this resource instance's current
+    /// frame scope. Rent and Reset both advance the scope so retained references to the
+    /// same object cannot cross into a later resource publication.
     /// </summary>
     internal ulong FrameId => _frameId;
 
@@ -67,18 +66,15 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
                 System.Threading.Interlocked.Increment(ref _reusedCount);
                 var instance = Pool.Dequeue();
                 instance._returned = false;
-                instance._sealed = false;
                 instance._retainCount = 0; // defensive: clear stale retain state
-                instance._textArena.Reset(); // defensive: ensure arena is unsealed
-                instance._textStyles.Clear();
-                instance._textStyleHandles.Clear();
-                instance._frameId++;
+                instance.ClearMutableState(); // defensive: ensure arena is unsealed
+                instance.AdvanceFrameId();
                 return instance;
             }
         }
 
         System.Threading.Interlocked.Increment(ref _createdCount);
-        return new FrameDrawingResources { _frameId = 1 };
+        return new FrameDrawingResources();
     }
 
     public static void Return(FrameDrawingResources resources)
@@ -99,10 +95,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         }
 
         resources._returned = true;
-        resources._textArena.Reset();
-        resources._textStyles.Clear();
-        resources._textStyleHandles.Clear();
-        resources._sealed = false;
+        resources.ClearMutableState();
 
         lock (PoolLock)
         {
@@ -231,8 +224,7 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     }
 
     /// <summary>
-    /// Reset the arena and style lists for reuse. Only valid when not retained.
-    /// Typically called by <see cref="Return"/> during pool recycling.
+    /// Reset the arena and style lists for an explicitly owned new frame scope.
     /// </summary>
     internal void Reset()
     {
@@ -243,11 +235,14 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
                 "Call Release() first.");
         }
 
-        _textArena.Reset();
-        _textStyles.Clear();
-        _textStyleHandles.Clear();
-        _sealed = false;
+        if (_returned)
+        {
+            throw new InvalidOperationException("Cannot reset FrameDrawingResources after it has been returned to the pool.");
+        }
+
+        ClearMutableState();
         _returned = false;
+        AdvanceFrameId();
     }
 
     public void Dispose()
@@ -273,6 +268,19 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         {
             throw new InvalidOperationException("Cannot add resources after the frame resource set has been sealed.");
         }
+    }
+
+    private void ClearMutableState()
+    {
+        _textArena.Reset();
+        _textStyles.Clear();
+        _textStyleHandles.Clear();
+        _sealed = false;
+    }
+
+    private void AdvanceFrameId()
+    {
+        _frameId = _frameId == ulong.MaxValue ? 1 : _frameId + 1;
     }
 
     private sealed class EmptyFrameResourceResolver : IFrameResourceResolver

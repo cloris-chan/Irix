@@ -43,6 +43,7 @@ public sealed class FrameDrawingResourcesTests
     {
         using var resources = new FrameDrawingResources();
 
+        var frameId1 = resources.FrameId;
         var handle1 = resources.AddTextStyle(TextStyle.Default);
         var text1 = resources.AddText("Hello");
         resources.Seal();
@@ -50,12 +51,30 @@ public sealed class FrameDrawingResourcesTests
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(handle1));
 
         resources.Reset();
+        var frameId2 = resources.FrameId;
 
         var handle2 = resources.AddTextStyle(TextStyle.Default);
         var text2 = resources.AddText("World");
         resources.Seal();
         Assert.Equal("World", resources.Resolve(text2).ToString());
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(handle2));
+        Assert.NotEqual(0ul, frameId1);
+        Assert.NotEqual(0ul, frameId2);
+        Assert.NotEqual(frameId1, frameId2);
+    }
+
+    [Fact]
+    public void Reset_after_return_throws()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+
+        FrameDrawingResources.Return(resources);
+
+        Assert.Throws<InvalidOperationException>(() => resources.Reset());
+
+        var recycled = FrameDrawingResources.Rent();
+        FrameDrawingResources.Return(recycled);
     }
 
     [Fact]
@@ -210,11 +229,11 @@ public sealed class FrameDrawingResourcesTests
         // If same object, FrameId must differ
         if (ReferenceEquals(r1, r2))
         {
-            Assert.True(id2 > id1);
+            Assert.NotEqual(id1, id2);
         }
         else
         {
-            Assert.True(id2 >= 1);
+            Assert.NotEqual(0ul, id2);
         }
 
         FrameDrawingResources.Return(r2);
