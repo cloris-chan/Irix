@@ -2053,9 +2053,54 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(2, diagnostics.ExecuteCount);
         Assert.True(diagnostics.ExecuteCompositionCount > 0);
         Assert.True(diagnostics.LoopTickCount > 0);
+
+        var chain = diagnostics.RetargetChain;
+        Assert.Equal(108, chain.Position);
+        Assert.Equal(108, chain.TargetPosition);
+        Assert.False(chain.IsAnimating);
+        Assert.Equal(2, chain.RetargetCount);
+        Assert.Equal(2, chain.RetainedStageCount);
+        Assert.Equal(1, chain.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, chain.Cancellation.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.LayoutAffecting, chain.Cancellation.LastInvalidationKind);
+        Assert.Equal(1, chain.Cancellation.RenderInvalidationCount);
+
+        var explicitCancellation = diagnostics.ExplicitCancellation;
+        Assert.Equal("explicit", explicitCancellation.Name);
+        Assert.Equal(1, explicitCancellation.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.Explicit, explicitCancellation.Cancellation.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, explicitCancellation.Cancellation.LastInvalidationKind);
+        Assert.Equal(1, explicitCancellation.Cancellation.ExplicitCount);
+        Assert.Equal(0, explicitCancellation.RenderCount);
+        Assert.False(explicitCancellation.PresentationActiveAfter);
+
+        var viewportCancellation = diagnostics.ViewportInvalidationCancellation;
+        Assert.Equal("viewport", viewportCancellation.Name);
+        Assert.Equal(1, viewportCancellation.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, viewportCancellation.Cancellation.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.ViewportChanged, viewportCancellation.Cancellation.LastInvalidationKind);
+        Assert.Equal(1, viewportCancellation.RenderCount);
+        Assert.False(viewportCancellation.PresentationActiveDuringRender);
+        Assert.False(viewportCancellation.PresentationActiveAfter);
+
+        var maxScrollCancellation = diagnostics.MaxScrollInvalidationCancellation;
+        Assert.Equal("maxScroll", maxScrollCancellation.Name);
+        Assert.Equal(1, maxScrollCancellation.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, maxScrollCancellation.Cancellation.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.MaxScrollChanged, maxScrollCancellation.Cancellation.LastInvalidationKind);
+        Assert.Equal(1, maxScrollCancellation.RenderCount);
+        Assert.False(maxScrollCancellation.PresentationActiveDuringRender);
+        Assert.False(maxScrollCancellation.PresentationActiveAfter);
+
         Assert.Contains("loopTicks=", summary);
-        Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False", summary);
+        Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False scenario=initial", summary);
         Assert.Contains("cancels=0 cancelReason=None cancelInvalidation=None", summary);
+        Assert.Contains("scroll-presentation-runtime actual position=108 target=108 animating=False scenario=chain", summary);
+        Assert.Contains("cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
+        Assert.Contains("scroll-presentation-runtime.cancel scenario=explicit cancels=1 cancelReason=Explicit cancelInvalidation=None", summary);
+        Assert.Contains("scroll-presentation-runtime.cancel scenario=viewport cancels=1 cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
+        Assert.Contains("scroll-presentation-runtime.cancel scenario=maxScroll cancels=1 cancelReason=RenderInvalidation cancelInvalidation=MaxScrollChanged", summary);
+        Assert.Contains("activeDuringRender=False activeAfter=False", summary);
         Assert.Contains("retainedStages=1", summary);
         Assert.Contains("execute=2", summary);
         Assert.Contains("lastPresented=54", summary);
