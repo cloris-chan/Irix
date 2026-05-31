@@ -143,6 +143,12 @@ internal static partial class Program
             return;
         }
 
+        if (args.Contains("--diagnose-composition-skip"))
+        {
+            task = RunCompositionSkipDiagnosticsAsync(args);
+            return;
+        }
+
         if (args.Contains("--diagnose-composition-marker-runtime"))
         {
             task = RunCompositionMarkerRuntimeDiagnosticsAsync(args);
@@ -522,6 +528,13 @@ internal static partial class Program
     {
         using var diagnosticOutput = TryCreateDiagnosticOutput(args);
         await CompositionMarkerRuntimeDiagnosticRunner.RunAsync(diagnosticOutput ?? Console.Out);
+    }
+
+    private static Task RunCompositionSkipDiagnosticsAsync(string[] args)
+    {
+        using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+        CompositionSkipDiagnosticRunner.Run(diagnosticOutput ?? Console.Out);
+        return Task.CompletedTask;
     }
 }
 #endif

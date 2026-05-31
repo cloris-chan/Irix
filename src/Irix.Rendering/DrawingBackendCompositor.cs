@@ -11,7 +11,7 @@ namespace Irix.Rendering;
 /// Caches hit targets from the frame for input routing.
 /// This is the bridge between the RenderFrameBatch world and the IDrawingBackend world.
 /// </summary>
-public sealed class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionFramePacingProvider, IDisposable
+public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionFramePacingProvider, IDisposable
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
@@ -244,6 +244,23 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             return count;
         }
     }
+
+    partial void RecordCompositionExecutionSkipped(
+        byte kind,
+        byte reason,
+        CompositionBackendCapabilities requiredCapabilities,
+        CompositionBackendCapabilities backendCapabilities,
+        CompositionFramePacing framePacing,
+        int layerCount,
+        int commandCount);
+
+    partial void RecordCompositionExecutionCompleted(
+        byte kind,
+        CompositionBackendCapabilities requiredCapabilities,
+        CompositionBackendCapabilities backendCapabilities,
+        CompositionFramePacing framePacing,
+        int layerCount,
+        int commandCount);
 
     internal void SetCompositionAnimationPlan(in CompositionAnimationPlan plan)
     {
@@ -619,18 +636,68 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     {
         if (_compositionAnimationPlan is not { } plan)
         {
+            RecordCompositionExecutionSkipped(
+                1,
+                1,
+                CompositionBackendCapabilities.TransformOpacity,
+                _backend is ICompositionDrawingBackend existingBackend ? existingBackend.CompositionCapabilities : CompositionBackendCapabilities.None,
+                FramePacing,
+                0,
+                0);
             throw new InvalidOperationException("A composition animation plan must be set before compositor-only animation ticks can be rendered.");
         }
 
-        if (_backend is not ICompositionDrawingBackend compositionBackend
-            || (compositionBackend.CompositionCapabilities & CompositionBackendCapabilities.TransformOpacity) != CompositionBackendCapabilities.TransformOpacity)
+        if (_backend is not ICompositionDrawingBackend compositionBackend)
         {
+            RecordCompositionExecutionSkipped(
+                1,
+                2,
+                CompositionBackendCapabilities.TransformOpacity,
+                CompositionBackendCapabilities.None,
+                CompositionFramePacing.SoftwareTimer,
+                plan.LayerAnimation.LayerId.IsValid ? 1 : 0,
+                _retainedFrame.CommandCount);
+            throw new InvalidOperationException("The drawing backend must expose transform/opacity composition execution for compositor-only animation ticks.");
+        }
+
+        var backendCapabilities = compositionBackend.CompositionCapabilities;
+        if ((backendCapabilities & CompositionBackendCapabilities.TransformOpacity) != CompositionBackendCapabilities.TransformOpacity)
+        {
+            RecordCompositionExecutionSkipped(
+                1,
+                3,
+                CompositionBackendCapabilities.TransformOpacity,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerAnimation.LayerId.IsValid ? 1 : 0,
+                _retainedFrame.CommandCount);
             throw new InvalidOperationException("The drawing backend must expose transform/opacity composition execution for compositor-only animation ticks.");
         }
 
         if (!_retainedFrame.TryReadFrame(out var commands, out var resources))
         {
+            RecordCompositionExecutionSkipped(
+                1,
+                4,
+                CompositionBackendCapabilities.TransformOpacity,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerAnimation.LayerId.IsValid ? 1 : 0,
+                0);
             throw new InvalidOperationException("A retained render frame must exist before compositor-only animation ticks can be rendered.");
+        }
+
+        if (!plan.IsValidForCommandCount(commands.Length))
+        {
+            RecordCompositionExecutionSkipped(
+                1,
+                5,
+                CompositionBackendCapabilities.TransformOpacity,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerAnimation.LayerId.IsValid ? 1 : 0,
+                commands.Length);
+            throw new InvalidOperationException("Composition animation plan layer range must fit the retained command frame.");
         }
 
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
@@ -641,6 +708,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             resources,
             compositionFrame,
             timestamp,
+            1,
+            CompositionBackendCapabilities.TransformOpacity,
             static (DrawingBackendCompositor compositor, in CompositionMarkerEventContext context) =>
             {
                 var plan = context.AnimationPlan.GetValueOrDefault();
@@ -694,34 +763,149 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
     {
         if (_compositionScrollPresentationPlan is not { } plan)
         {
+            RecordCompositionExecutionSkipped(
+                2,
+                1,
+                CompositionBackendCapabilities.ScrollPresentation,
+                _backend is ICompositionDrawingBackend existingBackend ? existingBackend.CompositionCapabilities : CompositionBackendCapabilities.None,
+                FramePacing,
+                0,
+                0);
             throw new InvalidOperationException("A composition scroll presentation plan must be set before compositor-only scroll ticks can be rendered.");
         }
 
-        if (_backend is not ICompositionDrawingBackend compositionBackend
-            || (compositionBackend.CompositionCapabilities & CompositionBackendCapabilities.ScrollPresentation) != CompositionBackendCapabilities.ScrollPresentation)
+        if (_backend is not ICompositionDrawingBackend compositionBackend)
         {
+            RecordCompositionExecutionSkipped(
+                2,
+                2,
+                CompositionBackendCapabilities.ScrollPresentation,
+                CompositionBackendCapabilities.None,
+                CompositionFramePacing.SoftwareTimer,
+                plan.LayerCount,
+                _retainedFrame.CommandCount);
+            throw new InvalidOperationException("The drawing backend must expose fixed-clip scroll presentation execution for compositor-only scroll ticks.");
+        }
+
+        var backendCapabilities = compositionBackend.CompositionCapabilities;
+        if ((backendCapabilities & CompositionBackendCapabilities.ScrollPresentation) != CompositionBackendCapabilities.ScrollPresentation)
+        {
+            RecordCompositionExecutionSkipped(
+                2,
+                3,
+                CompositionBackendCapabilities.ScrollPresentation,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerCount,
+                _retainedFrame.CommandCount);
             throw new InvalidOperationException("The drawing backend must expose fixed-clip scroll presentation execution for compositor-only scroll ticks.");
         }
 
         if (!_retainedFrame.TryReadFrame(out var commands, out var resources))
         {
+            RecordCompositionExecutionSkipped(
+                2,
+                4,
+                CompositionBackendCapabilities.ScrollPresentation,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerCount,
+                0);
             throw new InvalidOperationException("A retained render frame must exist before compositor-only scroll ticks can be rendered.");
+        }
+
+        if (!plan.IsValidForCommandCount(commands.Length))
+        {
+            RecordCompositionExecutionSkipped(
+                2,
+                5,
+                CompositionBackendCapabilities.ScrollPresentation,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerCount,
+                commands.Length);
+            throw new InvalidOperationException("Composition scroll presentation plan layer range must fit the retained command frame.");
         }
 
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
         var sample = plan.LayerAnimation.Timeline.SampleAt(timestamp);
-        return RenderCompositionScrollPresentationFrameAtAsync(compositionBackend, commands, resources, plan, compositionFrame, sample, timestamp);
+        return RenderCompositionScrollPresentationFrameAtAsync(
+            compositionBackend,
+            commands,
+            resources,
+            plan,
+            compositionFrame,
+            sample,
+            timestamp,
+            2);
     }
 
     private bool TryRenderActiveScrollPresentationAfterRetainedUpdate(out CompositionBackendExecutionResult result)
     {
         result = default;
-        if (_compositionScrollPresentationPlan is not { } plan
-            || _backend is not ICompositionDrawingBackend compositionBackend
-            || (compositionBackend.CompositionCapabilities & CompositionBackendCapabilities.ScrollPresentation) != CompositionBackendCapabilities.ScrollPresentation
-            || !_retainedFrame.TryReadFrame(out var commands, out var resources)
-            || !plan.IsValidForCommandCount(commands.Length))
+        if (_compositionScrollPresentationPlan is not { } plan)
         {
+            RecordCompositionExecutionSkipped(
+                3,
+                1,
+                CompositionBackendCapabilities.ScrollPresentation,
+                _backend is ICompositionDrawingBackend existingBackend ? existingBackend.CompositionCapabilities : CompositionBackendCapabilities.None,
+                FramePacing,
+                0,
+                _retainedFrame.CommandCount);
+            return false;
+        }
+
+        if (_backend is not ICompositionDrawingBackend compositionBackend)
+        {
+            RecordCompositionExecutionSkipped(
+                3,
+                2,
+                CompositionBackendCapabilities.ScrollPresentation,
+                CompositionBackendCapabilities.None,
+                CompositionFramePacing.SoftwareTimer,
+                plan.LayerCount,
+                _retainedFrame.CommandCount);
+            return false;
+        }
+
+        var backendCapabilities = compositionBackend.CompositionCapabilities;
+        if ((backendCapabilities & CompositionBackendCapabilities.ScrollPresentation) != CompositionBackendCapabilities.ScrollPresentation)
+        {
+            RecordCompositionExecutionSkipped(
+                3,
+                3,
+                CompositionBackendCapabilities.ScrollPresentation,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerCount,
+                _retainedFrame.CommandCount);
+            return false;
+        }
+
+        if (!_retainedFrame.TryReadFrame(out var commands, out var resources))
+        {
+            RecordCompositionExecutionSkipped(
+                3,
+                4,
+                CompositionBackendCapabilities.ScrollPresentation,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerCount,
+                0);
+            return false;
+        }
+
+        if (!plan.IsValidForCommandCount(commands.Length))
+        {
+            RecordCompositionExecutionSkipped(
+                3,
+                5,
+                CompositionBackendCapabilities.ScrollPresentation,
+                backendCapabilities,
+                compositionBackend.FramePacing,
+                plan.LayerCount,
+                commands.Length);
             return false;
         }
 
@@ -735,7 +919,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             plan,
             compositionFrame,
             sample,
-            timestamp).GetAwaiter().GetResult();
+            timestamp,
+            3).GetAwaiter().GetResult();
         return true;
     }
 
@@ -746,7 +931,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         in CompositionScrollPresentationPlan plan,
         in CompositionFrame compositionFrame,
         in CompositionTimelineSample sample,
-        CompositionTimestamp timestamp)
+        CompositionTimestamp timestamp,
+        byte kind)
     {
         return RenderCompositionFrameAtAsync(
             compositionBackend,
@@ -754,6 +940,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
             resources,
             compositionFrame,
             timestamp,
+            kind,
+            CompositionBackendCapabilities.ScrollPresentation,
             static (DrawingBackendCompositor compositor, in CompositionMarkerEventContext context) =>
             {
                 var plan = context.ScrollPresentationPlan.GetValueOrDefault();
@@ -781,6 +969,8 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         IFrameResourceResolver resources,
         in CompositionFrame compositionFrame,
         CompositionTimestamp timestamp,
+        byte kind,
+        CompositionBackendCapabilities requiredCapabilities,
         CompositionMarkerEventPublisher publishMarkerEvents,
         in CompositionMarkerEventContext markerEventContext)
     {
@@ -797,12 +987,27 @@ public sealed class DrawingBackendCompositor(IDrawingBackend backend) : IComposi
         {
             if (TryHandleDeviceLost(ex))
             {
+                RecordCompositionExecutionSkipped(
+                    kind,
+                    6,
+                    requiredCapabilities,
+                    compositionBackend.CompositionCapabilities,
+                    compositionBackend.FramePacing,
+                    compositionFrame.LayerCount,
+                    commands.Length);
                 return ValueTask.FromResult(result);
             }
 
             throw;
         }
 
+        RecordCompositionExecutionCompleted(
+            kind,
+            requiredCapabilities,
+            compositionBackend.CompositionCapabilities,
+            compositionBackend.FramePacing,
+            compositionFrame.LayerCount,
+            commands.Length);
         lock (_compositionMarkerLock)
         {
             publishMarkerEvents.Invoke(this, markerEventContext);

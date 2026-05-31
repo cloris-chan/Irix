@@ -27,6 +27,7 @@ The current implementation owns:
 - A `--diagnose-composition-scroll` diagnostic that exercises D3D12 fixed-clip scroll presentation.
 - A `--diagnose-composition-multilayer` diagnostic that exercises two D3D12 composition layers in one frame.
 - A `--diagnose-composition-layer-cache` diagnostic that proves layer cache miss/hit behavior across two compositor ticks with the same retained source commands.
+- A `--diagnose-composition-skip` diagnostic that makes unsupported compositor producer paths explicit.
 - Stable machine-readable diagnostics.
 
 ## Non-Goals
@@ -34,7 +35,7 @@ The current implementation owns:
 - No public composition API.
 - No generalized composition tree extraction.
 - No active internal offscreen/render-target cache. Fixed-clip scroll remains D3D12-composited through the direct/layer-content path; content-space offscreen surfaces need a separate bounds/origin/clip design and a proven direct-composition need before consideration.
-- No broad composition skip/degradation diagnostics for unsupported producer paths yet.
+- No generic fallback compositor for unsupported producer paths.
 - No Vulkan/Metal work.
 - No replacement of normal UI frame publication. `ICompositor.RenderAsync` remains the content-update path; compositor ticks are a separate retained-frame presentation path.
 
@@ -128,6 +129,14 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - final runtime model state after dispatch
 - compositor execution count for the marker-producing ticks
 
+`--diagnose-composition-skip` must prove:
+
+- transform/opacity tick skip when the backend does not implement composition
+- fixed-clip scroll tick skip when the backend lacks `ScrollPresentation`
+- retained-update scroll presentation skip before falling back to normal retained-frame render
+- successful compositor execution clears the skip reason to `None`
+- required/backend capabilities, pacing, layer count, and command count are machine-readable
+
 ## Next Gate
 
-Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing now reads `CompositorHitTestSnapshot`, which maps pointer coordinates through active presented layer transforms and fixed clips without a UI runtime layout pass. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime, including a PoC diagnostic that dispatches a marker into `CounterMessage`. Multi-layer `CompositionFrame` execution now exists on the D3D12 path, retained nested/mixed-clip scroll targets decompose into ordered fixed-clip layers, PoC runtime policy defines commit/cancel/retarget behavior for presented scroll interruption, live wheel input can retarget from active compositor scroll presentation through `ScrollPresentationInputBridge`, and `CompositorLoop` owns scroll presentation tick sequencing after `ScrollPresentationCoordinator` installs the declaration from the main app wheel path. D3D12 composition declares backend-present pacing, so scroll presentation and the visible composition demo do not add software `Task.Delay`/`Task.Yield` frame caps on top of `Present(1,0)`. `CompositionRenderInvalidation` now cancels active scroll presentation before viewport/tree/layout/text/max-scroll-changing frames render. The D3D12 backend keeps direct/layer-content composition as the active path; internal offscreen/render-target caching is deferred unless content-space bounds/origin semantics are designed and direct composition still needs it. The next gate is explicit composition skip diagnostics for unsupported producer paths.
+Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompositionTarget` values. Runtime-owned transform declarations resolve `NodeKey` targets into `CompositionAnimationPlan` instances; runtime-owned scroll presentation declarations resolve scroll container `NodeKey` targets into fixed-clip `CompositionScrollPresentationPlan` instances. Transform/opacity and fixed-clip scroll hit testing now reads `CompositorHitTestSnapshot`, which maps pointer coordinates through active presented layer transforms and fixed clips without a UI runtime layout pass. Marker events now provide the first generic bridge from compositor/GPU animation execution back to UI runtime, including a PoC diagnostic that dispatches a marker into `CounterMessage`. Multi-layer `CompositionFrame` execution now exists on the D3D12 path, retained nested/mixed-clip scroll targets decompose into ordered fixed-clip layers, PoC runtime policy defines commit/cancel/retarget behavior for presented scroll interruption, live wheel input can retarget from active compositor scroll presentation through `ScrollPresentationInputBridge`, and `CompositorLoop` owns scroll presentation tick sequencing after `ScrollPresentationCoordinator` installs the declaration from the main app wheel path. D3D12 composition declares backend-present pacing, so scroll presentation and the visible composition demo do not add software `Task.Delay`/`Task.Yield` frame caps on top of `Present(1,0)`. `CompositionRenderInvalidation` now cancels active scroll presentation before viewport/tree/layout/text/max-scroll-changing frames render. Composition skip diagnostics now record attempted path, blocker, required/backend capabilities, frame pacing, layers, and command count through optional diagnostics-only state. The D3D12 backend keeps direct/layer-content composition as the active path; internal offscreen/render-target caching is deferred unless content-space bounds/origin semantics are designed and direct composition still needs it. The next gate is broader main-app integration hardening around the existing D3D12-first path, not a generic fallback compositor.

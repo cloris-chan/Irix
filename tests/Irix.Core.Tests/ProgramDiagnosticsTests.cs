@@ -1997,6 +1997,24 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Composition_skip_diagnostic_has_cli_and_machine_readable_fields()
+    {
+        var root = FindRepoRoot();
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
+
+        var diagnostics = CompositionSkipDiagnosticRunner.RunCore();
+        var summary = CompositionSkipDiagnosticRunner.Format(diagnostics);
+
+        Assert.Contains("--diagnose-composition-skip", programSource);
+        Assert.Contains("CompositionSkipDiagnosticRunner.Run", programSource);
+        Assert.Contains("Composition skip diagnostics", design);
+        Assert.Equal(
+            "composition-skip actual transform=TransformOpacityTick:BackendDoesNotImplementComposition:required=TransformOpacity:backend=None:pacing=SoftwareTimer:layers=1:commands=1 scroll=ScrollPresentationTick:MissingBackendCapability:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 retainedUpdate=RetainedUpdateScrollPresentation:MissingBackendCapability:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 executed=TransformOpacityTick:None:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executedCompositionCount=1 skippedCompositionCount=0",
+            summary);
+    }
+
+    [Fact]
     public void Scroll_presentation_policy_diagnostic_has_cli_and_machine_readable_fields()
     {
         var root = FindRepoRoot();
@@ -2685,6 +2703,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticProgramSource, StringComparison.Ordinal);
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticCounterApplicationSource, StringComparison.Ordinal);
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", diagnosticInputOwnershipSource, StringComparison.Ordinal);
+        Assert.StartsWith("#if IRIX_DIAGNOSTICS", NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "CompositionExecutionDiagnostics.optional-diagnostics.cs"))), StringComparison.Ordinal);
+        Assert.StartsWith("#if IRIX_DIAGNOSTICS", NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.optional-diagnostics.cs"))), StringComparison.Ordinal);
         Assert.Contains("static partial void CreateDiagnosticCliTask", mainProgramSource);
         Assert.Contains("static partial void CreateDiagnosticCliTask", diagnosticProgramSource);
         Assert.Contains("partial void TryBuildOptionalHeaderRows", counterApplicationSource);

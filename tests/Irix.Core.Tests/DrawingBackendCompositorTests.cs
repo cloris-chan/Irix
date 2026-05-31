@@ -767,6 +767,35 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task RenderCompositionAnimationTickAsync_records_missing_backend_skip_status()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var compositor = new DrawingBackendCompositor(new DirtyRangeTrackingBackend());
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f))));
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken));
+
+        var status = compositor.LastCompositionExecutionStatus;
+        Assert.Equal(CompositionExecutionKind.TransformOpacityTick, status.Kind);
+        Assert.Equal(CompositionExecutionSkipReason.BackendDoesNotImplementComposition, status.SkipReason);
+        Assert.Equal(CompositionBackendCapabilities.TransformOpacity, status.RequiredCapabilities);
+        Assert.Equal(CompositionBackendCapabilities.None, status.BackendCapabilities);
+        Assert.Equal(CompositionFramePacing.SoftwareTimer, status.FramePacing);
+        Assert.Equal(1, status.LayerCount);
+        Assert.Equal(1, status.CommandCount);
+    }
+
+    [Fact]
     public void CompositionAnimationPlan_evaluates_timeline_and_easing()
     {
         var plan = new CompositionAnimationPlan(new CompositionLayerAnimation(
@@ -1186,6 +1215,68 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(1, result.LayerCount);
         Assert.Equal(new CompositionLayerId(3), backend.LastCompositionFrame.Layer.Id);
         Assert.Equal(10, backend.LastCompositionFrame.Layer.Transform.TranslateX);
+    }
+
+    [Fact]
+    public async Task RenderCompositionScrollPresentationTickAsync_records_missing_capability_skip_status()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new ConfigurableCompositionBackend(CompositionBackendCapabilities.TransformOpacity);
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationPlan(new CompositionScrollPresentationPlan(new CompositionScrollLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new PixelRectangle(0, 0, 100, 80),
+            RetainedScrollY: 0,
+            MaxScrollY: 100,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
+            new CompositionScalarAnimation(0, 20))));
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () => await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken));
+
+        var status = compositor.LastCompositionExecutionStatus;
+        Assert.Equal(CompositionExecutionKind.ScrollPresentationTick, status.Kind);
+        Assert.Equal(CompositionExecutionSkipReason.MissingBackendCapability, status.SkipReason);
+        Assert.Equal(CompositionBackendCapabilities.ScrollPresentation, status.RequiredCapabilities);
+        Assert.Equal(CompositionBackendCapabilities.TransformOpacity, status.BackendCapabilities);
+        Assert.Equal(CompositionFramePacing.SoftwareTimer, status.FramePacing);
+        Assert.Equal(1, status.LayerCount);
+        Assert.Equal(1, status.CommandCount);
+        Assert.Equal(0, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
+    public async Task RenderCompositionAnimationTickAsync_records_success_status()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f))));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        var status = compositor.LastCompositionExecutionStatus;
+        Assert.Equal(CompositionExecutionKind.TransformOpacityTick, status.Kind);
+        Assert.Equal(CompositionExecutionSkipReason.None, status.SkipReason);
+        Assert.Equal(CompositionBackendCapabilities.TransformOpacity, status.RequiredCapabilities);
+        Assert.Equal(CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation | CompositionBackendCapabilities.MultiLayer, status.BackendCapabilities);
+        Assert.Equal(1, status.LayerCount);
+        Assert.Equal(1, status.CommandCount);
     }
 
     [Fact]
@@ -1625,6 +1716,37 @@ public sealed class DrawingBackendCompositorTests
 
             return count;
         }
+    }
+
+    private sealed class ConfigurableCompositionBackend(CompositionBackendCapabilities capabilities) : IDrawingBackend, ICompositionDrawingBackend
+    {
+        public int ExecuteCount { get; private set; }
+        public int ExecuteCompositionCount { get; private set; }
+        public CompositionBackendCapabilities CompositionCapabilities { get; } = capabilities;
+
+        public void BeginFrame(in FrameContext frameContext) { }
+
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+            ExecuteCount++;
+        }
+
+        public CompositionBackendExecutionResult ExecuteComposition(
+            ReadOnlySpan<DrawCommand> commands,
+            IFrameResourceResolver resources,
+            in CompositionFrame compositionFrame)
+        {
+            ExecuteCompositionCount++;
+            return new CompositionBackendExecutionResult(
+                D3D12Backed: true,
+                LayerCount: compositionFrame.LayerCount,
+                CommandCount: commands.Length,
+                TranslatedCommands: 0,
+                OpacityAppliedCommands: 0);
+        }
+
+        public void EndFrame() { }
+        public void Dispose() { }
     }
 
     private sealed class BlockingCompositionBackend : IDrawingBackend, ICompositionDrawingBackend
