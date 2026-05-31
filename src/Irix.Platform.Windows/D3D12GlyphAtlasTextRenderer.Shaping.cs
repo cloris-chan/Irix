@@ -26,13 +26,6 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer
             return false;
         }
 
-        var totalAdvance = shapedRun.ComputeAdvance();
-        if (totalAdvance > textRun.Width)
-        {
-            unsupportedReason = style.Wrapping == TextWrapping.NoWrap ? GlyphAtlasFallbackReason.Clip : GlyphAtlasFallbackReason.Wrapping;
-            return false;
-        }
-
         var lineHeight = shapedRun.ComputeLineHeight();
         var scissor = ResolveRunScissor(textRun, viewportWidth, viewportHeight);
         if (scissor.IsEmpty)

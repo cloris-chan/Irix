@@ -215,7 +215,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Glyph_atlas_line_planner_keeps_no_wrap_as_single_line_or_clip()
+    public void Glyph_atlas_line_planner_keeps_no_wrap_overflow_as_single_scissored_line()
     {
         Span<GlyphAtlasLayoutLine> lines = stackalloc GlyphAtlasLayoutLine[2];
         Span<float> advances = [10, 12, 8];
@@ -232,16 +232,44 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(1, acceptedLineCount);
         Assert.Equal(new GlyphAtlasLayoutLine(0, 3, 30), lines[0]);
 
-        var clippedReason = GlyphAtlasTextCompositionHelpers.PlanLines(
+        var overflowReason = GlyphAtlasTextCompositionHelpers.PlanLines(
             "ABC".AsSpan(),
             advances,
             maxLineWidth: 29,
             TextWrapping.NoWrap,
             lines,
-            out var clippedLineCount);
+            out var overflowLineCount);
 
-        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Clip, clippedReason);
-        Assert.Equal(0, clippedLineCount);
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, overflowReason);
+        Assert.Equal(1, overflowLineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, 3, 30), lines[0]);
+
+        const string clippedPocText = "Click a button or use Up/Down, mouse wheel, and R.";
+        Span<GlyphAtlasLayoutLine> clippedPocLines = stackalloc GlyphAtlasLayoutLine[clippedPocText.Length + 1];
+        Span<float> clippedPocAdvances = stackalloc float[clippedPocText.Length];
+        clippedPocAdvances.Fill(1);
+
+        var clippedPocReason = GlyphAtlasTextCompositionHelpers.PlanLines(
+            clippedPocText.AsSpan(),
+            clippedPocAdvances,
+            maxLineWidth: clippedPocText.Length - 1,
+            TextWrapping.NoWrap,
+            clippedPocLines,
+            out var clippedPocLineCount);
+
+        Assert.Equal(D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.None, clippedPocReason);
+        Assert.Equal(1, clippedPocLineCount);
+        Assert.Equal(new GlyphAtlasLayoutLine(0, clippedPocText.Length, clippedPocText.Length), clippedPocLines[0]);
+    }
+
+    [Fact]
+    public void Glyph_atlas_renderer_keeps_no_wrap_overflow_on_scissored_atlas_path()
+    {
+        var root = FindRepoRoot();
+        var glyphSource = ReadGlyphAtlasRendererSources(root);
+
+        Assert.DoesNotContain("style.Wrapping == TextWrapping.NoWrap && penX + glyph.Advance > maxX", glyphSource);
+        Assert.DoesNotContain("style.Wrapping == TextWrapping.NoWrap ? GlyphAtlasFallbackReason.Clip", glyphSource);
     }
 
     [Fact]

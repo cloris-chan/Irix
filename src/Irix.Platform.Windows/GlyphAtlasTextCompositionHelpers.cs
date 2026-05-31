@@ -130,11 +130,6 @@ internal static class GlyphAtlasTextCompositionHelpers
                 while (index < text.Length && !IsLineBreak(text, index, out lineBreakWidth))
                 {
                     noWrapLineWidth += advances[index];
-                    if (noWrapLineWidth > maxLineWidth)
-                    {
-                        return D3D12GlyphAtlasTextRenderer.GlyphAtlasFallbackReason.Clip;
-                    }
-
                     index++;
                 }
 

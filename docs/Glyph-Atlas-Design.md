@@ -30,7 +30,7 @@ Current accepted coverage includes:
 - DirectWrite fallback-face segmentation for mixed base/fallback runs such as ASCII + CJK.
 - Explicit CR/LF line breaks.
 - Tab as a four-space advance control segment.
-- Minimal whitespace wrapping, unbreakable word clipping, and over-height line-stack clipping.
+- Minimal whitespace wrapping, no-wrap overflow clipping, unbreakable word clipping, and over-height line-stack clipping.
 - LTR complex-script shaped runs that stay within the current accepted projection.
 - Single-level RTL `NoWrap`, RTL-base wrapped/mixed lines including leading weak digits, Hebrew/Arabic presentation-form RTL classification, and mixed BiDi resolved-level segment ordering.
 - DirectWrite outline/COLR color layers through alpha atlas pages and per-layer color.
@@ -90,7 +90,7 @@ Accepted degradation cases:
 - Glyph atlas record or initialization failure.
 - Full LRU/entry-level eviction is not yet implemented; AtlasFull degrades the current run after scheduling safe format-scoped page reuse when possible.
 
-Degradation must preserve renderer stability, diagnostics, and clip semantics. NonAscii, complex shaping, color glyph, atlas-full safety, and runtime failure cases are either handled by D3D12 atlas or reported as D3D12-only degradation.
+Degradation must preserve renderer stability, diagnostics, and clip semantics. No-wrap text overflow is accepted atlas content and clipped by the resolved D3D12 text scissor; it must not degrade or hide the whole run. NonAscii, complex shaping, color glyph, atlas-full safety, and runtime failure cases are either handled by D3D12 atlas or reported as D3D12-only degradation.
 
 Remaining work is reducing `DegradedRuns` by expanding the D3D12 atlas path with matching oracle/regression coverage.
 

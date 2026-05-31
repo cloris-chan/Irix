@@ -402,7 +402,6 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
             var batchStart = vertexCount;
             var batchSegmentStart = vertexCount;
             var batchPage = default(GlyphAtlasPageHandle);
-            var maxX = textRun.X + textRun.Width;
 
             for (var lineIndex = 0; lineIndex < lineCount; lineIndex++)
             {
@@ -419,12 +418,6 @@ internal sealed unsafe partial class D3D12GlyphAtlasTextRenderer : IDisposable
                     }
 
                     var glyph = _layoutGlyphScratch[glyphIndex];
-                    if (style.Wrapping == TextWrapping.NoWrap && penX + glyph.Advance > maxX)
-                    {
-                        unsupportedReason = GlyphAtlasFallbackReason.Clip;
-                        break;
-                    }
-
                     if (glyph.Width > 0 && glyph.Height > 0)
                     {
                         if (batchPage.IsNone)
