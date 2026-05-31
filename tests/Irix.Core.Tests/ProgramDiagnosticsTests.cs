@@ -2198,6 +2198,20 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Local_diagnostic_scripts_enable_optional_diagnostics_build()
+    {
+        var root = FindRepoRoot();
+        var diagnosticBaseline = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "diagnostic-baseline.ps1")));
+        var glyphRegression = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "glyph-atlas-regression.ps1")));
+        var diagnose = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "diagnose.ps1")));
+
+        Assert.Contains("\"-p:IrixDiagnostics=true\"", diagnosticBaseline);
+        Assert.Contains("dotnet publish $pocProject -c Release -r win-x64 --self-contained -p:IrixDiagnostics=true", diagnosticBaseline);
+        Assert.Contains("\"-p:IrixDiagnostics=true\"", glyphRegression);
+        Assert.Contains("-p:IrixDiagnostics=true -- --diagnose", diagnose);
+    }
+
+    [Fact]
     public void Glyph_atlas_regression_lane_is_pre_merge_ci_step()
     {
         var root = FindRepoRoot();

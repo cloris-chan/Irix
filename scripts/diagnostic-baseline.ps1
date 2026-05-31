@@ -66,13 +66,13 @@ function Get-RunnerCommand {
     if (-not $Aot) {
         $script:CachedRunner = [pscustomobject]@{
             Command = "dotnet"
-            Args = @("run", "--project", $pocProject, "-c", "Release", "--")
+            Args = @("run", "--project", $pocProject, "-c", "Release", "-p:IrixDiagnostics=true", "--")
             UseStartProcess = $false
         }
         return $script:CachedRunner
     }
 
-    dotnet publish $pocProject -c Release -r win-x64 --self-contained | Out-Host
+    dotnet publish $pocProject -c Release -r win-x64 --self-contained -p:IrixDiagnostics=true | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "AOT publish failed with exit code $LASTEXITCODE."
     }

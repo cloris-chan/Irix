@@ -90,7 +90,7 @@ function New-ColorGlyphArgs {
 function Invoke-Diagnostic([string]$Name, [string[]]$Arguments, [string[]]$SummaryPatterns) {
     $outputPath = Join-Path $resultsDir $Name
     $summaryPath = [System.IO.Path]::ChangeExtension($outputPath, ".summary.txt")
-    $diagnosticArgs = @("run", "--project", $pocProject, "-c", "Release", "--") + @($Arguments) + @("--diagnostic-output", $outputPath)
+    $diagnosticArgs = @("run", "--project", $pocProject, "-c", "Release", "-p:IrixDiagnostics=true", "--") + @($Arguments) + @("--diagnostic-output", $outputPath)
 
     Write-Host "=== Running $Name ===" -ForegroundColor Cyan
     Remove-Item $outputPath, $summaryPath -Force -ErrorAction SilentlyContinue

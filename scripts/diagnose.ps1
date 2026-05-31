@@ -16,7 +16,7 @@
 
 .EXAMPLE
     .\scripts\diagnose.ps1
-    dotnet run --project src\Irix.Poc -- --diagnose
+    dotnet run --project src\Irix.Poc -p:IrixDiagnostics=true -- --diagnose
 #>
 
 $ErrorActionPreference = "Stop"
@@ -34,7 +34,7 @@ Write-Host "=== Irix D3D12 Diagnostic Smoke Test ===" -ForegroundColor Cyan
 Write-Host "Project: $pocProject"
 Write-Host ""
 
-dotnet run --project $pocProject -- --diagnose
+dotnet run --project $pocProject -p:IrixDiagnostics=true -- --diagnose
 $exitCode = $LASTEXITCODE
 
 Write-Host ""
