@@ -28,7 +28,8 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             await RunChainScenarioAsync(cancellationToken),
             await RunRapidEnsureScenarioAsync(cancellationToken),
             await RunBoundaryScenarioAsync(cancellationToken),
-            await RunTopBoundaryScenarioAsync(cancellationToken));
+            await RunTopBoundaryScenarioAsync(cancellationToken),
+            await RunLifecycleScenarioAsync(cancellationToken));
     }
 
     internal static string Format(in ScrollPresentationInteractionDiagnostics diagnostics)
@@ -39,7 +40,8 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             FormatChain(diagnostics.Chain),
             FormatRapidEnsure(diagnostics.RapidEnsure),
             FormatBoundary(diagnostics.Boundary),
-            FormatTopBoundary(diagnostics.TopBoundary));
+            FormatTopBoundary(diagnostics.TopBoundary),
+            FormatLifecycle(diagnostics.Lifecycle));
     }
 
     private static async Task<ScrollPresentationPointerInteractionDiagnostics> RunPointerScenarioAsync(CancellationToken cancellationToken)
@@ -302,6 +304,114 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             session.CompositorLoop.ScrollPresentationTickCount);
     }
 
+    private static async Task<ScrollPresentationLifecycleInteractionDiagnostics> RunLifecycleScenarioAsync(CancellationToken cancellationToken)
+    {
+        return new ScrollPresentationLifecycleInteractionDiagnostics(
+            await RunResizeLifecycleScenarioAsync(cancellationToken),
+            await RunDpiLifecycleScenarioAsync(cancellationToken),
+            await RunMaxScrollLifecycleScenarioAsync(cancellationToken));
+    }
+
+    private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunResizeLifecycleScenarioAsync(CancellationToken cancellationToken)
+    {
+        await using var session = await DiagnosticSession.StartAsync(cancellationToken);
+        var activeBefore = await StartActivePresentationAsync(session, cancellationToken);
+        var cancelTask = Task.CompletedTask;
+        var renderTask = Task.CompletedTask;
+
+        session.Window.SizeChanged += (width, height) =>
+        {
+            cancelTask = session.CompositorLoop.CancelCompositionScrollPresentationAsync(cancellationToken).AsTask();
+            session.Compositor.SetViewport(new PixelRectangle(0, 0, width, height), DisplayScale.Identity);
+            renderTask = session.CompositorLoop.RequestRenderAndWaitAsync(cancellationToken).AsTask();
+        };
+
+        session.Window.RaiseSizeChanged(720, 420);
+        await Task.WhenAll(cancelTask, renderTask);
+
+        return CaptureLifecycleScenario("resize", session, activeBefore);
+    }
+
+    private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunDpiLifecycleScenarioAsync(CancellationToken cancellationToken)
+    {
+        await using var session = await DiagnosticSession.StartAsync(cancellationToken);
+        var activeBefore = await StartActivePresentationAsync(session, cancellationToken);
+        var cancelTask = Task.CompletedTask;
+        var renderTask = Task.CompletedTask;
+
+        session.Window.DpiChanged += scale =>
+        {
+            var normalized = scale.Normalize();
+            cancelTask = session.CompositorLoop.CancelCompositionScrollPresentationAsync(cancellationToken).AsTask();
+            session.Translator.SetDisplayScale(normalized);
+            session.Compositor.SetViewport(session.Window.Region.PhysicalBounds, normalized);
+            renderTask = session.CompositorLoop.RequestRenderAndWaitAsync(cancellationToken).AsTask();
+        };
+
+        session.Window.RaiseDpiChanged(new DisplayScale(1.5f, 1.5f));
+        await Task.WhenAll(cancelTask, renderTask);
+
+        return CaptureLifecycleScenario("dpi", session, activeBefore);
+    }
+
+    private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunMaxScrollLifecycleScenarioAsync(CancellationToken cancellationToken)
+    {
+        await using var session = await DiagnosticSession.StartAsync(cancellationToken);
+        var initialMaxScrollY = session.Translator.LastMaxScrollY;
+        await session.Runtime.DispatchAndWaitAsync(new CounterMessage.UpdateMaxScrollY(initialMaxScrollY), cancellationToken);
+        var activeBefore = await StartActivePresentationAsync(session, cancellationToken);
+        var nextMaxScrollY = Math.Max(activeBefore.PresentedScrollY + 120, initialMaxScrollY - 64);
+        var cancelTask = session.CompositorLoop.CancelCompositionScrollPresentationAsync(cancellationToken).AsTask();
+        var updateTask = session.Runtime.DispatchAndWaitAsync(new CounterMessage.UpdateMaxScrollY(nextMaxScrollY), cancellationToken);
+
+        await Task.WhenAll(cancelTask, updateTask);
+
+        return CaptureLifecycleScenario("maxScroll", session, activeBefore);
+    }
+
+    private static async Task<ScrollPresentationLifecycleActiveProbe> StartActivePresentationAsync(DiagnosticSession session, CancellationToken cancellationToken)
+    {
+        session.Coordinator.AddPendingPixels(WheelDownPixels(1));
+        await session.Coordinator.RunUntilIdleAsync(session.Runtime, session.CompositorLoop, session.Translator, ScrollTargetKey, cancellationToken);
+        var active = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedScrollY);
+        var hit = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var action);
+        return new ScrollPresentationLifecycleActiveProbe(active, presentedScrollY, hit, action, session.Compositor.RenderCount);
+    }
+
+    private static ScrollPresentationLifecycleScenarioDiagnostics CaptureLifecycleScenario(
+        string name,
+        DiagnosticSession session,
+        in ScrollPresentationLifecycleActiveProbe activeBefore)
+    {
+        var activeAfter = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfter);
+        var hitAfter = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var actionAfter);
+        var cancellation = session.CompositorLoop.ScrollPresentationCancellationDiagnostics;
+        var viewport = session.Window.Region.PhysicalBounds;
+        var scale = session.Compositor.CurrentDisplayScale;
+        return new ScrollPresentationLifecycleScenarioDiagnostics(
+            name,
+            activeBefore.Active,
+            activeBefore.PresentedScrollY,
+            activeBefore.Hit,
+            activeBefore.Action,
+            activeAfter,
+            presentedAfter,
+            hitAfter,
+            actionAfter,
+            session.CompositorLoop.ScrollPresentationCancelCount,
+            cancellation.LastReason,
+            cancellation.LastInvalidationKind,
+            cancellation.ExplicitCount,
+            cancellation.RenderInvalidationCount,
+            activeBefore.RenderCount,
+            session.Compositor.RenderCount,
+            session.Translator.LastLayoutRebuildReason,
+            viewport.Width,
+            viewport.Height,
+            scale.ScaleX,
+            session.Runtime.CurrentModel.Scroll.MaxScrollY);
+    }
+
     private static string FormatPointer(in ScrollPresentationPointerInteractionDiagnostics diagnostics)
     {
         return string.Join(" ", [
@@ -370,6 +480,28 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             $"targetAfterOverscroll={diagnostics.TargetAfterOverscroll:0.##} positionAfterOverscroll={diagnostics.PositionAfterOverscroll:0.##}",
             $"retargetsAfterOverscroll={diagnostics.RetargetsAfterOverscroll} cancelsAfterOverscroll={diagnostics.CancelsAfterOverscroll}",
             $"pending={diagnostics.PendingPixels:0.##} compositionTicks={diagnostics.CompositionTickCount} loopTicks={diagnostics.LoopTickCount}"
+        ]);
+    }
+
+    private static string FormatLifecycle(in ScrollPresentationLifecycleInteractionDiagnostics diagnostics)
+    {
+        return string.Join(
+            Environment.NewLine,
+            FormatLifecycleScenario(diagnostics.Resize),
+            FormatLifecycleScenario(diagnostics.Dpi),
+            FormatLifecycleScenario(diagnostics.MaxScroll));
+    }
+
+    private static string FormatLifecycleScenario(in ScrollPresentationLifecycleScenarioDiagnostics diagnostics)
+    {
+        return string.Join(" ", [
+            $"scroll-presentation-interaction actual scenario=lifecycle-{diagnostics.Name}",
+            $"activeBefore={diagnostics.ActiveBefore} presentedBefore={diagnostics.PresentedBefore:0.##} hitBefore={diagnostics.HitBefore} actionBefore={diagnostics.ActionBefore.Value}",
+            $"activeAfter={diagnostics.ActiveAfter} presentedAfter={diagnostics.PresentedAfter:0.##} hitAfter={diagnostics.HitAfter} actionAfter={diagnostics.ActionAfter.Value}",
+            $"cancels={diagnostics.CancelCount} cancelReason={diagnostics.CancelReason} cancelInvalidation={diagnostics.CancelInvalidationKind}",
+            $"explicitCancels={diagnostics.ExplicitCancelCount} invalidationCancels={diagnostics.RenderInvalidationCancelCount}",
+            $"renderBefore={diagnostics.RenderCountBefore} renderAfter={diagnostics.RenderCountAfter} layoutAfter={diagnostics.LayoutRebuildReasonAfter}",
+            $"viewport={diagnostics.ViewportWidth}x{diagnostics.ViewportHeight} scale={diagnostics.DisplayScaleX:0.##} maxScroll={diagnostics.MaxScrollY:0.##}"
         ]);
     }
 
@@ -459,6 +591,15 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         public double PresentedScrollY { get; } = PresentedScrollY;
     }
 
+    private readonly struct ScrollPresentationLifecycleActiveProbe(bool Active, double PresentedScrollY, bool Hit, ActionId Action, long RenderCount)
+    {
+        public bool Active { get; } = Active;
+        public double PresentedScrollY { get; } = PresentedScrollY;
+        public bool Hit { get; } = Hit;
+        public ActionId Action { get; } = Action;
+        public long RenderCount { get; } = RenderCount;
+    }
+
     private sealed class DiagnosticSession : IAsyncDisposable
     {
         private DiagnosticSession(
@@ -520,8 +661,19 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         public void RunMessageLoop() { }
         public void SetContentElements(IReadOnlyList<WindowContentElement> elements, ITextResolver textResolver) { }
         public void Show() { }
-        public event Action<int, int>? SizeChanged { add { } remove { } }
-        public event Action<DisplayScale>? DpiChanged { add { } remove { } }
+        public event Action<int, int>? SizeChanged;
+        public event Action<DisplayScale>? DpiChanged;
+
+        public void RaiseSizeChanged(int width, int height)
+        {
+            Region = new ScreenRegion(Region.ScreenId, new PixelRectangle(Region.PhysicalBounds.X, Region.PhysicalBounds.Y, width, height));
+            SizeChanged?.Invoke(width, height);
+        }
+
+        public void RaiseDpiChanged(DisplayScale scale)
+        {
+            DpiChanged?.Invoke(scale);
+        }
     }
 
     private sealed class DiagnosticCompositionBackend : IDrawingBackend, ICompositionDrawingBackend
@@ -572,13 +724,15 @@ internal readonly struct ScrollPresentationInteractionDiagnostics(
     ScrollPresentationChainInteractionDiagnostics Chain,
     ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure,
     ScrollPresentationBoundaryInteractionDiagnostics Boundary,
-    ScrollPresentationBoundaryInteractionDiagnostics TopBoundary)
+    ScrollPresentationBoundaryInteractionDiagnostics TopBoundary,
+    ScrollPresentationLifecycleInteractionDiagnostics Lifecycle)
 {
     public ScrollPresentationPointerInteractionDiagnostics Pointer { get; } = Pointer;
     public ScrollPresentationChainInteractionDiagnostics Chain { get; } = Chain;
     public ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure { get; } = RapidEnsure;
     public ScrollPresentationBoundaryInteractionDiagnostics Boundary { get; } = Boundary;
     public ScrollPresentationBoundaryInteractionDiagnostics TopBoundary { get; } = TopBoundary;
+    public ScrollPresentationLifecycleInteractionDiagnostics Lifecycle { get; } = Lifecycle;
 }
 
 internal readonly struct ScrollPresentationPointerInteractionDiagnostics(
@@ -779,5 +933,61 @@ internal readonly struct ScrollPresentationBoundaryInteractionDiagnostics(
     public double PendingPixels { get; } = PendingPixels;
     public long CompositionTickCount { get; } = CompositionTickCount;
     public long LoopTickCount { get; } = LoopTickCount;
+}
+
+internal readonly struct ScrollPresentationLifecycleInteractionDiagnostics(
+    ScrollPresentationLifecycleScenarioDiagnostics Resize,
+    ScrollPresentationLifecycleScenarioDiagnostics Dpi,
+    ScrollPresentationLifecycleScenarioDiagnostics MaxScroll)
+{
+    public ScrollPresentationLifecycleScenarioDiagnostics Resize { get; } = Resize;
+    public ScrollPresentationLifecycleScenarioDiagnostics Dpi { get; } = Dpi;
+    public ScrollPresentationLifecycleScenarioDiagnostics MaxScroll { get; } = MaxScroll;
+}
+
+internal readonly struct ScrollPresentationLifecycleScenarioDiagnostics(
+    string Name,
+    bool ActiveBefore,
+    double PresentedBefore,
+    bool HitBefore,
+    ActionId ActionBefore,
+    bool ActiveAfter,
+    double PresentedAfter,
+    bool HitAfter,
+    ActionId ActionAfter,
+    long CancelCount,
+    ScrollPresentationCancellationReason CancelReason,
+    CompositionRenderInvalidationKind CancelInvalidationKind,
+    long ExplicitCancelCount,
+    long RenderInvalidationCancelCount,
+    long RenderCountBefore,
+    long RenderCountAfter,
+    LayoutRebuildReason LayoutRebuildReasonAfter,
+    int ViewportWidth,
+    int ViewportHeight,
+    float DisplayScaleX,
+    double MaxScrollY)
+{
+    public string Name { get; } = Name;
+    public bool ActiveBefore { get; } = ActiveBefore;
+    public double PresentedBefore { get; } = PresentedBefore;
+    public bool HitBefore { get; } = HitBefore;
+    public ActionId ActionBefore { get; } = ActionBefore;
+    public bool ActiveAfter { get; } = ActiveAfter;
+    public double PresentedAfter { get; } = PresentedAfter;
+    public bool HitAfter { get; } = HitAfter;
+    public ActionId ActionAfter { get; } = ActionAfter;
+    public long CancelCount { get; } = CancelCount;
+    public ScrollPresentationCancellationReason CancelReason { get; } = CancelReason;
+    public CompositionRenderInvalidationKind CancelInvalidationKind { get; } = CancelInvalidationKind;
+    public long ExplicitCancelCount { get; } = ExplicitCancelCount;
+    public long RenderInvalidationCancelCount { get; } = RenderInvalidationCancelCount;
+    public long RenderCountBefore { get; } = RenderCountBefore;
+    public long RenderCountAfter { get; } = RenderCountAfter;
+    public LayoutRebuildReason LayoutRebuildReasonAfter { get; } = LayoutRebuildReasonAfter;
+    public int ViewportWidth { get; } = ViewportWidth;
+    public int ViewportHeight { get; } = ViewportHeight;
+    public float DisplayScaleX { get; } = DisplayScaleX;
+    public double MaxScrollY { get; } = MaxScrollY;
 }
 #endif

@@ -2309,6 +2309,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(topBoundary.CompositionTickCount > 0);
         Assert.True(topBoundary.LoopTickCount > 0);
 
+        var lifecycle = diagnostics.Lifecycle;
+        AssertLifecycleScenario(lifecycle.Resize, "resize", LayoutRebuildReason.ViewportChanged, 720, 420, 1f, expectedHitAfter: true);
+        AssertLifecycleScenario(lifecycle.Dpi, "dpi", LayoutRebuildReason.ViewportChanged, 960, 540, 1.5f, expectedHitAfter: false);
+        AssertLifecycleScenario(lifecycle.MaxScroll, "maxScroll", LayoutRebuildReason.LayoutAffecting, 960, 540, 1f, expectedHitAfter: true);
+        Assert.True(lifecycle.MaxScroll.MaxScrollY < boundary.MaxScrollY);
+
         Assert.Contains("scroll-presentation-interaction actual scenario=pointer pointer=(20,190)", summary);
         Assert.Contains("beforeHit=True beforeAction=1 staleHover=1 activeHit=True activeAction=2", summary);
         Assert.Contains("hoverMapped=True hoverMessage=InputVisualStateChanged hovered=2", summary);
@@ -2327,6 +2333,40 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("retargetsAfterOverscroll=1", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=boundaryTop", summary);
         Assert.Contains("rapidWheelPx=-216", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-resize", summary);
+        Assert.Contains("activeBefore=True", summary);
+        Assert.Contains("activeAfter=False", summary);
+        Assert.Contains("cancelReason=Explicit cancelInvalidation=None", summary);
+        Assert.Contains("viewport=720x420 scale=1", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-dpi", summary);
+        Assert.Contains("viewport=960x540 scale=1.5", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-maxScroll", summary);
+    }
+
+    private static void AssertLifecycleScenario(
+        in ScrollPresentationLifecycleScenarioDiagnostics diagnostics,
+        string name,
+        LayoutRebuildReason expectedLayoutReason,
+        int expectedViewportWidth,
+        int expectedViewportHeight,
+        float expectedScale,
+        bool expectedHitAfter)
+    {
+        Assert.Equal(name, diagnostics.Name);
+        Assert.True(diagnostics.ActiveBefore);
+        Assert.True(diagnostics.HitBefore);
+        Assert.False(diagnostics.ActiveAfter);
+        Assert.Equal(expectedHitAfter, diagnostics.HitAfter);
+        Assert.Equal(1, diagnostics.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.Explicit, diagnostics.CancelReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, diagnostics.CancelInvalidationKind);
+        Assert.Equal(1, diagnostics.ExplicitCancelCount);
+        Assert.Equal(0, diagnostics.RenderInvalidationCancelCount);
+        Assert.True(diagnostics.RenderCountAfter >= diagnostics.RenderCountBefore);
+        Assert.Equal(expectedLayoutReason, diagnostics.LayoutRebuildReasonAfter);
+        Assert.Equal(expectedViewportWidth, diagnostics.ViewportWidth);
+        Assert.Equal(expectedViewportHeight, diagnostics.ViewportHeight);
+        Assert.Equal(expectedScale, diagnostics.DisplayScaleX);
     }
 
     [Fact]
