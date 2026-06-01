@@ -2537,6 +2537,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Category!=D3D12&Category!=Performance", workflow);
         Assert.Contains("CI_WINDOWS_SDK_VERSION: 10.0.28000.0", workflow);
         Assert.DoesNotContain("IrixWindowsRequiredSdkVersion", workflow);
+        Assert.Contains("dotnet restore -p:IrixDiagnostics=true", workflow);
         Assert.Contains("<IrixWindowsTargetFramework>net10.0-windows10.0.26100.0</IrixWindowsTargetFramework>", buildProps);
         Assert.DoesNotContain("IrixWindowsRequiredSdkVersion", buildProps);
         Assert.Contains("windows-2025", workflow);

@@ -58,7 +58,9 @@ jobs:
           dotnet --info
 
       - name: Restore
-        run: dotnet restore
+        run: |
+          dotnet restore
+          dotnet restore -p:IrixDiagnostics=true
 
       - name: Build
         run: dotnet build --no-restore -c Release
@@ -97,7 +99,9 @@ jobs:
           dotnet --info
 
       - name: Restore
-        run: dotnet restore
+        run: |
+          dotnet restore
+          dotnet restore -p:IrixDiagnostics=true
 
       - name: Build
         run: dotnet build --no-restore -c Release
