@@ -127,21 +127,30 @@ internal sealed class ScrollPresentationCoordinator
         CancellationToken cancellationToken)
     {
         var state = runtime.CurrentModel.Scroll;
-        var from = ResolvePresentedOrPosition(compositorLoop, scrollTargetKey, state);
-        var decision = ScrollPresentationInputBridge.TryResolveWheelRetarget(
-            compositorLoop,
-            scrollTargetKey,
+        var delta = new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels);
+        var targetProbe = ScrollController.ResolvePresentationInterrupt(
             state,
-            pendingPixels,
-            out var inputDecision)
-            ? inputDecision.Interrupt
-            : ScrollController.ResolvePresentationInterrupt(
-                state,
-                from,
-                new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels),
-                ScrollMetrics.DefaultText,
-                SystemScrollSettings.Default,
-                ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
+            state.Position,
+            delta,
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default,
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
+        if (!ShouldStartRetargetSegment(state, targetProbe))
+        {
+            return true;
+        }
+
+        var activeSample = await compositorLoop.SampleAndCancelCompositionScrollPresentationAsync(
+            scrollTargetKey,
+            cancellationToken);
+        var from = activeSample.HasValue ? activeSample.PresentedScrollY : state.Position;
+        var decision = ScrollController.ResolvePresentationInterrupt(
+            state,
+            from,
+            delta,
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default,
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget);
         if (!ShouldStartRetargetSegment(state, decision))
         {
             return true;
@@ -185,16 +194,6 @@ internal sealed class ScrollPresentationCoordinator
     {
         var bits = Interlocked.Exchange(ref _pendingPixelsBits, 0);
         return BitConverter.Int64BitsToDouble(bits);
-    }
-
-    private static double ResolvePresentedOrPosition(
-        CompositorLoop compositorLoop,
-        NodeKey scrollTargetKey,
-        ScrollState state)
-    {
-        return compositorLoop.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY)
-            ? presentedScrollY
-            : state.Position;
     }
 
     private static double ReadDouble(ref long bits)
