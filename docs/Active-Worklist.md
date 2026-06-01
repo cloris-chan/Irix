@@ -6,7 +6,7 @@
 
 ## Windows Boundary
 
-The Windows PoC separates target framework, installed SDK, and runtime minimum. Windows-targeted projects inherit `IrixWindowsTargetFramework=net10.0-windows10.0.26100.0`, `IrixWindowsRequiredSdkVersion=10.0.28000.0`, and `IrixWindowsSupportedOSPlatformVersion=10.0.15063.0` from `Directory.Build.props`; CI checks for .NET 10 and the installed Windows SDK version before restore/build. The target framework stays on 26100 because .NET SDK 10.0.300 does not yet provide `Microsoft.Windows.SDK.NET.Ref` / TFM support for 28000, while the installed SDK check tracks the local 28000 toolchain. The 10.0.15063.0 runtime floor is intentional for PerMonitorV2 DPI awareness and display scale support. `IDWriteFactory4` is available within this runtime target and is the baseline DirectWrite factory for the glyph atlas path.
+The Windows PoC separates target framework, CI toolchain choice, and runtime minimum. Windows-targeted projects inherit `IrixWindowsTargetFramework=net10.0-windows10.0.26100.0` and `IrixWindowsSupportedOSPlatformVersion=10.0.15063.0` from `Directory.Build.props`; local builds rely on the .NET SDK to resolve a compatible installed Windows SDK such as 26100 or 28000 and report missing SDKs. The target framework stays on 26100 because .NET SDK 10.0.300 does not yet provide `Microsoft.Windows.SDK.NET.Ref` / TFM support for 28000, while CI can pin the installed Windows SDK toolchain independently. The 10.0.15063.0 runtime floor is intentional for PerMonitorV2 DPI awareness and display scale support. `IDWriteFactory4` is available within this runtime target and is the baseline DirectWrite factory for the glyph atlas path.
 
 ---
 

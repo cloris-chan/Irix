@@ -23,6 +23,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CI_WINDOWS_SDK_VERSION: 10.0.28000.0
+
 jobs:
   quick:
     name: Windows 2025 / SDK 28000 / quick
@@ -44,8 +47,7 @@ jobs:
             throw "Required .NET 10 SDK was not found. Installed SDKs: $($dotnetSdks -join ', ')"
           }
 
-          [xml]$buildProps = Get-Content Directory.Build.props
-          $requiredWindowsSdkVersion = $buildProps.Project.PropertyGroup.IrixWindowsRequiredSdkVersion
+          $requiredWindowsSdkVersion = $env:CI_WINDOWS_SDK_VERSION
           $windowsSdkPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib\$requiredWindowsSdkVersion"
           if (-not (Test-Path $windowsSdkPath)) {
             $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
@@ -84,8 +86,7 @@ jobs:
             throw "Required .NET 10 SDK was not found. Installed SDKs: $($dotnetSdks -join ', ')"
           }
 
-          [xml]$buildProps = Get-Content Directory.Build.props
-          $requiredWindowsSdkVersion = $buildProps.Project.PropertyGroup.IrixWindowsRequiredSdkVersion
+          $requiredWindowsSdkVersion = $env:CI_WINDOWS_SDK_VERSION
           $windowsSdkPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib\$requiredWindowsSdkVersion"
           if (-not (Test-Path $windowsSdkPath)) {
             $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'

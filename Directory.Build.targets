@@ -4,15 +4,6 @@
     <Error Condition="'$(SupportedOSPlatformVersion)' != '$(IrixWindowsSupportedOSPlatformVersion)'" Text="Windows-targeted projects must use SupportedOSPlatformVersion=$(IrixWindowsSupportedOSPlatformVersion) from Directory.Build.props. Project $(MSBuildProjectName) has SupportedOSPlatformVersion=$(SupportedOSPlatformVersion)." />
   </Target>
 
-  <Target Name="ValidateIrixWindowsSdkInstallation" BeforeTargets="PrepareForBuild" Condition="'$(TargetFramework)' != '' and $([System.String]::Copy('$(TargetFramework)').Contains('-windows')) and '$(IrixWindowsRequiredSdkVersion)' != ''">
-    <PropertyGroup>
-      <IrixProgramFilesX86>$([System.Environment]::GetEnvironmentVariable('ProgramFiles(x86)'))</IrixProgramFilesX86>
-      <IrixRequiredWindowsSdkLibPath>$(IrixProgramFilesX86)\Windows Kits\10\Lib\$(IrixWindowsRequiredSdkVersion)</IrixRequiredWindowsSdkLibPath>
-    </PropertyGroup>
-
-    <Error Condition="!Exists('$(IrixRequiredWindowsSdkLibPath)')" Text="Windows-targeted projects require Windows SDK $(IrixWindowsRequiredSdkVersion) at $(IrixRequiredWindowsSdkLibPath)." />
-  </Target>
-
   <PropertyGroup Condition="'$(IrixDiagnostics)' == 'true'">
     <DefineConstants>$(DefineConstants);IRIX_DIAGNOSTICS</DefineConstants>
   </PropertyGroup>
