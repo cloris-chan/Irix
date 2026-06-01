@@ -25,8 +25,34 @@
     <Compile Remove="obj\**\*.cs;bin\**\*.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(MSBuildProjectExtension)' == '.csproj'">
-    <Compile Include="$(MSBuildThisFileDirectory)RepositoryInternalsVisibleTo.cs"
-             Link="Generated\RepositoryInternalsVisibleTo.g.cs" />
-  </ItemGroup>
+  <Target Name="GenerateIrixInternalScopeAssemblyInfo"
+          BeforeTargets="BeforeCompile;CoreCompile"
+          DependsOnTargets="PrepareForBuild"
+          Condition="'$(MSBuildProjectExtension)' == '.csproj'">
+    <PropertyGroup>
+      <IrixInternalScopeAssemblyInfoFile>$(IntermediateOutputPath)IrixInternalScope.AssemblyInfo.cs</IrixInternalScopeAssemblyInfoFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_IrixInternalScopeCurrent Include="@(IrixInternalScope)" Condition="'%(IrixInternalScope.Identity)' == '$(AssemblyName)'" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'@(_IrixInternalScopeCurrent)' != ''">
+      <_IrixInternalScopeFriend Include="@(IrixInternalScope)" />
+      <_IrixInternalScopeFriend Remove="$(AssemblyName)" />
+      <_IrixInternalScopeAssemblyInfoLine Include="// &lt;auto-generated /&gt;" Condition="'@(_IrixInternalScopeCurrent)' != ''" />
+      <_IrixInternalScopeAssemblyInfoLine Include="@(_IrixInternalScopeFriend->'[assembly: System.Runtime.CompilerServices.InternalsVisibleTo(&quot;%(Identity)&quot;)]')" Condition="'@(_IrixInternalScopeCurrent)' != ''" />
+    </ItemGroup>
+
+    <WriteLinesToFile File="$(IrixInternalScopeAssemblyInfoFile)"
+                      Lines="@(_IrixInternalScopeAssemblyInfoLine)"
+                      Overwrite="true"
+                      WriteOnlyWhenDifferent="true"
+                      Condition="'@(_IrixInternalScopeCurrent)' != ''" />
+
+    <ItemGroup>
+      <Compile Include="$(IrixInternalScopeAssemblyInfoFile)" Condition="'@(_IrixInternalScopeCurrent)' != ''" />
+      <FileWrites Include="$(IrixInternalScopeAssemblyInfoFile)" Condition="'@(_IrixInternalScopeCurrent)' != ''" />
+    </ItemGroup>
+  </Target>
 </Project>

@@ -17,4 +17,14 @@
     <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">obj\$(IrixBuildFlavor)\</BaseIntermediateOutputPath>
   </PropertyGroup>
 
+  <ItemGroup>
+    <IrixInternalScope Include="Irix.Core" />
+    <IrixInternalScope Include="Irix.Drawing" />
+    <IrixInternalScope Include="Irix.Platform" />
+    <IrixInternalScope Include="Irix.Platform.Windows" />
+    <IrixInternalScope Include="Irix.Rendering" />
+    <IrixInternalScope Include="Irix.Poc" />
+    <IrixInternalScope Include="Irix.Core.Tests" />
+  </ItemGroup>
+
 </Project>
