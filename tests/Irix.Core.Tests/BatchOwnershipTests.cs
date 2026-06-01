@@ -372,6 +372,56 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_render_invalidation_skips_stale_delayed_scroll_tick_after_cancellation()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new OneShotInvalidatingTranslator(
+            CompositionRenderInvalidation.FromLayoutRebuildReason(LayoutRebuildReason.ViewportChanged));
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var oldStart = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(30);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(oldStart, CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        Assert.Equal(1, compositor.TickCount);
+
+        var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Next", new NodeKey(1)))
+        ]), 1);
+        await loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken);
+        var tickCountAfterInvalidation = compositor.TickCount;
+
+        await Task.Delay(90, cancellationToken);
+        await loop.RequestRenderAndWaitAsync(cancellationToken);
+
+        Assert.Equal(2, compositor.RenderCallCount);
+        Assert.Equal(1, compositor.ClearCount);
+        Assert.False(compositor.PresentationActiveDuringLastRender);
+        Assert.Equal(1, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.ViewportChanged, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.Equal(1, loop.ScrollPresentationCancellationDiagnostics.RenderInvalidationCount);
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+        Assert.Equal(1, tickCountAfterInvalidation);
+        Assert.Equal(tickCountAfterInvalidation, compositor.TickCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_render_invalidation_records_max_scroll_changed_reason()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -513,6 +563,28 @@ public sealed class BatchOwnershipTests
         {
             TranslateCallCount++;
             LastCompositionInvalidation = invalidation;
+            var owner = new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(
+                    DrawCommandKind.DrawTextRun,
+                    Rect: new DrawRect(16, 16, 928, 32))
+            ]);
+            return new RenderFrameBatch(new DrawCommandBatch(owner, 1), []);
+        }
+    }
+
+    private sealed class OneShotInvalidatingTranslator(CompositionRenderInvalidation invalidation) : IPatchBatchTranslator, ICompositionInvalidationProvider
+    {
+        private bool _hasInvalidated;
+
+        public int TranslateCallCount { get; private set; }
+        public CompositionRenderInvalidation LastCompositionInvalidation { get; private set; }
+
+        public RenderFrameBatch Translate(PatchBatch patchBatch)
+        {
+            TranslateCallCount++;
+            LastCompositionInvalidation = _hasInvalidated ? CompositionRenderInvalidation.None : invalidation;
+            _hasInvalidated = true;
             var owner = new ArrayMemoryOwner<DrawCommand>(
             [
                 new DrawCommand(
