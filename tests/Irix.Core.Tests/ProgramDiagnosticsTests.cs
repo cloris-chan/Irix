@@ -2524,14 +2524,19 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public void Glyph_atlas_regression_lane_is_pre_merge_ci_step()
+    public void Glyph_atlas_regression_lane_is_manual_ci_validation()
     {
         var root = FindRepoRoot();
         var workflow = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, ".github", "workflows", "ci.yml")));
+        var buildProps = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "Directory.Build.props")));
 
-        Assert.Contains("suite: glyph-atlas", workflow);
+        Assert.Contains("workflow_dispatch:", workflow);
+        Assert.Contains("glyph-atlas-smoke", workflow);
         Assert.Contains("Glyph atlas regression lane", workflow);
         Assert.Contains(".\\scripts\\glyph-atlas-regression.ps1 -Mode Smoke", workflow);
+        Assert.Contains("Category!=D3D12&Category!=Performance", workflow);
+        Assert.Contains("IrixWindowsRequiredSdkVersion", workflow);
+        Assert.Contains("<IrixWindowsRequiredSdkVersion>10.0.28000.0</IrixWindowsRequiredSdkVersion>", buildProps);
         Assert.Contains("windows-2025", workflow);
     }
 

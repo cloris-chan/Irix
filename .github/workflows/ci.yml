@@ -5,33 +5,29 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      validation_suite:
+        description: Optional heavier validation to run manually.
+        required: true
+        default: quick
+        type: choice
+        options:
+          - quick
+          - d3d12
+          - glyph-atlas-smoke
+          - performance
+          - aot
+          - all-heavy
 
 permissions:
   contents: read
 
 jobs:
-  verify:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Windows 2025 / SDK 26100 / test suite
-            os: windows-2025
-            suite: tests
-          - name: Windows 2025 / SDK 26100 / headless D3D12
-            os: windows-2025
-            suite: d3d12
-          - name: Windows 2025 / SDK 26100 / glyph atlas regression lane
-            os: windows-2025
-            suite: glyph-atlas
-          - name: Windows 2025 / SDK 26100 / performance baseline
-            os: windows-2025
-            suite: performance
-          - name: Windows 2025 / SDK 26100 / AOT publish
-            os: windows-2025
-            suite: aot
+  quick:
+    name: Windows 2025 / SDK 28000 / quick
+    runs-on: windows-2025
+    if: github.event_name != 'workflow_dispatch' || inputs.validation_suite == 'quick'
     steps:
       - uses: actions/checkout@v6
 
@@ -40,7 +36,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Verify .NET 10 and Windows SDK 26100
+      - name: Verify .NET 10 and Windows SDK 28000
         shell: pwsh
         run: |
           $dotnetSdks = dotnet --list-sdks
@@ -48,11 +44,13 @@ jobs:
             throw "Required .NET 10 SDK was not found. Installed SDKs: $($dotnetSdks -join ', ')"
           }
 
-          $windowsSdkPath = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib\10.0.26100.0'
+          [xml]$buildProps = Get-Content Directory.Build.props
+          $requiredWindowsSdkVersion = $buildProps.Project.PropertyGroup.IrixWindowsRequiredSdkVersion
+          $windowsSdkPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib\$requiredWindowsSdkVersion"
           if (-not (Test-Path $windowsSdkPath)) {
             $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
             $installedWindowsSdks = if (Test-Path $windowsSdkRoot) { Get-ChildItem $windowsSdkRoot -Directory | Select-Object -ExpandProperty Name } else { @() }
-            throw "Required Windows SDK 10.0.26100.0 was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
+            throw "Required Windows SDK $requiredWindowsSdkVersion was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
           }
 
           dotnet --info
@@ -64,22 +62,77 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        if: matrix.suite == 'tests'
         run: dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance" --verbosity normal
 
-      - name: D3D12 smoke tests
-        if: matrix.suite == 'd3d12'
-        run: dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal
+  optional-validation:
+    name: Windows 2025 / SDK 28000 / optional ${{ inputs.validation_suite }}
+    runs-on: windows-2025
+    if: github.event_name == 'workflow_dispatch' && inputs.validation_suite != 'quick'
+    steps:
+      - uses: actions/checkout@v6
 
-      - name: Glyph atlas regression lane
-        if: matrix.suite == 'glyph-atlas'
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Verify .NET 10 and Windows SDK 28000
         shell: pwsh
-        run: .\scripts\glyph-atlas-regression.ps1 -Mode Smoke
+        run: |
+          $dotnetSdks = dotnet --list-sdks
+          if (-not ($dotnetSdks | Where-Object { $_ -match '^10\.' })) {
+            throw "Required .NET 10 SDK was not found. Installed SDKs: $($dotnetSdks -join ', ')"
+          }
 
-      - name: Performance regression baseline
-        if: matrix.suite == 'performance'
-        run: dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal
+          [xml]$buildProps = Get-Content Directory.Build.props
+          $requiredWindowsSdkVersion = $buildProps.Project.PropertyGroup.IrixWindowsRequiredSdkVersion
+          $windowsSdkPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib\$requiredWindowsSdkVersion"
+          if (-not (Test-Path $windowsSdkPath)) {
+            $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
+            $installedWindowsSdks = if (Test-Path $windowsSdkRoot) { Get-ChildItem $windowsSdkRoot -Directory | Select-Object -ExpandProperty Name } else { @() }
+            throw "Required Windows SDK $requiredWindowsSdkVersion was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
+          }
 
-      - name: Publish (Poc only)
-        if: matrix.suite == 'aot'
-        run: dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained
+          dotnet --info
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore -c Release
+
+      - name: Run selected validation
+        shell: pwsh
+        run: |
+          function Invoke-Checked([string]$Name, [scriptblock]$Command) {
+            Write-Host "=== $Name ===" -ForegroundColor Cyan
+            & $Command
+            if ($LASTEXITCODE -ne 0) {
+              throw "$Name failed with exit code $LASTEXITCODE."
+            }
+          }
+
+          $suite = '${{ inputs.validation_suite }}'
+          switch ($suite) {
+            'd3d12' {
+              Invoke-Checked 'D3D12 smoke tests' { dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal }
+            }
+            'glyph-atlas-smoke' {
+              Invoke-Checked 'Glyph atlas regression lane' { .\scripts\glyph-atlas-regression.ps1 -Mode Smoke }
+            }
+            'performance' {
+              Invoke-Checked 'Performance regression baseline' { dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal }
+            }
+            'aot' {
+              Invoke-Checked 'Publish (Poc only)' { dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained }
+            }
+            'all-heavy' {
+              Invoke-Checked 'D3D12 smoke tests' { dotnet test --no-build -c Release --filter "Category=D3D12" --verbosity normal }
+              Invoke-Checked 'Glyph atlas regression lane' { .\scripts\glyph-atlas-regression.ps1 -Mode Smoke }
+              Invoke-Checked 'Performance regression baseline' { dotnet test --no-build -c Release --filter "Category=Performance" --verbosity normal }
+              Invoke-Checked 'Publish (Poc only)' { dotnet publish src/Irix.Poc/Irix.Poc.csproj -c Release -r win-x64 --self-contained }
+            }
+            default {
+              throw "Unknown validation suite '$suite'."
+            }
+          }

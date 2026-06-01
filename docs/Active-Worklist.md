@@ -6,7 +6,7 @@
 
 ## Windows Boundary
 
-The Windows PoC separates target SDK from runtime minimum. Windows-targeted projects inherit `IrixWindowsTargetFramework=net10.0-windows10.0.26100.0` and `IrixWindowsSupportedOSPlatformVersion=10.0.15063.0` from `Directory.Build.props`; CI checks for .NET 10 and Windows SDK 10.0.26100.0 before restore/build. The 10.0.15063.0 runtime floor is intentional for PerMonitorV2 DPI awareness and display scale support. `IDWriteFactory4` is available within this runtime target and is the baseline DirectWrite factory for the glyph atlas path.
+The Windows PoC separates target framework, installed SDK, and runtime minimum. Windows-targeted projects inherit `IrixWindowsTargetFramework=net10.0-windows10.0.26100.0`, `IrixWindowsRequiredSdkVersion=10.0.28000.0`, and `IrixWindowsSupportedOSPlatformVersion=10.0.15063.0` from `Directory.Build.props`; CI checks for .NET 10 and the installed Windows SDK version before restore/build. The target framework stays on 26100 because .NET SDK 10.0.300 does not yet provide `Microsoft.Windows.SDK.NET.Ref` / TFM support for 28000, while the installed SDK check tracks the local 28000 toolchain. The 10.0.15063.0 runtime floor is intentional for PerMonitorV2 DPI awareness and display scale support. `IDWriteFactory4` is available within this runtime target and is the baseline DirectWrite factory for the glyph atlas path.
 
 ---
 
@@ -33,6 +33,7 @@ The Windows PoC separates target SDK from runtime minimum. Windows-targeted proj
 | Source boundary guards | Active guards keep final text composition on D3D12 GlyphAtlas, block runtime shader compile, block raw retained text strings, and prevent premature compositor/runtime extraction. | Guards stay green after renderer, text, diagnostics, or architecture-boundary changes. |
 
 Run `Smoke` before/after broad changes. Do not add artifact-upload work until Actions quota returns.
+Push/PR CI intentionally stays lightweight while quota is constrained; run the manual `glyph-atlas-smoke` workflow_dispatch suite only when remote confirmation is worth the cost.
 
 ### Near-Term Plan
 

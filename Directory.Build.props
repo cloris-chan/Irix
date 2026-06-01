@@ -2,6 +2,7 @@
   <PropertyGroup>
     <IrixDefaultTargetFramework>net10.0</IrixDefaultTargetFramework>
     <IrixWindowsTargetFramework>net10.0-windows10.0.26100.0</IrixWindowsTargetFramework>
+    <IrixWindowsRequiredSdkVersion>10.0.28000.0</IrixWindowsRequiredSdkVersion>
     <IrixWindowsSupportedOSPlatformVersion>10.0.15063.0</IrixWindowsSupportedOSPlatformVersion>
     <TargetFramework>$(IrixDefaultTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
@@ -15,4 +16,5 @@
     <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">bin\$(IrixBuildFlavor)\</BaseOutputPath>
     <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">obj\$(IrixBuildFlavor)\</BaseIntermediateOutputPath>
   </PropertyGroup>
+
 </Project>

@@ -57,7 +57,7 @@ Diagnostics expose total and format-split page counts, resident CPU shadow bytes
 
 ## Regression Lane
 
-`scripts/glyph-atlas-regression.ps1` is the fixed local gate for guarded coverage changes and is configured in Windows CI as `Glyph atlas regression lane`. GitHub Actions quota is currently exhausted, so the CI lane is configured but not runnable as status. Keep `.github/workflows/ci.yml`, but do not rely on Actions until quota returns.
+`scripts/glyph-atlas-regression.ps1` is the fixed local gate for guarded coverage changes and is available in Windows CI as the manual `glyph-atlas-smoke` validation suite. GitHub Actions quota is currently exhausted, so push/PR CI stays lightweight and the manual lane is not the status source. Keep `.github/workflows/ci.yml`, but do not rely on Actions until quota returns.
 
 - `-Mode Smoke`: matrix, 60-frame soak, color-format natural coverage probe, BiDi oracle, and glyph oracle. Run before/after broad changes.
 - `-Mode Local`: extends soak to 300 frames. Run after glyph/page/shaping changes.

@@ -30,7 +30,7 @@ One-off smoke/default evidence files are intentionally not canonical. Keep durab
 
 Private execution mode: these docs are working notes for a personal repository, not public compatibility or delivery commitments. Prefer direct target-architecture work, migrate internal APIs and tests when boundaries change, and keep secondary paths explicit and diagnostic-visible.
 
-GitHub Actions quota is currently exhausted. `.github/workflows/ci.yml` remains configured, but Actions status is not the source of truth until quota returns. Use local gates:
+GitHub Actions quota is currently exhausted. `.github/workflows/ci.yml` now keeps push/PR validation to the quick Windows lane: SDK/Windows SDK check, Release build, and non-D3D12/non-performance tests. Heavier D3D12, glyph-atlas Smoke, performance, and AOT lanes remain available through `workflow_dispatch`, but Actions status is not the source of truth until quota returns. Use local gates:
 
 - Before and after broad changes: `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke`.
 - After glyph/page/shaping changes: `.\scripts\glyph-atlas-regression.ps1 -Mode Local`.
