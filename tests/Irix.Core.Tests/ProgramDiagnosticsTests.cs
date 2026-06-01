@@ -2535,7 +2535,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Glyph atlas regression lane", workflow);
         Assert.Contains(".\\scripts\\glyph-atlas-regression.ps1 -Mode Smoke", workflow);
         Assert.Contains("Category!=D3D12&Category!=Performance", workflow);
-        Assert.Contains("CI_WINDOWS_SDK_VERSION: 10.0.28000.0", workflow);
+        Assert.Contains("CI_WINDOWS_SDK_MIN_VERSION: 10.0.26100.0", workflow);
+        Assert.Contains("Windows SDK 26100+", workflow);
         Assert.DoesNotContain("IrixWindowsRequiredSdkVersion", workflow);
         Assert.Contains("dotnet restore -p:IrixDiagnostics=true", workflow);
         Assert.Contains("<IrixWindowsTargetFramework>net10.0-windows10.0.26100.0</IrixWindowsTargetFramework>", buildProps);

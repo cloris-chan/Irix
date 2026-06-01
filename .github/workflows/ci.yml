@@ -24,11 +24,11 @@ permissions:
   contents: read
 
 env:
-  CI_WINDOWS_SDK_VERSION: 10.0.28000.0
+  CI_WINDOWS_SDK_MIN_VERSION: 10.0.26100.0
 
 jobs:
   quick:
-    name: Windows 2025 / SDK 28000 / quick
+    name: Windows 2025 / SDK 26100+ / quick
     runs-on: windows-2025
     if: github.event_name != 'workflow_dispatch' || inputs.validation_suite == 'quick'
     steps:
@@ -39,7 +39,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Verify .NET 10 and Windows SDK 28000
+      - name: Verify .NET 10 and Windows SDK 26100+
         shell: pwsh
         run: |
           $dotnetSdks = dotnet --list-sdks
@@ -47,12 +47,14 @@ jobs:
             throw "Required .NET 10 SDK was not found. Installed SDKs: $($dotnetSdks -join ', ')"
           }
 
-          $requiredWindowsSdkVersion = $env:CI_WINDOWS_SDK_VERSION
-          $windowsSdkPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib\$requiredWindowsSdkVersion"
-          if (-not (Test-Path $windowsSdkPath)) {
-            $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
-            $installedWindowsSdks = if (Test-Path $windowsSdkRoot) { Get-ChildItem $windowsSdkRoot -Directory | Select-Object -ExpandProperty Name } else { @() }
-            throw "Required Windows SDK $requiredWindowsSdkVersion was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
+          $requiredWindowsSdkVersion = [version]$env:CI_WINDOWS_SDK_MIN_VERSION
+          $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
+          $installedWindowsSdks = if (Test-Path $windowsSdkRoot) { Get-ChildItem $windowsSdkRoot -Directory | Select-Object -ExpandProperty Name } else { @() }
+          $compatibleWindowsSdk = $installedWindowsSdks | Where-Object {
+            try { [version]$_ -ge $requiredWindowsSdkVersion } catch { $false }
+          } | Select-Object -First 1
+          if (-not $compatibleWindowsSdk) {
+            throw "Windows SDK $requiredWindowsSdkVersion or newer was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
           }
 
           dotnet --info
@@ -69,7 +71,7 @@ jobs:
         run: dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance" --verbosity normal
 
   optional-validation:
-    name: Windows 2025 / SDK 28000 / optional ${{ inputs.validation_suite }}
+    name: Windows 2025 / SDK 26100+ / optional ${{ inputs.validation_suite }}
     runs-on: windows-2025
     if: github.event_name == 'workflow_dispatch' && inputs.validation_suite != 'quick'
     steps:
@@ -80,7 +82,7 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Verify .NET 10 and Windows SDK 28000
+      - name: Verify .NET 10 and Windows SDK 26100+
         shell: pwsh
         run: |
           $dotnetSdks = dotnet --list-sdks
@@ -88,12 +90,14 @@ jobs:
             throw "Required .NET 10 SDK was not found. Installed SDKs: $($dotnetSdks -join ', ')"
           }
 
-          $requiredWindowsSdkVersion = $env:CI_WINDOWS_SDK_VERSION
-          $windowsSdkPath = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib\$requiredWindowsSdkVersion"
-          if (-not (Test-Path $windowsSdkPath)) {
-            $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
-            $installedWindowsSdks = if (Test-Path $windowsSdkRoot) { Get-ChildItem $windowsSdkRoot -Directory | Select-Object -ExpandProperty Name } else { @() }
-            throw "Required Windows SDK $requiredWindowsSdkVersion was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
+          $requiredWindowsSdkVersion = [version]$env:CI_WINDOWS_SDK_MIN_VERSION
+          $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
+          $installedWindowsSdks = if (Test-Path $windowsSdkRoot) { Get-ChildItem $windowsSdkRoot -Directory | Select-Object -ExpandProperty Name } else { @() }
+          $compatibleWindowsSdk = $installedWindowsSdks | Where-Object {
+            try { [version]$_ -ge $requiredWindowsSdkVersion } catch { $false }
+          } | Select-Object -First 1
+          if (-not $compatibleWindowsSdk) {
+            throw "Windows SDK $requiredWindowsSdkVersion or newer was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
           }
 
           dotnet --info
