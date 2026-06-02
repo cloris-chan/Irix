@@ -9,6 +9,7 @@ namespace Irix.Poc;
 internal static class ScrollPresentationInteractionDiagnosticRunner
 {
     private static readonly NodeKey ScrollTargetKey = new(1);
+    private const int LifecycleStaleTickDrainDelayMs = 90;
     private static readonly RawInputEvent FixedPointerMove = new(RawInputEventKind.PointerMoved, Timestamp: 1, X: 20, Y: 190);
     private static readonly RawInputEvent FixedPointerPress = new(RawInputEventKind.PointerPressed, Timestamp: 2, X: 20, Y: 190, Button: PointerButton.Left);
     private static readonly RawInputEvent FixedPointerRelease = new(RawInputEventKind.PointerReleased, Timestamp: 3, X: 20, Y: 190, Button: PointerButton.Left);
@@ -329,7 +330,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         session.Window.RaiseSizeChanged(720, 420);
         await Task.WhenAll(cancelTask, renderTask);
 
-        return CaptureLifecycleScenario("resize", session, activeBefore);
+        return await CaptureLifecycleScenarioAsync("resize", session, activeBefore, cancellationToken);
     }
 
     private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunDpiLifecycleScenarioAsync(CancellationToken cancellationToken)
@@ -351,7 +352,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         session.Window.RaiseDpiChanged(new DisplayScale(1.5f, 1.5f));
         await Task.WhenAll(cancelTask, renderTask);
 
-        return CaptureLifecycleScenario("dpi", session, activeBefore);
+        return await CaptureLifecycleScenarioAsync("dpi", session, activeBefore, cancellationToken);
     }
 
     private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunMaxScrollLifecycleScenarioAsync(CancellationToken cancellationToken)
@@ -366,7 +367,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
 
         await Task.WhenAll(cancelTask, updateTask);
 
-        return CaptureLifecycleScenario("maxScroll", session, activeBefore);
+        return await CaptureLifecycleScenarioAsync("maxScroll", session, activeBefore, cancellationToken);
     }
 
     private static async Task<ScrollPresentationLifecycleActiveProbe> StartActivePresentationAsync(DiagnosticSession session, CancellationToken cancellationToken)
@@ -378,16 +379,28 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         return new ScrollPresentationLifecycleActiveProbe(active, presentedScrollY, hit, action, session.Compositor.RenderCount);
     }
 
-    private static ScrollPresentationLifecycleScenarioDiagnostics CaptureLifecycleScenario(
+    private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> CaptureLifecycleScenarioAsync(
         string name,
         DiagnosticSession session,
-        in ScrollPresentationLifecycleActiveProbe activeBefore)
+        ScrollPresentationLifecycleActiveProbe activeBefore,
+        CancellationToken cancellationToken)
     {
         var activeAfter = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfter);
         var hitAfter = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var actionAfter);
         var cancellation = session.CompositorLoop.ScrollPresentationCancellationDiagnostics;
         var viewport = session.Window.Region.PhysicalBounds;
         var scale = session.Compositor.CurrentDisplayScale;
+        var renderCountAfter = session.Compositor.RenderCount;
+        var compositionTickCountAfterLifecycle = session.Compositor.CompositionTickCount;
+        var loopTickCountAfterLifecycle = session.CompositorLoop.ScrollPresentationTickCount;
+        var layoutRebuildReasonAfter = session.Translator.LastLayoutRebuildReason;
+        var maxScrollY = session.Runtime.CurrentModel.Scroll.MaxScrollY;
+
+        await Task.Delay(LifecycleStaleTickDrainDelayMs, cancellationToken);
+        await session.CompositorLoop.RequestRenderAndWaitAsync(cancellationToken);
+        var activeAfterStaleWindow = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out _);
+        var hitAfterStaleWindow = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var actionAfterStaleWindow);
+
         return new ScrollPresentationLifecycleScenarioDiagnostics(
             name,
             activeBefore.Active,
@@ -404,12 +417,19 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             cancellation.ExplicitCount,
             cancellation.RenderInvalidationCount,
             activeBefore.RenderCount,
-            session.Compositor.RenderCount,
-            session.Translator.LastLayoutRebuildReason,
+            renderCountAfter,
+            layoutRebuildReasonAfter,
             viewport.Width,
             viewport.Height,
             scale.ScaleX,
-            session.Runtime.CurrentModel.Scroll.MaxScrollY);
+            maxScrollY,
+            compositionTickCountAfterLifecycle,
+            loopTickCountAfterLifecycle,
+            session.Compositor.CompositionTickCount,
+            session.CompositorLoop.ScrollPresentationTickCount,
+            activeAfterStaleWindow,
+            hitAfterStaleWindow,
+            actionAfterStaleWindow);
     }
 
     private static string FormatPointer(in ScrollPresentationPointerInteractionDiagnostics diagnostics)
@@ -501,6 +521,9 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             $"cancels={diagnostics.CancelCount} cancelReason={diagnostics.CancelReason} cancelInvalidation={diagnostics.CancelInvalidationKind}",
             $"explicitCancels={diagnostics.ExplicitCancelCount} invalidationCancels={diagnostics.RenderInvalidationCancelCount}",
             $"renderBefore={diagnostics.RenderCountBefore} renderAfter={diagnostics.RenderCountAfter} layoutAfter={diagnostics.LayoutRebuildReasonAfter}",
+            $"compositionTicksAfterLifecycle={diagnostics.CompositionTickCountAfterLifecycle} loopTicksAfterLifecycle={diagnostics.LoopTickCountAfterLifecycle}",
+            $"compositionTicksAfterStaleWindow={diagnostics.CompositionTickCountAfterStaleWindow} loopTicksAfterStaleWindow={diagnostics.LoopTickCountAfterStaleWindow}",
+            $"activeAfterStaleWindow={diagnostics.ActiveAfterStaleWindow} hitAfterStaleWindow={diagnostics.HitAfterStaleWindow} actionAfterStaleWindow={diagnostics.ActionAfterStaleWindow.Value}",
             $"viewport={diagnostics.ViewportWidth}x{diagnostics.ViewportHeight} scale={diagnostics.DisplayScaleX:0.##} maxScroll={diagnostics.MaxScrollY:0.##}"
         ]);
     }
@@ -966,7 +989,14 @@ internal readonly struct ScrollPresentationLifecycleScenarioDiagnostics(
     int ViewportWidth,
     int ViewportHeight,
     float DisplayScaleX,
-    double MaxScrollY)
+    double MaxScrollY,
+    long CompositionTickCountAfterLifecycle,
+    long LoopTickCountAfterLifecycle,
+    long CompositionTickCountAfterStaleWindow,
+    long LoopTickCountAfterStaleWindow,
+    bool ActiveAfterStaleWindow,
+    bool HitAfterStaleWindow,
+    ActionId ActionAfterStaleWindow)
 {
     public string Name { get; } = Name;
     public bool ActiveBefore { get; } = ActiveBefore;
@@ -989,5 +1019,12 @@ internal readonly struct ScrollPresentationLifecycleScenarioDiagnostics(
     public int ViewportHeight { get; } = ViewportHeight;
     public float DisplayScaleX { get; } = DisplayScaleX;
     public double MaxScrollY { get; } = MaxScrollY;
+    public long CompositionTickCountAfterLifecycle { get; } = CompositionTickCountAfterLifecycle;
+    public long LoopTickCountAfterLifecycle { get; } = LoopTickCountAfterLifecycle;
+    public long CompositionTickCountAfterStaleWindow { get; } = CompositionTickCountAfterStaleWindow;
+    public long LoopTickCountAfterStaleWindow { get; } = LoopTickCountAfterStaleWindow;
+    public bool ActiveAfterStaleWindow { get; } = ActiveAfterStaleWindow;
+    public bool HitAfterStaleWindow { get; } = HitAfterStaleWindow;
+    public ActionId ActionAfterStaleWindow { get; } = ActionAfterStaleWindow;
 }
 #endif

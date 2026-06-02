@@ -2370,6 +2370,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(expectedViewportWidth, diagnostics.ViewportWidth);
         Assert.Equal(expectedViewportHeight, diagnostics.ViewportHeight);
         Assert.Equal(expectedScale, diagnostics.DisplayScaleX);
+        Assert.True(diagnostics.CompositionTickCountAfterLifecycle > 0);
+        Assert.True(diagnostics.LoopTickCountAfterLifecycle > 0);
+        Assert.Equal(diagnostics.CompositionTickCountAfterLifecycle, diagnostics.CompositionTickCountAfterStaleWindow);
+        Assert.Equal(diagnostics.LoopTickCountAfterLifecycle, diagnostics.LoopTickCountAfterStaleWindow);
+        Assert.False(diagnostics.ActiveAfterStaleWindow);
+        Assert.Equal(expectedHitAfter, diagnostics.HitAfterStaleWindow);
+        Assert.Equal(diagnostics.ActionAfter, diagnostics.ActionAfterStaleWindow);
     }
 
     [Fact]
