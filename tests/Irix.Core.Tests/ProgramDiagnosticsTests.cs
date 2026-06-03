@@ -2313,9 +2313,54 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(topBoundary.LoopTickCount > 0);
 
         var lifecycle = diagnostics.Lifecycle;
-        AssertLifecycleScenario(lifecycle.Resize, "resize", LayoutRebuildReason.ViewportChanged, 720, 420, 1f, expectedHitAfter: true);
-        AssertLifecycleScenario(lifecycle.Dpi, "dpi", LayoutRebuildReason.ViewportChanged, 960, 540, 1.5f, expectedHitAfter: false);
-        AssertLifecycleScenario(lifecycle.MaxScroll, "maxScroll", LayoutRebuildReason.LayoutAffecting, 960, 540, 1f, expectedHitAfter: true);
+        AssertLifecycleScenario(
+            lifecycle.Resize,
+            "resize",
+            LayoutRebuildReason.ViewportChanged,
+            720,
+            420,
+            1f,
+            expectedHitAfter: true,
+            expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
+            expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
+            explicitCancelCount: 1,
+            renderInvalidationCancelCount: 0);
+        AssertLifecycleScenario(
+            lifecycle.Dpi,
+            "dpi",
+            LayoutRebuildReason.ViewportChanged,
+            960,
+            540,
+            1.5f,
+            expectedHitAfter: false,
+            expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
+            expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
+            explicitCancelCount: 1,
+            renderInvalidationCancelCount: 0);
+        AssertLifecycleScenario(
+            lifecycle.RenderInvalidation,
+            "renderInvalidation",
+            LayoutRebuildReason.ViewportChanged,
+            840,
+            480,
+            1f,
+            expectedHitAfter: true,
+            expectedCancelReason: ScrollPresentationCancellationReason.RenderInvalidation,
+            expectedCancelInvalidationKind: CompositionRenderInvalidationKind.ViewportChanged,
+            explicitCancelCount: 0,
+            renderInvalidationCancelCount: 1);
+        AssertLifecycleScenario(
+            lifecycle.MaxScroll,
+            "maxScroll",
+            LayoutRebuildReason.LayoutAffecting,
+            960,
+            540,
+            1f,
+            expectedHitAfter: true,
+            expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
+            expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
+            explicitCancelCount: 1,
+            renderInvalidationCancelCount: 0);
         Assert.True(lifecycle.MaxScroll.MaxScrollY < boundary.MaxScrollY);
 
         Assert.Contains("scroll-presentation-interaction actual scenario=pointer pointer=(20,190)", summary);
@@ -2343,6 +2388,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("viewport=720x420 scale=1", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-dpi", summary);
         Assert.Contains("viewport=960x540 scale=1.5", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-renderInvalidation", summary);
+        Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
+        Assert.Contains("explicitCancels=0 invalidationCancels=1", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-maxScroll", summary);
     }
 
@@ -2353,7 +2401,11 @@ public sealed class ProgramDiagnosticsTests
         int expectedViewportWidth,
         int expectedViewportHeight,
         float expectedScale,
-        bool expectedHitAfter)
+        bool expectedHitAfter,
+        ScrollPresentationCancellationReason expectedCancelReason,
+        CompositionRenderInvalidationKind expectedCancelInvalidationKind,
+        long explicitCancelCount,
+        long renderInvalidationCancelCount)
     {
         Assert.Equal(name, diagnostics.Name);
         Assert.True(diagnostics.ActiveBefore);
@@ -2361,10 +2413,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(diagnostics.ActiveAfter);
         Assert.Equal(expectedHitAfter, diagnostics.HitAfter);
         Assert.Equal(1, diagnostics.CancelCount);
-        Assert.Equal(ScrollPresentationCancellationReason.Explicit, diagnostics.CancelReason);
-        Assert.Equal(CompositionRenderInvalidationKind.None, diagnostics.CancelInvalidationKind);
-        Assert.Equal(1, diagnostics.ExplicitCancelCount);
-        Assert.Equal(0, diagnostics.RenderInvalidationCancelCount);
+        Assert.Equal(expectedCancelReason, diagnostics.CancelReason);
+        Assert.Equal(expectedCancelInvalidationKind, diagnostics.CancelInvalidationKind);
+        Assert.Equal(explicitCancelCount, diagnostics.ExplicitCancelCount);
+        Assert.Equal(renderInvalidationCancelCount, diagnostics.RenderInvalidationCancelCount);
         Assert.True(diagnostics.RenderCountAfter >= diagnostics.RenderCountBefore);
         Assert.Equal(expectedLayoutReason, diagnostics.LayoutRebuildReasonAfter);
         Assert.Equal(expectedViewportWidth, diagnostics.ViewportWidth);

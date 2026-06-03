@@ -310,6 +310,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         return new ScrollPresentationLifecycleInteractionDiagnostics(
             await RunResizeLifecycleScenarioAsync(cancellationToken),
             await RunDpiLifecycleScenarioAsync(cancellationToken),
+            await RunRenderInvalidationLifecycleScenarioAsync(cancellationToken),
             await RunMaxScrollLifecycleScenarioAsync(cancellationToken));
     }
 
@@ -353,6 +354,24 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         await Task.WhenAll(cancelTask, renderTask);
 
         return await CaptureLifecycleScenarioAsync("dpi", session, activeBefore, cancellationToken);
+    }
+
+    private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunRenderInvalidationLifecycleScenarioAsync(CancellationToken cancellationToken)
+    {
+        await using var session = await DiagnosticSession.StartAsync(cancellationToken);
+        var activeBefore = await StartActivePresentationAsync(session, cancellationToken);
+        var renderTask = Task.CompletedTask;
+
+        session.Window.SizeChanged += (width, height) =>
+        {
+            session.Compositor.SetViewport(new PixelRectangle(0, 0, width, height), DisplayScale.Identity);
+            renderTask = session.CompositorLoop.RequestRenderAndWaitAsync(cancellationToken).AsTask();
+        };
+
+        session.Window.RaiseSizeChanged(840, 480);
+        await renderTask;
+
+        return await CaptureLifecycleScenarioAsync("renderInvalidation", session, activeBefore, cancellationToken);
     }
 
     private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunMaxScrollLifecycleScenarioAsync(CancellationToken cancellationToken)
@@ -509,6 +528,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             Environment.NewLine,
             FormatLifecycleScenario(diagnostics.Resize),
             FormatLifecycleScenario(diagnostics.Dpi),
+            FormatLifecycleScenario(diagnostics.RenderInvalidation),
             FormatLifecycleScenario(diagnostics.MaxScroll));
     }
 
@@ -961,10 +981,12 @@ internal readonly struct ScrollPresentationBoundaryInteractionDiagnostics(
 internal readonly struct ScrollPresentationLifecycleInteractionDiagnostics(
     ScrollPresentationLifecycleScenarioDiagnostics Resize,
     ScrollPresentationLifecycleScenarioDiagnostics Dpi,
+    ScrollPresentationLifecycleScenarioDiagnostics RenderInvalidation,
     ScrollPresentationLifecycleScenarioDiagnostics MaxScroll)
 {
     public ScrollPresentationLifecycleScenarioDiagnostics Resize { get; } = Resize;
     public ScrollPresentationLifecycleScenarioDiagnostics Dpi { get; } = Dpi;
+    public ScrollPresentationLifecycleScenarioDiagnostics RenderInvalidation { get; } = RenderInvalidation;
     public ScrollPresentationLifecycleScenarioDiagnostics MaxScroll { get; } = MaxScroll;
 }
 
