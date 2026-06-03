@@ -29,6 +29,19 @@ internal static class CounterInputRouter
         out CounterMessage message)
         where THitTestResolver : struct, IActionHitTestResolver
     {
+        var actionMapper = new CounterInputActionMapper();
+        return TryMapInput(inputEvent, ownershipState, hitTestResolver, actionMapper, out message);
+    }
+
+    public static bool TryMapInput<THitTestResolver, TActionMapper>(
+        RawInputEvent inputEvent,
+        InputOwnershipState ownershipState,
+        THitTestResolver hitTestResolver,
+        TActionMapper actionMapper,
+        out CounterMessage message)
+        where THitTestResolver : struct, IActionHitTestResolver
+        where TActionMapper : struct, IInputActionMapper<CounterMessage>
+    {
         switch (inputEvent.Kind)
         {
             case RawInputEventKind.PointerMoved:
@@ -43,8 +56,7 @@ internal static class CounterInputRouter
                 var actionId = ownershipState.ReleasePointer(inputEvent, ref hitTestResolver);
                 if (!actionId.IsNone)
                 {
-                    message = MapActionId(actionId);
-                    return true;
+                    return actionMapper.TryMapAction(actionId, in inputEvent, out message);
                 }
 
                 break;
@@ -53,8 +65,7 @@ internal static class CounterInputRouter
                 var focusedActionId = ownershipState.GetKeyboardTarget();
                 if (!focusedActionId.IsNone)
                 {
-                    message = MapActionId(focusedActionId);
-                    return true;
+                    return actionMapper.TryMapAction(focusedActionId, in inputEvent, out message);
                 }
 
                 break;
@@ -81,13 +92,12 @@ internal static class CounterInputRouter
 
     internal static CounterMessage MapActionId(ActionId actionId)
     {
-        return actionId.Value switch
+        var actionMapper = new CounterInputActionMapper();
+        if (actionMapper.TryMapAction(actionId, default, out var message))
         {
-            1 => new CounterMessage.Increment(),
-            2 => new CounterMessage.Decrement(),
-            3 => new CounterMessage.Reset(0),
-            _ => throw new NotSupportedException($"Unsupported action id: {actionId.Value}")
-        };
-    }
+            return message;
+        }
 
+        throw new NotSupportedException($"Unsupported action id: {actionId.Value}");
+    }
 }

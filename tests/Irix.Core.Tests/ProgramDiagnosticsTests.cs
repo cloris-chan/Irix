@@ -2634,6 +2634,9 @@ public sealed class ProgramDiagnosticsTests
         var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
         var coordinatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationCoordinator.cs")));
         var adapterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationAdapters.cs")));
+        var inputActionMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputActionMapper.cs")));
+        var counterInputRouterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterInputRouter.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
 
         Assert.Contains("### Scroll / Input Runtime Owner Boundary", contracts);
         Assert.Contains("logical scroll state, input ownership state, control visual state, or app message dispatch", contracts);
@@ -2642,12 +2645,19 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Input action mapper", contracts);
         Assert.Contains("Moving `ScrollPresentationCoordinator` requires a compositor sampler interface", contracts);
         Assert.Contains("scroll/input runtime owner boundary is written", status);
-        Assert.Contains("feedback-sink, compositor-sampler, hit-test-service, and app-message-dispatch adapters", status);
+        Assert.Contains("feedback-sink, compositor-sampler, hit-test-service, input-action-mapper, and app-message-dispatch adapters", status);
         Assert.Contains("Boundary is written in [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md)", worklist);
         Assert.Contains("first Poc-owned scroll presentation adapter cut exists", worklist);
         Assert.Contains("interface IScrollPresentationRuntimeAdapter", adapterSource);
         Assert.Contains("interface IScrollPresentationCompositorAdapter", adapterSource);
         Assert.Contains("interface IScrollPresentationRetainedSnapshotProvider", adapterSource);
+        Assert.Contains("interface IInputActionMapper", inputActionMapperSource);
+        Assert.Contains("struct CounterInputActionMapper", inputActionMapperSource);
+        Assert.Contains("TryMapAction(ActionId actionId, in RawInputEvent inputEvent", inputActionMapperSource);
+        Assert.Contains("where TActionMapper : struct, IInputActionMapper<CounterMessage>", counterInputRouterSource);
+        Assert.Contains("actionMapper.TryMapAction(actionId, in inputEvent, out message)", counterInputRouterSource);
+        Assert.Contains("actionMapper.TryMapAction(focusedActionId, in inputEvent, out message)", counterInputRouterSource);
+        Assert.Contains("var actionMapper = new CounterInputActionMapper();", programSource);
         Assert.Contains("DispatchScrollPresentationInterruptedAsync", coordinatorSource);
         Assert.Contains("SampleAndCancelAsync", coordinatorSource);
         Assert.Contains("snapshotProvider.LastRetainedInputSnapshot", coordinatorSource);

@@ -303,7 +303,8 @@ internal static partial class Program
         where THitTestResolver : struct, IActionHitTestResolver
     {
         var before = ownershipState.Snapshot;
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, hitTestResolver, out var mappedMessage);
+        var actionMapper = new CounterInputActionMapper();
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, hitTestResolver, actionMapper, out var mappedMessage);
         var after = ownershipState.Snapshot;
 
         if (mapped)
