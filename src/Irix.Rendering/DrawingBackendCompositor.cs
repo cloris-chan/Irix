@@ -1341,13 +1341,25 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     /// </summary>
     internal bool TryGetActionIdAtLogicalPixel(int x, int y, out ActionId actionId)
     {
+        if (TryHitTestLogicalPixel(x, y, out var result))
+        {
+            actionId = result.ActionId;
+            return true;
+        }
+
+        actionId = ActionId.None;
+        return false;
+    }
+
+    internal bool TryHitTestLogicalPixel(int x, int y, out CompositorHitTestResult result)
+    {
         CompositorHitTestSnapshot snapshot;
         lock (_hitTargetsLock)
         {
             snapshot = _hitTestSnapshot;
         }
 
-        return snapshot.TryGetActionIdAtLogicalPixel(x, y, out actionId);
+        return snapshot.TryHitTestLogicalPixel(x, y, out result);
     }
 
     private CompositionFrame GetActiveCompositionFrame()

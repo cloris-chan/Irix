@@ -48,6 +48,7 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
         _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(10), cancellationToken);
 
         var activeHit = compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var activeAction);
+        var activeHitResult = compositor.TryHitTestLogicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var activeResult);
         var hitTestResolver = new DrawingBackendCompositorActionHitTestResolver(compositor);
         var mapped = Program.TryMapInputForRuntime(FixedPointerMove, new InputOwnershipState(), hitTestResolver, out var message);
         var hoverMessage = message as CounterMessage.InputVisualStateChanged;
@@ -94,6 +95,11 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
             staleHoverAction,
             activeHit,
             activeAction,
+            activeHitResult,
+            activeResult.MappedThroughComposition,
+            activeResult.MappedThroughFixedClip,
+            activeResult.AppliedLayerCount,
+            activeResult.LocalY,
             mapped,
             ResolveMessageKind(message),
             hoverMessage?.Snapshot.HoveredTarget ?? ActionId.None,
@@ -136,6 +142,7 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
             $"scroll-presentation-hittest actual pointer=({diagnostics.PointerX},{diagnostics.PointerY})",
             $"beforeHit={diagnostics.BeforeHit} beforeAction={diagnostics.BeforeAction.Value} staleHover={diagnostics.StaleHoverAction.Value}",
             $"activeHit={diagnostics.ActiveHit} activeAction={diagnostics.ActiveAction.Value}",
+            $"activeMapped={diagnostics.ActiveMappedThroughComposition} activeFixedClip={diagnostics.ActiveMappedThroughFixedClip} activeLayers={diagnostics.ActiveAppliedLayerCount} activeLocalY={diagnostics.ActiveLocalY:0.##}",
             $"mapped={diagnostics.MappedInput} message={diagnostics.MessageKind} hovered={diagnostics.HoveredAction.Value}",
             $"renderBeforeHover={diagnostics.RenderCountBeforeHoverDispatch} renderAfterHover={diagnostics.RenderCountAfterHoverDispatch}",
             $"executeBeforeHover={diagnostics.ExecuteCountBeforeHoverDispatch} executeAfterHover={diagnostics.ExecuteCountAfterHoverDispatch}",
@@ -311,6 +318,11 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
     ActionId StaleHoverAction,
     bool ActiveHit,
     ActionId ActiveAction,
+    bool ActiveHitResult,
+    bool ActiveMappedThroughComposition,
+    bool ActiveMappedThroughFixedClip,
+    int ActiveAppliedLayerCount,
+    float ActiveLocalY,
     bool MappedInput,
     string MessageKind,
     ActionId HoveredAction,
@@ -353,6 +365,11 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
     public ActionId StaleHoverAction { get; } = StaleHoverAction;
     public bool ActiveHit { get; } = ActiveHit;
     public ActionId ActiveAction { get; } = ActiveAction;
+    public bool ActiveHitResult { get; } = ActiveHitResult;
+    public bool ActiveMappedThroughComposition { get; } = ActiveMappedThroughComposition;
+    public bool ActiveMappedThroughFixedClip { get; } = ActiveMappedThroughFixedClip;
+    public int ActiveAppliedLayerCount { get; } = ActiveAppliedLayerCount;
+    public float ActiveLocalY { get; } = ActiveLocalY;
     public bool MappedInput { get; } = MappedInput;
     public string MessageKind { get; } = MessageKind;
     public ActionId HoveredAction { get; } = HoveredAction;
@@ -397,6 +414,11 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
             && StaleHoverAction == other.StaleHoverAction
             && ActiveHit == other.ActiveHit
             && ActiveAction == other.ActiveAction
+            && ActiveHitResult == other.ActiveHitResult
+            && ActiveMappedThroughComposition == other.ActiveMappedThroughComposition
+            && ActiveMappedThroughFixedClip == other.ActiveMappedThroughFixedClip
+            && ActiveAppliedLayerCount == other.ActiveAppliedLayerCount
+            && ActiveLocalY.Equals(other.ActiveLocalY)
             && MappedInput == other.MappedInput
             && MessageKind == other.MessageKind
             && HoveredAction == other.HoveredAction
@@ -445,6 +467,11 @@ internal readonly struct ScrollPresentationHitTestDiagnostics(
         hash.Add(StaleHoverAction);
         hash.Add(ActiveHit);
         hash.Add(ActiveAction);
+        hash.Add(ActiveHitResult);
+        hash.Add(ActiveMappedThroughComposition);
+        hash.Add(ActiveMappedThroughFixedClip);
+        hash.Add(ActiveAppliedLayerCount);
+        hash.Add(ActiveLocalY);
         hash.Add(MappedInput);
         hash.Add(MessageKind);
         hash.Add(HoveredAction);

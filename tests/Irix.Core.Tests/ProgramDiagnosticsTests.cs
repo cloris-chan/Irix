@@ -2154,6 +2154,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(ActionIdRegistry.Decrement, diagnostics.StaleHoverAction);
         Assert.True(diagnostics.ActiveHit);
         Assert.Equal(ActionIdRegistry.Increment, diagnostics.ActiveAction);
+        Assert.True(diagnostics.ActiveHitResult);
+        Assert.True(diagnostics.ActiveMappedThroughComposition);
+        Assert.True(diagnostics.ActiveMappedThroughFixedClip);
+        Assert.Equal(1, diagnostics.ActiveAppliedLayerCount);
+        Assert.Equal(-2, diagnostics.ActiveLocalY);
         Assert.True(diagnostics.MappedInput);
         Assert.Equal(nameof(CounterMessage.InputVisualStateChanged), diagnostics.MessageKind);
         Assert.Equal(ActionIdRegistry.Increment, diagnostics.HoveredAction);
@@ -2189,6 +2194,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(diagnostics.CompositionTickCount >= 4);
         Assert.Contains("scroll-presentation-hittest actual pointer=(20,28)", summary);
         Assert.Contains("beforeHit=True beforeAction=2 staleHover=2 activeHit=True activeAction=1", summary);
+        Assert.Contains("activeMapped=True activeFixedClip=True activeLayers=1 activeLocalY=-2", summary);
         Assert.Contains("message=InputVisualStateChanged hovered=1", summary);
         Assert.Contains("executeBeforeHover=2 executeAfterHover=2 executeCompositionBeforeHover=1 executeCompositionAfterHover=2", summary);
         Assert.Contains("afterHoverHit=True afterHoverAction=1 activeAfterHover=True presentedAfterHover=10", summary);
