@@ -2568,6 +2568,25 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Scroll_input_runtime_owner_boundary_is_documented_before_extraction()
+    {
+        var root = FindRepoRoot();
+        var contracts = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Poc-Promotion-Contracts.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+
+        Assert.Contains("### Scroll / Input Runtime Owner Boundary", contracts);
+        Assert.Contains("logical scroll state, input ownership state, control visual state, or app message dispatch", contracts);
+        Assert.Contains("Scroll presentation sampler", contracts);
+        Assert.Contains("Hit-test service", contracts);
+        Assert.Contains("Input action mapper", contracts);
+        Assert.Contains("Moving `ScrollPresentationCoordinator` requires a compositor sampler interface", contracts);
+        Assert.Contains("scroll/input runtime owner boundary is written", status);
+        Assert.Contains("feedback-sink, compositor-sampler, hit-test-service, and app-message-dispatch adapters", status);
+        Assert.Contains("Boundary is written in [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md)", worklist);
+    }
+
+    [Fact]
     public void Project_docs_do_not_use_obsolete_release_or_version_stage_labels()
     {
         var root = FindRepoRoot();

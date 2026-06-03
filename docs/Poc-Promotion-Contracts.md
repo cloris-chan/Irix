@@ -181,6 +181,49 @@ Rules:
 - `ActionId` dispatch and `CounterMessage` mapping are sample-app concerns. A framework extraction must introduce typed control actions or routed commands first.
 - Keep the current code in `Irix.Poc` until a future commit can move one coherent unit with tests and without Counter-specific assumptions.
 
+### Scroll / Input Runtime Owner Boundary
+
+Decision: the next scroll/input extraction must be an app/control runtime boundary, not a renderer move. `Irix.Rendering` may publish layout observation, retained hit targets, and compositor presentation samples, but it must not become the owner of logical scroll state, input ownership state, control visual state, or app message dispatch.
+
+The current Poc path already has the correct split, even though the names still live in one project:
+
+```text
+platform input
+  -> app input owner resolves hit target
+  -> app/control runtime updates logical state
+  -> translator projects layout feedback after render
+  -> compositor may sample/cancel presented scroll for continuity
+  -> app/control runtime dispatches the next app message
+```
+
+Framework extraction may introduce these contracts, in this order:
+
+| Boundary | Owner | Contract |
+|----------|-------|----------|
+| Logical state owner | App/control runtime | Owns `ScrollState`, accumulator, target/current position, max-scroll clamp state, animation-active bit, input ownership snapshot, focus, capture, and pressed/hovered targets. Rendering can observe derived geometry only. |
+| Feedback owner | App/control feedback adapter | Receives layout-produced scroll metrics after translation and delivers them to runtime state. Feedback is mutable runtime correction, not renderer diagnostics. |
+| Compositor sampling owner | App/control scroll presentation coordinator | Calls compositor-loop sample/cancel APIs to preserve presented-origin continuity before dispatching a new logical layout frame. The compositor owns the presented value only while the presentation is active. |
+| Hit-test service access | Input/control adapter | Reads a renderer-neutral hit-test service that accounts for active compositor presentation. The adapter resolves input coordinates to control/action identity without owning retained render frames. |
+| App message dispatch owner | App runtime dispatcher | Maps control actions, scroll interrupts, wheel deltas, marker events, and feedback corrections into app messages. `Irix.Rendering` and platform backends must not construct app messages. |
+
+Required interface shapes before code moves:
+
+| Interface shape | Purpose | Must not include |
+|-----------------|---------|------------------|
+| Scroll feedback sink | Accepts immutable control-feedback values derived from layout diagnostics. | CLI/debug formatting, renderer state mutation, or platform callbacks. |
+| Scroll presentation sampler | Samples and cancels active presented scroll on the compositor thread. | App model mutation, `CounterMessage`, or direct hit-test routing. |
+| Hit-test service | Resolves physical or logical input coordinates against the current retained/composited hit-test snapshot. | `ActionIdRegistry`, `CounterApplication`, or renderer ownership transfer. |
+| Input action mapper | Maps resolved control identity plus raw input to runtime messages. | Retained frame access, D3D12/backend types, or layout mutation. |
+
+Extraction guardrails:
+
+- Moving pure scroll state/update functions is allowed only after the new owner can dispatch runtime messages without `CounterMessage`.
+- Moving `ScrollPresentationCoordinator` requires a compositor sampler interface and a retained-snapshot provider interface; it must not depend on `WindowDrawCommandTranslator`.
+- Moving input ownership requires a renderer-neutral hit-test service and a control identity model wider than `ActionIdRegistry`.
+- Moving control visual projection requires a framework control-state contract; button property publishing alone is not enough.
+- Diagnostics may follow the owner as read-only snapshots, but diagnostics must not become the scheduling, feedback, or message-dispatch channel.
+- No extraction commit may also move renderer, glyph, D3D12 backend, or allocation-optimization code.
+
 ## `D3D12DrawingBackend`
 
 Current role: Windows D3D12 drawing backend adapter in `Irix.Platform.Windows`.
