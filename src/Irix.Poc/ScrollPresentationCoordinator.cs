@@ -41,12 +41,30 @@ internal sealed class ScrollPresentationCoordinator
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(compositorLoop);
         ArgumentNullException.ThrowIfNull(translator);
+        return EnsureRunning(
+            new CounterScrollPresentationRuntimeAdapter(runtime),
+            new CompositorLoopScrollPresentationAdapter(compositorLoop),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            scrollTargetKey,
+            cancellationToken);
+    }
+
+    internal bool EnsureRunning<TRuntime, TCompositor, TSnapshotProvider>(
+        TRuntime runtime,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
+        NodeKey scrollTargetKey,
+        CancellationToken cancellationToken = default)
+        where TRuntime : IScrollPresentationRuntimeAdapter
+        where TCompositor : IScrollPresentationCompositorAdapter
+        where TSnapshotProvider : IScrollPresentationRetainedSnapshotProvider
+    {
         if (Interlocked.Exchange(ref _loopRunning, 1) != 0)
         {
             return false;
         }
 
-        var runTask = RunAsync(runtime, compositorLoop, translator, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
+        var runTask = RunAsync(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
         _ = runTask.ContinueWith(
             static task => _ = task.Exception,
             CancellationToken.None,
@@ -65,21 +83,42 @@ internal sealed class ScrollPresentationCoordinator
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(compositorLoop);
         ArgumentNullException.ThrowIfNull(translator);
+        return RunUntilIdleAsync(
+            new CounterScrollPresentationRuntimeAdapter(runtime),
+            new CompositorLoopScrollPresentationAdapter(compositorLoop),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            scrollTargetKey,
+            cancellationToken);
+    }
+
+    internal Task RunUntilIdleAsync<TRuntime, TCompositor, TSnapshotProvider>(
+        TRuntime runtime,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
+        NodeKey scrollTargetKey,
+        CancellationToken cancellationToken = default)
+        where TRuntime : IScrollPresentationRuntimeAdapter
+        where TCompositor : IScrollPresentationCompositorAdapter
+        where TSnapshotProvider : IScrollPresentationRetainedSnapshotProvider
+    {
         if (Interlocked.Exchange(ref _loopRunning, 1) != 0)
         {
             throw new InvalidOperationException("A scroll presentation coordinator is already running.");
         }
 
-        return RunAsync(runtime, compositorLoop, translator, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
+        return RunAsync(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken, releaseLoopFlag: true);
     }
 
-    private async Task RunAsync(
-        Runtime<CounterModel, CounterMessage> runtime,
-        CompositorLoop compositorLoop,
-        WindowDrawCommandTranslator translator,
+    private async Task RunAsync<TRuntime, TCompositor, TSnapshotProvider>(
+        TRuntime runtime,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
         NodeKey scrollTargetKey,
         CancellationToken cancellationToken,
         bool releaseLoopFlag)
+        where TRuntime : IScrollPresentationRuntimeAdapter
+        where TCompositor : IScrollPresentationCompositorAdapter
+        where TSnapshotProvider : IScrollPresentationRetainedSnapshotProvider
     {
         try
         {
@@ -90,7 +129,7 @@ internal sealed class ScrollPresentationCoordinator
                 var pendingPixels = DrainPendingPixels();
                 if (pendingPixels != 0)
                 {
-                    if (!await RetargetAsync(runtime, compositorLoop, translator, scrollTargetKey, pendingPixels, cancellationToken))
+                    if (!await RetargetAsync(runtime, compositor, snapshotProvider, scrollTargetKey, pendingPixels, cancellationToken))
                     {
                         return;
                     }
@@ -113,20 +152,23 @@ internal sealed class ScrollPresentationCoordinator
 
             if (PendingPixels != 0 && !cancellationToken.IsCancellationRequested)
             {
-                EnsureRunning(runtime, compositorLoop, translator, scrollTargetKey, cancellationToken);
+                EnsureRunning(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken);
             }
         }
     }
 
-    private async Task<bool> RetargetAsync(
-        Runtime<CounterModel, CounterMessage> runtime,
-        CompositorLoop compositorLoop,
-        WindowDrawCommandTranslator translator,
+    private async Task<bool> RetargetAsync<TRuntime, TCompositor, TSnapshotProvider>(
+        TRuntime runtime,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
         NodeKey scrollTargetKey,
         double pendingPixels,
         CancellationToken cancellationToken)
+        where TRuntime : IScrollPresentationRuntimeAdapter
+        where TCompositor : IScrollPresentationCompositorAdapter
+        where TSnapshotProvider : IScrollPresentationRetainedSnapshotProvider
     {
-        var state = runtime.CurrentModel.Scroll;
+        var state = runtime.CurrentScroll;
         var delta = new ScrollDelta(ScrollDeltaUnit.Pixel, pendingPixels);
         var targetProbe = ScrollController.ResolvePresentationInterrupt(
             state,
@@ -140,7 +182,7 @@ internal sealed class ScrollPresentationCoordinator
             return true;
         }
 
-        var activeSample = await compositorLoop.SampleAndCancelCompositionScrollPresentationAsync(
+        var activeSample = await compositor.SampleAndCancelAsync(
             scrollTargetKey,
             cancellationToken);
         var from = activeSample.HasValue ? activeSample.PresentedScrollY : state.Position;
@@ -157,22 +199,22 @@ internal sealed class ScrollPresentationCoordinator
         }
 
         var layoutState = ScrollController.CommitPresented(decision.NextState, decision.NextState.TargetPosition);
-        await runtime.DispatchAndStageRetainedFrameAsync(new CounterMessage.ScrollPresentationInterrupted(decision with { NextState = layoutState }), cancellationToken);
-        var snapshot = translator.LastRetainedInputSnapshot;
+        await runtime.DispatchScrollPresentationInterruptedAsync(decision with { NextState = layoutState }, cancellationToken);
+        var snapshot = snapshotProvider.LastRetainedInputSnapshot;
         if (snapshot is null)
         {
             return false;
         }
 
-        var retainedScrollY = ScrollController.GetScrollY(runtime.CurrentModel.Scroll);
+        var retainedScrollY = ScrollController.GetScrollY(runtime.CurrentScroll);
         var segmentStart = CompositionTimestamp.Now();
         var segmentDuration = CompositionDuration.FromMilliseconds(AnimationDurationMs);
         var declaration = new CompositionScrollPresentationDeclaration(
             scrollTargetKey,
             new CompositionAnimationTimeline(segmentStart, segmentDuration),
             new CompositionScalarAnimation((float)from, retainedScrollY, RetargetEasing));
-        await compositorLoop.StartCompositionScrollPresentationAsync(declaration, snapshot, cancellationToken);
-        RecordPresented(compositorLoop, scrollTargetKey);
+        await compositor.StartAsync(declaration, snapshot, cancellationToken);
+        RecordPresented(compositor, scrollTargetKey);
         Interlocked.Increment(ref _retargetCount);
         return true;
     }
@@ -182,9 +224,10 @@ internal sealed class ScrollPresentationCoordinator
         return Math.Abs(currentState.TargetPosition - decision.NextState.TargetPosition) > TargetEpsilon;
     }
 
-    private void RecordPresented(CompositorLoop compositorLoop, NodeKey scrollTargetKey)
+    private void RecordPresented<TCompositor>(TCompositor compositor, NodeKey scrollTargetKey)
+        where TCompositor : IScrollPresentationCompositorAdapter
     {
-        if (compositorLoop.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY))
+        if (compositor.TryGetPresentedScrollY(scrollTargetKey, out var presentedScrollY))
         {
             WriteDouble(ref _lastPresentedScrollYBits, presentedScrollY);
         }

@@ -2632,6 +2632,8 @@ public sealed class ProgramDiagnosticsTests
         var contracts = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Poc-Promotion-Contracts.md")));
         var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
         var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+        var coordinatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationCoordinator.cs")));
+        var adapterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationAdapters.cs")));
 
         Assert.Contains("### Scroll / Input Runtime Owner Boundary", contracts);
         Assert.Contains("logical scroll state, input ownership state, control visual state, or app message dispatch", contracts);
@@ -2642,6 +2644,16 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("scroll/input runtime owner boundary is written", status);
         Assert.Contains("feedback-sink, compositor-sampler, hit-test-service, and app-message-dispatch adapters", status);
         Assert.Contains("Boundary is written in [Poc-Promotion-Contracts.md](Poc-Promotion-Contracts.md)", worklist);
+        Assert.Contains("first Poc-owned scroll presentation adapter cut exists", worklist);
+        Assert.Contains("interface IScrollPresentationRuntimeAdapter", adapterSource);
+        Assert.Contains("interface IScrollPresentationCompositorAdapter", adapterSource);
+        Assert.Contains("interface IScrollPresentationRetainedSnapshotProvider", adapterSource);
+        Assert.Contains("DispatchScrollPresentationInterruptedAsync", coordinatorSource);
+        Assert.Contains("SampleAndCancelAsync", coordinatorSource);
+        Assert.Contains("snapshotProvider.LastRetainedInputSnapshot", coordinatorSource);
+        Assert.DoesNotContain("SampleAndCancelCompositionScrollPresentationAsync", coordinatorSource);
+        Assert.DoesNotContain("StartCompositionScrollPresentationAsync", coordinatorSource);
+        Assert.DoesNotContain("translator.LastRetainedInputSnapshot", coordinatorSource);
     }
 
     [Fact]
