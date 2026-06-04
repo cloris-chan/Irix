@@ -43,7 +43,7 @@ internal sealed partial class WindowDrawCommandTranslator
         ApplyOutput(in output);
 
         OnTranslateAllocationPhaseStarted();
-        _feedbackSink.Deliver(output.LayoutResult, output.MaxScrollY);
+        _feedbackSink.Deliver(output.MaxScrollY, BuildScrollFeedback(output.LayoutResult));
         OnTranslateFeedbackAllocated();
 
         return output.Batch;

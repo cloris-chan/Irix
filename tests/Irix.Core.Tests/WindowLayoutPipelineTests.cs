@@ -1706,6 +1706,36 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void WindowDrawCommandTranslator_delivers_projected_feedback_to_injected_sink()
+    {
+        var feedbackSink = new RecordingControlFeedbackSink();
+        var translator = new WindowDrawCommandTranslator(
+            new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 100))),
+            prepareFrame: null,
+            viewportProvider: null,
+            postFrameCallback: null,
+            feedbackSink: feedbackSink);
+        var children = new VirtualNode[10];
+        for (var index = 0; index < children.Length; index++)
+        {
+            children[index] = VirtualNodeBuilder.Text(_arena, $"item {index}", new NodeKey((uint)(index + 2)));
+        }
+
+        var root = new VirtualNode(VirtualNodeKind.ScrollContainer, key: 1, children: children);
+        using var batch = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root, _arena.GetOrCreateSnapshot()));
+        using var frame = translator.Translate(batch);
+
+        var metrics = Assert.Single(feedbackSink.LastScrollFeedback.Containers);
+        Assert.Equal(1, feedbackSink.DeliveryCount);
+        Assert.Equal(new ScrollContainerId(0), metrics.ContainerId);
+        Assert.Equal(100.0, metrics.ViewportExtent);
+        Assert.True(metrics.ContentExtent > metrics.ViewportExtent);
+        Assert.Equal(feedbackSink.LastMaxScrollY, metrics.MaxScrollY);
+        Assert.Equal(feedbackSink.LastMaxScrollY, translator.LastMaxScrollY);
+        Assert.Same(feedbackSink.LastScrollFeedback, translator.LastScrollFeedback);
+    }
+
+    [Fact]
     public void WindowDrawCommandTranslator_keeps_feedback_callback_and_viewport_diagnostics_aligned_on_render_request()
     {
         var callbackMaxScrollYs = new List<double>();
@@ -3503,5 +3533,21 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(1, pipeline.RetainedFrame.CommandCount);
         Assert.Single(pipeline.RetainedFrame.DirtyCommandRanges);
         Assert.Equal((0, 1), pipeline.RetainedFrame.DirtyCommandRanges[0]);
+    }
+
+    private sealed class RecordingControlFeedbackSink : IControlFeedbackSink
+    {
+        public int DeliveryCount { get; private set; }
+
+        public double LastMaxScrollY { get; private set; }
+
+        public ScrollFeedback LastScrollFeedback { get; private set; } = ScrollFeedback.Empty;
+
+        public void Deliver(double maxScrollY, ScrollFeedback scrollFeedback)
+        {
+            DeliveryCount++;
+            LastMaxScrollY = maxScrollY;
+            LastScrollFeedback = scrollFeedback;
+        }
     }
 }

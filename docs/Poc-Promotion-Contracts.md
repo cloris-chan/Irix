@@ -77,7 +77,7 @@ The current split names the translation boundary before any public API is introd
 | `TranslatorInput` | `Irix.Rendering` internal value type | `PatchBatch`, physical viewport, layout viewport, and `DisplayScale`. | No `INativeWindow`, callbacks, app style defaults, scroll pump, CLI diagnostics, or allocation measurement. |
 | `TranslatorOutput` | `Irix.Rendering` internal value type | `RenderFrameBatch`, layout diagnostics, dirty classifications, layout result, max scroll, and renderer-neutral layout viewport. | No direct mutation of app model and no platform callback invocation. |
 | `IViewportProvider` / `ViewportProvider` | Poc/platform adapter | Supplies physical viewport and applied renderer viewport; may call prepare-frame before reading backend/window state. | Stays outside the platform-neutral translation core because it couples window/backend timing to translation cadence. |
-| `IFeedbackSink` / `FeedbackSink` | App/control adapter | Receives `ScrollFeedback`, legacy `MaxScrollY`, and future control feedback after layout. | It is app/control feedback, not rendering diagnostics and not platform feedback. |
+| `IControlFeedbackSink` / `TranslatorFeedbackSink` | App/control adapter | Receives `ScrollFeedback`, legacy `MaxScrollY`, and future control feedback after layout. | It is app/control feedback, not rendering diagnostics and not platform feedback. |
 | `TranslatorDiagnostics` | Diagnostics adapter | Allocation attribution, last viewport fields, and debug rows. | Optional wrapper around the core translator; not required for the core API. |
 | `RenderPipelineFactory` | Composition root | Supplies style preset and `RenderPipeline` construction. | Do not default to `CounterStylePreset.Default` in reusable code. |
 
@@ -117,7 +117,7 @@ Remain in `Irix.Poc`:
 |------|--------|
 | `WindowDrawCommandTranslator` | Adapter that composes viewport provider, feedback sink, allocation meter, core, and public last-state properties. |
 | `TranslatorViewportProvider`, `TranslatorViewport` | Reads `INativeWindow`, invokes prepare-frame callbacks, and resolves Poc/window timing. |
-| `TranslatorFeedbackSink` | Delivers app/control scroll feedback and legacy max-scroll callback. |
+| `IControlFeedbackSink` / `TranslatorFeedbackSink` | Delivers app/control scroll feedback and legacy max-scroll callback. |
 | `TranslatorAllocationMeter`, `WindowTranslateAllocationAttribution` | Diagnostics-only allocation attribution used by Poc diagnostic commands/tests. |
 | `TranslatorRenderPipelineFactory.CounterDefault` | Poc composition root for `CounterStylePreset.Default`; must not move with reusable translator core. |
 

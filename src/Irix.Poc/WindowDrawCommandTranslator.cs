@@ -7,7 +7,7 @@ namespace Irix.Poc;
 internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslator, ICompositionInvalidationProvider
 {
     private readonly TranslatorViewportProvider _translatorViewportProvider;
-    private readonly TranslatorFeedbackSink _feedbackSink;
+    private readonly IControlFeedbackSink _feedbackSink;
     private readonly TranslatorCore _translatorCore;
     private DisplayScale _displayScale;
     private PixelRectangle _lastLayoutViewport;
@@ -22,10 +22,11 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
         Action<double>? postFrameCallback,
         TranslatorRenderPipelineFactory? renderPipelineFactory = null,
         RenderPipelineProductionOwnerOptions ownerOptions = default,
-        DisplayScale displayScale = default)
+        DisplayScale displayScale = default,
+        IControlFeedbackSink? feedbackSink = null)
     {
         _translatorViewportProvider = new TranslatorViewportProvider(window, prepareFrame, viewportProvider);
-        _feedbackSink = new TranslatorFeedbackSink(postFrameCallback);
+        _feedbackSink = feedbackSink ?? new TranslatorFeedbackSink(postFrameCallback);
         _translatorCore = new TranslatorCore((renderPipelineFactory ?? TranslatorRenderPipelineFactory.CounterDefault).Create(), ownerOptions);
         _displayScale = displayScale.Normalize();
     }
@@ -83,7 +84,7 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
         ApplyOutput(in output);
 
         OnTranslateAllocationPhaseStarted();
-        _feedbackSink.Deliver(output.LayoutResult, output.MaxScrollY);
+        _feedbackSink.Deliver(output.MaxScrollY, BuildScrollFeedback(output.LayoutResult));
         OnTranslateFeedbackAllocated();
 
         return output.Batch;
@@ -114,6 +115,27 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
         }
 
         return CompositionRenderInvalidation.MaxScrollChanged;
+    }
+
+    private static ScrollFeedback BuildScrollFeedback(LayoutTreeResult? layoutResult)
+    {
+        if (layoutResult is null || layoutResult.ScrollDiagnostics.Count == 0)
+        {
+            return ScrollFeedback.Empty;
+        }
+
+        var containers = new ScrollContainerMetrics[layoutResult.ScrollDiagnostics.Count];
+        for (var index = 0; index < containers.Length; index++)
+        {
+            var diagnostics = layoutResult.ScrollDiagnostics[index];
+            containers[index] = new ScrollContainerMetrics(
+                ContainerId: new ScrollContainerId(diagnostics.DfsIndex),
+                ViewportExtent: diagnostics.VisibleHeight,
+                ContentExtent: diagnostics.ContentHeight,
+                MaxScrollY: diagnostics.MaxScrollY);
+        }
+
+        return new ScrollFeedback(containers);
     }
 
     partial void OnTranslateAllocationStarted();
@@ -164,37 +186,16 @@ internal readonly struct TranslatorViewport(
     public DisplayScale DisplayScale { get; } = DisplayScale;
 }
 
-internal sealed class TranslatorFeedbackSink(Action<double>? postFrameCallback)
+internal sealed class TranslatorFeedbackSink(Action<double>? postFrameCallback) : IControlFeedbackSink
 {
     public double LastMaxScrollY { get; private set; }
 
     public ScrollFeedback LastScrollFeedback { get; private set; } = ScrollFeedback.Empty;
 
-    public void Deliver(LayoutTreeResult? layoutResult, double maxScrollY)
+    public void Deliver(double maxScrollY, ScrollFeedback scrollFeedback)
     {
         LastMaxScrollY = maxScrollY;
-        LastScrollFeedback = BuildScrollFeedback(layoutResult);
+        LastScrollFeedback = scrollFeedback;
         postFrameCallback?.Invoke(maxScrollY);
-    }
-
-    private static ScrollFeedback BuildScrollFeedback(LayoutTreeResult? layoutResult)
-    {
-        if (layoutResult is null || layoutResult.ScrollDiagnostics.Count == 0)
-        {
-            return ScrollFeedback.Empty;
-        }
-
-        var containers = new ScrollContainerMetrics[layoutResult.ScrollDiagnostics.Count];
-        for (var index = 0; index < containers.Length; index++)
-        {
-            var diagnostics = layoutResult.ScrollDiagnostics[index];
-            containers[index] = new ScrollContainerMetrics(
-                ContainerId: new ScrollContainerId(diagnostics.DfsIndex),
-                ViewportExtent: diagnostics.VisibleHeight,
-                ContentExtent: diagnostics.ContentHeight,
-                MaxScrollY: diagnostics.MaxScrollY);
-        }
-
-        return new ScrollFeedback(containers);
     }
 }

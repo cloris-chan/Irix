@@ -25,3 +25,12 @@ internal sealed record ScrollFeedback(IReadOnlyList<ScrollContainerMetrics> Cont
 {
     public static ScrollFeedback Empty { get; } = new([]);
 }
+
+internal interface IControlFeedbackSink
+{
+    double LastMaxScrollY { get; }
+
+    ScrollFeedback LastScrollFeedback { get; }
+
+    void Deliver(double maxScrollY, ScrollFeedback scrollFeedback);
+}
