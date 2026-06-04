@@ -154,12 +154,13 @@ internal static partial class Program
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
-                    var pixels = ScrollController.ConvertToPixels(
-                        new ScrollDelta(ScrollDeltaUnit.WheelRaw, wheel.RawDelta),
-                        ScrollMetrics.DefaultText,
-                        SystemScrollSettings.Default);
-                    scrollPresentationCoordinator.AddPendingPixels(pixels);
-                    scrollPresentationCoordinator.EnsureRunning(runtime, compositorLoop, drawCommandTranslator, new NodeKey(1));
+                    var wheelDispatchSink = new ScrollPresentationWheelDispatchSink(
+                        scrollPresentationCoordinator,
+                        runtime,
+                        compositorLoop,
+                        drawCommandTranslator,
+                        new NodeKey(1));
+                    _ = TryDispatchWheelInputForRuntime(wheel, wheelDispatchSink);
                 }
                 else if (message is not null)
                 {
@@ -352,6 +353,14 @@ internal static partial class Program
 
         message = null;
         return false;
+    }
+
+    internal static bool TryDispatchWheelInputForRuntime<TDispatchSink>(
+        CounterMessage.WheelRaw wheel,
+        TDispatchSink dispatchSink)
+        where TDispatchSink : struct, IWheelInputDispatchSink
+    {
+        return ScrollInputDispatchAdapter.TryDispatchWheelRaw(wheel, dispatchSink);
     }
 
 }

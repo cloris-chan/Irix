@@ -779,6 +779,19 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Program_wheel_dispatch_uses_scroll_presentation_sink()
+    {
+        var recorder = new WheelDispatchRecorder();
+        var sink = new RecordingWheelDispatchSink(recorder);
+
+        var dispatched = Program.TryDispatchWheelInputForRuntime(new CounterMessage.WheelRaw(120), sink);
+
+        Assert.True(dispatched);
+        Assert.Equal(-54.0, recorder.LastPixels);
+        Assert.Equal(1, recorder.DispatchCount);
+    }
+
+    [Fact]
     public void Hover_only_input_updates_model_ownership_and_button_state()
     {
         var app = new CounterApplication();
@@ -1234,6 +1247,21 @@ public sealed class CounterInputRouterTests
         {
             appMessage = new CounterMessage.Reset((int)maxScrollY);
             return true;
+        }
+    }
+
+    private sealed class WheelDispatchRecorder
+    {
+        public double LastPixels { get; set; }
+        public int DispatchCount { get; set; }
+    }
+
+    private readonly struct RecordingWheelDispatchSink(WheelDispatchRecorder Recorder) : IWheelInputDispatchSink
+    {
+        public void DispatchWheelPixels(double pixels)
+        {
+            Recorder.LastPixels = pixels;
+            Recorder.DispatchCount++;
         }
     }
 
