@@ -536,6 +536,90 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_invalidates_layer_content_cache_when_layer_identity_or_range_changes()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 40, 24), Color: DrawColor.Opaque(100, 120, 140)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(72, 44, 30, 20), Color: DrawColor.Opaque(160, 180, 200))
+        };
+        var cache = new D3D12CompositionLayerContentCache();
+        var warmFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(14),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionTransform(10, 0),
+            CompositionOpacity.Opaque));
+
+        _ = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            warmFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+        rects.Reset();
+        texts.Reset();
+
+        var layerIdChanged = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            new CompositionFrame(new CompositionLayer(
+                new CompositionLayerId(15),
+                CommandStart: 1,
+                CommandCount: 1,
+                new CompositionTransform(20, 0),
+                CompositionOpacity.Opaque)),
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(0, layerIdChanged.LayerCacheHits);
+        Assert.Equal(1, layerIdChanged.LayerCacheMisses);
+        Assert.Equal(1, layerIdChanged.CachedLayerCommands);
+        Assert.Equal(36, rects.Span[1].X);
+        rects.Reset();
+        texts.Reset();
+
+        var commandRangeChanged = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            new CompositionFrame(new CompositionLayer(
+                new CompositionLayerId(14),
+                CommandStart: 1,
+                CommandCount: 2,
+                new CompositionTransform(30, 0),
+                new CompositionOpacity(0.5f))),
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(0, commandRangeChanged.LayerCacheHits);
+        Assert.Equal(1, commandRangeChanged.LayerCacheMisses);
+        Assert.Equal(2, commandRangeChanged.CachedLayerCommands);
+        Assert.Equal(2, commandRangeChanged.TranslatedCommands);
+        Assert.Equal(2, commandRangeChanged.OpacityAppliedCommands);
+        Assert.Equal(46, rects.Span[1].X);
+        Assert.Equal(102, rects.Span[2].X);
+        Assert.Equal(128f / 255f, rects.Span[1].A);
+        Assert.Equal(128f / 255f, rects.Span[2].A);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_invalidates_layer_content_cache_when_display_scale_changes()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

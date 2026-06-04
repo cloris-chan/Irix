@@ -124,6 +124,9 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - display-scale changes miss the layer cache instead of reusing text payloads shaped for the previous scale
 - resource resolver changes miss the layer cache even when command handles and source command values compare equal
 - same resource resolver resets miss the layer cache even when source command values compare equal
+- source command changes miss the layer cache even when layer id and command range are stable
+- layer id changes miss the layer cache even when command range and source commands are stable
+- command range changes miss the layer cache even when layer id and source command array are stable
 - disjoint multi-layer frames can hit independently cached layer payloads
 - overlapping layer command ranges bypass the layer cache and use direct composition so stacked transforms/opacity still compose in order
 - cached command count is diagnostic-visible
