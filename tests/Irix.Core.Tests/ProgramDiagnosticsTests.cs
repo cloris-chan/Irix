@@ -2382,6 +2382,27 @@ public sealed class ProgramDiagnosticsTests
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.ViewportChanged,
             explicitCancelCount: 0,
             renderInvalidationCancelCount: 1);
+        AssertLifecycleInvalidationScenario(
+            lifecycle.TreeInvalidation,
+            "tree",
+            LayoutRebuildReason.TreeStructure,
+            CompositionRenderInvalidationKind.TreeStructure,
+            expectedHitAfter: false,
+            expectedActionAfter: ActionId.None);
+        AssertLifecycleInvalidationScenario(
+            lifecycle.LayoutInvalidation,
+            "layout",
+            LayoutRebuildReason.LayoutAffecting,
+            CompositionRenderInvalidationKind.LayoutAffecting,
+            expectedHitAfter: true,
+            expectedActionAfter: ActionIdRegistry.Decrement);
+        AssertLifecycleInvalidationScenario(
+            lifecycle.TextInvalidation,
+            "text",
+            LayoutRebuildReason.TextSizeAffecting,
+            CompositionRenderInvalidationKind.TextSizeAffecting,
+            expectedHitAfter: true,
+            expectedActionAfter: ActionIdRegistry.Decrement);
         AssertLifecycleScenario(
             lifecycle.MaxScroll,
             "maxScroll",
@@ -2427,7 +2448,37 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
         Assert.Contains("explicitCancels=0 invalidationCancels=1", summary);
         Assert.Contains("staleDelayedTickSkipsAfterLifecycle=0 staleDelayedTickSkipsAfterStaleWindow=1", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-tree", summary);
+        Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=TreeStructure", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-layout", summary);
+        Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-text", summary);
+        Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=TextSizeAffecting", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-maxScroll", summary);
+    }
+
+    private static void AssertLifecycleInvalidationScenario(
+        in ScrollPresentationLifecycleScenarioDiagnostics diagnostics,
+        string name,
+        LayoutRebuildReason expectedLayoutReason,
+        CompositionRenderInvalidationKind expectedCancelInvalidationKind,
+        bool expectedHitAfter,
+        ActionId expectedActionAfter)
+    {
+        AssertLifecycleScenario(
+            diagnostics,
+            name,
+            expectedLayoutReason,
+            960,
+            540,
+            1f,
+            expectedHitAfter,
+            expectedActionAfter,
+            expectedRenderCountDelta: 1,
+            expectedCancelReason: ScrollPresentationCancellationReason.RenderInvalidation,
+            expectedCancelInvalidationKind,
+            explicitCancelCount: 0,
+            renderInvalidationCancelCount: 1);
     }
 
     private static void AssertLifecycleScenario(

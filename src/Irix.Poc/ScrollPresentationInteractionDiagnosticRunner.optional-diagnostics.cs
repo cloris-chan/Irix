@@ -309,7 +309,10 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         return new ScrollPresentationLifecycleInteractionDiagnostics(
             await RunResizeLifecycleScenarioAsync(cancellationToken),
             await RunDpiLifecycleScenarioAsync(cancellationToken),
-            await RunRenderInvalidationLifecycleScenarioAsync(cancellationToken),
+            await RunViewportInvalidationLifecycleScenarioAsync(cancellationToken),
+            await RunTreeInvalidationLifecycleScenarioAsync(cancellationToken),
+            await RunLayoutInvalidationLifecycleScenarioAsync(cancellationToken),
+            await RunTextInvalidationLifecycleScenarioAsync(cancellationToken),
             await RunMaxScrollLifecycleScenarioAsync(cancellationToken));
     }
 
@@ -355,22 +358,65 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         return await CaptureLifecycleScenarioAsync("dpi", session, activeBefore, cancellationToken);
     }
 
-    private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunRenderInvalidationLifecycleScenarioAsync(CancellationToken cancellationToken)
+    private static Task<ScrollPresentationLifecycleScenarioDiagnostics> RunViewportInvalidationLifecycleScenarioAsync(CancellationToken cancellationToken) =>
+        RunRenderInvalidationLifecycleScenarioAsync(
+            "renderInvalidation",
+            cancellationToken,
+            session =>
+            {
+                var renderTask = Task.CompletedTask;
+                session.Window.SizeChanged += (width, height) =>
+                {
+                    session.Compositor.SetViewport(new PixelRectangle(0, 0, width, height), DisplayScale.Identity);
+                    renderTask = session.CompositorLoop.RequestRenderAndWaitAsync(cancellationToken).AsTask();
+                };
+
+                session.Window.RaiseSizeChanged(840, 480);
+                return renderTask;
+            });
+
+    private static Task<ScrollPresentationLifecycleScenarioDiagnostics> RunTreeInvalidationLifecycleScenarioAsync(CancellationToken cancellationToken) =>
+        RunRenderInvalidationLifecycleScenarioAsync(
+            "tree",
+            cancellationToken,
+            session =>
+            {
+                session.CounterApplication.ConfigureDiagnostics(showDiagnostics: true);
+                return session.Runtime.DispatchAndWaitAsync(
+                    new CounterMessage.DebugDiagnosticsChanged(
+                        default,
+                        new CounterLayoutDiagnostics(
+                            session.Translator.LayoutRebuildCount,
+                            session.Translator.LastLayoutRebuildReason,
+                            session.Translator.LastDirtyClassifications)),
+                    cancellationToken);
+            });
+
+    private static Task<ScrollPresentationLifecycleScenarioDiagnostics> RunLayoutInvalidationLifecycleScenarioAsync(CancellationToken cancellationToken) =>
+        RunRenderInvalidationLifecycleScenarioAsync(
+            "layout",
+            cancellationToken,
+            session => session.Runtime.DispatchAndWaitAsync(
+                new CounterMessage.ScrollFrame(new ScrollDelta(ScrollDeltaUnit.Pixel, 1), 1),
+                cancellationToken));
+
+    private static Task<ScrollPresentationLifecycleScenarioDiagnostics> RunTextInvalidationLifecycleScenarioAsync(CancellationToken cancellationToken) =>
+        RunRenderInvalidationLifecycleScenarioAsync(
+            "text",
+            cancellationToken,
+            session => session.Runtime.DispatchAndWaitAsync(new CounterMessage.Reset(10), cancellationToken));
+
+    private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunRenderInvalidationLifecycleScenarioAsync(
+        string name,
+        CancellationToken cancellationToken,
+        Func<DiagnosticSession, Task> triggerAsync)
     {
         await using var session = await DiagnosticSession.StartAsync(cancellationToken);
         var activeBefore = await StartActivePresentationAsync(session, cancellationToken);
-        var renderTask = Task.CompletedTask;
 
-        session.Window.SizeChanged += (width, height) =>
-        {
-            session.Compositor.SetViewport(new PixelRectangle(0, 0, width, height), DisplayScale.Identity);
-            renderTask = session.CompositorLoop.RequestRenderAndWaitAsync(cancellationToken).AsTask();
-        };
+        await triggerAsync(session);
 
-        session.Window.RaiseSizeChanged(840, 480);
-        await renderTask;
-
-        return await CaptureLifecycleScenarioAsync("renderInvalidation", session, activeBefore, cancellationToken);
+        return await CaptureLifecycleScenarioAsync(name, session, activeBefore, cancellationToken);
     }
 
     private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> RunMaxScrollLifecycleScenarioAsync(CancellationToken cancellationToken)
@@ -537,6 +583,9 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             FormatLifecycleScenario(diagnostics.Resize),
             FormatLifecycleScenario(diagnostics.Dpi),
             FormatLifecycleScenario(diagnostics.RenderInvalidation),
+            FormatLifecycleScenario(diagnostics.TreeInvalidation),
+            FormatLifecycleScenario(diagnostics.LayoutInvalidation),
+            FormatLifecycleScenario(diagnostics.TextInvalidation),
             FormatLifecycleScenario(diagnostics.MaxScroll));
     }
 
@@ -678,6 +727,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             DrawingBackendCompositor compositor,
             CompositorLoop compositorLoop,
             Runtime<CounterModel, CounterMessage> runtime,
+            CounterApplication counterApplication,
             ScrollPresentationCoordinator coordinator)
         {
             Window = window;
@@ -686,6 +736,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             Compositor = compositor;
             CompositorLoop = compositorLoop;
             Runtime = runtime;
+            CounterApplication = counterApplication;
             Coordinator = coordinator;
         }
 
@@ -695,6 +746,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         public DrawingBackendCompositor Compositor { get; }
         public CompositorLoop CompositorLoop { get; }
         public Runtime<CounterModel, CounterMessage> Runtime { get; }
+        public CounterApplication CounterApplication { get; }
         public ScrollPresentationCoordinator Coordinator { get; }
 
         public static async Task<DiagnosticSession> StartAsync(CancellationToken cancellationToken)
@@ -705,10 +757,11 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             var compositor = new DrawingBackendCompositor(backend);
             compositor.SetViewport(window.Region.PhysicalBounds, DisplayScale.Identity);
             var compositorLoop = new CompositorLoop(translator, compositor);
-            var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
+            var counterApplication = new CounterApplication();
+            var runtime = new Runtime<CounterModel, CounterMessage>(counterApplication, compositorLoop);
             await runtime.StartAsync(cancellationToken);
             await compositorLoop.RequestRenderAndWaitAsync(cancellationToken);
-            return new DiagnosticSession(window, translator, backend, compositor, compositorLoop, runtime, new ScrollPresentationCoordinator());
+            return new DiagnosticSession(window, translator, backend, compositor, compositorLoop, runtime, counterApplication, new ScrollPresentationCoordinator());
         }
 
         public async ValueTask DisposeAsync()
@@ -1008,11 +1061,17 @@ internal readonly struct ScrollPresentationLifecycleInteractionDiagnostics(
     ScrollPresentationLifecycleScenarioDiagnostics Resize,
     ScrollPresentationLifecycleScenarioDiagnostics Dpi,
     ScrollPresentationLifecycleScenarioDiagnostics RenderInvalidation,
+    ScrollPresentationLifecycleScenarioDiagnostics TreeInvalidation,
+    ScrollPresentationLifecycleScenarioDiagnostics LayoutInvalidation,
+    ScrollPresentationLifecycleScenarioDiagnostics TextInvalidation,
     ScrollPresentationLifecycleScenarioDiagnostics MaxScroll)
 {
     public ScrollPresentationLifecycleScenarioDiagnostics Resize { get; } = Resize;
     public ScrollPresentationLifecycleScenarioDiagnostics Dpi { get; } = Dpi;
     public ScrollPresentationLifecycleScenarioDiagnostics RenderInvalidation { get; } = RenderInvalidation;
+    public ScrollPresentationLifecycleScenarioDiagnostics TreeInvalidation { get; } = TreeInvalidation;
+    public ScrollPresentationLifecycleScenarioDiagnostics LayoutInvalidation { get; } = LayoutInvalidation;
+    public ScrollPresentationLifecycleScenarioDiagnostics TextInvalidation { get; } = TextInvalidation;
     public ScrollPresentationLifecycleScenarioDiagnostics MaxScroll { get; } = MaxScroll;
 }
 
