@@ -343,6 +343,145 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_reuses_layer_content_cache_for_multiple_disjoint_layers()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 40, 24), Color: DrawColor.Opaque(100, 120, 140)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(72, 44, 30, 20), Color: DrawColor.Opaque(160, 180, 200))
+        };
+        Span<CompositionLayer> warmLayers =
+        [
+            new CompositionLayer(
+                new CompositionLayerId(21),
+                CommandStart: 1,
+                CommandCount: 1,
+                new CompositionTransform(12, 8),
+                new CompositionOpacity(0.5f)),
+            new CompositionLayer(
+                new CompositionLayerId(22),
+                CommandStart: 2,
+                CommandCount: 1,
+                new CompositionTransform(4, 6),
+                CompositionOpacity.Opaque)
+        ];
+        var cache = new D3D12CompositionLayerContentCache();
+
+        var first = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            CompositionFrame.FromLayers(warmLayers),
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(0, first.LayerCacheHits);
+        Assert.Equal(2, first.LayerCacheMisses);
+        Assert.Equal(2, first.CachedLayerCommands);
+
+        rects.Reset();
+        texts.Reset();
+        Span<CompositionLayer> hitLayers =
+        [
+            new CompositionLayer(
+                new CompositionLayerId(21),
+                CommandStart: 1,
+                CommandCount: 1,
+                new CompositionTransform(20, 10),
+                new CompositionOpacity(0.25f)),
+            new CompositionLayer(
+                new CompositionLayerId(22),
+                CommandStart: 2,
+                CommandCount: 1,
+                new CompositionTransform(8, 12),
+                new CompositionOpacity(0.5f))
+        ];
+
+        var second = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            CompositionFrame.FromLayers(hitLayers),
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(2, second.LayerCacheHits);
+        Assert.Equal(0, second.LayerCacheMisses);
+        Assert.Equal(2, second.CachedLayerCommands);
+        Assert.Equal(3, rects.Count);
+        Assert.Equal(36, rects.Span[1].X);
+        Assert.Equal(30, rects.Span[1].Y);
+        Assert.Equal(64f / 255f, rects.Span[1].A);
+        Assert.Equal(80, rects.Span[2].X);
+        Assert.Equal(56, rects.Span[2].Y);
+        Assert.Equal(128f / 255f, rects.Span[2].A);
+    }
+
+    [Fact]
+    public void ExecuteCompositionDiagnosticCore_bypasses_layer_content_cache_for_overlapping_layers()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(10, 10, 40, 24), Color: DrawColor.Opaque(100, 120, 140)),
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(20, 20, 40, 24), Color: DrawColor.Opaque(160, 180, 200))
+        };
+        Span<CompositionLayer> layers =
+        [
+            new CompositionLayer(
+                new CompositionLayerId(31),
+                CommandStart: 1,
+                CommandCount: 2,
+                new CompositionTransform(10, 0),
+                new CompositionOpacity(0.5f)),
+            new CompositionLayer(
+                new CompositionLayerId(32),
+                CommandStart: 2,
+                CommandCount: 1,
+                new CompositionTransform(0, 20),
+                CompositionOpacity.Opaque)
+        ];
+
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            CompositionFrame.FromLayers(layers),
+            DisplayScale.Identity,
+            rects,
+            texts,
+            new D3D12CompositionLayerContentCache());
+
+        Assert.Equal(0, diagnostics.LayerCacheHits);
+        Assert.Equal(0, diagnostics.LayerCacheMisses);
+        Assert.Equal(0, diagnostics.CachedLayerCommands);
+        Assert.Equal(3, diagnostics.TranslatedCommands);
+        Assert.Equal(2, diagnostics.OpacityAppliedCommands);
+        Assert.Equal(3, rects.Count);
+        Assert.Equal(20, rects.Span[1].X);
+        Assert.Equal(10, rects.Span[1].Y);
+        Assert.Equal(30, rects.Span[2].X);
+        Assert.Equal(40, rects.Span[2].Y);
+        Assert.Equal(128f / 255f, rects.Span[2].A);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_invalidates_layer_content_cache_when_source_commands_change()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

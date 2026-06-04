@@ -2010,6 +2010,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal("composition-layer-cache.scaleChanged finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 cacheHits=0 cacheMisses=1 cachedCommands=2 translatedCommands=2 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatScaleChanged(diagnostics.ScaleChanged));
         Assert.Equal("composition-layer-cache.resourceChanged finalComposition=D3D12 d3d12Backed=True layers=1 commands=3 cacheHits=0 cacheMisses=1 cachedCommands=2 translatedCommands=2 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatResourceChanged(diagnostics.ResourceChanged));
         Assert.Equal("composition-layer-cache.resourceFrameReset finalComposition=D3D12 d3d12Backed=True layers=1 commands=2 cacheHits=0 cacheMisses=1 cachedCommands=1 translatedCommands=1 opacityAppliedCommands=1", CompositionLayerCacheDiagnosticRunner.FormatResourceFrameReset(diagnostics.ResourceFrameReset));
+        Assert.Equal("composition-layer-cache.multiLayer finalComposition=D3D12 d3d12Backed=True layers=2 commands=3 cacheHits=2 cacheMisses=0 cachedCommands=2 translatedCommands=2 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatMultiLayer(diagnostics.MultiLayer));
+        Assert.Equal("composition-layer-cache.overlapFallback finalComposition=D3D12 d3d12Backed=True layers=2 commands=3 cacheHits=0 cacheMisses=0 cachedCommands=0 translatedCommands=3 opacityAppliedCommands=2", CompositionLayerCacheDiagnosticRunner.FormatOverlapFallback(diagnostics.OverlapFallback));
     }
 
     [Fact]
