@@ -21,7 +21,7 @@ The current implementation owns:
 - `CompositorHitTestSnapshot` publication for transform/opacity and fixed-clip scroll layers, with inverse-mapped local coordinates and reverse paint-order hit selection.
 - Typed composition clock values: `CompositionTimestamp` and `CompositionDuration` carry `Stopwatch.GetTimestamp()` ticks and keep frame indexes out of animation progress.
 - Animation marker events for transform/opacity and fixed-clip scroll presentation. Markers are data on the declaration, evaluated by timeline interval crossing after a successful compositor tick, and drained through a runtime-facing pump that maps typed runtime event ids to app messages outside the backend.
-- A D3D12 layer content cache for disjoint composition layers. The cache is keyed by stable layer id, command range, source command hash, resource resolver identity/frame identity, and display scale; it reuses materialized backend payloads across compositor ticks while transform/opacity/fixed-clip state is applied per tick. Display-scale changes, resource resolver changes, and same-resolver resource frame resets force a rebuild of scale- or resource-dependent payloads.
+- A D3D12 layer content cache for disjoint composition layers. The cache is keyed by stable layer id, command range, source command hash, resource resolver identity/frame identity, and display scale; it reuses materialized backend payloads across compositor ticks while transform/opacity/fixed-clip state is applied per tick. Display-scale changes, resource resolver changes, same-resolver resource frame resets, and device recovery force a rebuild of scale-, resource-, or device-dependent payloads.
 - D3D12 backend consumption through `ICompositionDrawingBackend.ExecuteComposition`.
 - A PoC demo that renders static draw commands once, then updates only compositor-owned transform/opacity per frame.
 - A `--diagnose-composition-scroll` diagnostic that exercises D3D12 fixed-clip scroll presentation.
@@ -127,6 +127,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - source command changes miss the layer cache even when layer id and command range are stable
 - layer id changes miss the layer cache even when command range and source commands are stable
 - command range changes miss the layer cache even when layer id and source command array are stable
+- explicitly cleared layer cache state misses on the next compositor execution
 - disjoint multi-layer frames can hit independently cached layer payloads
 - overlapping layer command ranges bypass the layer cache and use direct composition so stacked transforms/opacity still compose in order
 - cached command count is diagnostic-visible

@@ -1301,7 +1301,16 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     public bool IsDeviceRemoved => _renderer.IsDeviceRemoved;
 
-    public bool TryRecover() => _renderer.TryRecover();
+    public bool TryRecover()
+    {
+        if (!_renderer.TryRecover())
+        {
+            return false;
+        }
+
+        _compositionLayerContentCache.Clear();
+        return true;
+    }
 
     public void Dispose()
     {

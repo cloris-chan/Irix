@@ -20,6 +20,7 @@ internal static class CompositionLayerCacheDiagnosticRunner
         output.WriteLine(FormatSourceChanged(diagnostics.SourceChanged));
         output.WriteLine(FormatLayerIdChanged(diagnostics.LayerIdChanged));
         output.WriteLine(FormatCommandRangeChanged(diagnostics.CommandRangeChanged));
+        output.WriteLine(FormatCleared(diagnostics.Cleared));
         output.WriteLine(FormatMultiLayer(diagnostics.MultiLayer));
         output.WriteLine(FormatOverlapFallback(diagnostics.OverlapFallback));
         output.WriteLine("=== d3d12 composition layer cache diagnostic complete ===");
@@ -142,6 +143,10 @@ internal static class CompositionLayerCacheDiagnosticRunner
 
         rects.Reset();
         texts.Reset();
+        var cleared = RunCacheClearedScenario(displayScale, rects, texts);
+
+        rects.Reset();
+        texts.Reset();
         var multiLayer = RunMultiLayerCacheScenario(displayScale, rects, texts);
 
         rects.Reset();
@@ -157,6 +162,7 @@ internal static class CompositionLayerCacheDiagnosticRunner
             sourceChanged,
             layerIdChanged,
             commandRangeChanged,
+            cleared,
             multiLayer,
             overlapFallback);
     }
@@ -199,6 +205,11 @@ internal static class CompositionLayerCacheDiagnosticRunner
     internal static string FormatCommandRangeChanged(in D3D12CompositionExecuteDiagnostics diagnostics)
     {
         return $"composition-layer-cache.commandRangeChanged finalComposition=D3D12 d3d12Backed={diagnostics.D3D12Backed} layers={diagnostics.LayerCount} commands={diagnostics.CommandCount} cacheHits={diagnostics.LayerCacheHits} cacheMisses={diagnostics.LayerCacheMisses} cachedCommands={diagnostics.CachedLayerCommands} translatedCommands={diagnostics.TranslatedCommands} opacityAppliedCommands={diagnostics.OpacityAppliedCommands}";
+    }
+
+    internal static string FormatCleared(in D3D12CompositionExecuteDiagnostics diagnostics)
+    {
+        return $"composition-layer-cache.cleared finalComposition=D3D12 d3d12Backed={diagnostics.D3D12Backed} layers={diagnostics.LayerCount} commands={diagnostics.CommandCount} cacheHits={diagnostics.LayerCacheHits} cacheMisses={diagnostics.LayerCacheMisses} cachedCommands={diagnostics.CachedLayerCommands} translatedCommands={diagnostics.TranslatedCommands} opacityAppliedCommands={diagnostics.OpacityAppliedCommands}";
     }
 
     internal static string FormatMultiLayer(in D3D12CompositionExecuteDiagnostics diagnostics)
@@ -408,6 +419,60 @@ internal static class CompositionLayerCacheDiagnosticRunner
             cache);
     }
 
+    private static D3D12CompositionExecuteDiagnostics RunCacheClearedScenario(
+        DisplayScale displayScale,
+        FrameRenderList<D3D12Renderer2D.RectData> rects,
+        FrameRenderList<D3D12TextRun> texts)
+    {
+        using var resources = new FrameDrawingResources();
+        resources.Seal();
+        var commands = BuildKeyMatrixCommands(layerRectX: 32);
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(70),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionTransform(8, 0),
+            CompositionOpacity.Opaque));
+        var cache = new D3D12CompositionLayerContentCache();
+        _ = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 640, 360),
+            commands,
+            resources,
+            frame,
+            displayScale,
+            rects,
+            texts,
+            cache);
+
+        rects.Reset();
+        texts.Reset();
+        _ = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 640, 360),
+            commands,
+            resources,
+            frame,
+            displayScale,
+            rects,
+            texts,
+            cache);
+
+        cache.Clear();
+        rects.Reset();
+        texts.Reset();
+        return D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 640, 360),
+            commands,
+            resources,
+            frame,
+            displayScale,
+            rects,
+            texts,
+            cache);
+    }
+
     private static D3D12CompositionExecuteDiagnostics RunOverlapFallbackScenario(
         DisplayScale displayScale,
         FrameRenderList<D3D12Renderer2D.RectData> rects,
@@ -504,6 +569,7 @@ internal readonly struct CompositionLayerCacheDiagnostics(
     D3D12CompositionExecuteDiagnostics SourceChanged,
     D3D12CompositionExecuteDiagnostics LayerIdChanged,
     D3D12CompositionExecuteDiagnostics CommandRangeChanged,
+    D3D12CompositionExecuteDiagnostics Cleared,
     D3D12CompositionExecuteDiagnostics MultiLayer,
     D3D12CompositionExecuteDiagnostics OverlapFallback)
 {
@@ -515,6 +581,7 @@ internal readonly struct CompositionLayerCacheDiagnostics(
     public D3D12CompositionExecuteDiagnostics SourceChanged { get; } = SourceChanged;
     public D3D12CompositionExecuteDiagnostics LayerIdChanged { get; } = LayerIdChanged;
     public D3D12CompositionExecuteDiagnostics CommandRangeChanged { get; } = CommandRangeChanged;
+    public D3D12CompositionExecuteDiagnostics Cleared { get; } = Cleared;
     public D3D12CompositionExecuteDiagnostics MultiLayer { get; } = MultiLayer;
     public D3D12CompositionExecuteDiagnostics OverlapFallback { get; } = OverlapFallback;
 }
