@@ -9,7 +9,6 @@ namespace Irix.Poc;
 internal static class ScrollPresentationInteractionDiagnosticRunner
 {
     private static readonly NodeKey ScrollTargetKey = new(1);
-    private const int LifecycleStaleTickDrainDelayMs = 90;
     private static readonly RawInputEvent FixedPointerMove = new(RawInputEventKind.PointerMoved, Timestamp: 1, X: 20, Y: 190);
     private static readonly RawInputEvent FixedPointerPress = new(RawInputEventKind.PointerPressed, Timestamp: 2, X: 20, Y: 190, Button: PointerButton.Left);
     private static readonly RawInputEvent FixedPointerRelease = new(RawInputEventKind.PointerReleased, Timestamp: 3, X: 20, Y: 190, Button: PointerButton.Left);
@@ -412,13 +411,20 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         var renderCountAfter = session.Compositor.RenderCount;
         var compositionTickCountAfterLifecycle = session.Compositor.CompositionTickCount;
         var loopTickCountAfterLifecycle = session.CompositorLoop.ScrollPresentationTickCount;
+        var staleDelayedTickSkipsAfterLifecycle = session.CompositorLoop.ScrollPresentationStaleDelayedTickSkipCount;
         var layoutRebuildReasonAfter = session.Translator.LastLayoutRebuildReason;
         var maxScrollY = session.Runtime.CurrentModel.Scroll.MaxScrollY;
 
-        await Task.Delay(LifecycleStaleTickDrainDelayMs, cancellationToken);
-        await session.CompositorLoop.RequestRenderAndWaitAsync(cancellationToken);
+        if (activeBefore.Active)
+        {
+            await WaitForConditionAsync(
+                () => session.CompositorLoop.ScrollPresentationStaleDelayedTickSkipCount > staleDelayedTickSkipsAfterLifecycle,
+                cancellationToken);
+        }
+
         var activeAfterStaleWindow = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out _);
         var hitAfterStaleWindow = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var actionAfterStaleWindow);
+        var staleDelayedTickSkipsAfterStaleWindow = session.CompositorLoop.ScrollPresentationStaleDelayedTickSkipCount;
 
         return new ScrollPresentationLifecycleScenarioDiagnostics(
             name,
@@ -444,8 +450,10 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             maxScrollY,
             compositionTickCountAfterLifecycle,
             loopTickCountAfterLifecycle,
+            staleDelayedTickSkipsAfterLifecycle,
             session.Compositor.CompositionTickCount,
             session.CompositorLoop.ScrollPresentationTickCount,
+            staleDelayedTickSkipsAfterStaleWindow,
             activeAfterStaleWindow,
             hitAfterStaleWindow,
             actionAfterStaleWindow);
@@ -543,6 +551,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             $"renderBefore={diagnostics.RenderCountBefore} renderAfter={diagnostics.RenderCountAfter} layoutAfter={diagnostics.LayoutRebuildReasonAfter}",
             $"compositionTicksAfterLifecycle={diagnostics.CompositionTickCountAfterLifecycle} loopTicksAfterLifecycle={diagnostics.LoopTickCountAfterLifecycle}",
             $"compositionTicksAfterStaleWindow={diagnostics.CompositionTickCountAfterStaleWindow} loopTicksAfterStaleWindow={diagnostics.LoopTickCountAfterStaleWindow}",
+            $"staleDelayedTickSkipsAfterLifecycle={diagnostics.StaleDelayedTickSkipsAfterLifecycle} staleDelayedTickSkipsAfterStaleWindow={diagnostics.StaleDelayedTickSkipsAfterStaleWindow}",
             $"activeAfterStaleWindow={diagnostics.ActiveAfterStaleWindow} hitAfterStaleWindow={diagnostics.HitAfterStaleWindow} actionAfterStaleWindow={diagnostics.ActionAfterStaleWindow.Value}",
             $"viewport={diagnostics.ViewportWidth}x{diagnostics.ViewportHeight} scale={diagnostics.DisplayScaleX:0.##} maxScroll={diagnostics.MaxScrollY:0.##}"
         ]);
@@ -573,6 +582,23 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         }
 
         return new PresentedActionProbe(hit, action, presentedScrollY);
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> condition, CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        while (stopwatch.ElapsedMilliseconds < 2_000)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (condition())
+            {
+                return;
+            }
+
+            await Task.Delay(1, cancellationToken);
+        }
+
+        throw new TimeoutException("Timed out while waiting for scroll presentation lifecycle condition.");
     }
 
     private static async Task WaitForCoordinatorIdleAsync(DiagnosticSession session, CancellationToken cancellationToken)
@@ -1014,8 +1040,10 @@ internal readonly struct ScrollPresentationLifecycleScenarioDiagnostics(
     double MaxScrollY,
     long CompositionTickCountAfterLifecycle,
     long LoopTickCountAfterLifecycle,
+    long StaleDelayedTickSkipsAfterLifecycle,
     long CompositionTickCountAfterStaleWindow,
     long LoopTickCountAfterStaleWindow,
+    long StaleDelayedTickSkipsAfterStaleWindow,
     bool ActiveAfterStaleWindow,
     bool HitAfterStaleWindow,
     ActionId ActionAfterStaleWindow)
@@ -1043,8 +1071,10 @@ internal readonly struct ScrollPresentationLifecycleScenarioDiagnostics(
     public double MaxScrollY { get; } = MaxScrollY;
     public long CompositionTickCountAfterLifecycle { get; } = CompositionTickCountAfterLifecycle;
     public long LoopTickCountAfterLifecycle { get; } = LoopTickCountAfterLifecycle;
+    public long StaleDelayedTickSkipsAfterLifecycle { get; } = StaleDelayedTickSkipsAfterLifecycle;
     public long CompositionTickCountAfterStaleWindow { get; } = CompositionTickCountAfterStaleWindow;
     public long LoopTickCountAfterStaleWindow { get; } = LoopTickCountAfterStaleWindow;
+    public long StaleDelayedTickSkipsAfterStaleWindow { get; } = StaleDelayedTickSkipsAfterStaleWindow;
     public bool ActiveAfterStaleWindow { get; } = ActiveAfterStaleWindow;
     public bool HitAfterStaleWindow { get; } = HitAfterStaleWindow;
     public ActionId ActionAfterStaleWindow { get; } = ActionAfterStaleWindow;

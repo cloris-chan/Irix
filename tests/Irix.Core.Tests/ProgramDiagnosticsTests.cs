@@ -2397,6 +2397,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-renderInvalidation", summary);
         Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
         Assert.Contains("explicitCancels=0 invalidationCancels=1", summary);
+        Assert.Contains("staleDelayedTickSkipsAfterLifecycle=0 staleDelayedTickSkipsAfterStaleWindow=1", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-maxScroll", summary);
     }
 
@@ -2432,6 +2433,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(diagnostics.LoopTickCountAfterLifecycle > 0);
         Assert.Equal(diagnostics.CompositionTickCountAfterLifecycle, diagnostics.CompositionTickCountAfterStaleWindow);
         Assert.Equal(diagnostics.LoopTickCountAfterLifecycle, diagnostics.LoopTickCountAfterStaleWindow);
+        Assert.Equal(diagnostics.StaleDelayedTickSkipsAfterLifecycle + 1, diagnostics.StaleDelayedTickSkipsAfterStaleWindow);
         Assert.False(diagnostics.ActiveAfterStaleWindow);
         Assert.Equal(expectedHitAfter, diagnostics.HitAfterStaleWindow);
         Assert.Equal(diagnostics.ActionAfter, diagnostics.ActionAfterStaleWindow);
