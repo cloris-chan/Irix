@@ -333,11 +333,18 @@ public sealed class BatchOwnershipTests
         Assert.Equal(12, presentedScrollY);
     }
 
-    [Fact]
-    public async Task CompositorLoop_render_invalidation_cancels_scroll_presentation_before_render()
+    [Theory]
+    [InlineData((int)CompositionRenderInvalidationKind.ScrollPresentation)]
+    [InlineData((int)CompositionRenderInvalidationKind.ViewportChanged)]
+    [InlineData((int)CompositionRenderInvalidationKind.TreeStructure)]
+    [InlineData((int)CompositionRenderInvalidationKind.LayoutAffecting)]
+    [InlineData((int)CompositionRenderInvalidationKind.TextSizeAffecting)]
+    [InlineData((int)CompositionRenderInvalidationKind.MaxScrollChanged)]
+    public async Task CompositorLoop_render_invalidation_cancels_scroll_presentation_before_render(int invalidationKindValue)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var translator = new InvalidatingTranslator(CompositionRenderInvalidation.ScrollPresentation);
+        var invalidationKind = (CompositionRenderInvalidationKind)invalidationKindValue;
+        var translator = new InvalidatingTranslator(new CompositionRenderInvalidation(invalidationKind));
         var compositor = new ScrollPresentationSchedulerCompositor();
         await using var loop = new CompositorLoop(translator, compositor);
         var pipeline = new RenderPipeline();
@@ -369,7 +376,7 @@ public sealed class BatchOwnershipTests
         Assert.False(compositor.PresentationActiveDuringLastRender);
         Assert.Equal(1, loop.ScrollPresentationCancelCount);
         Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, loop.ScrollPresentationCancellationDiagnostics.LastReason);
-        Assert.Equal(CompositionRenderInvalidationKind.ScrollPresentation, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.Equal(invalidationKind, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
         Assert.Equal(0, loop.ScrollPresentationCancellationDiagnostics.ExplicitCount);
         Assert.Equal(1, loop.ScrollPresentationCancellationDiagnostics.RenderInvalidationCount);
     }
@@ -425,42 +432,6 @@ public sealed class BatchOwnershipTests
         Assert.Equal(1, tickCountAfterInvalidation);
         Assert.Equal(tickCountAfterInvalidation, compositor.TickCount);
         Assert.Equal(staleSkipsBeforeInvalidation + 1, loop.ScrollPresentationStaleDelayedTickSkipCount);
-    }
-
-    [Fact]
-    public async Task CompositorLoop_render_invalidation_records_max_scroll_changed_reason()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        var translator = new InvalidatingTranslator(CompositionRenderInvalidation.MaxScrollChanged);
-        var compositor = new ScrollPresentationSchedulerCompositor();
-        await using var loop = new CompositorLoop(translator, compositor);
-        var pipeline = new RenderPipeline();
-        using var frame = pipeline.Build(
-            new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
-                key: 1,
-                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
-                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
-            new PixelRectangle(0, 0, 240, 120),
-            _arena.GetOrCreateSnapshot());
-        var declaration = new CompositionScrollPresentationDeclaration(
-            new NodeKey(1),
-            new CompositionAnimationTimeline(CompositionTimestamp.Now(), CompositionDuration.FromMilliseconds(160)),
-            new CompositionScalarAnimation(0, 54));
-        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
-
-        var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>(
-        [
-            new VirtualNodePatch(
-                VirtualNodePatchOperation.ReplaceRoot,
-                0,
-                VirtualNodeBuilder.Text(_arena, "Next", new NodeKey(1)))
-        ]), 1);
-        await loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken);
-
-        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, loop.ScrollPresentationCancellationDiagnostics.LastReason);
-        Assert.Equal(CompositionRenderInvalidationKind.MaxScrollChanged, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
-        Assert.Equal(1, loop.ScrollPresentationCancellationDiagnostics.RenderInvalidationCount);
     }
 
     [Fact]

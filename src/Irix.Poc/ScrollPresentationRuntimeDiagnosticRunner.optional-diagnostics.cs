@@ -26,6 +26,18 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
                 new CompositionRenderInvalidation(CompositionRenderInvalidationKind.ViewportChanged),
                 cancellationToken),
             await RunInvalidationCancellationScenarioAsync(
+                "tree",
+                new CompositionRenderInvalidation(CompositionRenderInvalidationKind.TreeStructure),
+                cancellationToken),
+            await RunInvalidationCancellationScenarioAsync(
+                "layout",
+                new CompositionRenderInvalidation(CompositionRenderInvalidationKind.LayoutAffecting),
+                cancellationToken),
+            await RunInvalidationCancellationScenarioAsync(
+                "text",
+                new CompositionRenderInvalidation(CompositionRenderInvalidationKind.TextSizeAffecting),
+                cancellationToken),
+            await RunInvalidationCancellationScenarioAsync(
                 "maxScroll",
                 CompositionRenderInvalidation.MaxScrollChanged,
                 cancellationToken));
@@ -127,6 +139,9 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
             FormatRetarget("chain", diagnostics.RetargetChain),
             FormatCancellation(diagnostics.ExplicitCancellation),
             FormatCancellation(diagnostics.ViewportInvalidationCancellation),
+            FormatCancellation(diagnostics.TreeInvalidationCancellation),
+            FormatCancellation(diagnostics.LayoutInvalidationCancellation),
+            FormatCancellation(diagnostics.TextInvalidationCancellation),
             FormatCancellation(diagnostics.MaxScrollInvalidationCancellation));
     }
 
@@ -304,12 +319,18 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
     ScrollPresentationRuntimeRetargetDiagnostics RetargetChain,
     ScrollPresentationCancellationScenarioDiagnostics ExplicitCancellation,
     ScrollPresentationCancellationScenarioDiagnostics ViewportInvalidationCancellation,
+    ScrollPresentationCancellationScenarioDiagnostics TreeInvalidationCancellation,
+    ScrollPresentationCancellationScenarioDiagnostics LayoutInvalidationCancellation,
+    ScrollPresentationCancellationScenarioDiagnostics TextInvalidationCancellation,
     ScrollPresentationCancellationScenarioDiagnostics MaxScrollInvalidationCancellation) : IEquatable<ScrollPresentationRuntimeDiagnostics>
 {
     public ScrollPresentationRuntimeRetargetDiagnostics Retarget { get; } = Retarget;
     public ScrollPresentationRuntimeRetargetDiagnostics RetargetChain { get; } = RetargetChain;
     public ScrollPresentationCancellationScenarioDiagnostics ExplicitCancellation { get; } = ExplicitCancellation;
     public ScrollPresentationCancellationScenarioDiagnostics ViewportInvalidationCancellation { get; } = ViewportInvalidationCancellation;
+    public ScrollPresentationCancellationScenarioDiagnostics TreeInvalidationCancellation { get; } = TreeInvalidationCancellation;
+    public ScrollPresentationCancellationScenarioDiagnostics LayoutInvalidationCancellation { get; } = LayoutInvalidationCancellation;
+    public ScrollPresentationCancellationScenarioDiagnostics TextInvalidationCancellation { get; } = TextInvalidationCancellation;
     public ScrollPresentationCancellationScenarioDiagnostics MaxScrollInvalidationCancellation { get; } = MaxScrollInvalidationCancellation;
     public double Position => Retarget.Position;
     public double TargetPosition => Retarget.TargetPosition;
@@ -331,12 +352,27 @@ internal readonly struct ScrollPresentationRuntimeDiagnostics(
             && RetargetChain == other.RetargetChain
             && ExplicitCancellation == other.ExplicitCancellation
             && ViewportInvalidationCancellation == other.ViewportInvalidationCancellation
+            && TreeInvalidationCancellation == other.TreeInvalidationCancellation
+            && LayoutInvalidationCancellation == other.LayoutInvalidationCancellation
+            && TextInvalidationCancellation == other.TextInvalidationCancellation
             && MaxScrollInvalidationCancellation == other.MaxScrollInvalidationCancellation;
     }
 
     public override bool Equals(object? obj) => obj is ScrollPresentationRuntimeDiagnostics other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Retarget, RetargetChain, ExplicitCancellation, ViewportInvalidationCancellation, MaxScrollInvalidationCancellation);
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Retarget);
+        hash.Add(RetargetChain);
+        hash.Add(ExplicitCancellation);
+        hash.Add(ViewportInvalidationCancellation);
+        hash.Add(TreeInvalidationCancellation);
+        hash.Add(LayoutInvalidationCancellation);
+        hash.Add(TextInvalidationCancellation);
+        hash.Add(MaxScrollInvalidationCancellation);
+        return hash.ToHashCode();
+    }
 
     public static bool operator ==(ScrollPresentationRuntimeDiagnostics left, ScrollPresentationRuntimeDiagnostics right) => left.Equals(right);
 

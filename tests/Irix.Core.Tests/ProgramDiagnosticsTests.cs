@@ -2105,23 +2105,26 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(0, explicitCancellation.RenderCount);
         Assert.False(explicitCancellation.PresentationActiveAfter);
 
-        var viewportCancellation = diagnostics.ViewportInvalidationCancellation;
-        Assert.Equal("viewport", viewportCancellation.Name);
-        Assert.Equal(1, viewportCancellation.CancelCount);
-        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, viewportCancellation.Cancellation.LastReason);
-        Assert.Equal(CompositionRenderInvalidationKind.ViewportChanged, viewportCancellation.Cancellation.LastInvalidationKind);
-        Assert.Equal(1, viewportCancellation.RenderCount);
-        Assert.False(viewportCancellation.PresentationActiveDuringRender);
-        Assert.False(viewportCancellation.PresentationActiveAfter);
-
-        var maxScrollCancellation = diagnostics.MaxScrollInvalidationCancellation;
-        Assert.Equal("maxScroll", maxScrollCancellation.Name);
-        Assert.Equal(1, maxScrollCancellation.CancelCount);
-        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, maxScrollCancellation.Cancellation.LastReason);
-        Assert.Equal(CompositionRenderInvalidationKind.MaxScrollChanged, maxScrollCancellation.Cancellation.LastInvalidationKind);
-        Assert.Equal(1, maxScrollCancellation.RenderCount);
-        Assert.False(maxScrollCancellation.PresentationActiveDuringRender);
-        Assert.False(maxScrollCancellation.PresentationActiveAfter);
+        AssertRuntimeInvalidationCancellation(
+            diagnostics.ViewportInvalidationCancellation,
+            "viewport",
+            CompositionRenderInvalidationKind.ViewportChanged);
+        AssertRuntimeInvalidationCancellation(
+            diagnostics.TreeInvalidationCancellation,
+            "tree",
+            CompositionRenderInvalidationKind.TreeStructure);
+        AssertRuntimeInvalidationCancellation(
+            diagnostics.LayoutInvalidationCancellation,
+            "layout",
+            CompositionRenderInvalidationKind.LayoutAffecting);
+        AssertRuntimeInvalidationCancellation(
+            diagnostics.TextInvalidationCancellation,
+            "text",
+            CompositionRenderInvalidationKind.TextSizeAffecting);
+        AssertRuntimeInvalidationCancellation(
+            diagnostics.MaxScrollInvalidationCancellation,
+            "maxScroll",
+            CompositionRenderInvalidationKind.MaxScrollChanged);
 
         Assert.Contains("loopTicks=", summary);
         Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False scenario=initial", summary);
@@ -2130,11 +2133,29 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
         Assert.Contains("scroll-presentation-runtime.cancel scenario=explicit cancels=1 cancelReason=Explicit cancelInvalidation=None", summary);
         Assert.Contains("scroll-presentation-runtime.cancel scenario=viewport cancels=1 cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
+        Assert.Contains("scroll-presentation-runtime.cancel scenario=tree cancels=1 cancelReason=RenderInvalidation cancelInvalidation=TreeStructure", summary);
+        Assert.Contains("scroll-presentation-runtime.cancel scenario=layout cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
+        Assert.Contains("scroll-presentation-runtime.cancel scenario=text cancels=1 cancelReason=RenderInvalidation cancelInvalidation=TextSizeAffecting", summary);
         Assert.Contains("scroll-presentation-runtime.cancel scenario=maxScroll cancels=1 cancelReason=RenderInvalidation cancelInvalidation=MaxScrollChanged", summary);
         Assert.Contains("activeDuringRender=False activeAfter=False", summary);
         Assert.Contains("retainedStages=1", summary);
         Assert.Contains("execute=2", summary);
         Assert.Contains("lastPresented=54", summary);
+    }
+
+    private static void AssertRuntimeInvalidationCancellation(
+        in ScrollPresentationCancellationScenarioDiagnostics diagnostics,
+        string name,
+        CompositionRenderInvalidationKind invalidationKind)
+    {
+        Assert.Equal(name, diagnostics.Name);
+        Assert.Equal(1, diagnostics.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, diagnostics.Cancellation.LastReason);
+        Assert.Equal(invalidationKind, diagnostics.Cancellation.LastInvalidationKind);
+        Assert.Equal(1, diagnostics.Cancellation.RenderInvalidationCount);
+        Assert.Equal(1, diagnostics.RenderCount);
+        Assert.False(diagnostics.PresentationActiveDuringRender);
+        Assert.False(diagnostics.PresentationActiveAfter);
     }
 
     [Fact]
