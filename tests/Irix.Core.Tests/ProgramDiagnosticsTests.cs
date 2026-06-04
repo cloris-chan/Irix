@@ -2328,6 +2328,7 @@ public sealed class ProgramDiagnosticsTests
             1f,
             expectedHitAfter: true,
             expectedActionAfter: ActionIdRegistry.Decrement,
+            expectedRenderCountDelta: 1,
             expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
             explicitCancelCount: 1,
@@ -2341,6 +2342,7 @@ public sealed class ProgramDiagnosticsTests
             1.5f,
             expectedHitAfter: false,
             expectedActionAfter: ActionId.None,
+            expectedRenderCountDelta: 1,
             expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
             explicitCancelCount: 1,
@@ -2354,6 +2356,7 @@ public sealed class ProgramDiagnosticsTests
             1f,
             expectedHitAfter: true,
             expectedActionAfter: ActionIdRegistry.Decrement,
+            expectedRenderCountDelta: 1,
             expectedCancelReason: ScrollPresentationCancellationReason.RenderInvalidation,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.ViewportChanged,
             explicitCancelCount: 0,
@@ -2367,6 +2370,7 @@ public sealed class ProgramDiagnosticsTests
             1f,
             expectedHitAfter: true,
             expectedActionAfter: ActionIdRegistry.Decrement,
+            expectedRenderCountDelta: 0,
             expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
             explicitCancelCount: 1,
@@ -2414,6 +2418,7 @@ public sealed class ProgramDiagnosticsTests
         float expectedScale,
         bool expectedHitAfter,
         ActionId expectedActionAfter,
+        long expectedRenderCountDelta,
         ScrollPresentationCancellationReason expectedCancelReason,
         CompositionRenderInvalidationKind expectedCancelInvalidationKind,
         long explicitCancelCount,
@@ -2430,7 +2435,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(expectedCancelInvalidationKind, diagnostics.CancelInvalidationKind);
         Assert.Equal(explicitCancelCount, diagnostics.ExplicitCancelCount);
         Assert.Equal(renderInvalidationCancelCount, diagnostics.RenderInvalidationCancelCount);
-        Assert.True(diagnostics.RenderCountAfter >= diagnostics.RenderCountBefore);
+        Assert.Equal(diagnostics.RenderCountBefore + expectedRenderCountDelta, diagnostics.RenderCountAfter);
         Assert.Equal(expectedLayoutReason, diagnostics.LayoutRebuildReasonAfter);
         Assert.Equal(expectedViewportWidth, diagnostics.ViewportWidth);
         Assert.Equal(expectedViewportHeight, diagnostics.ViewportHeight);
