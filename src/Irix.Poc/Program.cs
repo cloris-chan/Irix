@@ -84,20 +84,16 @@ internal static partial class Program
         var inputOwnershipState = new InputOwnershipState();
         SetDebugUiRuntimeSources(scrollFramePump, inputOwnershipState, d3d12Backend.ClipMode);
 
-        // Wire up MaxScrollY feedback after runtime is created
         double? lastKnownMaxScrollY = null;
         maxScrollYCallback = maxScrollY =>
         {
-            if (!lastKnownMaxScrollY.HasValue || Math.Abs(maxScrollY - lastKnownMaxScrollY.Value) > 0.5)
-            {
-                lastKnownMaxScrollY = maxScrollY;
-                _ = compositorLoop.CancelCompositionScrollPresentationAsync();
-                var feedbackMapper = new CounterAppMessageDispatchMapper();
-                if (TryMapMaxScrollFeedbackForRuntime(maxScrollY, feedbackMapper, out var message) && message is not null)
-                {
-                    _ = TryDispatchAppMessageForRuntime(message, runtimeDispatchSink);
-                }
-            }
+            _ = TryDispatchMaxScrollFeedbackForRuntime(
+                maxScrollY,
+                lastKnownMaxScrollY,
+                out lastKnownMaxScrollY,
+                () => _ = compositorLoop.CancelCompositionScrollPresentationAsync(),
+                new CounterAppMessageDispatchMapper(),
+                runtimeDispatchSink);
         };
 
         window.SizeChanged += (w, h) =>
@@ -354,6 +350,33 @@ internal static partial class Program
 
         message = null;
         return false;
+    }
+
+    internal static bool TryDispatchMaxScrollFeedbackForRuntime<TFeedbackMapper, TDispatchSink>(
+        double maxScrollY,
+        double? lastKnownMaxScrollY,
+        out double? nextKnownMaxScrollY,
+        Action cancelScrollPresentation,
+        TFeedbackMapper feedbackMapper,
+        TDispatchSink dispatchSink)
+        where TFeedbackMapper : struct, IControlFeedbackDispatchMapper<CounterMessage>
+        where TDispatchSink : struct, IAppRuntimeDispatchSink<CounterMessage>
+    {
+        ArgumentNullException.ThrowIfNull(cancelScrollPresentation);
+        nextKnownMaxScrollY = lastKnownMaxScrollY;
+        if (lastKnownMaxScrollY.HasValue && Math.Abs(maxScrollY - lastKnownMaxScrollY.Value) <= 0.5)
+        {
+            return false;
+        }
+
+        nextKnownMaxScrollY = maxScrollY;
+        cancelScrollPresentation();
+        if (TryMapMaxScrollFeedbackForRuntime(maxScrollY, feedbackMapper, out var message))
+        {
+            _ = TryDispatchAppMessageForRuntime(message, dispatchSink);
+        }
+
+        return true;
     }
 
     internal static bool TryDispatchWheelInputForRuntime<TDispatchSink>(

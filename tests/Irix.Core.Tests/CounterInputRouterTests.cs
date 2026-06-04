@@ -779,6 +779,78 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Program_max_scroll_feedback_dispatch_accepts_first_value()
+    {
+        var cancelRecorder = new FeedbackCancelRecorder();
+        var dispatchRecorder = new AppRuntimeDispatchRecorder();
+        var dispatchSink = new RecordingAppRuntimeDispatchSink(dispatchRecorder);
+
+        var accepted = Program.TryDispatchMaxScrollFeedbackForRuntime(
+            42.5,
+            lastKnownMaxScrollY: null,
+            out var nextKnownMaxScrollY,
+            cancelRecorder.Cancel,
+            new CounterAppMessageDispatchMapper(),
+            dispatchSink);
+
+        var update = Assert.IsType<CounterMessage.UpdateMaxScrollY>(dispatchRecorder.LastMessage);
+        Assert.True(accepted);
+        Assert.Equal(42.5, nextKnownMaxScrollY);
+        Assert.Equal(42.5, update.MaxScrollY);
+        Assert.Equal(1, cancelRecorder.CancelCount);
+        Assert.Equal(1, dispatchRecorder.DispatchCount);
+    }
+
+    [Theory]
+    [InlineData(100.5)]
+    [InlineData(99.5)]
+    public void Program_max_scroll_feedback_dispatch_ignores_values_within_half_pixel_threshold(double nextMaxScrollY)
+    {
+        var cancelRecorder = new FeedbackCancelRecorder();
+        var dispatchRecorder = new AppRuntimeDispatchRecorder();
+        var dispatchSink = new RecordingAppRuntimeDispatchSink(dispatchRecorder);
+
+        var accepted = Program.TryDispatchMaxScrollFeedbackForRuntime(
+            nextMaxScrollY,
+            lastKnownMaxScrollY: 100,
+            out var nextKnownMaxScrollY,
+            cancelRecorder.Cancel,
+            new CounterAppMessageDispatchMapper(),
+            dispatchSink);
+
+        Assert.False(accepted);
+        Assert.Equal(100, nextKnownMaxScrollY);
+        Assert.Equal(0, cancelRecorder.CancelCount);
+        Assert.Equal(0, dispatchRecorder.DispatchCount);
+        Assert.Null(dispatchRecorder.LastMessage);
+    }
+
+    [Theory]
+    [InlineData(100.51)]
+    [InlineData(99.49)]
+    public void Program_max_scroll_feedback_dispatch_accepts_values_beyond_half_pixel_threshold(double nextMaxScrollY)
+    {
+        var cancelRecorder = new FeedbackCancelRecorder();
+        var dispatchRecorder = new AppRuntimeDispatchRecorder();
+        var dispatchSink = new RecordingAppRuntimeDispatchSink(dispatchRecorder);
+
+        var accepted = Program.TryDispatchMaxScrollFeedbackForRuntime(
+            nextMaxScrollY,
+            lastKnownMaxScrollY: 100,
+            out var nextKnownMaxScrollY,
+            cancelRecorder.Cancel,
+            new CounterAppMessageDispatchMapper(),
+            dispatchSink);
+
+        var update = Assert.IsType<CounterMessage.UpdateMaxScrollY>(dispatchRecorder.LastMessage);
+        Assert.True(accepted);
+        Assert.Equal(nextMaxScrollY, nextKnownMaxScrollY);
+        Assert.Equal(nextMaxScrollY, update.MaxScrollY);
+        Assert.Equal(1, cancelRecorder.CancelCount);
+        Assert.Equal(1, dispatchRecorder.DispatchCount);
+    }
+
+    [Fact]
     public void Program_wheel_dispatch_uses_scroll_presentation_sink()
     {
         var recorder = new WheelDispatchRecorder();
@@ -1274,6 +1346,16 @@ public sealed class CounterInputRouterTests
         {
             appMessage = new CounterMessage.Reset((int)maxScrollY);
             return true;
+        }
+    }
+
+    private sealed class FeedbackCancelRecorder
+    {
+        public int CancelCount { get; private set; }
+
+        public void Cancel()
+        {
+            CancelCount++;
         }
     }
 
