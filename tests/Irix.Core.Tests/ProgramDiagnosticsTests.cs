@@ -2634,8 +2634,11 @@ public sealed class ProgramDiagnosticsTests
         var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
         var coordinatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationCoordinator.cs")));
         var adapterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationAdapters.cs")));
+        var inputHitTestServiceSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputHitTestService.cs")));
+        var actionHitTestResolverSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ActionHitTestResolver.cs")));
         var inputActionMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputActionMapper.cs")));
         var counterInputRouterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterInputRouter.cs")));
+        var inputOwnershipSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.cs")));
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
 
         Assert.Contains("### Scroll / Input Runtime Owner Boundary", contracts);
@@ -2651,12 +2654,20 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("interface IScrollPresentationRuntimeAdapter", adapterSource);
         Assert.Contains("interface IScrollPresentationCompositorAdapter", adapterSource);
         Assert.Contains("interface IScrollPresentationRetainedSnapshotProvider", adapterSource);
+        Assert.Contains("interface IInputHitTestService", inputHitTestServiceSource);
+        Assert.Contains("TryHitTestPhysicalPixel(int x, int y, out ActionId actionId)", inputHitTestServiceSource);
+        Assert.Contains("DrawingBackendCompositorInputHitTestService", actionHitTestResolverSource);
+        Assert.Contains("IActionHitTestResolver : IInputHitTestService", actionHitTestResolverSource);
         Assert.Contains("interface IInputActionMapper", inputActionMapperSource);
         Assert.Contains("struct CounterInputActionMapper", inputActionMapperSource);
         Assert.Contains("TryMapAction(ActionId actionId, in RawInputEvent inputEvent", inputActionMapperSource);
+        Assert.Contains("where THitTestService : struct, IInputHitTestService", inputOwnershipSource);
+        Assert.Contains("hitTestService.TryHitTestPhysicalPixel(inputEvent.X, inputEvent.Y, out var actionId)", inputOwnershipSource);
+        Assert.Contains("where THitTestService : struct, IInputHitTestService", counterInputRouterSource);
         Assert.Contains("where TActionMapper : struct, IInputActionMapper<CounterMessage>", counterInputRouterSource);
         Assert.Contains("actionMapper.TryMapAction(actionId, in inputEvent, out message)", counterInputRouterSource);
         Assert.Contains("actionMapper.TryMapAction(focusedActionId, in inputEvent, out message)", counterInputRouterSource);
+        Assert.Contains("var hitTestService = new DrawingBackendCompositorInputHitTestService", programSource);
         Assert.Contains("var actionMapper = new CounterInputActionMapper();", programSource);
         Assert.Contains("DispatchScrollPresentationInterruptedAsync", coordinatorSource);
         Assert.Contains("SampleAndCancelAsync", coordinatorSource);

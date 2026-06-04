@@ -145,8 +145,8 @@ internal static partial class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
-            var hitTestResolver = new DrawingBackendCompositorActionHitTestResolver(d3d12Compositor);
-            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, hitTestResolver, out var message))
+            var hitTestService = new DrawingBackendCompositorInputHitTestService(d3d12Compositor);
+            if (TryMapInputForRuntime(inputEvent, inputOwnershipState, hitTestService, out var message))
             {
                 if (message is CounterMessage.WheelRaw wheel)
                 {
@@ -295,16 +295,16 @@ internal static partial class Program
         }
     }
 
-    internal static bool TryMapInputForRuntime<THitTestResolver>(
+    internal static bool TryMapInputForRuntime<THitTestService>(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
-        THitTestResolver hitTestResolver,
+        THitTestService hitTestService,
         out CounterMessage? message)
-        where THitTestResolver : struct, IActionHitTestResolver
+        where THitTestService : struct, IInputHitTestService
     {
         var before = ownershipState.Snapshot;
         var actionMapper = new CounterInputActionMapper();
-        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, hitTestResolver, actionMapper, out var mappedMessage);
+        var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, hitTestService, actionMapper, out var mappedMessage);
         var after = ownershipState.Snapshot;
 
         if (mapped)

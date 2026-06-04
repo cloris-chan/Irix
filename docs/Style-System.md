@@ -103,7 +103,7 @@ Examples:
 - Focus ring appears: visual or composition style depending on implementation.
 - Expanded/collapsed changes height: layout style target plus optional compositor presentation.
 
-`InputOwnershipState`, `ControlVisualState*`, and `ActionHitTestResolver` remain in `Irix.Poc` until the input/control contract is extracted from Counter-specific assumptions.
+`InputOwnershipState`, `ControlVisualState*`, and the current hit-test service/resolver adapters remain in `Irix.Poc` until the input/control contract is extracted from Counter-specific assumptions.
 
 ## Style And Animation
 

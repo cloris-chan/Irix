@@ -169,7 +169,7 @@ Current ownership:
 |----------------|---------------|----------|
 | `InputOwnershipState` / `OwnershipSnapshot` | `Irix.Poc` app runtime state | Tracks single-pointer hover, pressed, captured, and focused targets for Counter. Candidate runtime state, but not movable until multi-control ownership and action dispatch are no longer Counter-specific. |
 | `InputOwnershipEvent` / diagnostics ring | `Irix.Poc` diagnostics over app input state | Diagnostic observation only. It should follow the input owner if a future runtime extraction happens. |
-| `IActionHitTestResolver` and resolver implementations | `Irix.Poc` input adapter | Bridges physical input coordinates to `ActionId` through Poc/compositor hit targets. Future framework form needs a renderer-neutral hit-test service contract. |
+| `IInputHitTestService`, `IActionHitTestResolver`, and resolver/service implementations | `Irix.Poc` input adapter | Bridges physical input coordinates to `ActionId` through Poc/compositor hit targets. The first renderer-neutral service shape exists, but the identity model is still Counter/Poc `ActionId`. |
 | `CounterInputRouter` | `Irix.Poc` sample app router | Maps raw input plus ownership state to `CounterMessage`; it must not be promoted as framework runtime. |
 | `ControlVisualState`, `ControlVisualStateProjection`, `ControlVisualStatePropertyAdapter`, `ButtonPropertyBundle` | `Irix.Poc` control projection | Converts ownership snapshot into Counter button properties. Candidate concept, but current shape is button-specific and property-array publishing remains app-authoring glue. |
 

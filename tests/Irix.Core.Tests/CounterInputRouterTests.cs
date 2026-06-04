@@ -42,6 +42,37 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void TryMapInput_uses_hit_test_service_for_pointer_ownership()
+    {
+        var ownershipState = new InputOwnershipState();
+        var hitTestService = new IncrementButtonHitTestService();
+        var pressMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            hitTestService,
+            out _);
+        var releaseMapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 2,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            hitTestService,
+            out var message);
+
+        Assert.False(pressMapped);
+        Assert.True(releaseMapped);
+        Assert.IsType<CounterMessage.Increment>(message);
+    }
+
+    [Fact]
     public void TryMapInput_uses_action_mapper_for_pointer_activation()
     {
         var ownershipState = new InputOwnershipState();
@@ -1092,6 +1123,15 @@ public sealed class CounterInputRouterTests
     private static ActionId HitIncrementAtButton(int x, int y)
     {
         return x == 32 && y == 140 ? new ActionId(1) : ActionId.None;
+    }
+
+    private readonly struct IncrementButtonHitTestService : IInputHitTestService
+    {
+        public bool TryHitTestPhysicalPixel(int x, int y, out ActionId actionId)
+        {
+            actionId = HitIncrementAtButton(x, y);
+            return !actionId.IsNone;
+        }
     }
 
     private readonly struct TimestampResetActionMapper : IInputActionMapper<CounterMessage>

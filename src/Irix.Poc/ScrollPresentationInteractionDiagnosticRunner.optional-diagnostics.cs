@@ -50,8 +50,8 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         await using var session = await DiagnosticSession.StartAsync(cancellationToken);
         var beforeHit = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var beforeAction);
         var inputOwnershipState = new InputOwnershipState();
-        var initialResolver = new DrawingBackendCompositorActionHitTestResolver(session.Compositor);
-        _ = Program.TryMapInputForRuntime(FixedPointerMove, inputOwnershipState, initialResolver, out _);
+        var initialHitTestService = new DrawingBackendCompositorInputHitTestService(session.Compositor);
+        _ = Program.TryMapInputForRuntime(FixedPointerMove, inputOwnershipState, initialHitTestService, out _);
         var staleHoverAction = inputOwnershipState.HoveredTarget;
 
         var wheelPixels = WheelDownPixels(1);
@@ -59,8 +59,8 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         await session.Coordinator.RunUntilIdleAsync(session.Runtime, session.CompositorLoop, session.Translator, ScrollTargetKey, cancellationToken);
         var activeProbe = await WaitForPresentedActionAsync(session, FixedPointerMove.X, FixedPointerMove.Y, ActionIdRegistry.Decrement, cancellationToken);
 
-        var hitTestResolver = new DrawingBackendCompositorActionHitTestResolver(session.Compositor);
-        var hoverMapped = Program.TryMapInputForRuntime(FixedPointerMove, inputOwnershipState, hitTestResolver, out var hoverMessage);
+        var hitTestService = new DrawingBackendCompositorInputHitTestService(session.Compositor);
+        var hoverMapped = Program.TryMapInputForRuntime(FixedPointerMove, inputOwnershipState, hitTestService, out var hoverMessage);
         var hoverRefresh = hoverMessage as CounterMessage.InputVisualStateChanged;
         var renderCountBeforeHoverDispatch = session.Compositor.RenderCount;
         var executeCountBeforeHoverDispatch = session.Backend.ExecuteCount;
@@ -76,7 +76,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         var layoutReasonAfterHoverDispatch = session.Translator.LastLayoutRebuildReason;
         var activeAfterHover = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfterHover);
 
-        var pressMapped = Program.TryMapInputForRuntime(FixedPointerPress, inputOwnershipState, hitTestResolver, out var pressMessage);
+        var pressMapped = Program.TryMapInputForRuntime(FixedPointerPress, inputOwnershipState, hitTestService, out var pressMessage);
         var pressRefresh = pressMessage as CounterMessage.InputVisualStateChanged;
         var pressSnapshot = pressRefresh?.Snapshot ?? inputOwnershipState.Snapshot;
         var renderCountBeforePressDispatch = session.Compositor.RenderCount;
@@ -92,7 +92,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         var executeCompositionCountAfterPressDispatch = session.Backend.ExecuteCompositionCount;
         var layoutReasonAfterPressDispatch = session.Translator.LastLayoutRebuildReason;
         var activeAfterPress = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfterPress);
-        var releaseMapped = Program.TryMapInputForRuntime(FixedPointerRelease, inputOwnershipState, hitTestResolver, out var releaseMessage);
+        var releaseMapped = Program.TryMapInputForRuntime(FixedPointerRelease, inputOwnershipState, hitTestService, out var releaseMessage);
         var releaseActionKind = ResolveRoutedActionKind(releaseMessage);
         if (releaseMessage is not null)
         {

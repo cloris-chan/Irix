@@ -35,8 +35,8 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
 
         var beforeHit = compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var beforeAction);
         var stalePressOwnershipState = new InputOwnershipState();
-        var initialHitTestResolver = new DrawingBackendCompositorActionHitTestResolver(compositor);
-        _ = Program.TryMapInputForRuntime(FixedPointerMove, stalePressOwnershipState, initialHitTestResolver, out _);
+        var initialHitTestService = new DrawingBackendCompositorInputHitTestService(compositor);
+        _ = Program.TryMapInputForRuntime(FixedPointerMove, stalePressOwnershipState, initialHitTestService, out _);
         var staleHoverAction = stalePressOwnershipState.HoveredTarget;
         var snapshot = translator.LastRetainedInputSnapshot ?? throw new InvalidOperationException("Retained input snapshot was not produced.");
         compositor.SetCompositionScrollPresentationDeclaration(
@@ -49,8 +49,8 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
 
         var activeHit = compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var activeAction);
         var activeHitResult = compositor.TryHitTestLogicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var activeResult);
-        var hitTestResolver = new DrawingBackendCompositorActionHitTestResolver(compositor);
-        var mapped = Program.TryMapInputForRuntime(FixedPointerMove, new InputOwnershipState(), hitTestResolver, out var message);
+        var hitTestService = new DrawingBackendCompositorInputHitTestService(compositor);
+        var mapped = Program.TryMapInputForRuntime(FixedPointerMove, new InputOwnershipState(), hitTestService, out var message);
         var hoverMessage = message as CounterMessage.InputVisualStateChanged;
         var renderCountBeforeHoverDispatch = compositor.RenderCount;
         var executeCountBeforeHoverDispatch = backend.ExecuteCount;
@@ -65,7 +65,7 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
         var executeCompositionCountAfterHoverDispatch = backend.ExecuteCompositionCount;
         var afterHoverHit = compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var afterHoverAction);
         var activeAfterHover = compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfterHover);
-        var pressMapped = Program.TryMapInputForRuntime(FixedPointerPress, stalePressOwnershipState, hitTestResolver, out var pressMessage);
+        var pressMapped = Program.TryMapInputForRuntime(FixedPointerPress, stalePressOwnershipState, hitTestService, out var pressMessage);
         var pressRefresh = pressMessage as CounterMessage.InputVisualStateChanged;
         var pressSnapshot = pressRefresh?.Snapshot ?? stalePressOwnershipState.Snapshot;
         var renderCountBeforePressDispatch = compositor.RenderCount;
@@ -80,7 +80,7 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
         var executeCountAfterPressDispatch = backend.ExecuteCount;
         var executeCompositionCountAfterPressDispatch = backend.ExecuteCompositionCount;
         var activeAfterPress = compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfterPress);
-        var releaseMapped = Program.TryMapInputForRuntime(FixedPointerRelease, stalePressOwnershipState, hitTestResolver, out var releaseMessage);
+        var releaseMapped = Program.TryMapInputForRuntime(FixedPointerRelease, stalePressOwnershipState, hitTestService, out var releaseMessage);
         var releaseActionKind = ResolveRoutedActionKind(releaseMessage);
         if (releaseMessage is not null)
         {

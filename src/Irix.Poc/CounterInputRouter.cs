@@ -14,46 +14,46 @@ internal static class CounterInputRouter
         Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel,
         out CounterMessage message)
     {
-        var resolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
-        return TryMapInput(inputEvent, ownershipState, resolver, out message);
+        var hitTestService = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
+        return TryMapInput(inputEvent, ownershipState, hitTestService, out message);
     }
 
     /// <summary>
-    /// Maps one input event using a value-type resolver. Runtime input paths use this overload
+    /// Maps one input event using a value-type hit-test service. Runtime input paths use this overload
     /// to avoid allocating a delegate/closure per native input event.
     /// </summary>
-    public static bool TryMapInput<THitTestResolver>(
+    public static bool TryMapInput<THitTestService>(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
-        THitTestResolver hitTestResolver,
+        THitTestService hitTestService,
         out CounterMessage message)
-        where THitTestResolver : struct, IActionHitTestResolver
+        where THitTestService : struct, IInputHitTestService
     {
         var actionMapper = new CounterInputActionMapper();
-        return TryMapInput(inputEvent, ownershipState, hitTestResolver, actionMapper, out message);
+        return TryMapInput(inputEvent, ownershipState, hitTestService, actionMapper, out message);
     }
 
-    public static bool TryMapInput<THitTestResolver, TActionMapper>(
+    public static bool TryMapInput<THitTestService, TActionMapper>(
         RawInputEvent inputEvent,
         InputOwnershipState ownershipState,
-        THitTestResolver hitTestResolver,
+        THitTestService hitTestService,
         TActionMapper actionMapper,
         out CounterMessage message)
-        where THitTestResolver : struct, IActionHitTestResolver
+        where THitTestService : struct, IInputHitTestService
         where TActionMapper : struct, IInputActionMapper<CounterMessage>
     {
         switch (inputEvent.Kind)
         {
             case RawInputEventKind.PointerMoved:
-                ownershipState.UpdateHover(inputEvent, ref hitTestResolver);
+                ownershipState.UpdateHover(inputEvent, ref hitTestService);
                 break;
             case RawInputEventKind.PointerPressed
                 when inputEvent.Button == PointerButton.Left:
-                ownershipState.PressPointer(inputEvent, ref hitTestResolver);
+                ownershipState.PressPointer(inputEvent, ref hitTestService);
                 break;
             case RawInputEventKind.PointerReleased
                 when inputEvent.Button == PointerButton.Left:
-                var actionId = ownershipState.ReleasePointer(inputEvent, ref hitTestResolver);
+                var actionId = ownershipState.ReleasePointer(inputEvent, ref hitTestService);
                 if (!actionId.IsNone)
                 {
                     return actionMapper.TryMapAction(actionId, in inputEvent, out message);

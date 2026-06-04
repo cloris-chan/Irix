@@ -154,7 +154,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 `--diagnose-scroll-presentation-hittest` must prove:
 
 - fixed pointer coordinates can map to a different action while presented scroll moves retained content under the pointer
-- runtime hover mapping uses the active `CompositorHitTestSnapshot` through `DrawingBackendCompositorActionHitTestResolver`
+- runtime hover mapping uses the active `CompositorHitTestSnapshot` through `DrawingBackendCompositorInputHitTestService`
 - hover refresh during active presentation re-renders through composition execution, not a normal retained-frame `Execute`
 - the active presented scroll value and hit-test mapping survive the hover refresh
 - press without an intervening pointer move refreshes stale hover state from the active presentation snapshot, captures/focuses the presented target, and keeps the press refresh on composition execution
@@ -163,7 +163,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 `--diagnose-scroll-presentation-interaction` must prove:
 
 - the real Counter app path starts scroll presentation only through `ScrollPresentationCoordinator.AddPendingPixels` plus `RunUntilIdleAsync`
-- fixed pointer hover/press/release during active presentation use `Program.TryMapInputForRuntime`, `InputOwnershipState`, and `DrawingBackendCompositorActionHitTestResolver`
+- fixed pointer hover/press/release during active presentation use `Program.TryMapInputForRuntime`, `InputOwnershipState`, and `DrawingBackendCompositorInputHitTestService`
 - hover and press style refresh keep the active presentation on composition execution while normal retained `Execute` does not increase
 - release routes the captured presented target through `RoutedInput`
 - chained wheel input accumulates target distance through coordinator retargeting

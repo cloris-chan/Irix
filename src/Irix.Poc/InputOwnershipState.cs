@@ -116,14 +116,14 @@ internal sealed partial class InputOwnershipState
     /// <summary>Updates hover ownership from the latest pointer location.</summary>
     public void UpdateHover(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel)
     {
-        var resolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
-        UpdateHover(inputEvent, ref resolver);
+        var hitTestService = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
+        UpdateHover(inputEvent, ref hitTestService);
     }
 
-    public void UpdateHover<THitTestResolver>(RawInputEvent inputEvent, ref THitTestResolver hitTestResolver)
-        where THitTestResolver : struct, IActionHitTestResolver
+    public void UpdateHover<THitTestService>(RawInputEvent inputEvent, ref THitTestService hitTestService)
+        where THitTestService : struct, IInputHitTestService
     {
-        SetHoverTarget(hitTestResolver.Resolve(inputEvent.X, inputEvent.Y));
+        SetHoverTarget(HitTestActionId(inputEvent, ref hitTestService));
     }
 
     /// <summary>
@@ -132,14 +132,14 @@ internal sealed partial class InputOwnershipState
     /// </summary>
     public void PressPointer(RawInputEvent inputEvent, Func<int, int, ActionId> tryGetActionIdAtPhysicalPixel)
     {
-        var resolver = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
-        PressPointer(inputEvent, ref resolver);
+        var hitTestService = new DelegateActionHitTestResolver(tryGetActionIdAtPhysicalPixel);
+        PressPointer(inputEvent, ref hitTestService);
     }
 
-    public void PressPointer<THitTestResolver>(RawInputEvent inputEvent, ref THitTestResolver hitTestResolver)
-        where THitTestResolver : struct, IActionHitTestResolver
+    public void PressPointer<THitTestService>(RawInputEvent inputEvent, ref THitTestService hitTestService)
+        where THitTestService : struct, IInputHitTestService
     {
-        var target = hitTestResolver.Resolve(inputEvent.X, inputEvent.Y);
+        var target = HitTestActionId(inputEvent, ref hitTestService);
         SetHoverTarget(target);
         var previousFocus = FocusedTarget;
         var previousPressed = PressedTarget;
@@ -166,10 +166,10 @@ internal sealed partial class InputOwnershipState
         }
     }
 
-    public ActionId ReleasePointer<THitTestResolver>(RawInputEvent inputEvent, ref THitTestResolver hitTestResolver)
-        where THitTestResolver : struct, IActionHitTestResolver
+    public ActionId ReleasePointer<THitTestService>(RawInputEvent inputEvent, ref THitTestService hitTestService)
+        where THitTestService : struct, IInputHitTestService
     {
-        SetHoverTarget(hitTestResolver.Resolve(inputEvent.X, inputEvent.Y));
+        SetHoverTarget(HitTestActionId(inputEvent, ref hitTestService));
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
         var wasPointerPressed = _isPointerPressed;
@@ -251,5 +251,13 @@ internal sealed partial class InputOwnershipState
         LastHoverEnteredTarget = nextTarget;
         HoverChangeCount++;
         RecordHoverChanged(previousTarget, nextTarget);
+    }
+
+    private static ActionId HitTestActionId<THitTestService>(RawInputEvent inputEvent, ref THitTestService hitTestService)
+        where THitTestService : struct, IInputHitTestService
+    {
+        return hitTestService.TryHitTestPhysicalPixel(inputEvent.X, inputEvent.Y, out var actionId)
+            ? actionId
+            : ActionId.None;
     }
 }
