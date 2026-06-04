@@ -302,6 +302,19 @@ internal static partial class Program
         out CounterMessage? message)
         where THitTestService : struct, IInputHitTestService
     {
+        var dispatchMapper = new CounterAppMessageDispatchMapper();
+        return TryMapInputForRuntime(inputEvent, ownershipState, hitTestService, dispatchMapper, out message);
+    }
+
+    internal static bool TryMapInputForRuntime<THitTestService, TDispatchMapper>(
+        RawInputEvent inputEvent,
+        InputOwnershipState ownershipState,
+        THitTestService hitTestService,
+        TDispatchMapper dispatchMapper,
+        out CounterMessage? message)
+        where THitTestService : struct, IInputHitTestService
+        where TDispatchMapper : struct, IAppMessageDispatchMapper<CounterMessage, CounterMessage>
+    {
         var before = ownershipState.Snapshot;
         var actionMapper = new CounterInputActionMapper();
         var mapped = CounterInputRouter.TryMapInput(inputEvent, ownershipState, hitTestService, actionMapper, out var mappedMessage);
@@ -309,16 +322,12 @@ internal static partial class Program
 
         if (mapped)
         {
-            message = mappedMessage is CounterMessage.WheelRaw
-                ? mappedMessage
-                : new CounterMessage.RoutedInput(mappedMessage, after);
-            return true;
+            return dispatchMapper.TryMapInputMessage(mappedMessage, in after, out message);
         }
 
         if (before != after)
         {
-            message = new CounterMessage.InputVisualStateChanged(after);
-            return true;
+            return dispatchMapper.TryMapInputOwnershipChanged(in after, out message);
         }
 
         message = null;

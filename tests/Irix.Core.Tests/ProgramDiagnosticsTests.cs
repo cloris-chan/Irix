@@ -2637,6 +2637,7 @@ public sealed class ProgramDiagnosticsTests
         var inputHitTestServiceSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputHitTestService.cs")));
         var actionHitTestResolverSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ActionHitTestResolver.cs")));
         var inputActionMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputActionMapper.cs")));
+        var appMessageDispatchMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "AppMessageDispatchMapper.cs")));
         var counterInputRouterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterInputRouter.cs")));
         var inputOwnershipSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "InputOwnershipState.cs")));
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
@@ -2661,6 +2662,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("interface IInputActionMapper", inputActionMapperSource);
         Assert.Contains("struct CounterInputActionMapper", inputActionMapperSource);
         Assert.Contains("TryMapAction(ActionId actionId, in RawInputEvent inputEvent", inputActionMapperSource);
+        Assert.Contains("interface IAppMessageDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("struct CounterAppMessageDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("TryMapInputMessage(", appMessageDispatchMapperSource);
+        Assert.Contains("TryMapInputOwnershipChanged(", appMessageDispatchMapperSource);
         Assert.Contains("where THitTestService : struct, IInputHitTestService", inputOwnershipSource);
         Assert.Contains("hitTestService.TryHitTestPhysicalPixel(inputEvent.X, inputEvent.Y, out var actionId)", inputOwnershipSource);
         Assert.Contains("where THitTestService : struct, IInputHitTestService", counterInputRouterSource);
@@ -2669,6 +2674,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("actionMapper.TryMapAction(focusedActionId, in inputEvent, out message)", counterInputRouterSource);
         Assert.Contains("var hitTestService = new DrawingBackendCompositorInputHitTestService", programSource);
         Assert.Contains("var actionMapper = new CounterInputActionMapper();", programSource);
+        Assert.Contains("var dispatchMapper = new CounterAppMessageDispatchMapper();", programSource);
+        Assert.Contains("where TDispatchMapper : struct, IAppMessageDispatchMapper<CounterMessage, CounterMessage>", programSource);
+        Assert.Contains("dispatchMapper.TryMapInputMessage(mappedMessage, in after, out message)", programSource);
+        Assert.Contains("dispatchMapper.TryMapInputOwnershipChanged(in after, out message)", programSource);
         Assert.Contains("DispatchScrollPresentationInterruptedAsync", coordinatorSource);
         Assert.Contains("SampleAndCancelAsync", coordinatorSource);
         Assert.Contains("snapshotProvider.LastRetainedInputSnapshot", coordinatorSource);

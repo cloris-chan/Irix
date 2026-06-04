@@ -720,6 +720,41 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Program_input_mapping_uses_app_message_dispatch_mapper()
+    {
+        var ownershipState = new InputOwnershipState();
+        var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
+        var dispatchMapper = new FocusResetDispatchMapper();
+        Program.TryMapInputForRuntime(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            hitTestResolver,
+            dispatchMapper,
+            out _);
+
+        var mapped = Program.TryMapInputForRuntime(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 2,
+                X: 500,
+                Y: 500,
+                Button: PointerButton.Left),
+            ownershipState,
+            hitTestResolver,
+            dispatchMapper,
+            out var message);
+
+        var reset = Assert.IsType<CounterMessage.Reset>(message);
+        Assert.True(mapped);
+        Assert.Equal(1, reset.Value);
+    }
+
+    [Fact]
     public void Hover_only_input_updates_model_ownership_and_button_state()
     {
         var app = new CounterApplication();
@@ -1146,6 +1181,26 @@ public sealed class CounterInputRouterTests
 
             message = null!;
             return false;
+        }
+    }
+
+    private readonly struct FocusResetDispatchMapper : IAppMessageDispatchMapper<CounterMessage, CounterMessage>
+    {
+        public bool TryMapInputMessage(
+            CounterMessage inputMessage,
+            in OwnershipSnapshot ownershipSnapshot,
+            out CounterMessage appMessage)
+        {
+            appMessage = new CounterMessage.Reset((int)ownershipSnapshot.FocusedTarget.Value);
+            return true;
+        }
+
+        public bool TryMapInputOwnershipChanged(
+            in OwnershipSnapshot ownershipSnapshot,
+            out CounterMessage appMessage)
+        {
+            appMessage = new CounterMessage.Reset((int)ownershipSnapshot.HoverChangeCount);
+            return true;
         }
     }
 

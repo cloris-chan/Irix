@@ -170,6 +170,7 @@ Current ownership:
 | `InputOwnershipState` / `OwnershipSnapshot` | `Irix.Poc` app runtime state | Tracks single-pointer hover, pressed, captured, and focused targets for Counter. Candidate runtime state, but not movable until multi-control ownership and action dispatch are no longer Counter-specific. |
 | `InputOwnershipEvent` / diagnostics ring | `Irix.Poc` diagnostics over app input state | Diagnostic observation only. It should follow the input owner if a future runtime extraction happens. |
 | `IInputHitTestService`, `IActionHitTestResolver`, and resolver/service implementations | `Irix.Poc` input adapter | Bridges physical input coordinates to `ActionId` through Poc/compositor hit targets. The first renderer-neutral service shape exists, but the identity model is still Counter/Poc `ActionId`. |
+| `IAppMessageDispatchMapper` and `CounterAppMessageDispatchMapper` | `Irix.Poc` app message adapter | Converts routed input results and ownership snapshots into `CounterMessage` dispatch values. This is the first input-route mapper shape; broader wheel, feedback, marker, and runtime dispatch ownership still needs separate extraction coverage. |
 | `CounterInputRouter` | `Irix.Poc` sample app router | Maps raw input plus ownership state to `CounterMessage`; it must not be promoted as framework runtime. |
 | `ControlVisualState`, `ControlVisualStateProjection`, `ControlVisualStatePropertyAdapter`, `ButtonPropertyBundle` | `Irix.Poc` control projection | Converts ownership snapshot into Counter button properties. Candidate concept, but current shape is button-specific and property-array publishing remains app-authoring glue. |
 
@@ -214,6 +215,7 @@ Required interface shapes before code moves:
 | Scroll presentation sampler | Samples and cancels active presented scroll on the compositor thread. | App model mutation, `CounterMessage`, or direct hit-test routing. |
 | Hit-test service | Resolves physical or logical input coordinates against the current retained/composited hit-test snapshot. | `ActionIdRegistry`, `CounterApplication`, or renderer ownership transfer. |
 | Input action mapper | Maps resolved control identity plus raw input to runtime messages. | Retained frame access, D3D12/backend types, or layout mutation. |
+| App message dispatch mapper | Maps routed input/control results and ownership snapshots into app dispatch messages. | Renderer/backend types, retained-frame access, or direct `Runtime<TModel, TMessage>` dispatch calls. |
 
 Extraction guardrails:
 
