@@ -149,6 +149,75 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public void CompositorHitTestSnapshot_marks_fixed_clip_remap_when_presented_layer_hits_inside_clip()
+    {
+        var hitTargets = new[]
+        {
+            new HitTestTarget(
+                new PixelRectangle(20, 20, 120, 40),
+                new ActionId(100),
+                default,
+                0,
+                1)
+        };
+        var layer = new CompositionLayer(
+            new CompositionLayerId(1),
+            0,
+            1,
+            new CompositionTransform(0, 8),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            new DrawRect(0, 0, 200, 60));
+        var snapshot = CompositorHitTestSnapshot.Create(hitTargets, 1, new CompositionFrame(layer));
+
+        Assert.True(snapshot.TryHitTestLogicalPixel(24, 28, out var result));
+        Assert.Equal(new ActionId(100), result.ActionId);
+        Assert.Equal(24f, result.LocalX);
+        Assert.Equal(20f, result.LocalY);
+        Assert.Equal(new CompositionLayerId(1), result.LayerId);
+        Assert.Equal(1, result.AppliedLayerCount);
+        Assert.True(result.MappedThroughComposition);
+        Assert.True(result.MappedThroughFixedClip);
+    }
+
+    [Fact]
+    public void CompositorHitTestSnapshot_does_not_occlude_static_target_when_fixed_clip_rejects_presented_layer()
+    {
+        var hitTargets = new[]
+        {
+            new HitTestTarget(
+                new PixelRectangle(20, 80, 120, 40),
+                new ActionId(100),
+                default,
+                0,
+                1),
+            new HitTestTarget(
+                new PixelRectangle(20, 20, 120, 40),
+                new ActionId(200),
+                default,
+                1,
+                1)
+        };
+        var layer = new CompositionLayer(
+            new CompositionLayerId(1),
+            1,
+            1,
+            new CompositionTransform(0, 60),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            new DrawRect(0, 0, 200, 60));
+        var snapshot = CompositorHitTestSnapshot.Create(hitTargets, 2, new CompositionFrame(layer));
+
+        Assert.True(snapshot.TryHitTestLogicalPixel(24, 88, out var result));
+        Assert.Equal(new ActionId(100), result.ActionId);
+        Assert.Equal(24f, result.LocalX);
+        Assert.Equal(88f, result.LocalY);
+        Assert.Equal(default, result.LayerId);
+        Assert.False(result.MappedThroughComposition);
+        Assert.False(result.MappedThroughFixedClip);
+    }
+
+    [Fact]
     public async Task TryGetActionIdAtPhysicalPixel_maps_physical_input_to_logical_hit_targets()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
