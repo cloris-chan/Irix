@@ -24,7 +24,9 @@ internal static class AppRuntimeDispatchAdapter
 }
 
 internal readonly struct CounterRuntimeDispatchSink(
-    Runtime<CounterModel, CounterMessage> Runtime) : IAppRuntimeDispatchSink<CounterMessage>
+    Runtime<CounterModel, CounterMessage> Runtime) :
+    IAppRuntimeDispatchSink<CounterMessage>,
+    IMessageDispatcher<CounterMessage>
 {
     public void Dispatch(CounterMessage message)
     {

@@ -84,7 +84,7 @@ For scroll presentation, the retained draw output already contains content at th
 
 This is intentionally D3D12-backed. Non-composition backends do not receive a CPU compatibility implementation for this tick path; they fail fast until a written blocker justifies a secondary path.
 
-Marker delivery is intentionally above the backend. `DrawingBackendCompositor` evaluates markers only after `ICompositionDrawingBackend.ExecuteComposition` returns successfully, records typed `CompositionAnimationMarkerEvent` values, and leaves message mapping to the UI runtime. `CompositionMarkerEventPump` drains queued events into an app-owned mapper and dispatches mapped messages through `IMessageDispatcher<TMessage>`. Device-lost/recovered skipped ticks do not publish marker events because presentation did not commit.
+Marker delivery is intentionally above the backend. `DrawingBackendCompositor` evaluates markers only after `ICompositionDrawingBackend.ExecuteComposition` returns successfully, records typed `CompositionAnimationMarkerEvent` values, and leaves message mapping to the UI runtime. `CompositionMarkerEventPump` drains queued events into an app-owned mapper and the Poc runtime path dispatches mapped messages through the app runtime dispatch sink. Device-lost/recovered skipped ticks do not publish marker events because presentation did not commit.
 
 ## Diagnostics
 

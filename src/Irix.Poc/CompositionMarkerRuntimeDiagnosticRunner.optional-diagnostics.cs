@@ -25,6 +25,7 @@ internal static class CompositionMarkerRuntimeDiagnosticRunner
         using var drawingCompositor = new DrawingBackendCompositor(backend);
         await using var compositorLoop = new CompositorLoop(translator, drawingCompositor);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), compositorLoop);
+        var runtimeDispatchSink = new CounterRuntimeDispatchSink(runtime);
         await runtime.StartAsync(cancellationToken);
         await compositorLoop.RequestRenderAndWaitAsync(cancellationToken);
 
@@ -44,7 +45,7 @@ internal static class CompositionMarkerRuntimeDiagnosticRunner
         _ = await drawingCompositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(80), cancellationToken);
 
         var mapper = new CounterCompositionMarkerMapper();
-        var dispatchResult = CompositionMarkerEventPump.DrainAndDispatch(drawingCompositor, ref mapper, runtime);
+        var dispatchResult = CompositionMarkerEventPump.DrainAndDispatch(drawingCompositor, ref mapper, runtimeDispatchSink);
         using var waitTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         waitTimeout.CancelAfter(RuntimeDispatchTimeout);
         await WaitForCountAsync(runtime, 1, waitTimeout.Token);
