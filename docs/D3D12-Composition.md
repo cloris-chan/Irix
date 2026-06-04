@@ -139,11 +139,19 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 
 `--diagnose-composition-skip` must prove:
 
+- transform/opacity tick skip when no compositor-only plan is active
 - transform/opacity tick skip when the backend does not implement composition
+- transform/opacity tick skip when no retained frame exists
+- transform/opacity tick skip when the active plan no longer fits the retained frame
+- fixed-clip scroll tick skip when no scroll presentation plan is active
 - fixed-clip scroll tick skip when the backend lacks `ScrollPresentation`
-- retained-update scroll presentation skip before falling back to normal retained-frame render
+- fixed-clip scroll tick skip when no retained frame exists
+- fixed-clip scroll tick skip when the active plan no longer fits the retained frame
+- retained-update scroll presentation skip when no scroll presentation plan is active before falling back to normal retained-frame render
+- retained-update scroll presentation skip when the backend lacks `ScrollPresentation` before falling back to normal retained-frame render
+- device-lost recovery records an explicit skipped compositor execution
 - successful compositor execution clears the skip reason to `None`
-- required/backend capabilities, pacing, layer count, and command count are machine-readable
+- skip state, required/backend capabilities, pacing, layer count, and command count are machine-readable
 
 `--diagnose-scroll-presentation-runtime` must prove:
 
