@@ -392,9 +392,9 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
     {
         session.Coordinator.AddPendingPixels(WheelDownPixels(1));
         await session.Coordinator.RunUntilIdleAsync(session.Runtime, session.CompositorLoop, session.Translator, ScrollTargetKey, cancellationToken);
+        var probe = await WaitForPresentedActionAsync(session, FixedPointerMove.X, FixedPointerMove.Y, ActionIdRegistry.Decrement, cancellationToken);
         var active = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedScrollY);
-        var hit = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var action);
-        return new ScrollPresentationLifecycleActiveProbe(active, presentedScrollY, hit, action, session.Compositor.RenderCount);
+        return new ScrollPresentationLifecycleActiveProbe(active, presentedScrollY, probe.Hit, probe.Action, session.Compositor.RenderCount);
     }
 
     private static async Task<ScrollPresentationLifecycleScenarioDiagnostics> CaptureLifecycleScenarioAsync(

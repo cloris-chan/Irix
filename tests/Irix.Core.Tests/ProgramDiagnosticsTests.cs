@@ -2426,7 +2426,9 @@ public sealed class ProgramDiagnosticsTests
     {
         Assert.Equal(name, diagnostics.Name);
         Assert.True(diagnostics.ActiveBefore);
+        Assert.True(diagnostics.PresentedBefore > 0);
         Assert.True(diagnostics.HitBefore);
+        Assert.Equal(ActionIdRegistry.Decrement, diagnostics.ActionBefore);
         Assert.False(diagnostics.ActiveAfter);
         Assert.Equal(expectedHitAfter, diagnostics.HitAfter);
         Assert.Equal(expectedActionAfter, diagnostics.ActionAfter);
