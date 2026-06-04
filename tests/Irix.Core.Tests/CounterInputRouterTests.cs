@@ -1971,6 +1971,38 @@ public sealed class CounterInputRouterTests
         Assert.True(ScrollPresentationCoordinator.ShouldStartRetargetSegment(state, decision));
     }
 
+    [Theory]
+    [InlineData(240, 54)]
+    [InlineData(0, -54)]
+    public async Task ScrollPresentationCoordinator_boundary_delta_does_not_sample_or_restart_same_target_segment(
+        double boundaryPosition,
+        double pendingPixels)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var coordinator = new ScrollPresentationCoordinator();
+        var runtime = new RecordingScrollPresentationRuntimeAdapter(
+            new ScrollState
+            {
+                Position = boundaryPosition,
+                TargetPosition = boundaryPosition,
+                MaxScrollY = 240,
+                HasMaxScrollY = true
+            });
+        var compositor = new RecordingScrollPresentationCompositorAdapter();
+        var snapshotProvider = new FixedScrollPresentationSnapshotProvider(BuildScrollSnapshot());
+
+        coordinator.AddPendingPixels(pendingPixels);
+        await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, new NodeKey(1), cancellationToken);
+
+        Assert.Empty(runtime.Decisions);
+        Assert.Equal(0, compositor.SampleAndCancelCount);
+        Assert.Empty(compositor.Declarations);
+        Assert.Equal(0, coordinator.RetargetCount);
+        Assert.Equal(0, coordinator.PendingPixels);
+        Assert.Equal(boundaryPosition, runtime.CurrentScroll.Position);
+        Assert.Equal(boundaryPosition, runtime.CurrentScroll.TargetPosition);
+    }
+
     [Fact]
     public async Task ScrollPresentationCoordinator_replacement_segment_starts_from_sampled_presented_value()
     {
