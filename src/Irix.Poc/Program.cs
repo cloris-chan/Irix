@@ -77,6 +77,7 @@ internal static partial class Program
         var counterApplication = new CounterApplication();
         ConfigureDebugUi(args, counterApplication, window, d3d12Renderer, drawCommandTranslator, displayScale);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(counterApplication, compositorLoop);
+        var runtimeDispatchSink = new CounterRuntimeDispatchSink(runtime);
         SetDebugUiRuntime(runtime);
         var scrollFramePump = new ScrollFramePump();
         var scrollPresentationCoordinator = new ScrollPresentationCoordinator();
@@ -94,7 +95,7 @@ internal static partial class Program
                 var feedbackMapper = new CounterAppMessageDispatchMapper();
                 if (TryMapMaxScrollFeedbackForRuntime(maxScrollY, feedbackMapper, out var message) && message is not null)
                 {
-                    runtime.Dispatch(message);
+                    _ = TryDispatchAppMessageForRuntime(message, runtimeDispatchSink);
                 }
             }
         };
@@ -164,7 +165,7 @@ internal static partial class Program
                 }
                 else if (message is not null)
                 {
-                    runtime.Dispatch(message);
+                    _ = TryDispatchAppMessageForRuntime(message, runtimeDispatchSink);
                 }
             }
         }
@@ -361,6 +362,14 @@ internal static partial class Program
         where TDispatchSink : struct, IWheelInputDispatchSink
     {
         return ScrollInputDispatchAdapter.TryDispatchWheelRaw(wheel, dispatchSink);
+    }
+
+    internal static bool TryDispatchAppMessageForRuntime<TDispatchSink>(
+        CounterMessage? message,
+        TDispatchSink dispatchSink)
+        where TDispatchSink : struct, IAppRuntimeDispatchSink<CounterMessage>
+    {
+        return AppRuntimeDispatchAdapter.TryDispatchMessage(message, dispatchSink);
     }
 
 }

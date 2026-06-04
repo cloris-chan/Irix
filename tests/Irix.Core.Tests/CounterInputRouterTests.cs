@@ -792,6 +792,33 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Program_runtime_dispatch_uses_app_runtime_dispatch_sink()
+    {
+        var recorder = new AppRuntimeDispatchRecorder();
+        var sink = new RecordingAppRuntimeDispatchSink(recorder);
+        var message = new CounterMessage.Reset(7);
+
+        var dispatched = Program.TryDispatchAppMessageForRuntime(message, sink);
+
+        Assert.True(dispatched);
+        Assert.Same(message, recorder.LastMessage);
+        Assert.Equal(1, recorder.DispatchCount);
+    }
+
+    [Fact]
+    public void Program_runtime_dispatch_skips_null_message()
+    {
+        var recorder = new AppRuntimeDispatchRecorder();
+        var sink = new RecordingAppRuntimeDispatchSink(recorder);
+
+        var dispatched = Program.TryDispatchAppMessageForRuntime(null, sink);
+
+        Assert.False(dispatched);
+        Assert.Null(recorder.LastMessage);
+        Assert.Equal(0, recorder.DispatchCount);
+    }
+
+    [Fact]
     public void Hover_only_input_updates_model_ownership_and_button_state()
     {
         var app = new CounterApplication();
@@ -1261,6 +1288,22 @@ public sealed class CounterInputRouterTests
         public void DispatchWheelPixels(double pixels)
         {
             Recorder.LastPixels = pixels;
+            Recorder.DispatchCount++;
+        }
+    }
+
+    private sealed class AppRuntimeDispatchRecorder
+    {
+        public CounterMessage? LastMessage { get; set; }
+        public int DispatchCount { get; set; }
+    }
+
+    private readonly struct RecordingAppRuntimeDispatchSink(
+        AppRuntimeDispatchRecorder Recorder) : IAppRuntimeDispatchSink<CounterMessage>
+    {
+        public void Dispatch(CounterMessage message)
+        {
+            Recorder.LastMessage = message;
             Recorder.DispatchCount++;
         }
     }
