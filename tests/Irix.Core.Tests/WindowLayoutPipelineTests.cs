@@ -1465,6 +1465,15 @@ public sealed class WindowLayoutPipelineTests
         return x == 32 && y == 140 ? new ActionId(1) : ActionId.None;
     }
 
+    private static void AssertCompositionInvalidation(
+        WindowDrawCommandTranslator translator,
+        CompositionRenderInvalidationKind expectedKind,
+        bool cancelsScrollPresentation)
+    {
+        Assert.Equal(expectedKind, translator.LastCompositionInvalidation.Kind);
+        Assert.Equal(cancelsScrollPresentation, translator.LastCompositionInvalidation.CancelsScrollPresentation);
+    }
+
     private sealed class NoOpBackend : IDrawingBackend
     {
         public void BeginFrame(in FrameContext frameContext) { }
@@ -1497,6 +1506,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, translator.LastLayoutRebuildReason);
         Assert.Contains(translator.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.StyleOnly);
+        AssertCompositionInvalidation(translator, CompositionRenderInvalidationKind.None, cancelsScrollPresentation: false);
     }
 
     [Fact]
@@ -1514,6 +1524,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.LayoutAffecting, translator.LastLayoutRebuildReason);
         Assert.Contains(translator.LastDirtyClassifications, classification => classification is { DfsIndex: 0, Reason: LayoutRebuildReason.LayoutAffecting });
+        AssertCompositionInvalidation(translator, CompositionRenderInvalidationKind.LayoutAffecting, cancelsScrollPresentation: true);
     }
 
     [Fact]
@@ -1546,6 +1557,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.ViewportChanged, translator.LastLayoutRebuildReason);
         Assert.Empty(translator.LastDirtyClassifications);
+        AssertCompositionInvalidation(translator, CompositionRenderInvalidationKind.ViewportChanged, cancelsScrollPresentation: true);
     }
 
     [Fact]
@@ -1648,6 +1660,51 @@ public sealed class WindowLayoutPipelineTests
         // Layout should reflect updated content
         var textContent = frame2.Resources.Resolve(frame2.Commands.Memory.Span[0].Text).ToString();
         Assert.Equal("Count: 1", textContent);
+    }
+
+    [Fact]
+    public void WindowDrawCommandTranslator_text_size_diff_maps_to_text_invalidation()
+    {
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+        var root1 = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeBuilder.Text(_arena, "Short", new NodeKey(2)));
+        var root2 = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeBuilder.Text(_arena, "Longer text", new NodeKey(2)));
+
+        using var batch1 = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root1, _arena.GetOrCreateSnapshot()));
+        using var frame1 = translator.Translate(batch1);
+        using var batch2 = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(root1, _arena.GetOrCreateSnapshot()), new VirtualNodeTree(root2, _arena.GetOrCreateSnapshot()));
+        using var frame2 = translator.Translate(batch2);
+
+        Assert.Equal(LayoutRebuildReason.TextSizeAffecting, translator.LastLayoutRebuildReason);
+        Assert.Contains(translator.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.TextSizeAffecting);
+        AssertCompositionInvalidation(translator, CompositionRenderInvalidationKind.TextSizeAffecting, cancelsScrollPresentation: true);
+    }
+
+    [Fact]
+    public void WindowDrawCommandTranslator_tree_diff_maps_to_tree_invalidation()
+    {
+        var translator = new WindowDrawCommandTranslator(new FakeWindow(
+            new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540))));
+        var root1 = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)));
+        var root2 = VirtualNodeFactory.ScrollContainer(
+            1,
+            VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)),
+            VirtualNodeBuilder.Text(_arena, "B", new NodeKey(3)));
+
+        using var batch1 = VirtualNodeDiffer.CreatePatchBatch(default, new VirtualNodeTree(root1, _arena.GetOrCreateSnapshot()));
+        using var frame1 = translator.Translate(batch1);
+        using var batch2 = VirtualNodeDiffer.CreatePatchBatch(new VirtualNodeTree(root1, _arena.GetOrCreateSnapshot()), new VirtualNodeTree(root2, _arena.GetOrCreateSnapshot()));
+        using var frame2 = translator.Translate(batch2);
+
+        Assert.Equal(LayoutRebuildReason.TreeStructure, translator.LastLayoutRebuildReason);
+        Assert.Contains(translator.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.TreeStructure);
+        AssertCompositionInvalidation(translator, CompositionRenderInvalidationKind.TreeStructure, cancelsScrollPresentation: true);
     }
 
     [Fact]
@@ -1777,6 +1834,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.True(renderRequestMetrics.MaxScrollY < initialMetrics.MaxScrollY);
         Assert.Equal(translator.LastMaxScrollY, renderRequestMetrics.MaxScrollY);
         Assert.Equal(callbackMaxScrollYs[^1], renderRequestMetrics.MaxScrollY);
+        AssertCompositionInvalidation(translator, CompositionRenderInvalidationKind.ViewportChanged, cancelsScrollPresentation: true);
         Assert.Equal(initialFrame.Commands.Count, renderRequestFrame.Commands.Count);
     }
 
