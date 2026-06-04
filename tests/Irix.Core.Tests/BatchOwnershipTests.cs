@@ -312,6 +312,7 @@ public sealed class BatchOwnershipTests
         await loop.StartCompositionScrollPresentationAsync(oldDeclaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
         Assert.Equal(1, compositor.TickCount);
 
+        var staleSkipsBeforeCancel = loop.ScrollPresentationStaleDelayedTickSkipCount;
         var sample = await loop.SampleAndCancelCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
         var replacementDeclaration = new CompositionScrollPresentationDeclaration(
             new NodeKey(1),
@@ -320,12 +321,14 @@ public sealed class BatchOwnershipTests
         await loop.StartCompositionScrollPresentationAsync(replacementDeclaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
         var tickCountAfterReplacement = compositor.TickCount;
 
-        await Task.Delay(90, cancellationToken);
-        await loop.RequestRenderAndWaitAsync(cancellationToken);
+        await WaitForConditionAsync(
+            () => loop.ScrollPresentationStaleDelayedTickSkipCount > staleSkipsBeforeCancel,
+            cancellationToken);
 
         Assert.True(sample.HasValue);
         Assert.Equal(2, tickCountAfterReplacement);
         Assert.Equal(tickCountAfterReplacement, compositor.TickCount);
+        Assert.Equal(staleSkipsBeforeCancel + 1, loop.ScrollPresentationStaleDelayedTickSkipCount);
         Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
         Assert.Equal(12, presentedScrollY);
     }
@@ -396,6 +399,7 @@ public sealed class BatchOwnershipTests
         await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
         Assert.Equal(1, compositor.TickCount);
 
+        var staleSkipsBeforeInvalidation = loop.ScrollPresentationStaleDelayedTickSkipCount;
         var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>(
         [
             new VirtualNodePatch(
@@ -406,10 +410,11 @@ public sealed class BatchOwnershipTests
         await loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken);
         var tickCountAfterInvalidation = compositor.TickCount;
 
-        await Task.Delay(90, cancellationToken);
-        await loop.RequestRenderAndWaitAsync(cancellationToken);
+        await WaitForConditionAsync(
+            () => loop.ScrollPresentationStaleDelayedTickSkipCount > staleSkipsBeforeInvalidation,
+            cancellationToken);
 
-        Assert.Equal(2, compositor.RenderCallCount);
+        Assert.Equal(1, compositor.RenderCallCount);
         Assert.Equal(1, compositor.ClearCount);
         Assert.False(compositor.PresentationActiveDuringLastRender);
         Assert.Equal(1, loop.ScrollPresentationCancelCount);
@@ -419,6 +424,7 @@ public sealed class BatchOwnershipTests
         Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
         Assert.Equal(1, tickCountAfterInvalidation);
         Assert.Equal(tickCountAfterInvalidation, compositor.TickCount);
+        Assert.Equal(staleSkipsBeforeInvalidation + 1, loop.ScrollPresentationStaleDelayedTickSkipCount);
     }
 
     [Fact]

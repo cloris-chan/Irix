@@ -22,6 +22,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     private int _scrollPresentationGeneration;
     private long _scrollPresentationTickCount;
     private long _scrollPresentationCancelCount;
+    private long _scrollPresentationStaleDelayedTickSkipCount;
     private RenderCompletionWaitGroup? _scrollPresentationIdleWaitGroup;
 
     public CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor)
@@ -96,6 +97,8 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     internal long ScrollPresentationTickCount => Volatile.Read(ref _scrollPresentationTickCount);
 
     internal long ScrollPresentationCancelCount => Volatile.Read(ref _scrollPresentationCancelCount);
+
+    internal long ScrollPresentationStaleDelayedTickSkipCount => Volatile.Read(ref _scrollPresentationStaleDelayedTickSkipCount);
 
     partial void RecordScrollPresentationCancellation(
         byte reason,
@@ -599,7 +602,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
 
         if (delay.StopwatchTicks <= 0)
         {
-            _channel.Writer.TryWrite(CompositorWorkItem.TickScrollPresentation(generation));
+            _ = TryQueueScrollPresentationTick(generation);
             return;
         }
 
@@ -616,13 +619,29 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 await Task.Delay(delayMilliseconds, _disposeCancellationTokenSource.Token);
             }
 
-            if (!_disposeCancellationTokenSource.IsCancellationRequested)
+            if (!_disposeCancellationTokenSource.IsCancellationRequested
+                && !TryQueueScrollPresentationTick(generation))
             {
-                _channel.Writer.TryWrite(CompositorWorkItem.TickScrollPresentation(generation));
+                Interlocked.Increment(ref _scrollPresentationStaleDelayedTickSkipCount);
             }
         }
         catch (OperationCanceledException) when (_disposeCancellationTokenSource.IsCancellationRequested)
         {
+        }
+    }
+
+    private bool TryQueueScrollPresentationTick(int generation)
+    {
+        lock (_compositionScheduleGate)
+        {
+            if (!_scrollPresentationSchedule.IsActive
+                || _scrollPresentationSchedule.Generation != generation
+                || !_scrollPresentationTickQueued)
+            {
+                return false;
+            }
+
+            return _channel.Writer.TryWrite(CompositorWorkItem.TickScrollPresentation(generation));
         }
     }
 
