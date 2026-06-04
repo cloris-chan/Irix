@@ -2327,6 +2327,7 @@ public sealed class ProgramDiagnosticsTests
             420,
             1f,
             expectedHitAfter: true,
+            expectedActionAfter: ActionIdRegistry.Decrement,
             expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
             explicitCancelCount: 1,
@@ -2339,6 +2340,7 @@ public sealed class ProgramDiagnosticsTests
             540,
             1.5f,
             expectedHitAfter: false,
+            expectedActionAfter: ActionId.None,
             expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
             explicitCancelCount: 1,
@@ -2351,6 +2353,7 @@ public sealed class ProgramDiagnosticsTests
             480,
             1f,
             expectedHitAfter: true,
+            expectedActionAfter: ActionIdRegistry.Decrement,
             expectedCancelReason: ScrollPresentationCancellationReason.RenderInvalidation,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.ViewportChanged,
             explicitCancelCount: 0,
@@ -2363,6 +2366,7 @@ public sealed class ProgramDiagnosticsTests
             540,
             1f,
             expectedHitAfter: true,
+            expectedActionAfter: ActionIdRegistry.Decrement,
             expectedCancelReason: ScrollPresentationCancellationReason.Explicit,
             expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
             explicitCancelCount: 1,
@@ -2409,6 +2413,7 @@ public sealed class ProgramDiagnosticsTests
         int expectedViewportHeight,
         float expectedScale,
         bool expectedHitAfter,
+        ActionId expectedActionAfter,
         ScrollPresentationCancellationReason expectedCancelReason,
         CompositionRenderInvalidationKind expectedCancelInvalidationKind,
         long explicitCancelCount,
@@ -2419,6 +2424,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(diagnostics.HitBefore);
         Assert.False(diagnostics.ActiveAfter);
         Assert.Equal(expectedHitAfter, diagnostics.HitAfter);
+        Assert.Equal(expectedActionAfter, diagnostics.ActionAfter);
         Assert.Equal(1, diagnostics.CancelCount);
         Assert.Equal(expectedCancelReason, diagnostics.CancelReason);
         Assert.Equal(expectedCancelInvalidationKind, diagnostics.CancelInvalidationKind);
