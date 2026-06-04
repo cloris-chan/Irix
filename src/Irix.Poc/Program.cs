@@ -91,7 +91,11 @@ internal static partial class Program
             {
                 lastKnownMaxScrollY = maxScrollY;
                 _ = compositorLoop.CancelCompositionScrollPresentationAsync();
-                runtime.Dispatch(new CounterMessage.UpdateMaxScrollY(maxScrollY));
+                var feedbackMapper = new CounterAppMessageDispatchMapper();
+                if (TryMapMaxScrollFeedbackForRuntime(maxScrollY, feedbackMapper, out var message) && message is not null)
+                {
+                    runtime.Dispatch(message);
+                }
             }
         };
 
@@ -328,6 +332,22 @@ internal static partial class Program
         if (before != after)
         {
             return dispatchMapper.TryMapInputOwnershipChanged(in after, out message);
+        }
+
+        message = null;
+        return false;
+    }
+
+    internal static bool TryMapMaxScrollFeedbackForRuntime<TFeedbackMapper>(
+        double maxScrollY,
+        TFeedbackMapper feedbackMapper,
+        out CounterMessage? message)
+        where TFeedbackMapper : struct, IControlFeedbackDispatchMapper<CounterMessage>
+    {
+        if (feedbackMapper.TryMapMaxScrollY(maxScrollY, out var mappedMessage))
+        {
+            message = mappedMessage;
+            return true;
         }
 
         message = null;

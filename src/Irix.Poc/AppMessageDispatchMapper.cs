@@ -12,7 +12,14 @@ internal interface IAppMessageDispatchMapper<TInputMessage, TAppMessage>
         out TAppMessage appMessage);
 }
 
-internal readonly struct CounterAppMessageDispatchMapper : IAppMessageDispatchMapper<CounterMessage, CounterMessage>
+internal interface IControlFeedbackDispatchMapper<TAppMessage>
+{
+    bool TryMapMaxScrollY(double maxScrollY, out TAppMessage appMessage);
+}
+
+internal readonly struct CounterAppMessageDispatchMapper :
+    IAppMessageDispatchMapper<CounterMessage, CounterMessage>,
+    IControlFeedbackDispatchMapper<CounterMessage>
 {
     public bool TryMapInputMessage(
         CounterMessage inputMessage,
@@ -30,6 +37,12 @@ internal readonly struct CounterAppMessageDispatchMapper : IAppMessageDispatchMa
         out CounterMessage appMessage)
     {
         appMessage = new CounterMessage.InputVisualStateChanged(ownershipSnapshot);
+        return true;
+    }
+
+    public bool TryMapMaxScrollY(double maxScrollY, out CounterMessage appMessage)
+    {
+        appMessage = new CounterMessage.UpdateMaxScrollY(maxScrollY);
         return true;
     }
 }

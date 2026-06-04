@@ -755,6 +755,30 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Counter_app_message_dispatch_mapper_maps_max_scroll_feedback()
+    {
+        var mapper = new CounterAppMessageDispatchMapper();
+
+        var mapped = mapper.TryMapMaxScrollY(42.5, out var message);
+
+        var update = Assert.IsType<CounterMessage.UpdateMaxScrollY>(message);
+        Assert.True(mapped);
+        Assert.Equal(42.5, update.MaxScrollY);
+    }
+
+    [Fact]
+    public void Program_feedback_mapping_uses_control_feedback_dispatch_mapper()
+    {
+        var feedbackMapper = new MaxScrollResetDispatchMapper();
+
+        var mapped = Program.TryMapMaxScrollFeedbackForRuntime(42.5, feedbackMapper, out var message);
+
+        var reset = Assert.IsType<CounterMessage.Reset>(message);
+        Assert.True(mapped);
+        Assert.Equal(42, reset.Value);
+    }
+
+    [Fact]
     public void Hover_only_input_updates_model_ownership_and_button_state()
     {
         var app = new CounterApplication();
@@ -1200,6 +1224,15 @@ public sealed class CounterInputRouterTests
             out CounterMessage appMessage)
         {
             appMessage = new CounterMessage.Reset((int)ownershipSnapshot.HoverChangeCount);
+            return true;
+        }
+    }
+
+    private readonly struct MaxScrollResetDispatchMapper : IControlFeedbackDispatchMapper<CounterMessage>
+    {
+        public bool TryMapMaxScrollY(double maxScrollY, out CounterMessage appMessage)
+        {
+            appMessage = new CounterMessage.Reset((int)maxScrollY);
             return true;
         }
     }
