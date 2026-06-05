@@ -343,6 +343,80 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_layer_content_cache_hit_applies_latest_fixed_clip_scroll_state()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        var style = resources.AddTextStyle(TextStyle.Default);
+        var text = resources.AddText("cached scroll");
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, -24, 140, 40), ClipBounds: new DrawRect(0, 0, 200, 60), Color: DrawColor.Opaque(1, 2, 3)),
+            new(DrawCommandKind.DrawTextRun, Rect: new DrawRect(16, -24, 140, 40), Resource: style, Text: text, ClipBounds: new DrawRect(0, 0, 200, 60), Color: DrawColor.Opaque(240, 240, 240))
+        };
+        var cache = new D3D12CompositionLayerContentCache();
+        var firstFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(7),
+            CommandStart: 0,
+            CommandCount: 2,
+            new CompositionTransform(0, 30),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            new DrawRect(0, 0, 200, 60)));
+
+        var first = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            firstFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(0, first.LayerCacheHits);
+        Assert.Equal(1, first.LayerCacheMisses);
+        Assert.Equal(2, first.CachedLayerCommands);
+        Assert.Equal(16, rects.Span[0].X);
+        Assert.Equal(6, rects.Span[0].Y);
+        Assert.Equal(new IntegerScissorRect(0, 0, 200, 60), rects.Span[0].Scissor);
+        Assert.Equal(new DrawRect(0, 0, 200, 60), first.ExecuteResult.TextClipDiagnostics.LastEffectiveTextClip.Bounds);
+
+        rects.Reset();
+        texts.Reset();
+        var secondFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(7),
+            CommandStart: 0,
+            CommandCount: 2,
+            new CompositionTransform(0, 44),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            new DrawRect(8, 10, 180, 44)));
+
+        var second = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            secondFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(1, second.LayerCacheHits);
+        Assert.Equal(0, second.LayerCacheMisses);
+        Assert.Equal(2, second.CachedLayerCommands);
+        Assert.Equal(16, rects.Span[0].X);
+        Assert.Equal(20, rects.Span[0].Y);
+        Assert.Equal(new IntegerScissorRect(8, 10, 188, 54), rects.Span[0].Scissor);
+        Assert.Equal(new DrawRect(8, 10, 180, 44), second.ExecuteResult.TextClipDiagnostics.LastEffectiveTextClip.Bounds);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_reuses_layer_content_cache_for_multiple_disjoint_layers()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
