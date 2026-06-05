@@ -35,10 +35,16 @@ internal static class CompositionMarkerRuntimeDiagnosticRunner
             CompositionTransformAnimation.Identity,
             CompositionScalarAnimation.Constant(1f),
             new CompositionAnimationInstanceId(1),
-            [new CompositionAnimationMarker(
-                new CompositionAnimationMarkerId(1),
-                CounterCompositionMarkerRuntimeEventIds.Increment,
-                CompositionAnimationMarkerTrigger.AtProgress(0.5f))]);
+            [
+                new CompositionAnimationMarker(
+                    new CompositionAnimationMarkerId(1),
+                    CounterCompositionMarkerRuntimeEventIds.Increment,
+                    CompositionAnimationMarkerTrigger.AtProgress(0.5f)),
+                new CompositionAnimationMarker(
+                    new CompositionAnimationMarkerId(2),
+                    new CompositionRuntimeEventId(404),
+                    CompositionAnimationMarkerTrigger.AtProgress(0.5f))
+            ]);
         drawingCompositor.SetCompositionAnimationDeclaration(declaration, translator.LastRetainedInputSnapshot!);
 
         _ = await drawingCompositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(20), cancellationToken);

@@ -139,7 +139,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 
 - marker queue drain count
 - dispatched runtime message count
-- unmapped marker count
+- unmapped marker count from unknown runtime event ids in the same drain path
 - final runtime model state after dispatch
 - compositor execution count for the marker-producing ticks
 

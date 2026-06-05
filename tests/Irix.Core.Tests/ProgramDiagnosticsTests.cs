@@ -2019,7 +2019,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
-    public async Task Composition_marker_runtime_diagnostic_maps_marker_event_to_counter_message()
+    public async Task Composition_marker_runtime_diagnostic_maps_marker_event_and_reports_unmapped_events()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var root = FindRepoRoot();
@@ -2030,7 +2030,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-composition-marker-runtime", programSource);
         Assert.Contains("CompositionMarkerRuntimeDiagnosticRunner.RunAsync", programSource);
-        Assert.Equal("composition-marker-runtime actual drainedEvents=1 dispatchedMessages=1 unmappedEvents=0 finalCount=1 executeCompositionCount=2 layerId=6", summary);
+        Assert.Equal("composition-marker-runtime actual drainedEvents=2 dispatchedMessages=1 unmappedEvents=1 finalCount=1 executeCompositionCount=2 layerId=6", summary);
     }
 
     [Fact]
