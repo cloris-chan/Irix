@@ -2045,7 +2045,7 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Contains("--diagnose-composition-skip", programSource);
         Assert.Contains("CompositionSkipDiagnosticRunner.Run", programSource);
-        Assert.Contains("Composition skip diagnostics", design);
+        Assert.Contains("`--diagnose-composition-skip` must prove:", design);
         Assert.Equal(
             "composition-skip actual transformNoPlan=TransformOpacityTick:NoActivePlan:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=0:commands=0 transformBackend=TransformOpacityTick:BackendDoesNotImplementComposition:isSkipped=True:required=TransformOpacity:backend=None:pacing=SoftwareTimer:layers=1:commands=1 transformMissingFrame=TransformOpacityTick:MissingRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=0 transformInvalidFrame=TransformOpacityTick:InvalidPlanForRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=1 scrollNoPlan=ScrollPresentationTick:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=0 scrollCapability=ScrollPresentationTick:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 scrollMissingFrame=ScrollPresentationTick:MissingRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=0 scrollInvalidFrame=ScrollPresentationTick:InvalidPlanForRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=1 retainedUpdateNoPlan=RetainedUpdateScrollPresentation:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=1 retainedUpdateCapability=RetainedUpdateScrollPresentation:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 deviceLostRecovered=TransformOpacityTick:DeviceLostRecovered:isSkipped=True:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executed=TransformOpacityTick:None:isSkipped=False:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executedCompositionCount=1 recoveredCompositionCount=1",
             summary);
@@ -2711,7 +2711,7 @@ public sealed class ProgramDiagnosticsTests
         var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
 
         Assert.Contains("GitHub Actions quota is currently exhausted", status);
-        Assert.Contains("local guard summary is the current status source", design);
+        Assert.Contains("current CI/source-of-truth status lives in [Project_Status_and_Todo.md]", design);
         Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
         Assert.Contains("Run `Smoke` before/after broad changes", worklist);
         Assert.Contains("Do not add artifact-upload work until Actions quota returns", worklist);
