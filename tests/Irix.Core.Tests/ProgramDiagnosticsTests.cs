@@ -2454,6 +2454,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
         Assert.Contains("explicitCancels=0 invalidationCancels=1", summary);
         Assert.Contains("staleDelayedTickSkipsAfterLifecycle=0 staleDelayedTickSkipsAfterStaleWindow=1", summary);
+        Assert.Contains("staleQueuedTickSuppressed=True", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-tree", summary);
         Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=TreeStructure", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-layout", summary);
@@ -2525,6 +2526,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(diagnostics.CompositionTickCountAfterLifecycle, diagnostics.CompositionTickCountAfterStaleWindow);
         Assert.Equal(diagnostics.LoopTickCountAfterLifecycle, diagnostics.LoopTickCountAfterStaleWindow);
         Assert.Equal(diagnostics.StaleDelayedTickSkipsAfterLifecycle + 1, diagnostics.StaleDelayedTickSkipsAfterStaleWindow);
+        Assert.True(diagnostics.StaleQueuedTickSuppressed);
         Assert.False(diagnostics.ActiveAfterStaleWindow);
         Assert.Equal(expectedHitAfter, diagnostics.HitAfterStaleWindow);
         Assert.Equal(diagnostics.ActionAfter, diagnostics.ActionAfterStaleWindow);

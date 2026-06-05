@@ -1275,6 +1275,48 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task CompositionScrollPresentationMarker_clear_presentation_discards_pending_events()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(40, 10),
+            new CompositionAnimationInstanceId(16),
+            [new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId(7),
+                new CompositionRuntimeEventId(106),
+                CompositionAnimationMarkerTrigger.EveryTick())]), pipeline.LastRetainedInputSnapshot!);
+
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        Assert.True(compositor.TryGetPresentedScrollY(new NodeKey(1), out _));
+        Assert.Equal(1, compositor.PendingCompositionMarkerEventCount);
+
+        compositor.ClearCompositionScrollPresentation();
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        Assert.False(compositor.TryGetPresentedScrollY(new NodeKey(1), out _));
+        Assert.Equal(0, compositor.PendingCompositionMarkerEventCount);
+        Assert.Equal(0, compositor.DrainCompositionMarkerEvents(events));
+    }
+
+    [Fact]
     public async Task CompositionScrollPresentationMarker_device_lost_before_first_tick_does_not_publish_or_backfill()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

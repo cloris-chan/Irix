@@ -84,7 +84,7 @@ For scroll presentation, the retained draw output already contains content at th
 
 This is intentionally D3D12-backed. Non-composition backends do not receive a CPU compatibility implementation for this tick path; they fail fast until a written blocker justifies a secondary path.
 
-Marker delivery is intentionally above the backend. `DrawingBackendCompositor` evaluates markers only after `ICompositionDrawingBackend.ExecuteComposition` returns successfully, records typed `CompositionAnimationMarkerEvent` values, and leaves message mapping to the UI runtime. `CompositionMarkerEventPump` drains queued events into an app-owned mapper and the Poc runtime path dispatches mapped messages through the app runtime dispatch sink. Device-lost/recovered skipped ticks do not publish marker events because presentation did not commit.
+Marker delivery is intentionally above the backend. `DrawingBackendCompositor` evaluates markers only after `ICompositionDrawingBackend.ExecuteComposition` returns successfully, records typed `CompositionAnimationMarkerEvent` values, and leaves message mapping to the UI runtime. `CompositionMarkerEventPump` drains queued events into an app-owned mapper and the Poc runtime path dispatches mapped messages through the app runtime dispatch sink. Device-lost/recovered skipped ticks do not publish marker events because presentation did not commit, and clearing an active scroll presentation discards pending scroll marker events with the canceled presentation state.
 
 ## Diagnostics
 
@@ -166,6 +166,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - cancel count, last cancel reason, and last render invalidation kind are machine-readable
 - explicit, viewport-invalidation, and max-scroll-invalidation cancellation counts are separately visible when diagnostics are enabled
 - render-invalidation cancellation clears active presentation before the retained frame render path observes it
+- stale queued delayed ticks after lifecycle cancellation are skipped without advancing composition or loop tick counts
 
 `--diagnose-scroll-presentation-hittest` must prove:
 
@@ -186,6 +187,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - rapid wheel input through the `EnsureRunning` main-app pattern preserves total wheel distance while the coordinator loop is already running
 - rapid top/bottom boundary wheel input clamps to the boundary without starting repeated same-target presentation segments
 - resize, DPI, and max-scroll lifecycle changes clear active presentation through the main-app cancellation path and leave no active presented-scroll state behind
+- lifecycle scenarios report `staleQueuedTickSuppressed=True` after the stale delayed tick window
 
 ## Current Hardening Boundary
 
@@ -195,4 +197,6 @@ Active hit testing reads `CompositorHitTestSnapshot`, so pointer coordinates are
 
 Layer content caching remains source-content caching, not presentation-state caching. Cached payloads are reused only for stable disjoint layer sources, while current tick transform, opacity, fixed clip, empty intersections, and text clips are resolved during each composition execution.
 
-The next gate is broader main-app integration hardening around the existing D3D12-first path: queued compositor ticks, lifecycle cancellation, marker publication under skipped/failed ticks, and active hit-test routing. It is not a generic fallback compositor or an internal offscreen/render-target cache.
+Current narrow coverage pins skipped/failed tick marker non-publication, marker runtime mapping/unmapped accounting, scroll marker queue cleanup on cancellation, stale queued lifecycle tick suppression, superseded scroll-presentation idle waiter completion, and active hit-test routing through sibling and nested layers.
+
+The next gate is broader main-app integration hardening around the existing D3D12-first path: cancellation/retarget edge cases, marker publication edge cases, and active hit-test routing regressions as concrete bugs appear. It is not a generic fallback compositor or an internal offscreen/render-target cache.

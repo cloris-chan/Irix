@@ -470,7 +470,13 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
 
         var activeAfterStaleWindow = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out _);
         var hitAfterStaleWindow = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var actionAfterStaleWindow);
+        var compositionTickCountAfterStaleWindow = session.Compositor.CompositionTickCount;
+        var loopTickCountAfterStaleWindow = session.CompositorLoop.ScrollPresentationTickCount;
         var staleDelayedTickSkipsAfterStaleWindow = session.CompositorLoop.ScrollPresentationStaleDelayedTickSkipCount;
+        var staleQueuedTickSuppressed =
+            compositionTickCountAfterStaleWindow == compositionTickCountAfterLifecycle
+            && loopTickCountAfterStaleWindow == loopTickCountAfterLifecycle
+            && staleDelayedTickSkipsAfterStaleWindow == staleDelayedTickSkipsAfterLifecycle + 1;
 
         return new ScrollPresentationLifecycleScenarioDiagnostics(
             name,
@@ -497,9 +503,10 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             compositionTickCountAfterLifecycle,
             loopTickCountAfterLifecycle,
             staleDelayedTickSkipsAfterLifecycle,
-            session.Compositor.CompositionTickCount,
-            session.CompositorLoop.ScrollPresentationTickCount,
+            compositionTickCountAfterStaleWindow,
+            loopTickCountAfterStaleWindow,
             staleDelayedTickSkipsAfterStaleWindow,
+            staleQueuedTickSuppressed,
             activeAfterStaleWindow,
             hitAfterStaleWindow,
             actionAfterStaleWindow);
@@ -601,6 +608,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             $"compositionTicksAfterLifecycle={diagnostics.CompositionTickCountAfterLifecycle} loopTicksAfterLifecycle={diagnostics.LoopTickCountAfterLifecycle}",
             $"compositionTicksAfterStaleWindow={diagnostics.CompositionTickCountAfterStaleWindow} loopTicksAfterStaleWindow={diagnostics.LoopTickCountAfterStaleWindow}",
             $"staleDelayedTickSkipsAfterLifecycle={diagnostics.StaleDelayedTickSkipsAfterLifecycle} staleDelayedTickSkipsAfterStaleWindow={diagnostics.StaleDelayedTickSkipsAfterStaleWindow}",
+            $"staleQueuedTickSuppressed={diagnostics.StaleQueuedTickSuppressed}",
             $"activeAfterStaleWindow={diagnostics.ActiveAfterStaleWindow} hitAfterStaleWindow={diagnostics.HitAfterStaleWindow} actionAfterStaleWindow={diagnostics.ActionAfterStaleWindow.Value}",
             $"viewport={diagnostics.ViewportWidth}x{diagnostics.ViewportHeight} scale={diagnostics.DisplayScaleX:0.##} maxScroll={diagnostics.MaxScrollY:0.##}"
         ]);
@@ -1103,6 +1111,7 @@ internal readonly struct ScrollPresentationLifecycleScenarioDiagnostics(
     long CompositionTickCountAfterStaleWindow,
     long LoopTickCountAfterStaleWindow,
     long StaleDelayedTickSkipsAfterStaleWindow,
+    bool StaleQueuedTickSuppressed,
     bool ActiveAfterStaleWindow,
     bool HitAfterStaleWindow,
     ActionId ActionAfterStaleWindow)
@@ -1134,6 +1143,7 @@ internal readonly struct ScrollPresentationLifecycleScenarioDiagnostics(
     public long CompositionTickCountAfterStaleWindow { get; } = CompositionTickCountAfterStaleWindow;
     public long LoopTickCountAfterStaleWindow { get; } = LoopTickCountAfterStaleWindow;
     public long StaleDelayedTickSkipsAfterStaleWindow { get; } = StaleDelayedTickSkipsAfterStaleWindow;
+    public bool StaleQueuedTickSuppressed { get; } = StaleQueuedTickSuppressed;
     public bool ActiveAfterStaleWindow { get; } = ActiveAfterStaleWindow;
     public bool HitAfterStaleWindow { get; } = HitAfterStaleWindow;
     public ActionId ActionAfterStaleWindow { get; } = ActionAfterStaleWindow;
