@@ -181,6 +181,80 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public void CompositorHitTestSnapshot_maps_nested_composition_layers_to_source_local_coordinates()
+    {
+        var hitTargets = new[]
+        {
+            new HitTestTarget(
+                new PixelRectangle(20, 20, 120, 40),
+                new ActionId(100),
+                default,
+                0,
+                1)
+        };
+        var layers = new[]
+        {
+            new CompositionLayer(
+                new CompositionLayerId(10),
+                0,
+                1,
+                new CompositionTransform(12, 5),
+                new CompositionOpacity(0.5f)),
+            new CompositionLayer(
+                new CompositionLayerId(11),
+                0,
+                1,
+                new CompositionTransform(0, 20),
+                CompositionOpacity.Opaque,
+                CompositionClipMode.Fixed,
+                new DrawRect(30, 40, 160, 24))
+        };
+        var snapshot = CompositorHitTestSnapshot.Create(hitTargets, 1, CompositionFrame.FromLayers(layers));
+
+        Assert.True(snapshot.TryHitTestLogicalPixel(36, 49, out var result));
+        Assert.Equal(new ActionId(100), result.ActionId);
+        Assert.Equal(24f, result.LocalX);
+        Assert.Equal(24f, result.LocalY);
+        Assert.Equal(2, result.AppliedLayerCount);
+        Assert.True(result.MappedThroughComposition);
+        Assert.True(result.MappedThroughFixedClip);
+    }
+
+    [Fact]
+    public void CompositorHitTestSnapshot_rejects_nested_fixed_clip_before_local_bounds_accepts_target()
+    {
+        var hitTargets = new[]
+        {
+            new HitTestTarget(
+                new PixelRectangle(20, 20, 120, 40),
+                new ActionId(100),
+                default,
+                0,
+                1)
+        };
+        var layers = new[]
+        {
+            new CompositionLayer(
+                new CompositionLayerId(10),
+                0,
+                1,
+                new CompositionTransform(12, 5),
+                new CompositionOpacity(0.5f)),
+            new CompositionLayer(
+                new CompositionLayerId(11),
+                0,
+                1,
+                new CompositionTransform(0, 20),
+                CompositionOpacity.Opaque,
+                CompositionClipMode.Fixed,
+                new DrawRect(30, 40, 160, 24))
+        };
+        var snapshot = CompositorHitTestSnapshot.Create(hitTargets, 1, CompositionFrame.FromLayers(layers));
+
+        Assert.False(snapshot.TryHitTestLogicalPixel(36, 75, out _));
+    }
+
+    [Fact]
     public void CompositorHitTestSnapshot_does_not_occlude_static_target_when_fixed_clip_rejects_presented_layer()
     {
         var hitTargets = new[]
