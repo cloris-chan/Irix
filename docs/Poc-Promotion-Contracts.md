@@ -266,13 +266,10 @@ Move invariants:
 
 Mechanical move status: complete.
 
-Move validation:
+Validation status:
 
-- `dotnet build --no-restore -c Release` passed.
-- `D3D12DrawingBackendScissorTests`, `DisplayScaleTests`, and `PerformanceRegressionTests` targeted lane passed: 64 tests.
-- `ProgramDiagnosticsTests` passed: 113 tests.
-- Full `dotnet test --no-build -c Release --verbosity normal` passed: 701 tests.
-- Glyph atlas Smoke was not run because the move did not change glyph renderer behavior, matrix expected values, or `D3D12Renderer` internals.
+- The mechanical move is complete and covered by the normal local test gates.
+- Keep current pass counts and broad-rendering evidence in [Project_Status_and_Todo.md](Project_Status_and_Todo.md), local test output, and glyph-atlas guard summaries rather than duplicating stale numbers here.
 
 ## `WindowBackend`
 

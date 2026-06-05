@@ -57,13 +57,13 @@ Diagnostics expose total and format-split page counts, resident CPU shadow bytes
 
 ## Regression Lane
 
-`scripts/glyph-atlas-regression.ps1` is the fixed local gate for guarded coverage changes and is available in Windows CI as the manual `glyph-atlas-smoke` validation suite. GitHub Actions quota is currently exhausted, so push/PR CI stays lightweight and the manual lane is not the status source. Keep `.github/workflows/ci.yml`, but do not rely on Actions until quota returns.
+`scripts/glyph-atlas-regression.ps1` is the fixed local gate for guarded coverage changes and is available in Windows CI as the manual `glyph-atlas-smoke` validation suite. The current CI/source-of-truth status lives in [Project_Status_and_Todo.md](Project_Status_and_Todo.md).
 
 - `-Mode Smoke`: matrix, 60-frame soak, color-format natural coverage probe, BiDi oracle, and glyph oracle. Run before/after broad changes.
 - `-Mode Local`: extends soak to 300 frames. Run after glyph/page/shaping changes.
 - `-Mode Nightly`: extends soak to 900 frames. Run manually after page-policy, eviction, or shaping overhauls.
 
-The script writes `TestResults\glyph-atlas-regression-*-*.guard.summary.txt`; that local guard summary is the current status source while Actions quota is unavailable. Matrix actual must keep `degradedRuns=0`, `glyphAtlasInitialized=True`, and `finalComposition=D3D12`. Soak must keep `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`, and `recordFailurePhase=None`. BiDi/glyph oracle expected and actual probe labels/counts must match with `finalComposition=D3D12`.
+The script writes `TestResults\glyph-atlas-regression-*-*.guard.summary.txt`. Matrix actual must keep `degradedRuns=0`, `glyphAtlasInitialized=True`, and `finalComposition=D3D12`. Soak must keep `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`, and `recordFailurePhase=None`. BiDi/glyph oracle expected and actual probe labels/counts must match with `finalComposition=D3D12`.
 
 ## Structural Oracles
 

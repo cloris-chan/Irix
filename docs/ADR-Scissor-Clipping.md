@@ -35,7 +35,7 @@ Rules:
 - Empty intersections skip that FillRect command.
 - Effective scissor calculation remains a pure Drawing-layer function before any D3D12 state changes.
 - Scissor state changes must preserve draw order. The first implementation should batch only consecutive FillRect commands with the same effective clip, not globally reorder by clip.
-- Scissor diagnostics should report clip mode, clipped command count, skipped empty-intersection count, and scissor state change count once implemented.
+- Scissor diagnostics report clip mode, clipped command count, skipped empty-intersection count, and scissor state change count.
 
 ## Batch-by-clip Boundary
 

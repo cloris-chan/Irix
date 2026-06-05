@@ -91,7 +91,7 @@ High-level rules:
 - Composition style covers transform, opacity, layer clip, and presented scroll offset.
 - Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
 - Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
-- The first composition implementation targets D3D12-backed transform/opacity ticks and fixed-clip scroll presentation resolved from retained `NodeKey` declarations, with active hit-test remapping. Normal retained-frame rendering remains the secondary path when the GPU-first path exposes an explicit blocker.
+- The active composition implementation is D3D12-backed transform/opacity ticks, fixed-clip scroll presentation resolved from retained `NodeKey` declarations, multi-layer retained clip decomposition, active hit-test remapping, marker dispatch, and layer content caching. Normal retained-frame rendering remains the secondary path when the GPU-first path exposes an explicit blocker.
 
 ## Renderer Contract
 
@@ -125,11 +125,11 @@ Implementation bias:
 
 Preferred GPU offload order:
 
-1. Layer transform and opacity property updates.
-2. Compositor-aware hit-test remapping.
-3. Presented scroll offset under a fixed layer clip.
-4. Multi-layer composition for nested/mixed clips.
-5. Layer content payload caching.
+1. Layer transform and opacity property updates. Implemented on D3D12.
+2. Compositor-aware hit-test remapping. Implemented for active transform and fixed-clip presentation.
+3. Presented scroll offset under a fixed layer clip. Implemented for retained scroll targets.
+4. Multi-layer composition for nested/mixed clips. Implemented on D3D12.
+5. Layer content payload caching. Implemented for disjoint D3D12 composition layers.
 6. Backend-side batching and persistent upload rings.
 7. GPU culling/compaction for large retained scenes.
 8. Content-space internal offscreen surfaces only after bounds/origin/clip semantics are designed and direct composition still needs them.
@@ -160,7 +160,7 @@ Current private baseline:
 - `IDWriteFactory4` is assumed available.
 - Single Windows D3D12 backend is the only active graphics backend.
 - Current control/workflow surface remains focused on text, rectangles, button, scroll, input, layout, diagnostics, and local PoC execution.
-- GitHub Actions quota is currently exhausted; local gates are authoritative until quota returns.
+- Current CI/local gate status is tracked in [Project_Status_and_Todo.md](Project_Status_and_Todo.md).
 
 Not currently selected unless an explicit target-architecture task pulls them forward:
 
@@ -186,7 +186,7 @@ Not currently selected unless an explicit target-architecture task pulls them fo
 - App/control runtime state does not move into `Irix.Rendering` just because layout exposes observation data.
 - Compositor animation does not mutate logical app state without a commit/cancel contract.
 - `Irix.Poc` code is not promoted without a contract.
-- Workflow/CI churn is deferred while Actions quota is exhausted.
+- Workflow/CI churn is deferred unless [Project_Status_and_Todo.md](Project_Status_and_Todo.md) says remote validation is authoritative again.
 - Composition skip and secondary-path behavior must be explicit, diagnostic-visible, and secondary to the D3D12/GPU-backed path.
 
 ## Current Work Shape
