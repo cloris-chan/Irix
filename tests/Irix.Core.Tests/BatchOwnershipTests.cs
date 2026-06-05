@@ -333,6 +333,46 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_sample_and_cancel_scroll_presentation_completes_existing_idle_waiter()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var start = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(250);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(start, CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        var idleWait = loop.WaitForScrollPresentationIdleAsync(cancellationToken).AsTask();
+
+        Assert.Equal(1, compositor.TickCount);
+        Assert.False(idleWait.IsCompleted);
+
+        var sample = await loop.SampleAndCancelCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+
+        await idleWait.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        Assert.True(sample.HasValue);
+        Assert.Equal(0, sample.PresentedScrollY);
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+        Assert.Equal(1, compositor.ClearCount);
+        Assert.Equal(1, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.LayoutAffecting, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+    }
+
+    [Fact]
     public async Task CompositorLoop_sample_and_cancel_skips_stale_delayed_tick_after_replacement_segment()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
