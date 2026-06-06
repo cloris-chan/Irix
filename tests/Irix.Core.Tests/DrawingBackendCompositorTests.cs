@@ -1235,6 +1235,52 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task CompositionMarkerEventPump_dispatches_mapped_events_and_counts_unmapped_events_across_batches()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+
+        var markers = new CompositionAnimationMarker[18];
+        for (var i = 0; i < markers.Length; i++)
+        {
+            var runtimeEventId = new CompositionRuntimeEventId((uint)(i + 1));
+            markers[i] = new CompositionAnimationMarker(
+                new CompositionAnimationMarkerId((uint)(i + 1)),
+                runtimeEventId,
+                CompositionAnimationMarkerTrigger.EveryTick());
+        }
+
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(1)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f),
+            new CompositionAnimationInstanceId(15),
+            new NodeKey(25),
+            markers)));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        Assert.Equal(markers.Length, compositor.PendingCompositionMarkerEventCount);
+
+        var mapper = new EvenRuntimeEventMarkerMapper();
+        var dispatcher = new RecordingMarkerDispatcher();
+        var result = CompositionMarkerEventPump.DrainAndDispatch(compositor, ref mapper, dispatcher);
+
+        Assert.Equal(markers.Length, mapper.MapCount);
+        Assert.Equal(18, result.DrainedEvents);
+        Assert.Equal(9, result.DispatchedMessages);
+        Assert.Equal(9, result.UnmappedEvents);
+        Assert.Equal(0, compositor.PendingCompositionMarkerEventCount);
+        Assert.Equal(new[] { 2, 4, 6, 8, 10, 12, 14, 16, 18 }, dispatcher.Messages);
+    }
+
+    [Fact]
     public async Task CompositionScrollPresentationMarker_progress_range_publishes_scroll_owner()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -2256,6 +2302,29 @@ public sealed class DrawingBackendCompositorTests
             }
 
             return count;
+        }
+    }
+
+    private struct EvenRuntimeEventMarkerMapper : ICompositionMarkerEventMapper<int>
+    {
+        public int MapCount { get; private set; }
+
+        public CompositionMarkerMappedMessage<int> Map(in CompositionAnimationMarkerEvent markerEvent)
+        {
+            MapCount++;
+            return markerEvent.RuntimeEventId.Value % 2 == 0
+                ? CompositionMarkerMappedMessage<int>.FromMessage((int)markerEvent.RuntimeEventId.Value)
+                : CompositionMarkerMappedMessage<int>.Unmapped;
+        }
+    }
+
+    private sealed class RecordingMarkerDispatcher : IMessageDispatcher<int>
+    {
+        public List<int> Messages { get; } = [];
+
+        public void Dispatch(int message)
+        {
+            Messages.Add(message);
         }
     }
 

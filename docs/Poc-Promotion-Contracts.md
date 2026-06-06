@@ -227,6 +227,29 @@ Extraction guardrails:
 - No extraction commit may also move renderer, glyph, D3D12 backend, or allocation-optimization code.
 - Current source guards enforce the pre-extraction boundary by keeping `CounterMessage`, `ActionIdRegistry`, feedback/input/dispatch adapters, and app runtime sinks out of `Irix.Rendering` and `Irix.Platform.Windows`. These guards do not extract runtime code; they make the prerequisite boundary auditable before a future extraction commit.
 
+### Marker Runtime Dispatch Boundary
+
+Decision: marker event evaluation is a compositor concern, but marker-to-message mapping and runtime dispatch stay app-owned.
+
+`Irix.Rendering` may keep the generic `CompositionMarkerEventPump`, `ICompositionMarkerEventMapper<TMessage>`, and `CompositionMarkerMappedMessage<TMessage>` helper shapes because they operate only on typed marker events and an abstract `IMessageDispatcher<TMessage>`. It must not construct `CounterMessage`, own `Runtime<CounterModel, CounterMessage>`, or depend on the Poc app runtime dispatch sink.
+
+Current Poc ownership:
+
+| Type / concept | Current owner | Contract |
+|----------------|---------------|----------|
+| `CompositionAnimationMarkerEvent` queue | `Irix.Rendering` compositor | Publishes typed marker events only after successful compositor execution. |
+| `CounterCompositionMarkerRuntimeEventIds` | `Irix.Poc` sample app runtime | Counter-specific marker ids; not reusable framework identity. |
+| `CounterCompositionMarkerMapper` | `Irix.Poc` app message adapter | Maps runtime event ids to `CounterMessage` values and reports unmapped events through the generic pump result. |
+| `CounterRuntimeDispatchSink` | `Irix.Poc` app runtime dispatch sink | Bridges mapped Counter messages to `Runtime<CounterModel, CounterMessage>`. |
+| `--diagnose-composition-marker-runtime` | `Irix.Poc` diagnostics | Proves drain, dispatch, unmapped count, and final app state without moving runtime ownership. |
+
+Rules:
+
+- `ICompositionDrawingBackend` and platform backends never receive runtime delegates and never dispatch app messages.
+- `CompositionMarkerEventPump` may drain and count events, but mapping policy belongs to the app-owned mapper.
+- `CounterCompositionMarkerMapper`, `CounterCompositionMarkerRuntimeEventIds`, and `CounterRuntimeDispatchSink` stay in `Irix.Poc`.
+- A future runtime extraction must introduce non-Counter marker/action identity and an app/runtime dispatch contract before moving marker dispatch ownership.
+
 ## `D3D12DrawingBackend`
 
 Current role: Windows D3D12 drawing backend adapter in `Irix.Platform.Windows`.

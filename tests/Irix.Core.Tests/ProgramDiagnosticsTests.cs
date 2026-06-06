@@ -2804,6 +2804,41 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Marker_runtime_dispatch_boundary_stays_app_owned_before_runtime_extraction()
+    {
+        var root = FindRepoRoot();
+        var contracts = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Poc-Promotion-Contracts.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+        var animationDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition.md")));
+        var d3d12Design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
+        var pumpSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "CompositionMarkerEventPump.cs")));
+        var markerMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterCompositionMarkerMapper.cs")));
+        var runtimeDispatchSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "AppRuntimeDispatchAdapter.cs")));
+        var diagnosticSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionMarkerRuntimeDiagnosticRunner.optional-diagnostics.cs")));
+
+        Assert.Contains("### Marker Runtime Dispatch Boundary", contracts);
+        Assert.Contains("CounterCompositionMarkerMapper", contracts);
+        Assert.Contains("CounterRuntimeDispatchSink", contracts);
+        Assert.Contains("must not construct `CounterMessage`", contracts);
+        Assert.Contains("marker-runtime dispatch-through-sink source guard", status);
+        Assert.Contains("Marker runtime dispatch source guards", worklist);
+        Assert.Contains("app-specific marker ids and message mapping remain outside `Irix.Rendering`", animationDesign);
+        Assert.Contains("Marker delivery is intentionally above the backend", d3d12Design);
+        Assert.Contains("interface ICompositionMarkerEventMapper<TMessage>", pumpSource);
+        Assert.Contains("IMessageDispatcher<TMessage> dispatcher", pumpSource);
+        Assert.Contains("dispatcher.Dispatch(mapped.Message)", pumpSource);
+        Assert.DoesNotContain("CounterMessage", pumpSource);
+        Assert.DoesNotContain("Runtime<", pumpSource);
+        Assert.Contains("CounterCompositionMarkerMapper : ICompositionMarkerEventMapper<CounterMessage>", markerMapperSource);
+        Assert.Contains("CounterCompositionMarkerRuntimeEventIds", markerMapperSource);
+        Assert.Contains("CompositionMarkerMappedMessage<CounterMessage>.Unmapped", markerMapperSource);
+        Assert.Contains("struct CounterRuntimeDispatchSink", runtimeDispatchSource);
+        Assert.Contains("IMessageDispatcher<CounterMessage>", runtimeDispatchSource);
+        Assert.Contains("CompositionMarkerEventPump.DrainAndDispatch(drawingCompositor, ref mapper, runtimeDispatchSink)", diagnosticSource);
+    }
+
+    [Fact]
     public void Poc_runtime_identity_does_not_leak_into_rendering_or_windows_backend()
     {
         var root = FindRepoRoot();
@@ -2820,8 +2855,25 @@ public sealed class ProgramDiagnosticsTests
             "IInputHitTestService",
             "IInputActionMapper",
             "IAppMessageDispatchMapper",
+            "IControlFeedbackDispatchMapper",
             "IAppRuntimeDispatchSink",
-            "IWheelInputDispatchSink"
+            "IWheelInputDispatchSink",
+            "CounterInputRouter",
+            "CounterInputActionMapper",
+            "CounterAppMessageDispatchMapper",
+            "CounterCompositionMarkerMapper",
+            "CounterCompositionMarkerRuntimeEventIds",
+            "CounterRuntimeDispatchSink",
+            "ScrollPresentationWheelDispatchSink",
+            "InputOwnershipState",
+            "OwnershipSnapshot",
+            "ScrollFramePump",
+            "ScrollController",
+            "ScrollState",
+            "ScrollFeedback",
+            "ButtonPropertyBundle",
+            "ControlVisualStateProjection",
+            "Runtime<CounterModel"
         };
 
         foreach (var sourcePath in Directory.EnumerateFiles(renderingRoot, "*.cs", SearchOption.TopDirectoryOnly)
@@ -2837,9 +2889,19 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("interface IControlFeedbackSink", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "ScrollFeedback.cs"))));
         Assert.Contains("interface IInputHitTestService", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "InputHitTestService.cs"))));
         Assert.Contains("interface IInputActionMapper", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "InputActionMapper.cs"))));
-        Assert.Contains("interface IAppMessageDispatchMapper", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "AppMessageDispatchMapper.cs"))));
-        Assert.Contains("interface IAppRuntimeDispatchSink", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "AppRuntimeDispatchAdapter.cs"))));
-        Assert.Contains("interface IWheelInputDispatchSink", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "ScrollInputDispatchAdapter.cs"))));
+        var appMessageDispatchMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "AppMessageDispatchMapper.cs")));
+        var appRuntimeDispatchSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "AppRuntimeDispatchAdapter.cs")));
+        var scrollInputDispatchSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "ScrollInputDispatchAdapter.cs")));
+        var markerMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "CounterCompositionMarkerMapper.cs")));
+        Assert.Contains("interface IAppMessageDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("interface IControlFeedbackDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("struct CounterAppMessageDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("interface IAppRuntimeDispatchSink", appRuntimeDispatchSource);
+        Assert.Contains("struct CounterRuntimeDispatchSink", appRuntimeDispatchSource);
+        Assert.Contains("interface IWheelInputDispatchSink", scrollInputDispatchSource);
+        Assert.Contains("struct ScrollPresentationWheelDispatchSink", scrollInputDispatchSource);
+        Assert.Contains("struct CounterCompositionMarkerMapper", markerMapperSource);
+        Assert.Contains("CounterCompositionMarkerRuntimeEventIds", markerMapperSource);
     }
 
     [Fact]
