@@ -1,7 +1,7 @@
 # Irix Project Status
 
 > Current developer handoff note for the Irix Windows PoC.
-> Last verified: 2026-06-05.
+> Last verified: 2026-06-06.
 
 ---
 
@@ -19,7 +19,7 @@
 | [Glyph-Atlas-Design.md](Glyph-Atlas-Design.md) | D3D12 glyph atlas text renderer design, degradation policy, and guarded coverage expansion. |
 | [Glyph-Atlas-Entry-Eviction-Design.md](Glyph-Atlas-Entry-Eviction-Design.md) | Design-only preconditions and non-goals for future entry-level LRU / sub-rect free-list work. |
 | [ADR-Scissor-Clipping.md](ADR-Scissor-Clipping.md) | Clip/scissor/text-clip decision and guarded behavior. |
-| [LayoutDirty-Design.md](LayoutDirty-Design.md) | Layout dirty classification and StyleOnly planning boundary. |
+| [LayoutDirty-Design.md](LayoutDirty-Design.md) | Layout dirty classification, retained publication ownership, and StyleOnly/partial-apply boundary. |
 | [Diagnostics-Snapshot.md](Diagnostics-Snapshot.md) | Diagnostics snapshot boundary and formatter contract. |
 
 One-off smoke/default evidence files are intentionally not canonical. Keep durable evidence in current regression commands, local guard summaries, and this status document.
@@ -46,6 +46,7 @@ GitHub Actions quota is currently exhausted. `.github/workflows/ci.yml` now keep
 | Text/value IR | Framework/core paths must not retain raw text strings. Retained and drawing paths use `TextNodeContent`, `TextBufferSnapshot`, `FrameTextArena`, `TextSlice`, and resolver boundaries. CLI/debug/report formatting strings are output-boundary exceptions. |
 | Architecture boundary | `Irix.Poc` is an app, diagnostics, and adapter-glue project. It is not the reusable framework home. `D3D12DrawingBackend` has moved to `Irix.Platform.Windows`; `TranslatorCore`, `TranslatorInput`, `TranslatorOutput`, and `TranslatorRetainedState` have moved to `Irix.Rendering`; `WindowDrawCommandTranslator` remains the Poc adapter around viewport timing, app/control scroll feedback, diagnostics, allocation attribution, and Counter default composition. The scroll/input runtime owner boundary is written: future extraction needs explicit logical-state, feedback-sink, compositor-sampler, hit-test-service, input-action-mapper, and app-message-dispatch adapters. The first Poc feedback sink, max-scroll feedback dispatch mapper, hit-test service, input action mapper, input-route app-message dispatch mapper, wheel-input scroll presentation dispatch sink, app runtime dispatch sink, and marker-runtime dispatch-through-sink cuts exist. `WindowBackend` stays as legacy/debug presentation. |
 | Style / animation / composition | D3D12 composition covers retained `NodeKey` transform/opacity declarations, fixed-clip scroll presentation declarations, multi-layer nested/mixed-clip decomposition, compositor-only ticks, marker events plus runtime dispatch pumping, active hit-test remapping, main-app scroll presentation integration, reason-typed lifecycle cancellation, skip diagnostics, and layer content caching. Recent hardening pins fixed-clip hit-test occlusion, nested layer hit-test remapping, device-recovery cache clearing, cache key invalidation, fixed-clip cache-hit state, empty fixed-clip intersections, sibling-layer hit-test routing, mapped/unmapped marker runtime dispatch, empty sample-and-cancel without cancellation, superseded and sample-and-cancel scroll-presentation idle waiters, lifecycle stale queued tick suppression, and scroll marker cancellation queue cleanup. Internal offscreen/render-target caching is not active; secondary paths require documented blockers. |
+| Partial apply / StyleOnly | `RenderPipeline.Build` still rebuilds `LayoutTreeBuilder` output when tree, viewport, or dirty nodes require layout; there is no active StyleOnly layout-skip branch inside the pipeline. Retained partial apply and segmented render-source handoff are implemented for command/resource/hit-target metadata reuse after publication: the Poc runtime enables the selected segmented render-source path by default, `--no-partial-apply` disables it, and guarded full-frame fallback remains the baseline when ownership, freshness, or range validation rejects the partial path. |
 | Performance | Allocation measurement/hardening is on hold. Latest `--diagnose-text-cache 180` warm scroll baseline with buildRoot/layout attribution is the comparison point: about `396760 bytes`, `2204 B/frame`; `pipeline.layout=501` B/frame, `tree.buildRoot=546` B/frame, and record about `45 B/frame`. Only safe empty publication array reuse was implemented. Remaining tree/layout/snapshot buckets require ownership design, not opportunistic retained-array micro-optimization. |
 | Diagnostics | Optional diagnostics are built with `IrixDiagnostics=true`, compile out by default, and use separate `bin/diagnostics` / `obj/diagnostics` outputs from normal `bin/runtime` / `obj/runtime` builds to avoid stale mixed-ABI incremental outputs. |
 | Docs | Current docs describe active architecture and remaining work, not process history. |

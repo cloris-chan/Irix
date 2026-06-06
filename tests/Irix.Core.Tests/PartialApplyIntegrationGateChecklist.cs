@@ -80,8 +80,8 @@ internal static class PartialApplyIntegrationGateChecklist
             "Default-off RetainedRenderFrameSegmentOwnership sits beside the production RetainedRenderFrame, can opt in a segmented owner that follows normal batches, and DrawingBackendCompositor's internal handoff selector can invoke RetainedRenderFrameHandoffHarness for a fresh accepted partial owner while TryReadFrame remains unchanged.",
             "Default-off selected render-source path in DrawingBackendCompositor can execute fresh accepted RuntimeOwner.ReadSegments through the real backend for one frame; disabled, missing, stale, rejected, fallback, and empty-read cases still use RetainedRenderFrame.TryReadFrame.",
             "Backend contract and D3D12 execution tests remain unchanged.",
-            "Satisfied for current baseline; default-on hookup remains separate target work.",
-            "Internal/default-off selected path is promoted; external API shape and default-on rollout remain separate target work."),
+            "Satisfied for current baseline; Poc default-on hookup is active and external API/public rollout remains separate target work.",
+            "Internal selected render-source path is promoted for Poc default-on use; external API shape and public rollout remain separate target work."),
         new(
             PartialApplyIntegrationGate.ResourceDisposePolicy,
             true,
@@ -91,7 +91,7 @@ internal static class PartialApplyIntegrationGateChecklist
             "Selected path keeps segmented snapshots owned by RuntimeOwner, reports partial fallback without mutating owner state, pairs EndFrame on backend throw, preserves hit targets before commit, and releases accepted partial snapshots exactly once on dispose.",
             "Existing retained frame resource ownership tests keep same-frame behavior sealed.",
             "Satisfied for current baseline; resource cache and stable global handles remain separate target work.",
-            "Internal/default-off selected path is promoted; D3D12-specific segmented ownership remains separate target work."),
+            "Internal selected render-source path is promoted; D3D12-specific segmented ownership remains separate target work."),
         new(
             PartialApplyIntegrationGate.CommandRangeStability,
             true,
@@ -101,7 +101,7 @@ internal static class PartialApplyIntegrationGateChecklist
             "DrawingBackendCompositor validates owner freshness, command owner, resource owner, command count, FrameId, strict dirty ranges, and contiguous segment coverage before selected execution; stale, malformed, overlapping, and command-count mismatch cases fall back before candidate execution.",
             "No-change compositor tests keep current full/guarded partial behavior sealed.",
             "Satisfied for current baseline; broader typed-id range contracts remain separate target work.",
-            "Internal/default-off selected path is promoted; external range contract changes remain separate target work."),
+            "Internal selected render-source path is promoted; external range contract changes remain separate target work."),
         new(
             PartialApplyIntegrationGate.HitTargetMetadataProjection,
             true,
@@ -111,7 +111,7 @@ internal static class PartialApplyIntegrationGateChecklist
             "DrawingBackendCompositor uses owner-side hit targets only after selected segmented execution succeeds; disabled, missing, stale, rejected, fallback, projection failure, and backend throw paths keep retained-frame hit targets.",
             "Hit-test behavior tests keep retained geometry and compositor lookup unchanged.",
             "Satisfied for current baseline; future geometry-source changes remain separate target work.",
-            "Internal/default-off selected path is promoted; hit-test API shape remains unchanged for this checkpoint."),
+            "Internal selected render-source path is promoted; hit-test API shape remains unchanged for this checkpoint."),
         new(
             PartialApplyIntegrationGate.RetainedRootUpdate,
             true,
@@ -121,7 +121,7 @@ internal static class PartialApplyIntegrationGateChecklist
             "Production-owner feed accepted partials atomically advance command segments, resource snapshots, retained root metadata, and hit target metadata; failed projection, malformed range, and fallback cases report fallback while preserving the previous owner state.",
             "RenderPipeline.Build tests keep the current diff/layout baseline unchanged.",
             "Satisfied for current baseline; RenderPipeline.Build default full layout behavior remains unchanged.",
-            "Internal/default-off selected path is promoted; layout-skip default enablement remains separate target work."),
+            "Internal selected render-source path is promoted; layout-skip implementation remains separate target work."),
         new(
             PartialApplyIntegrationGate.FallbackReporting,
             true,
@@ -131,7 +131,7 @@ internal static class PartialApplyIntegrationGateChecklist
             "DrawingBackendCompositor.LastHandoffResult includes internal reason vocabulary for Disabled, MissingOwner, StaleOwner, OwnerRejected, OwnerFallbackFull, EmptySegmentRead, DirtyRangeMismatch, MalformedSegmentCoverage, and BackendThrewBeforeCommit without changing CLI diagnostics; EmptySegmentRead is wired for empty-segment validation but not directly asserted on LastHandoffResult because the owner reports ShadowFallbackFull before reaching that path.",
             "Diagnostics formatter tests keep CLI output unchanged.",
             "Satisfied for current baseline; unified diagnostics channel remains separate target work.",
-            "Internal/default-off selected path is promoted; CLI diagnostics text remains unchanged."),
+            "Internal selected render-source path is promoted; CLI diagnostics text remains unchanged."),
         new(
             PartialApplyIntegrationGate.CompositorOwnership,
             true,
@@ -140,8 +140,8 @@ internal static class PartialApplyIntegrationGateChecklist
             "Production-adjacent no-change tests prove retained-frame segment ownership, the feed, and DrawingBackendCompositor's default-off selector do not alter DrawingBackendCompositor counters, backend Execute calls, dirty range propagation, hit-test results, or diagnostics text when disabled or enabled; enabled selector executes only a fresh accepted partial owner, rejects stale ownership, and uses segment-local dirty ranges and internal handoff counter semantics only.",
             "DrawingBackendCompositor's internal selector can make fresh accepted segmented reads the selected render source for a frame, route segment-local dirty ranges through the real backend, report LastHandoffResult, and use owner-side hit targets only after selected execution succeeds.",
             "Compositor no-mutation tests keep current counters, retained frame, and backend execution unchanged.",
-            "Satisfied for current baseline; default-on rollout remains outside this gate.",
-            "Internal/default-off selected path is promoted; IDrawingBackend.Execute remains unchanged."),
+            "Satisfied for current baseline; Poc default-on rollout is complete and public/runtime-wide rollout remains outside this gate.",
+            "Internal selected render-source path is promoted for Poc default-on use; IDrawingBackend.Execute remains unchanged."),
         new(
             PartialApplyIntegrationGate.RegressionCoverage,
             true,
@@ -151,7 +151,7 @@ internal static class PartialApplyIntegrationGateChecklist
             "Focused regression tests cover default-off equivalence, enabled selected segmented execution, fallback path, stale owner, backend throw, malformed guard, dirty range routing, hit-test ownership, counter semantics, diagnostics unchanged, and style-only pre-switch behavior.",
             "Focused and full test suites act as the no-change regression guard.",
             "Satisfied for current baseline; platform-specific hardening remains separate target work.",
-            "Internal/default-off selected path is promoted; manual validation remains separate.")
+            "Internal selected render-source path is promoted; manual validation remains separate.")
     ];
 
     public static bool CanHookUpPartialApply

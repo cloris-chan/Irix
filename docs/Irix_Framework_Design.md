@@ -140,7 +140,7 @@ Do not implement Vulkan/Metal or advanced GPU paths until the platform-neutral c
 
 ## Layout, Clip, And Diagnostics
 
-Layout dirty classification records why layout is dirty but does not skip layout yet. `StyleOnly` fast paths remain design-only until retained layout/resource ownership is proven. See [LayoutDirty-Design.md](LayoutDirty-Design.md).
+Layout dirty classification records why layout is dirty but `RenderPipeline.Build` does not skip layout yet. Retained partial apply and segmented selected render-source handoff can reuse command/resource/hit-target metadata after normal publication when guards pass; a true `StyleOnly` layout-skip branch remains future work. See [LayoutDirty-Design.md](LayoutDirty-Design.md).
 
 Clip/scissor is default-on:
 

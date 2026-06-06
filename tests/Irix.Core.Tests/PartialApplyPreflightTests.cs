@@ -3579,7 +3579,7 @@ public sealed class PartialApplyPreflightTests
             Assert.False(string.IsNullOrWhiteSpace(status.RuntimePromotionCondition));
             Assert.DoesNotContain("None; no", status.ProductionRuntimeEvidence);
             Assert.Contains("Satisfied for current baseline", status.BlockingCondition);
-            Assert.Contains("Internal/default-off selected path is promoted", status.RuntimePromotionCondition);
+            Assert.Contains("Internal selected render-source path is promoted", status.RuntimePromotionCondition);
         }
     }
 

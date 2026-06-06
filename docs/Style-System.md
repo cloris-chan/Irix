@@ -16,7 +16,7 @@
 - No theme/resource dictionary implementation.
 - No public animation API.
 - No cross-platform backend implementation.
-- No StyleOnly layout skip implementation yet.
+- No `RenderPipeline.Build` StyleOnly layout-skip implementation yet. Retained partial apply and selected render-source handoff exist after normal publication; they are not layout skip.
 - No change to current `VirtualNodeProperty` authoring in this document.
 
 ## Style Layers
@@ -126,7 +126,7 @@ Animation eligibility is determined by the target property category:
 3. A way to update draw commands or composition properties without invalidating layout.
 4. Tests proving hit targets, clips, and diagnostics remain consistent.
 
-Until then, style changes may still rebuild layout even if a future system could skip it.
+Until then, style changes may still rebuild layout even if a future system could skip it. Poc partial apply may still reduce retained-frame execution after the rebuild when the guarded selected render-source path accepts the current publication.
 
 ## Cross-Platform Notes
 

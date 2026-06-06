@@ -1,6 +1,6 @@
 # Layout Dirty Classification
 
-> Diagnostic and planning boundary for layout invalidation. The current implementation still rebuilds the full `LayoutTreeBuilder` result whenever layout is invalidated.
+> Diagnostic and planning boundary for layout invalidation. The current implementation still rebuilds the full `LayoutTreeBuilder` result whenever layout is invalidated. Retained partial apply can reuse command/resource/hit-target metadata after that publication; it is not a layout-skip path.
 
 ## Goal
 
@@ -23,7 +23,9 @@ Layout dirty classification records why layout is dirty and keeps enough diagnos
 - `--diagnose-input` prints dirty reasons for hover-only, press, and release.
 - Tests cover hover-only `StyleOnly`, press `StyleOnly`, scroll `LayoutAffecting`, resize `ViewportChanged`, release `TextSizeAffecting`, and mixed priority.
 - `LayoutTreeBuilder` still performs a full layout rebuild for dirty nodes, tree changes, and viewport changes.
-- `dirtyElementRanges` and dirty command ranges are diagnostics for retained command replacement; they are not partial layout.
+- `dirtyElementRanges` and dirty command ranges are diagnostics and retained partial-apply inputs for command replacement; they are not partial layout.
+- Segmented retained-frame ownership can select a segment-local render source after normal layout/draw publication when ownership, freshness, command range, resource, and hit-target guards pass. The Poc runtime enables this by default and `--no-partial-apply` disables it.
+- The selected render-source path does not change `LayoutRebuildCount`, `LastLayoutRebuildReason`, `LastLayoutResult`, or `RenderPipelineRetainedInputSnapshot` semantics.
 
 ## `LayoutTreeResult` Publication Contract
 
@@ -77,11 +79,11 @@ Current implementation: empty `DirtyElementRanges` and absent `ScrollDiagnostics
 - Expand dirty diagnostics only when a target implementation needs the additional signal or an existing output regresses.
 - `StyleOnly` layout skip, partial layout, local subtree layout, and `LayoutTreeBuilder` rewrites should be reopened as explicit target-architecture work, not as incidental cleanup.
 
-## StyleOnly Patch Design
+## StyleOnly Patch Boundary
 
-This section is design-only. It is not implemented and must not change `RenderPipeline.Build` behavior until retained layout/resource ownership is explicit.
+The planning and retained-frame ownership pieces for style-only partial apply are implemented: style-only eligibility, dirty element to command-range planning, retained root metadata projection, hit-target metadata projection, segmented retained-frame ownership, and guarded compositor handoff all exist as internal/runtime paths.
 
-A future style-only patch may reuse retained layout only when every dirty classification is `StyleOnly` and retained layout context is otherwise identical:
+The not-yet-implemented part is a true `RenderPipeline.Build` layout-skip branch. A future style-only layout-skip patch may reuse retained layout only when every dirty classification is `StyleOnly` and retained layout context is otherwise identical:
 
 - Viewport bounds and root clip semantics.
 - Flat layout element count and order.
