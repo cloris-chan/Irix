@@ -14,6 +14,7 @@
 
 - No public animation API.
 - No public timeline scheduler.
+- No public style transition API.
 - No scroll code extraction from `Irix.Poc`.
 - No public scroll animation API.
 - No retained-array or snapshot ownership changes.
@@ -50,6 +51,8 @@ A compositor animation must not become the authoritative app model unless a sync
 | Fill/text color | Compositor only after material/layer color contract exists | Otherwise update draw commands. |
 | Width/height/padding/font size | UI runtime/layout | Layout target may animate at low frequency; compositor may present a transform but cannot change true layout. |
 | Text content/wrapping/fallback | UI runtime/rendering | Not compositor-only. |
+
+Internal style metadata marks opacity and translation properties as composite-eligible. `StyleTransitionCompiler` can precompile a pure internal opacity/translation delta into the existing transform/opacity declaration shape, but the active compositor path still installs declarations only after retained `NodeKey` target resolution. Fill/text/background color remains draw-command-owned until a material/layer color contract exists.
 
 ## Scroll As Hybrid Animation
 
@@ -101,6 +104,8 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 
 The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock owned by `CompositorLoop`; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` and `RenderCompositionScrollPresentationTickAtAsync` paths with typed timestamps. Normal render pipeline snapshots resolve internal `NodeKey`-addressable `CompositionTarget` and `ScrollCompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. `DrawingBackendCompositor.SetCompositionAnimationDeclaration` and `SetCompositionScrollPresentationDeclaration` install runtime declarations only after the declaration resolves against the retained frame, so the runtime path no longer guesses command ranges. After normal rendering, retained-frame staging, or a compositor-only tick, `DrawingBackendCompositor` publishes a `CompositorHitTestSnapshot`; input routing reads that snapshot instead of recomputing active layer transforms from scattered state.
+
+Future public style transitions should feed semantic style deltas into this internal compiler only after target property metadata, retained target resolution, backend capability, cancellation policy, and runtime commit policy are all explicit. The compiler must not allocate per-frame target lists or let diagnostics become the scheduler.
 
 ## Animation Markers
 

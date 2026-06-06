@@ -293,48 +293,8 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     private static DirtyNodeClassification ClassifyPropertyChanges(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)
     {
-        var changeSet = GetChangedPropertySet(previousProperties, nextProperties);
-        var invalidationKind = changeSet.ClassifySet();
-        return new DirtyNodeClassification(invalidationKind.ToLayoutRebuildReason(), invalidationKind);
-    }
-
-    private static PropertyChangeSet GetChangedPropertySet(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)
-    {
-        var changeSet = default(PropertyChangeSet);
-
-        foreach (var property in previousProperties)
-        {
-            if (!TryFindProperty(nextProperties, property.Key, out var nextProperty)
-                || property.Value != nextProperty.Value)
-            {
-                changeSet = PropertyChangeSet.AddKey(changeSet, property.Key);
-            }
-        }
-
-        foreach (var property in nextProperties)
-        {
-            if (!TryFindProperty(previousProperties, property.Key, out _))
-            {
-                changeSet = PropertyChangeSet.AddKey(changeSet, property.Key);
-            }
-        }
-
-        return changeSet;
-    }
-
-    private static bool TryFindProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key, out VirtualNodeProperty property)
-    {
-        foreach (var candidate in properties)
-        {
-            if (candidate.Key == key)
-            {
-                property = candidate;
-                return true;
-            }
-        }
-
-        property = default;
-        return false;
+        var plan = StyleDeltaPlanner.Plan(previousProperties, nextProperties);
+        return new DirtyNodeClassification(plan.LayoutRebuildReason, plan.InvalidationKind);
     }
 
     private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)

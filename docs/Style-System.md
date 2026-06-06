@@ -1,6 +1,6 @@
 # Style System
 
-> Design contract for style ownership after the renderer foundation. This file defines style categories and invalidation boundaries. It does not introduce a public styling API or theme system.
+> Design contract for style ownership after the renderer foundation. This file defines internal style categories and invalidation boundaries. It does not introduce a public styling API or theme system.
 
 ## Goals
 
@@ -17,7 +17,7 @@
 - No public animation API.
 - No cross-platform backend implementation.
 - No `RenderPipeline.Build` StyleOnly layout-skip implementation yet. Retained partial apply and selected render-source handoff exist after normal publication; they are not layout skip.
-- No change to current `VirtualNodeProperty` authoring in this document.
+- No public UI style authoring surface. Public UI code should not be asked to label a property as layout, visual, text, or composition style; those categories are internal classification results.
 
 ## Style Layers
 
@@ -29,6 +29,12 @@
 | Composition style | Transform, opacity, layer clip, z-order within a composition parent, presented scroll offset, effect parameters. | Composition layer / platform backend. | Compositor property update; no layout or draw rebuild if source content is unchanged. |
 | Control-state style | Hover, pressed, focused, disabled, selected, active gesture state. | App/control runtime. | Projects state into layout/visual/composition style; state itself is not rendering-owned. |
 | Diagnostic style | Debug UI surfaces, diagnostic text, guard visualization. | Poc/diagnostics. | Output-boundary only; must not become a core style owner. |
+
+## Authoring Boundary
+
+The current low-level `VirtualNodeProperty` style entries are internal IR for renderer classification, not the final public UI styling API. Public UI style should remain semantic: component variants, state styles, tokens, and modifiers can describe properties such as width, background, foreground, opacity, or translation without exposing `StyleOnly`, `LayoutAffecting`, `VisualOnly`, or `CompositeOnly`.
+
+Internally, style values stay compact and typed. The current pre-public-API slice adds value-style color storage and metadata for semantic visual properties (`BackgroundColor`, `ForegroundColor`) plus composition metadata (`LayerOpacity`, `TranslateX`, `TranslateY`). These keys are not public authoring methods. `StyleDeltaPlanner` turns changed internal properties into explicit work flags for layout, text measure, draw, composition, and control-state projection, so future optimizers do not need to infer execution policy from public API names.
 
 ## Invalidation Rules
 
@@ -63,6 +69,8 @@ Visual style changes pixels but not layout. Examples:
 
 Visual style can be either draw-recorded or promoted to composition style if the backend can update it without re-recording the content. The current rule is conservative: keep draw-command ownership unless the composition contract explicitly says the property is layer-owned.
 
+Current implementation: internal background/foreground color properties can override rectangle, button, and text draw-command colors. They are classified as visual-only and keep layout geometry, clips, and hit targets stable, but `RenderPipeline.Build` still performs the normal full layout publication when a dirty patch asks it to rebuild.
+
 ## Text Shaping Style
 
 Text style needs its own category because it can affect both layout and glyph cache state.
@@ -91,6 +99,8 @@ Initial compositor-eligible properties:
 - Simple color modulation only after the backend has a stable layer/color contract.
 
 Composition style must not require rebuilding `VirtualNode`, layout, or draw command buffers for every animation tick. It is the main mechanism for GPU/off-main-pipeline animation.
+
+Current implementation: internal opacity and translation metadata classify as composite-only and identify compositor-eligible property intent. `StyleTransitionCompiler` can compile a pure internal opacity/translation delta into the existing `CompositionAnimationDeclaration` shape. It does not schedule transitions, resolve public style rules, commit runtime state, or bypass retained target validation; existing compositor execution remains driven by resolved transform/opacity and scroll presentation declarations.
 
 ## Control-State Style
 
@@ -127,6 +137,8 @@ Animation eligibility is determined by the target property category:
 4. Tests proving hit targets, clips, and diagnostics remain consistent.
 
 Until then, style changes may still rebuild layout even if a future system could skip it. Poc partial apply may still reduce retained-frame execution after the rebuild when the guarded selected render-source path accepts the current publication.
+
+The immediate contract is therefore: semantic style deltas are classified cheaply through metadata, visual color deltas can update draw payloads, and pure composition deltas can be precompiled to existing transform/opacity declarations. None of those facts imply a layout-skip branch, public style API, public transition API, or runtime transition scheduler.
 
 ## Cross-Platform Notes
 

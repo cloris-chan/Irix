@@ -173,14 +173,14 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                         Resource: textStyle,
                         Text: text,
                         ClipBounds: clip,
-                        Color: style.TextColor);
+                        Color: ResolveColor(element.ForegroundColor, style.TextColor));
                     break;
                 case LayoutElementKind.Rectangle:
                     commands[commandCount++] = new DrawCommand(
                         DrawCommandKind.FillRect,
                         Rect: ToDrawRect(element.Bounds),
                         ClipBounds: clip,
-                        Color: style.RectangleFillColor);
+                        Color: ResolveColor(element.BackgroundColor, style.RectangleFillColor));
                     break;
                 case LayoutElementKind.Button:
                     var bounds = ToDrawRect(element.Bounds);
@@ -188,7 +188,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                         DrawCommandKind.FillRect,
                         Rect: bounds,
                         ClipBounds: clip,
-                        Color: visualStateResolver.ResolveButtonFillColor(style, element.ButtonState));
+                        Color: ResolveColor(element.BackgroundColor, visualStateResolver.ResolveButtonFillColor(style, element.ButtonState)));
                     var buttonSpan = ResolveText(element.Text, textSnapshot);
                     if (!buttonSpan.IsEmpty)
                     {
@@ -199,7 +199,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                             Resource: buttonTextStyle,
                             Text: buttonText,
                             ClipBounds: clip,
-                            Color: style.ButtonTextColor);
+                            Color: ResolveColor(element.ForegroundColor, style.ButtonTextColor));
                     }
                     break;
             }
@@ -218,5 +218,12 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     private static DrawRect ToDrawRect(PixelRectangle bounds)
     {
         return new DrawRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
+    }
+
+    private static DrawColor ResolveColor(StyleColorSlot styleColor, DrawColor defaultColor)
+    {
+        return styleColor.HasValue
+            ? new DrawColor(styleColor.Value.A, styleColor.Value.R, styleColor.Value.G, styleColor.Value.B)
+            : defaultColor;
     }
 }

@@ -26,7 +26,8 @@ public enum PropertyValueKind : byte
     None,
     Number,
     Boolean,
-    ActionId
+    ActionId,
+    Color
 }
 
 public enum NodeContentKind : byte
@@ -150,6 +151,9 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     public static PropertyValue FromActionId(ActionId value) =>
         new(PropertyValueKind.ActionId, value.Value, 0);
 
+    internal static PropertyValue FromColor(StyleColor value) =>
+        new(PropertyValueKind.Color, value.Argb, 0);
+
     public bool TryGetNumber(out double value)
     {
         if (_kind != PropertyValueKind.Number) { value = 0; return false; }
@@ -168,6 +172,13 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     {
         if (_kind != PropertyValueKind.ActionId) { value = ActionId.None; return false; }
         value = new ActionId(_uintValue);
+        return true;
+    }
+
+    internal bool TryGetColor(out StyleColor value)
+    {
+        if (_kind != PropertyValueKind.Color) { value = default; return false; }
+        value = StyleColor.FromArgb(_uintValue);
         return true;
     }
 
@@ -201,6 +212,16 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.ActionId}.");
     }
 
+    internal StyleColor GetRequiredColor()
+    {
+        if (TryGetColor(out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.Color}.");
+    }
+
     public bool Equals(PropertyValue other) => _kind == other._kind && _uintValue == other._uintValue && _data0 == other._data0;
 
     public override bool Equals(object? obj) => obj is PropertyValue other && Equals(other);
@@ -210,6 +231,55 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     public static bool operator ==(PropertyValue left, PropertyValue right) => left.Equals(right);
 
     public static bool operator !=(PropertyValue left, PropertyValue right) => !left.Equals(right);
+}
+
+internal readonly struct StyleColor(uint Argb) : IEquatable<StyleColor>
+{
+    public uint Argb { get; } = Argb;
+
+    public byte A => (byte)(Argb >> 24);
+    public byte R => (byte)(Argb >> 16);
+    public byte G => (byte)(Argb >> 8);
+    public byte B => (byte)Argb;
+
+    public static StyleColor Transparent => default;
+
+    public static StyleColor Opaque(byte r, byte g, byte b) => FromArgb(255, r, g, b);
+
+    public static StyleColor FromArgb(byte a, byte r, byte g, byte b) =>
+        new(((uint)a << 24) | ((uint)r << 16) | ((uint)g << 8) | b);
+
+    public static StyleColor FromArgb(uint argb) => new(argb);
+
+    public bool Equals(StyleColor other) => Argb == other.Argb;
+
+    public override bool Equals(object? obj) => obj is StyleColor other && Equals(other);
+
+    public override int GetHashCode() => Argb.GetHashCode();
+
+    public static bool operator ==(StyleColor left, StyleColor right) => left.Equals(right);
+
+    public static bool operator !=(StyleColor left, StyleColor right) => !left.Equals(right);
+}
+
+internal readonly struct StyleColorSlot(StyleColor Value, bool HasValue) : IEquatable<StyleColorSlot>
+{
+    public StyleColor Value { get; } = Value;
+    public bool HasValue { get; } = HasValue;
+
+    public static StyleColorSlot None => default;
+
+    public static StyleColorSlot Some(StyleColor value) => new(value, true);
+
+    public bool Equals(StyleColorSlot other) => Value == other.Value && HasValue == other.HasValue;
+
+    public override bool Equals(object? obj) => obj is StyleColorSlot other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Value, HasValue);
+
+    public static bool operator ==(StyleColorSlot left, StyleColorSlot right) => left.Equals(right);
+
+    public static bool operator !=(StyleColorSlot left, StyleColorSlot right) => !left.Equals(right);
 }
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key -> NodeKey) ─
@@ -394,6 +464,10 @@ public ref struct VirtualNodePropertyListBuilder
 
     public void AddScrollY(double value) => Add(VirtualNodeProperty.ScrollY(value));
 
+    internal void AddBackgroundColor(StyleColor value) => Add(VirtualNodeProperty.BackgroundColor(value));
+
+    internal void AddForegroundColor(StyleColor value) => Add(VirtualNodeProperty.ForegroundColor(value));
+
     public void Add(VirtualNodeProperty property)
     {
         for (var i = 0; i < _count; i++)
@@ -565,6 +639,21 @@ public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 
     public static VirtualNodeProperty Focused(bool value) =>
         new(VirtualPropertyKey.IsFocused, PropertyValue.FromBoolean(value));
+
+    internal static VirtualNodeProperty BackgroundColor(StyleColor value) =>
+        new(VirtualPropertyKey.BackgroundColor, PropertyValue.FromColor(value));
+
+    internal static VirtualNodeProperty ForegroundColor(StyleColor value) =>
+        new(VirtualPropertyKey.ForegroundColor, PropertyValue.FromColor(value));
+
+    internal static VirtualNodeProperty LayerOpacity(double value) =>
+        new(VirtualPropertyKey.LayerOpacity, PropertyValue.FromNumber(value));
+
+    internal static VirtualNodeProperty TranslateX(double value) =>
+        new(VirtualPropertyKey.TranslateX, PropertyValue.FromNumber(value));
+
+    internal static VirtualNodeProperty TranslateY(double value) =>
+        new(VirtualPropertyKey.TranslateY, PropertyValue.FromNumber(value));
 
     private static void Validate(VirtualPropertyKey key, PropertyValue value)
     {

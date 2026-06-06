@@ -47,4 +47,18 @@ internal readonly ref struct PropertyReader
 
         return ActionId.None;
     }
+
+    public bool TryGetColor(VirtualPropertyKey key, out StyleColor value)
+    {
+        foreach (var property in _properties)
+        {
+            if (property.Key == key && property.Value.TryGetColor(out value))
+            {
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
 }

@@ -133,6 +133,44 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void DrawCommandRecorder_applies_internal_visual_style_color_overrides()
+    {
+        var recorder = new DrawCommandRecorder();
+        var text = _arena.AddText("Title".AsSpan());
+        var buttonText = _arena.AddText("Go".AsSpan());
+        var snapshot = _arena.GetOrCreateSnapshot();
+        var elements = new[]
+        {
+            new LayoutElement(
+                LayoutElementKind.Text,
+                new PixelRectangle(16, 16, 200, 32),
+                Text: text,
+                ForegroundColor: StyleColorSlot.Some(StyleColor.Opaque(1, 2, 3))),
+            new LayoutElement(
+                LayoutElementKind.Rectangle,
+                new PixelRectangle(16, 60, 160, 48),
+                BackgroundColor: StyleColorSlot.Some(StyleColor.FromArgb(0, 4, 5, 6))),
+            new LayoutElement(
+                LayoutElementKind.Button,
+                new PixelRectangle(16, 120, 140, 40),
+                Text: buttonText,
+                ActionId: new ActionId(1),
+                BackgroundColor: StyleColorSlot.Some(StyleColor.Opaque(7, 8, 9)),
+                ForegroundColor: StyleColorSlot.Some(StyleColor.Opaque(10, 11, 12)))
+        };
+
+        var result = recorder.Record(elements, textSnapshot: snapshot);
+
+        Assert.Equal(4, result.Commands.Count);
+        Assert.Equal(DrawColor.Opaque(1, 2, 3), result.Commands.Memory.Span[0].Color);
+        Assert.Equal(new DrawColor(0, 4, 5, 6), result.Commands.Memory.Span[1].Color);
+        Assert.Equal(DrawColor.Opaque(7, 8, 9), result.Commands.Memory.Span[2].Color);
+        Assert.Equal(DrawColor.Opaque(10, 11, 12), result.Commands.Memory.Span[3].Color);
+
+        result.Commands.Dispose();
+    }
+
+    [Fact]
     public void Default_style_preset_keeps_current_layout_metrics()
     {
         var layout = RenderStylePreset.Default.Layout;
@@ -434,6 +472,194 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)], pipeline.LastDirtyClassifications);
         Assert.Equal(frame1.HitTargets[0].Bounds, frame2.HitTargets[0].Bounds);
+    }
+
+    [Fact]
+    public void RenderPipeline_classifies_internal_visual_color_change_as_style_only()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(20, 30, 40))));
+        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(80, 90, 100))));
+
+        using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
+        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+        using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
+        var nextGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly, InvalidationKind.VisualOnly)], pipeline.LastDirtyClassifications);
+        Assert.Equal(initialGeometry, nextGeometry);
+        Assert.Equal(DrawColor.Opaque(20, 30, 40), frame1.Commands.Memory.Span[0].Color);
+        Assert.Equal(DrawColor.Opaque(80, 90, 100), frame2.Commands.Memory.Span[0].Color);
+        Assert.Equal(frame1.Commands.Memory.Span[0].Rect, frame2.Commands.Memory.Span[0].Rect);
+        Assert.Equal([(0, 1)], frame2.DirtyCommandRanges);
+    }
+
+    [Fact]
+    public void RenderPipeline_classifies_internal_composition_property_change_as_style_only_composite()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.LayerOpacity(1)));
+        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.LayerOpacity(0.5)));
+
+        using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
+        using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly, InvalidationKind.CompositeOnly)], pipeline.LastDirtyClassifications);
+        Assert.Equal(frame1.Commands.Memory.Span[0].Rect, frame2.Commands.Memory.Span[0].Rect);
+        Assert.Equal(frame1.Commands.Memory.Span[0].Color, frame2.Commands.Memory.Span[0].Color);
+    }
+
+    [Fact]
+    public void RenderPipeline_classifies_mixed_visual_and_composition_style_change_as_draw_update()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(20, 30, 40)),
+                VirtualNodeProperty.LayerOpacity(1)));
+        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(80, 90, 100)),
+                VirtualNodeProperty.LayerOpacity(0.5)));
+
+        using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
+        using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
+
+        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly, InvalidationKind.VisualOnly)], pipeline.LastDirtyClassifications);
+        Assert.Equal(DrawColor.Opaque(20, 30, 40), frame1.Commands.Memory.Span[0].Color);
+        Assert.Equal(DrawColor.Opaque(80, 90, 100), frame2.Commands.Memory.Span[0].Color);
+        Assert.Equal(frame1.Commands.Memory.Span[0].Rect, frame2.Commands.Memory.Span[0].Rect);
+    }
+
+    [Fact]
+    public void StyleTransitionCompiler_compiles_internal_composite_delta_to_composition_declaration()
+    {
+        var previous = new[]
+        {
+            VirtualNodeProperty.LayerOpacity(1),
+            VirtualNodeProperty.TranslateX(0),
+            VirtualNodeProperty.TranslateY(4)
+        };
+        var next = new[]
+        {
+            VirtualNodeProperty.LayerOpacity(0.5),
+            VirtualNodeProperty.TranslateX(24),
+            VirtualNodeProperty.TranslateY(16)
+        };
+        var marker = new CompositionAnimationMarker(
+            new CompositionAnimationMarkerId(1),
+            new CompositionRuntimeEventId(2),
+            CompositionAnimationMarkerTrigger.AtProgress(0.5f));
+        var request = new StyleTransitionCompileRequest(
+            new NodeKey(22),
+            previous,
+            next,
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            new CompositionAnimationInstanceId(3),
+            [marker]);
+
+        var result = StyleTransitionCompiler.Compile(request);
+
+        Assert.True(result.HasDeclaration);
+        Assert.Equal(StyleTransitionCompileStatus.CompiledCompositionDeclaration, result.Status);
+        Assert.True(result.DeltaPlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(new StyleTransitionState(0, 4, 1), result.From);
+        Assert.Equal(new StyleTransitionState(24, 16, 0.5f), result.To);
+
+        var declaration = result.Declaration;
+        Assert.Equal(new NodeKey(22), declaration.TargetKey);
+        Assert.Equal(CompositionTimestamp.FromStopwatchTicks(100), declaration.Timeline.StartTimestamp);
+        Assert.Equal(CompositionDuration.FromStopwatchTicks(50), declaration.Timeline.Duration);
+        Assert.Equal(new CompositionAnimationInstanceId(3), declaration.InstanceId);
+        Assert.Equal([marker], declaration.Markers.ToArray());
+        Assert.True(declaration.Transform.TranslateX.Evaluate(0.5f) > 12);
+        Assert.True(declaration.Transform.TranslateY.Evaluate(0.5f) > 10);
+        Assert.Equal(0.5f, declaration.Opacity.To);
+    }
+
+    [Fact]
+    public void StyleTransitionCompiler_rejects_draw_or_layout_owned_deltas()
+    {
+        VirtualNodeProperty[] visualPrevious = [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3))];
+        VirtualNodeProperty[] visualNext = [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6))];
+        VirtualNodeProperty[] layoutPrevious = [VirtualNodeProperty.Width(100)];
+        VirtualNodeProperty[] layoutNext = [VirtualNodeProperty.Width(120)];
+        VirtualNodeProperty[] mixedPrevious =
+        [
+            VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)),
+            VirtualNodeProperty.LayerOpacity(1)
+        ];
+        VirtualNodeProperty[] mixedNext =
+        [
+            VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)),
+            VirtualNodeProperty.LayerOpacity(0.5)
+        ];
+        var visualRequest = new StyleTransitionCompileRequest(
+            new NodeKey(22),
+            visualPrevious,
+            visualNext,
+            CompositionTimestamp.Zero,
+            CompositionDuration.FromStopwatchTicks(50));
+        var layoutRequest = new StyleTransitionCompileRequest(
+            new NodeKey(22),
+            layoutPrevious,
+            layoutNext,
+            CompositionTimestamp.Zero,
+            CompositionDuration.FromStopwatchTicks(50));
+        var mixedRequest = new StyleTransitionCompileRequest(
+            new NodeKey(22),
+            mixedPrevious,
+            mixedNext,
+            CompositionTimestamp.Zero,
+            CompositionDuration.FromStopwatchTicks(50));
+
+        var visual = StyleTransitionCompiler.Compile(visualRequest);
+        var layout = StyleTransitionCompiler.Compile(layoutRequest);
+        var mixed = StyleTransitionCompiler.Compile(mixedRequest);
+
+        Assert.Equal(StyleTransitionCompileStatus.RequiresDrawUpdate, visual.Status);
+        Assert.Equal(StyleTransitionCompileStatus.RequiresLayout, layout.Status);
+        Assert.Equal(StyleTransitionCompileStatus.RequiresDrawUpdate, mixed.Status);
+        Assert.False(visual.HasDeclaration);
+        Assert.False(layout.HasDeclaration);
+        Assert.False(mixed.HasDeclaration);
     }
 
     [Fact]

@@ -39,7 +39,9 @@ internal readonly struct LayoutElement(
     PixelRectangle ClipBounds = default,
     TextNodeContent Text = default,
     ActionId ActionId = default,
-    ButtonVisualState ButtonState = default) : IEquatable<LayoutElement>
+    ButtonVisualState ButtonState = default,
+    StyleColorSlot BackgroundColor = default,
+    StyleColorSlot ForegroundColor = default) : IEquatable<LayoutElement>
 {
 
     public LayoutElementKind Kind { get; } = Kind;
@@ -48,6 +50,8 @@ internal readonly struct LayoutElement(
     public TextNodeContent Text { get; } = Text;
     public ActionId ActionId { get; } = ActionId;
     public ButtonVisualState ButtonState { get; } = ButtonState;
+    public StyleColorSlot BackgroundColor { get; } = BackgroundColor;
+    public StyleColorSlot ForegroundColor { get; } = ForegroundColor;
 
     public bool Equals(LayoutElement other)
     {
@@ -56,12 +60,26 @@ internal readonly struct LayoutElement(
             && ClipBounds == other.ClipBounds
             && Text.Equals(other.Text)
             && ActionId.Equals(other.ActionId)
-            && ButtonState == other.ButtonState;
+            && ButtonState == other.ButtonState
+            && BackgroundColor == other.BackgroundColor
+            && ForegroundColor == other.ForegroundColor;
     }
 
     public override bool Equals(object? obj) => obj is LayoutElement other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Kind, Bounds, ClipBounds, Text, ActionId, ButtonState);
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Kind);
+        hash.Add(Bounds);
+        hash.Add(ClipBounds);
+        hash.Add(Text);
+        hash.Add(ActionId);
+        hash.Add(ButtonState);
+        hash.Add(BackgroundColor);
+        hash.Add(ForegroundColor);
+        return hash.ToHashCode();
+    }
 
     public static bool operator ==(LayoutElement left, LayoutElement right) => left.Equals(right);
 

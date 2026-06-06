@@ -6,6 +6,7 @@ internal enum PropertyDomain : byte
     Visual = 2,
     Interaction = 3,
     RuntimeState = 4,
+    Composition = 5,
 }
 
 [Flags]
@@ -71,11 +72,18 @@ public readonly struct VirtualPropertyKey : IEquatable<VirtualPropertyKey>
     public static readonly VirtualPropertyKey Height = new(PropertyDomain.Layout, 2);
     public static readonly VirtualPropertyKey ScrollY = new(PropertyDomain.Layout, 3);
 
+    internal static readonly VirtualPropertyKey BackgroundColor = new(PropertyDomain.Visual, 1);
+    internal static readonly VirtualPropertyKey ForegroundColor = new(PropertyDomain.Visual, 2);
+
     public static readonly VirtualPropertyKey ActionId = new(PropertyDomain.Interaction, 1);
 
     public static readonly VirtualPropertyKey IsHovered = new(PropertyDomain.RuntimeState, 1);
     public static readonly VirtualPropertyKey IsPressed = new(PropertyDomain.RuntimeState, 2);
     public static readonly VirtualPropertyKey IsFocused = new(PropertyDomain.RuntimeState, 3);
+
+    internal static readonly VirtualPropertyKey LayerOpacity = new(PropertyDomain.Composition, 1);
+    internal static readonly VirtualPropertyKey TranslateX = new(PropertyDomain.Composition, 2);
+    internal static readonly VirtualPropertyKey TranslateY = new(PropertyDomain.Composition, 3);
 }
 
 internal readonly struct StylePropertyMetadata(
@@ -119,6 +127,9 @@ internal static class VirtualPropertyMetadata
     private const VirtualNodeKindFlags HeightNodes =
         VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button | VirtualNodeKindFlags.ScrollContainer;
 
+    private const VirtualNodeKindFlags CompositionNodes =
+        VirtualNodeKindFlags.Text | VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button | VirtualNodeKindFlags.ScrollContainer;
+
     public static StylePropertyMetadata Get(VirtualPropertyKey key)
     {
         if (TryGet(key, out var metadata))
@@ -154,6 +165,30 @@ internal static class VirtualPropertyMetadata
             return true;
         }
 
+        if (key == VirtualPropertyKey.BackgroundColor)
+        {
+            metadata = new StylePropertyMetadata(
+                key,
+                PropertyValueKind.Color,
+                StyleEffect.Visual,
+                AnimationChannel.CpuStyle,
+                StylePropertyScope.NodeLocal,
+                VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button);
+            return true;
+        }
+
+        if (key == VirtualPropertyKey.ForegroundColor)
+        {
+            metadata = new StylePropertyMetadata(
+                key,
+                PropertyValueKind.Color,
+                StyleEffect.Visual,
+                AnimationChannel.CpuStyle,
+                StylePropertyScope.NodeLocal,
+                VirtualNodeKindFlags.Text | VirtualNodeKindFlags.Button);
+            return true;
+        }
+
         if (key == VirtualPropertyKey.ActionId)
         {
             metadata = new StylePropertyMetadata(
@@ -178,6 +213,28 @@ internal static class VirtualPropertyMetadata
             return true;
         }
 
+        if (key == VirtualPropertyKey.LayerOpacity)
+        {
+            metadata = Number(
+                key,
+                StyleEffect.Composite,
+                AnimationChannel.Composite,
+                StylePropertyScope.NodeLocal,
+                CompositionNodes);
+            return true;
+        }
+
+        if (key == VirtualPropertyKey.TranslateX || key == VirtualPropertyKey.TranslateY)
+        {
+            metadata = Number(
+                key,
+                StyleEffect.Composite,
+                AnimationChannel.Composite,
+                StylePropertyScope.NodeLocal,
+                CompositionNodes);
+            return true;
+        }
+
         metadata = default;
         return false;
     }
@@ -198,10 +255,15 @@ internal static class VirtualPropertyDiagnostics
         if (key == VirtualPropertyKey.Width) return nameof(VirtualPropertyKey.Width);
         if (key == VirtualPropertyKey.Height) return nameof(VirtualPropertyKey.Height);
         if (key == VirtualPropertyKey.ScrollY) return nameof(VirtualPropertyKey.ScrollY);
+        if (key == VirtualPropertyKey.BackgroundColor) return nameof(VirtualPropertyKey.BackgroundColor);
+        if (key == VirtualPropertyKey.ForegroundColor) return nameof(VirtualPropertyKey.ForegroundColor);
         if (key == VirtualPropertyKey.ActionId) return nameof(VirtualPropertyKey.ActionId);
         if (key == VirtualPropertyKey.IsHovered) return nameof(VirtualPropertyKey.IsHovered);
         if (key == VirtualPropertyKey.IsPressed) return nameof(VirtualPropertyKey.IsPressed);
         if (key == VirtualPropertyKey.IsFocused) return nameof(VirtualPropertyKey.IsFocused);
+        if (key == VirtualPropertyKey.LayerOpacity) return nameof(VirtualPropertyKey.LayerOpacity);
+        if (key == VirtualPropertyKey.TranslateX) return nameof(VirtualPropertyKey.TranslateX);
+        if (key == VirtualPropertyKey.TranslateY) return nameof(VirtualPropertyKey.TranslateY);
 
         return $"Unknown({(byte)key.Domain},{key.Code})";
     }
@@ -243,12 +305,14 @@ internal readonly struct PropertyChangeSet : IEquatable<PropertyChangeSet>
         ulong visualMask,
         ulong interactionMask,
         ulong runtimeStateMask,
+        ulong compositionMask,
         StyleEffect effects)
     {
         LayoutMask = layoutMask;
         VisualMask = visualMask;
         InteractionMask = interactionMask;
         RuntimeStateMask = runtimeStateMask;
+        CompositionMask = compositionMask;
         Effects = effects;
     }
 
@@ -256,9 +320,16 @@ internal readonly struct PropertyChangeSet : IEquatable<PropertyChangeSet>
     public ulong VisualMask { get; }
     public ulong InteractionMask { get; }
     public ulong RuntimeStateMask { get; }
+    public ulong CompositionMask { get; }
     public StyleEffect Effects { get; }
 
-    public bool IsEmpty => LayoutMask == 0 && VisualMask == 0 && InteractionMask == 0 && RuntimeStateMask == 0 && Effects == StyleEffect.None;
+    public bool IsEmpty =>
+        LayoutMask == 0
+        && VisualMask == 0
+        && InteractionMask == 0
+        && RuntimeStateMask == 0
+        && CompositionMask == 0
+        && Effects == StyleEffect.None;
 
     public static PropertyChangeSet AddKey(PropertyChangeSet set, VirtualPropertyKey key)
     {
@@ -270,11 +341,12 @@ internal readonly struct PropertyChangeSet : IEquatable<PropertyChangeSet>
         var bit = key.Code is 0 or > 64 ? 0 : 1ul << (key.Code - 1);
         return key.Domain switch
         {
-            PropertyDomain.Layout => new PropertyChangeSet(set.LayoutMask | bit, set.VisualMask, set.InteractionMask, set.RuntimeStateMask, set.Effects | metadata.Effects),
-            PropertyDomain.Visual => new PropertyChangeSet(set.LayoutMask, set.VisualMask | bit, set.InteractionMask, set.RuntimeStateMask, set.Effects | metadata.Effects),
-            PropertyDomain.Interaction => new PropertyChangeSet(set.LayoutMask, set.VisualMask, set.InteractionMask | bit, set.RuntimeStateMask, set.Effects | metadata.Effects),
-            PropertyDomain.RuntimeState => new PropertyChangeSet(set.LayoutMask, set.VisualMask, set.InteractionMask, set.RuntimeStateMask | bit, set.Effects | metadata.Effects),
-            _ => new PropertyChangeSet(set.LayoutMask, set.VisualMask, set.InteractionMask, set.RuntimeStateMask, set.Effects | metadata.Effects),
+            PropertyDomain.Layout => new PropertyChangeSet(set.LayoutMask | bit, set.VisualMask, set.InteractionMask, set.RuntimeStateMask, set.CompositionMask, set.Effects | metadata.Effects),
+            PropertyDomain.Visual => new PropertyChangeSet(set.LayoutMask, set.VisualMask | bit, set.InteractionMask, set.RuntimeStateMask, set.CompositionMask, set.Effects | metadata.Effects),
+            PropertyDomain.Interaction => new PropertyChangeSet(set.LayoutMask, set.VisualMask, set.InteractionMask | bit, set.RuntimeStateMask, set.CompositionMask, set.Effects | metadata.Effects),
+            PropertyDomain.RuntimeState => new PropertyChangeSet(set.LayoutMask, set.VisualMask, set.InteractionMask, set.RuntimeStateMask | bit, set.CompositionMask, set.Effects | metadata.Effects),
+            PropertyDomain.Composition => new PropertyChangeSet(set.LayoutMask, set.VisualMask, set.InteractionMask, set.RuntimeStateMask, set.CompositionMask | bit, set.Effects | metadata.Effects),
+            _ => new PropertyChangeSet(set.LayoutMask, set.VisualMask, set.InteractionMask, set.RuntimeStateMask, set.CompositionMask, set.Effects | metadata.Effects),
         };
     }
 
@@ -282,11 +354,12 @@ internal readonly struct PropertyChangeSet : IEquatable<PropertyChangeSet>
         && VisualMask == other.VisualMask
         && InteractionMask == other.InteractionMask
         && RuntimeStateMask == other.RuntimeStateMask
+        && CompositionMask == other.CompositionMask
         && Effects == other.Effects;
 
     public override bool Equals(object? obj) => obj is PropertyChangeSet other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(LayoutMask, VisualMask, InteractionMask, RuntimeStateMask, Effects);
+    public override int GetHashCode() => HashCode.Combine(LayoutMask, VisualMask, InteractionMask, RuntimeStateMask, CompositionMask, Effects);
 
     public static bool operator ==(PropertyChangeSet left, PropertyChangeSet right) => left.Equals(right);
 

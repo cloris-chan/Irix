@@ -18,11 +18,11 @@ internal static class PropertyChangeSetClassification
         if ((effects & StyleEffect.TextMeasure) != 0)
             return InvalidationKind.TextMeasure;
 
-        if ((effects & StyleEffect.Composite) != 0)
-            return InvalidationKind.CompositeOnly;
-
         if ((effects & (StyleEffect.Visual | StyleEffect.Interaction)) != 0)
             return InvalidationKind.VisualOnly;
+
+        if ((effects & StyleEffect.Composite) != 0)
+            return InvalidationKind.CompositeOnly;
 
         return InvalidationKind.None;
     }

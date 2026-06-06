@@ -85,6 +85,11 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(VirtualPropertyKey.IsHovered, VirtualNodeProperty.Hovered(true).Key);
         Assert.Equal(VirtualPropertyKey.IsPressed, VirtualNodeProperty.Pressed(true).Key);
         Assert.Equal(VirtualPropertyKey.IsFocused, VirtualNodeProperty.Focused(true).Key);
+        Assert.Equal(VirtualPropertyKey.BackgroundColor, VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)).Key);
+        Assert.Equal(VirtualPropertyKey.ForegroundColor, VirtualNodeProperty.ForegroundColor(StyleColor.Opaque(4, 5, 6)).Key);
+        Assert.Equal(VirtualPropertyKey.LayerOpacity, VirtualNodeProperty.LayerOpacity(0.5).Key);
+        Assert.Equal(VirtualPropertyKey.TranslateX, VirtualNodeProperty.TranslateX(12).Key);
+        Assert.Equal(VirtualPropertyKey.TranslateY, VirtualNodeProperty.TranslateY(24).Key);
     }
 
     [Fact]
@@ -224,6 +229,13 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Internal_style_value_slots_have_no_managed_references()
+    {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleColor>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleColorSlot>());
+    }
+
+    [Fact]
     public void VirtualPropertyKey_has_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<VirtualPropertyKey>());
@@ -293,6 +305,16 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Internal_style_delta_plan_is_value_typed()
+    {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleDeltaPlan>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleDeltaWork>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleTransitionState>());
+        Assert.True(RuntimeHelpers.IsReferenceOrContainsReferences<StyleTransitionCompileRequest>());
+        Assert.True(RuntimeHelpers.IsReferenceOrContainsReferences<StyleTransitionCompileResult>());
+    }
+
+    [Fact]
     public void Every_public_virtual_property_key_has_metadata()
     {
         foreach (var field in GetPublicVirtualPropertyKeyFields())
@@ -324,6 +346,26 @@ public class TypedIdAllocationGuardTests
         Assert.True((hovered.Effects & StyleEffect.Interaction) != 0);
         Assert.True((hovered.Effects & StyleEffect.Visual) != 0);
         Assert.Equal(AnimationChannel.Discrete, hovered.AnimationChannel);
+
+        var background = VirtualPropertyMetadata.Get(VirtualPropertyKey.BackgroundColor);
+        Assert.Equal(PropertyValueKind.Color, background.ValueKind);
+        Assert.Equal(StyleEffect.Visual, background.Effects);
+        Assert.Equal(AnimationChannel.CpuStyle, background.AnimationChannel);
+
+        var foreground = VirtualPropertyMetadata.Get(VirtualPropertyKey.ForegroundColor);
+        Assert.Equal(PropertyValueKind.Color, foreground.ValueKind);
+        Assert.Equal(StyleEffect.Visual, foreground.Effects);
+        Assert.Equal(AnimationChannel.CpuStyle, foreground.AnimationChannel);
+
+        var opacity = VirtualPropertyMetadata.Get(VirtualPropertyKey.LayerOpacity);
+        Assert.Equal(PropertyValueKind.Number, opacity.ValueKind);
+        Assert.Equal(StyleEffect.Composite, opacity.Effects);
+        Assert.Equal(AnimationChannel.Composite, opacity.AnimationChannel);
+
+        var translateX = VirtualPropertyMetadata.Get(VirtualPropertyKey.TranslateX);
+        Assert.Equal(PropertyValueKind.Number, translateX.ValueKind);
+        Assert.Equal(StyleEffect.Composite, translateX.Effects);
+        Assert.Equal(AnimationChannel.Composite, translateX.AnimationChannel);
     }
 
     [Fact]
@@ -333,6 +375,63 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(InvalidationKind.Layout, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ScrollY).ClassifySet());
         Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ActionId).ClassifySet());
         Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.IsHovered).ClassifySet());
+        Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.BackgroundColor).ClassifySet());
+        Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ForegroundColor).ClassifySet());
+        Assert.Equal(InvalidationKind.CompositeOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.LayerOpacity).ClassifySet());
+        Assert.Equal(InvalidationKind.CompositeOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.TranslateX).ClassifySet());
+
+        var visualAndComposite = PropertyChangeSet.AddKey(default, VirtualPropertyKey.BackgroundColor);
+        visualAndComposite = PropertyChangeSet.AddKey(visualAndComposite, VirtualPropertyKey.LayerOpacity);
+        Assert.Equal(InvalidationKind.VisualOnly, visualAndComposite.ClassifySet());
+    }
+
+    [Fact]
+    public void Property_change_set_tracks_composition_separately_from_visual_draw_style()
+    {
+        var background = PropertyChangeSet.AddKey(default, VirtualPropertyKey.BackgroundColor);
+        Assert.Equal(1ul, background.VisualMask);
+        Assert.Equal(0ul, background.CompositionMask);
+
+        var translate = PropertyChangeSet.AddKey(default, VirtualPropertyKey.TranslateY);
+        Assert.Equal(0ul, translate.VisualMask);
+        Assert.Equal(4ul, translate.CompositionMask);
+
+        var mixed = PropertyChangeSet.AddKey(background, VirtualPropertyKey.LayerOpacity);
+        Assert.Equal(1ul, mixed.VisualMask);
+        Assert.Equal(1ul, mixed.CompositionMask);
+        Assert.Equal(StyleEffect.Visual | StyleEffect.Composite, mixed.Effects);
+    }
+
+    [Fact]
+    public void Style_delta_planner_preserves_internal_execution_work_flags()
+    {
+        var visualPlan = StyleDeltaPlanner.Plan(PropertyChangeSet.AddKey(default, VirtualPropertyKey.ForegroundColor));
+        Assert.True(visualPlan.CanReuseLayout);
+        Assert.True(visualPlan.RequiresDrawUpdate);
+        Assert.False(visualPlan.RequiresCompositionUpdate);
+        Assert.Equal(InvalidationKind.VisualOnly, visualPlan.InvalidationKind);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, visualPlan.LayoutRebuildReason);
+
+        var compositionPlan = StyleDeltaPlanner.Plan(PropertyChangeSet.AddKey(default, VirtualPropertyKey.TranslateX));
+        Assert.True(compositionPlan.CanReuseLayout);
+        Assert.False(compositionPlan.RequiresDrawUpdate);
+        Assert.True(compositionPlan.RequiresCompositionUpdate);
+        Assert.True(compositionPlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(InvalidationKind.CompositeOnly, compositionPlan.InvalidationKind);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, compositionPlan.LayoutRebuildReason);
+
+        var mixedPlan = StyleDeltaPlanner.Plan(
+            StyleDeltaPlanner.BuildChangeSet(
+                [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3))],
+                [
+                    VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)),
+                    VirtualNodeProperty.LayerOpacity(0.75)
+                ]));
+        Assert.True(mixedPlan.CanReuseLayout);
+        Assert.True(mixedPlan.RequiresDrawUpdate);
+        Assert.True(mixedPlan.RequiresCompositionUpdate);
+        Assert.False(mixedPlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(InvalidationKind.VisualOnly, mixedPlan.InvalidationKind);
     }
 
     [Fact]
@@ -543,6 +642,22 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(new ActionId(7), value);
     }
 
+    [Fact]
+    public void PropertyValue_Color_roundtrip_preserves_transparent_values()
+    {
+        var transparent = PropertyValue.FromColor(StyleColor.Transparent);
+        var opaque = PropertyValue.FromColor(StyleColor.Opaque(10, 20, 30));
+
+        Assert.Equal(PropertyValueKind.Color, transparent.Kind);
+        Assert.True(transparent.TryGetColor(out var transparentValue));
+        Assert.Equal(StyleColor.Transparent, transparentValue);
+        Assert.Equal(StyleColor.Transparent, transparent.GetRequiredColor());
+
+        Assert.Equal(PropertyValueKind.Color, opaque.Kind);
+        Assert.True(opaque.TryGetColor(out var opaqueValue));
+        Assert.Equal(StyleColor.Opaque(10, 20, 30), opaqueValue);
+    }
+
     // ── R13-25: Source-level guards — no string API in core/rendering ──
 
     [Fact]
@@ -573,9 +688,9 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("FontSize", source);
         Assert.DoesNotContain("FontWeight", source);
         Assert.DoesNotContain("Wrapping", source);
-        Assert.DoesNotContain("FillColor", source);
-        Assert.DoesNotContain("TextColor", source);
-        Assert.DoesNotContain("Opacity", source);
+        Assert.DoesNotContain("public static readonly VirtualPropertyKey FillColor", source);
+        Assert.DoesNotContain("public static readonly VirtualPropertyKey TextColor", source);
+        Assert.DoesNotContain("public static readonly VirtualPropertyKey Opacity", source);
 
         Assert.DoesNotContain("ButtonHeight", source);
         Assert.DoesNotContain("RectangleHeight", source);
@@ -1083,6 +1198,14 @@ public class TypedIdAllocationGuardTests
         Assert.False(typeof(AnimationChannel).IsPublic);
         Assert.False(typeof(VirtualNodeKindFlags).IsPublic);
         Assert.False(typeof(StylePropertyScope).IsPublic);
+        Assert.False(typeof(StyleColor).IsPublic);
+        Assert.False(typeof(StyleColorSlot).IsPublic);
+        Assert.False(typeof(StyleDeltaPlan).IsPublic);
+        Assert.False(typeof(StyleDeltaWork).IsPublic);
+        Assert.False(typeof(StyleDeltaPlanner).IsPublic);
+        Assert.False(typeof(StyleTransitionCompiler).IsPublic);
+        Assert.False(typeof(StyleTransitionCompileRequest).IsPublic);
+        Assert.False(typeof(StyleTransitionCompileResult).IsPublic);
     }
 
     [Fact]
@@ -1099,6 +1222,38 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("LayoutStyle", methods);
         Assert.DoesNotContain("VisualStyle", methods);
         Assert.DoesNotContain("CompositeStyle", methods);
+        Assert.DoesNotContain("BackgroundColor", methods);
+        Assert.DoesNotContain("ForegroundColor", methods);
+        Assert.DoesNotContain("LayerOpacity", methods);
+        Assert.DoesNotContain("TranslateX", methods);
+        Assert.DoesNotContain("TranslateY", methods);
+    }
+
+    [Fact]
+    public void Internal_style_preflight_does_not_create_public_authoring_or_scheduler_surface()
+    {
+        var root = FindRepoRoot();
+        var coreSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "VirtualPropertyKey.cs"));
+        var transitionSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleTransitionCompiler.cs"));
+        var styleDeltaSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleDeltaPlan.cs"));
+
+        Assert.Contains("internal enum PropertyDomain", coreSource);
+        Assert.Contains("Composition = 5", coreSource);
+        Assert.Contains("public ulong CompositionMask", coreSource);
+        Assert.Contains("PropertyDomain.Composition", coreSource);
+
+        Assert.DoesNotContain("public enum StyleDeltaWork", styleDeltaSource);
+        Assert.DoesNotContain("public readonly struct StyleDeltaPlan", styleDeltaSource);
+        Assert.DoesNotContain("public static class StyleDeltaPlanner", styleDeltaSource);
+        Assert.DoesNotContain("public static class StyleTransitionCompiler", transitionSource);
+        Assert.DoesNotContain("Theme", transitionSource);
+        Assert.DoesNotContain("Cascade", transitionSource);
+        Assert.DoesNotContain("Scheduler", transitionSource);
+        Assert.DoesNotContain("Task", transitionSource);
+        Assert.DoesNotContain("async", transitionSource);
+        Assert.DoesNotContain("SetCompositionAnimationDeclaration", transitionSource);
+        Assert.Contains("CompositionAnimationDeclaration", transitionSource);
+        Assert.Contains("StyleDeltaPlanner.Plan", transitionSource);
     }
 
     [Fact]

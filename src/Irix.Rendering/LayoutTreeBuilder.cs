@@ -297,11 +297,13 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             }
 
             var elementIndex = _elements.Count;
+            var properties = new PropertyReader(node.Properties);
             _elements.Add(new LayoutElement(
                 LayoutElementKind.Text,
                 new PixelRectangle(_ctx.Style.HorizontalPadding, _cursorY, _ctx.AvailableWidth, _ctx.Style.TextHeight),
                 ClipBounds: _ctx.ClipBounds,
-                Text: content));
+                Text: content,
+                ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += _ctx.Style.TextHeight + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Text, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -317,7 +319,11 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 ReadInt(properties, VirtualPropertyKey.Width, Math.Min(_ctx.AvailableWidth, 160)),
                 ReadInt(properties, VirtualPropertyKey.Height, _ctx.Style.RectangleHeight));
             var elementIndex = _elements.Count;
-            _elements.Add(new LayoutElement(LayoutElementKind.Rectangle, rectangleBounds, ClipBounds: _ctx.ClipBounds));
+            _elements.Add(new LayoutElement(
+                LayoutElementKind.Rectangle,
+                rectangleBounds,
+                ClipBounds: _ctx.ClipBounds,
+                BackgroundColor: ReadColor(properties, VirtualPropertyKey.BackgroundColor)));
             _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -354,7 +360,9 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 ClipBounds: _ctx.ClipBounds,
                 Text: label,
                 ActionId: actionId,
-                ButtonState: buttonState));
+                ButtonState: buttonState,
+                BackgroundColor: ReadColor(properties, VirtualPropertyKey.BackgroundColor),
+                ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -394,7 +402,9 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                     el.ClipBounds,
                     el.Text,
                     el.ActionId,
-                    el.ButtonState);
+                    el.ButtonState,
+                    el.BackgroundColor,
+                    el.ForegroundColor);
             }
         }
     }
@@ -533,6 +543,9 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
     private static int ReadInt(PropertyReader reader, VirtualPropertyKey key, int defaultValue) =>
         (int)reader.GetNumber(key, defaultValue);
+
+    private static StyleColorSlot ReadColor(PropertyReader reader, VirtualPropertyKey key) =>
+        reader.TryGetColor(key, out var color) ? StyleColorSlot.Some(color) : StyleColorSlot.None;
 
     private static TextNodeContent GetTextContent(VirtualNode node)
     {
