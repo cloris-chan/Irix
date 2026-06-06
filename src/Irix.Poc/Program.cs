@@ -146,9 +146,11 @@ internal static partial class Program
 
         void HandleInput(RawInputEvent inputEvent)
         {
+            var previousOwnership = inputOwnershipState.Snapshot;
             var hitTestService = new DrawingBackendCompositorInputHitTestService(d3d12Compositor);
             if (TryMapInputForRuntime(inputEvent, inputOwnershipState, hitTestService, out var message))
             {
+                var nextOwnership = inputOwnershipState.Snapshot;
                 if (message is CounterMessage.WheelRaw wheel)
                 {
                     var wheelDispatchSink = new ScrollPresentationWheelDispatchSink(
@@ -161,7 +163,28 @@ internal static partial class Program
                 }
                 else if (message is not null)
                 {
-                    _ = TryDispatchAppMessageForRuntime(message, runtimeDispatchSink);
+                    var shouldApplyStyleTransition = previousOwnership != nextOwnership
+                        && !compositorLoop.TryGetPresentedScrollY(new NodeKey(1), out _);
+                    if (shouldApplyStyleTransition)
+                    {
+                        var transitionTask = CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+                            runtime,
+                            message,
+                            previousOwnership,
+                            nextOwnership,
+                            new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor),
+                            new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
+                            CompositionTimestamp.Now()).AsTask();
+                        _ = transitionTask.ContinueWith(
+                            static task => _ = task.Exception,
+                            CancellationToken.None,
+                            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                            TaskScheduler.Default);
+                    }
+                    else
+                    {
+                        _ = TryDispatchAppMessageForRuntime(message, runtimeDispatchSink);
+                    }
                 }
             }
         }

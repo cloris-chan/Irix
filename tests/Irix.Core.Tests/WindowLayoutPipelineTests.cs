@@ -864,6 +864,115 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void CounterStyleTransitionBridge_maps_single_control_state_delta_to_semantic_composition_decision()
+    {
+        var previous = default(OwnershipSnapshot);
+        var hovered = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+
+        var mapped = CounterStyleTransitionBridge.TryCreateDecision(
+            previous,
+            hovered,
+            CompositionTimestamp.FromStopwatchTicks(100),
+            out var decision);
+
+        Assert.True(mapped);
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Start, decision.Kind);
+        Assert.Equal(new NodeKey(6), decision.TargetKey);
+        Assert.Equal(CompositionAnimationEasing.SineOut, decision.Easing);
+        Assert.Equal(CompositionAnimationRepeatMode.Once, decision.RepeatMode);
+
+        var compileResult = StyleTransitionCompiler.Compile(decision.ToCompileRequest());
+
+        Assert.True(compileResult.HasDeclaration);
+        Assert.Equal(StyleTransitionCompileStatus.CompiledCompositionDeclaration, compileResult.Status);
+        Assert.Equal(1f, compileResult.From.Opacity);
+        Assert.Equal(0.98f, compileResult.To.Opacity);
+        Assert.Equal(0f, compileResult.To.TranslateY);
+    }
+
+    [Fact]
+    public void CounterStyleTransitionBridge_rejects_multi_target_control_state_delta_until_multi_owner_exists()
+    {
+        var previous = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var next = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+
+        var mapped = CounterStyleTransitionBridge.TryCreateDecision(
+            previous,
+            next,
+            CompositionTimestamp.FromStopwatchTicks(100),
+            out var decision);
+
+        Assert.False(mapped);
+        Assert.Equal(default, decision);
+    }
+
+    [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_dispatches_app_state_then_installs_retained_declaration()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var previous = runtime.CurrentModel.InputOwnership;
+        var next = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+
+        var result = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(next),
+            previous,
+            next,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            cancellationToken);
+
+        Assert.Equal(next, runtime.CurrentModel.InputOwnership);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Started, result.Kind);
+        Assert.Equal(StyleTransitionCompileStatus.CompiledCompositionDeclaration, result.CompileStatus);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+        var animation = compositor.CompositionAnimationPlan!.Value.LayerAnimation;
+        Assert.Equal(new NodeKey(6), animation.TargetKey);
+        Assert.Equal(0.98f, animation.Opacity.To);
+        Assert.Equal(0f, animation.Transform.TranslateY.To);
+    }
+
+    [Fact]
     public void RenderPipeline_classifies_text_size_affecting_dirty_rebuild()
     {
         var pipeline = new RenderPipeline();
@@ -1942,6 +2051,28 @@ public sealed class WindowLayoutPipelineTests
             }
 
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RenderingPatchSink(WindowDrawCommandTranslator translator, ICompositor compositor) : IVirtualNodePatchSink
+    {
+        public async ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            await RenderAsync(patchBatch, cancellationToken);
+        }
+
+        public async ValueTask PublishAndWaitRenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default)
+        {
+            await RenderAsync(patchBatch, cancellationToken);
+        }
+
+        private async ValueTask RenderAsync(PatchBatch patchBatch, CancellationToken cancellationToken)
+        {
+            using (patchBatch)
+            using (var frame = translator.Translate(patchBatch))
+            {
+                await compositor.RenderAsync(frame, cancellationToken);
+            }
         }
     }
 

@@ -2750,9 +2750,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("diagnostics are not a public timeline scheduler", animationDesign);
 
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
-        Assert.Contains("Poc-owned style transition runtime preflight now exists", status);
+        Assert.Contains("first Counter app/control integration slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring and Poc runtime ownership preflights are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, and first Counter app/control transition integration are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2842,15 +2842,19 @@ public sealed class ProgramDiagnosticsTests
         var drawingCompositorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.cs")));
         var compilerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleTransitionCompiler.cs")));
         var demoSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionTransformDemoRunner.cs")));
+        var counterTransitionSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterStyleTransitionBridge.cs")));
+        var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
 
         Assert.Contains("StyleTransitionRuntimeCoordinator", styleDesign);
+        Assert.Contains("CounterStyleTransitionBridge", styleDesign);
         Assert.Contains("Current runtime ownership preflight", animationDesign);
         Assert.Contains("IStyleTransitionRuntimeAdapter", animationDesign);
         Assert.Contains("falls back before presentation ownership changes", animationDesign);
-        Assert.Contains("narrow Poc-owned style transition runtime preflight now exists", status);
-        Assert.Contains("Style transition app integration", status);
-        Assert.Contains("first Poc-owned style transition runtime preflight", worklist);
-        Assert.Contains("Style transition app integration", worklist);
+        Assert.Contains("first concrete app/control integration is Counter-owned", animationDesign);
+        Assert.Contains("first Counter app/control integration slice now maps", status);
+        Assert.Contains("Style transition lifecycle design", status);
+        Assert.Contains("first Counter app/control integration slice also exists", worklist);
+        Assert.Contains("Style transition lifecycle design", worklist);
 
         Assert.Contains("interface IStyleTransitionRuntimeAdapter", coordinatorSource);
         Assert.Contains("StyleTransitionRuntimeDecision ConsumeStyleTransitionDecision()", coordinatorSource);
@@ -2875,10 +2879,23 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("new CompositionAnimationTimeline(request.StartTimestamp, request.Duration, request.RepeatMode)", compilerSource);
         Assert.Contains("StyleTransitionRuntimeCoordinator", demoSource);
         Assert.Contains("BuildAnimationDecision", demoSource);
+        Assert.Contains("CounterStyleTransitionBridge", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionRuntimeBridge", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionRuntimeAdapter", counterTransitionSource);
+        Assert.Contains("CounterButtonTransitionTarget", counterTransitionSource);
+        Assert.Contains("OwnershipSnapshot", counterTransitionSource);
+        Assert.Contains("StyleTransitionRuntimeDecisionKind.Retarget", counterTransitionSource);
+        Assert.Contains("return false;", counterTransitionSource);
+        Assert.Contains("runtime.DispatchAndWaitAsync(appMessage", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync", programSource);
+        Assert.Contains("!compositorLoop.TryGetPresentedScrollY(new NodeKey(1), out _)", programSource);
         Assert.DoesNotContain("compositor.SetCompositionAnimationDeclaration", demoSource);
         Assert.DoesNotContain("StyleTransitionScheduler", coordinatorSource);
         Assert.DoesNotContain("Theme", coordinatorSource);
         Assert.DoesNotContain("Cascade", coordinatorSource);
+        Assert.DoesNotContain("StyleTransitionScheduler", counterTransitionSource);
+        Assert.DoesNotContain("Theme", counterTransitionSource);
+        Assert.DoesNotContain("Cascade", counterTransitionSource);
 
         var renderingSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Rendering"), "*.cs", SearchOption.AllDirectories).Select(path => NormalizeLineEndings(File.ReadAllText(path))));
         var platformWindowsSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Platform.Windows"), "*.cs", SearchOption.AllDirectories).Select(path => NormalizeLineEndings(File.ReadAllText(path))));
@@ -2889,7 +2906,10 @@ public sealed class ProgramDiagnosticsTests
             "StyleTransitionRuntimeDecision",
             "StyleTransitionRuntimeResult",
             "DrawingBackendStyleTransitionCompositorAdapter",
-            "SingleStyleTransitionRuntimeAdapter"
+            "SingleStyleTransitionRuntimeAdapter",
+            "CounterStyleTransitionBridge",
+            "CounterStyleTransitionRuntimeBridge",
+            "CounterButtonTransitionTarget"
         })
         {
             Assert.DoesNotContain(token, renderingSource);
