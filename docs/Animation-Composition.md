@@ -107,6 +107,24 @@ The runtime may create, cancel, or retarget animations. The backend/compositor a
 
 Future public style transitions should feed semantic style deltas into this internal compiler only after target property metadata, retained target resolution, backend capability, cancellation policy, and runtime commit policy are all explicit. The compiler must not allocate per-frame target lists or let diagnostics become the scheduler.
 
+## Public Transition Authoring Preflight
+
+Public transition authoring describes semantic properties and timing, not retained targets or execution lanes. A future UI layer may express a transition over opacity, translation, background, foreground, size, or state changes with duration, delay, easing, repeat, cancellation, and commit intent. It must not expose `NodeKey` target resolution, `StyleDeltaWork`, `AnimationChannel`, `VisualOnly`, `CompositeOnly`, `StyleOnly`, or backend capability names as authoring choices.
+
+Runtime transition ownership is explicit:
+
+| Responsibility | Owner |
+|----------------|-------|
+| Start, cancel, retarget, and commit decisions | App/control runtime. |
+| Logical state and final committed values | App/control runtime. |
+| Layout targets, measurement, and retained publication | Rendering/layout pipeline. |
+| Presented interpolation for transform, opacity, and fixed-clip scroll | Compositor/backend. |
+| Capability detection and explicit fallback reporting | Backend/compositor boundary. |
+
+`StyleTransitionCompiler` remains a pure internal compiler. It may precompile semantic opacity/translation deltas into `CompositionAnimationDeclaration` data after the runtime supplies target identity, timing, and ownership policy, but it does not schedule, tick, cancel, retarget, commit logical state, resolve themes, or dispatch app messages.
+
+Unsupported or mixed-property transitions fall back before presentation ownership changes. Background/foreground color transition remains draw/update-owned until a material or layer color contract exists; size and text-metric transitions remain runtime/layout-owned; mixed draw plus composition deltas must not silently become compositor-only. Diagnostics may report those decisions, but diagnostics are not a public timeline scheduler.
+
 ## Animation Markers
 
 Compositor/GPU animations can publish runtime-facing marker events without letting the backend call runtime callbacks. A marker is immutable data attached to the animation declaration:

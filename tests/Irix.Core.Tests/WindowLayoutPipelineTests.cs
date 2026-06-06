@@ -663,6 +663,56 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void Semantic_style_authoring_preflight_maps_to_internal_delta_plans()
+    {
+        var backgroundPlan = StyleDeltaPlanner.Plan(
+            [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3))],
+            [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6))]);
+        var opacityPlan = StyleDeltaPlanner.Plan(
+            [VirtualNodeProperty.LayerOpacity(1), VirtualNodeProperty.TranslateX(0), VirtualNodeProperty.TranslateY(0)],
+            [VirtualNodeProperty.LayerOpacity(0.5), VirtualNodeProperty.TranslateX(24), VirtualNodeProperty.TranslateY(8)]);
+        var statePlan = StyleDeltaPlanner.Plan(
+            [VirtualNodeProperty.Hovered(false)],
+            [VirtualNodeProperty.Hovered(true)]);
+        var sizePlan = StyleDeltaPlanner.Plan(
+            [VirtualNodeProperty.Width(100)],
+            [VirtualNodeProperty.Width(120)]);
+        var mixedSizeAndOpacityPlan = StyleDeltaPlanner.Plan(
+            [VirtualNodeProperty.Width(100), VirtualNodeProperty.LayerOpacity(1)],
+            [VirtualNodeProperty.Width(120), VirtualNodeProperty.LayerOpacity(0.5)]);
+
+        Assert.Equal(StyleDeltaWork.Draw, backgroundPlan.Work);
+        Assert.True(backgroundPlan.CanReuseLayout);
+        Assert.False(backgroundPlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(InvalidationKind.VisualOnly, backgroundPlan.InvalidationKind);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, backgroundPlan.LayoutRebuildReason);
+
+        Assert.Equal(StyleDeltaWork.Composition, opacityPlan.Work);
+        Assert.True(opacityPlan.CanReuseLayout);
+        Assert.True(opacityPlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(InvalidationKind.CompositeOnly, opacityPlan.InvalidationKind);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, opacityPlan.LayoutRebuildReason);
+
+        Assert.Equal(StyleDeltaWork.Draw | StyleDeltaWork.ControlStateProjection, statePlan.Work);
+        Assert.True(statePlan.CanReuseLayout);
+        Assert.False(statePlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(InvalidationKind.VisualOnly, statePlan.InvalidationKind);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, statePlan.LayoutRebuildReason);
+
+        Assert.Equal(StyleDeltaWork.Layout | StyleDeltaWork.Draw, sizePlan.Work);
+        Assert.False(sizePlan.CanReuseLayout);
+        Assert.False(sizePlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(InvalidationKind.Layout, sizePlan.InvalidationKind);
+        Assert.Equal(LayoutRebuildReason.LayoutAffecting, sizePlan.LayoutRebuildReason);
+
+        Assert.Equal(StyleDeltaWork.Layout | StyleDeltaWork.Draw | StyleDeltaWork.Composition, mixedSizeAndOpacityPlan.Work);
+        Assert.False(mixedSizeAndOpacityPlan.CanReuseLayout);
+        Assert.False(mixedSizeAndOpacityPlan.IsCompositorOnlyTransitionCandidate);
+        Assert.Equal(InvalidationKind.Layout, mixedSizeAndOpacityPlan.InvalidationKind);
+        Assert.Equal(LayoutRebuildReason.LayoutAffecting, mixedSizeAndOpacityPlan.LayoutRebuildReason);
+    }
+
+    [Fact]
     public void RenderPipeline_classifies_text_size_affecting_dirty_rebuild()
     {
         var pipeline = new RenderPipeline();

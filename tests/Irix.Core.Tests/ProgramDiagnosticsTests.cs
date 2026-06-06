@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Numerics;
+using System.Reflection;
 using Irix.Drawing;
 using Irix.Platform;
 using Irix.Platform.Windows;
@@ -2723,6 +2724,107 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains(".\\scripts\\validate.ps1 -Mode GlyphSmoke", status);
         Assert.Contains("`Focused` validates source guards", worklist);
         Assert.Contains("`Full` runs the Release test suite", worklist);
+    }
+
+    [Fact]
+    public void Public_style_transition_authoring_preflight_is_documented_and_source_guarded()
+    {
+        var root = FindRepoRoot();
+        var styleDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Style-System.md")));
+        var animationDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+
+        Assert.Contains("## Public Authoring Contract Preflight", styleDesign);
+        Assert.Contains("Public authoring terms stay semantic", styleDesign);
+        Assert.Contains("Forbidden public authoring names", styleDesign);
+        Assert.Contains("Semantic-to-internal mapping remains one-way", styleDesign);
+        Assert.Contains("Internal classification remains the renderer boundary", styleDesign);
+        Assert.Contains("No theme, resource dictionary, CSS-like cascade, or scheduler is introduced by this preflight.", styleDesign);
+
+        Assert.Contains("## Public Transition Authoring Preflight", animationDesign);
+        Assert.Contains("Public transition authoring describes semantic properties and timing", animationDesign);
+        Assert.Contains("Runtime transition ownership is explicit", animationDesign);
+        Assert.Contains("remains a pure internal compiler", animationDesign);
+        Assert.Contains("Unsupported or mixed-property transitions fall back before presentation ownership changes", animationDesign);
+        Assert.Contains("diagnostics are not a public timeline scheduler", animationDesign);
+
+        Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
+        Assert.Contains("Public style/transition authoring preflight is now documented and guard-covered", status);
+        Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
+        Assert.Contains("Public transition authoring preflight now pins", worklist);
+
+        var publicAuthoringNames = typeof(VirtualNodeProperty)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
+            .Where(method => method.DeclaringType == typeof(VirtualNodeProperty))
+            .Select(method => method.Name)
+            .Concat(typeof(VirtualNodePropertyListBuilder)
+                .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(method => method.DeclaringType == typeof(VirtualNodePropertyListBuilder))
+                .Select(method => method.Name))
+            .Concat(typeof(VirtualPropertyKey)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(field => field.FieldType == typeof(VirtualPropertyKey))
+                .Select(field => field.Name))
+            .ToArray();
+
+        foreach (var forbiddenName in new[]
+        {
+            "BackgroundColor",
+            "ForegroundColor",
+            "LayerOpacity",
+            "TranslateX",
+            "TranslateY",
+            "LayoutAffecting",
+            "VisualOnly",
+            "CompositeOnly",
+            "StyleOnly",
+            "StyleEffect",
+            "AnimationChannel",
+            "StyleDeltaWork",
+            "StyleDeltaPlan",
+            "StyleDeltaPlanner",
+            "StyleTransitionCompiler",
+            "Theme",
+            "Cascade",
+            "Scheduler"
+        })
+        {
+            Assert.DoesNotContain(forbiddenName, publicAuthoringNames);
+        }
+
+        var forbiddenPublicSourceFragments = new[]
+        {
+            "public enum StyleEffect",
+            "public enum AnimationChannel",
+            "public enum StyleDeltaWork",
+            "public readonly struct StyleDeltaPlan",
+            "public static class StyleDeltaPlanner",
+            "public readonly struct StyleTransitionCompileRequest",
+            "public readonly struct StyleTransitionCompileResult",
+            "public static class StyleTransitionCompiler",
+            "public sealed class StyleTransitionScheduler",
+            "public class StyleTransitionScheduler",
+            "public interface IStyleTransitionScheduler",
+            "public sealed class Theme",
+            "public class Theme",
+            "public interface ITheme",
+            "public sealed class StyleCascade",
+            "public class StyleCascade",
+            "public interface IStyleCascade",
+            "public sealed class TransitionScheduler",
+            "public class TransitionScheduler",
+            "public interface ITransitionScheduler"
+        };
+
+        foreach (var file in EnumerateActiveSourceGuardFiles(root).Where(file => Path.GetExtension(file).Equals(".cs", StringComparison.OrdinalIgnoreCase)))
+        {
+            var source = NormalizeLineEndings(File.ReadAllText(file));
+            foreach (var fragment in forbiddenPublicSourceFragments)
+            {
+                Assert.DoesNotContain(fragment, source);
+            }
+        }
     }
 
     [Fact]

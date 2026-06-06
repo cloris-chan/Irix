@@ -36,6 +36,26 @@ The current low-level `VirtualNodeProperty` style entries are internal IR for re
 
 Internally, style values stay compact and typed. The current pre-public-API slice adds value-style color storage and metadata for semantic visual properties (`BackgroundColor`, `ForegroundColor`) plus composition metadata (`LayerOpacity`, `TranslateX`, `TranslateY`). These keys are not public authoring methods. `StyleDeltaPlanner` turns changed internal properties into explicit work flags for layout, text measure, draw, composition, and control-state projection, so future optimizers do not need to infer execution policy from public API names.
 
+## Public Authoring Contract Preflight
+
+This preflight defines the future public authoring boundary without adding the public API. Public authoring terms stay semantic: a UI layer may describe component variants, state styles, modifiers, and transitions over concepts such as size, background, foreground, opacity, and translation. It must not ask callers to pick renderer processing layers.
+
+Forbidden public authoring names: `LayoutAffecting`, `VisualOnly`, `CompositeOnly`, `StyleOnly`, `StyleEffect`, `AnimationChannel`, `StyleDeltaWork`, `StyleDeltaPlan`, `StyleDeltaPlanner`, and `StyleTransitionCompiler`. These names can appear in internal renderer code and diagnostics, but they are not user-facing style concepts.
+
+Semantic-to-internal mapping remains one-way:
+
+| Future semantic authoring term | Internal target |
+|--------------------------------|-----------------|
+| Size and spacing requests | Layout metadata, then normal layout publication. |
+| Background and foreground colors | Internal visual color properties and draw payload updates. |
+| Opacity and translation | Internal composition properties and transform/opacity declaration precompile when eligible. |
+| Hover, pressed, focused, disabled, selected | Runtime/control-state projection before renderer classification. |
+| Transition timing/easing over compositor-eligible values | Internal `StyleTransitionCompiler` preflight only after runtime ownership policy is supplied. |
+
+Internal classification remains the renderer boundary. The UI-facing layer should pass semantic style deltas down; `VirtualPropertyMetadata`, `StyleDeltaPlanner`, retained partial apply, and backend capability checks decide whether the result needs layout, draw recording, composition update, or fallback. A public style declaration must not store or echo internal invalidation categories as part of its authoring contract.
+
+No theme, resource dictionary, CSS-like cascade, or scheduler is introduced by this preflight. Those are separate design decisions and require ownership rules for resolution order, lifetime, invalidation, and runtime scheduling before code is promoted.
+
 ## Invalidation Rules
 
 | Change | Required work | Notes |
