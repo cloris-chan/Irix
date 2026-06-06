@@ -333,6 +333,27 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_sample_and_cancel_without_active_presentation_returns_empty_sample_without_cancellation()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+
+        var sample = await loop.SampleAndCancelCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+        await loop.WaitForScrollPresentationIdleAsync(cancellationToken);
+
+        Assert.False(sample.HasValue);
+        Assert.Equal(0, sample.PresentedScrollY);
+        Assert.Equal(0, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.None, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.Equal(0, loop.ScrollPresentationCancellationDiagnostics.ExplicitCount);
+        Assert.Equal(0, loop.ScrollPresentationCancellationDiagnostics.RenderInvalidationCount);
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+    }
+
+    [Fact]
     public async Task CompositorLoop_sample_and_cancel_scroll_presentation_completes_existing_idle_waiter()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
