@@ -1989,6 +1989,110 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
+    public async Task PartialApplyHandoffDiagnosticSnapshot_reports_disabled_executed_fallback_and_rejected_states()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Static", new NodeKey(10)),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(20),
+                VirtualNodeProperty.Action(new ActionId(1)),
+                VirtualNodeProperty.Hovered(false)));
+        var partialRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Static", new NodeKey(10)),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(20),
+                VirtualNodeProperty.Action(new ActionId(4)),
+                VirtualNodeProperty.Hovered(true)));
+
+        using var disabledFeed = new SegmentedRetainedFrameProductionOwnerFeed(new RenderPipeline(), RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
+        using var disabledFrame = disabledFeed.Build(retainedRoot, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
+        var disabledBackend = new DirtyRangeAwareCapturingBackend();
+        using var disabledCompositor = new DrawingBackendCompositor(disabledBackend, DrawingBackendCompositorHandoffOptions.Disabled);
+        await disabledCompositor.RenderAsync(disabledFrame, disabledFeed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
+
+        var enabledPipeline = new RenderPipeline();
+        using var enabledFeed = new SegmentedRetainedFrameProductionOwnerFeed(enabledPipeline, RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled);
+        var enabledBackend = new DirtyRangeAwareCapturingBackend();
+        using var enabledCompositor = new DrawingBackendCompositor(enabledBackend, DrawingBackendCompositorHandoffOptions.Enabled);
+        using var enabledFrame1 = enabledFeed.Build(retainedRoot, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
+        await enabledCompositor.RenderAsync(enabledFrame1, enabledFeed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
+        var fallbackSnapshot = PartialApplyHandoffDiagnosticSnapshot.FromCompositor(enabledCompositor);
+        using var enabledFrame2 = enabledFeed.Build(partialRoot, viewport, _arena.GetOrCreateSnapshot(), [2]);
+        await enabledCompositor.RenderAsync(enabledFrame2, enabledFeed.SegmentOwnership, new FrameContext(960, 540), cancellationToken);
+
+        var rejectedBackend = new DirtyRangeAwareCapturingBackend();
+        using var rejectedCompositor = new DrawingBackendCompositor(rejectedBackend, DrawingBackendCompositorHandoffOptions.Enabled);
+        using var rejectedRetainedFrame = new RetainedRenderFrame();
+        using var rejectedOwnership = new RetainedRenderFrameSegmentOwnership(rejectedRetainedFrame, RetainedRenderFrameSegmentOwnershipOptions.Enabled);
+        using var rejectedCommands = CreateCommandBatch(new DrawCommand(DrawCommandKind.FillRect));
+        using var rejectedFrame = new RenderFrameBatch(
+            rejectedCommands,
+            [new HitTestTarget(new PixelRectangle(0, 0, 100, 100), new ActionId(204))],
+            new NamedResolver("selected"),
+            [(0, 1), (0, 1)]);
+        var rejectedRoot = CreateActionButtonRoot(new ActionId(204));
+        rejectedOwnership.Update(null, rejectedRoot, new PixelRectangle(0, 0, 100, 100), rejectedFrame);
+        SetOwnershipLastResult(rejectedOwnership, new SegmentedRetainedFrameProductionOwnerFeedResult(
+            new SegmentedRetainedFrameShadowResult(
+                SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial,
+                RetainedPartialApplyFallbackReason.None,
+                RetainedPartialApplyResultKind.AppliedPartial,
+                rejectedOwnership.RuntimeOwner!.ReadSegments()),
+            RuntimeOwnerEnabled: true,
+            FallbackApplied: false,
+            OwnerStatePreservedBeforeFallback: true,
+            BatchFrameId: 0,
+            BatchCommandCount: rejectedFrame.Commands.Count,
+            BatchResources: rejectedFrame.Resources,
+            BatchCommandOwner: rejectedFrame.Commands.Owner));
+        await rejectedCompositor.RenderAsync(rejectedFrame, rejectedOwnership, new FrameContext(100, 100), cancellationToken);
+
+        var disabledSnapshot = PartialApplyHandoffDiagnosticSnapshot.FromCompositor(disabledCompositor);
+        var executedSnapshot = PartialApplyHandoffDiagnosticSnapshot.FromCompositor(enabledCompositor);
+        var rejectedSnapshot = PartialApplyHandoffDiagnosticSnapshot.FromCompositor(rejectedCompositor);
+
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.Disabled, disabledSnapshot.HandoffKind);
+        Assert.Equal(DrawingBackendCompositorHandoffReason.Disabled, disabledSnapshot.Reason);
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.Disabled, disabledSnapshot.OwnerKind);
+        Assert.False(disabledSnapshot.RuntimeOwnerEnabled);
+        Assert.Equal(0UL, disabledSnapshot.BatchFrameId);
+
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.FallbackFull, fallbackSnapshot.HandoffKind);
+        Assert.Equal(DrawingBackendCompositorHandoffReason.OwnerFallbackFull, fallbackSnapshot.Reason);
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowFallbackFull, fallbackSnapshot.OwnerKind);
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, fallbackSnapshot.PlanKind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.None, fallbackSnapshot.FallbackReason);
+        Assert.True(fallbackSnapshot.RuntimeOwnerEnabled);
+        Assert.False(fallbackSnapshot.FallbackApplied);
+        Assert.True(fallbackSnapshot.OwnerStatePreserved);
+        Assert.Equal((ulong)((FrameDrawingResources)enabledFrame1.Resources).FrameId, fallbackSnapshot.BatchFrameId);
+        Assert.Equal(enabledFrame1.Commands.Count, fallbackSnapshot.BatchCommandCount);
+        Assert.Empty(fallbackSnapshot.DirtyRanges);
+
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.Executed, executedSnapshot.HandoffKind);
+        Assert.Equal(DrawingBackendCompositorHandoffReason.None, executedSnapshot.Reason);
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, executedSnapshot.OwnerKind);
+        Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, executedSnapshot.PlanKind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.None, executedSnapshot.FallbackReason);
+        Assert.True(executedSnapshot.RuntimeOwnerEnabled);
+        Assert.False(executedSnapshot.FallbackApplied);
+        Assert.True(executedSnapshot.OwnerStatePreserved);
+        Assert.Equal((ulong)((FrameDrawingResources)enabledFrame2.Resources).FrameId, executedSnapshot.BatchFrameId);
+        Assert.Equal(enabledFrame2.Commands.Count, executedSnapshot.BatchCommandCount);
+        Assert.Equal(enabledCompositor.LastDirtyCommandRanges, executedSnapshot.DirtyRanges);
+
+        Assert.Equal(DrawingBackendCompositorHandoffResultKind.Rejected, rejectedSnapshot.HandoffKind);
+        Assert.Equal(DrawingBackendCompositorHandoffReason.DirtyRangeMismatch, rejectedSnapshot.Reason);
+        Assert.Equal(SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial, rejectedSnapshot.OwnerKind);
+        Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, rejectedSnapshot.PlanKind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.None, rejectedSnapshot.FallbackReason);
+        Assert.True(rejectedSnapshot.RuntimeOwnerEnabled);
+        Assert.False(rejectedSnapshot.FallbackApplied);
+        Assert.Equal(rejectedFrame.Commands.Count, rejectedSnapshot.BatchCommandCount);
+        Assert.Equal(rejectedCompositor.LastDirtyCommandRanges, rejectedSnapshot.DirtyRanges);
+    }
+
+    [Fact]
     public async Task StyleOnlyFastPathOptions_default_off_pre_switch_controls_selected_segmented_render_source()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

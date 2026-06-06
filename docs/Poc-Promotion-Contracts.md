@@ -225,6 +225,7 @@ Extraction guardrails:
 - Moving control visual projection requires a framework control-state contract; button property publishing alone is not enough.
 - Diagnostics may follow the owner as read-only snapshots, but diagnostics must not become the scheduling, feedback, or message-dispatch channel.
 - No extraction commit may also move renderer, glyph, D3D12 backend, or allocation-optimization code.
+- Current source guards enforce the pre-extraction boundary by keeping `CounterMessage`, `ActionIdRegistry`, feedback/input/dispatch adapters, and app runtime sinks out of `Irix.Rendering` and `Irix.Platform.Windows`. These guards do not extract runtime code; they make the prerequisite boundary auditable before a future extraction commit.
 
 ## `D3D12DrawingBackend`
 

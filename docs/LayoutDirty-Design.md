@@ -26,6 +26,7 @@ Layout dirty classification records why layout is dirty and keeps enough diagnos
 - `dirtyElementRanges` and dirty command ranges are diagnostics and retained partial-apply inputs for command replacement; they are not partial layout.
 - Segmented retained-frame ownership can select a segment-local render source after normal layout/draw publication when ownership, freshness, command range, resource, and hit-target guards pass. The Poc runtime enables this by default and `--no-partial-apply` disables it.
 - The selected render-source path does not change `LayoutRebuildCount`, `LastLayoutRebuildReason`, `LastLayoutResult`, or `RenderPipelineRetainedInputSnapshot` semantics.
+- Focused preflight tests pin this boundary: `StyleOnly` hover/action-id changes still increase the full layout rebuild count today, while retained partial apply may accept post-publication command/resource/hit-target reuse; mixed text/layout/viewport reasons still fall back.
 
 ## `LayoutTreeResult` Publication Contract
 

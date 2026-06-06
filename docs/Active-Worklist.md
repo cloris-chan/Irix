@@ -30,11 +30,12 @@ The Windows PoC separates target framework, CI toolchain check, and runtime mini
 
 | Task | Current state | Acceptance |
 |------|---------------|------------|
-| Local Smoke gate | GitHub Actions quota is exhausted, so local `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke` is the broad-change gate. | Guard `status=Passed`; matrix `degradedRuns=0`, `glyphAtlasInitialized=True`, `finalComposition=D3D12`; soak `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`. |
+| Local validation entrypoint | `.\scripts\validate.ps1` is the fixed local runner while GitHub Actions quota is exhausted. `Quick` mirrors CI quick validation, `Focused` validates source guards, partial apply, composition, and scroll/input preflights, `GlyphSmoke` delegates the guarded glyph smoke lane, and `Full` runs the Release test suite with optional glyph smoke. | `validation.guard status=Passed`; failed lanes report non-zero exit codes and the lane name. |
+| Local Smoke gate | GitHub Actions quota is exhausted, so local `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke` remains the broad rendering/glyph gate. | Guard `status=Passed`; matrix `degradedRuns=0`, `glyphAtlasInitialized=True`, `finalComposition=D3D12`; soak `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`. |
 | Guarded glyph coverage | Glyph atlas script/format support is guard-gated by oracle/regression/degradation coverage. | Add new coverage only when it has matching oracle/regression coverage; reject unguarded coverage drift. |
 | Source boundary guards | Active guards keep final text composition on D3D12 GlyphAtlas, block runtime shader compile, block raw retained text strings, and prevent premature compositor/runtime extraction. | Guards stay green after renderer, text, diagnostics, or architecture-boundary changes. |
 
-Run `Smoke` before/after broad changes. Do not add artifact-upload work until Actions quota returns.
+Run `Quick` for routine changes and `Focused` after architecture-boundary, diagnostics, partial-apply, composition, scroll/input, or status-doc edits. Run `Smoke` before/after broad rendering changes. Do not add artifact-upload work until Actions quota returns.
 Push/PR CI intentionally stays lightweight while quota is constrained; run the manual `glyph-atlas-smoke` workflow_dispatch suite only when remote confirmation is worth the cost.
 
 ### Near-Term Plan
@@ -62,7 +63,7 @@ Push/PR CI intentionally stays lightweight while quota is constrained; run the m
 
 | Task | Current state | Acceptance |
 |------|---------------|------------|
-| Translator boundary | Core translator types live in `Irix.Rendering`. `WindowDrawCommandTranslator` remains in `Irix.Poc` because it composes viewport callbacks, app/control scroll feedback, diagnostics, optional allocation attribution, and Counter default style construction. | Do not move the outer adapter or make the core public without a new contract. |
+| Translator boundary | Core translator types live in `Irix.Rendering`. `WindowDrawCommandTranslator` remains in `Irix.Poc` because it composes viewport callbacks, app/control scroll feedback, diagnostics, optional allocation attribution, and Counter default style construction. Source guards now prevent Counter/Poc runtime identity and dispatch adapters from leaking into `Irix.Rendering` or `Irix.Platform.Windows`. | Do not move the outer adapter or make the core public without a new contract. |
 | Windows drawing backend | `D3D12DrawingBackend` and helper structs live in `Irix.Platform.Windows`. | Preserve scissor/text clip/device recovery/scale diagnostics tests; do not move it back into `Irix.Poc`. |
 | WindowBackend isolation | `WindowBackend` is a legacy/debug `INativeWindow.SetContent` presentation path. | Do not move it into `Irix.Rendering` or `Irix.Platform.Windows`; replace only if the legacy/debug path becomes unnecessary. |
 | Scroll ownership | `ScrollDiagnostics` is layout observation; `ScrollFeedback` is app/control feedback; `ScrollController`, `ScrollState`, `ScrollFramePump`, and `ScrollPresentationCoordinator` remain app runtime state in `Irix.Poc`. The scroll/input runtime owner boundary is written, and `ScrollPresentationCoordinator` now consumes Poc-owned runtime, compositor, and retained-snapshot adapter shapes instead of directly depending on the compositor loop and translator inside its core retarget path. `WindowDrawCommandTranslator` now delivers projected feedback through a Poc-owned `IControlFeedbackSink`. | Do not move scroll runtime code until a separate extraction commit introduces broader app-message dispatch and framework runtime owner contracts. |
@@ -93,7 +94,7 @@ Layout publication note: main layout arrays are retained publication state, not 
 | Task | Current state | Acceptance |
 |------|---------------|------------|
 | Unified diagnostics channel | Postponed. | Replace per-component diagnostics only after current snapshots prove insufficient. |
-| StyleOnly layout skip | `RenderPipeline.Build` layout skip remains unimplemented. Segmented retained-frame partial apply and selected render-source handoff are implemented and Poc-default-on, but they consume the current retained publication after normal layout/draw work; they are not a `LayoutTreeBuilder` skip. | Implement only as a separate pipeline fast path that proves retained layout reuse, current-frame resources, hit target metadata, dirty ranges, and fallback behavior. |
+| StyleOnly layout skip | `RenderPipeline.Build` layout skip remains unimplemented. Segmented retained-frame partial apply and selected render-source handoff are implemented and Poc-default-on, but they consume the current retained publication after normal layout/draw work; they are not a `LayoutTreeBuilder` skip. A focused preflight guard now pins the full-layout-rebuild boundary for StyleOnly while proving retained partial apply can still accept post-publication reuse. | Implement only as a separate pipeline fast path that proves retained layout reuse, current-frame resources, hit target metadata, dirty ranges, and fallback behavior. |
 | Second graphics backend | Deferred. | Start only after D3D12 composition contracts and project/layer boundaries are stable. |
 
 ---

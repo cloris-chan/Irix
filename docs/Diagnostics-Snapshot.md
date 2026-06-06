@@ -26,6 +26,7 @@ The model answers:
 | Snapshot | Producer owner | Current consumers | Boundary |
 |----------|----------------|-------------------|----------|
 | `RenderingPipelineDiagnosticSnapshot` | `Irix.Rendering` counters from `RenderPipeline` / `DrawingBackendCompositor` | `--diagnose` compositor and layout pipeline blocks | Pipeline counters must come from pipeline/compositor state, not retained PoC statics. |
+| `PartialApplyHandoffDiagnosticSnapshot` | `DrawingBackendCompositor.LastHandoffResult` plus production owner feed stamps | `--diagnose` compositor block and focused tests | Internal diagnostics-only status for selected segmented render-source handoff. It reports disabled, executed, fallback, and rejected states without changing backend execution contracts or introducing a public partial-apply API. |
 | `BackendClipTextDiagnosticSnapshot` | Backend adapter owner; currently `Irix.Platform.Windows.D3D12DrawingBackend` plus `D3D12Renderer` device state | `--diagnose` scissor/text clip smokes and debug clip row | Device errors remain typed until CLI/debug formatting. |
 | `ViewportDiagnosticsSnapshot` | Platform/render bridge owner; current data crosses window, renderer, and translator | `--diagnose-resize` and debug viewport row | Dimensions must come from window/renderer/translator source-of-truth fields. |
 | `ScrollDiagnosticsSnapshot` | Scroll service owner; currently PoC scroll pump/controller | `--diagnose-scroll` and debug scroll row | PoC statics are read-only adapters until scroll ownership is extracted. |
@@ -38,6 +39,7 @@ The model answers:
 - Existing `--diagnose`, `--diagnose-resize`, `--diagnose-scroll`, and `--diagnose-input` output text is guarded by tests, not a public compatibility promise.
 - Existing `ProgramDiagnosticsTests` formatter/smoke assertions are local regression guards.
 - CLI implementations build snapshot values first, then format through the same formatter logic.
+- Partial-apply handoff status is one stable machine-readable line with `handoffKind`, `reason`, `ownerKind`, `planKind`, `fallbackReason`, `runtimeOwnerEnabled`, `fallbackApplied`, `ownerStatePreserved`, `batchFrameId`, `batchCommandCount`, and `dirtyRanges`.
 - Any intentional CLI text change must be staged separately with explicit test updates and a migration note.
 
 ## Debug UI Bridge

@@ -55,13 +55,19 @@ internal static class DiagnosticsFormatter
             $"Partial apply: {snapshot.PartialApplyCount}",
             $"Full apply: {snapshot.FullApplyCount}",
             $"Empty frames: {snapshot.EmptyFrameCount}",
-            $"Partial hit rate: {snapshot.PartialHitRate:F1}%"
+            $"Partial hit rate: {snapshot.PartialHitRate:F1}%",
+            BuildPartialApplyHandoffDiagnosticLine(snapshot.PartialApplyHandoff)
         };
         AppendDirtyCommandRangeDiagnosticLines(lines, "Compositor", snapshot.CompositorDirtyCommandRanges);
         AppendDirtyCommandRangeDiagnosticLines(lines, "Backend", snapshot.BackendDirtyCommandRanges);
         lines.Add($"Dirty ranges aligned: {snapshot.DirtyRangesAligned}");
         lines.Add($"Clipped commands: {snapshot.BackendClippedCommandCount}");
         return [.. lines];
+    }
+
+    internal static string BuildPartialApplyHandoffDiagnosticLine(PartialApplyHandoffDiagnosticSnapshot snapshot)
+    {
+        return $"Partial handoff status: handoffKind={snapshot.HandoffKind} reason={snapshot.Reason} ownerKind={snapshot.OwnerKind} planKind={snapshot.PlanKind} fallbackReason={snapshot.FallbackReason} runtimeOwnerEnabled={snapshot.RuntimeOwnerEnabled} fallbackApplied={snapshot.FallbackApplied} ownerStatePreserved={snapshot.OwnerStatePreserved} batchFrameId={snapshot.BatchFrameId} batchCommandCount={snapshot.BatchCommandCount} dirtyRanges={FormatRanges(snapshot.DirtyRanges)}";
     }
 
     internal static string[] BuildRenderingPipelineLayoutDiagnosticLines(RenderingPipelineDiagnosticSnapshot snapshot)

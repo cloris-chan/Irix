@@ -94,6 +94,7 @@ internal readonly struct RenderingPipelineDiagnosticSnapshot(
     long PartialApplyCount,
     long FullApplyCount,
     long EmptyFrameCount,
+    PartialApplyHandoffDiagnosticSnapshot PartialApplyHandoff,
     IReadOnlyList<(int Start, int Count)> CompositorDirtyCommandRanges,
     IReadOnlyList<(int Start, int Count)> BackendDirtyCommandRanges,
     int BackendClippedCommandCount,
@@ -111,6 +112,7 @@ internal readonly struct RenderingPipelineDiagnosticSnapshot(
     public long PartialApplyCount { get; } = PartialApplyCount;
     public long FullApplyCount { get; } = FullApplyCount;
     public long EmptyFrameCount { get; } = EmptyFrameCount;
+    public PartialApplyHandoffDiagnosticSnapshot PartialApplyHandoff { get; } = PartialApplyHandoff;
     public IReadOnlyList<(int Start, int Count)> CompositorDirtyCommandRanges { get; } = CompositorDirtyCommandRanges;
     public IReadOnlyList<(int Start, int Count)> BackendDirtyCommandRanges { get; } = BackendDirtyCommandRanges;
     public int BackendClippedCommandCount { get; } = BackendClippedCommandCount;
@@ -134,6 +136,7 @@ internal readonly struct RenderingPipelineDiagnosticSnapshot(
             && PartialApplyCount == other.PartialApplyCount
             && FullApplyCount == other.FullApplyCount
             && EmptyFrameCount == other.EmptyFrameCount
+            && PartialApplyHandoff == other.PartialApplyHandoff
             && EqualityComparer<IReadOnlyList<(int Start, int Count)>>.Default.Equals(CompositorDirtyCommandRanges, other.CompositorDirtyCommandRanges)
             && EqualityComparer<IReadOnlyList<(int Start, int Count)>>.Default.Equals(BackendDirtyCommandRanges, other.BackendDirtyCommandRanges)
             && BackendClippedCommandCount == other.BackendClippedCommandCount
@@ -156,6 +159,7 @@ internal readonly struct RenderingPipelineDiagnosticSnapshot(
         hash.Add(PartialApplyCount);
         hash.Add(FullApplyCount);
         hash.Add(EmptyFrameCount);
+        hash.Add(PartialApplyHandoff);
         hash.Add(CompositorDirtyCommandRanges);
         hash.Add(BackendDirtyCommandRanges);
         hash.Add(BackendClippedCommandCount);
@@ -173,6 +177,107 @@ internal readonly struct RenderingPipelineDiagnosticSnapshot(
     public static bool operator ==(RenderingPipelineDiagnosticSnapshot left, RenderingPipelineDiagnosticSnapshot right) => left.Equals(right);
 
     public static bool operator !=(RenderingPipelineDiagnosticSnapshot left, RenderingPipelineDiagnosticSnapshot right) => !left.Equals(right);
+}
+
+internal readonly struct PartialApplyHandoffDiagnosticSnapshot(
+    DrawingBackendCompositorHandoffResultKind HandoffKind,
+    DrawingBackendCompositorHandoffReason Reason,
+    SegmentedRetainedFrameShadowResultKind OwnerKind,
+    RetainedPartialApplyResultKind PlanKind,
+    RetainedPartialApplyFallbackReason FallbackReason,
+    bool RuntimeOwnerEnabled,
+    bool FallbackApplied,
+    bool OwnerStatePreserved,
+    ulong BatchFrameId,
+    int BatchCommandCount,
+    IReadOnlyList<(int Start, int Count)> DirtyRanges) : IEquatable<PartialApplyHandoffDiagnosticSnapshot>
+{
+    public DrawingBackendCompositorHandoffResultKind HandoffKind { get; } = HandoffKind;
+    public DrawingBackendCompositorHandoffReason Reason { get; } = Reason;
+    public SegmentedRetainedFrameShadowResultKind OwnerKind { get; } = OwnerKind;
+    public RetainedPartialApplyResultKind PlanKind { get; } = PlanKind;
+    public RetainedPartialApplyFallbackReason FallbackReason { get; } = FallbackReason;
+    public bool RuntimeOwnerEnabled { get; } = RuntimeOwnerEnabled;
+    public bool FallbackApplied { get; } = FallbackApplied;
+    public bool OwnerStatePreserved { get; } = OwnerStatePreserved;
+    public ulong BatchFrameId { get; } = BatchFrameId;
+    public int BatchCommandCount { get; } = BatchCommandCount;
+    public IReadOnlyList<(int Start, int Count)> DirtyRanges { get; } = DirtyRanges;
+
+    public static PartialApplyHandoffDiagnosticSnapshot Disabled { get; } = new(
+        DrawingBackendCompositorHandoffResultKind.Disabled,
+        DrawingBackendCompositorHandoffReason.Disabled,
+        SegmentedRetainedFrameShadowResultKind.Disabled,
+        RetainedPartialApplyResultKind.Rejected,
+        RetainedPartialApplyFallbackReason.None,
+        RuntimeOwnerEnabled: false,
+        FallbackApplied: false,
+        OwnerStatePreserved: true,
+        BatchFrameId: 0,
+        BatchCommandCount: 0,
+        DirtyRanges: []);
+
+    public static PartialApplyHandoffDiagnosticSnapshot FromCompositor(DrawingBackendCompositor compositor)
+    {
+        return FromHandoffResult(compositor.LastHandoffResult, compositor.LastDirtyCommandRanges);
+    }
+
+    public static PartialApplyHandoffDiagnosticSnapshot FromHandoffResult(
+        DrawingBackendCompositorHandoffResult result,
+        IReadOnlyList<(int Start, int Count)> dirtyRanges)
+    {
+        var ownerResult = result.OwnerResult;
+        return new PartialApplyHandoffDiagnosticSnapshot(
+            result.Kind,
+            result.Reason,
+            ownerResult.Kind,
+            ownerResult.ShadowResult.PlanKind,
+            ownerResult.ShadowResult.Reason,
+            ownerResult.RuntimeOwnerEnabled,
+            ownerResult.FallbackApplied,
+            ownerResult.OwnerStatePreservedBeforeFallback,
+            ownerResult.BatchFrameId,
+            ownerResult.BatchCommandCount,
+            dirtyRanges);
+    }
+
+    public bool Equals(PartialApplyHandoffDiagnosticSnapshot other)
+    {
+        return HandoffKind == other.HandoffKind
+            && Reason == other.Reason
+            && OwnerKind == other.OwnerKind
+            && PlanKind == other.PlanKind
+            && FallbackReason == other.FallbackReason
+            && RuntimeOwnerEnabled == other.RuntimeOwnerEnabled
+            && FallbackApplied == other.FallbackApplied
+            && OwnerStatePreserved == other.OwnerStatePreserved
+            && BatchFrameId == other.BatchFrameId
+            && BatchCommandCount == other.BatchCommandCount
+            && EqualityComparer<IReadOnlyList<(int Start, int Count)>>.Default.Equals(DirtyRanges, other.DirtyRanges);
+    }
+
+    public override bool Equals(object? obj) => obj is PartialApplyHandoffDiagnosticSnapshot other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(HandoffKind);
+        hash.Add(Reason);
+        hash.Add(OwnerKind);
+        hash.Add(PlanKind);
+        hash.Add(FallbackReason);
+        hash.Add(RuntimeOwnerEnabled);
+        hash.Add(FallbackApplied);
+        hash.Add(OwnerStatePreserved);
+        hash.Add(BatchFrameId);
+        hash.Add(BatchCommandCount);
+        hash.Add(DirtyRanges);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(PartialApplyHandoffDiagnosticSnapshot left, PartialApplyHandoffDiagnosticSnapshot right) => left.Equals(right);
+
+    public static bool operator !=(PartialApplyHandoffDiagnosticSnapshot left, PartialApplyHandoffDiagnosticSnapshot right) => !left.Equals(right);
 }
 
 internal readonly struct ViewportDiagnosticsSnapshot(

@@ -1059,6 +1059,64 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleOnly_layout_skip_preflight_keeps_full_layout_rebuild_and_post_publication_partial_apply_separate()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
+                VirtualNodeProperty.Action(new ActionId(1)),
+                VirtualNodeProperty.Hovered(false)));
+        var styleOnlyRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
+                VirtualNodeProperty.Action(new ActionId(1)),
+                VirtualNodeProperty.Hovered(true)));
+        var mixedRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
+                VirtualNodeProperty.Action(new ActionId(1)),
+                VirtualNodeProperty.Hovered(false)));
+
+        using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
+        var initialLayout = pipeline.LastLayoutResult!;
+        var initialLayoutSnapshot = SnapshotLayoutGeometryInvariants(initialLayout.Elements);
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+        using var styleOnlyFrame = pipeline.Build(styleOnlyRoot, viewport, _arena.GetOrCreateSnapshot(), [2]);
+        var styleOnlySnapshot = pipeline.LastRetainedInputSnapshot;
+        var styleOnlyPlan = RetainedPartialApplyPlanner.Plan(styleOnlySnapshot, viewport, styleOnlyFrame.Resources, styleOnlyFrame.Resources);
+        var styleOnlyPatchPlan = StyleOnlyPatchPlanBuilder.Build(
+            pipeline.LastDirtyClassifications,
+            viewportChanged: false,
+            initialLayout,
+            [.. pipeline.LastElementCommandRanges],
+            frame1.HitTargets,
+            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastDirtyElementRanges);
+
+        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
+        Assert.Equal(initialLayoutSnapshot, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements));
+        Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, styleOnlyPlan.Kind);
+        Assert.True(styleOnlyPatchPlan.Eligible);
+
+        using var mixedFrame = pipeline.Build(mixedRoot, viewport, _arena.GetOrCreateSnapshot(), [1, 2]);
+        var mixedPlan = RetainedPartialApplyPlanner.Plan(pipeline.LastRetainedInputSnapshot, viewport, mixedFrame.Resources, mixedFrame.Resources);
+        var viewportPlan = RetainedPartialApplyPlanner.Plan(styleOnlySnapshot, new PixelRectangle(0, 0, 800, 540), styleOnlyFrame.Resources, styleOnlyFrame.Resources);
+
+        Assert.Equal(initialRebuildCount + 2, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.TextSizeAffecting, pipeline.LastLayoutRebuildReason);
+        Assert.Contains(pipeline.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.TextSizeAffecting);
+        Assert.Contains(pipeline.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.StyleOnly);
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, mixedPlan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.NotStyleOnly, mixedPlan.Reason);
+        Assert.Equal(RetainedPartialApplyResultKind.FallbackFull, viewportPlan.Kind);
+        Assert.Equal(RetainedPartialApplyFallbackReason.ViewportChanged, viewportPlan.Reason);
+    }
+
+    [Fact]
     public void StyleOnlyPatchPlanBuilder_creates_eligible_hover_only_plan()
     {
         var pipeline = new RenderPipeline();

@@ -2705,6 +2705,27 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Local_validate_script_documents_quick_focused_glyph_and_full_lanes()
+    {
+        var root = FindRepoRoot();
+        var validate = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "validate.ps1")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+
+        Assert.Contains("[ValidateSet(\"Quick\", \"Focused\", \"GlyphSmoke\", \"Full\")]", validate);
+        Assert.Contains("validation.guard status=Passed mode=$Mode", validate);
+        Assert.Contains("validation.guard status=Failed mode=$Mode", validate);
+        Assert.Contains("Category!=D3D12&Category!=Performance", validate);
+        Assert.Contains("FullyQualifiedName~ProgramDiagnosticsTests", validate);
+        Assert.Contains("FullyQualifiedName~PartialApply|FullyQualifiedName~DrawingBackendCompositor", validate);
+        Assert.Contains(".\\scripts\\validate.ps1 -Mode Quick", status);
+        Assert.Contains(".\\scripts\\validate.ps1 -Mode Focused", status);
+        Assert.Contains(".\\scripts\\validate.ps1 -Mode GlyphSmoke", status);
+        Assert.Contains("`Focused` validates source guards", worklist);
+        Assert.Contains("`Full` runs the Release test suite", worklist);
+    }
+
+    [Fact]
     public void Glyph_atlas_status_documents_actions_quota_and_local_guard_source()
     {
         var root = FindRepoRoot();
@@ -2715,7 +2736,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GitHub Actions quota is currently exhausted", status);
         Assert.Contains("current CI/source-of-truth status lives in [Project_Status_and_Todo.md]", design);
         Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
-        Assert.Contains("Run `Smoke` before/after broad changes", worklist);
+        Assert.Contains("Run `Quick` for routine changes and `Focused` after architecture-boundary", worklist);
+        Assert.Contains("Run `Smoke` before/after broad rendering changes", worklist);
         Assert.Contains("Do not add artifact-upload work until Actions quota returns", worklist);
         Assert.Contains("`Nightly` after page-policy, eviction, or shaping overhauls", worklist);
     }
@@ -2779,6 +2801,78 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("SampleAndCancelCompositionScrollPresentationAsync", coordinatorSource);
         Assert.DoesNotContain("StartCompositionScrollPresentationAsync", coordinatorSource);
         Assert.DoesNotContain("translator.LastRetainedInputSnapshot", coordinatorSource);
+    }
+
+    [Fact]
+    public void Poc_runtime_identity_does_not_leak_into_rendering_or_windows_backend()
+    {
+        var root = FindRepoRoot();
+        var renderingRoot = Path.Combine(root, "src", "Irix.Rendering");
+        var platformWindowsRoot = Path.Combine(root, "src", "Irix.Platform.Windows");
+        var pocRoot = Path.Combine(root, "src", "Irix.Poc");
+        var forbiddenRuntimeTokens = new[]
+        {
+            "CounterMessage",
+            "CounterModel",
+            "CounterApplication",
+            "ActionIdRegistry",
+            "IControlFeedbackSink",
+            "IInputHitTestService",
+            "IInputActionMapper",
+            "IAppMessageDispatchMapper",
+            "IAppRuntimeDispatchSink",
+            "IWheelInputDispatchSink"
+        };
+
+        foreach (var sourcePath in Directory.EnumerateFiles(renderingRoot, "*.cs", SearchOption.TopDirectoryOnly)
+            .Concat(Directory.EnumerateFiles(platformWindowsRoot, "*.cs", SearchOption.TopDirectoryOnly)))
+        {
+            var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
+            foreach (var token in forbiddenRuntimeTokens)
+            {
+                Assert.DoesNotContain(token, source);
+            }
+        }
+
+        Assert.Contains("interface IControlFeedbackSink", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "ScrollFeedback.cs"))));
+        Assert.Contains("interface IInputHitTestService", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "InputHitTestService.cs"))));
+        Assert.Contains("interface IInputActionMapper", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "InputActionMapper.cs"))));
+        Assert.Contains("interface IAppMessageDispatchMapper", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "AppMessageDispatchMapper.cs"))));
+        Assert.Contains("interface IAppRuntimeDispatchSink", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "AppRuntimeDispatchAdapter.cs"))));
+        Assert.Contains("interface IWheelInputDispatchSink", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "ScrollInputDispatchAdapter.cs"))));
+    }
+
+    [Fact]
+    public void Active_sources_block_runtime_shader_compile_and_removed_viewport_space_cache()
+    {
+        var root = FindRepoRoot();
+        var offenders = new List<string>();
+        var forbiddenTokens = new[]
+        {
+            "D3DCompile",
+            "D3DCompileFromFile",
+            "D3DReadFileToBlob",
+            "CompileShader",
+            "ShaderCompileFromSource",
+            "ViewportRenderTargetCache",
+            "ViewportSpaceRenderTarget",
+            "ViewportSpaceCache"
+        };
+
+        foreach (var sourcePath in EnumerateActiveSourceGuardFiles(root))
+        {
+            var relative = Path.GetRelativePath(root, sourcePath).Replace('\\', '/');
+            var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
+            foreach (var token in forbiddenTokens)
+            {
+                if (source.Contains(token, StringComparison.Ordinal))
+                {
+                    offenders.Add($"{relative}: {token}");
+                }
+            }
+        }
+
+        Assert.Empty(offenders);
     }
 
     [Fact]
@@ -3957,6 +4051,7 @@ public sealed class ProgramDiagnosticsTests
             "Full apply: 1",
             "Empty frames: 0",
             "Partial hit rate: 66.7%",
+            "Partial handoff status: handoffKind=Executed reason=None ownerKind=ShadowAppliedPartial planKind=AppliedPartial fallbackReason=None runtimeOwnerEnabled=True fallbackApplied=False ownerStatePreserved=True batchFrameId=42 batchCommandCount=4 dirtyRanges=1:2",
             "Compositor dirty ranges: 1 ranges",
             "  [0..3] (4 commands)",
             "Backend dirty ranges: 1 ranges",
@@ -3964,6 +4059,27 @@ public sealed class ProgramDiagnosticsTests
             "Dirty ranges aligned: True",
             "Clipped commands: 0"
         ]), output);
+    }
+
+    [Fact]
+    public void Diagnose_partial_apply_handoff_status_outputs_stable_machine_readable_fields()
+    {
+        var snapshot = new PartialApplyHandoffDiagnosticSnapshot(
+            DrawingBackendCompositorHandoffResultKind.Rejected,
+            DrawingBackendCompositorHandoffReason.DirtyRangeMismatch,
+            SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial,
+            RetainedPartialApplyResultKind.AppliedPartial,
+            RetainedPartialApplyFallbackReason.None,
+            RuntimeOwnerEnabled: true,
+            FallbackApplied: false,
+            OwnerStatePreserved: true,
+            BatchFrameId: 12,
+            BatchCommandCount: 5,
+            DirtyRanges: [(1, 2), (4, 1)]);
+
+        var line = DiagnosticsFormatter.BuildPartialApplyHandoffDiagnosticLine(snapshot);
+
+        Assert.Equal("Partial handoff status: handoffKind=Rejected reason=DirtyRangeMismatch ownerKind=ShadowAppliedPartial planKind=AppliedPartial fallbackReason=None runtimeOwnerEnabled=True fallbackApplied=False ownerStatePreserved=True batchFrameId=12 batchCommandCount=5 dirtyRanges=1:2,4:1", line);
     }
 
     [Fact]
@@ -4316,6 +4432,18 @@ public sealed class ProgramDiagnosticsTests
             PartialApplyCount: 2,
             FullApplyCount: 1,
             EmptyFrameCount: 0,
+            PartialApplyHandoff: new PartialApplyHandoffDiagnosticSnapshot(
+                DrawingBackendCompositorHandoffResultKind.Executed,
+                DrawingBackendCompositorHandoffReason.None,
+                SegmentedRetainedFrameShadowResultKind.ShadowAppliedPartial,
+                RetainedPartialApplyResultKind.AppliedPartial,
+                RetainedPartialApplyFallbackReason.None,
+                RuntimeOwnerEnabled: true,
+                FallbackApplied: false,
+                OwnerStatePreserved: true,
+                BatchFrameId: 42,
+                BatchCommandCount: 4,
+                DirtyRanges: [(1, 2)]),
             CompositorDirtyCommandRanges: [(0, 4)],
             BackendDirtyCommandRanges: [(0, 4)],
             BackendClippedCommandCount: 0,

@@ -111,6 +111,7 @@ internal static class FullDiagnosticRunner
             partialApplyCount,
             fullApplyCount,
             emptyFrameCount,
+            PartialApplyHandoffDiagnosticSnapshot.FromCompositor(compositor),
             dirty,
             backendDirty,
             backendClippedCommandCount,
