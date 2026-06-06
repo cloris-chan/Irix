@@ -490,6 +490,201 @@ public sealed class BatchOwnershipTests
         Assert.Equal(0, loop.ScrollPresentationCancelCount);
     }
 
+    [Fact]
+    public async Task CompositorLoop_explicit_cancel_completes_all_existing_scroll_presentation_idle_waiters()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var start = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(250);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(start, CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        var idleWait1 = loop.WaitForScrollPresentationIdleAsync(cancellationToken).AsTask();
+        var idleWait2 = loop.WaitForScrollPresentationIdleAsync(cancellationToken).AsTask();
+
+        Assert.Equal(1, compositor.TickCount);
+        Assert.False(idleWait1.IsCompleted);
+        Assert.False(idleWait2.IsCompleted);
+
+        await loop.CancelCompositionScrollPresentationAsync(cancellationToken);
+
+        await idleWait1.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        await idleWait2.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        Assert.Equal(1, compositor.ClearCount);
+        Assert.Equal(1, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.Explicit, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.Equal(1, loop.ScrollPresentationCancellationDiagnostics.ExplicitCount);
+        Assert.Equal(0, loop.ScrollPresentationCancellationDiagnostics.RenderInvalidationCount);
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+    }
+
+    [Fact]
+    public async Task CompositorLoop_render_invalidation_completes_all_existing_scroll_presentation_idle_waiters()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new OneShotInvalidatingTranslator(
+            CompositionRenderInvalidation.FromLayoutRebuildReason(LayoutRebuildReason.ViewportChanged));
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var start = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(250);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(start, CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        var idleWait1 = loop.WaitForScrollPresentationIdleAsync(cancellationToken).AsTask();
+        var idleWait2 = loop.WaitForScrollPresentationIdleAsync(cancellationToken).AsTask();
+
+        Assert.Equal(1, compositor.TickCount);
+        Assert.False(idleWait1.IsCompleted);
+        Assert.False(idleWait2.IsCompleted);
+
+        var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Next", new NodeKey(1)))
+        ]), 1);
+        await loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken);
+
+        await idleWait1.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        await idleWait2.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        Assert.Equal(1, compositor.RenderCallCount);
+        Assert.Equal(1, compositor.ClearCount);
+        Assert.False(compositor.PresentationActiveDuringLastRender);
+        Assert.Equal(1, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.ViewportChanged, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.Equal(0, loop.ScrollPresentationCancellationDiagnostics.ExplicitCount);
+        Assert.Equal(1, loop.ScrollPresentationCancellationDiagnostics.RenderInvalidationCount);
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+    }
+
+    [Fact]
+    public async Task CompositorLoop_render_invalidation_after_explicit_cancel_does_not_double_count_scroll_presentation_cancellation()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new OneShotInvalidatingTranslator(
+            CompositionRenderInvalidation.FromLayoutRebuildReason(LayoutRebuildReason.ViewportChanged));
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var start = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(30);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(start, CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        await loop.CancelCompositionScrollPresentationAsync(cancellationToken);
+        var cancelCountAfterExplicitCancel = loop.ScrollPresentationCancelCount;
+
+        var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Next", new NodeKey(1)))
+        ]), 1);
+        await loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken);
+
+        Assert.Equal(1, compositor.RenderCallCount);
+        Assert.False(compositor.PresentationActiveDuringLastRender);
+        Assert.Equal(1, cancelCountAfterExplicitCancel);
+        Assert.Equal(cancelCountAfterExplicitCancel, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.Explicit, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.Equal(1, loop.ScrollPresentationCancellationDiagnostics.ExplicitCount);
+        Assert.Equal(0, loop.ScrollPresentationCancellationDiagnostics.RenderInvalidationCount);
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+    }
+
+    [Fact]
+    public async Task CompositorLoop_dispose_completes_all_existing_scroll_presentation_idle_waiters()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        var loop = new CompositorLoop(translator, compositor);
+        var disposed = false;
+        try
+        {
+            var pipeline = new RenderPipeline();
+            using var frame = pipeline.Build(
+                new VirtualNode(
+                    VirtualNodeKind.ScrollContainer,
+                    key: 1,
+                    properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                    children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+                new PixelRectangle(0, 0, 240, 120),
+                _arena.GetOrCreateSnapshot());
+            var start = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(250);
+            var declaration = new CompositionScrollPresentationDeclaration(
+                new NodeKey(1),
+                new CompositionAnimationTimeline(start, CompositionDuration.FromMilliseconds(160)),
+                new CompositionScalarAnimation(0, 54));
+
+            await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+            var idleWait1 = loop.WaitForScrollPresentationIdleAsync(cancellationToken).AsTask();
+            var idleWait2 = loop.WaitForScrollPresentationIdleAsync(cancellationToken).AsTask();
+
+            Assert.Equal(1, compositor.TickCount);
+            Assert.False(idleWait1.IsCompleted);
+            Assert.False(idleWait2.IsCompleted);
+
+            await loop.DisposeAsync();
+            disposed = true;
+
+            await idleWait1.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+            await idleWait2.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
+            Assert.Equal(0, loop.ScrollPresentationCancelCount);
+            Assert.Equal(ScrollPresentationCancellationReason.Dispose, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+            Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+            Assert.Equal(1, loop.ScrollPresentationCancellationDiagnostics.DisposeCount);
+        }
+        finally
+        {
+            if (!disposed)
+            {
+                await loop.DisposeAsync();
+            }
+        }
+    }
+
     [Theory]
     [InlineData((int)CompositionRenderInvalidationKind.ScrollPresentation)]
     [InlineData((int)CompositionRenderInvalidationKind.ViewportChanged)]

@@ -166,6 +166,8 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - cancel count, last cancel reason, and last render invalidation kind are machine-readable
 - explicit, viewport-invalidation, and max-scroll-invalidation cancellation counts are separately visible when diagnostics are enabled
 - render-invalidation cancellation clears active presentation before the retained frame render path observes it
+- explicit cancellation, render-invalidation cancellation, and dispose release any existing scroll-presentation idle waiters
+- render invalidation after an explicit cancellation does not record a second lifecycle cancellation
 - stale queued delayed ticks after lifecycle cancellation are skipped without advancing composition or loop tick counts
 
 `--diagnose-scroll-presentation-hittest` must prove:
@@ -199,6 +201,6 @@ Active hit testing reads `CompositorHitTestSnapshot`, so pointer coordinates are
 
 Layer content caching remains source-content caching, not presentation-state caching. Cached payloads are reused only for stable disjoint layer sources, while current tick transform, opacity, fixed clip, empty intersections, and text clips are resolved during each composition execution.
 
-Current narrow coverage pins skipped/failed tick marker non-publication, marker runtime mapping/unmapped accounting, scroll marker queue cleanup on cancellation, empty sample-and-cancel without cancellation, stale queued lifecycle tick suppression, superseded and sample-and-cancel scroll-presentation idle waiter completion, and active hit-test routing through sibling and nested layers.
+Current narrow coverage pins skipped/failed tick marker non-publication, marker runtime mapping/unmapped accounting, scroll marker queue cleanup on cancellation, empty sample-and-cancel without cancellation, stale queued lifecycle tick suppression, superseded/sample-and-cancel/lifecycle scroll-presentation idle waiter completion, invalidation-after-explicit-cancel non-double-counting, and active hit-test routing through sibling and nested layers.
 
 The next gate is broader main-app integration hardening around the existing D3D12-first path: cancellation/retarget edge cases, marker publication edge cases, and active hit-test routing regressions as concrete bugs appear. It is not a generic fallback compositor or an internal offscreen/render-target cache.
