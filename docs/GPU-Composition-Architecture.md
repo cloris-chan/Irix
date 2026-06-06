@@ -78,7 +78,7 @@ Backends should report capabilities instead of forcing one feature baseline:
 |------------|---------|
 | `TransformOpacity` | Backend can advance transform/opacity composition ticks without UI rebuild. Implemented by D3D12 through `ICompositionDrawingBackend`. |
 | `ScrollPresentation` / `SupportsIndependentScrollTransform` | Backend can apply presented scroll offset under fixed clips. Implemented by D3D12 for single-layer and decomposed nested/mixed-clip retained scroll targets. |
-| `LayerContentCache` | Backend can reuse materialized layer payloads across compositor ticks when retained source commands are unchanged. Implemented by D3D12 for disjoint composition layers. |
+| `LayerContentCache` | Backend can reuse materialized layer payloads across compositor ticks when retained source commands are unchanged. Implemented by D3D12 for disjoint composition layers while preserving source paint order around ordinary commands. |
 | `SupportsLayerOpacity` | Backend can apply per-layer opacity without re-recording content. |
 | `SupportsLayerClip` | Backend can clip a layer independently of content generation. |
 | `SupportsDescriptorIndexing` | Backend can bind many resources through descriptor indexing or equivalent. |
@@ -116,7 +116,7 @@ The composition contract should not expose these backend objects to `Irix.Render
 | 8 | Runtime marker event dispatch bridge. | Implemented internally through `CompositionMarkerEventPump`, `ICompositionMarkerEventMapper<TMessage>`, and a PoC `--diagnose-composition-marker-runtime` proof. |
 | 9 | Multi-layer composition frame execution. | Implemented on the D3D12 execution path with ordered layer application and `--diagnose-composition-multilayer`. |
 | 10 | Nested/mixed-clip retained target decomposition. | Implemented by splitting retained scroll target command runs by fixed clip into ordered composition layers. |
-| 11 | Layer content caching. | Implemented for disjoint D3D12 composition layers by caching materialized source payloads behind stable layer/source keys while applying current tick transform/opacity/fixed-clip state at execution time. |
+| 11 | Layer content caching. | Implemented for disjoint D3D12 composition layers by caching materialized source payloads behind stable layer/source keys while applying current tick transform/opacity/fixed-clip state and source paint order at execution time. |
 | 12 | Content-space internal offscreen surfaces. | Deferred. Do not reintroduce this until bounds, origin, clip, invalidation, and hit-test semantics are specified and direct composition remains the reference behavior. |
 | 13 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
 | 14 | Effects/material graph. | Deferred until style/material contract exists. |

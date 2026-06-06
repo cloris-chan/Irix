@@ -132,6 +132,7 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - overlapping layer command ranges bypass the layer cache and use direct composition so stacked transforms/opacity still compose in order
 - fixed-clip cache hits apply the latest tick's transform and fixed clip rather than stale warm-tick state
 - fixed-clip cache hits skip rect/text payloads when the latest layer clip intersects retained source clips to empty
+- layer cache hits preserve source paint order when cached layers are interleaved with ordinary commands
 - cached command count is diagnostic-visible
 - translated and opacity-applied command counts remain stable
 
@@ -199,7 +200,7 @@ Normal UI output snapshots resolve retained `CompositionTarget` and `ScrollCompo
 
 Active hit testing reads `CompositorHitTestSnapshot`, so pointer coordinates are mapped through current presented transforms and fixed clips without a UI runtime layout pass. Covered behavior includes target-layer-only remapping, fixed-clip rejection before local bounds, clipped presented content not occluding lower static targets, and nested composition layer inverse mapping.
 
-Layer content caching remains source-content caching, not presentation-state caching. Cached payloads are reused only for stable disjoint layer sources, while current tick transform, opacity, fixed clip, empty intersections, and text clips are resolved during each composition execution.
+Layer content caching remains source-content caching, not presentation-state caching. Cached payloads are reused only for stable disjoint layer sources, while current tick transform, opacity, fixed clip, empty intersections, text clips, and source paint order are resolved during each composition execution.
 
 Current narrow coverage pins skipped/failed tick marker non-publication, marker runtime mapping/unmapped accounting, scroll marker queue cleanup on cancellation, empty sample-and-cancel without cancellation, stale queued lifecycle tick suppression, superseded/sample-and-cancel/lifecycle scroll-presentation idle waiter completion, invalidation-after-explicit-cancel non-double-counting, and active hit-test routing through sibling and nested layers.
 
