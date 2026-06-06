@@ -11,7 +11,7 @@ namespace Irix.Rendering;
 /// Caches hit targets from the frame for input routing.
 /// This is the bridge between the RenderFrameBatch world and the IDrawingBackend world.
 /// </summary>
-public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionFramePacingProvider, IDisposable
+public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionAnimationCompositor, ICompositionFramePacingProvider, IDisposable
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
@@ -307,6 +307,41 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             _compositionScrollMarkerStates = [];
             ClearCompositionPresentationState();
         }
+    }
+
+    void ICompositionAnimationCompositor.SetCompositionAnimationDeclaration(
+        in CompositionAnimationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        SetCompositionAnimationDeclaration(declaration, snapshot);
+    }
+
+    internal void ClearCompositionAnimation()
+    {
+        lock (_frameGate)
+        {
+            if (_compositionAnimationPlan is null)
+            {
+                return;
+            }
+
+            _compositionAnimationPlan = null;
+            _compositionAnimationMarkerStates = [];
+            ClearCompositionPresentationState();
+            ClearCompositionMarkerEvents();
+        }
+    }
+
+    void ICompositionAnimationCompositor.ClearCompositionAnimation()
+    {
+        ClearCompositionAnimation();
+    }
+
+    ValueTask<CompositionBackendExecutionResult> ICompositionAnimationCompositor.RenderCompositionAnimationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken)
+    {
+        return RenderCompositionAnimationTickAtAsync(timestamp, cancellationToken);
     }
 
     internal void ClearCompositionPlan()

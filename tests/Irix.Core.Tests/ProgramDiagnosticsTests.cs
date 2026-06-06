@@ -2750,9 +2750,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("diagnostics are not a public timeline scheduler", animationDesign);
 
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
-        Assert.Contains("Public style/transition authoring preflight is now documented and guard-covered", status);
+        Assert.Contains("Poc-owned style transition runtime preflight now exists", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public transition authoring preflight now pins", worklist);
+        Assert.Contains("Public style/transition authoring and Poc runtime ownership preflights are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2824,6 +2824,76 @@ public sealed class ProgramDiagnosticsTests
             {
                 Assert.DoesNotContain(fragment, source);
             }
+        }
+    }
+
+    [Fact]
+    public void Style_transition_runtime_ownership_preflight_stays_poc_owned()
+    {
+        var root = FindRepoRoot();
+        var styleDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Style-System.md")));
+        var animationDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+        var coordinatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionRuntimeCoordinator.cs")));
+        var adapterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionRuntimeAdapters.cs")));
+        var scrollAdapterSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationAdapters.cs")));
+        var compositorInterfaceSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "ICompositor.cs")));
+        var drawingCompositorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.cs")));
+        var compilerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleTransitionCompiler.cs")));
+        var demoSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionTransformDemoRunner.cs")));
+
+        Assert.Contains("StyleTransitionRuntimeCoordinator", styleDesign);
+        Assert.Contains("Current runtime ownership preflight", animationDesign);
+        Assert.Contains("IStyleTransitionRuntimeAdapter", animationDesign);
+        Assert.Contains("falls back before presentation ownership changes", animationDesign);
+        Assert.Contains("narrow Poc-owned style transition runtime preflight now exists", status);
+        Assert.Contains("Style transition app integration", status);
+        Assert.Contains("first Poc-owned style transition runtime preflight", worklist);
+        Assert.Contains("Style transition app integration", worklist);
+
+        Assert.Contains("interface IStyleTransitionRuntimeAdapter", coordinatorSource);
+        Assert.Contains("StyleTransitionRuntimeDecision ConsumeStyleTransitionDecision()", coordinatorSource);
+        Assert.Contains("void PublishStyleTransitionResult(in StyleTransitionRuntimeResult result)", coordinatorSource);
+        Assert.Contains("interface IStyleTransitionCompositorAdapter", coordinatorSource);
+        Assert.Contains("interface IStyleTransitionRetainedSnapshotProvider", coordinatorSource);
+        Assert.Contains("StyleTransitionCompiler.Compile", coordinatorSource);
+        Assert.Contains("MissingRetainedSnapshot", coordinatorSource);
+        Assert.Contains("CompileRejected", coordinatorSource);
+        Assert.Contains("StyleTransitionRuntimeDecisionKind.Cancel", coordinatorSource);
+        Assert.Contains("StyleTransitionRuntimeDecisionKind.Commit", coordinatorSource);
+
+        Assert.Contains("DrawingBackendStyleTransitionCompositorAdapter", adapterSource);
+        Assert.Contains("SingleStyleTransitionRuntimeAdapter", adapterSource);
+        Assert.Contains("FixedStyleTransitionRetainedSnapshotProvider", adapterSource);
+        Assert.Contains("IStyleTransitionRetainedSnapshotProvider", scrollAdapterSource);
+        Assert.Contains("internal interface ICompositionAnimationCompositor", compositorInterfaceSource);
+        Assert.Contains("void ClearCompositionAnimation()", compositorInterfaceSource);
+        Assert.Contains("ICompositionAnimationCompositor", drawingCompositorSource);
+        Assert.Contains("internal void ClearCompositionAnimation()", drawingCompositorSource);
+        Assert.Contains("CompositionAnimationRepeatMode RepeatMode", compilerSource);
+        Assert.Contains("new CompositionAnimationTimeline(request.StartTimestamp, request.Duration, request.RepeatMode)", compilerSource);
+        Assert.Contains("StyleTransitionRuntimeCoordinator", demoSource);
+        Assert.Contains("BuildAnimationDecision", demoSource);
+        Assert.DoesNotContain("compositor.SetCompositionAnimationDeclaration", demoSource);
+        Assert.DoesNotContain("StyleTransitionScheduler", coordinatorSource);
+        Assert.DoesNotContain("Theme", coordinatorSource);
+        Assert.DoesNotContain("Cascade", coordinatorSource);
+
+        var renderingSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Rendering"), "*.cs", SearchOption.AllDirectories).Select(path => NormalizeLineEndings(File.ReadAllText(path))));
+        var platformWindowsSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Platform.Windows"), "*.cs", SearchOption.AllDirectories).Select(path => NormalizeLineEndings(File.ReadAllText(path))));
+        foreach (var token in new[]
+        {
+            "IStyleTransitionRuntimeAdapter",
+            "StyleTransitionRuntimeCoordinator",
+            "StyleTransitionRuntimeDecision",
+            "StyleTransitionRuntimeResult",
+            "DrawingBackendStyleTransitionCompositorAdapter",
+            "SingleStyleTransitionRuntimeAdapter"
+        })
+        {
+            Assert.DoesNotContain(token, renderingSource);
+            Assert.DoesNotContain(token, platformWindowsSource);
         }
     }
 

@@ -28,6 +28,19 @@ internal interface ICompositionScrollPresentationCompositor
     bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY);
 }
 
+internal interface ICompositionAnimationCompositor
+{
+    void SetCompositionAnimationDeclaration(
+        in CompositionAnimationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot);
+
+    void ClearCompositionAnimation();
+
+    ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken = default);
+}
+
 internal interface ICompositionFramePacingProvider
 {
     CompositionFramePacing FramePacing { get; }

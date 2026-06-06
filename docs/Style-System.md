@@ -120,7 +120,7 @@ Initial compositor-eligible properties:
 
 Composition style must not require rebuilding `VirtualNode`, layout, or draw command buffers for every animation tick. It is the main mechanism for GPU/off-main-pipeline animation.
 
-Current implementation: internal opacity and translation metadata classify as composite-only and identify compositor-eligible property intent. `StyleTransitionCompiler` can compile a pure internal opacity/translation delta into the existing `CompositionAnimationDeclaration` shape. It does not schedule transitions, resolve public style rules, commit runtime state, or bypass retained target validation; existing compositor execution remains driven by resolved transform/opacity and scroll presentation declarations.
+Current implementation: internal opacity and translation metadata classify as composite-only and identify compositor-eligible property intent. `StyleTransitionCompiler` can compile a pure internal opacity/translation delta into the existing `CompositionAnimationDeclaration` shape. It does not schedule transitions, resolve public style rules, commit runtime state, or bypass retained target validation; existing compositor execution remains driven by resolved transform/opacity and scroll presentation declarations. The narrow Poc-owned `StyleTransitionRuntimeCoordinator` now proves the future ownership shape: runtime supplies start/cancel/retarget/commit decisions, retained snapshots are required before compositor install, and rejected draw/layout-owned deltas fall back before presentation ownership changes.
 
 ## Control-State Style
 

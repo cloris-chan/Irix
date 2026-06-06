@@ -45,8 +45,17 @@ internal static class CompositionTransformDemoRunner
         await compositor.RenderAsync(staticFrame, cancellationToken);
 
         var animationStartTimestamp = CompositionTimestamp.Now();
-        var declaration = BuildAnimationDeclaration(animationStartTimestamp);
-        compositor.SetCompositionAnimationDeclaration(declaration, pipeline.LastRetainedInputSnapshot!);
+        var runtimeAdapter = new SingleStyleTransitionRuntimeAdapter(BuildAnimationDecision(animationStartTimestamp));
+        var coordinator = new StyleTransitionRuntimeCoordinator();
+        var transitionResult = await coordinator.ApplyNextAsync(
+            runtimeAdapter,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(pipeline.LastRetainedInputSnapshot),
+            cancellationToken);
+        if (transitionResult.Kind != StyleTransitionRuntimeResultKind.Started)
+        {
+            throw new InvalidOperationException($"Composition demo style transition did not start: {transitionResult.Kind}/{transitionResult.FallbackReason}/{transitionResult.CompileStatus}.");
+        }
 
         output.WriteLine("=== D3D12 Composition Transform Demo ===");
         output.WriteLine($"Duration: {demoDurationMs}ms");
@@ -110,13 +119,44 @@ internal static class CompositionTransformDemoRunner
 
     internal static CompositionAnimationDeclaration BuildAnimationDeclaration(CompositionTimestamp startTimestamp, CompositionDuration duration)
     {
-        return new CompositionAnimationDeclaration(
+        var compileRequest = BuildAnimationDecision(startTimestamp, duration).ToCompileRequest();
+        var compileResult = StyleTransitionCompiler.Compile(compileRequest);
+        if (!compileResult.HasDeclaration)
+        {
+            throw new InvalidOperationException($"Composition demo style transition declaration rejected: {compileResult.Status}.");
+        }
+
+        return compileResult.Declaration;
+    }
+
+    internal static StyleTransitionRuntimeDecision BuildAnimationDecision(CompositionTimestamp startTimestamp)
+    {
+        return BuildAnimationDecision(startTimestamp, AnimationDuration);
+    }
+
+    internal static StyleTransitionRuntimeDecision BuildAnimationDecision(CompositionTimestamp startTimestamp, CompositionDuration duration)
+    {
+        VirtualNodeProperty[] previousProperties =
+        [
+            VirtualNodeProperty.TranslateX(24),
+            VirtualNodeProperty.TranslateY(18),
+            VirtualNodeProperty.LayerOpacity(0.95)
+        ];
+        VirtualNodeProperty[] nextProperties =
+        [
+            VirtualNodeProperty.TranslateX(120),
+            VirtualNodeProperty.TranslateY(42),
+            VirtualNodeProperty.LayerOpacity(0.55)
+        ];
+
+        return StyleTransitionRuntimeDecision.Start(
             DemoAnimatedTargetKey,
-            new CompositionAnimationTimeline(startTimestamp, duration.IsPositive ? duration : CompositionDuration.FromMilliseconds(AnimationDurationMs), CompositionAnimationRepeatMode.Alternate),
-            new CompositionTransformAnimation(
-                new CompositionScalarAnimation(24f, 120f, CompositionAnimationEasing.SineInOut),
-                new CompositionScalarAnimation(18f, 42f, CompositionAnimationEasing.SineInOut)),
-            new CompositionScalarAnimation(0.95f, 0.55f, CompositionAnimationEasing.SineInOut));
+            previousProperties,
+            nextProperties,
+            startTimestamp,
+            duration.IsPositive ? duration : CompositionDuration.FromMilliseconds(AnimationDurationMs),
+            CompositionAnimationEasing.SineInOut,
+            CompositionAnimationRepeatMode.Alternate);
     }
 
     internal static CompositionFrame BuildAnimatedCompositionFrameAt(RenderPipelineRetainedInputSnapshot snapshot, CompositionDuration elapsed)

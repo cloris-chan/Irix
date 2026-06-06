@@ -125,6 +125,8 @@ Runtime transition ownership is explicit:
 
 Unsupported or mixed-property transitions fall back before presentation ownership changes. Background/foreground color transition remains draw/update-owned until a material or layer color contract exists; size and text-metric transitions remain runtime/layout-owned; mixed draw plus composition deltas must not silently become compositor-only. Diagnostics may report those decisions, but diagnostics are not a public timeline scheduler.
 
+Current runtime ownership preflight: `IStyleTransitionRuntimeAdapter`, `StyleTransitionRuntimeCoordinator`, `IStyleTransitionCompositorAdapter`, and `IStyleTransitionRetainedSnapshotProvider` live in `Irix.Poc`. The runtime adapter supplies a decision (`Start`, `Cancel`, `Retarget`, or `Commit`) and receives the result; the coordinator compiles only start/retarget decisions, installs compositor declarations only through the compositor adapter, and falls back before presentation ownership changes when the retained snapshot is missing or the compiler rejects a non-compositor-owned delta. `DrawingBackendCompositor` exposes only an internal transform/opacity animation compositor boundary for this path. There is still no public transition API, theme/cascade resolver, or timeline scheduler.
+
 ## Animation Markers
 
 Compositor/GPU animations can publish runtime-facing marker events without letting the backend call runtime callbacks. A marker is immutable data attached to the animation declaration:

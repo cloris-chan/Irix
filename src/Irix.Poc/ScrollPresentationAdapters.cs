@@ -93,7 +93,7 @@ internal readonly struct CompositorLoopScrollPresentationAdapter(
 }
 
 internal readonly struct WindowDrawCommandTranslatorRetainedSnapshotProvider(
-    WindowDrawCommandTranslator Translator) : IScrollPresentationRetainedSnapshotProvider
+    WindowDrawCommandTranslator Translator) : IScrollPresentationRetainedSnapshotProvider, IStyleTransitionRetainedSnapshotProvider
 {
     public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot => Translator.LastRetainedInputSnapshot;
 }

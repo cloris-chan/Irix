@@ -35,7 +35,8 @@ internal readonly struct StyleTransitionCompileRequest(
     CompositionDuration Duration,
     CompositionAnimationEasing Easing = CompositionAnimationEasing.Linear,
     CompositionAnimationInstanceId InstanceId = default,
-    CompositionAnimationMarker[]? Markers = null)
+    CompositionAnimationMarker[]? Markers = null,
+    CompositionAnimationRepeatMode RepeatMode = CompositionAnimationRepeatMode.Once)
 {
     private readonly CompositionAnimationMarker[]? _markers = Markers;
 
@@ -47,6 +48,7 @@ internal readonly struct StyleTransitionCompileRequest(
     public CompositionAnimationEasing Easing { get; } = Easing;
     public CompositionAnimationInstanceId InstanceId { get; } = InstanceId;
     public ReadOnlySpan<CompositionAnimationMarker> Markers => _markers;
+    public CompositionAnimationRepeatMode RepeatMode { get; } = RepeatMode;
     internal CompositionAnimationMarker[]? MarkerArray => _markers;
 }
 
@@ -139,7 +141,7 @@ internal static class StyleTransitionCompiler
 
         var declaration = new CompositionAnimationDeclaration(
             request.TargetKey,
-            new CompositionAnimationTimeline(request.StartTimestamp, request.Duration),
+            new CompositionAnimationTimeline(request.StartTimestamp, request.Duration, request.RepeatMode),
             new CompositionTransformAnimation(
                 new CompositionScalarAnimation(from.TranslateX, to.TranslateX, request.Easing),
                 new CompositionScalarAnimation(from.TranslateY, to.TranslateY, request.Easing)),
