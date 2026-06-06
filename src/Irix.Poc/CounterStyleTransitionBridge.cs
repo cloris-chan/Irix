@@ -6,7 +6,41 @@ internal static class CounterStyleTransitionBridge
 {
     private static readonly CompositionDuration ButtonStateDuration = CompositionDuration.FromMilliseconds(120);
 
+    internal static CounterStyleTransitionLifecycleResult EvaluateInputTransition(
+        in OwnershipSnapshot previous,
+        in OwnershipSnapshot next,
+        bool hasActiveScrollPresentation,
+        CompositionTimestamp startTimestamp)
+    {
+        if (previous == next)
+        {
+            return CounterStyleTransitionLifecycleResult.DispatchNormally(
+                CounterStyleTransitionLifecycleReason.NoOwnershipDelta);
+        }
+
+        if (hasActiveScrollPresentation)
+        {
+            return CounterStyleTransitionLifecycleResult.DispatchNormally(
+                CounterStyleTransitionLifecycleReason.ActiveScrollPresentation);
+        }
+
+        var reason = CreateDecisionCore(previous, next, startTimestamp, out var decision);
+        return reason == CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta
+            ? CounterStyleTransitionLifecycleResult.ApplyTransition(decision)
+            : CounterStyleTransitionLifecycleResult.DispatchNormally(reason);
+    }
+
     internal static bool TryCreateDecision(
+        in OwnershipSnapshot previous,
+        in OwnershipSnapshot next,
+        CompositionTimestamp startTimestamp,
+        out StyleTransitionRuntimeDecision decision)
+    {
+        return CreateDecisionCore(previous, next, startTimestamp, out decision)
+            == CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta;
+    }
+
+    private static CounterStyleTransitionLifecycleReason CreateDecisionCore(
         in OwnershipSnapshot previous,
         in OwnershipSnapshot next,
         CompositionTimestamp startTimestamp,
@@ -28,7 +62,7 @@ internal static class CounterStyleTransitionBridge
             if (changed)
             {
                 decision = default;
-                return false;
+                return CounterStyleTransitionLifecycleReason.MultiTargetUnsupported;
             }
 
             changed = true;
@@ -40,7 +74,7 @@ internal static class CounterStyleTransitionBridge
         if (!changed)
         {
             decision = default;
-            return false;
+            return CounterStyleTransitionLifecycleReason.NoControlStateDelta;
         }
 
         var previousProperties = ToCompositionProperties(selectedPreviousState);
@@ -58,7 +92,7 @@ internal static class CounterStyleTransitionBridge
             CompositionAnimationEasing.SineOut,
             CompositionAnimationRepeatMode.Once,
             CreateInstanceId(selectedTarget.ActionId, next.HoverChangeCount));
-        return true;
+        return CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta;
     }
 
     internal static bool TryMapActionToNodeKey(ActionId actionId, out NodeKey nodeKey)
@@ -96,6 +130,70 @@ internal static class CounterStyleTransitionBridge
         var value = actionId.Value * 1_000u + (uint)(hoverChangeCount & 0x3ff);
         return new CompositionAnimationInstanceId(value == 0 ? 1 : value);
     }
+}
+
+internal enum CounterStyleTransitionLifecycleAction : byte
+{
+    None,
+    DispatchNormally,
+    ApplyTransition,
+}
+
+internal enum CounterStyleTransitionLifecycleReason : byte
+{
+    None,
+    NoOwnershipDelta,
+    NoControlStateDelta,
+    ActiveScrollPresentation,
+    MultiTargetUnsupported,
+    SingleTargetControlStateDelta,
+}
+
+internal enum CounterStyleTransitionLifecycleCompletionPolicy : byte
+{
+    None,
+    RequiresExplicitRuntimeDecision,
+}
+
+internal readonly struct CounterStyleTransitionLifecycleResult(
+    CounterStyleTransitionLifecycleAction Action,
+    CounterStyleTransitionLifecycleReason Reason,
+    StyleTransitionRuntimeDecision Decision = default,
+    CounterStyleTransitionLifecycleCompletionPolicy CompletionPolicy = CounterStyleTransitionLifecycleCompletionPolicy.None) : IEquatable<CounterStyleTransitionLifecycleResult>
+{
+    public CounterStyleTransitionLifecycleAction Action { get; } = Action;
+    public CounterStyleTransitionLifecycleReason Reason { get; } = Reason;
+    public StyleTransitionRuntimeDecision Decision { get; } = Decision;
+    public CounterStyleTransitionLifecycleCompletionPolicy CompletionPolicy { get; } = CompletionPolicy;
+    public bool HasTransitionDecision => Action == CounterStyleTransitionLifecycleAction.ApplyTransition
+        && Decision.Kind is StyleTransitionRuntimeDecisionKind.Start or StyleTransitionRuntimeDecisionKind.Retarget;
+    public bool RequiresNormalDispatch => Action == CounterStyleTransitionLifecycleAction.DispatchNormally;
+
+    public static CounterStyleTransitionLifecycleResult DispatchNormally(CounterStyleTransitionLifecycleReason reason) =>
+        new(CounterStyleTransitionLifecycleAction.DispatchNormally, reason);
+
+    public static CounterStyleTransitionLifecycleResult ApplyTransition(StyleTransitionRuntimeDecision decision) =>
+        new(
+            CounterStyleTransitionLifecycleAction.ApplyTransition,
+            CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta,
+            decision,
+            CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision);
+
+    public bool Equals(CounterStyleTransitionLifecycleResult other)
+    {
+        return Action == other.Action
+            && Reason == other.Reason
+            && Decision == other.Decision
+            && CompletionPolicy == other.CompletionPolicy;
+    }
+
+    public override bool Equals(object? obj) => obj is CounterStyleTransitionLifecycleResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Action, Reason, Decision, CompletionPolicy);
+
+    public static bool operator ==(CounterStyleTransitionLifecycleResult left, CounterStyleTransitionLifecycleResult right) => left.Equals(right);
+
+    public static bool operator !=(CounterStyleTransitionLifecycleResult left, CounterStyleTransitionLifecycleResult right) => !left.Equals(right);
 }
 
 internal readonly struct CounterButtonTransitionTarget(ActionId ActionId, NodeKey NodeKey) : IEquatable<CounterButtonTransitionTarget>
@@ -172,6 +270,26 @@ internal static class CounterStyleTransitionRuntimeBridge
         await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
 
         var adapter = new CounterStyleTransitionRuntimeAdapter(previous, next, startTimestamp);
+        var coordinator = new StyleTransitionRuntimeCoordinator();
+        return await coordinator.ApplyNextAsync(adapter, compositor, snapshotProvider, cancellationToken);
+    }
+
+    internal static async ValueTask<StyleTransitionRuntimeResult> DispatchAndApplyInputTransitionAsync<TCompositor, TSnapshotProvider>(
+        Runtime<CounterModel, CounterMessage> runtime,
+        CounterMessage appMessage,
+        StyleTransitionRuntimeDecision decision,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
+        CancellationToken cancellationToken = default)
+        where TCompositor : IStyleTransitionCompositorAdapter
+        where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(appMessage);
+
+        await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
+
+        var adapter = new SingleStyleTransitionRuntimeAdapter(decision);
         var coordinator = new StyleTransitionRuntimeCoordinator();
         return await coordinator.ApplyNextAsync(adapter, compositor, snapshotProvider, cancellationToken);
     }

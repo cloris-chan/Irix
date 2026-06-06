@@ -2750,9 +2750,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("diagnostics are not a public timeline scheduler", animationDesign);
 
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
-        Assert.Contains("first Counter app/control integration slice now maps", status);
+        Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, and first Counter app/control transition integration are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, and lifecycle preflight are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2851,10 +2851,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("IStyleTransitionRuntimeAdapter", animationDesign);
         Assert.Contains("falls back before presentation ownership changes", animationDesign);
         Assert.Contains("first concrete app/control integration is Counter-owned", animationDesign);
-        Assert.Contains("first Counter app/control integration slice now maps", status);
-        Assert.Contains("Style transition lifecycle design", status);
-        Assert.Contains("first Counter app/control integration slice also exists", worklist);
-        Assert.Contains("Style transition lifecycle design", worklist);
+        Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
+        Assert.Contains("Style transition scheduler or multi-owner design", status);
+        Assert.Contains("first Counter app/control integration and lifecycle preflight slice also exists", worklist);
+        Assert.Contains("Style transition scheduler or multi-owner design", worklist);
 
         Assert.Contains("interface IStyleTransitionRuntimeAdapter", coordinatorSource);
         Assert.Contains("StyleTransitionRuntimeDecision ConsumeStyleTransitionDecision()", coordinatorSource);
@@ -2882,13 +2882,18 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("CounterStyleTransitionBridge", counterTransitionSource);
         Assert.Contains("CounterStyleTransitionRuntimeBridge", counterTransitionSource);
         Assert.Contains("CounterStyleTransitionRuntimeAdapter", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionLifecycleResult", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionLifecycleReason.ActiveScrollPresentation", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionLifecycleReason.MultiTargetUnsupported", counterTransitionSource);
         Assert.Contains("CounterButtonTransitionTarget", counterTransitionSource);
         Assert.Contains("OwnershipSnapshot", counterTransitionSource);
         Assert.Contains("StyleTransitionRuntimeDecisionKind.Retarget", counterTransitionSource);
         Assert.Contains("return false;", counterTransitionSource);
         Assert.Contains("runtime.DispatchAndWaitAsync(appMessage", counterTransitionSource);
         Assert.Contains("CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync", programSource);
-        Assert.Contains("!compositorLoop.TryGetPresentedScrollY(new NodeKey(1), out _)", programSource);
+        Assert.Contains("CounterStyleTransitionBridge.EvaluateInputTransition", programSource);
+        Assert.Contains("hasActiveScrollPresentation", programSource);
         Assert.DoesNotContain("compositor.SetCompositionAnimationDeclaration", demoSource);
         Assert.DoesNotContain("StyleTransitionScheduler", coordinatorSource);
         Assert.DoesNotContain("Theme", coordinatorSource);
@@ -2909,6 +2914,9 @@ public sealed class ProgramDiagnosticsTests
             "SingleStyleTransitionRuntimeAdapter",
             "CounterStyleTransitionBridge",
             "CounterStyleTransitionRuntimeBridge",
+            "CounterStyleTransitionLifecycleResult",
+            "CounterStyleTransitionLifecycleReason",
+            "CounterStyleTransitionLifecycleCompletionPolicy",
             "CounterButtonTransitionTarget"
         })
         {

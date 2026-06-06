@@ -163,18 +163,20 @@ internal static partial class Program
                 }
                 else if (message is not null)
                 {
-                    var shouldApplyStyleTransition = previousOwnership != nextOwnership
-                        && !compositorLoop.TryGetPresentedScrollY(new NodeKey(1), out _);
-                    if (shouldApplyStyleTransition)
+                    var hasActiveScrollPresentation = compositorLoop.TryGetPresentedScrollY(new NodeKey(1), out _);
+                    var transitionLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+                        previousOwnership,
+                        nextOwnership,
+                        hasActiveScrollPresentation,
+                        CompositionTimestamp.Now());
+                    if (transitionLifecycle.HasTransitionDecision)
                     {
                         var transitionTask = CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
                             runtime,
                             message,
-                            previousOwnership,
-                            nextOwnership,
+                            transitionLifecycle.Decision,
                             new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor),
-                            new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
-                            CompositionTimestamp.Now()).AsTask();
+                            new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator)).AsTask();
                         _ = transitionTask.ContinueWith(
                             static task => _ = task.Exception,
                             CancellationToken.None,
