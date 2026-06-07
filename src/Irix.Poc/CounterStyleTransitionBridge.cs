@@ -260,7 +260,8 @@ internal static class CounterStyleTransitionRuntimeBridge
         TCompositor compositor,
         TSnapshotProvider snapshotProvider,
         CompositionTimestamp startTimestamp,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        StyleTransitionCompletionTracker? completionTracker = null)
         where TCompositor : IStyleTransitionCompositorAdapter
         where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
     {
@@ -270,8 +271,12 @@ internal static class CounterStyleTransitionRuntimeBridge
         await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
 
         var adapter = new CounterStyleTransitionRuntimeAdapter(previous, next, startTimestamp);
-        var coordinator = new StyleTransitionRuntimeCoordinator();
-        return await coordinator.ApplyNextAsync(adapter, compositor, snapshotProvider, cancellationToken);
+        return await ApplyNextWithOptionalCompletionTrackerAsync(
+            adapter,
+            compositor,
+            snapshotProvider,
+            completionTracker,
+            cancellationToken);
     }
 
     internal static async ValueTask<StyleTransitionRuntimeResult> DispatchAndApplyInputTransitionAsync<TCompositor, TSnapshotProvider>(
@@ -280,7 +285,8 @@ internal static class CounterStyleTransitionRuntimeBridge
         StyleTransitionRuntimeDecision decision,
         TCompositor compositor,
         TSnapshotProvider snapshotProvider,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        StyleTransitionCompletionTracker? completionTracker = null)
         where TCompositor : IStyleTransitionCompositorAdapter
         where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
     {
@@ -290,7 +296,39 @@ internal static class CounterStyleTransitionRuntimeBridge
         await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
 
         var adapter = new SingleStyleTransitionRuntimeAdapter(decision);
-        var coordinator = new StyleTransitionRuntimeCoordinator();
-        return await coordinator.ApplyNextAsync(adapter, compositor, snapshotProvider, cancellationToken);
+        return await ApplyNextWithOptionalCompletionTrackerAsync(
+            adapter,
+            compositor,
+            snapshotProvider,
+            completionTracker,
+            cancellationToken);
+    }
+
+    private static async ValueTask<StyleTransitionRuntimeResult> ApplyNextWithOptionalCompletionTrackerAsync<TRuntime, TCompositor, TSnapshotProvider>(
+        TRuntime runtime,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
+        StyleTransitionCompletionTracker? completionTracker,
+        CancellationToken cancellationToken)
+        where TRuntime : IStyleTransitionRuntimeAdapter
+        where TCompositor : IStyleTransitionCompositorAdapter
+        where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
+    {
+        if (completionTracker is null)
+        {
+            var coordinator = new StyleTransitionRuntimeCoordinator();
+            return await coordinator.ApplyNextAsync(runtime, compositor, snapshotProvider, cancellationToken);
+        }
+
+        var decision = runtime.ConsumeStyleTransitionDecision();
+        var trackedDecision = completionTracker.AttachCompletionMarker(decision);
+        var result = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            trackedDecision,
+            compositor,
+            snapshotProvider,
+            cancellationToken);
+        runtime.PublishStyleTransitionResult(result);
+        completionTracker.PublishRuntimeResult(trackedDecision, result);
+        return result;
     }
 }

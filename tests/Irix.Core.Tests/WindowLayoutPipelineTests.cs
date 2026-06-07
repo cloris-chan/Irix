@@ -1124,6 +1124,242 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleTransitionCompletionTracker_decorates_once_decision_and_preserves_existing_markers()
+    {
+        var tracker = new StyleTransitionCompletionTracker();
+        var existingMarker = new CompositionAnimationMarker(
+            new CompositionAnimationMarkerId(1),
+            new CompositionRuntimeEventId(2),
+            CompositionAnimationMarkerTrigger.AtProgress(0.5f));
+        var decision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9),
+            [existingMarker]);
+
+        var decorated = tracker.AttachCompletionMarker(decision);
+        var compileResult = StyleTransitionCompiler.Compile(decorated.ToCompileRequest());
+
+        Assert.Equal(1, decision.Markers.Length);
+        Assert.Equal(2, decorated.Markers.Length);
+        Assert.Equal(existingMarker, decorated.Markers[0]);
+        Assert.Equal(StyleTransitionCompletionTracker.CompletionMarkerId, decorated.Markers[1].Id);
+        Assert.Equal(StyleTransitionCompletionTracker.CompletionRuntimeEventId, decorated.Markers[1].RuntimeEventId);
+        Assert.Equal(CompositionAnimationMarkerTrigger.AtProgress(1f), decorated.Markers[1].Trigger);
+        Assert.True(compileResult.HasDeclaration);
+        Assert.Equal(decorated.Markers.ToArray(), compileResult.Declaration.Markers.ToArray());
+    }
+
+    [Fact]
+    public void StyleTransitionCompletionTracker_ignores_non_once_and_missing_instance_decisions()
+    {
+        var tracker = new StyleTransitionCompletionTracker();
+        var loopDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Loop,
+            new CompositionAnimationInstanceId(9));
+
+        var loopDecorated = tracker.AttachCompletionMarker(loopDecision);
+
+        Assert.Equal(loopDecision, loopDecorated);
+        Assert.Equal(StyleTransitionCompletionResultKind.NotTracked, tracker.LastResult.Kind);
+
+        var missingInstanceDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once);
+
+        var missingInstanceDecorated = tracker.AttachCompletionMarker(missingInstanceDecision);
+
+        Assert.Equal(missingInstanceDecision, missingInstanceDecorated);
+        Assert.Equal(StyleTransitionCompletionResultKind.NotTracked, tracker.LastResult.Kind);
+        Assert.False(tracker.HasActiveTransition);
+    }
+
+    [Fact]
+    public async Task StyleTransitionCompletionTracker_completion_marker_creates_explicit_commit_decision()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshot = CreateStyleTransitionRetainedSnapshot();
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var tracker = new StyleTransitionCompletionTracker();
+        var decision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9));
+        var decorated = tracker.AttachCompletionMarker(decision);
+
+        var start = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            decorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var tracking = tracker.PublishRuntimeResult(decorated, start);
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Started, start.Kind);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, tracking.Kind);
+        Assert.True(tracker.HasActiveTransition);
+        Assert.Equal(1, compositor.StartCount);
+        Assert.Equal(0, compositor.CancelCount);
+
+        var completed = tracker.TryCreateCompletionDecision(
+            BuildCompletionMarkerEvent(new NodeKey(22), new CompositionAnimationInstanceId(9)),
+            out var commitDecision);
+
+        Assert.True(completed);
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Commit, commitDecision.Kind);
+        Assert.Equal(new NodeKey(22), commitDecision.TargetKey);
+        Assert.Equal(StyleTransitionCompletionResultKind.Completed, tracker.LastResult.Kind);
+        Assert.False(tracker.HasActiveTransition);
+
+        var committed = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            commitDecision,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Committed, committed.Kind);
+        Assert.Equal(1, compositor.CancelCount);
+        Assert.Equal(new NodeKey(22), compositor.LastCancelTarget);
+    }
+
+    [Fact]
+    public async Task StyleTransitionCompletionTracker_retarget_supersedes_previous_instance()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshot = CreateStyleTransitionRetainedSnapshot();
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var tracker = new StyleTransitionCompletionTracker();
+        var startDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9));
+        var decoratedStart = tracker.AttachCompletionMarker(startDecision);
+        var start = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            decoratedStart,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        tracker.PublishRuntimeResult(decoratedStart, start);
+
+        var retargetDecision = StyleTransitionRuntimeDecision.Retarget(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            BuildCompositionStyleProperties(opacity: 0.5, translateX: 24, translateY: 16),
+            CompositionTimestamp.FromStopwatchTicks(150),
+            CompositionDuration.FromStopwatchTicks(30),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(10));
+        var decoratedRetarget = tracker.AttachCompletionMarker(retargetDecision);
+        var retarget = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            decoratedRetarget,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var tracking = tracker.PublishRuntimeResult(decoratedRetarget, retarget);
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Retargeted, retarget.Kind);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingRetargeted, tracking.Kind);
+        Assert.Equal(new CompositionAnimationInstanceId(10), tracker.ActiveInstanceId);
+        Assert.Equal(2, compositor.StartCount);
+
+        var oldCompleted = tracker.TryCreateCompletionDecision(
+            BuildCompletionMarkerEvent(new NodeKey(22), new CompositionAnimationInstanceId(9)),
+            out _);
+
+        Assert.False(oldCompleted);
+        Assert.True(tracker.HasActiveTransition);
+
+        var newCompleted = tracker.TryCreateCompletionDecision(
+            BuildCompletionMarkerEvent(new NodeKey(22), new CompositionAnimationInstanceId(10)),
+            out var commitDecision);
+
+        Assert.True(newCompleted);
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Commit, commitDecision.Kind);
+        Assert.Equal(new NodeKey(22), commitDecision.TargetKey);
+    }
+
+    [Fact]
+    public async Task StyleTransitionCompletionTracker_clears_on_cancel_or_fallback()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshot = CreateStyleTransitionRetainedSnapshot();
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var tracker = new StyleTransitionCompletionTracker();
+        var decision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9));
+        var decorated = tracker.AttachCompletionMarker(decision);
+        var start = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            decorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        tracker.PublishRuntimeResult(decorated, start);
+
+        var cancelDecision = StyleTransitionRuntimeDecision.Cancel(new NodeKey(22));
+        var canceled = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            cancelDecision,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var cancelCleared = tracker.PublishRuntimeResult(cancelDecision, canceled);
+
+        Assert.Equal(StyleTransitionCompletionResultKind.Cleared, cancelCleared.Kind);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.False(tracker.TryCreateCompletionDecision(
+            BuildCompletionMarkerEvent(new NodeKey(22), new CompositionAnimationInstanceId(9)),
+            out _));
+
+        var secondDecorated = tracker.AttachCompletionMarker(decision);
+        var secondStart = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            secondDecorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        tracker.PublishRuntimeResult(secondDecorated, secondStart);
+
+        var fallback = StyleTransitionRuntimeResult.Fallback(
+            new NodeKey(22),
+            StyleTransitionRuntimeFallbackReason.MissingRetainedSnapshot);
+        var fallbackCleared = tracker.PublishRuntimeResult(secondDecorated, fallback);
+
+        Assert.Equal(StyleTransitionCompletionResultKind.Cleared, fallbackCleared.Kind);
+        Assert.False(tracker.HasActiveTransition);
+    }
+
+    [Fact]
     public void RenderPipeline_classifies_text_size_affecting_dirty_rebuild()
     {
         var pipeline = new RenderPipeline();
@@ -4404,6 +4640,25 @@ public sealed class WindowLayoutPipelineTests
             VirtualNodeProperty.TranslateX(translateX),
             VirtualNodeProperty.TranslateY(translateY)
         ];
+    }
+
+    private static CompositionAnimationMarkerEvent BuildCompletionMarkerEvent(
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId)
+    {
+        return new CompositionAnimationMarkerEvent(
+            instanceId,
+            StyleTransitionCompletionTracker.CompletionMarkerId,
+            StyleTransitionCompletionTracker.CompletionRuntimeEventId,
+            CompositionAnimationMarkerEventKind.Progress,
+            CompositionAnimationMarkerOwnerKind.TransformOpacity,
+            new CompositionLayerId(1),
+            targetKey,
+            CompositionTimestamp.FromStopwatchTicks(150),
+            CompositionDuration.FromStopwatchTicks(50),
+            1f,
+            0,
+            CompositionPlaybackDirection.Forward);
     }
 
     private sealed class RecordingStyleTransitionCompositorAdapter : IStyleTransitionCompositorAdapter
