@@ -251,6 +251,16 @@ internal readonly struct StyleTransitionRuntimeResult(
 
 internal sealed class StyleTransitionRuntimeCoordinator
 {
+    internal StyleTransitionDecisionBatchValidationResult ValidateBatch<TSnapshotProvider>(
+        in StyleTransitionDecisionBatch batch,
+        TSnapshotProvider snapshotProvider,
+        CancellationToken cancellationToken = default)
+        where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return StyleTransitionDecisionBatchPreflight.Validate(batch, snapshotProvider);
+    }
+
     internal async ValueTask<StyleTransitionRuntimeResult> ApplyNextAsync<TRuntime, TCompositor, TSnapshotProvider>(
         TRuntime runtime,
         TCompositor compositor,

@@ -131,11 +131,11 @@ Current runtime ownership preflight: `IStyleTransitionRuntimeAdapter`, `StyleTra
 
 True concurrent style transitions require a design boundary before code changes. The current Counter path deliberately keeps multi-target control-state deltas on normal app dispatch because there is only one transform/opacity presentation owner. The next implementation must not relax that fallback until the runtime and compositor can represent multiple active owners without losing commit, cancel, retarget, marker, and hit-test semantics.
 
-This preflight is now a Poc-owned value-model and validation preflight only. It adds `StyleTransitionOwnerKey`, `StyleTransitionDecisionBatch`, per-owner validation results, and deterministic acceptance/rejection tests, but it does not add a public transition API, does not add a generic scheduler, does not move Poc runtime types into `Irix.Rendering`, does not install multiple compositor owners, and does not change `DrawingBackendCompositor` execution contracts.
+This preflight is now a Poc-owned value-model plus coordinator validation preflight only. It adds `StyleTransitionOwnerKey`, `StyleTransitionDecisionBatch`, per-owner validation results, deterministic acceptance/rejection tests, and `StyleTransitionRuntimeCoordinator.ValidateBatch`, but it does not add a public transition API, does not add a generic scheduler, does not move Poc runtime types into `Irix.Rendering`, does not install multiple compositor owners, and does not change `DrawingBackendCompositor` execution contracts.
 
 The minimum accepted design is runtime-owned owner identity and decision batching, retained target validation against one publication, compositor presentation-set validation, per-owner completion tracking, and diagnostics that report accepted and rejected owners before presentation state changes.
 
-Current preflight implementation: `StyleTransitionDecisionBatchPreflight` validates Poc-owned owner/decision batches against one retained publication and the existing `StyleTransitionCompiler`, reports accepted and rejected owners in runtime order, and reports `PresentationStateChanged=false`. It is not a coordinator batch apply path; Counter multi-target control-state deltas still use abort-and-normal-dispatch.
+Current preflight implementation: `StyleTransitionDecisionBatchPreflight` validates Poc-owned owner/decision batches against one retained publication and the existing `StyleTransitionCompiler`, reports accepted and rejected owners in runtime order, and reports `PresentationStateChanged=false`. `StyleTransitionRuntimeCoordinator.ValidateBatch` exposes that validation at the Poc coordinator boundary and preserves the existing single-owner apply path. It is not a batch apply path; Counter multi-target control-state deltas still use abort-and-normal-dispatch.
 
 Required future shapes:
 
@@ -161,8 +161,8 @@ Ownership rules:
 Implementation order:
 
 1. Done: Poc-owned batch/owner value types and tests around deterministic acceptance/rejection exist without installing multiple compositor owners.
-2. Next: teach the coordinator to validate a batch against one retained snapshot and report per-owner results while preserving current single-owner behavior.
-3. Add compositor-side presentation-set validation and conflict reporting for transform/opacity declarations.
+2. Done: the coordinator can validate a batch against one retained snapshot and report per-owner results while preserving current single-owner behavior.
+3. Next: add compositor-side presentation-set validation and conflict reporting for transform/opacity declarations without installing the set yet.
 4. Extend completion tracking from one active transition to an owner table.
 5. Only then allow Counter multi-target control-state deltas to use concurrent transitions instead of the current abort-and-normal-dispatch path.
 
