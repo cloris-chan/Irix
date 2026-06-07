@@ -48,11 +48,11 @@ A compositor animation must not become the authoritative app model unless a sync
 | Opacity | Compositor | Requires layer or material boundary. |
 | Presented scroll offset | Compositor | Runtime owns target/clamp; compositor owns interpolation. |
 | Clip reveal | Compositor when clip is a layer property | Layout clip still owns logical bounds. |
-| Fill/text color | Compositor only after material/layer color contract exists | Otherwise update draw commands. |
+| Fill/text color | Compositor only after material/layer color and output mapping contracts exist | Otherwise update draw commands. |
 | Width/height/padding/font size | UI runtime/layout | Layout target may animate at low frequency; compositor may present a transform but cannot change true layout. |
 | Text content/wrapping/fallback | UI runtime/rendering | Not compositor-only. |
 
-Internal style metadata marks opacity and translation properties as composite-eligible. `StyleTransitionCompiler` can precompile a pure internal opacity/translation delta into the existing transform/opacity declaration shape, but the active compositor path still installs declarations only after retained `NodeKey` target resolution. Fill/text/background color remains draw-command-owned until a material/layer color contract exists.
+Internal style metadata marks opacity and translation properties as composite-eligible. `StyleTransitionCompiler` can precompile a pure internal opacity/translation delta into the existing transform/opacity declaration shape, but the active compositor path still installs declarations only after retained `NodeKey` target resolution. Fill/text/background color remains draw-command-owned until a material/layer color contract and the [Color-Pipeline.md](Color-Pipeline.md) output mapping boundary exist.
 
 ## Scroll As Hybrid Animation
 
@@ -123,7 +123,7 @@ Runtime transition ownership is explicit:
 
 `StyleTransitionCompiler` remains a pure internal compiler. It may precompile semantic opacity/translation deltas into `CompositionAnimationDeclaration` data after the runtime supplies target identity, timing, and ownership policy, but it does not schedule, tick, cancel, retarget, commit logical state, resolve themes, or dispatch app messages.
 
-Unsupported or mixed-property transitions fall back before presentation ownership changes. Background/foreground color transition remains draw/update-owned until a material or layer color contract exists; size and text-metric transitions remain runtime/layout-owned; mixed draw plus composition deltas must not silently become compositor-only. Diagnostics may report those decisions, but diagnostics are not a public timeline scheduler.
+Unsupported or mixed-property transitions fall back before presentation ownership changes. Background/foreground color transition remains draw/update-owned until a material or layer color contract and color-managed output mapping exist; size and text-metric transitions remain runtime/layout-owned; mixed draw plus composition deltas must not silently become compositor-only. Diagnostics may report those decisions, but diagnostics are not a public timeline scheduler.
 
 Current runtime ownership preflight: `IStyleTransitionRuntimeAdapter`, `StyleTransitionRuntimeCoordinator`, `IStyleTransitionCompositorAdapter`, and `IStyleTransitionRetainedSnapshotProvider` live in `Irix.Poc`. The runtime adapter supplies a decision (`Start`, `Cancel`, `Retarget`, or `Commit`) and receives the result; the coordinator compiles only start/retarget decisions, installs compositor declarations only through the compositor adapter, and falls back before presentation ownership changes when the retained snapshot is missing or the compiler rejects a non-compositor-owned delta. The first concrete app/control integration is Counter-owned: `CounterStyleTransitionBridge` maps a single button control-state delta from `OwnershipSnapshot` into a semantic transform/opacity decision, classifies active scroll presentation and multi-target state changes as typed normal-dispatch outcomes, and records that completion/commit still requires an explicit runtime decision rather than happening after start. `CounterStyleTransitionRuntimeBridge` waits for the app runtime render to publish the retained snapshot before the coordinator installs the declaration. `DrawingBackendCompositor` exposes only an internal transform/opacity animation compositor boundary for this path. There is still no public transition API, theme/cascade resolver, multi-target transition owner, implicit commit path, or timeline scheduler.
 

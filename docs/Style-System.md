@@ -18,6 +18,7 @@
 - No cross-platform backend implementation.
 - No `RenderPipeline.Build` StyleOnly layout-skip implementation yet. Retained partial apply and selected render-source handoff exist after normal publication; they are not layout skip.
 - No public UI style authoring surface. Public UI code should not be asked to label a property as layout, visual, text, or composition style; those categories are internal classification results.
+- No HDR color output or tone-mapping implementation in the current style slice. Color output policy belongs to the compositor/backend output mapping context.
 
 ## Style Layers
 
@@ -34,7 +35,9 @@
 
 The current low-level `VirtualNodeProperty` style entries are internal IR for renderer classification, not the final public UI styling API. Public UI style should remain semantic: component variants, state styles, tokens, and modifiers can describe properties such as width, background, foreground, opacity, or translation without exposing `StyleOnly`, `LayoutAffecting`, `VisualOnly`, or `CompositeOnly`.
 
-Internally, style values stay compact and typed. The current pre-public-API slice adds value-style color storage and metadata for semantic visual properties (`BackgroundColor`, `ForegroundColor`) plus composition metadata (`LayerOpacity`, `TranslateX`, `TranslateY`). These keys are not public authoring methods. `StyleDeltaPlanner` turns changed internal properties into explicit work flags for layout, text measure, draw, composition, and control-state projection, so future optimizers do not need to infer execution policy from public API names.
+Internally, style values stay compact and typed. The current pre-public-API slice adds value-style color storage and metadata for semantic visual properties (`BackgroundColor`, `ForegroundColor`) plus composition metadata (`LayerOpacity`, `TranslateX`, `TranslateY`). These keys are not public authoring methods. The future color value direction is defined in [Color-Pipeline.md](Color-Pipeline.md): standard Irix `Color` canonicalizes authoring input into an ideal linear BT.2020 / Rec.2020 straight-alpha value and does not retain source color-space metadata. `StyleDeltaPlanner` turns changed internal properties into explicit work flags for layout, text measure, draw, composition, and control-state projection, so future optimizers do not need to infer execution policy from public API names.
+
+Style owns the semantic property value. It does not own SDR/HDR mode, tone mapping, system SDR brightness, Rec.2100 HLG/PQ selection, swapchain format, or per-screen color-profile mapping. Those belong to material/compositor/backend output mapping after the draw or composition payload has been produced.
 
 ## Public Authoring Contract Preflight
 
@@ -90,6 +93,8 @@ Visual style changes pixels but not layout. Examples:
 Visual style can be either draw-recorded or promoted to composition style if the backend can update it without re-recording the content. The current rule is conservative: keep draw-command ownership unless the composition contract explicitly says the property is layer-owned.
 
 Current implementation: internal background/foreground color properties can override rectangle, button, and text draw-command colors. They are classified as visual-only and keep layout geometry, clips, and hit targets stable, but `RenderPipeline.Build` still performs the normal full layout publication when a dirty patch asks it to rebuild.
+
+Current color implementation stage: visual color payloads still downgrade to the active SDR/sRGB draw-command representation. This preserves the current renderer while the canonical BT.2020 `Color` value and conversion helpers are still design/preflight work.
 
 ## Text Shaping Style
 

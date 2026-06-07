@@ -10,6 +10,7 @@ Irix is a native .NET UI framework prototype focused on a small, high-performanc
 - Retained render pipeline: diff, layout, draw command recording, hit-test metadata, diagnostics.
 - Windows PoC backend: Win32 window/input hosting plus D3D12 final composition.
 - D3D12 text path: GlyphAtlas only. DirectWrite and WIC are source-data paths for shaping, metrics, raster, fallback, and glyph image decode.
+- Color direction: future standard Irix `Color` is an ideal linear BT.2020 / Rec.2020 straight-alpha value; the active implementation still outputs SDR/sRGB.
 - Current architecture work: style layers, animation ownership, and D3D12-first GPU composition.
 
 The repository is still private and has no public compatibility target. When a boundary is wrong, migrate callers, tests, and docs directly instead of layering compatibility shims.
@@ -82,6 +83,7 @@ Architecture work is design-first, but implementation should be GPU-first once a
 | [Animation-Composition.md](Animation-Composition.md) | Splits UI-runtime animation, compositor animation, hybrid animation, and backend-internal animation. |
 | [GPU-Composition-Architecture.md](GPU-Composition-Architecture.md) | Defines platform-neutral composition IR, backend capabilities, and GPU offload phases. |
 | [D3D12-Composition.md](D3D12-Composition.md) | Tracks active D3D12 transform/opacity and fixed-clip scroll composition implementation details. |
+| [Color-Pipeline.md](Color-Pipeline.md) | Defines canonical Irix color as linear BT.2020 and keeps current HDR work deferred behind the output mapping boundary. |
 
 High-level rules:
 
@@ -90,6 +92,7 @@ High-level rules:
 - Text shaping style changes may invalidate shaping, glyph cache, and layout metrics.
 - Composition style covers transform, opacity, layer clip, and presented scroll offset.
 - Control-state style is app/control runtime projection and is not owned by `Irix.Rendering`.
+- Color values should canonicalize authoring input into the Irix linear BT.2020 value model; output color mapping belongs to compositor/backend output context, not to public style authoring names or per-color source metadata.
 - Scroll should move toward a hybrid model: logical scroll target in app/control runtime, extent observation in layout, and presented scroll offset in compositor animation.
 - The active composition implementation is D3D12-backed transform/opacity ticks, fixed-clip scroll presentation resolved from retained `NodeKey` declarations, multi-layer retained clip decomposition, active hit-test remapping, marker dispatch, and layer content caching. Normal retained-frame rendering remains the secondary path when the GPU-first path exposes an explicit blocker.
 
@@ -99,6 +102,7 @@ The active Windows renderer is D3D12-only for final composition:
 
 - Rectangles are drawn in the D3D12 rectangle pass.
 - Accepted text is drawn in the D3D12 GlyphAtlas pass.
+- Current color output is SDR/sRGB. Future canonical `Color` work may feed higher-precision internal color through the same drawing/composition boundaries, but HDR/scRGB/Rec.2100 output is not part of the current renderer baseline.
 - DirectWrite may shape, measure, map fallback fonts, raster glyphs, and expose color glyph image data.
 - WIC may decode PNG/JPEG/TIFF glyph image data for upload into BGRA atlas pages.
 - DirectWrite/WIC output is source data only; final text composition stays in the D3D12 command stream.
@@ -134,7 +138,8 @@ Preferred GPU offload order:
 7. GPU culling/compaction for large retained scenes.
 8. Content-space internal offscreen surfaces only after bounds/origin/clip semantics are designed and direct composition still needs them.
 9. Indirect draw and descriptor-indexed resource tables.
-10. Effects/material graph after style/material contracts exist.
+10. Color-managed material/output mapping after the canonical color value and output profile contracts exist.
+11. Effects/material graph after style/material contracts exist.
 
 Do not implement Vulkan/Metal or advanced GPU paths until the platform-neutral composition contract is stable.
 
@@ -168,6 +173,7 @@ Not currently selected unless an explicit target-architecture task pulls them fo
 - Public composition API.
 - Public animation API.
 - Theme/resource dictionary system.
+- HDR color output / Rec.2100 HLG/PQ pipeline.
 - Local/remote UI remoting.
 - MVVM/XAML bridge.
 - Full accessibility/UIA.
@@ -188,6 +194,7 @@ Not currently selected unless an explicit target-architecture task pulls them fo
 - `Irix.Poc` code is not promoted without a contract.
 - Workflow/CI churn is deferred unless [Project_Status_and_Todo.md](Project_Status_and_Todo.md) says remote validation is authoritative again.
 - Composition skip and secondary-path behavior must be explicit, diagnostic-visible, and secondary to the D3D12/GPU-backed path.
+- Current `DrawColor` / `WindowColor` SDR payloads must not be promoted as the canonical Irix color value; canonical color work follows [Color-Pipeline.md](Color-Pipeline.md).
 
 ## Current Work Shape
 
@@ -227,3 +234,4 @@ The actionable worklist lives in [Active-Worklist.md](Active-Worklist.md); the c
 | ADR-019 | Style layers are split into layout, visual, text shaping, composition, and control-state categories. | Design-only |
 | ADR-020 | Animation ownership is split between UI runtime, compositor, hybrid, and backend-internal classes. | Design-only |
 | ADR-021 | Future composition architecture targets modern explicit GPU APIs through platform-neutral composition IR and backend capabilities. | Design-only |
+| ADR-022 | Irix canonical `Color` represents an ideal linear BT.2020 / Rec.2020 straight-alpha value; current output remains SDR/sRGB until HDR output mapping is implemented. | Design-only |

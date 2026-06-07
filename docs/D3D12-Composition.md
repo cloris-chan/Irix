@@ -40,6 +40,7 @@ The current implementation owns:
 - No active internal offscreen/render-target cache. Fixed-clip scroll remains D3D12-composited through the direct/layer-content path; content-space offscreen surfaces need a separate bounds/origin/clip design and a proven direct-composition need before consideration.
 - No generic fallback compositor for unsupported producer paths.
 - No Vulkan/Metal work.
+- No HDR/scRGB/Rec.2100 output implementation in this composition slice. Current output remains SDR/sRGB; future HDR work belongs to a coordinated output mapping feature.
 - No replacement of normal UI frame publication. `ICompositor.RenderAsync` remains the content-update path; compositor ticks are a separate retained-frame presentation path.
 
 ## IR Contract
@@ -83,6 +84,8 @@ RenderFrameBatch commands/resources
 For scroll presentation, the retained draw output already contains content at the committed logical scroll position. The compositor applies `retainedScrollY - presentedScrollY` as a content transform while keeping the layer clip fixed. This preserves the viewport clip while allowing content to move without layout/draw rebuild.
 
 This is intentionally D3D12-backed. Non-composition backends do not receive a CPU compatibility implementation for this tick path; they fail fast until a written blocker justifies a secondary path.
+
+Color output is intentionally narrow in the current D3D12 path. The backend consumes the active SDR/sRGB draw-command payloads; it does not yet own HDR swapchain selection, system SDR brightness, tone mapping, or Rec.2100 HLG/PQ output. The long-term Irix color contract is defined separately in [Color-Pipeline.md](Color-Pipeline.md): canonical color is linear BT.2020, and final mapping to sRGB or HDR backend payloads belongs to a future compositor/backend output mapping context.
 
 Marker delivery is intentionally above the backend. `DrawingBackendCompositor` evaluates markers only after `ICompositionDrawingBackend.ExecuteComposition` returns successfully, records typed `CompositionAnimationMarkerEvent` values, and leaves message mapping to the UI runtime. `CompositionMarkerEventPump` drains queued events into an app-owned mapper and the Poc runtime path dispatches mapped messages through the app runtime dispatch sink. Device-lost/recovered skipped ticks do not publish marker events because presentation did not commit, and clearing an active scroll presentation discards pending scroll marker events with the canceled presentation state.
 

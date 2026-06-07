@@ -16,6 +16,7 @@
 - No Vulkan or Metal backend implementation.
 - No full composition tree implementation.
 - No shader/effect graph implementation.
+- No HDR/scRGB/Rec.2100 output implementation in this document.
 - No retained-array pooling.
 - No public composition API.
 - No replacement of the existing D3D12 rectangle/GlyphAtlas passes in this document.
@@ -33,6 +34,8 @@ RenderPipeline
 ```
 
 This remains valid. The composition architecture adds layer animation and backend composition capability between retained draw output and backend execution; it does not remove the current D3D12 renderer path.
+
+The active color output remains SDR/sRGB. The future canonical color value is documented in [Color-Pipeline.md](Color-Pipeline.md) as ideal linear BT.2020 / Rec.2020 straight-alpha; mapping that value to sRGB, scRGB, Rec.2100 HLG/PQ, or monitor-specific output is a separate output mapping contract, not part of the current transform/opacity/scroll composition implementation.
 
 ## Implementation Bias
 
@@ -85,6 +88,8 @@ Backends should report capabilities instead of forcing one feature baseline:
 | `SupportsIndirectDraw` | Backend can issue GPU-generated/indirect draws. |
 | `SupportsComputePasses` | Backend can run compute culling, compaction, or effects. |
 | `SupportsTimelineSynchronization` | Backend has timeline semaphore/fence style synchronization suitable for async work. |
+| `SupportsColorManagedOutput` | Backend can consume canonical Irix color through an explicit output mapping context instead of only SDR/sRGB payloads. Deferred. |
+| `SupportsHdrOutput` | Backend can present HDR output such as scRGB FP16 or Rec.2100 HLG/PQ with explicit SDR white and tone-mapping policy. Deferred. |
 
 Unsupported capabilities should fall back to draw-command updates, CPU-side batching, or explicit degradation only after the D3D12/GPU-backed path has been attempted or a written blocker says it cannot be attempted safely.
 
@@ -120,6 +125,7 @@ The composition contract should not expose these backend objects to `Irix.Render
 | 12 | Content-space internal offscreen surfaces. | Deferred. Do not reintroduce this until bounds, origin, clip, invalidation, and hit-test semantics are specified and direct composition remains the reference behavior. |
 | 13 | GPU culling / batching / indirect draw. | Useful for large retained command lists. |
 | 14 | Effects/material graph. | Deferred until style/material contract exists. |
+| 15 | Color-managed output mapping. | Deferred until the canonical color value is implemented and the backend/compositor output profile contract is selected. |
 
 ## Work Placement
 
