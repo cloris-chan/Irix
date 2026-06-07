@@ -874,10 +874,15 @@ public class TypedIdAllocationGuardTests
 
         Assert.Contains("struct DrawPayloadColor(Color Value)", drawingSource);
         Assert.Contains("internal enum ColorOutputKind : byte", drawingSource);
+        Assert.Contains("internal enum DrawMaterialBackendCapabilities : byte", drawingSource);
+        Assert.Contains("internal enum DrawMaterialFallbackReason : byte", drawingSource);
+        Assert.Contains("internal readonly struct DrawMaterialOutputMappingResult", drawingSource);
+        Assert.Contains("internal readonly struct DrawMaterialOutputDiagnostics", drawingSource);
         Assert.Contains("internal readonly struct ColorOutputMapping", drawingSource);
         Assert.Contains("public static ColorOutputMapping SdrSrgb", drawingSource);
         Assert.Contains("public DrawColor MapToSdr(Color color)", drawingSource);
         Assert.Contains("public DrawColor MapToSdr(DrawMaterial material) => MapToSdr(material.FallbackColor)", drawingSource);
+        Assert.Contains("DrawMaterialOutputMappingResult MapToSdr", drawingSource);
         Assert.Contains("public DrawColor MapToSdr(in DrawCommand command)", drawingSource);
         Assert.Contains("internal enum DrawMaterialKind : byte", drawingSource);
         Assert.Contains("internal readonly struct DrawMaterial", drawingSource);
@@ -904,13 +909,16 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("DrawCommand.FromMaterial", d3d12Source);
         Assert.Contains("ApplyOpacity(payload.Material", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", d3d12Source);
-        Assert.Contains("outputMapping.MapToSdr(command.Material)", d3d12Source);
+        Assert.Contains("outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities)", d3d12Source);
+        Assert.Contains("diagnostics.AddMaterialOutput", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", windowBackendSource);
         Assert.Contains("outputMapping.MapToSdr(command)", windowBackendSource);
         Assert.DoesNotContain("command.ToSdrColor()", d3d12Source);
         Assert.DoesNotContain("command.ToSdrColor()", windowBackendSource);
         Assert.DoesNotContain("var srgb = styleColor.Value.ToSrgb()", recorderSource);
         Assert.Equal(["SdrSrgb"], Enum.GetNames<ColorOutputKind>());
+        Assert.Equal(["None", "SolidColor"], Enum.GetNames<DrawMaterialBackendCapabilities>());
+        Assert.Equal(["None", "UnsupportedNonSolidMaterial", "UnsupportedMaterialKind"], Enum.GetNames<DrawMaterialFallbackReason>());
         Assert.DoesNotContain("ScRgb", drawingSource);
         Assert.DoesNotContain("Rec2100", drawingSource);
         Assert.DoesNotContain("ColorOutputKind.Hdr", drawingSource);

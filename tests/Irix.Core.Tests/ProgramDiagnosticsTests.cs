@@ -4714,10 +4714,32 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(2, snapshot.ScissorStateChangeCount);
         Assert.Equal(lastEffectiveScissor, snapshot.LastEffectiveScissor);
         Assert.Equal(lastEffectiveTextClip, snapshot.LastEffectiveTextClip);
+        Assert.Equal(ColorOutputKind.SdrSrgb, snapshot.MaterialOutput.OutputKind);
+        Assert.Equal(DrawMaterialBackendCapabilities.SolidColor, snapshot.MaterialOutput.BackendCapabilities);
+        Assert.Equal(DrawMaterialKind.SolidColor, snapshot.MaterialOutput.SelectedMaterialKind);
+        Assert.Equal(DrawMaterialFallbackReason.None, snapshot.MaterialOutput.FallbackReason);
         Assert.Equal(4, snapshot.TextClipSkippedCount);
         Assert.True(snapshot.DeviceRemoved);
         Assert.Equal(deviceError, snapshot.DeviceError);
         Assert.True(snapshot.GpuScissor);
+    }
+
+    [Fact]
+    public void Diagnose_material_output_status_outputs_stable_machine_readable_fields()
+    {
+        var snapshot = new DrawMaterialOutputDiagnostics(
+            ColorOutputKind.SdrSrgb,
+            DrawMaterialBackendCapabilities.SolidColor,
+            DrawMaterialKind.LinearGradient,
+            DrawMaterialFallbackReason.UnsupportedNonSolidMaterial,
+            CommandCount: 3,
+            SolidColorCommandCount: 2,
+            LinearGradientCommandCount: 1,
+            FallbackCommandCount: 1);
+
+        var line = DiagnosticsFormatter.BuildMaterialOutputDiagnosticLine(snapshot);
+
+        Assert.Equal("Material output status: outputKind=SdrSrgb backendCapabilities=SolidColor selectedMaterialKind=LinearGradient fallbackReason=UnsupportedNonSolidMaterial fallbackApplied=True commandCount=3 solidColorCommands=2 linearGradientCommands=1 fallbackCommands=1", line);
     }
 
     [Fact]
@@ -5187,6 +5209,15 @@ public sealed class ProgramDiagnosticsTests
             scissorStateChangeCount,
             lastEffectiveScissor,
             lastEffectiveTextClip,
+            new DrawMaterialOutputDiagnostics(
+                ColorOutputKind.SdrSrgb,
+                DrawMaterialBackendCapabilities.SolidColor,
+                DrawMaterialKind.SolidColor,
+                DrawMaterialFallbackReason.None,
+                CommandCount: 1,
+                SolidColorCommandCount: 1,
+                LinearGradientCommandCount: 0,
+                FallbackCommandCount: 0),
             textClipSkippedCount,
             deviceRemoved,
             deviceError);

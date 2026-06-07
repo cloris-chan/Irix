@@ -397,6 +397,15 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(directColor.G / 255f, firstGradientRect.G);
         Assert.Equal(directColor.B / 255f, firstGradientRect.B);
         Assert.Equal(128f / 255f, firstGradientRect.A);
+        Assert.Equal(ColorOutputKind.SdrSrgb, first.ExecuteResult.MaterialDiagnostics.OutputKind);
+        Assert.Equal(DrawMaterialBackendCapabilities.SolidColor, first.ExecuteResult.MaterialDiagnostics.BackendCapabilities);
+        Assert.Equal(DrawMaterialKind.LinearGradient, first.ExecuteResult.MaterialDiagnostics.SelectedMaterialKind);
+        Assert.Equal(DrawMaterialFallbackReason.UnsupportedNonSolidMaterial, first.ExecuteResult.MaterialDiagnostics.FallbackReason);
+        Assert.True(first.ExecuteResult.MaterialDiagnostics.FallbackApplied);
+        Assert.Equal(2, first.ExecuteResult.MaterialDiagnostics.CommandCount);
+        Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.SolidColorCommandCount);
+        Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.FallbackCommandCount);
 
         rects.Reset();
         texts.Reset();
@@ -427,6 +436,49 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(directColor.G / 255f, secondGradientRect.G);
         Assert.Equal(directColor.B / 255f, secondGradientRect.B);
         Assert.Equal(64f / 255f, secondGradientRect.A);
+        Assert.Equal(DrawMaterialKind.LinearGradient, second.ExecuteResult.MaterialDiagnostics.SelectedMaterialKind);
+        Assert.Equal(DrawMaterialFallbackReason.UnsupportedNonSolidMaterial, second.ExecuteResult.MaterialDiagnostics.FallbackReason);
+        Assert.True(second.ExecuteResult.MaterialDiagnostics.FallbackApplied);
+        Assert.Equal(2, second.ExecuteResult.MaterialDiagnostics.CommandCount);
+        Assert.Equal(1, second.ExecuteResult.MaterialDiagnostics.FallbackCommandCount);
+    }
+
+    [Fact]
+    public void ExecuteCore_reports_material_output_diagnostics_for_solid_and_linear_gradient_fallback()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var gradient = DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            new DrawPoint(0, 0),
+            new DrawPoint(40, 0));
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 50), Color: DrawColor.Opaque(1, 2, 3)),
+            DrawCommand.FromMaterial(DrawCommandKind.FillRect, Rect: new DrawRect(100, 0, 100, 50), Material: gradient)
+        };
+
+        var result = D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.Equal(ColorOutputKind.SdrSrgb, result.MaterialDiagnostics.OutputKind);
+        Assert.Equal(DrawMaterialBackendCapabilities.SolidColor, result.MaterialDiagnostics.BackendCapabilities);
+        Assert.Equal(DrawMaterialKind.LinearGradient, result.MaterialDiagnostics.SelectedMaterialKind);
+        Assert.Equal(DrawMaterialFallbackReason.UnsupportedNonSolidMaterial, result.MaterialDiagnostics.FallbackReason);
+        Assert.True(result.MaterialDiagnostics.FallbackApplied);
+        Assert.Equal(2, result.MaterialDiagnostics.CommandCount);
+        Assert.Equal(1, result.MaterialDiagnostics.SolidColorCommandCount);
+        Assert.Equal(1, result.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, result.MaterialDiagnostics.FallbackCommandCount);
     }
 
     [Fact]

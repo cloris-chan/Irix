@@ -23,6 +23,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
     int ScissorStateChangeCount,
     EffectiveScissor LastEffectiveScissor,
     EffectiveScissor LastEffectiveTextClip,
+    DrawMaterialOutputDiagnostics MaterialOutput,
     int TextClipSkippedCount,
     bool DeviceRemoved,
     DeviceErrorDiagnostic DeviceError) : IEquatable<BackendClipTextDiagnosticSnapshot>
@@ -34,6 +35,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
     public int ScissorStateChangeCount { get; } = ScissorStateChangeCount;
     public EffectiveScissor LastEffectiveScissor { get; } = LastEffectiveScissor;
     public EffectiveScissor LastEffectiveTextClip { get; } = LastEffectiveTextClip;
+    public DrawMaterialOutputDiagnostics MaterialOutput { get; } = MaterialOutput;
     public int TextClipSkippedCount { get; } = TextClipSkippedCount;
     public bool DeviceRemoved { get; } = DeviceRemoved;
     public DeviceErrorDiagnostic DeviceError { get; } = DeviceError;
@@ -49,6 +51,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
             backend.ScissorStateChangeCount,
             backend.LastEffectiveScissor,
             backend.LastEffectiveTextClip,
+            backend.MaterialOutputDiagnostics,
             backend.TextClipSkippedCount,
             renderer.IsDeviceRemoved,
             renderer.DeviceError);
@@ -62,6 +65,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
             && ScissorStateChangeCount == other.ScissorStateChangeCount
             && LastEffectiveScissor == other.LastEffectiveScissor
             && LastEffectiveTextClip == other.LastEffectiveTextClip
+            && MaterialOutput == other.MaterialOutput
             && TextClipSkippedCount == other.TextClipSkippedCount
             && DeviceRemoved == other.DeviceRemoved
             && DeviceError == other.DeviceError;
@@ -78,6 +82,7 @@ internal readonly struct BackendClipTextDiagnosticSnapshot(
         hash.Add(ScissorStateChangeCount);
         hash.Add(LastEffectiveScissor);
         hash.Add(LastEffectiveTextClip);
+        hash.Add(MaterialOutput);
         hash.Add(TextClipSkippedCount);
         hash.Add(DeviceRemoved);
         hash.Add(DeviceError);

@@ -221,6 +221,101 @@ internal enum ColorOutputKind : byte
     SdrSrgb
 }
 
+[Flags]
+internal enum DrawMaterialBackendCapabilities : byte
+{
+    None = 0,
+    SolidColor = 1
+}
+
+internal enum DrawMaterialFallbackReason : byte
+{
+    None,
+    UnsupportedNonSolidMaterial,
+    UnsupportedMaterialKind
+}
+
+internal readonly struct DrawMaterialOutputMappingResult(
+    DrawColor Color,
+    DrawMaterialKind MaterialKind,
+    DrawMaterialBackendCapabilities BackendCapabilities,
+    DrawMaterialFallbackReason FallbackReason) : IEquatable<DrawMaterialOutputMappingResult>
+{
+    public DrawColor Color { get; } = Color;
+    public DrawMaterialKind MaterialKind { get; } = MaterialKind;
+    public DrawMaterialBackendCapabilities BackendCapabilities { get; } = BackendCapabilities;
+    public DrawMaterialFallbackReason FallbackReason { get; } = FallbackReason;
+    public bool FallbackApplied => FallbackReason != DrawMaterialFallbackReason.None;
+
+    public bool Equals(DrawMaterialOutputMappingResult other)
+    {
+        return Color == other.Color
+            && MaterialKind == other.MaterialKind
+            && BackendCapabilities == other.BackendCapabilities
+            && FallbackReason == other.FallbackReason;
+    }
+
+    public override bool Equals(object? obj) => obj is DrawMaterialOutputMappingResult other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Color, MaterialKind, BackendCapabilities, FallbackReason);
+
+    public static bool operator ==(DrawMaterialOutputMappingResult left, DrawMaterialOutputMappingResult right) => left.Equals(right);
+
+    public static bool operator !=(DrawMaterialOutputMappingResult left, DrawMaterialOutputMappingResult right) => !left.Equals(right);
+}
+
+internal readonly struct DrawMaterialOutputDiagnostics(
+    ColorOutputKind OutputKind,
+    DrawMaterialBackendCapabilities BackendCapabilities,
+    DrawMaterialKind SelectedMaterialKind,
+    DrawMaterialFallbackReason FallbackReason,
+    int CommandCount,
+    int SolidColorCommandCount,
+    int LinearGradientCommandCount,
+    int FallbackCommandCount) : IEquatable<DrawMaterialOutputDiagnostics>
+{
+    public ColorOutputKind OutputKind { get; } = OutputKind;
+    public DrawMaterialBackendCapabilities BackendCapabilities { get; } = BackendCapabilities;
+    public DrawMaterialKind SelectedMaterialKind { get; } = SelectedMaterialKind;
+    public DrawMaterialFallbackReason FallbackReason { get; } = FallbackReason;
+    public int CommandCount { get; } = CommandCount;
+    public int SolidColorCommandCount { get; } = SolidColorCommandCount;
+    public int LinearGradientCommandCount { get; } = LinearGradientCommandCount;
+    public int FallbackCommandCount { get; } = FallbackCommandCount;
+    public bool FallbackApplied => FallbackCommandCount > 0;
+
+    public bool Equals(DrawMaterialOutputDiagnostics other)
+    {
+        return OutputKind == other.OutputKind
+            && BackendCapabilities == other.BackendCapabilities
+            && SelectedMaterialKind == other.SelectedMaterialKind
+            && FallbackReason == other.FallbackReason
+            && CommandCount == other.CommandCount
+            && SolidColorCommandCount == other.SolidColorCommandCount
+            && LinearGradientCommandCount == other.LinearGradientCommandCount
+            && FallbackCommandCount == other.FallbackCommandCount;
+    }
+
+    public override bool Equals(object? obj) => obj is DrawMaterialOutputDiagnostics other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(
+            OutputKind,
+            BackendCapabilities,
+            SelectedMaterialKind,
+            FallbackReason,
+            CommandCount,
+            SolidColorCommandCount,
+            LinearGradientCommandCount,
+            FallbackCommandCount);
+    }
+
+    public static bool operator ==(DrawMaterialOutputDiagnostics left, DrawMaterialOutputDiagnostics right) => left.Equals(right);
+
+    public static bool operator !=(DrawMaterialOutputDiagnostics left, DrawMaterialOutputDiagnostics right) => !left.Equals(right);
+}
+
 internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<ColorOutputMapping>
 {
 
@@ -236,6 +331,17 @@ internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<C
 
     public DrawColor MapToSdr(DrawMaterial material) => MapToSdr(material.FallbackColor);
 
+    internal DrawMaterialOutputMappingResult MapToSdr(
+        DrawMaterial material,
+        DrawMaterialBackendCapabilities backendCapabilities)
+    {
+        return new DrawMaterialOutputMappingResult(
+            MapToSdr(material),
+            material.Kind,
+            backendCapabilities,
+            ResolveFallbackReason(material.Kind, backendCapabilities));
+    }
+
     public DrawColor MapToSdr(in DrawCommand command) => MapToSdr(command.Material);
 
     public bool Equals(ColorOutputMapping other) => Kind == other.Kind;
@@ -247,6 +353,21 @@ internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<C
     public static bool operator ==(ColorOutputMapping left, ColorOutputMapping right) => left.Equals(right);
 
     public static bool operator !=(ColorOutputMapping left, ColorOutputMapping right) => !left.Equals(right);
+
+    private static DrawMaterialFallbackReason ResolveFallbackReason(
+        DrawMaterialKind materialKind,
+        DrawMaterialBackendCapabilities backendCapabilities)
+    {
+        return materialKind switch
+        {
+            DrawMaterialKind.None => DrawMaterialFallbackReason.None,
+            DrawMaterialKind.SolidColor => (backendCapabilities & DrawMaterialBackendCapabilities.SolidColor) != DrawMaterialBackendCapabilities.None
+                ? DrawMaterialFallbackReason.None
+                : DrawMaterialFallbackReason.UnsupportedMaterialKind,
+            DrawMaterialKind.LinearGradient => DrawMaterialFallbackReason.UnsupportedNonSolidMaterial,
+            _ => DrawMaterialFallbackReason.UnsupportedMaterialKind
+        };
+    }
 }
 
 internal enum DrawMaterialKind : byte

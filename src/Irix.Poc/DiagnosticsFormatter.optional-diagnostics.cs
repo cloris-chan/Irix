@@ -11,8 +11,14 @@ internal static class DiagnosticsFormatter
     {
         return [
             $"Device removed: {snapshot.DeviceRemoved}",
-            $"Device error reason: {snapshot.DeviceError}"
+            $"Device error reason: {snapshot.DeviceError}",
+            BuildMaterialOutputDiagnosticLine(snapshot.MaterialOutput)
         ];
+    }
+
+    internal static string BuildMaterialOutputDiagnosticLine(DrawMaterialOutputDiagnostics snapshot)
+    {
+        return $"Material output status: outputKind={snapshot.OutputKind} backendCapabilities={snapshot.BackendCapabilities} selectedMaterialKind={snapshot.SelectedMaterialKind} fallbackReason={snapshot.FallbackReason} fallbackApplied={snapshot.FallbackApplied} commandCount={snapshot.CommandCount} solidColorCommands={snapshot.SolidColorCommandCount} linearGradientCommands={snapshot.LinearGradientCommandCount} fallbackCommands={snapshot.FallbackCommandCount}";
     }
 
     internal static string BuildBackendClipModeDiagnosticLine(BackendClipTextDiagnosticSnapshot snapshot)

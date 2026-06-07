@@ -99,12 +99,14 @@ internal readonly struct D3D12TextClipDiagnostics(int TextClipSkippedCount, Effe
 internal readonly struct D3D12ExecuteCoreResult(
     D3D12FillRectScissorDiagnostics FillRectDiagnostics,
     D3D12TextClipDiagnostics TextClipDiagnostics,
+    DrawMaterialOutputDiagnostics MaterialDiagnostics,
     bool HasBackgroundColor,
     DrawColor BackgroundColor) : IEquatable<D3D12ExecuteCoreResult>
 {
 
     public D3D12FillRectScissorDiagnostics FillRectDiagnostics { get; } = FillRectDiagnostics;
     public D3D12TextClipDiagnostics TextClipDiagnostics { get; } = TextClipDiagnostics;
+    public DrawMaterialOutputDiagnostics MaterialDiagnostics { get; } = MaterialDiagnostics;
     public bool HasBackgroundColor { get; } = HasBackgroundColor;
     public DrawColor BackgroundColor { get; } = BackgroundColor;
 
@@ -112,13 +114,14 @@ internal readonly struct D3D12ExecuteCoreResult(
     {
         return FillRectDiagnostics == other.FillRectDiagnostics
             && TextClipDiagnostics == other.TextClipDiagnostics
+            && MaterialDiagnostics == other.MaterialDiagnostics
             && HasBackgroundColor == other.HasBackgroundColor
             && BackgroundColor == other.BackgroundColor;
     }
 
     public override bool Equals(object? obj) => obj is D3D12ExecuteCoreResult other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(FillRectDiagnostics, TextClipDiagnostics, HasBackgroundColor, BackgroundColor);
+    public override int GetHashCode() => HashCode.Combine(FillRectDiagnostics, TextClipDiagnostics, MaterialDiagnostics, HasBackgroundColor, BackgroundColor);
 
     public static bool operator ==(D3D12ExecuteCoreResult left, D3D12ExecuteCoreResult right) => left.Equals(right);
 
@@ -493,6 +496,12 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         private EffectiveScissor _lastEffectiveScissor;
         private int _textClipSkippedCount;
         private EffectiveScissor _lastEffectiveTextClip;
+        private DrawMaterialKind _selectedMaterialKind;
+        private DrawMaterialFallbackReason _materialFallbackReason;
+        private int _materialCommandCount;
+        private int _solidColorMaterialCommandCount;
+        private int _linearGradientMaterialCommandCount;
+        private int _materialFallbackCommandCount;
 
         public void AddCommandClip(in DrawCommand command)
         {
@@ -528,10 +537,49 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             }
         }
 
+        public void AddMaterialOutput(in DrawMaterialOutputMappingResult result)
+        {
+            _materialCommandCount++;
+            if (_selectedMaterialKind == DrawMaterialKind.None || result.FallbackApplied)
+            {
+                _selectedMaterialKind = result.MaterialKind;
+            }
+
+            if (_materialFallbackReason == DrawMaterialFallbackReason.None && result.FallbackApplied)
+            {
+                _materialFallbackReason = result.FallbackReason;
+            }
+
+            switch (result.MaterialKind)
+            {
+                case DrawMaterialKind.SolidColor:
+                    _solidColorMaterialCommandCount++;
+                    break;
+                case DrawMaterialKind.LinearGradient:
+                    _linearGradientMaterialCommandCount++;
+                    break;
+            }
+
+            if (result.FallbackApplied)
+            {
+                _materialFallbackCommandCount++;
+            }
+        }
+
         public D3D12FillRectScissorDiagnostics FillRectDiagnostics =>
             new(_clippedCommandCount, _emptyIntersectionSkippedCount, _scissorStateChangeCount, _lastEffectiveScissor);
 
         public D3D12TextClipDiagnostics TextClipDiagnostics => new(_textClipSkippedCount, _lastEffectiveTextClip);
+
+        public DrawMaterialOutputDiagnostics MaterialDiagnostics => new(
+            ColorOutputKind.SdrSrgb,
+            D3D12MaterialCapabilities,
+            _selectedMaterialKind,
+            _materialFallbackReason,
+            _materialCommandCount,
+            _solidColorMaterialCommandCount,
+            _linearGradientMaterialCommandCount,
+            _materialFallbackCommandCount);
     }
 
     private readonly D3D12Renderer _renderer = renderer;
@@ -547,7 +595,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     private int _textClipSkippedCount;
     private EffectiveScissor _lastEffectiveScissor = EffectiveScissor.Empty;
     private EffectiveScissor _lastEffectiveTextClip = EffectiveScissor.Empty;
+    private DrawMaterialOutputDiagnostics _materialOutputDiagnostics;
     private FrameContext _frameContext;
+
+    internal static DrawMaterialBackendCapabilities D3D12MaterialCapabilities => DrawMaterialBackendCapabilities.SolidColor;
 
     /// <summary>Dirty command ranges from the last SetDirtyCommandRanges call.</summary>
     public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges => _dirtyCommandRanges;
@@ -564,6 +615,8 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     public EffectiveScissor LastEffectiveScissor => _lastEffectiveScissor;
 
     public EffectiveScissor LastEffectiveTextClip => _lastEffectiveTextClip;
+
+    internal DrawMaterialOutputDiagnostics MaterialOutputDiagnostics => _materialOutputDiagnostics;
 
     public DrawingBackendClipMode ClipMode { get; private set; } = clipMode;
 
@@ -697,6 +750,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         _lastEffectiveScissor = result.FillRectDiagnostics.LastEffectiveScissor;
         _textClipSkippedCount = result.TextClipDiagnostics.TextClipSkippedCount;
         _lastEffectiveTextClip = result.TextClipDiagnostics.LastEffectiveTextClip;
+        _materialOutputDiagnostics = result.MaterialDiagnostics;
 
         if (result.HasBackgroundColor)
         {
@@ -741,6 +795,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         _lastEffectiveScissor = result.FillRectDiagnostics.LastEffectiveScissor;
         _textClipSkippedCount = result.TextClipDiagnostics.TextClipSkippedCount;
         _lastEffectiveTextClip = result.TextClipDiagnostics.LastEffectiveTextClip;
+        _materialOutputDiagnostics = result.MaterialDiagnostics;
 
         if (result.HasBackgroundColor)
         {
@@ -787,6 +842,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return new D3D12ExecuteCoreResult(
             diagnostics.FillRectDiagnostics,
             diagnostics.TextClipDiagnostics,
+            diagnostics.MaterialDiagnostics,
             hasBackgroundColor,
             backgroundColor);
     }
@@ -810,11 +866,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         switch (command.Kind)
         {
             case DrawCommandKind.FillRect:
+                var fillMaterial = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
+                diagnostics.AddMaterialOutput(fillMaterial);
                 AppendPhysicalFillRect(
                     clipMode,
                     viewport,
                     command.Rect,
-                    outputMapping.MapToSdr(command.Material),
+                    fillMaterial.Color,
                     command.ClipBounds,
                     rects,
                     ref diagnostics,
@@ -822,11 +880,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     ref backgroundColor);
                 break;
             case DrawCommandKind.DrawTextRun:
+                var textMaterial = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
+                diagnostics.AddMaterialOutput(textMaterial);
                 AppendPhysicalTextRun(
                     clipMode,
                     viewport,
                     command.Rect,
-                    outputMapping.MapToSdr(command.Material),
+                    textMaterial.Color,
                     command.Text,
                     command.Resource,
                     command.ClipBounds,
@@ -1097,6 +1157,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             ExecuteResult: new D3D12ExecuteCoreResult(
                 accumulator.FillRectDiagnostics,
                 accumulator.TextClipDiagnostics,
+                accumulator.MaterialDiagnostics,
                 hasBackgroundColor,
                 backgroundColor));
         return true;
@@ -1162,11 +1223,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 Material: ApplyOpacity(payload.Material, layer.Opacity),
                 ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
             diagnostics.AddCommandClip(command);
+            var material = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
+            diagnostics.AddMaterialOutput(material);
             AppendPhysicalFillRect(
                 clipMode,
                 viewport,
                 command.Rect,
-                outputMapping.MapToSdr(command.Material),
+                material.Color,
                 command.ClipBounds,
                 rects,
                 ref diagnostics,
@@ -1186,11 +1249,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 Text: payload.Text,
                 ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
             diagnostics.AddCommandClip(command);
+            var material = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
+            diagnostics.AddMaterialOutput(material);
             AppendPhysicalTextRun(
                 clipMode,
                 viewport,
                 command.Rect,
-                outputMapping.MapToSdr(command.Material),
+                material.Color,
                 payload.Text,
                 payload.Resource,
                 command.ClipBounds,
