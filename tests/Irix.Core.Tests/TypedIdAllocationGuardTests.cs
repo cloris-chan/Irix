@@ -1530,6 +1530,115 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Public_material_authoring_surface_remains_deferred()
+    {
+        var root = FindRepoRoot();
+        var coreDir = Path.Combine(root, "src", "Irix.Core");
+        var drawingDir = Path.Combine(root, "src", "Irix.Drawing");
+        var propertyKeySource = File.ReadAllText(Path.Combine(coreDir, "VirtualPropertyKey.cs"));
+        var nodeModelsSource = File.ReadAllText(Path.Combine(coreDir, "VirtualNodeModels.cs"));
+        var styleDeclarationSource = File.ReadAllText(Path.Combine(coreDir, "StyleDeclaration.cs"));
+        var drawingSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(drawingDir, "DrawingPrimitives.cs")));
+        var resourceSource = File.ReadAllText(Path.Combine(drawingDir, "FrameDrawingResources.cs"));
+
+        var stylePropertyNames = Enum.GetNames<StylePropertyId>();
+        Assert.DoesNotContain("Brush", stylePropertyNames);
+        Assert.DoesNotContain("Material", stylePropertyNames);
+        Assert.DoesNotContain("Gradient", stylePropertyNames);
+        Assert.DoesNotContain("LinearGradient", stylePropertyNames);
+        Assert.DoesNotContain("RadialGradient", stylePropertyNames);
+        Assert.DoesNotContain("Image", stylePropertyNames);
+
+        var styleValueMembers = typeof(StyleValue)
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+            .Select(method => method.Name)
+            .ToArray();
+        AssertDoesNotContainAny(
+            styleValueMembers,
+            "FromBrush",
+            "FromMaterial",
+            "FromGradient",
+            "FromImage",
+            "TryGetBrush",
+            "TryGetMaterial",
+            "TryGetGradient",
+            "TryGetImage",
+            "GetRequiredBrush",
+            "GetRequiredMaterial",
+            "GetRequiredGradient",
+            "GetRequiredImage");
+
+        var propertyValueKinds = Enum.GetNames<PropertyValueKind>();
+        Assert.DoesNotContain("Brush", propertyValueKinds);
+        Assert.DoesNotContain("Material", propertyValueKinds);
+        Assert.DoesNotContain("Gradient", propertyValueKinds);
+        Assert.DoesNotContain("Image", propertyValueKinds);
+
+        var virtualPropertyKeyBlock = ExtractSourceBetween(
+            propertyKeySource,
+            "public readonly struct VirtualPropertyKey",
+            "internal readonly struct StylePropertyMetadata");
+        AssertDoesNotContainAny(virtualPropertyKeyBlock, "Brush", "Material", "Gradient", "Image");
+
+        var propertyValueBlock = ExtractSourceBetween(
+            nodeModelsSource,
+            "public readonly struct PropertyValue",
+            "internal readonly struct StyleColor");
+        AssertDoesNotContainAny(
+            propertyValueBlock,
+            "FromBrush",
+            "FromMaterial",
+            "FromGradient",
+            "FromImage",
+            "TryGetBrush",
+            "TryGetMaterial",
+            "TryGetGradient",
+            "TryGetImage",
+            "GetRequiredBrush",
+            "GetRequiredMaterial",
+            "GetRequiredGradient",
+            "GetRequiredImage");
+
+        var virtualNodePropertyMethods = typeof(VirtualNodeProperty)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .Select(method => method.Name)
+            .ToArray();
+        AssertDoesNotContainAny(virtualNodePropertyMethods, "Brush", "Material", "Gradient", "Image");
+
+        var styleDeclarationBlock = ExtractSourceBetween(
+            styleDeclarationSource,
+            "internal readonly struct StyleDeclaration",
+            "internal static class StyleDeclarationMapper");
+        AssertDoesNotContainAny(styleDeclarationBlock, "Brush", "Material", "Gradient", "Image");
+
+        var frameResourceResolverBlock = ExtractSourceBetween(
+            resourceSource,
+            "public interface IFrameResourceResolver",
+            "internal interface IFrameBrushResolver");
+        Assert.DoesNotContain("ResolveBrush", frameResourceResolverBlock);
+        Assert.DoesNotContain("DrawMaterial", frameResourceResolverBlock);
+        Assert.Contains("internal interface IFrameBrushResolver", resourceSource);
+        Assert.DoesNotContain("public interface IFrameBrushResolver", resourceSource);
+
+        Assert.False(typeof(DrawMaterialKind).IsPublic);
+        Assert.False(typeof(DrawMaterial).IsPublic);
+        Assert.Equal(["None", "SolidColor"], Enum.GetNames<DrawMaterialKind>());
+
+        var materialKindBlock = ExtractSourceBetween(
+            drawingSource,
+            "internal enum DrawMaterialKind",
+            "internal readonly struct DrawMaterial");
+        AssertDoesNotContainAny(materialKindBlock, "LinearGradient", "RadialGradient", "Gradient", "Image", "Texture");
+
+        var materialBlock = ExtractSourceBetween(
+            drawingSource,
+            "internal readonly struct DrawMaterial",
+            "internal readonly struct DrawPayloadColor");
+        Assert.Contains("public static DrawMaterial SolidColor(Color color)", materialBlock);
+        AssertDoesNotContainAny(materialBlock, "LinearGradient", "RadialGradient", "Gradient", "Image", "Texture");
+    }
+
+    [Fact]
     public void Stored_display_scale_values_are_normalized_at_ingress()
     {
         var root = FindRepoRoot();
@@ -1840,6 +1949,22 @@ public class TypedIdAllocationGuardTests
         Assert.True(start >= 0, $"Could not find source marker: {startMarker}");
         Assert.True(end > start, $"Could not find source marker: {endMarker}");
         return source[start..end];
+    }
+
+    private static void AssertDoesNotContainAny(string source, params string[] forbidden)
+    {
+        foreach (var value in forbidden)
+        {
+            Assert.DoesNotContain(value, source);
+        }
+    }
+
+    private static void AssertDoesNotContainAny(IReadOnlyCollection<string> source, params string[] forbidden)
+    {
+        foreach (var value in forbidden)
+        {
+            Assert.DoesNotContain(value, source);
+        }
     }
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");

@@ -45,6 +45,8 @@ StyleColor / PropertyValue.Color: canonical Irix Color
 
 The draw/material migration decision is now partially selected: draw commands carry canonical `Color` internally, the current SDR/sRGB output stage is named by an internal `ColorOutputMapping.SdrSrgb` mapper, and the current material/resource preflight has an internal solid-color `DrawMaterial` plus brush table. Gradient/image materials, public material authoring, and HDR output mapping remain deferred. The current D3D12 output path still maps to sRGB until the HDR path is implemented.
 
+A source guard now pins that deferral: `DrawMaterial` and `IFrameBrushResolver` remain internal, `DrawMaterialKind` is limited to `None` and `SolidColor`, and style/property authoring does not expose brush, material, gradient, or image value factories. This guard is an architecture preflight only; it does not choose the future non-solid material model.
+
 ## Canonical Color Contract
 
 | Field | Contract |
@@ -148,7 +150,8 @@ The current SDR/sRGB code slice is acceptable when:
 - Draw commands retain canonical color payload internally while preserving existing SDR output behavior.
 - Current backend/window output converts canonical colors through the internal `ColorOutputMapping.SdrSrgb` stage.
 - Internal solid-color material/resource shape exists without exposing public material authoring.
+- Source guards keep public style/property authoring free of brush/material/gradient/image factories while the internal material shape remains solid-color only.
 - `DrawColor` and `WindowColor` are documented and guarded as SDR bridge/output payloads, not canonical Irix color.
 - HDR policy remains unimplemented but has a clear output mapping owner.
 
-Current status: implemented for internal style/property color, the draw-command payload bridge, the current SDR/sRGB output mapper, and the internal solid-color material/resource preflight, guarded by local tests. Public material authoring, non-solid materials, and HDR backend output mapping remain future work.
+Current status: implemented for internal style/property color, the draw-command payload bridge, the current SDR/sRGB output mapper, the internal solid-color material/resource preflight, and the public material-authoring deferral guard. Non-solid materials and HDR backend output mapping remain future work.

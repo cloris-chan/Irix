@@ -37,6 +37,8 @@ The current low-level `VirtualNodeProperty` style entries are internal IR for re
 
 Internally, style values stay compact and typed. The current pre-public-API slice adds an internal semantic declaration layer: `StylePropertyId`, `StyleValue`, `StyleDeclaration`, and `StyleDeclarationMapper`. It lets app/control adapters express width, height, background, foreground, opacity, translation, and control-state style terms, then maps one-way into the existing `VirtualNodeProperty` IR for classification. This layer does not store or expose `StyleEffect`, `AnimationChannel`, `StyleDeltaWork`, invalidation kinds, or layout rebuild reasons. Visual color values use canonical `Color` through `StyleColor`; the color value direction is defined in [Color-Pipeline.md](Color-Pipeline.md): standard Irix `Color` canonicalizes authoring input into an ideal linear BT.2020 / Rec.2020 straight-alpha value and does not retain source color-space metadata. `StyleDeltaPlanner` turns changed internal properties into explicit work flags for layout, text measure, draw, composition, and control-state projection, so future optimizers do not need to infer execution policy from public API names.
 
+Material authoring is also deferred at the public/style boundary. The renderer may carry an internal solid-color `DrawMaterial` and brush resource shape for retained/layer-cache payloads, but style declarations and future public UI authoring must not expose brush, material, gradient, or image handles until resource lifetime, non-solid material semantics, invalidation, and backend support are selected.
+
 Style owns the semantic property value. It does not own SDR/HDR mode, tone mapping, system SDR brightness, Rec.2100 HLG/PQ selection, swapchain format, or per-screen color-profile mapping. Those belong to material/compositor/backend output mapping after the draw or composition payload has been produced.
 
 ## Public Authoring Contract Preflight
@@ -44,6 +46,8 @@ Style owns the semantic property value. It does not own SDR/HDR mode, tone mappi
 This preflight defines the future public authoring boundary without adding the public API. Public authoring terms stay semantic: a UI layer may describe component variants, state styles, modifiers, and transitions over concepts such as size, background, foreground, opacity, and translation. It must not ask callers to pick renderer processing layers.
 
 Forbidden public authoring names: `LayoutAffecting`, `VisualOnly`, `CompositeOnly`, `StyleOnly`, `StyleEffect`, `AnimationChannel`, `StyleDeltaWork`, `StyleDeltaPlan`, `StyleDeltaPlanner`, and `StyleTransitionCompiler`. These names can appear in internal renderer code and diagnostics, but they are not user-facing style concepts.
+
+Deferred public authoring names in the current color/material stage: `Brush`, `Material`, `Gradient`, `LinearGradient`, `RadialGradient`, and `Image`. These may exist as low-level internal drawing/resource concepts, but they are not public style tokens or style value factories yet.
 
 Semantic-to-internal mapping remains one-way. The implemented internal `StyleDeclaration` layer is the current pre-public bridge for this mapping; it is not a public authoring API.
 
