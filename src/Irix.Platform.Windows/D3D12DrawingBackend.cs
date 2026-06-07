@@ -948,7 +948,6 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 viewport,
                 rect,
                 material,
-                mappedMaterial.Color,
                 outputMapping,
                 clipBounds,
                 rects,
@@ -1002,7 +1001,6 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         in DrawRect viewport,
         in DrawRect rect,
         in DrawMaterial material,
-        in DrawColor fallbackColor,
         ColorOutputMapping outputMapping,
         in DrawRect clipBounds,
         FrameRenderList<D3D12Renderer2D.RectData> rects,
@@ -1017,7 +1015,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             return;
         }
 
-        var representativeColor = ResolveLinearGradientRepresentativeColor(material, fallbackColor, outputMapping);
+        var representativeColor = ResolveLinearGradientRepresentativeColor(material, rect, outputMapping);
         if (rects.Count == 0 && !hasBackgroundColor)
         {
             backgroundColor = representativeColor;
@@ -1057,11 +1055,18 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     private static DrawColor ResolveLinearGradientRepresentativeColor(
         in DrawMaterial material,
-        in DrawColor fallbackColor,
-        ColorOutputMapping outputMapping) =>
-        IsDegenerateLinearGradient(material)
-            ? outputMapping.MapToSdr(material.Color)
-            : fallbackColor;
+        in DrawRect rect,
+        ColorOutputMapping outputMapping)
+    {
+        if (IsDegenerateLinearGradient(material))
+        {
+            return outputMapping.MapToSdr(material.Color);
+        }
+
+        var x = rect.Width > 0f ? rect.Width * 0.5f : 0f;
+        var y = rect.Height > 0f ? rect.Height * 0.5f : 0f;
+        return outputMapping.MapToSdr(SampleLinearGradient(material, x, y));
+    }
 
     private static Color SampleLinearGradient(in DrawMaterial material, float x, float y)
     {

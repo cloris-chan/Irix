@@ -1654,7 +1654,12 @@ public sealed class D3D12DrawingBackendScissorTests
 
     private static void AssertRectGradientColors(D3D12Renderer2D.RectData rect, DrawMaterial material, float width, float height)
     {
-        AssertRectGradientColors(rect, material, width, height, ColorOutputMapping.SdrSrgb.MapToSdr(material));
+        AssertRectGradientColors(
+            rect,
+            material,
+            width,
+            height,
+            SampleLinearGradientSdr(material, width * 0.5f, height * 0.5f));
     }
 
     private static void AssertRectGradientColors(D3D12Renderer2D.RectData rect, DrawMaterial material, float width, float height, DrawColor representativeColor)
