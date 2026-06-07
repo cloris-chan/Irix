@@ -549,6 +549,145 @@ internal readonly struct CompositionAnimationPlan(CompositionLayerAnimation Laye
     public static bool operator !=(CompositionAnimationPlan left, CompositionAnimationPlan right) => !left.Equals(right);
 }
 
+internal readonly struct CompositionAnimationPresentationSetPlan : IEquatable<CompositionAnimationPresentationSetPlan>
+{
+    private readonly CompositionAnimationPlan[]? _plans;
+
+    public CompositionAnimationPresentationSetPlan(ReadOnlySpan<CompositionAnimationPlan> plans)
+    {
+        _plans = plans.IsEmpty ? null : plans.ToArray();
+    }
+
+    public ReadOnlySpan<CompositionAnimationPlan> Plans => _plans;
+    public int Count => _plans?.Length ?? 0;
+    public bool IsEmpty => Count == 0;
+
+    public CompositionAnimationPlan GetPlan(int index)
+    {
+        var plans = Plans;
+        if ((uint)index >= (uint)plans.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        return plans[index];
+    }
+
+    public bool IsValidForCommandCount(int commandCount)
+    {
+        var plans = Plans;
+        if (plans.IsEmpty)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < plans.Length; i++)
+        {
+            if (!plans[i].IsValidForCommandCount(commandCount)
+                || HasDuplicateLayerId(plans, i, plans[i].LayerAnimation.LayerId)
+                || HasOverlappingCommandRange(plans, i, plans[i].LayerAnimation.CommandStart, plans[i].LayerAnimation.CommandCount))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public CompositionFrame Evaluate(int commandCount, CompositionTimestamp timestamp)
+    {
+        if (!IsValidForCommandCount(commandCount))
+        {
+            throw new ArgumentException("Composition animation presentation-set plans must reference non-overlapping ranges inside the command span.", nameof(commandCount));
+        }
+
+        var plans = Plans;
+        Span<CompositionLayer> layers = plans.Length <= 8 ? stackalloc CompositionLayer[plans.Length] : new CompositionLayer[plans.Length];
+        for (var i = 0; i < plans.Length; i++)
+        {
+            layers[i] = plans[i].LayerAnimation.Evaluate(timestamp);
+        }
+
+        return CompositionFrame.FromLayers(layers);
+    }
+
+    public bool Equals(CompositionAnimationPresentationSetPlan other)
+    {
+        var plans = Plans;
+        var otherPlans = other.Plans;
+        if (plans.Length != otherPlans.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < plans.Length; i++)
+        {
+            if (plans[i] != otherPlans[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is CompositionAnimationPresentationSetPlan other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hashCode = new HashCode();
+        foreach (ref readonly var plan in Plans)
+        {
+            hashCode.Add(plan);
+        }
+
+        return hashCode.ToHashCode();
+    }
+
+    public static bool operator ==(CompositionAnimationPresentationSetPlan left, CompositionAnimationPresentationSetPlan right) =>
+        left.Equals(right);
+
+    public static bool operator !=(CompositionAnimationPresentationSetPlan left, CompositionAnimationPresentationSetPlan right) =>
+        !left.Equals(right);
+
+    private static bool HasDuplicateLayerId(
+        ReadOnlySpan<CompositionAnimationPlan> plans,
+        int currentIndex,
+        CompositionLayerId layerId)
+    {
+        for (var i = 0; i < currentIndex; i++)
+        {
+            if (plans[i].LayerAnimation.LayerId == layerId)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasOverlappingCommandRange(
+        ReadOnlySpan<CompositionAnimationPlan> plans,
+        int currentIndex,
+        int commandStart,
+        int commandCount)
+    {
+        var commandEnd = commandStart + commandCount;
+        for (var i = 0; i < currentIndex; i++)
+        {
+            var accepted = plans[i].LayerAnimation;
+            var acceptedStart = accepted.CommandStart;
+            var acceptedEnd = acceptedStart + accepted.CommandCount;
+            if (commandStart < acceptedEnd && acceptedStart < commandEnd)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
 internal readonly struct CompositionScrollPresentationPlan : IEquatable<CompositionScrollPresentationPlan>
 {
     private readonly CompositionScrollLayerAnimation[]? _additionalLayerAnimations;

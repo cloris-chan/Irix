@@ -1669,6 +1669,125 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task PrepareCompositionAnimationPresentationSetActivation_builds_plan_set_without_installing_plan()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(22),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(23),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var first = CreatePresentationSetDeclaration(new NodeKey(22));
+        var second = CreatePresentationSetDeclaration(new NodeKey(23));
+
+        var preflight = compositor.PrepareCompositionAnimationPresentationSetActivation([first, second], snapshot);
+
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Accepted, preflight.Kind);
+        Assert.Equal(2, preflight.AcceptedCount);
+        Assert.Equal(0, preflight.RejectedCount);
+        Assert.Equal(snapshot.CommandCount, preflight.CommandCount);
+        Assert.False(preflight.PresentationStateChanged);
+        Assert.True(preflight.HasPlan);
+        Assert.Equal(2, preflight.Plan.Count);
+        Assert.True(preflight.Plan.IsValidForCommandCount(snapshot.CommandCount));
+        Assert.Collection(
+            preflight.Entries.ToArray(),
+            firstEntry =>
+            {
+                Assert.True(firstEntry.HasPlan);
+                Assert.Equal(new NodeKey(22), firstEntry.Validation.TargetKey);
+                Assert.Equal(new CompositionLayerId(22), firstEntry.Plan.LayerAnimation.LayerId);
+                Assert.Equal(firstEntry.Validation.CommandStart, firstEntry.Plan.LayerAnimation.CommandStart);
+                Assert.Equal(firstEntry.Validation.CommandCount, firstEntry.Plan.LayerAnimation.CommandCount);
+            },
+            secondEntry =>
+            {
+                Assert.True(secondEntry.HasPlan);
+                Assert.Equal(new NodeKey(23), secondEntry.Validation.TargetKey);
+                Assert.Equal(new CompositionLayerId(23), secondEntry.Plan.LayerAnimation.LayerId);
+                Assert.Equal(secondEntry.Validation.CommandStart, secondEntry.Plan.LayerAnimation.CommandStart);
+                Assert.Equal(secondEntry.Validation.CommandCount, secondEntry.Plan.LayerAnimation.CommandCount);
+            });
+
+        var evaluated = preflight.Plan.Evaluate(snapshot.CommandCount, CompositionTimestamp.FromStopwatchTicks(5));
+        Assert.Equal(2, evaluated.LayerCount);
+        Assert.Equal(new CompositionLayerId(22), evaluated.GetLayer(0).Id);
+        Assert.Equal(new CompositionLayerId(23), evaluated.GetLayer(1).Id);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Equal(0, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
+    public async Task PrepareCompositionAnimationPresentationSetActivation_reports_conflicts_without_plan_or_state_change()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(22),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var first = CreatePresentationSetDeclaration(new NodeKey(22));
+        var duplicateFirst = CreatePresentationSetDeclaration(new NodeKey(22));
+        using var missingFrameCompositor = new DrawingBackendCompositor(new CompositionTrackingBackend());
+
+        var preflight = compositor.PrepareCompositionAnimationPresentationSetActivation([first, duplicateFirst], snapshot);
+        var missingFrame = missingFrameCompositor.PrepareCompositionAnimationPresentationSetActivation([first], snapshot);
+
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Mixed, preflight.Kind);
+        Assert.Equal(1, preflight.AcceptedCount);
+        Assert.Equal(1, preflight.RejectedCount);
+        Assert.False(preflight.HasPlan);
+        Assert.True(preflight.Plan.IsEmpty);
+        Assert.False(preflight.PresentationStateChanged);
+        Assert.Collection(
+            preflight.Entries.ToArray(),
+            firstEntry =>
+            {
+                Assert.True(firstEntry.HasPlan);
+                Assert.Equal(CompositionAnimationPresentationSetEntryKind.Accepted, firstEntry.Validation.Kind);
+            },
+            secondEntry =>
+            {
+                Assert.False(secondEntry.HasPlan);
+                Assert.Equal(CompositionAnimationPresentationSetEntryKind.Rejected, secondEntry.Validation.Kind);
+                Assert.Equal(CompositionAnimationPresentationSetRejectionReason.DuplicateLayerId, secondEntry.Validation.RejectionReason);
+                Assert.Equal(0, secondEntry.Validation.ConflictingIndex);
+            });
+
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Rejected, missingFrame.Kind);
+        Assert.Equal(CompositionAnimationPresentationSetRejectionReason.MissingRetainedFrame, missingFrame.Entries[0].Validation.RejectionReason);
+        Assert.False(missingFrame.HasPlan);
+        Assert.False(missingFrame.PresentationStateChanged);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Equal(0, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
     public void ValidateCompositionAnimationPresentationSet_requires_retained_frame_without_installing_plan()
     {
         using var compositor = new DrawingBackendCompositor(new CompositionTrackingBackend());

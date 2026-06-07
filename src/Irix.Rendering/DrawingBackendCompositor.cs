@@ -329,6 +329,19 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         }
     }
 
+    internal CompositionAnimationPresentationSetActivationPreflightResult PrepareCompositionAnimationPresentationSetActivation(
+        ReadOnlySpan<CompositionAnimationDeclaration> declarations,
+        RenderPipelineRetainedInputSnapshot? snapshot)
+    {
+        lock (_frameGate)
+        {
+            return CompositionAnimationPresentationSetActivationPreflight.Prepare(
+                declarations,
+                snapshot,
+                _retainedFrame.CommandCount);
+        }
+    }
+
     internal void ClearCompositionAnimation()
     {
         lock (_frameGate)

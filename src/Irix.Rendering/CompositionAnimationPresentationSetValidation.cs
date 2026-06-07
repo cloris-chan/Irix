@@ -187,6 +187,195 @@ internal readonly struct CompositionAnimationPresentationSetValidationResult : I
     }
 }
 
+internal readonly struct CompositionAnimationPresentationSetActivationEntry(
+    CompositionAnimationPresentationSetEntryValidationResult Validation,
+    CompositionAnimationPlan Plan = default) : IEquatable<CompositionAnimationPresentationSetActivationEntry>
+{
+    public CompositionAnimationPresentationSetEntryValidationResult Validation { get; } = Validation;
+    public CompositionAnimationPlan Plan { get; } = Plan;
+    public bool HasPlan => Validation.IsAccepted && Plan.LayerAnimation.LayerId.IsValid;
+
+    public bool Equals(CompositionAnimationPresentationSetActivationEntry other) =>
+        Validation == other.Validation
+        && Plan == other.Plan;
+
+    public override bool Equals(object? obj) => obj is CompositionAnimationPresentationSetActivationEntry other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Validation, Plan);
+
+    public static bool operator ==(CompositionAnimationPresentationSetActivationEntry left, CompositionAnimationPresentationSetActivationEntry right) =>
+        left.Equals(right);
+
+    public static bool operator !=(CompositionAnimationPresentationSetActivationEntry left, CompositionAnimationPresentationSetActivationEntry right) =>
+        !left.Equals(right);
+}
+
+internal readonly struct CompositionAnimationPresentationSetActivationPreflightResult : IEquatable<CompositionAnimationPresentationSetActivationPreflightResult>
+{
+    private readonly CompositionAnimationPresentationSetActivationEntry[]? _entries;
+
+    internal CompositionAnimationPresentationSetActivationPreflightResult(
+        CompositionAnimationPresentationSetValidationResult Validation,
+        ReadOnlySpan<CompositionAnimationPresentationSetActivationEntry> entries,
+        CompositionAnimationPresentationSetPlan Plan,
+        int CommandCount,
+        bool PresentationStateChanged)
+    {
+        this.Validation = Validation;
+        _entries = entries.IsEmpty ? null : entries.ToArray();
+        this.Plan = Plan;
+        this.CommandCount = CommandCount;
+        this.PresentationStateChanged = PresentationStateChanged;
+    }
+
+    public CompositionAnimationPresentationSetValidationResult Validation { get; }
+    public CompositionAnimationPresentationSetResultKind Kind => Validation.Kind;
+    public ReadOnlySpan<CompositionAnimationPresentationSetActivationEntry> Entries => _entries;
+    public CompositionAnimationPresentationSetPlan Plan { get; }
+    public int CommandCount { get; }
+    public bool PresentationStateChanged { get; }
+    public bool HasPlan => !Plan.IsEmpty;
+    public int AcceptedCount => Validation.AcceptedCount;
+    public int RejectedCount => Validation.RejectedCount;
+
+    public bool Equals(CompositionAnimationPresentationSetActivationPreflightResult other)
+    {
+        if (Validation != other.Validation
+            || Plan != other.Plan
+            || CommandCount != other.CommandCount
+            || PresentationStateChanged != other.PresentationStateChanged)
+        {
+            return false;
+        }
+
+        var entries = Entries;
+        var otherEntries = other.Entries;
+        if (entries.Length != otherEntries.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < entries.Length; i++)
+        {
+            if (entries[i] != otherEntries[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is CompositionAnimationPresentationSetActivationPreflightResult other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Validation);
+        hash.Add(Plan);
+        hash.Add(CommandCount);
+        hash.Add(PresentationStateChanged);
+        foreach (ref readonly var entry in Entries)
+        {
+            hash.Add(entry);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(CompositionAnimationPresentationSetActivationPreflightResult left, CompositionAnimationPresentationSetActivationPreflightResult right) =>
+        left.Equals(right);
+
+    public static bool operator !=(CompositionAnimationPresentationSetActivationPreflightResult left, CompositionAnimationPresentationSetActivationPreflightResult right) =>
+        !left.Equals(right);
+}
+
+internal static class CompositionAnimationPresentationSetActivationPreflight
+{
+    internal static CompositionAnimationPresentationSetActivationPreflightResult Prepare(
+        ReadOnlySpan<CompositionAnimationDeclaration> declarations,
+        RenderPipelineRetainedInputSnapshot? snapshot,
+        int commandCount)
+    {
+        var validation = CompositionAnimationPresentationSetValidator.Validate(declarations, snapshot, commandCount);
+        if (declarations.IsEmpty || snapshot is null || commandCount <= 0 || snapshot.CommandCount != commandCount)
+        {
+            return new CompositionAnimationPresentationSetActivationPreflightResult(
+                validation,
+                CreateEntries(validation, declarations, snapshot, commandCount),
+                default,
+                commandCount,
+                PresentationStateChanged: false);
+        }
+
+        var entries = CreateEntries(validation, declarations, snapshot, commandCount);
+        var plan = validation.Kind == CompositionAnimationPresentationSetResultKind.Accepted
+            ? CreatePlan(entries)
+            : default;
+        return new CompositionAnimationPresentationSetActivationPreflightResult(
+            validation,
+            entries,
+            plan,
+            commandCount,
+            PresentationStateChanged: false);
+    }
+
+    private static CompositionAnimationPresentationSetActivationEntry[] CreateEntries(
+        in CompositionAnimationPresentationSetValidationResult validation,
+        ReadOnlySpan<CompositionAnimationDeclaration> declarations,
+        RenderPipelineRetainedInputSnapshot? snapshot,
+        int commandCount)
+    {
+        var validationEntries = validation.EntryResults;
+        if (validationEntries.IsEmpty)
+        {
+            return [];
+        }
+
+        var entries = new CompositionAnimationPresentationSetActivationEntry[validationEntries.Length];
+        for (var i = 0; i < validationEntries.Length; i++)
+        {
+            var validationEntry = validationEntries[i];
+            if (validationEntry.IsAccepted
+                && snapshot is not null
+                && commandCount > 0
+                && i < declarations.Length
+                && declarations[i].TryResolve(snapshot, commandCount, out var plan)
+                && plan.IsValidForCommandCount(commandCount))
+            {
+                entries[i] = new CompositionAnimationPresentationSetActivationEntry(validationEntry, plan);
+                continue;
+            }
+
+            entries[i] = new CompositionAnimationPresentationSetActivationEntry(validationEntry);
+        }
+
+        return entries;
+    }
+
+    private static CompositionAnimationPresentationSetPlan CreatePlan(
+        ReadOnlySpan<CompositionAnimationPresentationSetActivationEntry> entries)
+    {
+        if (entries.IsEmpty)
+        {
+            return default;
+        }
+
+        var plans = new CompositionAnimationPlan[entries.Length];
+        for (var i = 0; i < entries.Length; i++)
+        {
+            if (!entries[i].HasPlan)
+            {
+                return default;
+            }
+
+            plans[i] = entries[i].Plan;
+        }
+
+        return new CompositionAnimationPresentationSetPlan(plans);
+    }
+}
+
 internal static class CompositionAnimationPresentationSetValidator
 {
     internal static CompositionAnimationPresentationSetValidationResult Validate(
