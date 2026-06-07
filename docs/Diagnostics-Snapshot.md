@@ -33,6 +33,7 @@ The model answers:
 | `InputDiagnosticsSnapshot` | Input routing/focus owner; currently PoC input ownership/router | `--diagnose-input` and debug input row | Ownership state is value data; diagnostics history remains bounded. |
 | `StyleOnlyPatchPlanDiagnosticSnapshot` | `Irix.Rendering.StyleOnlyPatchPlanBuilder` | `--diagnose` style-only plan smoke | Planner data is explicit input/output and does not need PoC statics. |
 | `StyleTransitionCompletionPumpDiagnosticSnapshot` | `Irix.Poc.StyleTransitionCompletionPump` plus `StyleTransitionCompletionTracker` | Formatter/source guards and focused tests | Internal Poc-only lifecycle status for the narrow Counter style transition completion pump. It reports observation state only; it does not add a public transition API, timeline scheduler, or compositor/runtime extraction. |
+| `StyleTransitionBatchActivationDiagnosticSnapshot` | `Irix.Poc.StyleTransitionRuntimeCoordinator` result plus `StyleTransitionCompletionTracker` / `DrawingBackendCompositor` state | Formatter/source guards and focused tests | Internal Poc-only activation/fallback status for routed Counter multi-target batches. It observes activation and cleanup results; it does not add a public transition API, generic scheduler, or runtime extraction. |
 | `DebugUiDiagnosticsSnapshot` | `DefaultDebugDiagnosticsSnapshotBridge` | Current debug header rows | Bridge is read-only and local; it must not mutate scroll/input/backend state. |
 
 ## Diagnostic Text Guard
@@ -41,7 +42,8 @@ The model answers:
 - Existing `ProgramDiagnosticsTests` formatter/smoke assertions are local regression guards.
 - CLI implementations build snapshot values first, then format through the same formatter logic.
 - Partial-apply handoff status is one stable machine-readable line with `handoffKind`, `reason`, `ownerKind`, `planKind`, `fallbackReason`, `runtimeOwnerEnabled`, `fallbackApplied`, `ownerStatePreserved`, `batchFrameId`, `batchCommandCount`, and `dirtyRanges`.
-- Style transition completion pump status is one stable machine-readable line with `isRunning`, `hasActiveTransition`, `activeTarget`, `activeInstance`, `lastResult`, `lastDrainedEvents`, `lastCommitResult`, `lastCommitTarget`, `trackerResult`, `trackerTarget`, `trackerInstance`, `tickCount`, `commitCount`, `drainedEvents`, `hasError`, and `error`.
+- Style transition completion pump status is one stable machine-readable line with `isRunning`, `hasActiveTransition`, `activeTarget`, `activeInstance`, `activeOwnerCount`, `activeOwnerKind`, `tickMode`, `lastResult`, `lastDrainedEvents`, `lastCommitResult`, `lastCommitTarget`, `trackerResult`, `trackerTarget`, `trackerInstance`, `tickCount`, `commitCount`, `drainedEvents`, `hasError`, and `error`.
+- Style transition batch activation status is one stable machine-readable line with `activationKind`, `activationReason`, `runtimePreflight`, `runtimeReady`, `runtimeBlocked`, `presentationPreflight`, `presentationAccepted`, `presentationRejected`, `declarationCount`, `trackedOwnerCount`, `presentationStateChanged`, `cleanupResult`, `cleanupTarget`, `cleanupApplied`, `activeAfterCleanup`, `activeOwnerCountAfterCleanup`, and `presentationPlanAfterCleanup`.
 - Any intentional CLI text change must be staged separately with explicit test updates and a migration note.
 
 ## Debug UI Bridge

@@ -11,6 +11,13 @@ internal enum StyleTransitionCompletionPumpResultKind : byte
     TickUnavailable,
 }
 
+internal enum StyleTransitionCompletionPumpTickMode : byte
+{
+    None,
+    SingleAnimation,
+    PresentationSet,
+}
+
 internal readonly struct StyleTransitionCompletionPumpResult(
     StyleTransitionCompletionPumpResultKind Kind,
     int DrainedEvents = 0,
@@ -63,6 +70,7 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
     long TickCount,
     long CommitCount,
     long DrainedEventCount,
+    StyleTransitionCompletionPumpTickMode TickMode,
     string? LastErrorKind) : IEquatable<StyleTransitionCompletionPumpDiagnosticSnapshot>
 {
     public bool IsRunning { get; } = IsRunning;
@@ -76,6 +84,7 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
     public long TickCount { get; } = TickCount;
     public long CommitCount { get; } = CommitCount;
     public long DrainedEventCount { get; } = DrainedEventCount;
+    public StyleTransitionCompletionPumpTickMode TickMode { get; } = TickMode;
     public string? LastErrorKind { get; } = LastErrorKind;
     public bool HasError => LastErrorKind is not null;
 
@@ -92,6 +101,7 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
             && TickCount == other.TickCount
             && CommitCount == other.CommitCount
             && DrainedEventCount == other.DrainedEventCount
+            && TickMode == other.TickMode
             && LastErrorKind == other.LastErrorKind;
     }
 
@@ -111,6 +121,7 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
         hash.Add(TickCount);
         hash.Add(CommitCount);
         hash.Add(DrainedEventCount);
+        hash.Add(TickMode);
         hash.Add(LastErrorKind);
         return hash.ToHashCode();
     }
@@ -132,6 +143,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     private readonly Lock _gate = new();
     private Task? _pumpTask;
     private StyleTransitionCompletionPumpResult _lastResult;
+    private StyleTransitionCompletionPumpTickMode _tickMode;
     private bool _usePresentationTick;
 
     internal StyleTransitionCompletionPump(
@@ -192,6 +204,9 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
 
             LastError = null;
             _usePresentationTick = _compositor.CompositionAnimationPresentationPlan is not null;
+            _tickMode = _usePresentationTick
+                ? StyleTransitionCompletionPumpTickMode.PresentationSet
+                : StyleTransitionCompletionPumpTickMode.SingleAnimation;
             _pumpTask = Task.Run(
                 () => RunAsync(_disposeCancellationTokenSource.Token),
                 _disposeCancellationTokenSource.Token);
@@ -216,6 +231,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
                 TickCount,
                 CommitCount,
                 DrainedEventCount,
+                _tickMode,
                 LastError?.GetType().Name);
         }
     }
@@ -226,9 +242,11 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     {
         if (!_tracker.HasActiveTransition)
         {
+            SetTickMode(StyleTransitionCompletionPumpTickMode.None);
             return SetLastResult(StyleTransitionCompletionPumpResult.NoActiveTransition());
         }
 
+        SetTickMode(StyleTransitionCompletionPumpTickMode.SingleAnimation);
         try
         {
             _ = await _compositor.RenderCompositionAnimationTickAtAsync(timestamp, cancellationToken);
@@ -248,9 +266,11 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     {
         if (!_tracker.HasActiveTransition)
         {
+            SetTickMode(StyleTransitionCompletionPumpTickMode.None);
             return SetLastResult(StyleTransitionCompletionPumpResult.NoActiveTransition());
         }
 
+        SetTickMode(StyleTransitionCompletionPumpTickMode.PresentationSet);
         try
         {
             _ = await _compositor.RenderCompositionAnimationPresentationTickAtAsync(timestamp, cancellationToken);
@@ -434,6 +454,14 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         {
             _lastResult = result;
             return _lastResult;
+        }
+    }
+
+    private void SetTickMode(StyleTransitionCompletionPumpTickMode tickMode)
+    {
+        lock (_gate)
+        {
+            _tickMode = tickMode;
         }
     }
 

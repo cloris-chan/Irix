@@ -2859,6 +2859,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Poc-owned marker-driven completion tracker", animationDesign);
         Assert.Contains("owner table keyed by `StyleTransitionOwnerKey`", animationDesign);
         Assert.Contains("active owner count", animationDesign);
+        Assert.Contains("Batch activation diagnostics report activation kind/reason", animationDesign);
         Assert.Contains("Active-scroll fallback and blocked batch activation carry an explicit presentation policy", animationDesign);
         Assert.Contains("narrow Counter multi-target route over the existing concurrent-owner preflight", animationDesign);
         Assert.Contains("per-owner compositor partial clear inside an active presentation plan is not implemented", animationDesign);
@@ -2956,14 +2957,18 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("Theme", completionTrackerSource);
         Assert.DoesNotContain("Cascade", completionTrackerSource);
         Assert.Contains("sealed class StyleTransitionCompletionPump", completionPumpSource);
+        Assert.Contains("enum StyleTransitionCompletionPumpTickMode", completionPumpSource);
         Assert.Contains("StyleTransitionCompletionPumpDiagnosticSnapshot", completionPumpSource);
         Assert.Contains("CaptureDiagnosticSnapshot", completionPumpSource);
         Assert.Contains("LastResult", completionPumpSource);
+        Assert.Contains("TickMode", completionPumpSource);
         Assert.Contains("RenderCompositionAnimationTickAtAsync", completionPumpSource);
         Assert.Contains("TickPresentationAndDrainAtAsync", completionPumpSource);
         Assert.Contains("RenderCompositionAnimationPresentationTickAtAsync", completionPumpSource);
         Assert.Contains("DrainCompositionMarkerEvents", completionPumpSource);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ApplyDecisionAsync", completionPumpSource);
+        Assert.Contains("StyleTransitionBatchActivationDiagnosticSnapshot", NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionBatchActivationDiagnostics.cs"))));
+        Assert.Contains("BuildStyleTransitionBatchActivationDiagnosticLine", NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "DiagnosticsFormatter.optional-diagnostics.cs"))));
         Assert.DoesNotContain("StyleTransitionScheduler", completionPumpSource);
         Assert.DoesNotContain("Theme", completionPumpSource);
         Assert.DoesNotContain("Cascade", completionPumpSource);
@@ -4503,11 +4508,12 @@ public sealed class ProgramDiagnosticsTests
             TickCount: 2,
             CommitCount: 1,
             DrainedEventCount: 1,
+            TickMode: StyleTransitionCompletionPumpTickMode.SingleAnimation,
             LastErrorKind: null);
 
         var line = DiagnosticsFormatter.BuildStyleTransitionCompletionPumpDiagnosticLine(snapshot);
 
-        Assert.Equal("style-transition-completion-pump status isRunning=False hasActiveTransition=False activeTarget=- activeInstance=- activeOwnerCount=0 activeOwnerKind=None lastResult=CompletionCommitted lastDrainedEvents=1 lastCommitResult=Committed lastCommitTarget=6 trackerResult=Completed trackerTarget=6 trackerInstance=1001 tickCount=2 commitCount=1 drainedEvents=1 hasError=False error=-", line);
+        Assert.Equal("style-transition-completion-pump status isRunning=False hasActiveTransition=False activeTarget=- activeInstance=- activeOwnerCount=0 activeOwnerKind=None tickMode=SingleAnimation lastResult=CompletionCommitted lastDrainedEvents=1 lastCommitResult=Committed lastCommitTarget=6 trackerResult=Completed trackerTarget=6 trackerInstance=1001 tickCount=2 commitCount=1 drainedEvents=1 hasError=False error=-", line);
     }
 
     [Fact]
@@ -4527,11 +4533,47 @@ public sealed class ProgramDiagnosticsTests
             TickCount: 0,
             CommitCount: 0,
             DrainedEventCount: 0,
+            TickMode: StyleTransitionCompletionPumpTickMode.PresentationSet,
             LastErrorKind: nameof(InvalidOperationException));
 
         var line = DiagnosticsFormatter.BuildStyleTransitionCompletionPumpDiagnosticLine(snapshot);
 
-        Assert.Equal("style-transition-completion-pump status isRunning=True hasActiveTransition=True activeTarget=22 activeInstance=9 activeOwnerCount=1 activeOwnerKind=ControlState lastResult=TickUnavailable lastDrainedEvents=0 lastCommitResult=None lastCommitTarget=- trackerResult=TrackingStarted trackerTarget=22 trackerInstance=9 tickCount=0 commitCount=0 drainedEvents=0 hasError=True error=InvalidOperationException", line);
+        Assert.Equal("style-transition-completion-pump status isRunning=True hasActiveTransition=True activeTarget=22 activeInstance=9 activeOwnerCount=1 activeOwnerKind=ControlState tickMode=PresentationSet lastResult=TickUnavailable lastDrainedEvents=0 lastCommitResult=None lastCommitTarget=- trackerResult=TrackingStarted trackerTarget=22 trackerInstance=9 tickCount=0 commitCount=0 drainedEvents=0 hasError=True error=InvalidOperationException", line);
+    }
+
+    [Fact]
+    public void Diagnose_style_transition_batch_activation_formatter_outputs_stable_fields()
+    {
+        var runtimePreflight = new StyleTransitionBatchRuntimePreflightResult(
+            StyleTransitionBatchRuntimePreflightKind.Ready,
+            default,
+            [
+                StyleTransitionOwnerRuntimePreflightResult.Ready(
+                    StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(6)),
+                    new NodeKey(6),
+                    StyleTransitionRuntimeDecisionKind.Start,
+                    StyleTransitionOwnerRuntimeActionKind.StartPresentation,
+                    default,
+                    requiresPresentationSetInstall: true,
+                    requiresCompletionTracking: true,
+                    wouldAttachCompletionMarker: true)
+            ],
+            PresentationStateChanged: false);
+        var activation = StyleTransitionBatchPresentationActivationResult.Activated(
+            runtimePreflight,
+            default,
+            declarationCount: 1,
+            trackedOwnerCount: 1);
+        var snapshot = new StyleTransitionBatchActivationDiagnosticSnapshot(
+            activation,
+            StyleTransitionRuntimeResult.NoOp(),
+            HasActiveTransitionAfterCleanup: true,
+            ActiveOwnerCountAfterCleanup: 1,
+            HasPresentationPlanAfterCleanup: true);
+
+        var line = DiagnosticsFormatter.BuildStyleTransitionBatchActivationDiagnosticLine(snapshot);
+
+        Assert.Equal("style-transition-batch-activation status activationKind=Activated activationReason=None runtimePreflight=Ready runtimeReady=1 runtimeBlocked=0 presentationPreflight=None presentationAccepted=0 presentationRejected=0 declarationCount=1 trackedOwnerCount=1 presentationStateChanged=True cleanupResult=NoOp cleanupTarget=- cleanupApplied=False activeAfterCleanup=True activeOwnerCountAfterCleanup=1 presentationPlanAfterCleanup=True", line);
     }
 
     [Fact]

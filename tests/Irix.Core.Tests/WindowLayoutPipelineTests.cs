@@ -1820,6 +1820,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
         Assert.True(afterFirstCompletion.HasActiveTransition);
         Assert.Equal(1, afterFirstCompletion.ActiveOwnerCount);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.PresentationSet, afterFirstCompletion.TickMode);
         Assert.Equal(2, afterFirstCompletion.TickCount);
         Assert.Equal(1, afterFirstCompletion.CommitCount);
         Assert.Equal(1, afterFirstCompletion.DrainedEventCount);
@@ -1836,6 +1837,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Null(compositor.CompositionAnimationPresentationPlan);
         Assert.False(finalSnapshot.HasActiveTransition);
         Assert.Equal(0, finalSnapshot.ActiveOwnerCount);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.PresentationSet, finalSnapshot.TickMode);
         Assert.Equal(3, finalSnapshot.TickCount);
         Assert.Equal(2, finalSnapshot.CommitCount);
         Assert.Equal(2, finalSnapshot.DrainedEventCount);
@@ -2258,6 +2260,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(StyleTransitionCompletionPumpResultKind.TickRendered, renderedSnapshot.LastResult.Kind);
         Assert.Equal(0, renderedSnapshot.LastResult.DrainedEvents);
         Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, renderedSnapshot.TrackerResult.Kind);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.SingleAnimation, renderedSnapshot.TickMode);
         Assert.Equal(1, renderedSnapshot.TickCount);
         Assert.Equal(0, renderedSnapshot.CommitCount);
         Assert.Equal(0, renderedSnapshot.DrainedEventCount);
@@ -2286,6 +2289,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(2, snapshot.TickCount);
         Assert.Equal(1, snapshot.CommitCount);
         Assert.Equal(1, snapshot.DrainedEventCount);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.SingleAnimation, snapshot.TickMode);
         Assert.False(snapshot.HasError);
         Assert.Null(snapshot.LastErrorKind);
     }
@@ -2368,14 +2372,20 @@ public sealed class WindowLayoutPipelineTests
         var firstTick = await pump.TickPresentationAndDrainAtAsync(
             lifecycle.Batch.Entries[0].Decision.StartTimestamp,
             cancellationToken);
+        var firstSnapshot = pump.CaptureDiagnosticSnapshot();
         var completion = await pump.TickPresentationAndDrainAtAsync(
             lifecycle.Batch.Entries[0].Decision.StartTimestamp + lifecycle.Batch.Entries[0].Decision.Duration,
             cancellationToken);
+        var completionSnapshot = pump.CaptureDiagnosticSnapshot();
 
         Assert.Equal(StyleTransitionCompletionPumpResultKind.TickRendered, firstTick.Kind);
         Assert.Equal(0, firstTick.DrainedEvents);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.PresentationSet, firstSnapshot.TickMode);
+        Assert.Equal(2, firstSnapshot.ActiveOwnerCount);
         Assert.Equal(StyleTransitionCompletionPumpResultKind.CompletionCommitted, completion.Kind);
         Assert.Equal(2, completion.DrainedEvents);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.PresentationSet, completionSnapshot.TickMode);
+        Assert.Equal(0, completionSnapshot.ActiveOwnerCount);
         Assert.False(tracker.HasActiveTransition);
         Assert.Equal(0, tracker.ActiveOwnerCount);
         Assert.Null(compositor.CompositionAnimationPresentationPlan);
@@ -2406,6 +2416,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(0, snapshot.LastResult.DrainedEvents);
         Assert.Equal(StyleTransitionRuntimeResultKind.None, snapshot.LastResult.CommitResult.Kind);
         Assert.Equal(StyleTransitionCompletionResultKind.None, snapshot.TrackerResult.Kind);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.None, snapshot.TickMode);
         Assert.Equal(0, snapshot.TickCount);
         Assert.Equal(0, snapshot.CommitCount);
         Assert.Equal(0, snapshot.DrainedEventCount);
@@ -2456,6 +2467,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, diagnostic.TrackerResult.Kind);
         Assert.Equal(new NodeKey(22), diagnostic.TrackerResult.TargetKey);
         Assert.Equal(new CompositionAnimationInstanceId(9), diagnostic.TrackerResult.InstanceId);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.SingleAnimation, diagnostic.TickMode);
         Assert.Equal(0, diagnostic.TickCount);
         Assert.Equal(0, diagnostic.CommitCount);
         Assert.Equal(0, diagnostic.DrainedEventCount);
@@ -2628,11 +2640,18 @@ public sealed class WindowLayoutPipelineTests
             tracker,
             new DrawingBackendStyleTransitionCompositorAdapter(compositor),
             cancellationToken);
+        var diagnostic = StyleTransitionBatchActivationDiagnosticSnapshot.Capture(
+            result,
+            abortResult,
+            tracker,
+            compositor);
+        var diagnosticLine = DiagnosticsFormatter.BuildStyleTransitionBatchActivationDiagnosticLine(diagnostic);
 
         Assert.Equal(hoverDecrementAndLeaveIncrement, runtime.CurrentModel.InputOwnership);
         Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransitionBatch, lifecycle.Action);
         Assert.Equal(StyleTransitionBatchPresentationActivationKind.Blocked, result.Kind);
         Assert.Equal(StyleTransitionBatchPresentationActivationReason.RuntimePreflightNotReady, result.Reason);
+        Assert.Equal(StyleTransitionBatchRuntimePreflightKind.Mixed, result.RuntimePreflight.Kind);
         Assert.False(result.PresentationStateChanged);
         Assert.Equal(StyleTransitionRuntimeResultKind.Canceled, abortResult.Kind);
         Assert.Equal(new NodeKey(6), abortResult.TargetKey);
@@ -2641,6 +2660,18 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(StyleTransitionCompletionResultKind.Aborted, tracker.LastResult.Kind);
         Assert.Null(compositor.CompositionAnimationPlan);
         Assert.Null(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Blocked, diagnostic.ActivationKind);
+        Assert.Equal(StyleTransitionBatchPresentationActivationReason.RuntimePreflightNotReady, diagnostic.ActivationReason);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Canceled, diagnostic.CleanupKind);
+        Assert.Equal(new NodeKey(6), diagnostic.CleanupTargetKey);
+        Assert.True(diagnostic.CleanupApplied);
+        Assert.False(diagnostic.HasActiveTransitionAfterCleanup);
+        Assert.Equal(0, diagnostic.ActiveOwnerCountAfterCleanup);
+        Assert.False(diagnostic.HasPresentationPlanAfterCleanup);
+        Assert.Contains("activationKind=Blocked activationReason=RuntimePreflightNotReady", diagnosticLine);
+        Assert.Contains("runtimePreflight=Mixed", diagnosticLine);
+        Assert.Contains("cleanupResult=Canceled cleanupTarget=6 cleanupApplied=True", diagnosticLine);
+        Assert.Contains("activeAfterCleanup=False activeOwnerCountAfterCleanup=0 presentationPlanAfterCleanup=False", diagnosticLine);
     }
 
     [Fact]
