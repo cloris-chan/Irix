@@ -20,18 +20,27 @@ This keeps color values as values. Runtime output policy belongs to the material
 
 ## Current Implementation Stage
 
-The active implementation is still the SDR/sRGB pipeline:
+The active implementation now has the first internal SDR/sRGB color slice:
+
+- `Color` is an internal 16-byte canonical value storing linear BT.2020 / Rec.2020 RGBA with straight alpha.
+- `SrgbColor` is an internal 4-byte SDR bridge value used for sRGB import/export.
+- `StyleColor` wraps canonical `Color` and treats `FromArgb` / `Opaque` as sRGB authoring adapters.
+- `PropertyValue.Color` stores the canonical `Color` value instead of only a `uint ARGB` payload.
+- `DrawColor` and `WindowColor` remain SDR/sRGB output payloads.
+
+The active renderer output is still the SDR/sRGB pipeline:
 
 ```text
-internal style color
+StyleColor / PropertyValue.Color: canonical Irix Color
+  -> sRGB downgrade at draw-recording/output boundary
   -> DrawColor / draw command payload
   -> D3D12 rectangle or GlyphAtlas text pass
   -> sRGB SDR presentation
 ```
 
-`StyleColor`, `DrawColor`, and `WindowColor` currently use compact 8-bit ARGB-like storage on the active path. That storage is not the long-term definition of Irix color. It is the current SDR output representation and compatibility boundary while the renderer remains sRGB-only.
+`DrawColor` and `WindowColor` currently use compact 8-bit ARGB-like storage on the active output path. That storage is not the long-term definition of Irix color. It is the current SDR output representation and compatibility boundary while the renderer remains sRGB-only.
 
-The next color implementation work should first introduce the canonical `Color` value and conversion helpers, then migrate internal style color storage and draw/material payloads toward that canonical value. The current D3D12 output path may continue to downgrade to sRGB until the HDR path is implemented.
+The next color implementation work should decide whether draw/material payloads move from `DrawColor` to canonical `Color` or to a material handle. The current D3D12 output path may continue to downgrade to sRGB until the HDR path is implemented.
 
 ## Canonical Color Contract
 
@@ -41,7 +50,7 @@ The next color implementation work should first introduce the canonical `Color` 
 | Transfer | Linear light inside Irix |
 | White point | D65 |
 | Alpha | Straight alpha in the `Color` value |
-| Precision | High precision value storage. A future implementation may use 16-byte storage with four half-float channels or another explicitly chosen high-precision layout. |
+| Precision | Current internal implementation uses 16-byte storage with four floating-point channels. |
 | Source metadata | Not stored in `Color` after construction |
 | Output metadata | Not stored in `Color`; owned by output mapping context |
 
@@ -128,10 +137,12 @@ When a window spans multiple screens, the first implementation may choose a domi
 
 ## Acceptance For The Next Implementation Slice
 
-The next code slice is acceptable when:
+The current SDR/sRGB code slice is acceptable when:
 
 - A canonical internal color value exists for linear BT.2020 straight-alpha color.
 - sRGB authoring converts into that canonical value rather than being interpreted as BT.2020 coordinates.
 - Conversion back to sRGB preserves current SDR behavior for existing UI colors within a narrow tolerance.
 - `DrawColor` and `WindowColor` are documented and guarded as SDR output payloads, not canonical Irix color.
 - HDR policy remains unimplemented but has a clear output mapping owner.
+
+Current status: implemented for internal style/property color and guarded by local tests. The draw/backend payload migration remains future work.

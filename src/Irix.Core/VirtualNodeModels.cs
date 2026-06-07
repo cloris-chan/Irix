@@ -120,7 +120,7 @@ public readonly struct NodeContent : IEquatable<NodeContent>
 
 // ── PropertyValue: pure value union (R13-7) ─────────────────────
 
-[StructLayout(LayoutKind.Explicit, Size = 16)]
+[StructLayout(LayoutKind.Explicit, Size = 24)]
 public readonly struct PropertyValue : IEquatable<PropertyValue>
 {
     [FieldOffset(0)] private readonly PropertyValueKind _kind;
@@ -128,6 +128,7 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     [FieldOffset(2)] private readonly ushort _padding1;
     [FieldOffset(4)] private readonly uint _uintValue;
     [FieldOffset(8)] private readonly ulong _data0;
+    [FieldOffset(8)] private readonly Color _colorValue;
 
     private PropertyValue(PropertyValueKind kind, uint uintValue, ulong data0)
     {
@@ -135,7 +136,18 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         _padding0 = 0;
         _padding1 = 0;
         _uintValue = uintValue;
+        _colorValue = default;
         _data0 = data0;
+    }
+
+    private PropertyValue(Color color)
+    {
+        _kind = PropertyValueKind.Color;
+        _padding0 = 0;
+        _padding1 = 0;
+        _uintValue = 0;
+        _data0 = 0;
+        _colorValue = color;
     }
 
     public PropertyValueKind Kind => _kind;
@@ -152,7 +164,7 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         new(PropertyValueKind.ActionId, value.Value, 0);
 
     internal static PropertyValue FromColor(StyleColor value) =>
-        new(PropertyValueKind.Color, value.Argb, 0);
+        new(value.Value);
 
     public bool TryGetNumber(out double value)
     {
@@ -178,7 +190,7 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     internal bool TryGetColor(out StyleColor value)
     {
         if (_kind != PropertyValueKind.Color) { value = default; return false; }
-        value = StyleColor.FromArgb(_uintValue);
+        value = new StyleColor(_colorValue);
         return true;
     }
 
@@ -222,40 +234,45 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.Color}.");
     }
 
-    public bool Equals(PropertyValue other) => _kind == other._kind && _uintValue == other._uintValue && _data0 == other._data0;
+    public bool Equals(PropertyValue other) => _kind == other._kind && _uintValue == other._uintValue && _data0 == other._data0 && _colorValue == other._colorValue;
 
     public override bool Equals(object? obj) => obj is PropertyValue other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine((byte)_kind, _uintValue, _data0);
+    public override int GetHashCode() => HashCode.Combine((byte)_kind, _uintValue, _data0, _colorValue);
 
     public static bool operator ==(PropertyValue left, PropertyValue right) => left.Equals(right);
 
     public static bool operator !=(PropertyValue left, PropertyValue right) => !left.Equals(right);
 }
 
-internal readonly struct StyleColor(uint Argb) : IEquatable<StyleColor>
+internal readonly struct StyleColor(Color Value) : IEquatable<StyleColor>
 {
-    public uint Argb { get; } = Argb;
+    public Color Value { get; } = Value;
 
-    public byte A => (byte)(Argb >> 24);
-    public byte R => (byte)(Argb >> 16);
-    public byte G => (byte)(Argb >> 8);
-    public byte B => (byte)Argb;
+    public uint Argb => Value.ToSrgb().Argb;
+
+    public byte A => Value.ToSrgb().A;
+    public byte R => Value.ToSrgb().R;
+    public byte G => Value.ToSrgb().G;
+    public byte B => Value.ToSrgb().B;
 
     public static StyleColor Transparent => default;
 
     public static StyleColor Opaque(byte r, byte g, byte b) => FromArgb(255, r, g, b);
 
     public static StyleColor FromArgb(byte a, byte r, byte g, byte b) =>
-        new(((uint)a << 24) | ((uint)r << 16) | ((uint)g << 8) | b);
+        new(Color.FromSrgb(a, r, g, b));
 
-    public static StyleColor FromArgb(uint argb) => new(argb);
+    public static StyleColor FromArgb(uint argb) =>
+        FromArgb((byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
 
-    public bool Equals(StyleColor other) => Argb == other.Argb;
+    public SrgbColor ToSrgb() => Value.ToSrgb();
+
+    public bool Equals(StyleColor other) => Value == other.Value;
 
     public override bool Equals(object? obj) => obj is StyleColor other && Equals(other);
 
-    public override int GetHashCode() => Argb.GetHashCode();
+    public override int GetHashCode() => Value.GetHashCode();
 
     public static bool operator ==(StyleColor left, StyleColor right) => left.Equals(right);
 

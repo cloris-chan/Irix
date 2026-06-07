@@ -225,7 +225,16 @@ public class TypedIdAllocationGuardTests
     public void PropertyValue_has_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<PropertyValue>());
-        Assert.Equal(16, Unsafe.SizeOf<PropertyValue>());
+        Assert.Equal(24, Unsafe.SizeOf<PropertyValue>());
+    }
+
+    [Fact]
+    public void Color_has_no_managed_references_and_uses_16_byte_storage()
+    {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<Color>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<SrgbColor>());
+        Assert.Equal(16, Unsafe.SizeOf<Color>());
+        Assert.Equal(4, Unsafe.SizeOf<SrgbColor>());
     }
 
     [Fact]
@@ -656,6 +665,75 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(PropertyValueKind.Color, opaque.Kind);
         Assert.True(opaque.TryGetColor(out var opaqueValue));
         Assert.Equal(StyleColor.Opaque(10, 20, 30), opaqueValue);
+    }
+
+    [Fact]
+    public void Color_FromSrgb_canonicalizes_to_linear_bt2020()
+    {
+        var red = Color.FromSrgb(255, 0, 0);
+
+        Assert.InRange(red.LinearBt2020R, 0.6273f, 0.6275f);
+        Assert.InRange(red.LinearBt2020G, 0.0690f, 0.0692f);
+        Assert.InRange(red.LinearBt2020B, 0.0163f, 0.0165f);
+        Assert.Equal(1, red.A);
+
+        var srgb = red.ToSrgb();
+        Assert.Equal(SrgbColor.Opaque(255, 0, 0), srgb);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, 0)]
+    [InlineData(255, 255, 255, 255)]
+    [InlineData(255, 10, 20, 30)]
+    [InlineData(128, 52, 120, 246)]
+    [InlineData(1, 1, 2, 3)]
+    public void Color_srgb_roundtrip_preserves_current_sdr_payload(byte a, byte r, byte g, byte b)
+    {
+        var color = Color.FromSrgb(a, r, g, b);
+
+        Assert.Equal(SrgbColor.FromArgb(a, r, g, b), color.ToSrgb());
+    }
+
+    [Fact]
+    public void StyleColor_uses_canonical_color_while_preserving_srgb_output_bridge()
+    {
+        var styleColor = StyleColor.Opaque(255, 0, 0);
+
+        Assert.InRange(styleColor.Value.LinearBt2020R, 0.6273f, 0.6275f);
+        Assert.NotEqual(1, styleColor.Value.LinearBt2020R);
+        Assert.Equal(255u << 24 | 255u << 16, styleColor.Argb);
+        Assert.Equal(255, styleColor.A);
+        Assert.Equal(255, styleColor.R);
+        Assert.Equal(0, styleColor.G);
+        Assert.Equal(0, styleColor.B);
+    }
+
+    [Fact]
+    public void PropertyValue_Color_roundtrip_stores_canonical_color_not_argb_only()
+    {
+        var value = PropertyValue.FromColor(StyleColor.Opaque(255, 0, 0));
+
+        var color = value.GetRequiredColor();
+
+        Assert.InRange(color.Value.LinearBt2020R, 0.6273f, 0.6275f);
+        Assert.InRange(color.Value.LinearBt2020G, 0.0690f, 0.0692f);
+        Assert.InRange(color.Value.LinearBt2020B, 0.0163f, 0.0165f);
+        Assert.Equal(SrgbColor.Opaque(255, 0, 0), color.ToSrgb());
+    }
+
+    [Fact]
+    public void Color_value_source_guard_keeps_source_and_output_policy_metadata_out()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "Color.cs"));
+
+        Assert.Contains("struct Color", source);
+        Assert.Contains("FromSrgb", source);
+        Assert.Contains("ToSrgb", source);
+        Assert.DoesNotContain("SourceSpace", source);
+        Assert.DoesNotContain("SourceTransfer", source);
+        Assert.DoesNotContain("ToneMapPolicy", source);
+        Assert.DoesNotContain("HdrOutput", source);
+        Assert.DoesNotContain("Swapchain", source);
     }
 
     // ── R13-25: Source-level guards — no string API in core/rendering ──

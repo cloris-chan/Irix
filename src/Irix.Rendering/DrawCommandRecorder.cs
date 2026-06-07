@@ -222,8 +222,12 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
 
     private static DrawColor ResolveColor(StyleColorSlot styleColor, DrawColor defaultColor)
     {
-        return styleColor.HasValue
-            ? new DrawColor(styleColor.Value.A, styleColor.Value.R, styleColor.Value.G, styleColor.Value.B)
-            : defaultColor;
+        if (!styleColor.HasValue)
+        {
+            return defaultColor;
+        }
+
+        var srgb = styleColor.Value.ToSrgb();
+        return new DrawColor(srgb.A, srgb.R, srgb.G, srgb.B);
     }
 }
