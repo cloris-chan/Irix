@@ -273,6 +273,9 @@ internal readonly struct DrawMaterialOutputDiagnostics(
     int CommandCount,
     int SolidColorCommandCount,
     int LinearGradientCommandCount,
+    int LinearGradientSingleRectCommandCount,
+    int LinearGradientSegmentedCommandCount,
+    int LinearGradientSegmentRectCount,
     int FallbackCommandCount) : IEquatable<DrawMaterialOutputDiagnostics>
 {
     public ColorOutputKind OutputKind { get; } = OutputKind;
@@ -282,6 +285,9 @@ internal readonly struct DrawMaterialOutputDiagnostics(
     public int CommandCount { get; } = CommandCount;
     public int SolidColorCommandCount { get; } = SolidColorCommandCount;
     public int LinearGradientCommandCount { get; } = LinearGradientCommandCount;
+    public int LinearGradientSingleRectCommandCount { get; } = LinearGradientSingleRectCommandCount;
+    public int LinearGradientSegmentedCommandCount { get; } = LinearGradientSegmentedCommandCount;
+    public int LinearGradientSegmentRectCount { get; } = LinearGradientSegmentRectCount;
     public int FallbackCommandCount { get; } = FallbackCommandCount;
     public bool FallbackApplied => FallbackCommandCount > 0;
 
@@ -294,6 +300,9 @@ internal readonly struct DrawMaterialOutputDiagnostics(
             && CommandCount == other.CommandCount
             && SolidColorCommandCount == other.SolidColorCommandCount
             && LinearGradientCommandCount == other.LinearGradientCommandCount
+            && LinearGradientSingleRectCommandCount == other.LinearGradientSingleRectCommandCount
+            && LinearGradientSegmentedCommandCount == other.LinearGradientSegmentedCommandCount
+            && LinearGradientSegmentRectCount == other.LinearGradientSegmentRectCount
             && FallbackCommandCount == other.FallbackCommandCount;
     }
 
@@ -308,8 +317,12 @@ internal readonly struct DrawMaterialOutputDiagnostics(
             FallbackReason,
             CommandCount,
             SolidColorCommandCount,
-            LinearGradientCommandCount,
-            FallbackCommandCount);
+            HashCode.Combine(
+                LinearGradientCommandCount,
+                LinearGradientSingleRectCommandCount,
+                LinearGradientSegmentedCommandCount,
+                LinearGradientSegmentRectCount,
+                FallbackCommandCount));
     }
 
     public static bool operator ==(DrawMaterialOutputDiagnostics left, DrawMaterialOutputDiagnostics right) => left.Equals(right);

@@ -401,6 +401,9 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(2, first.ExecuteResult.MaterialDiagnostics.CommandCount);
         Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.SolidColorCommandCount);
         Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(0, first.ExecuteResult.MaterialDiagnostics.LinearGradientSegmentedCommandCount);
+        Assert.Equal(0, first.ExecuteResult.MaterialDiagnostics.LinearGradientSegmentRectCount);
         Assert.Equal(0, first.ExecuteResult.MaterialDiagnostics.FallbackCommandCount);
 
         rects.Reset();
@@ -436,6 +439,9 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(DrawMaterialFallbackReason.None, second.ExecuteResult.MaterialDiagnostics.FallbackReason);
         Assert.False(second.ExecuteResult.MaterialDiagnostics.FallbackApplied);
         Assert.Equal(2, second.ExecuteResult.MaterialDiagnostics.CommandCount);
+        Assert.Equal(1, second.ExecuteResult.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(0, second.ExecuteResult.MaterialDiagnostics.LinearGradientSegmentedCommandCount);
+        Assert.Equal(0, second.ExecuteResult.MaterialDiagnostics.LinearGradientSegmentRectCount);
         Assert.Equal(0, second.ExecuteResult.MaterialDiagnostics.FallbackCommandCount);
     }
 
@@ -474,6 +480,9 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(2, result.MaterialDiagnostics.CommandCount);
         Assert.Equal(1, result.MaterialDiagnostics.SolidColorCommandCount);
         Assert.Equal(1, result.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, result.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSegmentedCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSegmentRectCount);
         Assert.Equal(0, result.MaterialDiagnostics.FallbackCommandCount);
         Assert.Equal(2, rects.Count);
         var gradientRect = rects.Span[1];
@@ -515,6 +524,9 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(DrawMaterialFallbackReason.None, result.MaterialDiagnostics.FallbackReason);
         Assert.False(result.MaterialDiagnostics.FallbackApplied);
         Assert.Equal(1, result.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(1, result.MaterialDiagnostics.LinearGradientSegmentedCommandCount);
+        Assert.Equal(16, result.MaterialDiagnostics.LinearGradientSegmentRectCount);
         Assert.Equal(0, result.MaterialDiagnostics.FallbackCommandCount);
         Assert.Equal(17, rects.Count);
         var firstGradientSegment = rects.Span[1];
@@ -571,6 +583,9 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(DrawMaterialFallbackReason.UnsupportedNonSolidMaterial, result.MaterialDiagnostics.FallbackReason);
         Assert.True(result.MaterialDiagnostics.FallbackApplied);
         Assert.Equal(1, result.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSegmentedCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSegmentRectCount);
         Assert.Equal(1, result.MaterialDiagnostics.FallbackCommandCount);
     }
 

@@ -2848,6 +2848,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Until public material authoring lands, non-solid materials stay out of `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring.", colorDesign);
         Assert.Contains("The active SDR/sRGB backend path may collapse unsupported non-solid materials through a deterministic `DrawMaterial.FallbackColor`", colorDesign);
         Assert.Contains("The public material authoring policy preflight is now selected at the style boundary", colorDesign);
+        Assert.Contains("linear-gradient single-rect versus segmented rasterization counters", colorDesign);
+        Assert.Contains("linearGradientSingleRectCommands", colorDesign);
+        Assert.Contains("linearGradientSegmentedCommands", colorDesign);
+        Assert.Contains("linearGradientSegmentRects", colorDesign);
 
         Assert.Contains("## Public Material Authoring Policy Preflight", styleDesign);
         Assert.Contains("Non-solid visual material authoring is blocked on the policy preflight", styleDesign);
@@ -2860,8 +2864,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Output mapping separation", styleDesign);
         Assert.Contains("Until those gates are implemented and guarded, public/style authoring remains limited to semantic colors for background/foreground", styleDesign);
         Assert.Contains("internal solid-color and first linear-gradient `DrawMaterial`/brush resource shapes exist", status);
+        Assert.Contains("D3D12 material output diagnostics expose selected material kind/backend capability/fallback reason/fallback counts plus linear-gradient single-rect versus segmented rasterization counters", status);
         Assert.Contains("public material authoring is guard-deferred from style/property APIs and now has a policy preflight", status);
         Assert.Contains("Internal solid-color and linear-gradient material payloads exist", worklist);
+        Assert.Contains("material output diagnostics now distinguish single-rect versus segmented linear-gradient rasterization", worklist);
         Assert.Contains("public material authoring remains guard-deferred but now has a policy preflight", worklist);
 
         Assert.False(typeof(DrawMaterialKind).IsPublic);
@@ -4751,11 +4757,14 @@ public sealed class ProgramDiagnosticsTests
             CommandCount: 3,
             SolidColorCommandCount: 2,
             LinearGradientCommandCount: 1,
+            LinearGradientSingleRectCommandCount: 1,
+            LinearGradientSegmentedCommandCount: 0,
+            LinearGradientSegmentRectCount: 0,
             FallbackCommandCount: 0);
 
         var line = DiagnosticsFormatter.BuildMaterialOutputDiagnosticLine(snapshot);
 
-        Assert.Equal("Material output status: outputKind=SdrSrgb backendCapabilities=SolidColor, LinearGradient selectedMaterialKind=LinearGradient fallbackReason=None fallbackApplied=False commandCount=3 solidColorCommands=2 linearGradientCommands=1 fallbackCommands=0", line);
+        Assert.Equal("Material output status: outputKind=SdrSrgb backendCapabilities=SolidColor, LinearGradient selectedMaterialKind=LinearGradient fallbackReason=None fallbackApplied=False commandCount=3 solidColorCommands=2 linearGradientCommands=1 linearGradientSingleRectCommands=1 linearGradientSegmentedCommands=0 linearGradientSegmentRects=0 fallbackCommands=0", line);
     }
 
     [Fact]
@@ -5233,6 +5242,9 @@ public sealed class ProgramDiagnosticsTests
                 CommandCount: 1,
                 SolidColorCommandCount: 1,
                 LinearGradientCommandCount: 0,
+                LinearGradientSingleRectCommandCount: 0,
+                LinearGradientSegmentedCommandCount: 0,
+                LinearGradientSegmentRectCount: 0,
                 FallbackCommandCount: 0),
             textClipSkippedCount,
             deviceRemoved,

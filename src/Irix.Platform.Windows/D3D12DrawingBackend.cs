@@ -504,6 +504,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         private int _materialCommandCount;
         private int _solidColorMaterialCommandCount;
         private int _linearGradientMaterialCommandCount;
+        private int _linearGradientSingleRectCommandCount;
+        private int _linearGradientSegmentedCommandCount;
+        private int _linearGradientSegmentRectCount;
         private int _materialFallbackCommandCount;
 
         public void AddCommandClip(in DrawCommand command)
@@ -571,6 +574,19 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             }
         }
 
+        public void AddLinearGradientRasterization(bool segmented, int segmentRectCount)
+        {
+            if (segmented)
+            {
+                _linearGradientSegmentedCommandCount++;
+                _linearGradientSegmentRectCount += segmentRectCount;
+            }
+            else
+            {
+                _linearGradientSingleRectCommandCount++;
+            }
+        }
+
         public D3D12FillRectScissorDiagnostics FillRectDiagnostics =>
             new(_clippedCommandCount, _emptyIntersectionSkippedCount, _scissorStateChangeCount, _lastEffectiveScissor);
 
@@ -584,6 +600,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             _materialCommandCount,
             _solidColorMaterialCommandCount,
             _linearGradientMaterialCommandCount,
+            _linearGradientSingleRectCommandCount,
+            _linearGradientSegmentedCommandCount,
+            _linearGradientSegmentRectCount,
             _materialFallbackCommandCount);
     }
 
@@ -1006,6 +1025,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
         if (rect.Width <= 0f || rect.Height <= 0f)
         {
+            diagnostics.AddLinearGradientRasterization(segmented: false, segmentRectCount: 1);
             AddPhysicalRectData(rect, fallbackColor, scissorPlan.RenderScissor, rects);
             return;
         }
@@ -1021,6 +1041,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 outputMapping.MapToSdr(SampleLinearGradient(material, 0f, rect.Height)),
                 scissorPlan.RenderScissor,
                 rects);
+            diagnostics.AddLinearGradientRasterization(segmented: false, segmentRectCount: 1);
             return;
         }
 
@@ -1030,6 +1051,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             outputMapping,
             scissorPlan.RenderScissor,
             rects);
+        diagnostics.AddLinearGradientRasterization(segmented: true, segmentRectCount: LinearGradientClampFallbackSegmentCount);
     }
 
     private static Color SampleLinearGradient(in DrawMaterial material, float x, float y)
