@@ -27,6 +27,9 @@ internal static class CompositionSkipDiagnosticRunner
         var scrollInvalidFrameSkip = CaptureScrollInvalidRetainedFrameSkip();
         var retainedUpdateNoPlanSkip = CaptureRetainedUpdateNoPlanSkip();
         var retainedUpdateSkip = CaptureRetainedUpdateMissingCapabilitySkip();
+        var presentationNoPlanSkip = CapturePresentationNoPlanSkip();
+        var presentationCapabilitySkip = CapturePresentationMissingCapabilitySkip();
+        var presentationExecuted = CapturePresentationExecutedStatus(out var presentationExecutedCompositionCount);
         var deviceLostRecoveredSkip = CaptureDeviceLostRecoveredSkip(out var recoveredBackendExecuteCount);
         var executed = CaptureExecutedStatus(out var executedCompositionCount);
 
@@ -41,15 +44,19 @@ internal static class CompositionSkipDiagnosticRunner
             scrollInvalidFrameSkip,
             retainedUpdateNoPlanSkip,
             retainedUpdateSkip,
+            presentationNoPlanSkip,
+            presentationCapabilitySkip,
+            presentationExecuted,
             deviceLostRecoveredSkip,
             executed,
+            presentationExecutedCompositionCount,
             executedCompositionCount,
             recoveredBackendExecuteCount);
     }
 
     internal static string Format(in CompositionSkipDiagnostics diagnostics)
     {
-        return $"composition-skip actual transformNoPlan={FormatStatus(diagnostics.TransformNoPlanSkip)} transformBackend={FormatStatus(diagnostics.TransformBackendSkip)} transformMissingFrame={FormatStatus(diagnostics.TransformMissingFrameSkip)} transformInvalidFrame={FormatStatus(diagnostics.TransformInvalidFrameSkip)} scrollNoPlan={FormatStatus(diagnostics.ScrollNoPlanSkip)} scrollCapability={FormatStatus(diagnostics.ScrollCapabilitySkip)} scrollMissingFrame={FormatStatus(diagnostics.ScrollMissingFrameSkip)} scrollInvalidFrame={FormatStatus(diagnostics.ScrollInvalidFrameSkip)} retainedUpdateNoPlan={FormatStatus(diagnostics.RetainedUpdateNoPlanSkip)} retainedUpdateCapability={FormatStatus(diagnostics.RetainedUpdateSkip)} deviceLostRecovered={FormatStatus(diagnostics.DeviceLostRecoveredSkip)} executed={FormatStatus(diagnostics.ExecutedStatus)} executedCompositionCount={diagnostics.ExecutedCompositionCount} recoveredCompositionCount={diagnostics.RecoveredCompositionCount}";
+        return $"composition-skip actual transformNoPlan={FormatStatus(diagnostics.TransformNoPlanSkip)} transformBackend={FormatStatus(diagnostics.TransformBackendSkip)} transformMissingFrame={FormatStatus(diagnostics.TransformMissingFrameSkip)} transformInvalidFrame={FormatStatus(diagnostics.TransformInvalidFrameSkip)} scrollNoPlan={FormatStatus(diagnostics.ScrollNoPlanSkip)} scrollCapability={FormatStatus(diagnostics.ScrollCapabilitySkip)} scrollMissingFrame={FormatStatus(diagnostics.ScrollMissingFrameSkip)} scrollInvalidFrame={FormatStatus(diagnostics.ScrollInvalidFrameSkip)} retainedUpdateNoPlan={FormatStatus(diagnostics.RetainedUpdateNoPlanSkip)} retainedUpdateCapability={FormatStatus(diagnostics.RetainedUpdateSkip)} presentationNoPlan={FormatStatus(diagnostics.PresentationNoPlanSkip)} presentationCapability={FormatStatus(diagnostics.PresentationCapabilitySkip)} presentationExecuted={FormatStatus(diagnostics.PresentationExecutedStatus)} deviceLostRecovered={FormatStatus(diagnostics.DeviceLostRecoveredSkip)} executed={FormatStatus(diagnostics.ExecutedStatus)} presentationExecutedCompositionCount={diagnostics.PresentationExecutedCompositionCount} executedCompositionCount={diagnostics.ExecutedCompositionCount} recoveredCompositionCount={diagnostics.RecoveredCompositionCount}";
     }
 
     internal static string FormatStatus(in CompositionExecutionStatus status)
@@ -209,6 +216,37 @@ internal static class CompositionSkipDiagnosticRunner
         return compositor.LastCompositionExecutionStatus;
     }
 
+    private static CompositionExecutionStatus CapturePresentationNoPlanSkip()
+    {
+        using var backend = new CapabilityBackend(CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.MultiLayer);
+        using var compositor = new DrawingBackendCompositor(backend);
+        _ = TryRenderPresentationTick(compositor);
+        return compositor.LastCompositionExecutionStatus;
+    }
+
+    private static CompositionExecutionStatus CapturePresentationMissingCapabilitySkip()
+    {
+        using var backend = new CapabilityBackend(CompositionBackendCapabilities.TransformOpacity);
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateFrame(commandCount: 2);
+        compositor.RenderAsync(frame).GetAwaiter().GetResult();
+        compositor.ActivateCompositionAnimationPresentationPlan(CreatePresentationPlanSet(commandCount: 2));
+        _ = TryRenderPresentationTick(compositor);
+        return compositor.LastCompositionExecutionStatus;
+    }
+
+    private static CompositionExecutionStatus CapturePresentationExecutedStatus(out int executeCompositionCount)
+    {
+        using var backend = new CapabilityBackend(CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.MultiLayer);
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateFrame(commandCount: 2);
+        compositor.RenderAsync(frame).GetAwaiter().GetResult();
+        compositor.ActivateCompositionAnimationPresentationPlan(CreatePresentationPlanSet(commandCount: 2));
+        _ = compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1)).GetAwaiter().GetResult();
+        executeCompositionCount = backend.ExecuteCompositionCount;
+        return compositor.LastCompositionExecutionStatus;
+    }
+
     private static CompositionExecutionStatus CaptureDeviceLostRecoveredSkip(out int executeCompositionCount)
     {
         using var backend = new RecoveringCompositionBackend(throwOnComposition: true);
@@ -259,6 +297,19 @@ internal static class CompositionSkipDiagnosticRunner
         }
     }
 
+    private static bool TryRenderPresentationTick(DrawingBackendCompositor compositor)
+    {
+        try
+        {
+            _ = compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1)).GetAwaiter().GetResult();
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     private static RenderFrameBatch CreateFrame(int commandCount)
     {
         var resources = FrameDrawingResources.Rent();
@@ -277,6 +328,29 @@ internal static class CompositionSkipDiagnosticRunner
         return new CompositionAnimationPlan(new CompositionLayerAnimation(
             new CompositionLayerId(1),
             CommandStart: 0,
+            CommandCount: commandCount,
+            new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(1)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f)));
+    }
+
+    private static CompositionAnimationPresentationSetPlan CreatePresentationPlanSet(int commandCount)
+    {
+        return new CompositionAnimationPresentationSetPlan(
+            [
+                CreateAnimationPlan(layerId: new CompositionLayerId(1), commandStart: 0, commandCount: 1),
+                CreateAnimationPlan(layerId: new CompositionLayerId(2), commandStart: 1, commandCount: commandCount - 1)
+            ]);
+    }
+
+    private static CompositionAnimationPlan CreateAnimationPlan(
+        CompositionLayerId layerId,
+        int commandStart,
+        int commandCount)
+    {
+        return new CompositionAnimationPlan(new CompositionLayerAnimation(
+            layerId,
+            CommandStart: commandStart,
             CommandCount: commandCount,
             new CompositionAnimationTimeline(CompositionTimestamp.Zero, CompositionDuration.FromStopwatchTicks(1)),
             CompositionTransformAnimation.Identity,
@@ -403,8 +477,12 @@ internal readonly struct CompositionSkipDiagnostics(
     CompositionExecutionStatus ScrollInvalidFrameSkip,
     CompositionExecutionStatus RetainedUpdateNoPlanSkip,
     CompositionExecutionStatus RetainedUpdateSkip,
+    CompositionExecutionStatus PresentationNoPlanSkip,
+    CompositionExecutionStatus PresentationCapabilitySkip,
+    CompositionExecutionStatus PresentationExecutedStatus,
     CompositionExecutionStatus DeviceLostRecoveredSkip,
     CompositionExecutionStatus ExecutedStatus,
+    int PresentationExecutedCompositionCount,
     int ExecutedCompositionCount,
     int RecoveredCompositionCount) : IEquatable<CompositionSkipDiagnostics>
 {
@@ -418,8 +496,12 @@ internal readonly struct CompositionSkipDiagnostics(
     public CompositionExecutionStatus ScrollInvalidFrameSkip { get; } = ScrollInvalidFrameSkip;
     public CompositionExecutionStatus RetainedUpdateNoPlanSkip { get; } = RetainedUpdateNoPlanSkip;
     public CompositionExecutionStatus RetainedUpdateSkip { get; } = RetainedUpdateSkip;
+    public CompositionExecutionStatus PresentationNoPlanSkip { get; } = PresentationNoPlanSkip;
+    public CompositionExecutionStatus PresentationCapabilitySkip { get; } = PresentationCapabilitySkip;
+    public CompositionExecutionStatus PresentationExecutedStatus { get; } = PresentationExecutedStatus;
     public CompositionExecutionStatus DeviceLostRecoveredSkip { get; } = DeviceLostRecoveredSkip;
     public CompositionExecutionStatus ExecutedStatus { get; } = ExecutedStatus;
+    public int PresentationExecutedCompositionCount { get; } = PresentationExecutedCompositionCount;
     public int ExecutedCompositionCount { get; } = ExecutedCompositionCount;
     public int RecoveredCompositionCount { get; } = RecoveredCompositionCount;
 
@@ -435,8 +517,12 @@ internal readonly struct CompositionSkipDiagnostics(
             && ScrollInvalidFrameSkip == other.ScrollInvalidFrameSkip
             && RetainedUpdateNoPlanSkip == other.RetainedUpdateNoPlanSkip
             && RetainedUpdateSkip == other.RetainedUpdateSkip
+            && PresentationNoPlanSkip == other.PresentationNoPlanSkip
+            && PresentationCapabilitySkip == other.PresentationCapabilitySkip
+            && PresentationExecutedStatus == other.PresentationExecutedStatus
             && DeviceLostRecoveredSkip == other.DeviceLostRecoveredSkip
             && ExecutedStatus == other.ExecutedStatus
+            && PresentationExecutedCompositionCount == other.PresentationExecutedCompositionCount
             && ExecutedCompositionCount == other.ExecutedCompositionCount
             && RecoveredCompositionCount == other.RecoveredCompositionCount;
     }
@@ -456,8 +542,12 @@ internal readonly struct CompositionSkipDiagnostics(
         hash.Add(ScrollInvalidFrameSkip);
         hash.Add(RetainedUpdateNoPlanSkip);
         hash.Add(RetainedUpdateSkip);
+        hash.Add(PresentationNoPlanSkip);
+        hash.Add(PresentationCapabilitySkip);
+        hash.Add(PresentationExecutedStatus);
         hash.Add(DeviceLostRecoveredSkip);
         hash.Add(ExecutedStatus);
+        hash.Add(PresentationExecutedCompositionCount);
         hash.Add(ExecutedCompositionCount);
         hash.Add(RecoveredCompositionCount);
         return hash.ToHashCode();

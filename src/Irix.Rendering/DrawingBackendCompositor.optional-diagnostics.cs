@@ -67,6 +67,7 @@ public sealed partial class DrawingBackendCompositor
             1 => CompositionExecutionKind.TransformOpacityTick,
             2 => CompositionExecutionKind.ScrollPresentationTick,
             3 => CompositionExecutionKind.RetainedUpdateScrollPresentation,
+            4 => CompositionExecutionKind.AnimationPresentationTick,
             _ => CompositionExecutionKind.None
         };
     }

@@ -1788,6 +1788,185 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task ActivateCompositionAnimationPresentationPlan_ticks_multi_layer_frame_without_regular_execute()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = CreatePresentationSetRoot();
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var preflight = compositor.PrepareCompositionAnimationPresentationSetActivation(
+            [CreatePresentationSetDeclaration(new NodeKey(22)), CreatePresentationSetDeclaration(new NodeKey(23))],
+            snapshot);
+
+        compositor.ActivateCompositionAnimationPresentationPlan(preflight.Plan);
+        var result = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(5), cancellationToken);
+
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Null(compositor.CompositionScrollPresentationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(1, compositor.RenderCount);
+        Assert.Equal(1, compositor.CompositionTickCount);
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(1, backend.ExecuteCompositionCount);
+        Assert.Equal(2, result.LayerCount);
+        Assert.Equal(frame.Commands.Count, result.CommandCount);
+        Assert.Equal(2, backend.LastCompositionFrame.LayerCount);
+        Assert.Equal(new CompositionLayerId(22), backend.LastCompositionFrame.GetLayer(0).Id);
+        Assert.Equal(new CompositionLayerId(23), backend.LastCompositionFrame.GetLayer(1).Id);
+        Assert.Equal(new CompositionTransform(10, 0), backend.LastCompositionFrame.GetLayer(0).Transform);
+        Assert.Equal(new CompositionTransform(10, 0), backend.LastCompositionFrame.GetLayer(1).Transform);
+        Assert.Same(frame.Resources, backend.LastCompositionResources);
+        AssertCompositionStatus(
+            compositor.LastCompositionExecutionStatus,
+            CompositionExecutionKind.AnimationPresentationTick,
+            CompositionExecutionSkipReason.None,
+            CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.MultiLayer,
+            CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation | CompositionBackendCapabilities.MultiLayer,
+            layerCount: 2,
+            commandCount: frame.Commands.Count);
+    }
+
+    [Fact]
+    public async Task ActivateCompositionAnimationPresentationPlan_publishes_markers_per_layer()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(CreatePresentationSetRoot(), new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var firstMarker = new CompositionAnimationMarker(
+            new CompositionAnimationMarkerId(1),
+            new CompositionRuntimeEventId(101),
+            CompositionAnimationMarkerTrigger.AtProgress(0.5f));
+        var secondMarker = new CompositionAnimationMarker(
+            new CompositionAnimationMarkerId(1),
+            new CompositionRuntimeEventId(102),
+            CompositionAnimationMarkerTrigger.AtProgress(0.5f));
+        var preflight = compositor.PrepareCompositionAnimationPresentationSetActivation(
+            [
+                CreatePresentationSetDeclaration(
+                    new NodeKey(22),
+                    new CompositionAnimationInstanceId(22),
+                    [firstMarker]),
+                CreatePresentationSetDeclaration(
+                    new NodeKey(23),
+                    new CompositionAnimationInstanceId(23),
+                    [secondMarker])
+            ],
+            snapshot);
+
+        compositor.ActivateCompositionAnimationPresentationPlan(preflight.Plan);
+        _ = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(2), cancellationToken);
+        _ = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(8), cancellationToken);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var count = compositor.DrainCompositionMarkerEvents(events);
+        Assert.Equal(2, count);
+        Assert.Equal(CompositionAnimationMarkerOwnerKind.TransformOpacity, events[0].OwnerKind);
+        Assert.Equal(CompositionAnimationMarkerOwnerKind.TransformOpacity, events[1].OwnerKind);
+        Assert.Equal(new CompositionAnimationInstanceId(22), events[0].InstanceId);
+        Assert.Equal(new CompositionAnimationInstanceId(23), events[1].InstanceId);
+        Assert.Equal(new NodeKey(22), events[0].TargetKey);
+        Assert.Equal(new NodeKey(23), events[1].TargetKey);
+        Assert.Equal(new CompositionLayerId(22), events[0].LayerId);
+        Assert.Equal(new CompositionLayerId(23), events[1].LayerId);
+        Assert.Equal(new CompositionRuntimeEventId(101), events[0].RuntimeEventId);
+        Assert.Equal(new CompositionRuntimeEventId(102), events[1].RuntimeEventId);
+        Assert.Equal(0, compositor.PendingCompositionMarkerEventCount);
+    }
+
+    [Fact]
+    public async Task ActivateCompositionAnimationPresentationPlan_is_exclusive_and_clear_discards_events()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(CreatePresentationSetRoot(), new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        compositor.SetCompositionAnimationPlan(CreateAnimationPlan(commandCount: frame.Commands.Count));
+        compositor.SetCompositionScrollPresentationPlan(CreateScrollPresentationPlan(commandCount: frame.Commands.Count));
+        var marker = new CompositionAnimationMarker(
+            new CompositionAnimationMarkerId(2),
+            new CompositionRuntimeEventId(202),
+            CompositionAnimationMarkerTrigger.EveryTick());
+        var preflight = compositor.PrepareCompositionAnimationPresentationSetActivation(
+            [
+                CreatePresentationSetDeclaration(
+                    new NodeKey(22),
+                    new CompositionAnimationInstanceId(24),
+                    [marker]),
+                CreatePresentationSetDeclaration(new NodeKey(23))
+            ],
+            snapshot);
+
+        compositor.ActivateCompositionAnimationPresentationPlan(preflight.Plan);
+        _ = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Null(compositor.CompositionScrollPresentationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(1, compositor.PendingCompositionMarkerEventCount);
+
+        compositor.ClearCompositionAnimation();
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        Assert.Null(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(0, compositor.PendingCompositionMarkerEventCount);
+        Assert.Equal(0, compositor.DrainCompositionMarkerEvents(events));
+    }
+
+    [Fact]
+    public async Task ActivateCompositionAnimationPresentationPlan_rejects_invalid_state_and_records_tick_skips()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var missingFrameCompositor = new DrawingBackendCompositor(new CompositionTrackingBackend());
+        var plan = new CompositionAnimationPresentationSetPlan(
+            [CreateAnimationPlan(commandCount: 1), CreateAnimationPlan(new CompositionLayerId(2), commandStart: 1, commandCount: 1)]);
+
+        var missingFrameException = Assert.Throws<InvalidOperationException>(() => missingFrameCompositor.ActivateCompositionAnimationPresentationPlan(plan));
+        Assert.Contains("retained render frame", missingFrameException.Message);
+
+        using var noPlanCompositor = new DrawingBackendCompositor(new CompositionTrackingBackend());
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await noPlanCompositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken));
+        AssertCompositionStatus(
+            noPlanCompositor.LastCompositionExecutionStatus,
+            CompositionExecutionKind.AnimationPresentationTick,
+            CompositionExecutionSkipReason.NoActivePlan,
+            CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.MultiLayer,
+            CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.ScrollPresentation | CompositionBackendCapabilities.MultiLayer,
+            layerCount: 0,
+            commandCount: 0);
+
+        var missingCapabilityBackend = new ConfigurableCompositionBackend(CompositionBackendCapabilities.TransformOpacity);
+        using var missingCapabilityCompositor = new DrawingBackendCompositor(missingCapabilityBackend);
+        using var frame = CreateTwoRectFrame();
+        await missingCapabilityCompositor.RenderAsync(frame, cancellationToken);
+        missingCapabilityCompositor.ActivateCompositionAnimationPresentationPlan(plan);
+
+        _ = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await missingCapabilityCompositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken));
+
+        AssertCompositionStatus(
+            missingCapabilityCompositor.LastCompositionExecutionStatus,
+            CompositionExecutionKind.AnimationPresentationTick,
+            CompositionExecutionSkipReason.MissingBackendCapability,
+            CompositionBackendCapabilities.TransformOpacity | CompositionBackendCapabilities.MultiLayer,
+            CompositionBackendCapabilities.TransformOpacity,
+            layerCount: 2,
+            commandCount: 2);
+        Assert.Equal(0, missingCapabilityBackend.ExecuteCompositionCount);
+    }
+
+    [Fact]
     public void ValidateCompositionAnimationPresentationSet_requires_retained_frame_without_installing_plan()
     {
         using var compositor = new DrawingBackendCompositor(new CompositionTrackingBackend());
@@ -2357,11 +2536,33 @@ public sealed class DrawingBackendCompositorTests
             resources);
     }
 
+    private static RenderFrameBatch CreateTwoRectFrame()
+    {
+        var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        return new RenderFrameBatch(
+            new DrawCommandBatch(new ArrayMemoryOwner<DrawCommand>(
+            [
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 80), Color: DrawColor.Opaque(1, 2, 3)),
+                new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(120, 0, 100, 80), Color: DrawColor.Opaque(4, 5, 6))
+            ]), 2),
+            [],
+            resources);
+    }
+
     private static CompositionAnimationPlan CreateAnimationPlan(int commandCount)
     {
+        return CreateAnimationPlan(new CompositionLayerId(1), commandStart: 0, commandCount: commandCount);
+    }
+
+    private static CompositionAnimationPlan CreateAnimationPlan(
+        CompositionLayerId layerId,
+        int commandStart,
+        int commandCount)
+    {
         return new CompositionAnimationPlan(new CompositionLayerAnimation(
-            new CompositionLayerId(1),
-            CommandStart: 0,
+            layerId,
+            CommandStart: commandStart,
             CommandCount: commandCount,
             new CompositionAnimationTimeline(
                 CompositionTimestamp.Zero,
@@ -2372,6 +2573,14 @@ public sealed class DrawingBackendCompositorTests
 
     private static CompositionAnimationDeclaration CreatePresentationSetDeclaration(NodeKey targetKey)
     {
+        return CreatePresentationSetDeclaration(targetKey, default, null);
+    }
+
+    private static CompositionAnimationDeclaration CreatePresentationSetDeclaration(
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId,
+        CompositionAnimationMarker[]? markers)
+    {
         return new CompositionAnimationDeclaration(
             targetKey,
             new CompositionAnimationTimeline(
@@ -2380,7 +2589,28 @@ public sealed class DrawingBackendCompositorTests
             new CompositionTransformAnimation(
                 new CompositionScalarAnimation(0, 20),
                 CompositionScalarAnimation.Constant(0)),
-            CompositionScalarAnimation.Constant(1f));
+            CompositionScalarAnimation.Constant(1f),
+            instanceId,
+            markers);
+    }
+
+    private static VirtualNode CreatePresentationSetRoot()
+    {
+        return VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(22),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(23),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)));
     }
 
     private static CompositionScrollPresentationPlan CreateScrollPresentationPlan(int commandCount)

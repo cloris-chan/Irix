@@ -6,7 +6,8 @@ internal enum CompositionExecutionKind : byte
     None,
     TransformOpacityTick,
     ScrollPresentationTick,
-    RetainedUpdateScrollPresentation
+    RetainedUpdateScrollPresentation,
+    AnimationPresentationTick
 }
 
 internal enum CompositionExecutionSkipReason : byte

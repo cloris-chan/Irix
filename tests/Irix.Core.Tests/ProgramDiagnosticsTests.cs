@@ -2048,7 +2048,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("CompositionSkipDiagnosticRunner.Run", programSource);
         Assert.Contains("`--diagnose-composition-skip` must prove:", design);
         Assert.Equal(
-            "composition-skip actual transformNoPlan=TransformOpacityTick:NoActivePlan:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=0:commands=0 transformBackend=TransformOpacityTick:BackendDoesNotImplementComposition:isSkipped=True:required=TransformOpacity:backend=None:pacing=SoftwareTimer:layers=1:commands=1 transformMissingFrame=TransformOpacityTick:MissingRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=0 transformInvalidFrame=TransformOpacityTick:InvalidPlanForRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=1 scrollNoPlan=ScrollPresentationTick:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=0 scrollCapability=ScrollPresentationTick:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 scrollMissingFrame=ScrollPresentationTick:MissingRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=0 scrollInvalidFrame=ScrollPresentationTick:InvalidPlanForRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=1 retainedUpdateNoPlan=RetainedUpdateScrollPresentation:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=1 retainedUpdateCapability=RetainedUpdateScrollPresentation:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 deviceLostRecovered=TransformOpacityTick:DeviceLostRecovered:isSkipped=True:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executed=TransformOpacityTick:None:isSkipped=False:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executedCompositionCount=1 recoveredCompositionCount=1",
+            "composition-skip actual transformNoPlan=TransformOpacityTick:NoActivePlan:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=0:commands=0 transformBackend=TransformOpacityTick:BackendDoesNotImplementComposition:isSkipped=True:required=TransformOpacity:backend=None:pacing=SoftwareTimer:layers=1:commands=1 transformMissingFrame=TransformOpacityTick:MissingRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=0 transformInvalidFrame=TransformOpacityTick:InvalidPlanForRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=1 scrollNoPlan=ScrollPresentationTick:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=0 scrollCapability=ScrollPresentationTick:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 scrollMissingFrame=ScrollPresentationTick:MissingRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=0 scrollInvalidFrame=ScrollPresentationTick:InvalidPlanForRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=1 retainedUpdateNoPlan=RetainedUpdateScrollPresentation:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=1 retainedUpdateCapability=RetainedUpdateScrollPresentation:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 presentationNoPlan=AnimationPresentationTick:NoActivePlan:isSkipped=True:required=TransformOpacity|MultiLayer:backend=TransformOpacity|MultiLayer:pacing=SoftwareTimer:layers=0:commands=0 presentationCapability=AnimationPresentationTick:MissingBackendCapability:isSkipped=True:required=TransformOpacity|MultiLayer:backend=TransformOpacity:pacing=SoftwareTimer:layers=2:commands=2 presentationExecuted=AnimationPresentationTick:None:isSkipped=False:required=TransformOpacity|MultiLayer:backend=TransformOpacity|MultiLayer:pacing=SoftwareTimer:layers=2:commands=2 deviceLostRecovered=TransformOpacityTick:DeviceLostRecovered:isSkipped=True:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executed=TransformOpacityTick:None:isSkipped=False:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 presentationExecutedCompositionCount=1 executedCompositionCount=1 recoveredCompositionCount=1",
             summary);
     }
 
@@ -2752,7 +2752,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, completion-pump lifecycle diagnostics, true concurrent multi-owner transition design preflight, Poc-owned batch/owner value types with deterministic acceptance/rejection tests, coordinator batch validation against one retained snapshot, validation-only batch runtime preflight, compositor-side presentation-set validation/conflict reporting without install, rendering-owned activation preflight/plan-set data, and owner-table completion tracking are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, completion-pump lifecycle diagnostics, true concurrent multi-owner transition design preflight, Poc-owned batch/owner value types with deterministic acceptance/rejection tests, coordinator batch validation against one retained snapshot, validation-only batch runtime preflight, compositor-side presentation-set validation/conflict reporting without install, rendering-owned activation preflight/plan-set data, active presentation-set compositor state/tick contract, and owner-table completion tracking are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2997,7 +2997,7 @@ public sealed class ProgramDiagnosticsTests
         var drawingCompositorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.cs")));
 
         Assert.Contains("## Concurrent Transition Owner Preflight", animationDesign);
-        Assert.Contains("This preflight is now a Poc-owned value-model plus coordinator, compositor presentation-set validation, owner-table completion preflight, validation-only batch runtime preflight, and rendering-owned presentation-set activation preflight", animationDesign);
+        Assert.Contains("This preflight is now a Poc-owned value-model plus coordinator, compositor presentation-set validation, owner-table completion preflight, validation-only batch runtime preflight, rendering-owned presentation-set activation preflight, and internal active presentation-set compositor tick contract", animationDesign);
         Assert.Contains("Transition owner key", animationDesign);
         Assert.Contains("Transition decision batch", animationDesign);
         Assert.Contains("Retained target snapshot", animationDesign);
@@ -3012,6 +3012,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("CompositionAnimationPresentationSetPlan", animationDesign);
         Assert.Contains("DrawingBackendCompositor.ValidateCompositionAnimationPresentationSet", animationDesign);
         Assert.Contains("DrawingBackendCompositor.PrepareCompositionAnimationPresentationSetActivation", animationDesign);
+        Assert.Contains("DrawingBackendCompositor.ActivateCompositionAnimationPresentationPlan", animationDesign);
+        Assert.Contains("DrawingBackendCompositor.RenderCompositionAnimationPresentationTickAtAsync", animationDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ValidateBatchRuntime", animationDesign);
         Assert.Contains("StyleTransitionBatchRuntimePreflight", animationDesign);
         Assert.Contains("owner-keyed `StyleTransitionCompletionTracker` state", animationDesign);
@@ -3028,7 +3030,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Done: completion tracking now uses an owner table so one owner completion, cancel, fallback, or abort does not clear another owner", animationDesign);
         Assert.Contains("Done: validation-only batch runtime preflight now pairs accepted owners, rejected owners, presentation-set install requirements, and owner-table completion state", animationDesign);
         Assert.Contains("Done: rendering-owned presentation-set activation preflight now builds a validated `CompositionAnimationPresentationSetPlan`", animationDesign);
-        Assert.Contains("Next: define the active compositor state and tick contract for a validated presentation-set plan", animationDesign);
+        Assert.Contains("Done: active presentation-set compositor state and tick contract can execute a validated `CompositionAnimationPresentationSetPlan` internally", animationDesign);
+        Assert.Contains("Next: bridge the Poc validation-only batch runtime path to the active presentation-set compositor contract", animationDesign);
         Assert.Contains("StyleTransitionDecisionBatchPreflight", animationDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ValidateBatch", animationDesign);
         Assert.Contains("PresentationStateChanged=false", animationDesign);
@@ -3036,19 +3039,20 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("validation-only `ValidateBatchRuntime` requirements pairing", status);
         Assert.Contains("rendering-owned activation preflight/plan-set data", status);
         Assert.Contains("owner-table completion tracking", status);
-        Assert.Contains("actual multi-owner execution and active presentation-set compositor state remain deferred", status);
+        Assert.Contains("active presentation-set compositor state/tick contract", status);
+        Assert.Contains("actual Poc multi-owner batch execution and Counter multi-target transition routing remain deferred", status);
         Assert.Contains("coordinator batch validation against one retained snapshot", status);
         Assert.Contains("validation-only batch runtime preflight", status);
         Assert.Contains("compositor-side presentation-set validation/conflict reporting without install", status);
-        Assert.Contains("next useful style slice is an active presentation-set compositor state/tick contract", status);
+        Assert.Contains("next useful style slice is the Poc coordinator bridge from validation-only batch runtime preflight into active presentation-set activation/ticks", status);
         Assert.Contains("coordinator batch validation against one retained snapshot", worklist);
         Assert.Contains("validation-only batch runtime preflight", worklist);
         Assert.Contains("rendering-owned activation preflight/plan-set data", worklist);
         Assert.Contains("compositor-side presentation-set validation/conflict reporting without install", worklist);
         Assert.Contains("owner-table completion tracking", worklist);
-        Assert.Contains("Next slice should define the active presentation-set compositor state/tick contract", worklist);
+        Assert.Contains("Next slice should bridge the Poc validation-only batch runtime path to active presentation-set activation/ticks", worklist);
         Assert.Contains("Concurrent multi-owner transition support is now written as a preflight", styleDesign);
-        Assert.Contains("deterministic acceptance/rejection tests, `StyleTransitionRuntimeCoordinator.ValidateBatch`, validation-only `StyleTransitionRuntimeCoordinator.ValidateBatchRuntime`, rendering-owned presentation-set validation, rendering-owned activation preflight, and owner-table completion tracking exist", styleDesign);
+        Assert.Contains("deterministic acceptance/rejection tests, `StyleTransitionRuntimeCoordinator.ValidateBatch`, validation-only `StyleTransitionRuntimeCoordinator.ValidateBatchRuntime`, rendering-owned presentation-set validation, rendering-owned activation preflight, active presentation-set compositor state/tick contract, and owner-table completion tracking exist", styleDesign);
 
         Assert.Contains("namespace Irix.Poc;", batchSource);
         Assert.Contains("internal enum StyleTransitionOwnerKind", batchSource);
@@ -3099,8 +3103,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("StyleTransitionOwnerKey", presentationSetValidatorSource);
         Assert.DoesNotContain("StyleTransitionDecisionBatch", presentationSetValidatorSource);
         Assert.Contains("CompositionAnimationPlan?", drawingCompositorSource);
+        Assert.Contains("CompositionAnimationPresentationSetPlan?", drawingCompositorSource);
         Assert.Contains("ValidateCompositionAnimationPresentationSet", drawingCompositorSource);
         Assert.Contains("PrepareCompositionAnimationPresentationSetActivation", drawingCompositorSource);
+        Assert.Contains("ActivateCompositionAnimationPresentationPlan", drawingCompositorSource);
+        Assert.Contains("RenderCompositionAnimationPresentationTickAtAsync", drawingCompositorSource);
+        Assert.Contains("CreatePresentationMarkerPlaybackStates", drawingCompositorSource);
         Assert.Contains("CompositionAnimationPresentationSetValidator.Validate", drawingCompositorSource);
         Assert.Contains("CompositionAnimationPresentationSetActivationPreflight.Prepare", drawingCompositorSource);
         Assert.DoesNotContain("StyleTransitionOwnerKey", drawingCompositorSource);
