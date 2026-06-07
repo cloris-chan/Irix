@@ -20,6 +20,27 @@ public sealed class FrameDrawingResourcesTests
     }
 
     [Fact]
+    public void AddBrush_deduplicates_solid_materials_without_public_resolver_surface()
+    {
+        var resources = new FrameDrawingResources();
+        var material = DrawMaterial.SolidColor(Color.FromSrgb(10, 20, 30));
+
+        var first = resources.AddBrush(material);
+        var second = resources.AddBrush(material);
+        var none = resources.AddBrush(DrawMaterial.None);
+
+        Assert.Equal(first, second);
+        Assert.Equal(DrawingResourceKind.Brush, first.Kind);
+        Assert.Equal(ResourceHandle.None, none);
+        Assert.Equal(material, resources.ResolveBrush(first));
+        Assert.Equal(material, ((IFrameBrushResolver)resources).ResolveBrush(first));
+        Assert.Equal(DrawMaterial.None, resources.ResolveBrush(ResourceHandle.None));
+        Assert.DoesNotContain(
+            "ResolveBrush",
+            typeof(IFrameResourceResolver).GetMethods().Select(method => method.Name));
+    }
+
+    [Fact]
     public void ResolveTextStyle_returns_default_for_invalid_handles()
     {
         var resources = new FrameDrawingResources();
@@ -27,15 +48,17 @@ public sealed class FrameDrawingResourcesTests
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(ResourceHandle.None));
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(new ResourceHandle(42, DrawingResourceKind.TextStyle)));
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(new ResourceHandle(0, DrawingResourceKind.Brush)));
+        Assert.Equal(DrawMaterial.None, resources.ResolveBrush(new ResourceHandle(0, DrawingResourceKind.TextStyle)));
     }
 
     [Fact]
-    public void AddTextStyle_throws_after_seal()
+    public void Add_resources_throw_after_seal()
     {
         var resources = new FrameDrawingResources();
         resources.Seal();
 
         Assert.Throws<InvalidOperationException>(() => resources.AddTextStyle(TextStyle.Default));
+        Assert.Throws<InvalidOperationException>(() => resources.AddBrush(DrawMaterial.SolidColor(Color.FromSrgb(1, 2, 3))));
     }
 
     [Fact]
@@ -45,19 +68,24 @@ public sealed class FrameDrawingResourcesTests
 
         var frameId1 = resources.FrameId;
         var handle1 = resources.AddTextStyle(TextStyle.Default);
+        var brush1 = resources.AddBrush(DrawMaterial.SolidColor(Color.FromSrgb(1, 2, 3)));
         var text1 = resources.AddText("Hello");
         resources.Seal();
         Assert.Equal("Hello", resources.Resolve(text1).ToString());
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(handle1));
+        Assert.Equal(DrawMaterialKind.SolidColor, resources.ResolveBrush(brush1).Kind);
 
         resources.Reset();
         var frameId2 = resources.FrameId;
 
         var handle2 = resources.AddTextStyle(TextStyle.Default);
+        var brush2 = resources.AddBrush(DrawMaterial.SolidColor(Color.FromSrgb(4, 5, 6)));
         var text2 = resources.AddText("World");
         resources.Seal();
         Assert.Equal("World", resources.Resolve(text2).ToString());
         Assert.Equal(TextStyle.Default, resources.ResolveTextStyle(handle2));
+        Assert.Equal(DrawMaterialKind.SolidColor, resources.ResolveBrush(brush2).Kind);
+        Assert.Equal(brush1, brush2);
         Assert.NotEqual(0ul, frameId1);
         Assert.NotEqual(0ul, frameId2);
         Assert.NotEqual(frameId1, frameId2);

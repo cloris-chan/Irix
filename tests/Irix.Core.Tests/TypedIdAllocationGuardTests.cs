@@ -242,17 +242,24 @@ public class TypedIdAllocationGuardTests
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawCommand>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawPayloadColor>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawMaterial>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<ColorOutputMapping>());
 
         var command = DrawCommand.FromCanonicalColor(
             DrawCommandKind.FillRect,
             Color: Color.FromSrgb(255, 0, 0));
+        var materialCommand = DrawCommand.FromMaterial(
+            DrawCommandKind.FillRect,
+            Material: DrawMaterial.SolidColor(Color.FromSrgb(255, 0, 0)));
         var outputMapping = ColorOutputMapping.SdrSrgb;
 
         Assert.InRange(command.CanonicalColor.LinearBt2020R, 0.6273f, 0.6275f);
         Assert.NotEqual(1, command.CanonicalColor.LinearBt2020R);
         Assert.Equal(DrawColor.Opaque(255, 0, 0), command.Color);
         Assert.Equal(DrawColor.Opaque(255, 0, 0), command.ToSdrColor());
+        Assert.Equal(DrawMaterialKind.SolidColor, command.Material.Kind);
+        Assert.Equal(command.CanonicalColor, command.Material.Color);
+        Assert.Equal(command, materialCommand);
         Assert.Equal(DrawColor.Opaque(255, 0, 0), outputMapping.MapToSdr(command));
         Assert.Equal(DrawColor.Opaque(255, 0, 0), outputMapping.MapToSdr(command.CanonicalColor));
         Assert.Equal(ColorOutputKind.SdrSrgb, outputMapping.Kind);
@@ -855,8 +862,10 @@ public class TypedIdAllocationGuardTests
     public void DrawCommand_source_guard_keeps_canonical_payload_and_sdr_output_bridge_separate()
     {
         var drawingSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));
+        var resourceSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "FrameDrawingResources.cs"));
         var recorderSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "DrawCommandRecorder.cs"));
         var d3d12Source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Platform.Windows", "D3D12DrawingBackend.cs"));
+        var normalizedD3D12Source = NormalizeLineEndings(d3d12Source);
         var windowBackendSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "WindowBackend.cs"));
 
         Assert.Contains("struct DrawPayloadColor(Color Value)", drawingSource);
@@ -865,12 +874,26 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("public static ColorOutputMapping SdrSrgb", drawingSource);
         Assert.Contains("public DrawColor MapToSdr(Color color)", drawingSource);
         Assert.Contains("public DrawColor MapToSdr(in DrawCommand command)", drawingSource);
+        Assert.Contains("internal enum DrawMaterialKind : byte", drawingSource);
+        Assert.Contains("internal readonly struct DrawMaterial", drawingSource);
+        Assert.Contains("public static DrawMaterial SolidColor(Color color)", drawingSource);
+        Assert.Contains("internal DrawMaterial Material => DrawMaterial.SolidColor(_color.Value)", drawingSource);
+        Assert.Contains("internal static DrawCommand FromMaterial", drawingSource);
         Assert.Contains("private readonly DrawPayloadColor _color", drawingSource);
         Assert.Contains("internal Color CanonicalColor => _color.Value", drawingSource);
         Assert.Contains("internal DrawColor ToSdrColor() => _color.ToSdrColor()", drawingSource);
+        Assert.Contains("internal interface IFrameBrushResolver", resourceSource);
+        Assert.Contains("private readonly List<DrawMaterial> _brushes", resourceSource);
+        Assert.Contains("internal ResourceHandle AddBrush(DrawMaterial material)", resourceSource);
+        Assert.Contains("internal DrawMaterial ResolveBrush(ResourceHandle handle)", resourceSource);
+        Assert.DoesNotContain("ResolveBrush(ResourceHandle handle);", ExtractSourceBetween(resourceSource, "public interface IFrameResourceResolver", "internal interface IFrameBrushResolver"));
         Assert.Contains("DrawCommand.FromCanonicalColor", recorderSource);
         Assert.Contains("styleColor.Value.Value", recorderSource);
-        Assert.Contains("command.CanonicalColor", d3d12Source);
+        Assert.Contains("command.Material", d3d12Source);
+        Assert.Contains("D3D12CompositionLayerRectPayload(\n    DrawRect Rect,\n    DrawMaterial Material", normalizedD3D12Source);
+        Assert.Contains("D3D12CompositionLayerTextPayload(\n    DrawRect Rect,\n    DrawMaterial Material", normalizedD3D12Source);
+        Assert.Contains("DrawCommand.FromMaterial", d3d12Source);
+        Assert.Contains("ApplyOpacity(payload.Material", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", d3d12Source);
         Assert.Contains("outputMapping.MapToSdr(command)", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", windowBackendSource);
@@ -878,6 +901,8 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("command.ToSdrColor()", d3d12Source);
         Assert.DoesNotContain("command.ToSdrColor()", windowBackendSource);
         Assert.DoesNotContain("var srgb = styleColor.Value.ToSrgb()", recorderSource);
+        Assert.DoesNotContain("public enum DrawMaterialKind", drawingSource);
+        Assert.DoesNotContain("public readonly struct DrawMaterial", drawingSource);
         Assert.DoesNotContain("Hdr", drawingSource);
         Assert.DoesNotContain("DisplayP3", drawingSource);
         Assert.DoesNotContain("SourceSpace", drawingSource);
@@ -1816,6 +1841,8 @@ public class TypedIdAllocationGuardTests
         Assert.True(end > start, $"Could not find source marker: {endMarker}");
         return source[start..end];
     }
+
+    private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");
 
     private sealed class NullBackend : IDrawingBackend
     {

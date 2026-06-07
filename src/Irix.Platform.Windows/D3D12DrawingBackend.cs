@@ -318,13 +318,13 @@ internal sealed class D3D12CompositionLayerContent
             var command = commands[i];
             if (command.Kind == DrawCommandKind.FillRect)
             {
-                rects[rectIndex++] = new D3D12CompositionLayerRectPayload(command.Rect, command.CanonicalColor, command.ClipBounds);
+                rects[rectIndex++] = new D3D12CompositionLayerRectPayload(command.Rect, command.Material, command.ClipBounds);
             }
             else if (command.Kind == DrawCommandKind.DrawTextRun)
             {
                 texts[textIndex++] = new D3D12CompositionLayerTextPayload(
                     command.Rect,
-                    command.CanonicalColor,
+                    command.Material,
                     command.Text,
                     command.Resource,
                     command.ClipBounds,
@@ -339,18 +339,18 @@ internal sealed class D3D12CompositionLayerContent
 
 internal readonly struct D3D12CompositionLayerRectPayload(
     DrawRect Rect,
-    Color Color,
+    DrawMaterial Material,
     DrawRect ClipBounds) : IEquatable<D3D12CompositionLayerRectPayload>
 {
     public DrawRect Rect { get; } = Rect;
-    public Color Color { get; } = Color;
+    public DrawMaterial Material { get; } = Material;
     public DrawRect ClipBounds { get; } = ClipBounds;
 
-    public bool Equals(D3D12CompositionLayerRectPayload other) => Rect == other.Rect && Color == other.Color && ClipBounds == other.ClipBounds;
+    public bool Equals(D3D12CompositionLayerRectPayload other) => Rect == other.Rect && Material == other.Material && ClipBounds == other.ClipBounds;
 
     public override bool Equals(object? obj) => obj is D3D12CompositionLayerRectPayload other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Rect, Color, ClipBounds);
+    public override int GetHashCode() => HashCode.Combine(Rect, Material, ClipBounds);
 
     public static bool operator ==(D3D12CompositionLayerRectPayload left, D3D12CompositionLayerRectPayload right) => left.Equals(right);
 
@@ -359,7 +359,7 @@ internal readonly struct D3D12CompositionLayerRectPayload(
 
 internal readonly struct D3D12CompositionLayerTextPayload(
     DrawRect Rect,
-    Color Color,
+    DrawMaterial Material,
     TextSlice Text,
     ResourceHandle Resource,
     DrawRect ClipBounds,
@@ -367,7 +367,7 @@ internal readonly struct D3D12CompositionLayerTextPayload(
     bool HasText) : IEquatable<D3D12CompositionLayerTextPayload>
 {
     public DrawRect Rect { get; } = Rect;
-    public Color Color { get; } = Color;
+    public DrawMaterial Material { get; } = Material;
     public TextSlice Text { get; } = Text;
     public ResourceHandle Resource { get; } = Resource;
     public DrawRect ClipBounds { get; } = ClipBounds;
@@ -377,7 +377,7 @@ internal readonly struct D3D12CompositionLayerTextPayload(
     public bool Equals(D3D12CompositionLayerTextPayload other)
     {
         return Rect == other.Rect
-            && Color == other.Color
+            && Material == other.Material
             && Text == other.Text
             && Resource == other.Resource
             && ClipBounds == other.ClipBounds
@@ -387,7 +387,7 @@ internal readonly struct D3D12CompositionLayerTextPayload(
 
     public override bool Equals(object? obj) => obj is D3D12CompositionLayerTextPayload other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Rect, Color, Text, Resource, ClipBounds, ResolvedStyle, HasText);
+    public override int GetHashCode() => HashCode.Combine(Rect, Material, Text, Resource, ClipBounds, ResolvedStyle, HasText);
 
     public static bool operator ==(D3D12CompositionLayerTextPayload left, D3D12CompositionLayerTextPayload right) => left.Equals(right);
 
@@ -1156,10 +1156,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         for (var i = 0; i < rectPayloads.Length; i++)
         {
             var payload = rectPayloads[i];
-            var command = ScaleCommandToPhysicalPixels(DrawCommand.FromCanonicalColor(
+            var command = ScaleCommandToPhysicalPixels(DrawCommand.FromMaterial(
                 DrawCommandKind.FillRect,
                 Rect: Translate(payload.Rect, layer.Transform),
-                Color: ApplyOpacity(payload.Color, layer.Opacity),
+                Material: ApplyOpacity(payload.Material, layer.Opacity),
                 ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
             diagnostics.AddCommandClip(command);
             AppendPhysicalFillRect(
@@ -1178,10 +1178,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         for (var i = 0; i < textPayloads.Length; i++)
         {
             var payload = textPayloads[i];
-            var command = ScaleCommandToPhysicalPixels(DrawCommand.FromCanonicalColor(
+            var command = ScaleCommandToPhysicalPixels(DrawCommand.FromMaterial(
                 DrawCommandKind.DrawTextRun,
                 Rect: Translate(payload.Rect, layer.Transform),
-                Color: ApplyOpacity(payload.Color, layer.Opacity),
+                Material: ApplyOpacity(payload.Material, layer.Opacity),
                 Resource: payload.Resource,
                 Text: payload.Text,
                 ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
@@ -1282,6 +1282,12 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     {
         var normalized = opacity.Normalized;
         return normalized == 1f ? color : color.WithOpacity(normalized);
+    }
+
+    private static DrawMaterial ApplyOpacity(DrawMaterial material, CompositionOpacity opacity)
+    {
+        var normalized = opacity.Normalized;
+        return normalized == 1f ? material : material.WithOpacity(normalized);
     }
 
     private static TextStyle ResolvePhysicalTextStyle(IFrameResourceResolver resources, ResourceHandle handle, DisplayScale scale)

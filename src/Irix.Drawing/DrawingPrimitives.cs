@@ -230,6 +230,38 @@ internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<C
     public static bool operator !=(ColorOutputMapping left, ColorOutputMapping right) => !left.Equals(right);
 }
 
+internal enum DrawMaterialKind : byte
+{
+    None,
+    SolidColor
+}
+
+internal readonly struct DrawMaterial(DrawMaterialKind Kind, Color Color) : IEquatable<DrawMaterial>
+{
+
+    public DrawMaterialKind Kind { get; } = Kind;
+    public Color Color { get; } = Color;
+
+    public static DrawMaterial None => default;
+
+    public static DrawMaterial SolidColor(Color color) => new(DrawMaterialKind.SolidColor, color);
+
+    public DrawMaterial WithOpacity(float opacity) =>
+        Kind == DrawMaterialKind.SolidColor
+            ? SolidColor(Color.WithOpacity(opacity))
+            : this;
+
+    public bool Equals(DrawMaterial other) => Kind == other.Kind && Color == other.Color;
+
+    public override bool Equals(object? obj) => obj is DrawMaterial other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, Color);
+
+    public static bool operator ==(DrawMaterial left, DrawMaterial right) => left.Equals(right);
+
+    public static bool operator !=(DrawMaterial left, DrawMaterial right) => !left.Equals(right);
+}
+
 internal readonly struct DrawPayloadColor(Color Value) : IEquatable<DrawPayloadColor>
 {
 
@@ -429,6 +461,8 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
 
     internal Color CanonicalColor => _color.Value;
 
+    internal DrawMaterial Material => DrawMaterial.SolidColor(_color.Value);
+
     internal static DrawCommand FromCanonicalColor(
         DrawCommandKind Kind,
         DrawRect Rect = default,
@@ -440,6 +474,27 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
         Matrix3x2 Transform = default,
         int ZIndex = 0) =>
         new(Kind, Rect, new DrawPayloadColor(Color), Resource, Text, ClipBounds, StrokeWidth, Transform, ZIndex);
+
+    internal static DrawCommand FromMaterial(
+        DrawCommandKind Kind,
+        DrawRect Rect = default,
+        DrawMaterial Material = default,
+        ResourceHandle Resource = default,
+        TextSlice Text = default,
+        DrawRect ClipBounds = default,
+        float StrokeWidth = 1,
+        Matrix3x2 Transform = default,
+        int ZIndex = 0) =>
+        new(
+            Kind,
+            Rect,
+            new DrawPayloadColor(Material.Kind == DrawMaterialKind.SolidColor ? Material.Color : Irix.Color.Transparent),
+            Resource,
+            Text,
+            ClipBounds,
+            StrokeWidth,
+            Transform,
+            ZIndex);
 
     internal DrawColor ToSdrColor() => _color.ToSdrColor();
 

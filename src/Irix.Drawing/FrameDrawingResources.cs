@@ -5,7 +5,12 @@ public interface IFrameResourceResolver : ITextResolver
     TextStyle ResolveTextStyle(ResourceHandle handle);
 }
 
-public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
+internal interface IFrameBrushResolver
+{
+    DrawMaterial ResolveBrush(ResourceHandle handle);
+}
+
+public sealed class FrameDrawingResources : IFrameResourceResolver, IFrameBrushResolver, IDisposable
 {
     private const int MaxPoolSize = 4;
 
@@ -26,6 +31,8 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
     private readonly FrameTextArena _textArena = new();
     private readonly List<TextStyle> _textStyles = [];
     private readonly Dictionary<TextStyle, ResourceHandle> _textStyleHandles = [];
+    private readonly List<DrawMaterial> _brushes = [];
+    private readonly Dictionary<DrawMaterial, ResourceHandle> _brushHandles = [];
     private bool _sealed;
     private bool _returned;
     private int _retainCount;
@@ -199,6 +206,26 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         return handle;
     }
 
+    internal ResourceHandle AddBrush(DrawMaterial material)
+    {
+        EnsureCanAdd();
+
+        if (material.Kind == DrawMaterialKind.None)
+        {
+            return ResourceHandle.None;
+        }
+
+        if (_brushHandles.TryGetValue(material, out var existingHandle))
+        {
+            return existingHandle;
+        }
+
+        var handle = new ResourceHandle(_brushes.Count, DrawingResourceKind.Brush);
+        _brushes.Add(material);
+        _brushHandles.Add(material, handle);
+        return handle;
+    }
+
     public void Seal()
     {
         if (_sealed)
@@ -221,6 +248,19 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         }
 
         return _textStyles[handle.Id];
+    }
+
+    DrawMaterial IFrameBrushResolver.ResolveBrush(ResourceHandle handle) => ResolveBrush(handle);
+
+    internal DrawMaterial ResolveBrush(ResourceHandle handle)
+    {
+        if (handle.Kind != DrawingResourceKind.Brush
+            || (uint)handle.Id >= (uint)_brushes.Count)
+        {
+            return DrawMaterial.None;
+        }
+
+        return _brushes[handle.Id];
     }
 
     /// <summary>
@@ -258,6 +298,8 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         _textArena.Dispose();
         _textStyles.Clear();
         _textStyleHandles.Clear();
+        _brushes.Clear();
+        _brushHandles.Clear();
         _sealed = false;
         _returned = false;
     }
@@ -275,6 +317,8 @@ public sealed class FrameDrawingResources : IFrameResourceResolver, IDisposable
         _textArena.Reset();
         _textStyles.Clear();
         _textStyleHandles.Clear();
+        _brushes.Clear();
+        _brushHandles.Clear();
         _sealed = false;
     }
 
