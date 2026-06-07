@@ -892,6 +892,151 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleTransitionDecisionBatchPreflight_preserves_runtime_order_and_does_not_install_compositor_owners()
+    {
+        var snapshot = CreateMultiTargetStyleTransitionRetainedSnapshot();
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var acceptedIncrement = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22)),
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(22),
+                BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 4),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(11)));
+        var rejectedDecrement = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23)),
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(23),
+                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)) },
+                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)) },
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(12)));
+        var batch = StyleTransitionDecisionBatch.Create([acceptedIncrement, rejectedDecrement]);
+
+        var result = StyleTransitionDecisionBatchPreflight.Validate(
+            batch,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot));
+
+        Assert.Equal(StyleTransitionBatchResultKind.Mixed, result.Kind);
+        Assert.Equal(1, result.AcceptedCount);
+        Assert.Equal(1, result.RejectedCount);
+        Assert.False(result.PresentationStateChanged);
+        Assert.Equal(0, compositor.StartCount);
+        Assert.Equal(0, compositor.CancelCount);
+
+        var ownerResults = result.OwnerResults.ToArray();
+        Assert.Collection(
+            ownerResults,
+            first =>
+            {
+                Assert.Equal(StyleTransitionOwnerValidationKind.Accepted, first.Kind);
+                Assert.Equal(acceptedIncrement.OwnerKey, first.OwnerKey);
+                Assert.Equal(new NodeKey(22), first.TargetKey);
+                Assert.Equal(StyleTransitionRuntimeDecisionKind.Start, first.DecisionKind);
+                Assert.Equal(StyleTransitionOwnerRejectionReason.None, first.RejectionReason);
+                Assert.Equal(StyleTransitionCompileStatus.CompiledCompositionDeclaration, first.CompileStatus);
+                Assert.True(first.HasDeclaration);
+            },
+            second =>
+            {
+                Assert.Equal(StyleTransitionOwnerValidationKind.Rejected, second.Kind);
+                Assert.Equal(rejectedDecrement.OwnerKey, second.OwnerKey);
+                Assert.Equal(new NodeKey(23), second.TargetKey);
+                Assert.Equal(StyleTransitionRuntimeDecisionKind.Start, second.DecisionKind);
+                Assert.Equal(StyleTransitionOwnerRejectionReason.CompileRejected, second.RejectionReason);
+                Assert.Equal(StyleTransitionCompileStatus.RequiresDrawUpdate, second.CompileStatus);
+                Assert.False(second.HasDeclaration);
+            });
+    }
+
+    [Fact]
+    public void StyleTransitionDecisionBatchPreflight_rejects_missing_snapshot_or_target_before_compositor_install()
+    {
+        var missingSnapshotEntry = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22)),
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(22),
+                BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                BuildCompositionStyleProperties(opacity: 0.5, translateX: 4, translateY: 4),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50)));
+        var missingTargetEntry = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Reset, new NodeKey(99)),
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(99),
+                BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                BuildCompositionStyleProperties(opacity: 0.5, translateX: 4, translateY: 4),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50)));
+        var missingSnapshotBatch = StyleTransitionDecisionBatch.Create([missingSnapshotEntry]);
+        var missingTargetBatch = StyleTransitionDecisionBatch.Create([missingTargetEntry]);
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+
+        var missingSnapshot = StyleTransitionDecisionBatchPreflight.Validate(
+            missingSnapshotBatch,
+            new FixedStyleTransitionRetainedSnapshotProvider(null));
+        var missingTarget = StyleTransitionDecisionBatchPreflight.Validate(
+            missingTargetBatch,
+            new FixedStyleTransitionRetainedSnapshotProvider(CreateMultiTargetStyleTransitionRetainedSnapshot()));
+
+        Assert.Equal(StyleTransitionBatchResultKind.Rejected, missingSnapshot.Kind);
+        Assert.Equal(0, missingSnapshot.AcceptedCount);
+        Assert.Equal(1, missingSnapshot.RejectedCount);
+        Assert.False(missingSnapshot.PresentationStateChanged);
+        Assert.Equal(StyleTransitionOwnerRejectionReason.MissingRetainedSnapshot, missingSnapshot.OwnerResults[0].RejectionReason);
+
+        Assert.Equal(StyleTransitionBatchResultKind.Rejected, missingTarget.Kind);
+        Assert.Equal(0, missingTarget.AcceptedCount);
+        Assert.Equal(1, missingTarget.RejectedCount);
+        Assert.False(missingTarget.PresentationStateChanged);
+        Assert.Equal(StyleTransitionOwnerRejectionReason.MissingRetainedTarget, missingTarget.OwnerResults[0].RejectionReason);
+        Assert.Equal(0, compositor.StartCount);
+        Assert.Equal(0, compositor.CancelCount);
+    }
+
+    [Fact]
+    public void CounterStyleTransitionBridge_still_keeps_multi_target_delta_on_abort_and_normal_dispatch()
+    {
+        var previous = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var next = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            previous,
+            next,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+
+        Assert.Equal(CounterStyleTransitionLifecycleAction.DispatchNormally, lifecycle.Action);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetUnsupported, lifecycle.Reason);
+        Assert.True(lifecycle.RequiresNormalDispatch);
+        Assert.True(lifecycle.RequiresStyleTransitionAbort);
+        Assert.Equal(default, lifecycle.Decision);
+    }
+
+    [Fact]
     public void CounterStyleTransitionBridge_maps_single_control_state_delta_to_semantic_composition_decision()
     {
         var previous = default(OwnershipSnapshot);
@@ -4880,6 +5025,30 @@ public sealed class WindowLayoutPipelineTests
         var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(22),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)));
+
+        using var frame = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
+        return pipeline.LastRetainedInputSnapshot!;
+    }
+
+    private RenderPipelineRetainedInputSnapshot CreateMultiTargetStyleTransitionRetainedSnapshot()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(22),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(23),
                 VirtualNodeProperty.Width(220),
                 VirtualNodeProperty.Height(48),
                 VirtualNodeProperty.LayerOpacity(1),
