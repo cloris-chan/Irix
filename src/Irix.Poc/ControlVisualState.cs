@@ -17,11 +17,12 @@ internal static class ControlVisualStateProjection
 internal static class ControlVisualStatePropertyAdapter
 {
     internal static VirtualNodeProperty[] ToProperties(ControlVisualState state) =>
+        StyleDeclarationMapper.ToVirtualNodeProperties(
         [
-            VirtualNodeProperty.Hovered(state.IsHovered),
-            VirtualNodeProperty.Pressed(state.IsPressed),
-            VirtualNodeProperty.Focused(state.IsFocused)
-        ];
+            StyleDeclaration.Hovered(state.IsHovered),
+            StyleDeclaration.Pressed(state.IsPressed),
+            StyleDeclaration.Focused(state.IsFocused)
+        ]);
 }
 
 internal static class ControlActionPropertyAdapter

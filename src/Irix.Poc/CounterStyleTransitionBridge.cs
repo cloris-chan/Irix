@@ -117,12 +117,12 @@ internal static class CounterStyleTransitionBridge
     {
         var translateY = state.IsPressed ? 2 : 0;
         var opacity = state.IsPressed ? 0.92 : state.IsHovered ? 0.98 : 1.0;
-        return
+        return StyleDeclarationMapper.ToVirtualNodeProperties(
         [
-            VirtualNodeProperty.TranslateX(0),
-            VirtualNodeProperty.TranslateY(translateY),
-            VirtualNodeProperty.LayerOpacity(opacity)
-        ];
+            StyleDeclaration.TranslationX(0),
+            StyleDeclaration.TranslationY(translateY),
+            StyleDeclaration.Opacity(opacity)
+        ]);
     }
 
     private static CompositionAnimationInstanceId CreateInstanceId(ActionId actionId, long hoverChangeCount)

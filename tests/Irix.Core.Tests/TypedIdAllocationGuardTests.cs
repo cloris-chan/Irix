@@ -316,6 +316,9 @@ public class TypedIdAllocationGuardTests
     [Fact]
     public void Internal_style_delta_plan_is_value_typed()
     {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StylePropertyId>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleValue>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleDeclaration>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleDeltaPlan>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleDeltaWork>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleTransitionState>());
@@ -441,6 +444,84 @@ public class TypedIdAllocationGuardTests
         Assert.True(mixedPlan.RequiresCompositionUpdate);
         Assert.False(mixedPlan.IsCompositorOnlyTransitionCandidate);
         Assert.Equal(InvalidationKind.VisualOnly, mixedPlan.InvalidationKind);
+    }
+
+    [Fact]
+    public void Semantic_style_declarations_map_one_way_to_internal_properties()
+    {
+        var background = StyleDeclaration.Background(StyleColor.Opaque(1, 2, 3)).ToVirtualNodeProperty();
+        var foreground = StyleDeclaration.Foreground(StyleColor.Opaque(4, 5, 6)).ToVirtualNodeProperty();
+        var opacity = StyleDeclaration.Opacity(0.75).ToVirtualNodeProperty();
+        var translationX = StyleDeclaration.TranslationX(12).ToVirtualNodeProperty();
+        var translationY = StyleDeclaration.TranslationY(24).ToVirtualNodeProperty();
+        var hovered = StyleDeclaration.Hovered(true).ToVirtualNodeProperty();
+
+        Assert.Equal(VirtualPropertyKey.BackgroundColor, background.Key);
+        Assert.Equal(StyleColor.Opaque(1, 2, 3), background.Value.GetRequiredColor());
+        Assert.Equal(VirtualPropertyKey.ForegroundColor, foreground.Key);
+        Assert.Equal(StyleColor.Opaque(4, 5, 6), foreground.Value.GetRequiredColor());
+        Assert.Equal(VirtualPropertyKey.LayerOpacity, opacity.Key);
+        Assert.Equal(0.75, opacity.Value.GetRequiredNumber());
+        Assert.Equal(VirtualPropertyKey.TranslateX, translationX.Key);
+        Assert.Equal(12, translationX.Value.GetRequiredNumber());
+        Assert.Equal(VirtualPropertyKey.TranslateY, translationY.Key);
+        Assert.Equal(24, translationY.Value.GetRequiredNumber());
+        Assert.Equal(VirtualPropertyKey.IsHovered, hovered.Key);
+        Assert.True(hovered.Value.GetRequiredBoolean());
+    }
+
+    [Fact]
+    public void Semantic_style_declaration_collection_maps_to_node_properties()
+    {
+        var properties = StyleDeclarationMapper.ToVirtualNodeProperties(
+        [
+            StyleDeclaration.Width(100),
+            StyleDeclaration.Height(48),
+            StyleDeclaration.Background(StyleColor.Opaque(20, 30, 40)),
+            StyleDeclaration.Opacity(0.5)
+        ]);
+
+        Assert.Equal(4, properties.Length);
+        Assert.Equal(VirtualPropertyKey.Width, properties[0].Key);
+        Assert.Equal(VirtualPropertyKey.Height, properties[1].Key);
+        Assert.Equal(VirtualPropertyKey.BackgroundColor, properties[2].Key);
+        Assert.Equal(VirtualPropertyKey.LayerOpacity, properties[3].Key);
+
+        var node = VirtualNodeFactory.Rectangle(new NodeKey(7), properties);
+        properties[0] = VirtualNodeProperty.Width(999);
+
+        Assert.Equal(100, node.Properties[0].Value.GetRequiredNumber());
+    }
+
+    [Fact]
+    public void Semantic_style_declaration_collection_rejects_duplicate_properties()
+    {
+        Assert.Throws<ArgumentException>(() => StyleDeclarationMapper.ToVirtualNodeProperties(
+        [
+            StyleDeclaration.Width(100),
+            StyleDeclaration.Width(120)
+        ]));
+    }
+
+    [Fact]
+    public void Semantic_style_values_use_canonical_color_storage()
+    {
+        var declaration = StyleDeclaration.Background(StyleColor.Opaque(255, 0, 0));
+
+        Assert.Equal(PropertyValueKind.Color, declaration.Value.Kind);
+        var color = declaration.Value.GetRequiredColor();
+        Assert.InRange(color.Value.LinearBt2020R, 0.6273f, 0.6275f);
+        Assert.NotEqual(1, color.Value.LinearBt2020R);
+        Assert.Equal(SrgbColor.Opaque(255, 0, 0), color.ToSrgb());
+    }
+
+    [Fact]
+    public void Semantic_style_declaration_rejects_mismatched_value_kind()
+    {
+        Assert.Throws<ArgumentException>(() => StyleDeclaration.Create(StylePropertyId.Background, StyleValue.FromNumber(1)));
+        Assert.Throws<ArgumentException>(() => StyleDeclaration.Create(StylePropertyId.Opacity, StyleValue.FromBoolean(true)));
+        Assert.Throws<ArgumentException>(() => StyleDeclaration.Create(StylePropertyId.Hovered, StyleValue.FromColor(StyleColor.Opaque(1, 2, 3))));
+        Assert.Throws<ArgumentOutOfRangeException>(() => StyleDeclaration.Create(StylePropertyId.None, StyleValue.None));
     }
 
     [Fact]
@@ -1271,6 +1352,10 @@ public class TypedIdAllocationGuardTests
         Assert.False(typeof(VirtualPropertyMetadata).IsPublic);
         Assert.False(typeof(VirtualPropertyDiagnostics).IsPublic);
         Assert.False(typeof(VirtualNodePropertySupport).IsPublic);
+        Assert.False(typeof(StylePropertyId).IsPublic);
+        Assert.False(typeof(StyleValue).IsPublic);
+        Assert.False(typeof(StyleDeclaration).IsPublic);
+        Assert.False(typeof(StyleDeclarationMapper).IsPublic);
         Assert.False(typeof(StylePropertyMetadata).IsPublic);
         Assert.False(typeof(StyleEffect).IsPublic);
         Assert.False(typeof(AnimationChannel).IsPublic);
@@ -1312,6 +1397,9 @@ public class TypedIdAllocationGuardTests
     {
         var root = FindRepoRoot();
         var coreSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "VirtualPropertyKey.cs"));
+        var styleDeclarationSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "StyleDeclaration.cs"));
+        var controlVisualStateSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ControlVisualState.cs"));
+        var counterTransitionBridgeSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterStyleTransitionBridge.cs"));
         var transitionSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleTransitionCompiler.cs"));
         var styleDeltaSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleDeltaPlan.cs"));
 
@@ -1319,6 +1407,22 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("Composition = 5", coreSource);
         Assert.Contains("public ulong CompositionMask", coreSource);
         Assert.Contains("PropertyDomain.Composition", coreSource);
+        Assert.Contains("internal enum StylePropertyId", styleDeclarationSource);
+        Assert.Contains("internal readonly struct StyleDeclaration", styleDeclarationSource);
+        Assert.Contains("ToVirtualNodeProperty", styleDeclarationSource);
+        Assert.DoesNotContain("StyleEffect", styleDeclarationSource);
+        Assert.DoesNotContain("StyleDeltaWork", styleDeclarationSource);
+        Assert.DoesNotContain("InvalidationKind", styleDeclarationSource);
+        Assert.DoesNotContain("LayoutRebuildReason", styleDeclarationSource);
+        Assert.DoesNotContain("AnimationChannel", styleDeclarationSource);
+        Assert.Contains("StyleDeclarationMapper.ToVirtualNodeProperties", controlVisualStateSource);
+        Assert.DoesNotContain("VirtualNodeProperty.Hovered", controlVisualStateSource);
+        Assert.DoesNotContain("VirtualNodeProperty.Pressed", controlVisualStateSource);
+        Assert.DoesNotContain("VirtualNodeProperty.Focused", controlVisualStateSource);
+        Assert.Contains("StyleDeclarationMapper.ToVirtualNodeProperties", counterTransitionBridgeSource);
+        Assert.DoesNotContain("VirtualNodeProperty.LayerOpacity", counterTransitionBridgeSource);
+        Assert.DoesNotContain("VirtualNodeProperty.TranslateX", counterTransitionBridgeSource);
+        Assert.DoesNotContain("VirtualNodeProperty.TranslateY", counterTransitionBridgeSource);
 
         Assert.DoesNotContain("public enum StyleDeltaWork", styleDeltaSource);
         Assert.DoesNotContain("public readonly struct StyleDeltaPlan", styleDeltaSource);

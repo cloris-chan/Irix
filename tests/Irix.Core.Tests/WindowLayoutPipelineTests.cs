@@ -482,15 +482,21 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(2),
-                VirtualNodeProperty.Width(220),
-                VirtualNodeProperty.Height(48),
-                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(20, 30, 40))));
+                StyleDeclarationMapper.ToVirtualNodeProperties(
+                [
+                    StyleDeclaration.Width(220),
+                    StyleDeclaration.Height(48),
+                    StyleDeclaration.Background(StyleColor.Opaque(20, 30, 40))
+                ])));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(2),
-                VirtualNodeProperty.Width(220),
-                VirtualNodeProperty.Height(48),
-                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(80, 90, 100))));
+                StyleDeclarationMapper.ToVirtualNodeProperties(
+                [
+                    StyleDeclaration.Width(220),
+                    StyleDeclaration.Height(48),
+                    StyleDeclaration.Background(StyleColor.Opaque(80, 90, 100))
+                ])));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
@@ -515,15 +521,21 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(2),
-                VirtualNodeProperty.Width(220),
-                VirtualNodeProperty.Height(48),
-                VirtualNodeProperty.LayerOpacity(1)));
+                StyleDeclarationMapper.ToVirtualNodeProperties(
+                [
+                    StyleDeclaration.Width(220),
+                    StyleDeclaration.Height(48),
+                    StyleDeclaration.Opacity(1)
+                ])));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(2),
-                VirtualNodeProperty.Width(220),
-                VirtualNodeProperty.Height(48),
-                VirtualNodeProperty.LayerOpacity(0.5)));
+                StyleDeclarationMapper.ToVirtualNodeProperties(
+                [
+                    StyleDeclaration.Width(220),
+                    StyleDeclaration.Height(48),
+                    StyleDeclaration.Opacity(0.5)
+                ])));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -543,17 +555,23 @@ public sealed class WindowLayoutPipelineTests
         var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(2),
-                VirtualNodeProperty.Width(220),
-                VirtualNodeProperty.Height(48),
-                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(20, 30, 40)),
-                VirtualNodeProperty.LayerOpacity(1)));
+                StyleDeclarationMapper.ToVirtualNodeProperties(
+                [
+                    StyleDeclaration.Width(220),
+                    StyleDeclaration.Height(48),
+                    StyleDeclaration.Background(StyleColor.Opaque(20, 30, 40)),
+                    StyleDeclaration.Opacity(1)
+                ])));
         var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(2),
-                VirtualNodeProperty.Width(220),
-                VirtualNodeProperty.Height(48),
-                VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(80, 90, 100)),
-                VirtualNodeProperty.LayerOpacity(0.5)));
+                StyleDeclarationMapper.ToVirtualNodeProperties(
+                [
+                    StyleDeclaration.Width(220),
+                    StyleDeclaration.Height(48),
+                    StyleDeclaration.Background(StyleColor.Opaque(80, 90, 100)),
+                    StyleDeclaration.Opacity(0.5)
+                ])));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -569,18 +587,18 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void StyleTransitionCompiler_compiles_internal_composite_delta_to_composition_declaration()
     {
-        var previous = new[]
-        {
-            VirtualNodeProperty.LayerOpacity(1),
-            VirtualNodeProperty.TranslateX(0),
-            VirtualNodeProperty.TranslateY(4)
-        };
-        var next = new[]
-        {
-            VirtualNodeProperty.LayerOpacity(0.5),
-            VirtualNodeProperty.TranslateX(24),
-            VirtualNodeProperty.TranslateY(16)
-        };
+        var previous = StyleDeclarationMapper.ToVirtualNodeProperties(
+        [
+            StyleDeclaration.Opacity(1),
+            StyleDeclaration.TranslationX(0),
+            StyleDeclaration.TranslationY(4)
+        ]);
+        var next = StyleDeclarationMapper.ToVirtualNodeProperties(
+        [
+            StyleDeclaration.Opacity(0.5),
+            StyleDeclaration.TranslationX(24),
+            StyleDeclaration.TranslationY(16)
+        ]);
         var marker = new CompositionAnimationMarker(
             new CompositionAnimationMarkerId(1),
             new CompositionRuntimeEventId(2),
@@ -617,20 +635,20 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void StyleTransitionCompiler_rejects_draw_or_layout_owned_deltas()
     {
-        VirtualNodeProperty[] visualPrevious = [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3))];
-        VirtualNodeProperty[] visualNext = [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6))];
-        VirtualNodeProperty[] layoutPrevious = [VirtualNodeProperty.Width(100)];
-        VirtualNodeProperty[] layoutNext = [VirtualNodeProperty.Width(120)];
-        VirtualNodeProperty[] mixedPrevious =
+        var visualPrevious = StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Background(StyleColor.Opaque(1, 2, 3))]);
+        var visualNext = StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Background(StyleColor.Opaque(4, 5, 6))]);
+        var layoutPrevious = StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Width(100)]);
+        var layoutNext = StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Width(120)]);
+        var mixedPrevious = StyleDeclarationMapper.ToVirtualNodeProperties(
         [
-            VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)),
-            VirtualNodeProperty.LayerOpacity(1)
-        ];
-        VirtualNodeProperty[] mixedNext =
+            StyleDeclaration.Background(StyleColor.Opaque(1, 2, 3)),
+            StyleDeclaration.Opacity(1)
+        ]);
+        var mixedNext = StyleDeclarationMapper.ToVirtualNodeProperties(
         [
-            VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)),
-            VirtualNodeProperty.LayerOpacity(0.5)
-        ];
+            StyleDeclaration.Background(StyleColor.Opaque(4, 5, 6)),
+            StyleDeclaration.Opacity(0.5)
+        ]);
         var visualRequest = new StyleTransitionCompileRequest(
             new NodeKey(22),
             visualPrevious,
@@ -666,20 +684,30 @@ public sealed class WindowLayoutPipelineTests
     public void Semantic_style_authoring_preflight_maps_to_internal_delta_plans()
     {
         var backgroundPlan = StyleDeltaPlanner.Plan(
-            [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3))],
-            [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6))]);
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Background(StyleColor.Opaque(1, 2, 3))]),
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Background(StyleColor.Opaque(4, 5, 6))]));
         var opacityPlan = StyleDeltaPlanner.Plan(
-            [VirtualNodeProperty.LayerOpacity(1), VirtualNodeProperty.TranslateX(0), VirtualNodeProperty.TranslateY(0)],
-            [VirtualNodeProperty.LayerOpacity(0.5), VirtualNodeProperty.TranslateX(24), VirtualNodeProperty.TranslateY(8)]);
+            StyleDeclarationMapper.ToVirtualNodeProperties(
+            [
+                StyleDeclaration.Opacity(1),
+                StyleDeclaration.TranslationX(0),
+                StyleDeclaration.TranslationY(0)
+            ]),
+            StyleDeclarationMapper.ToVirtualNodeProperties(
+            [
+                StyleDeclaration.Opacity(0.5),
+                StyleDeclaration.TranslationX(24),
+                StyleDeclaration.TranslationY(8)
+            ]));
         var statePlan = StyleDeltaPlanner.Plan(
-            [VirtualNodeProperty.Hovered(false)],
-            [VirtualNodeProperty.Hovered(true)]);
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Hovered(false)]),
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Hovered(true)]));
         var sizePlan = StyleDeltaPlanner.Plan(
-            [VirtualNodeProperty.Width(100)],
-            [VirtualNodeProperty.Width(120)]);
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Width(100)]),
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Width(120)]));
         var mixedSizeAndOpacityPlan = StyleDeltaPlanner.Plan(
-            [VirtualNodeProperty.Width(100), VirtualNodeProperty.LayerOpacity(1)],
-            [VirtualNodeProperty.Width(120), VirtualNodeProperty.LayerOpacity(0.5)]);
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Width(100), StyleDeclaration.Opacity(1)]),
+            StyleDeclarationMapper.ToVirtualNodeProperties([StyleDeclaration.Width(120), StyleDeclaration.Opacity(0.5)]));
 
         Assert.Equal(StyleDeltaWork.Draw, backgroundPlan.Work);
         Assert.True(backgroundPlan.CanReuseLayout);
