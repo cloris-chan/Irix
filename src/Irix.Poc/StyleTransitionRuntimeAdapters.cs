@@ -23,6 +23,22 @@ internal readonly struct DrawingBackendStyleTransitionCompositorAdapter(
     }
 }
 
+internal readonly struct DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(
+    DrawingBackendCompositor Compositor) : IStyleTransitionPresentationActivationCompositorAdapter
+{
+    public CompositionAnimationPresentationSetActivationPreflightResult PreparePresentationActivation(
+        ReadOnlySpan<CompositionAnimationDeclaration> declarations,
+        RenderPipelineRetainedInputSnapshot? snapshot)
+    {
+        return Compositor.PrepareCompositionAnimationPresentationSetActivation(declarations, snapshot);
+    }
+
+    public void ActivatePresentationPlan(in CompositionAnimationPresentationSetPlan plan)
+    {
+        Compositor.ActivateCompositionAnimationPresentationPlan(plan);
+    }
+}
+
 internal readonly struct FixedStyleTransitionRetainedSnapshotProvider(
     RenderPipelineRetainedInputSnapshot? Snapshot) : IStyleTransitionRetainedSnapshotProvider
 {
@@ -48,4 +64,3 @@ internal sealed class SingleStyleTransitionRuntimeAdapter(
         LastResult = result;
     }
 }
-

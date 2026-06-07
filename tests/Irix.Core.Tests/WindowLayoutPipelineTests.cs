@@ -1385,6 +1385,216 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public async Task StyleTransitionRuntimeCoordinator_batch_activation_activates_ready_presentation_set_and_tracks_owners()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pipeline = new RenderPipeline();
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = pipeline.Build(
+            CreateMultiTargetStyleTransitionRoot(),
+            new PixelRectangle(0, 0, 960, 540),
+            _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var coordinator = new StyleTransitionRuntimeCoordinator();
+        var tracker = new StyleTransitionCompletionTracker();
+        var firstOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22));
+        var secondOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23));
+        var first = new StyleTransitionDecisionBatchEntry(
+            firstOwner,
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(22),
+                BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 4),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(101)));
+        var second = new StyleTransitionDecisionBatchEntry(
+            secondOwner,
+            StyleTransitionRuntimeDecision.Retarget(
+                new NodeKey(23),
+                BuildCompositionStyleProperties(opacity: 0.98, translateX: 0, translateY: 0),
+                BuildCompositionStyleProperties(opacity: 0.85, translateX: -8, translateY: 2),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(102)));
+        var batch = StyleTransitionDecisionBatch.Create([first, second]);
+        compositor.SetCompositionAnimationPlan(CreateStyleTransitionAnimationPlan(frame.Commands.Count));
+
+        var result = coordinator.ActivateBatchPresentation(
+            batch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            tracker,
+            cancellationToken);
+
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Activated, result.Kind);
+        Assert.Equal(StyleTransitionBatchPresentationActivationReason.None, result.Reason);
+        Assert.True(result.IsActivated);
+        Assert.True(result.PresentationStateChanged);
+        Assert.Equal(StyleTransitionBatchRuntimePreflightKind.Ready, result.RuntimePreflight.Kind);
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Accepted, result.ActivationPreflight.Kind);
+        Assert.Equal(2, result.DeclarationCount);
+        Assert.Equal(2, result.TrackedOwnerCount);
+        Assert.Equal(2, tracker.ActiveOwnerCount);
+        Assert.True(tracker.TryGetActiveTransition(firstOwner, out var firstTarget, out var firstInstance));
+        Assert.True(tracker.TryGetActiveTransition(secondOwner, out var secondTarget, out var secondInstance));
+        Assert.Equal(new NodeKey(22), firstTarget);
+        Assert.Equal(new NodeKey(23), secondTarget);
+        Assert.Equal(new CompositionAnimationInstanceId(101), firstInstance);
+        Assert.Equal(new CompositionAnimationInstanceId(102), secondInstance);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Null(compositor.CompositionScrollPresentationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(2, compositor.CompositionAnimationPresentationPlan!.Value.Count);
+        Assert.Contains(
+            compositor.CompositionAnimationPresentationPlan.Value.GetPlan(0).LayerAnimation.Markers.ToArray(),
+            marker => marker.Id == StyleTransitionCompletionTracker.CompletionMarkerId
+                && marker.RuntimeEventId == StyleTransitionCompletionTracker.CompletionRuntimeEventId);
+        Assert.Contains(
+            compositor.CompositionAnimationPresentationPlan.Value.GetPlan(1).LayerAnimation.Markers.ToArray(),
+            marker => marker.Id == StyleTransitionCompletionTracker.CompletionMarkerId
+                && marker.RuntimeEventId == StyleTransitionCompletionTracker.CompletionRuntimeEventId);
+
+        _ = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(100), cancellationToken);
+        var tick = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(150), cancellationToken);
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var markerCount = compositor.DrainCompositionMarkerEvents(events);
+
+        Assert.Equal(2, tick.LayerCount);
+        Assert.Equal(frame.Commands.Count, tick.CommandCount);
+        Assert.Equal(2, markerCount);
+        Assert.True(tracker.TryCreateCompletionDecision(firstOwner, events[0], out var firstCommit));
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Commit, firstCommit.Kind);
+        Assert.Equal(new NodeKey(22), firstCommit.TargetKey);
+        Assert.Equal(1, tracker.ActiveOwnerCount);
+        Assert.True(tracker.TryGetActiveTransition(secondOwner, out secondTarget, out secondInstance));
+        Assert.Equal(new NodeKey(23), secondTarget);
+        Assert.Equal(new CompositionAnimationInstanceId(102), secondInstance);
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(2, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
+    public async Task StyleTransitionRuntimeCoordinator_batch_activation_blocks_mixed_validation_without_presentation_change()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pipeline = new RenderPipeline();
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = pipeline.Build(
+            CreateMultiTargetStyleTransitionRoot(),
+            new PixelRectangle(0, 0, 960, 540),
+            _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var coordinator = new StyleTransitionRuntimeCoordinator();
+        var tracker = new StyleTransitionCompletionTracker();
+        var accepted = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22)),
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(22),
+                BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 4),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(111)));
+        var rejected = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23)),
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(23),
+                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)) },
+                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)) },
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(112)));
+        var batch = StyleTransitionDecisionBatch.Create([accepted, rejected]);
+
+        var result = coordinator.ActivateBatchPresentation(
+            batch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            tracker,
+            cancellationToken);
+
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Blocked, result.Kind);
+        Assert.Equal(StyleTransitionBatchPresentationActivationReason.RuntimePreflightNotReady, result.Reason);
+        Assert.False(result.IsActivated);
+        Assert.False(result.PresentationStateChanged);
+        Assert.Equal(StyleTransitionBatchRuntimePreflightKind.Mixed, result.RuntimePreflight.Kind);
+        Assert.Equal(0, result.DeclarationCount);
+        Assert.Equal(0, result.TrackedOwnerCount);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Null(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(0, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
+    public void StyleTransitionRuntimeCoordinator_batch_activation_reports_missing_retained_frame_without_tracking_owner()
+    {
+        var pipeline = new RenderPipeline();
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        using var frame = pipeline.Build(
+            CreateMultiTargetStyleTransitionRoot(),
+            new PixelRectangle(0, 0, 960, 540),
+            _arena.GetOrCreateSnapshot());
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var coordinator = new StyleTransitionRuntimeCoordinator();
+        var tracker = new StyleTransitionCompletionTracker();
+        var batch = StyleTransitionDecisionBatch.Create([
+            new StyleTransitionDecisionBatchEntry(
+                StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22)),
+                StyleTransitionRuntimeDecision.Start(
+                    new NodeKey(22),
+                    BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                    BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 4),
+                    CompositionTimestamp.FromStopwatchTicks(100),
+                    CompositionDuration.FromStopwatchTicks(50),
+                    CompositionAnimationEasing.SineOut,
+                    CompositionAnimationRepeatMode.Once,
+                    new CompositionAnimationInstanceId(121))),
+            new StyleTransitionDecisionBatchEntry(
+                StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23)),
+                StyleTransitionRuntimeDecision.Start(
+                    new NodeKey(23),
+                    BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                    BuildCompositionStyleProperties(opacity: 0.85, translateX: -8, translateY: 2),
+                    CompositionTimestamp.FromStopwatchTicks(100),
+                    CompositionDuration.FromStopwatchTicks(50),
+                    CompositionAnimationEasing.SineOut,
+                    CompositionAnimationRepeatMode.Once,
+                    new CompositionAnimationInstanceId(122)))
+        ]);
+
+        var result = coordinator.ActivateBatchPresentation(
+            batch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            tracker,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Blocked, result.Kind);
+        Assert.Equal(StyleTransitionBatchPresentationActivationReason.MissingRetainedFrame, result.Reason);
+        Assert.False(result.PresentationStateChanged);
+        Assert.Equal(StyleTransitionBatchRuntimePreflightKind.Ready, result.RuntimePreflight.Kind);
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Rejected, result.ActivationPreflight.Kind);
+        Assert.Equal(2, result.DeclarationCount);
+        Assert.Equal(0, result.TrackedOwnerCount);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Null(compositor.CompositionAnimationPresentationPlan);
+    }
+
+    [Fact]
     public async Task StyleTransitionRuntimeCoordinator_batch_validation_preserves_single_owner_apply_path()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -5632,7 +5842,15 @@ public sealed class WindowLayoutPipelineTests
     {
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = CreateMultiTargetStyleTransitionRoot();
+
+        using var frame = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
+        return pipeline.LastRetainedInputSnapshot!;
+    }
+
+    private static VirtualNode CreateMultiTargetStyleTransitionRoot()
+    {
+        return VirtualNodeFactory.ScrollContainer(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(22),
                 VirtualNodeProperty.Width(220),
@@ -5647,9 +5865,19 @@ public sealed class WindowLayoutPipelineTests
                 VirtualNodeProperty.LayerOpacity(1),
                 VirtualNodeProperty.TranslateX(0),
                 VirtualNodeProperty.TranslateY(0)));
+    }
 
-        using var frame = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
-        return pipeline.LastRetainedInputSnapshot!;
+    private static CompositionAnimationPlan CreateStyleTransitionAnimationPlan(int commandCount)
+    {
+        return new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: commandCount,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(1)),
+            CompositionTransformAnimation.Identity,
+            CompositionScalarAnimation.Constant(1f)));
     }
 
     private static VirtualNodeProperty[] BuildCompositionStyleProperties(

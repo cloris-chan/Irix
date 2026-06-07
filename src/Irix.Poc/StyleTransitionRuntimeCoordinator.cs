@@ -46,6 +46,15 @@ internal interface IStyleTransitionCompositorAdapter
     ValueTask CancelAsync(NodeKey targetKey, CancellationToken cancellationToken = default);
 }
 
+internal interface IStyleTransitionPresentationActivationCompositorAdapter
+{
+    CompositionAnimationPresentationSetActivationPreflightResult PreparePresentationActivation(
+        ReadOnlySpan<CompositionAnimationDeclaration> declarations,
+        RenderPipelineRetainedInputSnapshot? snapshot);
+
+    void ActivatePresentationPlan(in CompositionAnimationPresentationSetPlan plan);
+}
+
 internal interface IStyleTransitionRetainedSnapshotProvider
 {
     RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; }
@@ -270,6 +279,24 @@ internal sealed class StyleTransitionRuntimeCoordinator
     {
         cancellationToken.ThrowIfCancellationRequested();
         return StyleTransitionBatchRuntimePreflight.Validate(batch, snapshotProvider, completionTracker);
+    }
+
+    internal StyleTransitionBatchPresentationActivationResult ActivateBatchPresentation<TCompositor, TSnapshotProvider>(
+        in StyleTransitionDecisionBatch batch,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
+        StyleTransitionCompletionTracker completionTracker,
+        CancellationToken cancellationToken = default)
+        where TCompositor : IStyleTransitionPresentationActivationCompositorAdapter
+        where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = snapshotProvider.LastRetainedInputSnapshot;
+        return StyleTransitionBatchPresentationActivation.Activate(
+            batch,
+            compositor,
+            snapshot,
+            completionTracker);
     }
 
     internal async ValueTask<StyleTransitionRuntimeResult> ApplyNextAsync<TRuntime, TCompositor, TSnapshotProvider>(

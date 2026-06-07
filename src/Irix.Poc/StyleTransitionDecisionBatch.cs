@@ -74,6 +74,29 @@ internal enum StyleTransitionOwnerRuntimeBlocker : byte
     TrackedTargetMismatch,
 }
 
+internal enum StyleTransitionBatchPresentationActivationKind : byte
+{
+    None,
+    Empty,
+    Blocked,
+    Activated,
+}
+
+internal enum StyleTransitionBatchPresentationActivationReason : byte
+{
+    None,
+    EmptyBatch,
+    RuntimePreflightNotReady,
+    MissingRetainedSnapshot,
+    MissingRetainedFrame,
+    UnsupportedRuntimeAction,
+    NoPresentationOwner,
+    CompileRejected,
+    PresentationPreflightRejected,
+    MissingPresentationPlan,
+    ActivationFailed,
+}
+
 internal readonly struct StyleTransitionOwnerKey(
     StyleTransitionOwnerKind Kind,
     ActionId ActionId,
@@ -644,6 +667,78 @@ internal readonly struct StyleTransitionBatchRuntimePreflightResult : IEquatable
     }
 }
 
+internal readonly struct StyleTransitionBatchPresentationActivationResult(
+    StyleTransitionBatchPresentationActivationKind Kind,
+    StyleTransitionBatchPresentationActivationReason Reason,
+    StyleTransitionBatchRuntimePreflightResult RuntimePreflight = default,
+    CompositionAnimationPresentationSetActivationPreflightResult ActivationPreflight = default,
+    int DeclarationCount = 0,
+    int TrackedOwnerCount = 0,
+    bool PresentationStateChanged = false) : IEquatable<StyleTransitionBatchPresentationActivationResult>
+{
+    public StyleTransitionBatchPresentationActivationKind Kind { get; } = Kind;
+    public StyleTransitionBatchPresentationActivationReason Reason { get; } = Reason;
+    public StyleTransitionBatchRuntimePreflightResult RuntimePreflight { get; } = RuntimePreflight;
+    public CompositionAnimationPresentationSetActivationPreflightResult ActivationPreflight { get; } = ActivationPreflight;
+    public int DeclarationCount { get; } = DeclarationCount;
+    public int TrackedOwnerCount { get; } = TrackedOwnerCount;
+    public bool PresentationStateChanged { get; } = PresentationStateChanged;
+    public bool IsActivated => Kind == StyleTransitionBatchPresentationActivationKind.Activated;
+
+    internal static StyleTransitionBatchPresentationActivationResult Empty(
+        in StyleTransitionBatchRuntimePreflightResult runtimePreflight) =>
+        new(
+            StyleTransitionBatchPresentationActivationKind.Empty,
+            StyleTransitionBatchPresentationActivationReason.EmptyBatch,
+            runtimePreflight);
+
+    internal static StyleTransitionBatchPresentationActivationResult Blocked(
+        StyleTransitionBatchPresentationActivationReason reason,
+        in StyleTransitionBatchRuntimePreflightResult runtimePreflight,
+        in CompositionAnimationPresentationSetActivationPreflightResult activationPreflight = default,
+        int declarationCount = 0) =>
+        new(
+            StyleTransitionBatchPresentationActivationKind.Blocked,
+            reason,
+            runtimePreflight,
+            activationPreflight,
+            declarationCount);
+
+    internal static StyleTransitionBatchPresentationActivationResult Activated(
+        in StyleTransitionBatchRuntimePreflightResult runtimePreflight,
+        in CompositionAnimationPresentationSetActivationPreflightResult activationPreflight,
+        int declarationCount,
+        int trackedOwnerCount) =>
+        new(
+            StyleTransitionBatchPresentationActivationKind.Activated,
+            StyleTransitionBatchPresentationActivationReason.None,
+            runtimePreflight,
+            activationPreflight,
+            declarationCount,
+            trackedOwnerCount,
+            PresentationStateChanged: true);
+
+    public bool Equals(StyleTransitionBatchPresentationActivationResult other) =>
+        Kind == other.Kind
+        && Reason == other.Reason
+        && RuntimePreflight == other.RuntimePreflight
+        && ActivationPreflight == other.ActivationPreflight
+        && DeclarationCount == other.DeclarationCount
+        && TrackedOwnerCount == other.TrackedOwnerCount
+        && PresentationStateChanged == other.PresentationStateChanged;
+
+    public override bool Equals(object? obj) => obj is StyleTransitionBatchPresentationActivationResult other && Equals(other);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Kind, Reason, RuntimePreflight, ActivationPreflight, DeclarationCount, TrackedOwnerCount, PresentationStateChanged);
+
+    public static bool operator ==(StyleTransitionBatchPresentationActivationResult left, StyleTransitionBatchPresentationActivationResult right) =>
+        left.Equals(right);
+
+    public static bool operator !=(StyleTransitionBatchPresentationActivationResult left, StyleTransitionBatchPresentationActivationResult right) =>
+        !left.Equals(right);
+}
+
 internal static class StyleTransitionDecisionBatchPreflight
 {
     internal static StyleTransitionDecisionBatchValidationResult Validate(
@@ -986,5 +1081,200 @@ internal static class StyleTransitionBatchRuntimePreflight
         }
 
         return false;
+    }
+}
+
+internal static class StyleTransitionBatchPresentationActivation
+{
+    internal static StyleTransitionBatchPresentationActivationResult Activate<TCompositor>(
+        in StyleTransitionDecisionBatch batch,
+        TCompositor compositor,
+        RenderPipelineRetainedInputSnapshot? snapshot,
+        StyleTransitionCompletionTracker completionTracker)
+        where TCompositor : IStyleTransitionPresentationActivationCompositorAdapter
+    {
+        ArgumentNullException.ThrowIfNull(compositor);
+        ArgumentNullException.ThrowIfNull(completionTracker);
+
+        var runtimePreflight = StyleTransitionBatchRuntimePreflight.Validate(
+            batch,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            completionTracker);
+        if (runtimePreflight.Kind == StyleTransitionBatchRuntimePreflightKind.Empty)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Empty(runtimePreflight);
+        }
+
+        if (snapshot is null)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Blocked(
+                StyleTransitionBatchPresentationActivationReason.MissingRetainedSnapshot,
+                runtimePreflight);
+        }
+
+        if (runtimePreflight.Kind != StyleTransitionBatchRuntimePreflightKind.Ready)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Blocked(
+                StyleTransitionBatchPresentationActivationReason.RuntimePreflightNotReady,
+                runtimePreflight);
+        }
+
+        var entries = batch.Entries;
+        var ownerResults = runtimePreflight.OwnerResults;
+        var declarations = new CompositionAnimationDeclaration[ownerResults.Length];
+        var trackedDecisions = new StyleTransitionRuntimeDecision[ownerResults.Length];
+        var trackedOwnerKeys = new StyleTransitionOwnerKey[ownerResults.Length];
+        var trackedResults = new StyleTransitionRuntimeResult[ownerResults.Length];
+        var declarationCount = 0;
+        var trackedCount = 0;
+
+        for (var i = 0; i < ownerResults.Length; i++)
+        {
+            var ownerResult = ownerResults[i];
+            if (ownerResult.ActionKind is StyleTransitionOwnerRuntimeActionKind.CancelPresentation
+                or StyleTransitionOwnerRuntimeActionKind.CommitPresentation)
+            {
+                return StyleTransitionBatchPresentationActivationResult.Blocked(
+                    StyleTransitionBatchPresentationActivationReason.UnsupportedRuntimeAction,
+                    runtimePreflight);
+            }
+
+            if (ownerResult.ActionKind == StyleTransitionOwnerRuntimeActionKind.NoOp)
+            {
+                return StyleTransitionBatchPresentationActivationResult.Blocked(
+                    StyleTransitionBatchPresentationActivationReason.NoPresentationOwner,
+                    runtimePreflight);
+            }
+
+            if (ownerResult.ActionKind is not (StyleTransitionOwnerRuntimeActionKind.StartPresentation
+                or StyleTransitionOwnerRuntimeActionKind.RetargetPresentation))
+            {
+                return StyleTransitionBatchPresentationActivationResult.Blocked(
+                    StyleTransitionBatchPresentationActivationReason.RuntimePreflightNotReady,
+                    runtimePreflight);
+            }
+
+            if (!ownerResult.RequiresPresentationSetInstall)
+            {
+                continue;
+            }
+
+            var entry = entries[i];
+            var decision = ownerResult.RequiresCompletionTracking
+                ? completionTracker.AttachCompletionMarker(entry.OwnerKey, entry.Decision)
+                : entry.Decision;
+            var compileResult = StyleTransitionCompiler.Compile(decision.ToCompileRequest());
+            if (!compileResult.HasDeclaration)
+            {
+                return StyleTransitionBatchPresentationActivationResult.Blocked(
+                    StyleTransitionBatchPresentationActivationReason.CompileRejected,
+                    runtimePreflight,
+                    declarationCount: declarationCount);
+            }
+
+            declarations[declarationCount++] = compileResult.Declaration;
+            if (ownerResult.RequiresCompletionTracking)
+            {
+                trackedOwnerKeys[trackedCount] = entry.OwnerKey;
+                trackedDecisions[trackedCount] = decision;
+                trackedResults[trackedCount] = StyleTransitionRuntimeResult.FromCompileResult(
+                    decision.Kind == StyleTransitionRuntimeDecisionKind.Retarget
+                        ? StyleTransitionRuntimeResultKind.Retargeted
+                        : StyleTransitionRuntimeResultKind.Started,
+                    decision.TargetKey,
+                    compileResult);
+                trackedCount++;
+            }
+        }
+
+        if (declarationCount == 0)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Blocked(
+                StyleTransitionBatchPresentationActivationReason.NoPresentationOwner,
+                runtimePreflight);
+        }
+
+        var activationPreflight = compositor.PreparePresentationActivation(
+            declarations.AsSpan(0, declarationCount),
+            snapshot);
+        if (activationPreflight.Kind != CompositionAnimationPresentationSetResultKind.Accepted)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Blocked(
+                MapActivationRejection(activationPreflight),
+                runtimePreflight,
+                activationPreflight,
+                declarationCount);
+        }
+
+        if (!activationPreflight.HasPlan)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Blocked(
+                StyleTransitionBatchPresentationActivationReason.MissingPresentationPlan,
+                runtimePreflight,
+                activationPreflight,
+                declarationCount);
+        }
+
+        try
+        {
+            compositor.ActivatePresentationPlan(activationPreflight.Plan);
+        }
+        catch (ArgumentException)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Blocked(
+                StyleTransitionBatchPresentationActivationReason.ActivationFailed,
+                runtimePreflight,
+                activationPreflight,
+                declarationCount);
+        }
+        catch (InvalidOperationException)
+        {
+            return StyleTransitionBatchPresentationActivationResult.Blocked(
+                StyleTransitionBatchPresentationActivationReason.ActivationFailed,
+                runtimePreflight,
+                activationPreflight,
+                declarationCount);
+        }
+
+        var trackedOwnerCount = 0;
+        for (var i = 0; i < trackedCount; i++)
+        {
+            var tracking = completionTracker.PublishRuntimeResult(
+                trackedOwnerKeys[i],
+                trackedDecisions[i],
+                trackedResults[i]);
+            if (tracking.Kind is StyleTransitionCompletionResultKind.TrackingStarted
+                or StyleTransitionCompletionResultKind.TrackingRetargeted)
+            {
+                trackedOwnerCount++;
+            }
+        }
+
+        return StyleTransitionBatchPresentationActivationResult.Activated(
+            runtimePreflight,
+            activationPreflight,
+            declarationCount,
+            trackedOwnerCount);
+    }
+
+    private static StyleTransitionBatchPresentationActivationReason MapActivationRejection(
+        in CompositionAnimationPresentationSetActivationPreflightResult activationPreflight)
+    {
+        var entries = activationPreflight.Entries;
+        for (var i = 0; i < entries.Length; i++)
+        {
+            var reason = entries[i].Validation.RejectionReason;
+            if (reason == CompositionAnimationPresentationSetRejectionReason.MissingRetainedFrame)
+            {
+                return StyleTransitionBatchPresentationActivationReason.MissingRetainedFrame;
+            }
+
+            if (reason != CompositionAnimationPresentationSetRejectionReason.None)
+            {
+                return StyleTransitionBatchPresentationActivationReason.PresentationPreflightRejected;
+            }
+        }
+
+        return StyleTransitionBatchPresentationActivationReason.PresentationPreflightRejected;
     }
 }
