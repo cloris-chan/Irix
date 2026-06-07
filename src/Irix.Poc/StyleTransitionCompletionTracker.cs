@@ -118,6 +118,22 @@ internal sealed class StyleTransitionCompletionTracker
         }
     }
 
+    internal (
+        bool HasActiveTransition,
+        NodeKey ActiveTargetKey,
+        CompositionAnimationInstanceId ActiveInstanceId,
+        StyleTransitionCompletionResult LastResult) CaptureDiagnosticState()
+    {
+        lock (_gate)
+        {
+            return (
+                _active.HasValue,
+                _active.TargetKey,
+                _active.InstanceId,
+                _lastResult);
+        }
+    }
+
     internal StyleTransitionRuntimeDecision AttachCompletionMarker(StyleTransitionRuntimeDecision decision)
     {
         if (!IsTrackableDecision(decision))

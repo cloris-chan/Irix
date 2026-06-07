@@ -2752,7 +2752,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, and the multi-target abort-and-dispatch boundary are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, and completion-pump lifecycle diagnostics are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2865,6 +2865,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice also exists", worklist);
         Assert.Contains("marker-driven completion tracker", worklist);
         Assert.Contains("multi-target abort-and-dispatch boundary", worklist);
+        Assert.Contains("completion-pump lifecycle diagnostics", worklist);
         Assert.Contains("Style transition runtime hardening", worklist);
 
         Assert.Contains("interface IStyleTransitionRuntimeAdapter", coordinatorSource);
@@ -2934,6 +2935,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("Theme", completionTrackerSource);
         Assert.DoesNotContain("Cascade", completionTrackerSource);
         Assert.Contains("sealed class StyleTransitionCompletionPump", completionPumpSource);
+        Assert.Contains("StyleTransitionCompletionPumpDiagnosticSnapshot", completionPumpSource);
+        Assert.Contains("CaptureDiagnosticSnapshot", completionPumpSource);
+        Assert.Contains("LastResult", completionPumpSource);
         Assert.Contains("RenderCompositionAnimationTickAtAsync", completionPumpSource);
         Assert.Contains("DrainCompositionMarkerEvents", completionPumpSource);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ApplyDecisionAsync", completionPumpSource);
@@ -2961,7 +2965,8 @@ public sealed class ProgramDiagnosticsTests
             "StyleTransitionCompletionTracker",
             "StyleTransitionCompletionResult",
             "StyleTransitionCompletionPump",
-            "StyleTransitionCompletionPumpResult"
+            "StyleTransitionCompletionPumpResult",
+            "StyleTransitionCompletionPumpDiagnosticSnapshot"
         })
         {
             Assert.DoesNotContain(token, renderingSource);
@@ -4223,6 +4228,55 @@ public sealed class ProgramDiagnosticsTests
         var line = DiagnosticsFormatter.BuildStyleOnlyPatchPlanDiagnosticLine(snapshot);
 
         Assert.Equal("styleOnlyPlan HoverOnly eligible=True fallback=None dirtyElementRanges=0:1 dirtyCommandRanges=0:2 hitTargetCount=1", line);
+    }
+
+    [Fact]
+    public void Diagnose_style_transition_completion_pump_formatter_outputs_stable_fields()
+    {
+        var snapshot = new StyleTransitionCompletionPumpDiagnosticSnapshot(
+            IsRunning: false,
+            HasActiveTransition: false,
+            ActiveTargetKey: NodeKey.None,
+            ActiveInstanceId: default,
+            LastResult: StyleTransitionCompletionPumpResult.CompletionCommitted(
+                1,
+                new StyleTransitionRuntimeResult(
+                    StyleTransitionRuntimeResultKind.Committed,
+                    new NodeKey(6))),
+            TrackerResult: StyleTransitionCompletionResult.Completed(
+                new NodeKey(6),
+                new CompositionAnimationInstanceId(1001),
+                StyleTransitionRuntimeDecision.Commit(new NodeKey(6))),
+            TickCount: 2,
+            CommitCount: 1,
+            DrainedEventCount: 1,
+            LastErrorKind: null);
+
+        var line = DiagnosticsFormatter.BuildStyleTransitionCompletionPumpDiagnosticLine(snapshot);
+
+        Assert.Equal("style-transition-completion-pump status isRunning=False hasActiveTransition=False activeTarget=- activeInstance=- lastResult=CompletionCommitted lastDrainedEvents=1 lastCommitResult=Committed lastCommitTarget=6 trackerResult=Completed trackerTarget=6 trackerInstance=1001 tickCount=2 commitCount=1 drainedEvents=1 hasError=False error=-", line);
+    }
+
+    [Fact]
+    public void Diagnose_style_transition_completion_pump_formatter_outputs_active_and_error_fields()
+    {
+        var snapshot = new StyleTransitionCompletionPumpDiagnosticSnapshot(
+            IsRunning: true,
+            HasActiveTransition: true,
+            ActiveTargetKey: new NodeKey(22),
+            ActiveInstanceId: new CompositionAnimationInstanceId(9),
+            LastResult: StyleTransitionCompletionPumpResult.TickUnavailable(),
+            TrackerResult: StyleTransitionCompletionResult.TrackingStarted(
+                new NodeKey(22),
+                new CompositionAnimationInstanceId(9)),
+            TickCount: 0,
+            CommitCount: 0,
+            DrainedEventCount: 0,
+            LastErrorKind: nameof(InvalidOperationException));
+
+        var line = DiagnosticsFormatter.BuildStyleTransitionCompletionPumpDiagnosticLine(snapshot);
+
+        Assert.Equal("style-transition-completion-pump status isRunning=True hasActiveTransition=True activeTarget=22 activeInstance=9 lastResult=TickUnavailable lastDrainedEvents=0 lastCommitResult=None lastCommitTarget=- trackerResult=TrackingStarted trackerTarget=22 trackerInstance=9 tickCount=0 commitCount=0 drainedEvents=0 hasError=True error=InvalidOperationException", line);
     }
 
     [Fact]

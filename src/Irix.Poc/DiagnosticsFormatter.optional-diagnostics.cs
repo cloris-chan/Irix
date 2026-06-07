@@ -134,6 +134,11 @@ internal static class DiagnosticsFormatter
         return $"styleOnlyPlan {snapshot.Case} eligible={snapshot.Eligible} fallback={snapshot.FallbackReason} dirtyElementRanges={FormatRanges(snapshot.DirtyElementRanges)} dirtyCommandRanges={FormatRanges(snapshot.DirtyCommandRanges)} hitTargetCount={snapshot.HitTargetCount}";
     }
 
+    internal static string BuildStyleTransitionCompletionPumpDiagnosticLine(StyleTransitionCompletionPumpDiagnosticSnapshot snapshot)
+    {
+        return $"style-transition-completion-pump status isRunning={snapshot.IsRunning} hasActiveTransition={snapshot.HasActiveTransition} activeTarget={FormatNodeKey(snapshot.ActiveTargetKey)} activeInstance={FormatInstanceId(snapshot.ActiveInstanceId)} lastResult={snapshot.LastResult.Kind} lastDrainedEvents={snapshot.LastResult.DrainedEvents} lastCommitResult={snapshot.LastResult.CommitResult.Kind} lastCommitTarget={FormatNodeKey(snapshot.LastResult.CommitResult.TargetKey)} trackerResult={snapshot.TrackerResult.Kind} trackerTarget={FormatNodeKey(snapshot.TrackerResult.TargetKey)} trackerInstance={FormatInstanceId(snapshot.TrackerResult.InstanceId)} tickCount={snapshot.TickCount} commitCount={snapshot.CommitCount} drainedEvents={snapshot.DrainedEventCount} hasError={snapshot.HasError} error={snapshot.LastErrorKind ?? "-"}";
+    }
+
     internal static string[] BuildInputDiagnosticLines(InputDiagnosticsSnapshot snapshot)
     {
         var lines = new List<string>
@@ -424,6 +429,16 @@ internal static class DiagnosticsFormatter
     private static string FormatTarget(ActionId target)
     {
         return target.IsNone ? "-" : ActionIdRegistry.GetName(target);
+    }
+
+    private static string FormatNodeKey(NodeKey key)
+    {
+        return key == NodeKey.None ? "-" : key.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatInstanceId(CompositionAnimationInstanceId instanceId)
+    {
+        return instanceId.IsValid ? instanceId.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-";
     }
 
     private static string FormatButtonStatePriority(ButtonVisualState state)

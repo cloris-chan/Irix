@@ -32,6 +32,7 @@ The model answers:
 | `ScrollDiagnosticsSnapshot` | Scroll service owner; currently PoC scroll pump/controller | `--diagnose-scroll` and debug scroll row | PoC statics are read-only adapters until scroll ownership is extracted. |
 | `InputDiagnosticsSnapshot` | Input routing/focus owner; currently PoC input ownership/router | `--diagnose-input` and debug input row | Ownership state is value data; diagnostics history remains bounded. |
 | `StyleOnlyPatchPlanDiagnosticSnapshot` | `Irix.Rendering.StyleOnlyPatchPlanBuilder` | `--diagnose` style-only plan smoke | Planner data is explicit input/output and does not need PoC statics. |
+| `StyleTransitionCompletionPumpDiagnosticSnapshot` | `Irix.Poc.StyleTransitionCompletionPump` plus `StyleTransitionCompletionTracker` | Formatter/source guards and focused tests | Internal Poc-only lifecycle status for the narrow Counter style transition completion pump. It reports observation state only; it does not add a public transition API, timeline scheduler, or compositor/runtime extraction. |
 | `DebugUiDiagnosticsSnapshot` | `DefaultDebugDiagnosticsSnapshotBridge` | Current debug header rows | Bridge is read-only and local; it must not mutate scroll/input/backend state. |
 
 ## Diagnostic Text Guard
@@ -40,6 +41,7 @@ The model answers:
 - Existing `ProgramDiagnosticsTests` formatter/smoke assertions are local regression guards.
 - CLI implementations build snapshot values first, then format through the same formatter logic.
 - Partial-apply handoff status is one stable machine-readable line with `handoffKind`, `reason`, `ownerKind`, `planKind`, `fallbackReason`, `runtimeOwnerEnabled`, `fallbackApplied`, `ownerStatePreserved`, `batchFrameId`, `batchCommandCount`, and `dirtyRanges`.
+- Style transition completion pump status is one stable machine-readable line with `isRunning`, `hasActiveTransition`, `activeTarget`, `activeInstance`, `lastResult`, `lastDrainedEvents`, `lastCommitResult`, `lastCommitTarget`, `trackerResult`, `trackerTarget`, `trackerInstance`, `tickCount`, `commitCount`, `drainedEvents`, `hasError`, and `error`.
 - Any intentional CLI text change must be staged separately with explicit test updates and a migration note.
 
 ## Debug UI Bridge

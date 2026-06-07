@@ -1181,11 +1181,21 @@ public sealed class WindowLayoutPipelineTests
                 && marker.RuntimeEventId == StyleTransitionCompletionTracker.CompletionRuntimeEventId);
 
         var startTick = await pump.TickAndDrainAtAsync(lifecycle.Decision.StartTimestamp, cancellationToken);
+        var renderedSnapshot = pump.CaptureDiagnosticSnapshot();
         var completionTick = await pump.TickAndDrainAtAsync(
             lifecycle.Decision.StartTimestamp + lifecycle.Decision.Duration,
             cancellationToken);
 
         Assert.Equal(StyleTransitionCompletionPumpResultKind.TickRendered, startTick.Kind);
+        Assert.True(renderedSnapshot.HasActiveTransition);
+        Assert.Equal(lifecycle.Decision.TargetKey, renderedSnapshot.ActiveTargetKey);
+        Assert.Equal(lifecycle.Decision.InstanceId, renderedSnapshot.ActiveInstanceId);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.TickRendered, renderedSnapshot.LastResult.Kind);
+        Assert.Equal(0, renderedSnapshot.LastResult.DrainedEvents);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, renderedSnapshot.TrackerResult.Kind);
+        Assert.Equal(1, renderedSnapshot.TickCount);
+        Assert.Equal(0, renderedSnapshot.CommitCount);
+        Assert.Equal(0, renderedSnapshot.DrainedEventCount);
         Assert.Equal(StyleTransitionCompletionPumpResultKind.CompletionCommitted, completionTick.Kind);
         Assert.True(completionTick.HasCommit);
         Assert.Equal(StyleTransitionRuntimeResultKind.Committed, completionTick.CommitResult.Kind);
@@ -1195,6 +1205,105 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(2, pump.TickCount);
         Assert.Equal(1, pump.CommitCount);
         Assert.Equal(1, pump.DrainedEventCount);
+
+        var snapshot = pump.CaptureDiagnosticSnapshot();
+        Assert.False(snapshot.IsRunning);
+        Assert.False(snapshot.HasActiveTransition);
+        Assert.Equal(NodeKey.None, snapshot.ActiveTargetKey);
+        Assert.Equal(default, snapshot.ActiveInstanceId);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.CompletionCommitted, snapshot.LastResult.Kind);
+        Assert.Equal(1, snapshot.LastResult.DrainedEvents);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Committed, snapshot.LastResult.CommitResult.Kind);
+        Assert.Equal(lifecycle.Decision.TargetKey, snapshot.LastResult.CommitResult.TargetKey);
+        Assert.Equal(StyleTransitionCompletionResultKind.Completed, snapshot.TrackerResult.Kind);
+        Assert.Equal(lifecycle.Decision.TargetKey, snapshot.TrackerResult.TargetKey);
+        Assert.Equal(lifecycle.Decision.InstanceId, snapshot.TrackerResult.InstanceId);
+        Assert.Equal(2, snapshot.TickCount);
+        Assert.Equal(1, snapshot.CommitCount);
+        Assert.Equal(1, snapshot.DrainedEventCount);
+        Assert.False(snapshot.HasError);
+        Assert.Null(snapshot.LastErrorKind);
+    }
+
+    [Fact]
+    public async Task StyleTransitionCompletionPump_snapshot_captures_no_active_transition()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        var tracker = new StyleTransitionCompletionTracker();
+        await using var pump = new StyleTransitionCompletionPump(
+            compositor,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(null));
+
+        var result = await pump.TickAndDrainAtAsync(CompositionTimestamp.FromStopwatchTicks(100), cancellationToken);
+        var snapshot = pump.CaptureDiagnosticSnapshot();
+
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.NoActiveTransition, result.Kind);
+        Assert.Equal(result, pump.LastResult);
+        Assert.False(snapshot.IsRunning);
+        Assert.False(snapshot.HasActiveTransition);
+        Assert.Equal(NodeKey.None, snapshot.ActiveTargetKey);
+        Assert.Equal(default, snapshot.ActiveInstanceId);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.NoActiveTransition, snapshot.LastResult.Kind);
+        Assert.Equal(0, snapshot.LastResult.DrainedEvents);
+        Assert.Equal(StyleTransitionRuntimeResultKind.None, snapshot.LastResult.CommitResult.Kind);
+        Assert.Equal(StyleTransitionCompletionResultKind.None, snapshot.TrackerResult.Kind);
+        Assert.Equal(0, snapshot.TickCount);
+        Assert.Equal(0, snapshot.CommitCount);
+        Assert.Equal(0, snapshot.DrainedEventCount);
+        Assert.False(snapshot.HasError);
+    }
+
+    [Fact]
+    public async Task StyleTransitionCompletionPump_snapshot_captures_tick_unavailable_without_clearing_tracker()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshot = CreateStyleTransitionRetainedSnapshot();
+        var tracker = new StyleTransitionCompletionTracker();
+        var decision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9));
+        var decorated = tracker.AttachCompletionMarker(decision);
+        var start = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            decorated,
+            new RecordingStyleTransitionCompositorAdapter(),
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var tracking = tracker.PublishRuntimeResult(decorated, start);
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        await using var pump = new StyleTransitionCompletionPump(
+            compositor,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot));
+
+        var result = await pump.TickAndDrainAtAsync(CompositionTimestamp.FromStopwatchTicks(100), cancellationToken);
+        var diagnostic = pump.CaptureDiagnosticSnapshot();
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Started, start.Kind);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, tracking.Kind);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.TickUnavailable, result.Kind);
+        Assert.True(tracker.HasActiveTransition);
+        Assert.False(diagnostic.IsRunning);
+        Assert.True(diagnostic.HasActiveTransition);
+        Assert.Equal(new NodeKey(22), diagnostic.ActiveTargetKey);
+        Assert.Equal(new CompositionAnimationInstanceId(9), diagnostic.ActiveInstanceId);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.TickUnavailable, diagnostic.LastResult.Kind);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, diagnostic.TrackerResult.Kind);
+        Assert.Equal(new NodeKey(22), diagnostic.TrackerResult.TargetKey);
+        Assert.Equal(new CompositionAnimationInstanceId(9), diagnostic.TrackerResult.InstanceId);
+        Assert.Equal(0, diagnostic.TickCount);
+        Assert.Equal(0, diagnostic.CommitCount);
+        Assert.Equal(0, diagnostic.DrainedEventCount);
+        Assert.False(diagnostic.HasError);
     }
 
     [Fact]

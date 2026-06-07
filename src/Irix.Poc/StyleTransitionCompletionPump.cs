@@ -51,6 +51,67 @@ internal readonly struct StyleTransitionCompletionPumpResult(
     public static bool operator !=(StyleTransitionCompletionPumpResult left, StyleTransitionCompletionPumpResult right) => !left.Equals(right);
 }
 
+internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
+    bool IsRunning,
+    bool HasActiveTransition,
+    NodeKey ActiveTargetKey,
+    CompositionAnimationInstanceId ActiveInstanceId,
+    StyleTransitionCompletionPumpResult LastResult,
+    StyleTransitionCompletionResult TrackerResult,
+    long TickCount,
+    long CommitCount,
+    long DrainedEventCount,
+    string? LastErrorKind) : IEquatable<StyleTransitionCompletionPumpDiagnosticSnapshot>
+{
+    public bool IsRunning { get; } = IsRunning;
+    public bool HasActiveTransition { get; } = HasActiveTransition;
+    public NodeKey ActiveTargetKey { get; } = ActiveTargetKey;
+    public CompositionAnimationInstanceId ActiveInstanceId { get; } = ActiveInstanceId;
+    public StyleTransitionCompletionPumpResult LastResult { get; } = LastResult;
+    public StyleTransitionCompletionResult TrackerResult { get; } = TrackerResult;
+    public long TickCount { get; } = TickCount;
+    public long CommitCount { get; } = CommitCount;
+    public long DrainedEventCount { get; } = DrainedEventCount;
+    public string? LastErrorKind { get; } = LastErrorKind;
+    public bool HasError => LastErrorKind is not null;
+
+    public bool Equals(StyleTransitionCompletionPumpDiagnosticSnapshot other)
+    {
+        return IsRunning == other.IsRunning
+            && HasActiveTransition == other.HasActiveTransition
+            && ActiveTargetKey == other.ActiveTargetKey
+            && ActiveInstanceId == other.ActiveInstanceId
+            && LastResult == other.LastResult
+            && TrackerResult == other.TrackerResult
+            && TickCount == other.TickCount
+            && CommitCount == other.CommitCount
+            && DrainedEventCount == other.DrainedEventCount
+            && LastErrorKind == other.LastErrorKind;
+    }
+
+    public override bool Equals(object? obj) => obj is StyleTransitionCompletionPumpDiagnosticSnapshot other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(IsRunning);
+        hash.Add(HasActiveTransition);
+        hash.Add(ActiveTargetKey);
+        hash.Add(ActiveInstanceId);
+        hash.Add(LastResult);
+        hash.Add(TrackerResult);
+        hash.Add(TickCount);
+        hash.Add(CommitCount);
+        hash.Add(DrainedEventCount);
+        hash.Add(LastErrorKind);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(StyleTransitionCompletionPumpDiagnosticSnapshot left, StyleTransitionCompletionPumpDiagnosticSnapshot right) => left.Equals(right);
+
+    public static bool operator !=(StyleTransitionCompletionPumpDiagnosticSnapshot left, StyleTransitionCompletionPumpDiagnosticSnapshot right) => !left.Equals(right);
+}
+
 internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
 {
     private const int StackEventCapacity = 16;
@@ -62,6 +123,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     private readonly CancellationTokenSource _disposeCancellationTokenSource = new();
     private readonly Lock _gate = new();
     private Task? _pumpTask;
+    private StyleTransitionCompletionPumpResult _lastResult;
 
     internal StyleTransitionCompletionPump(
         DrawingBackendCompositor compositor,
@@ -88,6 +150,17 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
 
     internal Exception? LastError { get; private set; }
 
+    internal StyleTransitionCompletionPumpResult LastResult
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lastResult;
+            }
+        }
+    }
+
     internal bool IsRunning
     {
         get
@@ -109,8 +182,29 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
             }
 
             LastError = null;
-            _pumpTask = RunAsync(_disposeCancellationTokenSource.Token);
+            _pumpTask = Task.Run(
+                () => RunAsync(_disposeCancellationTokenSource.Token),
+                _disposeCancellationTokenSource.Token);
             return true;
+        }
+    }
+
+    internal StyleTransitionCompletionPumpDiagnosticSnapshot CaptureDiagnosticSnapshot()
+    {
+        var tracker = _tracker.CaptureDiagnosticState();
+        lock (_gate)
+        {
+            return new StyleTransitionCompletionPumpDiagnosticSnapshot(
+                _pumpTask is { IsCompleted: false },
+                tracker.HasActiveTransition,
+                tracker.ActiveTargetKey,
+                tracker.ActiveInstanceId,
+                _lastResult,
+                tracker.LastResult,
+                TickCount,
+                CommitCount,
+                DrainedEventCount,
+                LastError?.GetType().Name);
         }
     }
 
@@ -120,17 +214,17 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     {
         if (!_tracker.HasActiveTransition)
         {
-            return StyleTransitionCompletionPumpResult.NoActiveTransition();
+            return SetLastResult(StyleTransitionCompletionPumpResult.NoActiveTransition());
         }
 
         try
         {
             _ = await _compositor.RenderCompositionAnimationTickAtAsync(timestamp, cancellationToken);
-            TickCount++;
+            IncrementTickCount();
         }
         catch (InvalidOperationException)
         {
-            return StyleTransitionCompletionPumpResult.TickUnavailable();
+            return SetLastResult(StyleTransitionCompletionPumpResult.TickUnavailable());
         }
 
         return await DrainAndApplyCompletionAsync(cancellationToken);
@@ -188,7 +282,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            LastError = ex;
+            SetLastError(ex);
         }
     }
 
@@ -201,8 +295,8 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
             var count = _compositor.DrainCompositionMarkerEvents(events);
             if (count == 0)
             {
-                DrainedEventCount += drainedEvents;
-                return StyleTransitionCompletionPumpResult.TickRendered(drainedEvents);
+                AddDrainedEventCount(drainedEvents);
+                return SetLastResult(StyleTransitionCompletionPumpResult.TickRendered(drainedEvents));
             }
 
             drainedEvents += count;
@@ -218,10 +312,51 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
                     _styleCompositor,
                     _snapshotProvider,
                     cancellationToken);
-                CommitCount++;
-                DrainedEventCount += drainedEvents;
-                return StyleTransitionCompletionPumpResult.CompletionCommitted(drainedEvents, commitResult);
+                IncrementCommitCount();
+                AddDrainedEventCount(drainedEvents);
+                return SetLastResult(StyleTransitionCompletionPumpResult.CompletionCommitted(drainedEvents, commitResult));
             }
+        }
+    }
+
+    private void IncrementTickCount()
+    {
+        lock (_gate)
+        {
+            TickCount++;
+        }
+    }
+
+    private void IncrementCommitCount()
+    {
+        lock (_gate)
+        {
+            CommitCount++;
+        }
+    }
+
+    private void AddDrainedEventCount(int drainedEvents)
+    {
+        lock (_gate)
+        {
+            DrainedEventCount += drainedEvents;
+        }
+    }
+
+    private StyleTransitionCompletionPumpResult SetLastResult(StyleTransitionCompletionPumpResult result)
+    {
+        lock (_gate)
+        {
+            _lastResult = result;
+            return _lastResult;
+        }
+    }
+
+    private void SetLastError(Exception error)
+    {
+        lock (_gate)
+        {
+            LastError = error;
         }
     }
 }
