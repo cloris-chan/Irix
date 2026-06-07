@@ -170,6 +170,23 @@ public readonly struct DrawRect(float X, float Y, float Width, float Height) : I
     public static bool operator !=(DrawRect left, DrawRect right) => !left.Equals(right);
 }
 
+internal readonly struct DrawPoint(float X, float Y) : IEquatable<DrawPoint>
+{
+
+    public float X { get; } = X;
+    public float Y { get; } = Y;
+
+    public bool Equals(DrawPoint other) => X.Equals(other.X) && Y.Equals(other.Y);
+
+    public override bool Equals(object? obj) => obj is DrawPoint other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(X, Y);
+
+    public static bool operator ==(DrawPoint left, DrawPoint right) => left.Equals(right);
+
+    public static bool operator !=(DrawPoint left, DrawPoint right) => !left.Equals(right);
+}
+
 public readonly struct DrawColor(byte A, byte R, byte G, byte B) : IEquatable<DrawColor>
 {
 
@@ -217,7 +234,9 @@ internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<C
         return new DrawColor(srgb.A, srgb.R, srgb.G, srgb.B);
     }
 
-    public DrawColor MapToSdr(in DrawCommand command) => MapToSdr(command.CanonicalColor);
+    public DrawColor MapToSdr(DrawMaterial material) => MapToSdr(material.FallbackColor);
+
+    public DrawColor MapToSdr(in DrawCommand command) => MapToSdr(command.Material);
 
     public bool Equals(ColorOutputMapping other) => Kind == other.Kind;
 
@@ -233,33 +252,75 @@ internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<C
 internal enum DrawMaterialKind : byte
 {
     None,
-    SolidColor
+    SolidColor,
+    LinearGradient
 }
 
-internal readonly struct DrawMaterial(DrawMaterialKind Kind, Color Color) : IEquatable<DrawMaterial>
+internal readonly struct DrawMaterial(
+    DrawMaterialKind Kind,
+    Color Color,
+    Color EndColor = default,
+    DrawPoint StartPoint = default,
+    DrawPoint EndPoint = default) : IEquatable<DrawMaterial>
 {
 
     public DrawMaterialKind Kind { get; } = Kind;
     public Color Color { get; } = Color;
+    public Color EndColor { get; } = EndColor;
+    public DrawPoint StartPoint { get; } = StartPoint;
+    public DrawPoint EndPoint { get; } = EndPoint;
 
     public static DrawMaterial None => default;
 
     public static DrawMaterial SolidColor(Color color) => new(DrawMaterialKind.SolidColor, color);
 
-    public DrawMaterial WithOpacity(float opacity) =>
-        Kind == DrawMaterialKind.SolidColor
-            ? SolidColor(Color.WithOpacity(opacity))
-            : this;
+    public static DrawMaterial LinearGradient(Color startColor, Color endColor, DrawPoint startPoint, DrawPoint endPoint) =>
+        new(DrawMaterialKind.LinearGradient, startColor, endColor, startPoint, endPoint);
 
-    public bool Equals(DrawMaterial other) => Kind == other.Kind && Color == other.Color;
+    public DrawMaterial WithOpacity(float opacity) =>
+        Kind switch
+        {
+            DrawMaterialKind.SolidColor => SolidColor(Color.WithOpacity(opacity)),
+            DrawMaterialKind.LinearGradient => LinearGradient(
+                Color.WithOpacity(opacity),
+                EndColor.WithOpacity(opacity),
+                StartPoint,
+                EndPoint),
+            _ => this
+        };
+
+    public Color FallbackColor => Kind switch
+    {
+        DrawMaterialKind.SolidColor => Color,
+        DrawMaterialKind.LinearGradient => Average(Color, EndColor),
+        _ => Irix.Color.Transparent
+    };
+
+    public bool Equals(DrawMaterial other)
+    {
+        return Kind == other.Kind
+            && Color == other.Color
+            && EndColor == other.EndColor
+            && StartPoint == other.StartPoint
+            && EndPoint == other.EndPoint;
+    }
 
     public override bool Equals(object? obj) => obj is DrawMaterial other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Kind, Color);
+    public override int GetHashCode() => HashCode.Combine(Kind, Color, EndColor, StartPoint, EndPoint);
 
     public static bool operator ==(DrawMaterial left, DrawMaterial right) => left.Equals(right);
 
     public static bool operator !=(DrawMaterial left, DrawMaterial right) => !left.Equals(right);
+
+    private static Color Average(Color left, Color right)
+    {
+        return Color.FromLinearBt2020(
+            (left.LinearBt2020R + right.LinearBt2020R) * 0.5f,
+            (left.LinearBt2020G + right.LinearBt2020G) * 0.5f,
+            (left.LinearBt2020B + right.LinearBt2020B) * 0.5f,
+            (left.A + right.A) * 0.5f);
+    }
 }
 
 internal readonly struct DrawPayloadColor(Color Value) : IEquatable<DrawPayloadColor>
@@ -403,6 +464,7 @@ public readonly struct FrameContext(int Width, int Height, DisplayScale Scale = 
 public readonly struct DrawCommand : IEquatable<DrawCommand>
 {
     private readonly DrawPayloadColor _color;
+    private readonly DrawMaterial _material;
 
     public DrawCommand(
         DrawCommandKind Kind,
@@ -417,7 +479,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
         : this(
             Kind,
             Rect,
-            DrawPayloadColor.FromSdr(Color),
+            DrawMaterial.SolidColor(DrawPayloadColor.FromSdr(Color).Value),
             Resource,
             Text,
             ClipBounds,
@@ -430,7 +492,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
     private DrawCommand(
         DrawCommandKind kind,
         DrawRect rect,
-        DrawPayloadColor color,
+        DrawMaterial material,
         ResourceHandle resource,
         TextSlice text,
         DrawRect clipBounds,
@@ -440,7 +502,8 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
     {
         Kind = kind;
         Rect = rect;
-        _color = color;
+        _material = material;
+        _color = new DrawPayloadColor(material.FallbackColor);
         Resource = resource;
         Text = text;
         ClipBounds = clipBounds;
@@ -461,7 +524,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
 
     internal Color CanonicalColor => _color.Value;
 
-    internal DrawMaterial Material => DrawMaterial.SolidColor(_color.Value);
+    internal DrawMaterial Material => _material;
 
     internal static DrawCommand FromCanonicalColor(
         DrawCommandKind Kind,
@@ -473,7 +536,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
         float StrokeWidth = 1,
         Matrix3x2 Transform = default,
         int ZIndex = 0) =>
-        new(Kind, Rect, new DrawPayloadColor(Color), Resource, Text, ClipBounds, StrokeWidth, Transform, ZIndex);
+        new(Kind, Rect, DrawMaterial.SolidColor(Color), Resource, Text, ClipBounds, StrokeWidth, Transform, ZIndex);
 
     internal static DrawCommand FromMaterial(
         DrawCommandKind Kind,
@@ -485,16 +548,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
         float StrokeWidth = 1,
         Matrix3x2 Transform = default,
         int ZIndex = 0) =>
-        new(
-            Kind,
-            Rect,
-            new DrawPayloadColor(Material.Kind == DrawMaterialKind.SolidColor ? Material.Color : Irix.Color.Transparent),
-            Resource,
-            Text,
-            ClipBounds,
-            StrokeWidth,
-            Transform,
-            ZIndex);
+        new(Kind, Rect, Material, Resource, Text, ClipBounds, StrokeWidth, Transform, ZIndex);
 
     internal DrawColor ToSdrColor() => _color.ToSdrColor();
 
@@ -509,7 +563,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
                 Rect.Y * scale.ScaleY,
                 Rect.Width * scale.ScaleX,
                 Rect.Height * scale.ScaleY),
-            _color,
+            _material,
             Resource,
             Text,
             new DrawRect(
@@ -527,6 +581,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
         return Kind == other.Kind
             && Rect == other.Rect
             && _color == other._color
+            && _material == other._material
             && Resource == other.Resource
             && Text == other.Text
             && ClipBounds == other.ClipBounds
@@ -543,6 +598,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
         hash.Add(Kind);
         hash.Add(Rect);
         hash.Add(_color);
+        hash.Add(_material);
         hash.Add(Resource);
         hash.Add(Text);
         hash.Add(ClipBounds);

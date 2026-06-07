@@ -69,4 +69,30 @@ public sealed class WindowBackendTests
         Assert.Equal(new PixelRectangle(16, 120, 140, 40), result.HitTargets[0].Bounds);
         Assert.Equal(new ActionId(1), result.HitTargets[0].ActionId);
     }
+
+    [Fact]
+    public void WindowBackend_maps_internal_linear_gradient_material_to_sdr_fallback()
+    {
+        var backend = new Irix.Poc.WindowBackend();
+        var resources = new FrameDrawingResources();
+        resources.Seal();
+        var material = DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            new DrawPoint(0, 0),
+            new DrawPoint(120, 0));
+        var command = DrawCommand.FromMaterial(
+            DrawCommandKind.FillRect,
+            Rect: new DrawRect(16, 60, 220, 48),
+            Material: material);
+        var expected = ColorOutputMapping.SdrSrgb.MapToSdr(material);
+
+        var result = backend.Build([command], [], resources);
+
+        Assert.Single(result.Elements);
+        Assert.Equal(new WindowContentElement(
+            WindowContentElementKind.Rectangle,
+            new PixelRectangle(16, 60, 220, 48),
+            BackgroundColor: new WindowColor(expected.A, expected.R, expected.G, expected.B)), result.Elements[0]);
+    }
 }

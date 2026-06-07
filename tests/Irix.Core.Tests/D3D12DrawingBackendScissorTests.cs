@@ -345,6 +345,91 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_preserves_internal_linear_gradient_material_fallback_through_layer_cache()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var gradient = DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            new DrawPoint(0, 0),
+            new DrawPoint(40, 0));
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 240, 160), Color: DrawColor.Opaque(1, 2, 3)),
+            DrawCommand.FromMaterial(
+                DrawCommandKind.FillRect,
+                Rect: new DrawRect(16, 20, 40, 24),
+                ClipBounds: new DrawRect(10, 10, 160, 80),
+                Material: gradient)
+        };
+        var cache = new D3D12CompositionLayerContentCache();
+        var directColor = ColorOutputMapping.SdrSrgb.MapToSdr(gradient);
+        Assert.NotEqual(DrawColor.Opaque(128, 128, 0), directColor);
+
+        var firstFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(9),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionTransform(12, 8),
+            new CompositionOpacity(0.5f)));
+
+        var first = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            firstFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(0, first.LayerCacheHits);
+        Assert.Equal(1, first.LayerCacheMisses);
+        Assert.Equal(2, rects.Count);
+        var firstGradientRect = rects.Span[1];
+        Assert.Equal(28, firstGradientRect.X);
+        Assert.Equal(28, firstGradientRect.Y);
+        Assert.Equal(directColor.R / 255f, firstGradientRect.R);
+        Assert.Equal(directColor.G / 255f, firstGradientRect.G);
+        Assert.Equal(directColor.B / 255f, firstGradientRect.B);
+        Assert.Equal(128f / 255f, firstGradientRect.A);
+
+        rects.Reset();
+        texts.Reset();
+        var secondFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(9),
+            CommandStart: 1,
+            CommandCount: 1,
+            new CompositionTransform(20, 10),
+            new CompositionOpacity(0.25f)));
+
+        var second = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            secondFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(1, second.LayerCacheHits);
+        Assert.Equal(0, second.LayerCacheMisses);
+        var secondGradientRect = rects.Span[1];
+        Assert.Equal(36, secondGradientRect.X);
+        Assert.Equal(30, secondGradientRect.Y);
+        Assert.Equal(directColor.R / 255f, secondGradientRect.R);
+        Assert.Equal(directColor.G / 255f, secondGradientRect.G);
+        Assert.Equal(directColor.B / 255f, secondGradientRect.B);
+        Assert.Equal(64f / 255f, secondGradientRect.A);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_layer_content_cache_hit_applies_latest_fixed_clip_scroll_state()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

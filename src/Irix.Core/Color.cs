@@ -73,6 +73,13 @@ internal readonly struct Color : IEquatable<Color>
             NormalizeAlpha(a));
     }
 
+    internal static Color FromLinearBt2020(float r, float g, float b, float a = 1) =>
+        new(
+            NormalizeLinearChannel(r),
+            NormalizeLinearChannel(g),
+            NormalizeLinearChannel(b),
+            NormalizeAlpha(a));
+
     public SrgbColor ToSrgb()
     {
         var linearR = (Bt2020ToSrgbRr * _r) + (Bt2020ToSrgbRg * _g) + (Bt2020ToSrgbRb * _b);
@@ -125,6 +132,16 @@ internal readonly struct Color : IEquatable<Color>
     }
 
     private static float NormalizeSdrChannel(float value)
+    {
+        if (!float.IsFinite(value))
+        {
+            return 0;
+        }
+
+        return Math.Clamp(value, 0, 1);
+    }
+
+    private static float NormalizeLinearChannel(float value)
     {
         if (!float.IsFinite(value))
         {

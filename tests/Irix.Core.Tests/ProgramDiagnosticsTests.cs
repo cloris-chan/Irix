@@ -2838,29 +2838,29 @@ public sealed class ProgramDiagnosticsTests
         var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
 
         Assert.Contains("## Non-Solid Material Policy Preflight", colorDesign);
-        Assert.Contains("Non-solid materials are design-gated, not implemented.", colorDesign);
+        Assert.Contains("Non-solid material authoring remains design-gated; the first internal non-solid payload is implemented only as a renderer-owned linear gradient shape.", colorDesign);
         Assert.Contains("Material identity and lifetime", colorDesign);
         Assert.Contains("Coordinate space", colorDesign);
         Assert.Contains("Color interpolation", colorDesign);
         Assert.Contains("Invalidation", colorDesign);
         Assert.Contains("Backend capability and fallback", colorDesign);
         Assert.Contains("Diagnostics and tests", colorDesign);
-        Assert.Contains("Until that slice lands, non-solid materials stay out of `DrawMaterial`, `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring.", colorDesign);
+        Assert.Contains("Until public material authoring lands, non-solid materials stay out of `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring.", colorDesign);
+        Assert.Contains("The active SDR/sRGB backend path may collapse unsupported non-solid materials through a deterministic `DrawMaterial.FallbackColor`", colorDesign);
 
         Assert.Contains("Non-solid visual material authoring is blocked on the policy preflight", styleDesign);
-        Assert.Contains("non-solid material policy preflight is documented and guard-covered", status);
-        Assert.Contains("non-solid material policy preflight names the required lifetime, coordinate, interpolation, invalidation, backend fallback, and diagnostics contracts", worklist);
+        Assert.Contains("internal solid-color and first linear-gradient `DrawMaterial`/brush resource shapes exist", status);
+        Assert.Contains("Internal solid-color and linear-gradient material payloads exist", worklist);
 
         Assert.False(typeof(DrawMaterialKind).IsPublic);
         Assert.False(typeof(DrawMaterial).IsPublic);
-        Assert.Equal(["None", "SolidColor"], Enum.GetNames<DrawMaterialKind>());
+        Assert.False(typeof(DrawPoint).IsPublic);
+        Assert.Equal(["None", "SolidColor", "LinearGradient"], Enum.GetNames<DrawMaterialKind>());
 
         var forbiddenSourceFragments = new[]
         {
-            "DrawMaterialKind.LinearGradient",
             "DrawMaterialKind.RadialGradient",
             "DrawMaterialKind.Image",
-            "public static DrawMaterial LinearGradient",
             "public static DrawMaterial RadialGradient",
             "public static DrawMaterial Image",
             "public static StyleValue FromMaterial",

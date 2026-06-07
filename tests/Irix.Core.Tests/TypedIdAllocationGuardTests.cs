@@ -877,15 +877,20 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("internal readonly struct ColorOutputMapping", drawingSource);
         Assert.Contains("public static ColorOutputMapping SdrSrgb", drawingSource);
         Assert.Contains("public DrawColor MapToSdr(Color color)", drawingSource);
+        Assert.Contains("public DrawColor MapToSdr(DrawMaterial material) => MapToSdr(material.FallbackColor)", drawingSource);
         Assert.Contains("public DrawColor MapToSdr(in DrawCommand command)", drawingSource);
         Assert.Contains("internal enum DrawMaterialKind : byte", drawingSource);
         Assert.Contains("internal readonly struct DrawMaterial", drawingSource);
         Assert.Contains("public static DrawMaterial SolidColor(Color color)", drawingSource);
-        Assert.Contains("internal DrawMaterial Material => DrawMaterial.SolidColor(_color.Value)", drawingSource);
+        Assert.Contains("public static DrawMaterial LinearGradient(Color startColor, Color endColor, DrawPoint startPoint, DrawPoint endPoint)", drawingSource);
+        Assert.Contains("public Color FallbackColor => Kind switch", drawingSource);
+        Assert.Contains("private readonly DrawMaterial _material", drawingSource);
+        Assert.Contains("internal DrawMaterial Material => _material", drawingSource);
         Assert.Contains("internal static DrawCommand FromMaterial", drawingSource);
         Assert.Contains("private readonly DrawPayloadColor _color", drawingSource);
         Assert.Contains("internal Color CanonicalColor => _color.Value", drawingSource);
         Assert.Contains("internal DrawColor ToSdrColor() => _color.ToSdrColor()", drawingSource);
+        Assert.Contains("internal static Color FromLinearBt2020", File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "Color.cs")));
         Assert.Contains("internal interface IFrameBrushResolver", resourceSource);
         Assert.Contains("private readonly List<DrawMaterial> _brushes", resourceSource);
         Assert.Contains("internal ResourceHandle AddBrush(DrawMaterial material)", resourceSource);
@@ -899,7 +904,7 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("DrawCommand.FromMaterial", d3d12Source);
         Assert.Contains("ApplyOpacity(payload.Material", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", d3d12Source);
-        Assert.Contains("outputMapping.MapToSdr(command)", d3d12Source);
+        Assert.Contains("outputMapping.MapToSdr(command.Material)", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", windowBackendSource);
         Assert.Contains("outputMapping.MapToSdr(command)", windowBackendSource);
         Assert.DoesNotContain("command.ToSdrColor()", d3d12Source);
@@ -1646,20 +1651,24 @@ public class TypedIdAllocationGuardTests
 
         Assert.False(typeof(DrawMaterialKind).IsPublic);
         Assert.False(typeof(DrawMaterial).IsPublic);
-        Assert.Equal(["None", "SolidColor"], Enum.GetNames<DrawMaterialKind>());
+        Assert.False(typeof(DrawPoint).IsPublic);
+        Assert.Equal(["None", "SolidColor", "LinearGradient"], Enum.GetNames<DrawMaterialKind>());
 
         var materialKindBlock = ExtractSourceBetween(
             drawingSource,
             "internal enum DrawMaterialKind",
             "internal readonly struct DrawMaterial");
-        AssertDoesNotContainAny(materialKindBlock, "LinearGradient", "RadialGradient", "Gradient", "Image", "Texture");
+        Assert.Contains("LinearGradient", materialKindBlock);
+        AssertDoesNotContainAny(materialKindBlock, "RadialGradient", "Image", "Texture");
 
         var materialBlock = ExtractSourceBetween(
             drawingSource,
             "internal readonly struct DrawMaterial",
             "internal readonly struct DrawPayloadColor");
         Assert.Contains("public static DrawMaterial SolidColor(Color color)", materialBlock);
-        AssertDoesNotContainAny(materialBlock, "LinearGradient", "RadialGradient", "Gradient", "Image", "Texture");
+        Assert.Contains("public static DrawMaterial LinearGradient(Color startColor, Color endColor, DrawPoint startPoint, DrawPoint endPoint)", materialBlock);
+        Assert.Contains("public Color FallbackColor => Kind switch", materialBlock);
+        AssertDoesNotContainAny(materialBlock, "RadialGradient", "Image", "Texture");
     }
 
     [Fact]

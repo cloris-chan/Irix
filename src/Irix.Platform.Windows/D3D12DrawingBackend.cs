@@ -814,7 +814,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     clipMode,
                     viewport,
                     command.Rect,
-                    outputMapping.MapToSdr(command),
+                    outputMapping.MapToSdr(command.Material),
                     command.ClipBounds,
                     rects,
                     ref diagnostics,
@@ -826,7 +826,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     clipMode,
                     viewport,
                     command.Rect,
-                    outputMapping.MapToSdr(command),
+                    outputMapping.MapToSdr(command.Material),
                     command.Text,
                     command.Resource,
                     command.ClipBounds,
@@ -1166,7 +1166,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 clipMode,
                 viewport,
                 command.Rect,
-                outputMapping.MapToSdr(command),
+                outputMapping.MapToSdr(command.Material),
                 command.ClipBounds,
                 rects,
                 ref diagnostics,
@@ -1190,7 +1190,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 clipMode,
                 viewport,
                 command.Rect,
-                outputMapping.MapToSdr(command),
+                outputMapping.MapToSdr(command.Material),
                 payload.Text,
                 payload.Resource,
                 command.ClipBounds,
@@ -1206,10 +1206,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     {
         var transform = layer.Transform;
         var opacity = layer.Opacity;
-        return DrawCommand.FromCanonicalColor(
+        return DrawCommand.FromMaterial(
             command.Kind,
             Rect: Translate(command.Rect, transform),
-            Color: ApplyOpacity(command.CanonicalColor, opacity),
+            Material: ApplyOpacity(command.Material, opacity),
             Resource: command.Resource,
             Text: command.Text,
             ClipBounds: ResolveComposedClip(command.ClipBounds, layer),

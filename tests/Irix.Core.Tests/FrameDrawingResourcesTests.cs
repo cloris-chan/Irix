@@ -41,6 +41,37 @@ public sealed class FrameDrawingResourcesTests
     }
 
     [Fact]
+    public void AddBrush_deduplicates_internal_linear_gradient_materials()
+    {
+        var resources = new FrameDrawingResources();
+        var material = DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            new DrawPoint(0, 0),
+            new DrawPoint(120, 40));
+
+        var first = resources.AddBrush(material);
+        var second = resources.AddBrush(material);
+        var changedStops = resources.AddBrush(DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 0, 255),
+            new DrawPoint(0, 0),
+            new DrawPoint(120, 40)));
+        var changedGeometry = resources.AddBrush(DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            new DrawPoint(0, 0),
+            new DrawPoint(80, 40)));
+
+        Assert.Equal(first, second);
+        Assert.NotEqual(first, changedStops);
+        Assert.NotEqual(first, changedGeometry);
+        Assert.Equal(DrawingResourceKind.Brush, first.Kind);
+        Assert.Equal(DrawMaterialKind.LinearGradient, resources.ResolveBrush(first).Kind);
+        Assert.Equal(material, resources.ResolveBrush(first));
+    }
+
+    [Fact]
     public void ResolveTextStyle_returns_default_for_invalid_handles()
     {
         var resources = new FrameDrawingResources();
