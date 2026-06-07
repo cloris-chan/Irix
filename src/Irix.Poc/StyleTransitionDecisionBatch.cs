@@ -38,6 +38,42 @@ internal enum StyleTransitionOwnerRejectionReason : byte
     PresentationSetOverlappingCommandRange,
 }
 
+internal enum StyleTransitionBatchRuntimePreflightKind : byte
+{
+    None,
+    Empty,
+    Ready,
+    Blocked,
+    Mixed,
+}
+
+internal enum StyleTransitionOwnerRuntimePreflightKind : byte
+{
+    None,
+    Ready,
+    Blocked,
+}
+
+internal enum StyleTransitionOwnerRuntimeActionKind : byte
+{
+    None,
+    Rejected,
+    NoOp,
+    StartPresentation,
+    RetargetPresentation,
+    CancelPresentation,
+    CommitPresentation,
+}
+
+internal enum StyleTransitionOwnerRuntimeBlocker : byte
+{
+    None,
+    ValidationRejected,
+    OwnerTargetMismatch,
+    MissingTrackedOwner,
+    TrackedTargetMismatch,
+}
+
 internal readonly struct StyleTransitionOwnerKey(
     StyleTransitionOwnerKind Kind,
     ActionId ActionId,
@@ -379,6 +415,235 @@ internal readonly struct StyleTransitionDecisionBatchValidationResult : IEquatab
     }
 }
 
+internal readonly struct StyleTransitionOwnerRuntimePreflightResult(
+    StyleTransitionOwnerRuntimePreflightKind Kind,
+    StyleTransitionOwnerKey OwnerKey,
+    NodeKey TargetKey,
+    StyleTransitionRuntimeDecisionKind DecisionKind,
+    StyleTransitionOwnerRuntimeActionKind ActionKind,
+    StyleTransitionOwnerRuntimeBlocker Blocker = StyleTransitionOwnerRuntimeBlocker.None,
+    StyleTransitionOwnerValidationResult ValidationResult = default,
+    bool RequiresPresentationSetInstall = false,
+    bool RequiresCompletionTracking = false,
+    bool WouldAttachCompletionMarker = false,
+    bool ClearsTrackedOwner = false,
+    bool HasTrackedOwner = false,
+    CompositionAnimationInstanceId TrackedInstanceId = default) : IEquatable<StyleTransitionOwnerRuntimePreflightResult>
+{
+    public StyleTransitionOwnerRuntimePreflightKind Kind { get; } = Kind;
+    public StyleTransitionOwnerKey OwnerKey { get; } = OwnerKey;
+    public NodeKey TargetKey { get; } = TargetKey;
+    public StyleTransitionRuntimeDecisionKind DecisionKind { get; } = DecisionKind;
+    public StyleTransitionOwnerRuntimeActionKind ActionKind { get; } = ActionKind;
+    public StyleTransitionOwnerRuntimeBlocker Blocker { get; } = Blocker;
+    public StyleTransitionOwnerValidationResult ValidationResult { get; } = ValidationResult;
+    public bool RequiresPresentationSetInstall { get; } = RequiresPresentationSetInstall;
+    public bool RequiresCompletionTracking { get; } = RequiresCompletionTracking;
+    public bool WouldAttachCompletionMarker { get; } = WouldAttachCompletionMarker;
+    public bool ClearsTrackedOwner { get; } = ClearsTrackedOwner;
+    public bool HasTrackedOwner { get; } = HasTrackedOwner;
+    public CompositionAnimationInstanceId TrackedInstanceId { get; } = TrackedInstanceId;
+    public bool IsReady => Kind == StyleTransitionOwnerRuntimePreflightKind.Ready;
+    public bool IsBlocked => Kind == StyleTransitionOwnerRuntimePreflightKind.Blocked;
+
+    internal static StyleTransitionOwnerRuntimePreflightResult Ready(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        StyleTransitionRuntimeDecisionKind decisionKind,
+        StyleTransitionOwnerRuntimeActionKind actionKind,
+        in StyleTransitionOwnerValidationResult validationResult,
+        bool requiresPresentationSetInstall = false,
+        bool requiresCompletionTracking = false,
+        bool wouldAttachCompletionMarker = false,
+        bool clearsTrackedOwner = false,
+        bool hasTrackedOwner = false,
+        CompositionAnimationInstanceId trackedInstanceId = default)
+    {
+        return new StyleTransitionOwnerRuntimePreflightResult(
+            StyleTransitionOwnerRuntimePreflightKind.Ready,
+            ownerKey,
+            targetKey,
+            decisionKind,
+            actionKind,
+            ValidationResult: validationResult,
+            RequiresPresentationSetInstall: requiresPresentationSetInstall,
+            RequiresCompletionTracking: requiresCompletionTracking,
+            WouldAttachCompletionMarker: wouldAttachCompletionMarker,
+            ClearsTrackedOwner: clearsTrackedOwner,
+            HasTrackedOwner: hasTrackedOwner,
+            TrackedInstanceId: trackedInstanceId);
+    }
+
+    internal static StyleTransitionOwnerRuntimePreflightResult Blocked(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        StyleTransitionRuntimeDecisionKind decisionKind,
+        StyleTransitionOwnerRuntimeActionKind actionKind,
+        StyleTransitionOwnerRuntimeBlocker blocker,
+        in StyleTransitionOwnerValidationResult validationResult,
+        bool hasTrackedOwner = false,
+        CompositionAnimationInstanceId trackedInstanceId = default)
+    {
+        return new StyleTransitionOwnerRuntimePreflightResult(
+            StyleTransitionOwnerRuntimePreflightKind.Blocked,
+            ownerKey,
+            targetKey,
+            decisionKind,
+            actionKind,
+            blocker,
+            validationResult,
+            HasTrackedOwner: hasTrackedOwner,
+            TrackedInstanceId: trackedInstanceId);
+    }
+
+    public bool Equals(StyleTransitionOwnerRuntimePreflightResult other)
+    {
+        return Kind == other.Kind
+            && OwnerKey == other.OwnerKey
+            && TargetKey == other.TargetKey
+            && DecisionKind == other.DecisionKind
+            && ActionKind == other.ActionKind
+            && Blocker == other.Blocker
+            && ValidationResult == other.ValidationResult
+            && RequiresPresentationSetInstall == other.RequiresPresentationSetInstall
+            && RequiresCompletionTracking == other.RequiresCompletionTracking
+            && WouldAttachCompletionMarker == other.WouldAttachCompletionMarker
+            && ClearsTrackedOwner == other.ClearsTrackedOwner
+            && HasTrackedOwner == other.HasTrackedOwner
+            && TrackedInstanceId == other.TrackedInstanceId;
+    }
+
+    public override bool Equals(object? obj) => obj is StyleTransitionOwnerRuntimePreflightResult other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Kind);
+        hash.Add(OwnerKey);
+        hash.Add(TargetKey);
+        hash.Add(DecisionKind);
+        hash.Add(ActionKind);
+        hash.Add(Blocker);
+        hash.Add(ValidationResult);
+        hash.Add(RequiresPresentationSetInstall);
+        hash.Add(RequiresCompletionTracking);
+        hash.Add(WouldAttachCompletionMarker);
+        hash.Add(ClearsTrackedOwner);
+        hash.Add(HasTrackedOwner);
+        hash.Add(TrackedInstanceId);
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(StyleTransitionOwnerRuntimePreflightResult left, StyleTransitionOwnerRuntimePreflightResult right) =>
+        left.Equals(right);
+
+    public static bool operator !=(StyleTransitionOwnerRuntimePreflightResult left, StyleTransitionOwnerRuntimePreflightResult right) =>
+        !left.Equals(right);
+}
+
+internal readonly struct StyleTransitionBatchRuntimePreflightResult : IEquatable<StyleTransitionBatchRuntimePreflightResult>
+{
+    private readonly StyleTransitionOwnerRuntimePreflightResult[]? _ownerResults;
+
+    internal StyleTransitionBatchRuntimePreflightResult(
+        StyleTransitionBatchRuntimePreflightKind Kind,
+        StyleTransitionDecisionBatchValidationResult Validation,
+        ReadOnlySpan<StyleTransitionOwnerRuntimePreflightResult> ownerResults,
+        bool PresentationStateChanged)
+    {
+        this.Kind = Kind;
+        this.Validation = Validation;
+        _ownerResults = ownerResults.IsEmpty ? null : ownerResults.ToArray();
+        this.PresentationStateChanged = PresentationStateChanged;
+    }
+
+    public StyleTransitionBatchRuntimePreflightKind Kind { get; }
+    public StyleTransitionDecisionBatchValidationResult Validation { get; }
+    public ReadOnlySpan<StyleTransitionOwnerRuntimePreflightResult> OwnerResults => _ownerResults;
+    public bool PresentationStateChanged { get; }
+    public int ReadyCount => Count(StyleTransitionOwnerRuntimePreflightKind.Ready);
+    public int BlockedCount => Count(StyleTransitionOwnerRuntimePreflightKind.Blocked);
+    public bool RequiresPresentationSetInstall => Any(result => result.RequiresPresentationSetInstall);
+    public bool RequiresCompletionTracking => Any(result => result.RequiresCompletionTracking);
+    public bool RequiresTrackedOwnerClear => Any(result => result.ClearsTrackedOwner);
+
+    public bool Equals(StyleTransitionBatchRuntimePreflightResult other)
+    {
+        if (Kind != other.Kind
+            || Validation != other.Validation
+            || PresentationStateChanged != other.PresentationStateChanged)
+        {
+            return false;
+        }
+
+        var results = OwnerResults;
+        var otherResults = other.OwnerResults;
+        if (results.Length != otherResults.Length)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < results.Length; i++)
+        {
+            if (results[i] != otherResults[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is StyleTransitionBatchRuntimePreflightResult other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Kind);
+        hash.Add(Validation);
+        hash.Add(PresentationStateChanged);
+        foreach (ref readonly var result in OwnerResults)
+        {
+            hash.Add(result);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(StyleTransitionBatchRuntimePreflightResult left, StyleTransitionBatchRuntimePreflightResult right) =>
+        left.Equals(right);
+
+    public static bool operator !=(StyleTransitionBatchRuntimePreflightResult left, StyleTransitionBatchRuntimePreflightResult right) =>
+        !left.Equals(right);
+
+    private int Count(StyleTransitionOwnerRuntimePreflightKind kind)
+    {
+        var count = 0;
+        foreach (ref readonly var result in OwnerResults)
+        {
+            if (result.Kind == kind)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private bool Any(Func<StyleTransitionOwnerRuntimePreflightResult, bool> predicate)
+    {
+        foreach (ref readonly var result in OwnerResults)
+        {
+            if (predicate(result))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
 internal static class StyleTransitionDecisionBatchPreflight
 {
     internal static StyleTransitionDecisionBatchValidationResult Validate(
@@ -515,5 +780,211 @@ internal static class StyleTransitionDecisionBatchPreflight
             : rejectedCount == results.Length
                 ? StyleTransitionBatchResultKind.Rejected
                 : StyleTransitionBatchResultKind.Mixed;
+    }
+}
+
+internal static class StyleTransitionBatchRuntimePreflight
+{
+    internal static StyleTransitionBatchRuntimePreflightResult Validate(
+        in StyleTransitionDecisionBatch batch,
+        IStyleTransitionRetainedSnapshotProvider snapshotProvider,
+        StyleTransitionCompletionTracker completionTracker)
+    {
+        ArgumentNullException.ThrowIfNull(snapshotProvider);
+        ArgumentNullException.ThrowIfNull(completionTracker);
+
+        var validation = StyleTransitionDecisionBatchPreflight.Validate(batch, snapshotProvider);
+        if (batch.IsEmpty)
+        {
+            return new StyleTransitionBatchRuntimePreflightResult(
+                StyleTransitionBatchRuntimePreflightKind.Empty,
+                validation,
+                [],
+                PresentationStateChanged: false);
+        }
+
+        var entries = batch.Entries;
+        var validationResults = validation.OwnerResults;
+        var runtimeResults = new StyleTransitionOwnerRuntimePreflightResult[entries.Length];
+        for (var i = 0; i < entries.Length; i++)
+        {
+            runtimeResults[i] = ValidateOwner(entries[i], validationResults[i], completionTracker);
+        }
+
+        return new StyleTransitionBatchRuntimePreflightResult(
+            ResolveKind(runtimeResults),
+            validation,
+            runtimeResults,
+            PresentationStateChanged: false);
+    }
+
+    private static StyleTransitionOwnerRuntimePreflightResult ValidateOwner(
+        in StyleTransitionDecisionBatchEntry entry,
+        in StyleTransitionOwnerValidationResult validationResult,
+        StyleTransitionCompletionTracker completionTracker)
+    {
+        if (validationResult.IsRejected)
+        {
+            return StyleTransitionOwnerRuntimePreflightResult.Blocked(
+                validationResult.OwnerKey,
+                validationResult.TargetKey,
+                validationResult.DecisionKind,
+                StyleTransitionOwnerRuntimeActionKind.Rejected,
+                StyleTransitionOwnerRuntimeBlocker.ValidationRejected,
+                validationResult);
+        }
+
+        if (entry.OwnerKey.TargetKey != entry.Decision.TargetKey)
+        {
+            return StyleTransitionOwnerRuntimePreflightResult.Blocked(
+                entry.OwnerKey,
+                entry.Decision.TargetKey,
+                entry.Decision.Kind,
+                ResolveActionKind(entry.Decision.Kind),
+                StyleTransitionOwnerRuntimeBlocker.OwnerTargetMismatch,
+                validationResult);
+        }
+
+        return entry.Decision.Kind switch
+        {
+            StyleTransitionRuntimeDecisionKind.Start or StyleTransitionRuntimeDecisionKind.Retarget =>
+                ValidateStartOrRetarget(entry, validationResult),
+            StyleTransitionRuntimeDecisionKind.Cancel or StyleTransitionRuntimeDecisionKind.Commit =>
+                ValidateClear(entry, validationResult, completionTracker),
+            StyleTransitionRuntimeDecisionKind.None =>
+                StyleTransitionOwnerRuntimePreflightResult.Ready(
+                    entry.OwnerKey,
+                    entry.Decision.TargetKey,
+                    entry.Decision.Kind,
+                    StyleTransitionOwnerRuntimeActionKind.NoOp,
+                    validationResult),
+            _ => StyleTransitionOwnerRuntimePreflightResult.Blocked(
+                entry.OwnerKey,
+                entry.Decision.TargetKey,
+                entry.Decision.Kind,
+                StyleTransitionOwnerRuntimeActionKind.NoOp,
+                StyleTransitionOwnerRuntimeBlocker.ValidationRejected,
+                validationResult),
+        };
+    }
+
+    private static StyleTransitionOwnerRuntimePreflightResult ValidateStartOrRetarget(
+        in StyleTransitionDecisionBatchEntry entry,
+        in StyleTransitionOwnerValidationResult validationResult)
+    {
+        var requiresCompletionTracking = CanTrackCompletion(entry.OwnerKey, entry.Decision);
+        return StyleTransitionOwnerRuntimePreflightResult.Ready(
+            entry.OwnerKey,
+            entry.Decision.TargetKey,
+            entry.Decision.Kind,
+            ResolveActionKind(entry.Decision.Kind),
+            validationResult,
+            requiresPresentationSetInstall: validationResult.HasDeclaration,
+            requiresCompletionTracking: requiresCompletionTracking,
+            wouldAttachCompletionMarker: requiresCompletionTracking && !HasCompletionMarker(entry.Decision.Markers));
+    }
+
+    private static StyleTransitionOwnerRuntimePreflightResult ValidateClear(
+        in StyleTransitionDecisionBatchEntry entry,
+        in StyleTransitionOwnerValidationResult validationResult,
+        StyleTransitionCompletionTracker completionTracker)
+    {
+        if (!completionTracker.TryGetActiveTransition(entry.OwnerKey, out var trackedTarget, out var trackedInstance))
+        {
+            return StyleTransitionOwnerRuntimePreflightResult.Blocked(
+                entry.OwnerKey,
+                entry.Decision.TargetKey,
+                entry.Decision.Kind,
+                ResolveActionKind(entry.Decision.Kind),
+                StyleTransitionOwnerRuntimeBlocker.MissingTrackedOwner,
+                validationResult);
+        }
+
+        if (trackedTarget != entry.Decision.TargetKey)
+        {
+            return StyleTransitionOwnerRuntimePreflightResult.Blocked(
+                entry.OwnerKey,
+                entry.Decision.TargetKey,
+                entry.Decision.Kind,
+                ResolveActionKind(entry.Decision.Kind),
+                StyleTransitionOwnerRuntimeBlocker.TrackedTargetMismatch,
+                validationResult,
+                hasTrackedOwner: true,
+                trackedInstanceId: trackedInstance);
+        }
+
+        return StyleTransitionOwnerRuntimePreflightResult.Ready(
+            entry.OwnerKey,
+            entry.Decision.TargetKey,
+            entry.Decision.Kind,
+            ResolveActionKind(entry.Decision.Kind),
+            validationResult,
+            clearsTrackedOwner: true,
+            hasTrackedOwner: true,
+            trackedInstanceId: trackedInstance);
+    }
+
+    private static StyleTransitionBatchRuntimePreflightKind ResolveKind(
+        ReadOnlySpan<StyleTransitionOwnerRuntimePreflightResult> results)
+    {
+        var readyCount = 0;
+        var blockedCount = 0;
+        foreach (ref readonly var result in results)
+        {
+            if (result.IsReady)
+            {
+                readyCount++;
+            }
+            else if (result.IsBlocked)
+            {
+                blockedCount++;
+            }
+        }
+
+        return readyCount == results.Length
+            ? StyleTransitionBatchRuntimePreflightKind.Ready
+            : blockedCount == results.Length
+                ? StyleTransitionBatchRuntimePreflightKind.Blocked
+                : StyleTransitionBatchRuntimePreflightKind.Mixed;
+    }
+
+    private static StyleTransitionOwnerRuntimeActionKind ResolveActionKind(
+        StyleTransitionRuntimeDecisionKind decisionKind)
+    {
+        return decisionKind switch
+        {
+            StyleTransitionRuntimeDecisionKind.Start => StyleTransitionOwnerRuntimeActionKind.StartPresentation,
+            StyleTransitionRuntimeDecisionKind.Retarget => StyleTransitionOwnerRuntimeActionKind.RetargetPresentation,
+            StyleTransitionRuntimeDecisionKind.Cancel => StyleTransitionOwnerRuntimeActionKind.CancelPresentation,
+            StyleTransitionRuntimeDecisionKind.Commit => StyleTransitionOwnerRuntimeActionKind.CommitPresentation,
+            StyleTransitionRuntimeDecisionKind.None => StyleTransitionOwnerRuntimeActionKind.NoOp,
+            _ => StyleTransitionOwnerRuntimeActionKind.None,
+        };
+    }
+
+    private static bool CanTrackCompletion(
+        StyleTransitionOwnerKey ownerKey,
+        in StyleTransitionRuntimeDecision decision)
+    {
+        return !ownerKey.IsNone
+            && ownerKey.TargetKey == decision.TargetKey
+            && decision.Kind is StyleTransitionRuntimeDecisionKind.Start or StyleTransitionRuntimeDecisionKind.Retarget
+            && decision.TargetKey != NodeKey.None
+            && decision.InstanceId.IsValid
+            && decision.RepeatMode == CompositionAnimationRepeatMode.Once;
+    }
+
+    private static bool HasCompletionMarker(ReadOnlySpan<CompositionAnimationMarker> markers)
+    {
+        for (var i = 0; i < markers.Length; i++)
+        {
+            if (markers[i].Id == StyleTransitionCompletionTracker.CompletionMarkerId
+                && markers[i].RuntimeEventId == StyleTransitionCompletionTracker.CompletionRuntimeEventId)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

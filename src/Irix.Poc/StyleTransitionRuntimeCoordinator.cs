@@ -261,6 +261,17 @@ internal sealed class StyleTransitionRuntimeCoordinator
         return StyleTransitionDecisionBatchPreflight.Validate(batch, snapshotProvider);
     }
 
+    internal StyleTransitionBatchRuntimePreflightResult ValidateBatchRuntime<TSnapshotProvider>(
+        in StyleTransitionDecisionBatch batch,
+        TSnapshotProvider snapshotProvider,
+        StyleTransitionCompletionTracker completionTracker,
+        CancellationToken cancellationToken = default)
+        where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return StyleTransitionBatchRuntimePreflight.Validate(batch, snapshotProvider, completionTracker);
+    }
+
     internal async ValueTask<StyleTransitionRuntimeResult> ApplyNextAsync<TRuntime, TCompositor, TSnapshotProvider>(
         TRuntime runtime,
         TCompositor compositor,
