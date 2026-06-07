@@ -2752,7 +2752,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, completion-pump lifecycle diagnostics, true concurrent multi-owner transition design preflight, Poc-owned batch/owner value types with deterministic acceptance/rejection tests, and coordinator batch validation against one retained snapshot are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, completion-pump lifecycle diagnostics, true concurrent multi-owner transition design preflight, Poc-owned batch/owner value types with deterministic acceptance/rejection tests, coordinator batch validation against one retained snapshot, and compositor-side presentation-set validation/conflict reporting without install are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2987,10 +2987,11 @@ public sealed class ProgramDiagnosticsTests
         var counterTransitionSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterStyleTransitionBridge.cs")));
         var coordinatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionRuntimeCoordinator.cs")));
         var completionTrackerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionCompletionTracker.cs")));
+        var presentationSetValidatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "CompositionAnimationPresentationSetValidation.cs")));
         var drawingCompositorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.cs")));
 
         Assert.Contains("## Concurrent Transition Owner Preflight", animationDesign);
-        Assert.Contains("This preflight is now a Poc-owned value-model plus coordinator validation preflight only", animationDesign);
+        Assert.Contains("This preflight is now a Poc-owned value-model plus coordinator and compositor presentation-set validation preflight only", animationDesign);
         Assert.Contains("Transition owner key", animationDesign);
         Assert.Contains("Transition decision batch", animationDesign);
         Assert.Contains("Retained target snapshot", animationDesign);
@@ -3000,20 +3001,28 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("retained target validation against one publication", animationDesign);
         Assert.Contains("presentation-set validation", animationDesign);
         Assert.Contains("per-owner completion tracking", animationDesign);
+        Assert.Contains("CompositionAnimationPresentationSetValidator", animationDesign);
+        Assert.Contains("DrawingBackendCompositor.ValidateCompositionAnimationPresentationSet", animationDesign);
+        Assert.Contains("duplicate layer ids and overlapping command ranges", animationDesign);
         Assert.Contains("Batch order is runtime-owned and deterministic", animationDesign);
         Assert.Contains("A batch may be partially accepted only if rejected owners are reported before any accepted owner changes presentation state", animationDesign);
         Assert.Contains("Counter multi-target control-state deltas", animationDesign);
         Assert.Contains("Done: Poc-owned batch/owner value types and tests around deterministic acceptance/rejection exist without installing multiple compositor owners", animationDesign);
+        Assert.Contains("Done: compositor-side presentation-set validation and conflict reporting exists for transform/opacity declarations without installing the set", animationDesign);
+        Assert.Contains("Next: extend completion tracking from one active transition to an owner table", animationDesign);
         Assert.Contains("StyleTransitionDecisionBatchPreflight", animationDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ValidateBatch", animationDesign);
         Assert.Contains("PresentationStateChanged=false", animationDesign);
         Assert.Contains("coordinator `ValidateBatch` coverage", status);
         Assert.Contains("batch apply, compositor presentation-set install, and per-owner completion tracking remain deferred", status);
         Assert.Contains("coordinator batch validation against one retained snapshot", status);
+        Assert.Contains("compositor-side presentation-set validation/conflict reporting without install", status);
+        Assert.Contains("next useful style slice is extending completion tracking from one active transition to an owner table", status);
         Assert.Contains("coordinator batch validation against one retained snapshot", worklist);
-        Assert.Contains("Next slice should add compositor-side presentation-set validation and conflict reporting without installing the set", worklist);
+        Assert.Contains("compositor-side presentation-set validation/conflict reporting without install", worklist);
+        Assert.Contains("Next slice should extend completion tracking from one active transition to an owner table", worklist);
         Assert.Contains("Concurrent multi-owner transition support is now written as a preflight", styleDesign);
-        Assert.Contains("deterministic acceptance/rejection tests, and `StyleTransitionRuntimeCoordinator.ValidateBatch` exist", styleDesign);
+        Assert.Contains("deterministic acceptance/rejection tests, `StyleTransitionRuntimeCoordinator.ValidateBatch`, and rendering-owned presentation-set validation exist", styleDesign);
 
         Assert.Contains("namespace Irix.Poc;", batchSource);
         Assert.Contains("internal enum StyleTransitionOwnerKind", batchSource);
@@ -3025,6 +3034,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("internal static class StyleTransitionDecisionBatchPreflight", batchSource);
         Assert.Contains("public static StyleTransitionOwnerKey ControlState(ActionId actionId, NodeKey targetKey)", batchSource);
         Assert.Contains("StyleTransitionCompiler.Compile", batchSource);
+        Assert.Contains("CompositionAnimationPresentationSetValidator.Validate", batchSource);
+        Assert.Contains("PresentationSetDuplicateLayerId", batchSource);
+        Assert.Contains("PresentationSetOverlappingCommandRange", batchSource);
         Assert.Contains("PresentationStateChanged: false", batchSource);
 
         Assert.Contains("CounterStyleTransitionLifecycleReason.MultiTargetUnsupported", counterTransitionSource);
@@ -3036,7 +3048,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("StartBatch", coordinatorSource);
         Assert.DoesNotContain("SetCompositionAnimationPresentationSet", coordinatorSource);
         Assert.Contains("private TrackedTransition _active;", completionTrackerSource);
+        Assert.Contains("internal static class CompositionAnimationPresentationSetValidator", presentationSetValidatorSource);
+        Assert.Contains("CompositionAnimationPresentationSetRejectionReason.DuplicateLayerId", presentationSetValidatorSource);
+        Assert.Contains("CompositionAnimationPresentationSetRejectionReason.OverlappingCommandRange", presentationSetValidatorSource);
+        Assert.Contains("PresentationStateChanged: false", presentationSetValidatorSource);
+        Assert.DoesNotContain("StyleTransitionOwnerKey", presentationSetValidatorSource);
+        Assert.DoesNotContain("StyleTransitionDecisionBatch", presentationSetValidatorSource);
         Assert.Contains("CompositionAnimationPlan?", drawingCompositorSource);
+        Assert.Contains("ValidateCompositionAnimationPresentationSet", drawingCompositorSource);
+        Assert.Contains("CompositionAnimationPresentationSetValidator.Validate", drawingCompositorSource);
         Assert.DoesNotContain("StyleTransitionOwnerKey", drawingCompositorSource);
         Assert.DoesNotContain("StyleTransitionDecisionBatch", drawingCompositorSource);
 
@@ -3057,6 +3077,10 @@ public sealed class ProgramDiagnosticsTests
                 "internal interface IStyleTransitionMultiOwnerCoordinator",
                 "SetCompositionAnimationDeclarations",
                 "SetCompositionAnimationPresentationSet",
+                "InstallCompositionAnimationPresentationSet",
+                "ApplyCompositionAnimationPresentationSet",
+                "StartCompositionAnimationPresentationSet",
+                "ApplyPresentationSet",
                 "Dictionary<StyleTransitionOwnerKey"
             })
             {

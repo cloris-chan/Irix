@@ -1063,6 +1063,70 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleTransitionRuntimeCoordinator_validate_batch_reports_presentation_set_conflict_without_compositor_install()
+    {
+        var snapshot = CreateMultiTargetStyleTransitionRetainedSnapshot();
+        var snapshotProvider = new CountingStyleTransitionRetainedSnapshotProvider(snapshot);
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var coordinator = new StyleTransitionRuntimeCoordinator();
+        var firstIncrement = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22)),
+            StyleTransitionRuntimeDecision.Start(
+                new NodeKey(22),
+                BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 4),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(41)));
+        var secondIncrement = new StyleTransitionDecisionBatchEntry(
+            StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(22)),
+            StyleTransitionRuntimeDecision.Retarget(
+                new NodeKey(22),
+                BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 4),
+                BuildCompositionStyleProperties(opacity: 0.5, translateX: 24, translateY: 8),
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50),
+                CompositionAnimationEasing.SineOut,
+                CompositionAnimationRepeatMode.Once,
+                new CompositionAnimationInstanceId(42)));
+        var batch = StyleTransitionDecisionBatch.Create([firstIncrement, secondIncrement]);
+
+        var result = coordinator.ValidateBatch(batch, snapshotProvider, TestContext.Current.CancellationToken);
+
+        Assert.Equal(StyleTransitionBatchResultKind.Mixed, result.Kind);
+        Assert.Equal(1, result.AcceptedCount);
+        Assert.Equal(1, result.RejectedCount);
+        Assert.Equal(1, snapshotProvider.AccessCount);
+        Assert.False(result.PresentationStateChanged);
+        Assert.Equal(0, compositor.StartCount);
+        Assert.Equal(0, compositor.CancelCount);
+
+        Assert.Collection(
+            result.OwnerResults.ToArray(),
+            first =>
+            {
+                Assert.Equal(StyleTransitionOwnerValidationKind.Accepted, first.Kind);
+                Assert.Equal(firstIncrement.OwnerKey, first.OwnerKey);
+                Assert.Equal(new CompositionLayerId(22), first.LayerId);
+                Assert.True(first.CommandStart >= 0);
+                Assert.True(first.CommandCount > 0);
+                Assert.Equal(-1, first.ConflictingOwnerIndex);
+            },
+            second =>
+            {
+                Assert.Equal(StyleTransitionOwnerValidationKind.Rejected, second.Kind);
+                Assert.Equal(secondIncrement.OwnerKey, second.OwnerKey);
+                Assert.Equal(StyleTransitionOwnerRejectionReason.PresentationSetDuplicateLayerId, second.RejectionReason);
+                Assert.Equal(StyleTransitionCompileStatus.CompiledCompositionDeclaration, second.CompileStatus);
+                Assert.True(second.HasDeclaration);
+                Assert.Equal(new CompositionLayerId(22), second.LayerId);
+                Assert.Equal(0, second.ConflictingOwnerIndex);
+            });
+    }
+
+    [Fact]
     public async Task StyleTransitionRuntimeCoordinator_batch_validation_preserves_single_owner_apply_path()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

@@ -31,6 +31,11 @@ internal enum StyleTransitionOwnerRejectionReason : byte
     MissingRetainedSnapshot,
     MissingRetainedTarget,
     CompileRejected,
+    PresentationSetMissingRetainedFrame,
+    PresentationSetCommandFrameMismatch,
+    PresentationSetInvalidResolvedPlan,
+    PresentationSetDuplicateLayerId,
+    PresentationSetOverlappingCommandRange,
 }
 
 internal readonly struct StyleTransitionOwnerKey(
@@ -147,7 +152,11 @@ internal readonly struct StyleTransitionOwnerValidationResult(
     StyleTransitionOwnerRejectionReason RejectionReason = StyleTransitionOwnerRejectionReason.None,
     StyleTransitionCompileStatus CompileStatus = StyleTransitionCompileStatus.None,
     StyleDeltaPlan DeltaPlan = default,
-    bool HasDeclaration = false) : IEquatable<StyleTransitionOwnerValidationResult>
+    bool HasDeclaration = false,
+    CompositionLayerId LayerId = default,
+    int CommandStart = -1,
+    int CommandCount = 0,
+    int ConflictingOwnerIndex = -1) : IEquatable<StyleTransitionOwnerValidationResult>
 {
     public StyleTransitionOwnerValidationKind Kind { get; } = Kind;
     public StyleTransitionOwnerKey OwnerKey { get; } = OwnerKey;
@@ -157,6 +166,10 @@ internal readonly struct StyleTransitionOwnerValidationResult(
     public StyleTransitionCompileStatus CompileStatus { get; } = CompileStatus;
     public StyleDeltaPlan DeltaPlan { get; } = DeltaPlan;
     public bool HasDeclaration { get; } = HasDeclaration;
+    public CompositionLayerId LayerId { get; } = LayerId;
+    public int CommandStart { get; } = CommandStart;
+    public int CommandCount { get; } = CommandCount;
+    public int ConflictingOwnerIndex { get; } = ConflictingOwnerIndex;
     public bool IsAccepted => Kind == StyleTransitionOwnerValidationKind.Accepted;
     public bool IsRejected => Kind == StyleTransitionOwnerValidationKind.Rejected;
 
@@ -173,6 +186,42 @@ internal readonly struct StyleTransitionOwnerValidationResult(
             CompileStatus: compileResult.Status,
             DeltaPlan: compileResult.DeltaPlan,
             HasDeclaration: compileResult.HasDeclaration);
+    }
+
+    internal StyleTransitionOwnerValidationResult WithPresentationSetValidation(
+        in CompositionAnimationPresentationSetEntryValidationResult presentationResult,
+        int conflictingOwnerIndex = -1)
+    {
+        if (presentationResult.IsAccepted)
+        {
+            return new StyleTransitionOwnerValidationResult(
+                Kind,
+                OwnerKey,
+                TargetKey,
+                DecisionKind,
+                RejectionReason,
+                CompileStatus,
+                DeltaPlan,
+                HasDeclaration,
+                presentationResult.LayerId,
+                presentationResult.CommandStart,
+                presentationResult.CommandCount,
+                ConflictingOwnerIndex);
+        }
+
+        return new StyleTransitionOwnerValidationResult(
+            StyleTransitionOwnerValidationKind.Rejected,
+            OwnerKey,
+            TargetKey,
+            DecisionKind,
+            MapPresentationSetRejection(presentationResult.RejectionReason),
+            CompileStatus,
+            DeltaPlan,
+            HasDeclaration,
+            presentationResult.LayerId,
+            presentationResult.CommandStart,
+            presentationResult.CommandCount,
+            conflictingOwnerIndex);
     }
 
     internal static StyleTransitionOwnerValidationResult Rejected(
@@ -201,17 +250,52 @@ internal readonly struct StyleTransitionOwnerValidationResult(
             && RejectionReason == other.RejectionReason
             && CompileStatus == other.CompileStatus
             && DeltaPlan == other.DeltaPlan
-            && HasDeclaration == other.HasDeclaration;
+            && HasDeclaration == other.HasDeclaration
+            && LayerId == other.LayerId
+            && CommandStart == other.CommandStart
+            && CommandCount == other.CommandCount
+            && ConflictingOwnerIndex == other.ConflictingOwnerIndex;
     }
 
     public override bool Equals(object? obj) => obj is StyleTransitionOwnerValidationResult other && Equals(other);
 
-    public override int GetHashCode() =>
-        HashCode.Combine(Kind, OwnerKey, TargetKey, DecisionKind, RejectionReason, CompileStatus, DeltaPlan, HasDeclaration);
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Kind);
+        hash.Add(OwnerKey);
+        hash.Add(TargetKey);
+        hash.Add(DecisionKind);
+        hash.Add(RejectionReason);
+        hash.Add(CompileStatus);
+        hash.Add(DeltaPlan);
+        hash.Add(HasDeclaration);
+        hash.Add(LayerId);
+        hash.Add(CommandStart);
+        hash.Add(CommandCount);
+        hash.Add(ConflictingOwnerIndex);
+        return hash.ToHashCode();
+    }
 
     public static bool operator ==(StyleTransitionOwnerValidationResult left, StyleTransitionOwnerValidationResult right) => left.Equals(right);
 
     public static bool operator !=(StyleTransitionOwnerValidationResult left, StyleTransitionOwnerValidationResult right) => !left.Equals(right);
+
+    private static StyleTransitionOwnerRejectionReason MapPresentationSetRejection(
+        CompositionAnimationPresentationSetRejectionReason reason)
+    {
+        return reason switch
+        {
+            CompositionAnimationPresentationSetRejectionReason.MissingRetainedSnapshot => StyleTransitionOwnerRejectionReason.MissingRetainedSnapshot,
+            CompositionAnimationPresentationSetRejectionReason.MissingRetainedFrame => StyleTransitionOwnerRejectionReason.PresentationSetMissingRetainedFrame,
+            CompositionAnimationPresentationSetRejectionReason.CommandFrameMismatch => StyleTransitionOwnerRejectionReason.PresentationSetCommandFrameMismatch,
+            CompositionAnimationPresentationSetRejectionReason.MissingRetainedTarget => StyleTransitionOwnerRejectionReason.MissingRetainedTarget,
+            CompositionAnimationPresentationSetRejectionReason.InvalidResolvedPlan => StyleTransitionOwnerRejectionReason.PresentationSetInvalidResolvedPlan,
+            CompositionAnimationPresentationSetRejectionReason.DuplicateLayerId => StyleTransitionOwnerRejectionReason.PresentationSetDuplicateLayerId,
+            CompositionAnimationPresentationSetRejectionReason.OverlappingCommandRange => StyleTransitionOwnerRejectionReason.PresentationSetOverlappingCommandRange,
+            _ => StyleTransitionOwnerRejectionReason.PresentationSetInvalidResolvedPlan,
+        };
+    }
 }
 
 internal readonly struct StyleTransitionDecisionBatchValidationResult : IEquatable<StyleTransitionDecisionBatchValidationResult>
@@ -314,38 +398,55 @@ internal static class StyleTransitionDecisionBatchPreflight
         var entries = batch.Entries;
         var snapshot = snapshotProvider.LastRetainedInputSnapshot;
         var results = new StyleTransitionOwnerValidationResult[entries.Length];
-        var acceptedCount = 0;
-        var rejectedCount = 0;
+        var declarations = new CompositionAnimationDeclaration[entries.Length];
+        var declarationOwnerIndices = new int[entries.Length];
+        var declarationCount = 0;
         for (var i = 0; i < entries.Length; i++)
         {
             var entry = entries[i];
-            var result = ValidateEntry(entry, snapshot);
+            var result = ValidateEntry(entry, snapshot, out var declaration);
             results[i] = result;
-            if (result.IsAccepted)
+
+            if (result.IsAccepted && result.HasDeclaration)
             {
-                acceptedCount++;
-            }
-            else if (result.IsRejected)
-            {
-                rejectedCount++;
+                declarations[declarationCount] = declaration;
+                declarationOwnerIndices[declarationCount] = i;
+                declarationCount++;
             }
         }
 
-        var kind = acceptedCount == entries.Length
-            ? StyleTransitionBatchResultKind.Accepted
-            : rejectedCount == entries.Length
-                ? StyleTransitionBatchResultKind.Rejected
-                : StyleTransitionBatchResultKind.Mixed;
+        if (declarationCount > 0)
+        {
+            var presentationSetValidation = CompositionAnimationPresentationSetValidator.Validate(
+                declarations.AsSpan(0, declarationCount),
+                snapshot,
+                snapshot?.CommandCount ?? 0);
+            var presentationResults = presentationSetValidation.EntryResults;
+            for (var i = 0; i < presentationResults.Length; i++)
+            {
+                var ownerIndex = declarationOwnerIndices[i];
+                var conflictingOwnerIndex = presentationResults[i].ConflictingIndex >= 0
+                    ? declarationOwnerIndices[presentationResults[i].ConflictingIndex]
+                    : -1;
+                results[ownerIndex] = results[ownerIndex].WithPresentationSetValidation(
+                    presentationResults[i],
+                    conflictingOwnerIndex);
+            }
+        }
+
         return new StyleTransitionDecisionBatchValidationResult(
-            kind,
+            ResolveKind(results),
             results,
             PresentationStateChanged: false);
     }
 
     private static StyleTransitionOwnerValidationResult ValidateEntry(
         in StyleTransitionDecisionBatchEntry entry,
-        RenderPipelineRetainedInputSnapshot? snapshot)
+        RenderPipelineRetainedInputSnapshot? snapshot,
+        out CompositionAnimationDeclaration declaration)
     {
+        declaration = default;
+
         if (entry.OwnerKey.IsNone)
         {
             return StyleTransitionOwnerValidationResult.Rejected(
@@ -379,6 +480,7 @@ internal static class StyleTransitionDecisionBatchPreflight
         }
 
         var compileResult = StyleTransitionCompiler.Compile(entry.Decision.ToCompileRequest());
+        declaration = compileResult.Declaration;
         if (!compileResult.HasDeclaration)
         {
             return StyleTransitionOwnerValidationResult.Rejected(
@@ -390,5 +492,28 @@ internal static class StyleTransitionDecisionBatchPreflight
         }
 
         return StyleTransitionOwnerValidationResult.Accepted(entry.OwnerKey, entry.Decision, compileResult);
+    }
+
+    private static StyleTransitionBatchResultKind ResolveKind(ReadOnlySpan<StyleTransitionOwnerValidationResult> results)
+    {
+        var acceptedCount = 0;
+        var rejectedCount = 0;
+        foreach (ref readonly var result in results)
+        {
+            if (result.IsAccepted)
+            {
+                acceptedCount++;
+            }
+            else if (result.IsRejected)
+            {
+                rejectedCount++;
+            }
+        }
+
+        return acceptedCount == results.Length
+            ? StyleTransitionBatchResultKind.Accepted
+            : rejectedCount == results.Length
+                ? StyleTransitionBatchResultKind.Rejected
+                : StyleTransitionBatchResultKind.Mixed;
     }
 }

@@ -131,11 +131,11 @@ Current runtime ownership preflight: `IStyleTransitionRuntimeAdapter`, `StyleTra
 
 True concurrent style transitions require a design boundary before code changes. The current Counter path deliberately keeps multi-target control-state deltas on normal app dispatch because there is only one transform/opacity presentation owner. The next implementation must not relax that fallback until the runtime and compositor can represent multiple active owners without losing commit, cancel, retarget, marker, and hit-test semantics.
 
-This preflight is now a Poc-owned value-model plus coordinator validation preflight only. It adds `StyleTransitionOwnerKey`, `StyleTransitionDecisionBatch`, per-owner validation results, deterministic acceptance/rejection tests, and `StyleTransitionRuntimeCoordinator.ValidateBatch`, but it does not add a public transition API, does not add a generic scheduler, does not move Poc runtime types into `Irix.Rendering`, does not install multiple compositor owners, and does not change `DrawingBackendCompositor` execution contracts.
+This preflight is now a Poc-owned value-model plus coordinator and compositor presentation-set validation preflight only. It adds `StyleTransitionOwnerKey`, `StyleTransitionDecisionBatch`, per-owner validation results, deterministic acceptance/rejection tests, `StyleTransitionRuntimeCoordinator.ValidateBatch`, `CompositionAnimationPresentationSetValidator`, and `DrawingBackendCompositor.ValidateCompositionAnimationPresentationSet`, but it does not add a public transition API, does not add a generic scheduler, does not move Poc runtime types into `Irix.Rendering`, does not install multiple compositor owners, and does not change `DrawingBackendCompositor` execution contracts.
 
 The minimum accepted design is runtime-owned owner identity and decision batching, retained target validation against one publication, compositor presentation-set validation, per-owner completion tracking, and diagnostics that report accepted and rejected owners before presentation state changes.
 
-Current preflight implementation: `StyleTransitionDecisionBatchPreflight` validates Poc-owned owner/decision batches against one retained publication and the existing `StyleTransitionCompiler`, reports accepted and rejected owners in runtime order, and reports `PresentationStateChanged=false`. `StyleTransitionRuntimeCoordinator.ValidateBatch` exposes that validation at the Poc coordinator boundary and preserves the existing single-owner apply path. It is not a batch apply path; Counter multi-target control-state deltas still use abort-and-normal-dispatch.
+Current preflight implementation: `StyleTransitionDecisionBatchPreflight` validates Poc-owned owner/decision batches against one retained publication and the existing `StyleTransitionCompiler`, then feeds compiled transform/opacity declarations into the rendering-owned presentation-set validator. That validator resolves declarations against the retained command frame, reports duplicate layer ids and overlapping command ranges before presentation state changes, and keeps `PresentationStateChanged=false`. `StyleTransitionRuntimeCoordinator.ValidateBatch` exposes that validation at the Poc coordinator boundary and preserves the existing single-owner apply path. `DrawingBackendCompositor.ValidateCompositionAnimationPresentationSet` exposes the same validation against the compositor's retained frame without installing a plan. This is not a batch apply path; Counter multi-target control-state deltas still use abort-and-normal-dispatch.
 
 Required future shapes:
 
@@ -144,7 +144,7 @@ Required future shapes:
 | Transition owner key | App/control runtime | Stable identity for one logical control/property transition, separate from `NodeKey` and from app message identity. |
 | Transition decision batch | App/control runtime | Groups one or more start, retarget, cancel, or commit decisions produced by one input/control update. Batch order is runtime-owned and deterministic. |
 | Retained target snapshot | Rendering/layout pipeline | Resolves each decision target against the same retained publication before compositor install. A missing or stale target rejects the affected owner before presentation changes. |
-| Compositor presentation set | Compositor/backend boundary | Installs multiple transform/opacity declarations as one validated set when their retained command ranges and layer ids do not conflict. |
+| Compositor presentation set | Compositor/backend boundary | Validates multiple transform/opacity declarations as one set when their retained command ranges and layer ids do not conflict; future install can only use an already validated set. |
 | Completion tracker table | App/control runtime | Tracks completion markers per owner/instance so one completed owner cannot commit or clear another owner. |
 | Lifecycle diagnostics | Poc/internal diagnostics | Reports accepted owners, rejected owners, fallback reason, active owner count, marker-drain count, and whether app-owned fallback aborted any active presentation. |
 
@@ -162,8 +162,8 @@ Implementation order:
 
 1. Done: Poc-owned batch/owner value types and tests around deterministic acceptance/rejection exist without installing multiple compositor owners.
 2. Done: the coordinator can validate a batch against one retained snapshot and report per-owner results while preserving current single-owner behavior.
-3. Next: add compositor-side presentation-set validation and conflict reporting for transform/opacity declarations without installing the set yet.
-4. Extend completion tracking from one active transition to an owner table.
+3. Done: compositor-side presentation-set validation and conflict reporting exists for transform/opacity declarations without installing the set.
+4. Next: extend completion tracking from one active transition to an owner table.
 5. Only then allow Counter multi-target control-state deltas to use concurrent transitions instead of the current abort-and-normal-dispatch path.
 
 Non-goals for the first concurrent-owner slice: public authoring syntax, theme/cascade resolution, loop/alternate auto-completion, layout-skip, color/material animation, scroll runtime extraction, or a generic app scheduler.

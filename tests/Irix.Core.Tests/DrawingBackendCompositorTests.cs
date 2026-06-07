@@ -1606,6 +1606,95 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task ValidateCompositionAnimationPresentationSet_reports_conflicts_without_installing_plan()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(22),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(23),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var first = CreatePresentationSetDeclaration(new NodeKey(22));
+        var second = CreatePresentationSetDeclaration(new NodeKey(23));
+        var duplicateFirst = CreatePresentationSetDeclaration(new NodeKey(22));
+        var rootOverlap = CreatePresentationSetDeclaration(new NodeKey(1));
+
+        var accepted = compositor.ValidateCompositionAnimationPresentationSet([first, second], snapshot);
+        var conflicted = compositor.ValidateCompositionAnimationPresentationSet([first, duplicateFirst], snapshot);
+        var overlapped = compositor.ValidateCompositionAnimationPresentationSet([rootOverlap, first], snapshot);
+
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Accepted, accepted.Kind);
+        Assert.Equal(2, accepted.AcceptedCount);
+        Assert.Equal(0, accepted.RejectedCount);
+        Assert.False(accepted.PresentationStateChanged);
+        Assert.Equal(new CompositionLayerId(22), accepted.EntryResults[0].LayerId);
+        Assert.Equal(new CompositionLayerId(23), accepted.EntryResults[1].LayerId);
+
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Mixed, conflicted.Kind);
+        Assert.Equal(1, conflicted.AcceptedCount);
+        Assert.Equal(1, conflicted.RejectedCount);
+        Assert.False(conflicted.PresentationStateChanged);
+        Assert.Equal(CompositionAnimationPresentationSetEntryKind.Accepted, conflicted.EntryResults[0].Kind);
+        Assert.Equal(CompositionAnimationPresentationSetEntryKind.Rejected, conflicted.EntryResults[1].Kind);
+        Assert.Equal(CompositionAnimationPresentationSetRejectionReason.DuplicateLayerId, conflicted.EntryResults[1].RejectionReason);
+        Assert.Equal(new CompositionLayerId(22), conflicted.EntryResults[1].LayerId);
+        Assert.Equal(0, conflicted.EntryResults[1].ConflictingIndex);
+
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Mixed, overlapped.Kind);
+        Assert.Equal(1, overlapped.AcceptedCount);
+        Assert.Equal(1, overlapped.RejectedCount);
+        Assert.Equal(CompositionAnimationPresentationSetEntryKind.Accepted, overlapped.EntryResults[0].Kind);
+        Assert.Equal(CompositionAnimationPresentationSetEntryKind.Rejected, overlapped.EntryResults[1].Kind);
+        Assert.Equal(CompositionAnimationPresentationSetRejectionReason.OverlappingCommandRange, overlapped.EntryResults[1].RejectionReason);
+        Assert.Equal(new CompositionLayerId(22), overlapped.EntryResults[1].LayerId);
+        Assert.Equal(0, overlapped.EntryResults[1].ConflictingIndex);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Equal(0, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
+    public void ValidateCompositionAnimationPresentationSet_requires_retained_frame_without_installing_plan()
+    {
+        using var compositor = new DrawingBackendCompositor(new CompositionTrackingBackend());
+        var pipeline = new RenderPipeline();
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(22),
+                VirtualNodeProperty.Width(100),
+                VirtualNodeProperty.Height(40),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)));
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        var declaration = CreatePresentationSetDeclaration(new NodeKey(22));
+
+        var result = compositor.ValidateCompositionAnimationPresentationSet([declaration], pipeline.LastRetainedInputSnapshot!);
+
+        Assert.Equal(CompositionAnimationPresentationSetResultKind.Rejected, result.Kind);
+        Assert.Equal(0, result.AcceptedCount);
+        Assert.Equal(1, result.RejectedCount);
+        Assert.False(result.PresentationStateChanged);
+        Assert.Equal(CompositionAnimationPresentationSetRejectionReason.MissingRetainedFrame, result.EntryResults[0].RejectionReason);
+        Assert.Null(compositor.CompositionAnimationPlan);
+    }
+
+    [Fact]
     public async Task RenderCompositionScrollPresentationTickAsync_records_missing_capability_skip_status()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -2160,6 +2249,19 @@ public sealed class DrawingBackendCompositorTests
                 CompositionDuration.FromStopwatchTicks(1)),
             CompositionTransformAnimation.Identity,
             CompositionScalarAnimation.Constant(1f)));
+    }
+
+    private static CompositionAnimationDeclaration CreatePresentationSetDeclaration(NodeKey targetKey)
+    {
+        return new CompositionAnimationDeclaration(
+            targetKey,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(0, 20),
+                CompositionScalarAnimation.Constant(0)),
+            CompositionScalarAnimation.Constant(1f));
     }
 
     private static CompositionScrollPresentationPlan CreateScrollPresentationPlan(int commandCount)
