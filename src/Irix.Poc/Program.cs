@@ -175,7 +175,49 @@ internal static partial class Program
                         nextOwnership,
                         hasActiveScrollPresentation,
                         CompositionTimestamp.Now());
-                    if (transitionLifecycle.HasTransitionDecision)
+                    if (transitionLifecycle.HasTransitionBatch)
+                    {
+                        var transitionTask = CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
+                            runtime,
+                            message,
+                            transitionLifecycle.Batch,
+                            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(d3d12Compositor),
+                            new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
+                            styleTransitionCompletionTracker).AsTask();
+                        _ = transitionTask.ContinueWith(
+                            static (task, state) =>
+                            {
+                                if (task.Status != TaskStatus.RanToCompletion)
+                                {
+                                    return;
+                                }
+
+                                var context = ((StyleTransitionBatchContinuationContext)state!);
+                                if (task.Result.Kind == StyleTransitionBatchPresentationActivationKind.Activated)
+                                {
+                                    context.CompletionPump.EnsureRunning();
+                                    return;
+                                }
+
+                                AbortStyleTransitionPresentationForRuntime(
+                                    task.Result,
+                                    context.CompletionTracker,
+                                    new DrawingBackendStyleTransitionCompositorAdapter(context.Compositor));
+                            },
+                            new StyleTransitionBatchContinuationContext(
+                                styleTransitionCompletionPump,
+                                styleTransitionCompletionTracker,
+                                d3d12Compositor),
+                            CancellationToken.None,
+                            TaskContinuationOptions.ExecuteSynchronously,
+                            TaskScheduler.Default);
+                        _ = transitionTask.ContinueWith(
+                            static task => _ = task.Exception,
+                            CancellationToken.None,
+                            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                            TaskScheduler.Default);
+                    }
+                    else if (transitionLifecycle.HasTransitionDecision)
                     {
                         var transitionTask = CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
                             runtime,
@@ -469,6 +511,43 @@ internal static partial class Program
             compositor,
             new FixedStyleTransitionRetainedSnapshotProvider(null),
             CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    internal static StyleTransitionRuntimeResult AbortStyleTransitionPresentationForRuntime<TCompositor>(
+        in StyleTransitionBatchPresentationActivationResult activationResult,
+        StyleTransitionCompletionTracker completionTracker,
+        TCompositor compositor,
+        CancellationToken cancellationToken = default)
+        where TCompositor : IStyleTransitionCompositorAdapter
+    {
+        ArgumentNullException.ThrowIfNull(completionTracker);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (activationResult.Kind != StyleTransitionBatchPresentationActivationKind.Blocked)
+        {
+            return StyleTransitionRuntimeResult.NoOp();
+        }
+
+        var aborted = completionTracker.AbortActiveTransition();
+        if (aborted.Kind != StyleTransitionCompletionResultKind.Aborted)
+        {
+            return StyleTransitionRuntimeResult.NoOp();
+        }
+
+        return StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            StyleTransitionRuntimeDecision.Cancel(aborted.TargetKey),
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(null),
+            CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    private sealed class StyleTransitionBatchContinuationContext(
+        StyleTransitionCompletionPump CompletionPump,
+        StyleTransitionCompletionTracker CompletionTracker,
+        DrawingBackendCompositor Compositor)
+    {
+        public StyleTransitionCompletionPump CompletionPump { get; } = CompletionPump;
+        public StyleTransitionCompletionTracker CompletionTracker { get; } = CompletionTracker;
+        public DrawingBackendCompositor Compositor { get; } = Compositor;
     }
 
 }

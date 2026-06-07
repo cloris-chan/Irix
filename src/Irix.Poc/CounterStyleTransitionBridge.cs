@@ -24,10 +24,15 @@ internal static class CounterStyleTransitionBridge
                 CounterStyleTransitionLifecycleReason.ActiveScrollPresentation);
         }
 
-        var reason = CreateDecisionCore(previous, next, startTimestamp, out var decision);
-        return reason == CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta
-            ? CounterStyleTransitionLifecycleResult.ApplyTransition(decision)
-            : CounterStyleTransitionLifecycleResult.DispatchNormally(reason);
+        var reason = CreateDecisionBatchCore(previous, next, startTimestamp, out var decision, out var batch);
+        return reason switch
+        {
+            CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta =>
+                CounterStyleTransitionLifecycleResult.ApplyTransition(decision, batch),
+            CounterStyleTransitionLifecycleReason.MultiTargetControlStateDelta =>
+                CounterStyleTransitionLifecycleResult.ApplyTransitionBatch(batch, reason),
+            _ => CounterStyleTransitionLifecycleResult.DispatchNormally(reason),
+        };
     }
 
     internal static bool TryCreateDecision(
@@ -40,16 +45,44 @@ internal static class CounterStyleTransitionBridge
             == CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta;
     }
 
+    internal static bool TryCreateDecisionBatch(
+        in OwnershipSnapshot previous,
+        in OwnershipSnapshot next,
+        CompositionTimestamp startTimestamp,
+        out StyleTransitionDecisionBatch batch)
+    {
+        var reason = CreateDecisionBatchCore(previous, next, startTimestamp, out _, out batch);
+        return reason is CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta
+            or CounterStyleTransitionLifecycleReason.MultiTargetControlStateDelta;
+    }
+
     private static CounterStyleTransitionLifecycleReason CreateDecisionCore(
         in OwnershipSnapshot previous,
         in OwnershipSnapshot next,
         CompositionTimestamp startTimestamp,
         out StyleTransitionRuntimeDecision decision)
     {
-        var changed = false;
-        var selectedTarget = default(CounterButtonTransitionTarget);
-        var selectedPreviousState = default(ControlVisualState);
-        var selectedNextState = default(ControlVisualState);
+        var reason = CreateDecisionBatchCore(previous, next, startTimestamp, out decision, out var batch);
+        if (reason != CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta)
+        {
+            decision = default;
+        }
+
+        _ = batch;
+        return reason;
+    }
+
+    private static CounterStyleTransitionLifecycleReason CreateDecisionBatchCore(
+        in OwnershipSnapshot previous,
+        in OwnershipSnapshot next,
+        CompositionTimestamp startTimestamp,
+        out StyleTransitionRuntimeDecision decision,
+        out StyleTransitionDecisionBatch batch)
+    {
+        decision = default;
+        batch = default;
+        var entries = new StyleTransitionDecisionBatchEntry[CounterButtonTransitionTarget.All.Length];
+        var count = 0;
         foreach (var target in CounterButtonTransitionTarget.All)
         {
             var previousState = ControlVisualStateProjection.Project(previous, target.ActionId);
@@ -59,40 +92,46 @@ internal static class CounterStyleTransitionBridge
                 continue;
             }
 
-            if (changed)
-            {
-                decision = default;
-                return CounterStyleTransitionLifecycleReason.MultiTargetUnsupported;
-            }
-
-            changed = true;
-            selectedTarget = target;
-            selectedPreviousState = previousState;
-            selectedNextState = nextState;
+            var entryDecision = CreateDecision(target, previousState, nextState, startTimestamp, next.HoverChangeCount);
+            entries[count++] = new StyleTransitionDecisionBatchEntry(
+                StyleTransitionOwnerKey.ControlState(target.ActionId, target.NodeKey),
+                entryDecision);
         }
 
-        if (!changed)
+        if (count == 0)
         {
-            decision = default;
             return CounterStyleTransitionLifecycleReason.NoControlStateDelta;
         }
 
-        var previousProperties = ToCompositionProperties(selectedPreviousState);
-        var nextProperties = ToCompositionProperties(selectedNextState);
-        var kind = RequiresRetarget(selectedPreviousState, selectedNextState)
+        decision = count == 1 ? entries[0].Decision : default;
+        batch = StyleTransitionDecisionBatch.Create(entries.AsSpan(0, count));
+        return count == 1
+            ? CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta
+            : CounterStyleTransitionLifecycleReason.MultiTargetControlStateDelta;
+    }
+
+    private static StyleTransitionRuntimeDecision CreateDecision(
+        CounterButtonTransitionTarget target,
+        ControlVisualState previousState,
+        ControlVisualState nextState,
+        CompositionTimestamp startTimestamp,
+        long hoverChangeCount)
+    {
+        var previousProperties = ToCompositionProperties(previousState);
+        var nextProperties = ToCompositionProperties(nextState);
+        var kind = RequiresRetarget(previousState, nextState)
             ? StyleTransitionRuntimeDecisionKind.Retarget
             : StyleTransitionRuntimeDecisionKind.Start;
-        decision = new StyleTransitionRuntimeDecision(
+        return new StyleTransitionRuntimeDecision(
             kind,
-            selectedTarget.NodeKey,
+            target.NodeKey,
             previousProperties,
             nextProperties,
             startTimestamp,
             ButtonStateDuration,
             CompositionAnimationEasing.SineOut,
             CompositionAnimationRepeatMode.Once,
-            CreateInstanceId(selectedTarget.ActionId, next.HoverChangeCount));
-        return CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta;
+            CreateInstanceId(target.ActionId, hoverChangeCount));
     }
 
     internal static bool TryMapActionToNodeKey(ActionId actionId, out NodeKey nodeKey)
@@ -137,6 +176,7 @@ internal enum CounterStyleTransitionLifecycleAction : byte
     None,
     DispatchNormally,
     ApplyTransition,
+    ApplyTransitionBatch,
 }
 
 internal enum CounterStyleTransitionLifecyclePresentationPolicy : byte
@@ -152,8 +192,8 @@ internal enum CounterStyleTransitionLifecycleReason : byte
     NoOwnershipDelta,
     NoControlStateDelta,
     ActiveScrollPresentation,
-    MultiTargetUnsupported,
     SingleTargetControlStateDelta,
+    MultiTargetControlStateDelta,
 }
 
 internal enum CounterStyleTransitionLifecycleCompletionPolicy : byte
@@ -166,16 +206,20 @@ internal readonly struct CounterStyleTransitionLifecycleResult(
     CounterStyleTransitionLifecycleAction Action,
     CounterStyleTransitionLifecycleReason Reason,
     StyleTransitionRuntimeDecision Decision = default,
+    StyleTransitionDecisionBatch Batch = default,
     CounterStyleTransitionLifecycleCompletionPolicy CompletionPolicy = CounterStyleTransitionLifecycleCompletionPolicy.None,
     CounterStyleTransitionLifecyclePresentationPolicy PresentationPolicy = CounterStyleTransitionLifecyclePresentationPolicy.None) : IEquatable<CounterStyleTransitionLifecycleResult>
 {
     public CounterStyleTransitionLifecycleAction Action { get; } = Action;
     public CounterStyleTransitionLifecycleReason Reason { get; } = Reason;
     public StyleTransitionRuntimeDecision Decision { get; } = Decision;
+    public StyleTransitionDecisionBatch Batch { get; } = Batch;
     public CounterStyleTransitionLifecycleCompletionPolicy CompletionPolicy { get; } = CompletionPolicy;
     public CounterStyleTransitionLifecyclePresentationPolicy PresentationPolicy { get; } = PresentationPolicy;
     public bool HasTransitionDecision => Action == CounterStyleTransitionLifecycleAction.ApplyTransition
         && Decision.Kind is StyleTransitionRuntimeDecisionKind.Start or StyleTransitionRuntimeDecisionKind.Retarget;
+    public bool HasTransitionBatch => Action == CounterStyleTransitionLifecycleAction.ApplyTransitionBatch
+        && !Batch.IsEmpty;
     public bool RequiresNormalDispatch => Action == CounterStyleTransitionLifecycleAction.DispatchNormally;
     public bool RequiresStyleTransitionAbort => PresentationPolicy == CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition;
 
@@ -187,11 +231,25 @@ internal readonly struct CounterStyleTransitionLifecycleResult(
                 ? CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition
                 : CounterStyleTransitionLifecyclePresentationPolicy.Preserve);
 
-    public static CounterStyleTransitionLifecycleResult ApplyTransition(StyleTransitionRuntimeDecision decision) =>
+    public static CounterStyleTransitionLifecycleResult ApplyTransition(
+        StyleTransitionRuntimeDecision decision,
+        StyleTransitionDecisionBatch batch = default) =>
         new(
             CounterStyleTransitionLifecycleAction.ApplyTransition,
             CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta,
             decision,
+            batch,
+            CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision,
+            CounterStyleTransitionLifecyclePresentationPolicy.Preserve);
+
+    public static CounterStyleTransitionLifecycleResult ApplyTransitionBatch(
+        StyleTransitionDecisionBatch batch,
+        CounterStyleTransitionLifecycleReason reason) =>
+        new(
+            CounterStyleTransitionLifecycleAction.ApplyTransitionBatch,
+            reason,
+            default,
+            batch,
             CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision,
             CounterStyleTransitionLifecyclePresentationPolicy.Preserve);
 
@@ -200,21 +258,21 @@ internal readonly struct CounterStyleTransitionLifecycleResult(
         return Action == other.Action
             && Reason == other.Reason
             && Decision == other.Decision
+            && Batch == other.Batch
             && CompletionPolicy == other.CompletionPolicy
             && PresentationPolicy == other.PresentationPolicy;
     }
 
     public override bool Equals(object? obj) => obj is CounterStyleTransitionLifecycleResult other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Action, Reason, Decision, CompletionPolicy, PresentationPolicy);
+    public override int GetHashCode() => HashCode.Combine(Action, Reason, Decision, Batch, CompletionPolicy, PresentationPolicy);
 
     public static bool operator ==(CounterStyleTransitionLifecycleResult left, CounterStyleTransitionLifecycleResult right) => left.Equals(right);
 
     public static bool operator !=(CounterStyleTransitionLifecycleResult left, CounterStyleTransitionLifecycleResult right) => !left.Equals(right);
 
     private static bool RequiresPresentationAbort(CounterStyleTransitionLifecycleReason reason) =>
-        reason is CounterStyleTransitionLifecycleReason.ActiveScrollPresentation
-            or CounterStyleTransitionLifecycleReason.MultiTargetUnsupported;
+        reason is CounterStyleTransitionLifecycleReason.ActiveScrollPresentation;
 }
 
 internal readonly struct CounterButtonTransitionTarget(ActionId ActionId, NodeKey NodeKey) : IEquatable<CounterButtonTransitionTarget>
@@ -319,6 +377,32 @@ internal static class CounterStyleTransitionRuntimeBridge
         var adapter = new SingleStyleTransitionRuntimeAdapter(decision);
         return await ApplyNextWithOptionalCompletionTrackerAsync(
             adapter,
+            compositor,
+            snapshotProvider,
+            completionTracker,
+            cancellationToken);
+    }
+
+    internal static async ValueTask<StyleTransitionBatchPresentationActivationResult> DispatchAndActivateInputTransitionBatchAsync<TCompositor, TSnapshotProvider>(
+        Runtime<CounterModel, CounterMessage> runtime,
+        CounterMessage appMessage,
+        StyleTransitionDecisionBatch batch,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
+        StyleTransitionCompletionTracker completionTracker,
+        CancellationToken cancellationToken = default)
+        where TCompositor : IStyleTransitionPresentationActivationCompositorAdapter
+        where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
+    {
+        ArgumentNullException.ThrowIfNull(runtime);
+        ArgumentNullException.ThrowIfNull(appMessage);
+        ArgumentNullException.ThrowIfNull(completionTracker);
+
+        await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
+
+        var coordinator = new StyleTransitionRuntimeCoordinator();
+        return coordinator.ActivateBatchPresentation(
+            batch,
             compositor,
             snapshotProvider,
             completionTracker,

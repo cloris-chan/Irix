@@ -132,6 +132,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     private readonly Lock _gate = new();
     private Task? _pumpTask;
     private StyleTransitionCompletionPumpResult _lastResult;
+    private bool _usePresentationTick;
 
     internal StyleTransitionCompletionPump(
         DrawingBackendCompositor compositor,
@@ -190,6 +191,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
             }
 
             LastError = null;
+            _usePresentationTick = _compositor.CompositionAnimationPresentationPlan is not null;
             _pumpTask = Task.Run(
                 () => RunAsync(_disposeCancellationTokenSource.Token),
                 _disposeCancellationTokenSource.Token);
@@ -291,10 +293,17 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested && _tracker.HasActiveTransition)
             {
-                var result = await TickAndDrainAtAsync(CompositionTimestamp.Now(), cancellationToken);
+                var result = _usePresentationTick
+                    ? await TickPresentationAndDrainAtAsync(CompositionTimestamp.Now(), cancellationToken)
+                    : await TickAndDrainAtAsync(CompositionTimestamp.Now(), cancellationToken);
                 if (result.Kind is StyleTransitionCompletionPumpResultKind.NoActiveTransition
-                    or StyleTransitionCompletionPumpResultKind.CompletionCommitted
                     or StyleTransitionCompletionPumpResultKind.TickUnavailable)
+                {
+                    return;
+                }
+
+                if (result.Kind == StyleTransitionCompletionPumpResultKind.CompletionCommitted
+                    && (!_usePresentationTick || !_tracker.HasActiveTransition))
                 {
                     return;
                 }

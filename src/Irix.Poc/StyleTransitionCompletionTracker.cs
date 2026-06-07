@@ -311,7 +311,7 @@ internal sealed class StyleTransitionCompletionTracker
             }
 
             var previous = GetPrimaryActiveTransition();
-            RemoveActiveOwnerAt(0);
+            ClearActiveOwners();
             _lastResult = StyleTransitionCompletionResult.Aborted(previous.OwnerKey, previous.TargetKey, previous.InstanceId);
             return _lastResult;
         }
@@ -496,6 +496,16 @@ internal sealed class StyleTransitionCompletionTracker
 
         _activeOwnerCount--;
         _activeOwners![_activeOwnerCount] = default;
+    }
+
+    private void ClearActiveOwners()
+    {
+        if (_activeOwners is not null)
+        {
+            Array.Clear(_activeOwners, 0, _activeOwnerCount);
+        }
+
+        _activeOwnerCount = 0;
     }
 
     private TrackedTransition GetPrimaryActiveTransition()

@@ -1891,7 +1891,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void CounterStyleTransitionBridge_still_keeps_multi_target_delta_on_abort_and_normal_dispatch()
+    public void CounterStyleTransitionBridge_routes_multi_target_delta_to_transition_batch()
     {
         var previous = new OwnershipSnapshot(
             ActionIdRegistry.Increment,
@@ -1918,11 +1918,33 @@ public sealed class WindowLayoutPipelineTests
             hasActiveScrollPresentation: false,
             CompositionTimestamp.FromStopwatchTicks(100));
 
-        Assert.Equal(CounterStyleTransitionLifecycleAction.DispatchNormally, lifecycle.Action);
-        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetUnsupported, lifecycle.Reason);
-        Assert.True(lifecycle.RequiresNormalDispatch);
-        Assert.True(lifecycle.RequiresStyleTransitionAbort);
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransitionBatch, lifecycle.Action);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetControlStateDelta, lifecycle.Reason);
+        Assert.Equal(CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision, lifecycle.CompletionPolicy);
+        Assert.Equal(CounterStyleTransitionLifecyclePresentationPolicy.Preserve, lifecycle.PresentationPolicy);
+        Assert.True(lifecycle.HasTransitionBatch);
+        Assert.False(lifecycle.HasTransitionDecision);
+        Assert.False(lifecycle.RequiresNormalDispatch);
+        Assert.False(lifecycle.RequiresStyleTransitionAbort);
         Assert.Equal(default, lifecycle.Decision);
+        Assert.Equal(2, lifecycle.Batch.Count);
+
+        Assert.Collection(
+            lifecycle.Batch.Entries.ToArray(),
+            first =>
+            {
+                Assert.Equal(StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(6)), first.OwnerKey);
+                Assert.Equal(StyleTransitionRuntimeDecisionKind.Retarget, first.Decision.Kind);
+                Assert.Equal(new NodeKey(6), first.Decision.TargetKey);
+                Assert.Equal(new CompositionAnimationInstanceId(1002), first.Decision.InstanceId);
+            },
+            second =>
+            {
+                Assert.Equal(StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(7)), second.OwnerKey);
+                Assert.Equal(StyleTransitionRuntimeDecisionKind.Start, second.Decision.Kind);
+                Assert.Equal(new NodeKey(7), second.Decision.TargetKey);
+                Assert.Equal(new CompositionAnimationInstanceId(2002), second.Decision.InstanceId);
+            });
     }
 
     [Fact]
@@ -1961,7 +1983,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void CounterStyleTransitionBridge_rejects_multi_target_control_state_delta_until_multi_owner_exists()
+    public void CounterStyleTransitionBridge_keeps_legacy_single_decision_api_narrow_while_batch_api_accepts_multi_target()
     {
         var previous = new OwnershipSnapshot(
             ActionIdRegistry.Increment,
@@ -1987,9 +2009,16 @@ public sealed class WindowLayoutPipelineTests
             next,
             CompositionTimestamp.FromStopwatchTicks(100),
             out var decision);
+        var batched = CounterStyleTransitionBridge.TryCreateDecisionBatch(
+            previous,
+            next,
+            CompositionTimestamp.FromStopwatchTicks(100),
+            out var batch);
 
         Assert.False(mapped);
         Assert.Equal(default, decision);
+        Assert.True(batched);
+        Assert.Equal(2, batch.Count);
     }
 
     [Fact]
@@ -2024,7 +2053,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void CounterStyleTransitionBridge_lifecycle_routes_active_scroll_or_multi_target_to_normal_dispatch()
+    public void CounterStyleTransitionBridge_lifecycle_routes_active_scroll_to_normal_dispatch_but_multi_target_to_batch()
     {
         var previous = new OwnershipSnapshot(
             ActionIdRegistry.Increment,
@@ -2064,13 +2093,15 @@ public sealed class WindowLayoutPipelineTests
         Assert.False(activeScroll.HasTransitionDecision);
         Assert.Equal(default, activeScroll.Decision);
 
-        Assert.Equal(CounterStyleTransitionLifecycleAction.DispatchNormally, multiTarget.Action);
-        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetUnsupported, multiTarget.Reason);
-        Assert.True(multiTarget.RequiresNormalDispatch);
-        Assert.True(multiTarget.RequiresStyleTransitionAbort);
-        Assert.Equal(CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition, multiTarget.PresentationPolicy);
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransitionBatch, multiTarget.Action);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetControlStateDelta, multiTarget.Reason);
+        Assert.False(multiTarget.RequiresNormalDispatch);
+        Assert.False(multiTarget.RequiresStyleTransitionAbort);
+        Assert.Equal(CounterStyleTransitionLifecyclePresentationPolicy.Preserve, multiTarget.PresentationPolicy);
         Assert.False(multiTarget.HasTransitionDecision);
+        Assert.True(multiTarget.HasTransitionBatch);
         Assert.Equal(default, multiTarget.Decision);
+        Assert.Equal(2, multiTarget.Batch.Count);
     }
 
     [Fact]
@@ -2260,6 +2291,97 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_multi_target_batch_dispatch_activates_presentation_set_and_tracks_owners()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var previous = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        await runtime.DispatchAndWaitAsync(new CounterMessage.InputVisualStateChanged(previous), cancellationToken);
+
+        var next = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            next,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var tracker = new StyleTransitionCompletionTracker();
+        await using var pump = new StyleTransitionCompletionPump(
+            compositor,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator));
+
+        var result = await CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(next),
+            lifecycle.Batch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            tracker,
+            cancellationToken);
+
+        Assert.Equal(next, runtime.CurrentModel.InputOwnership);
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransitionBatch, lifecycle.Action);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetControlStateDelta, lifecycle.Reason);
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Activated, result.Kind);
+        Assert.True(result.PresentationStateChanged);
+        Assert.Equal(StyleTransitionBatchRuntimePreflightKind.Ready, result.RuntimePreflight.Kind);
+        Assert.Equal(2, result.DeclarationCount);
+        Assert.Equal(2, result.TrackedOwnerCount);
+        Assert.Equal(2, tracker.ActiveOwnerCount);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(2, compositor.CompositionAnimationPresentationPlan!.Value.Count);
+
+        var incrementOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(6));
+        var decrementOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(7));
+        Assert.True(tracker.TryGetActiveTransition(incrementOwner, out var incrementTarget, out var incrementInstance));
+        Assert.True(tracker.TryGetActiveTransition(decrementOwner, out var decrementTarget, out var decrementInstance));
+        Assert.Equal(new NodeKey(6), incrementTarget);
+        Assert.Equal(new CompositionAnimationInstanceId(1002), incrementInstance);
+        Assert.Equal(new NodeKey(7), decrementTarget);
+        Assert.Equal(new CompositionAnimationInstanceId(2002), decrementInstance);
+
+        var firstTick = await pump.TickPresentationAndDrainAtAsync(
+            lifecycle.Batch.Entries[0].Decision.StartTimestamp,
+            cancellationToken);
+        var completion = await pump.TickPresentationAndDrainAtAsync(
+            lifecycle.Batch.Entries[0].Decision.StartTimestamp + lifecycle.Batch.Entries[0].Decision.Duration,
+            cancellationToken);
+
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.TickRendered, firstTick.Kind);
+        Assert.Equal(0, firstTick.DrainedEvents);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.CompletionCommitted, completion.Kind);
+        Assert.Equal(2, completion.DrainedEvents);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Equal(0, tracker.ActiveOwnerCount);
+        Assert.Null(compositor.CompositionAnimationPresentationPlan);
+    }
+
+    [Fact]
     public async Task StyleTransitionCompletionPump_snapshot_captures_no_active_transition()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -2341,7 +2463,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public async Task CounterStyleTransitionRuntimeBridge_multi_target_normal_dispatch_aborts_active_style_transition()
+    public async Task CounterStyleTransitionRuntimeBridge_active_scroll_normal_dispatch_aborts_active_style_transition()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
@@ -2389,33 +2511,136 @@ public sealed class WindowLayoutPipelineTests
             ActionIdRegistry.Increment,
             HoverChangeCount: 2,
             IsPointerPressed: false);
-        var multiTargetLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+        var activeScrollLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
             runtime.CurrentModel.InputOwnership,
             hoverDecrementAndLeaveIncrement,
-            hasActiveScrollPresentation: false,
+            hasActiveScrollPresentation: true,
             CompositionTimestamp.FromStopwatchTicks(150));
 
-        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetUnsupported, multiTargetLifecycle.Reason);
-        Assert.True(multiTargetLifecycle.RequiresNormalDispatch);
-        Assert.True(multiTargetLifecycle.RequiresStyleTransitionAbort);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.ActiveScrollPresentation, activeScrollLifecycle.Reason);
+        Assert.True(activeScrollLifecycle.RequiresNormalDispatch);
+        Assert.True(activeScrollLifecycle.RequiresStyleTransitionAbort);
 
         var abortResult = Program.AbortStyleTransitionPresentationForRuntime(
-            multiTargetLifecycle,
+            activeScrollLifecycle,
             tracker,
             new DrawingBackendStyleTransitionCompositorAdapter(compositor),
             cancellationToken);
-        var dispatched = Program.TryDispatchAppMessageForRuntime(
+        await runtime.DispatchAndWaitAsync(
             new CounterMessage.InputVisualStateChanged(hoverDecrementAndLeaveIncrement),
-            new CounterRuntimeDispatchSink(runtime));
+            cancellationToken);
 
-        Assert.True(dispatched);
         Assert.Equal(StyleTransitionRuntimeResultKind.Canceled, abortResult.Kind);
         Assert.Equal(new NodeKey(6), abortResult.TargetKey);
         Assert.False(tracker.HasActiveTransition);
         Assert.Equal(StyleTransitionCompletionResultKind.Aborted, tracker.LastResult.Kind);
         Assert.Equal(new NodeKey(6), tracker.LastResult.TargetKey);
         Assert.Null(compositor.CompositionAnimationPlan);
+        var currentOwnership = runtime.CurrentModel.InputOwnership;
+        Assert.Equal(hoverDecrementAndLeaveIncrement.HoveredTarget, currentOwnership.HoveredTarget);
+        Assert.Equal(hoverDecrementAndLeaveIncrement.FocusedTarget, currentOwnership.FocusedTarget);
+        Assert.Equal(hoverDecrementAndLeaveIncrement.PressedTarget, currentOwnership.PressedTarget);
+        Assert.Equal(hoverDecrementAndLeaveIncrement.CapturedTarget, currentOwnership.CapturedTarget);
+        Assert.Equal(hoverDecrementAndLeaveIncrement.LastHoverEnteredTarget, currentOwnership.LastHoverEnteredTarget);
+        Assert.Equal(hoverDecrementAndLeaveIncrement.LastHoverLeftTarget, currentOwnership.LastHoverLeftTarget);
+        Assert.Equal(hoverDecrementAndLeaveIncrement.HoverChangeCount, currentOwnership.HoverChangeCount);
+        Assert.Equal(hoverDecrementAndLeaveIncrement.IsPointerPressed, currentOwnership.IsPointerPressed);
+    }
+
+    [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_blocked_multi_target_batch_aborts_stale_presentation_after_dispatch()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var tracker = new StyleTransitionCompletionTracker();
+        var hoverIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var startLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            hoverIncrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var startResult = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(hoverIncrement),
+            startLifecycle.Decision,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            cancellationToken,
+            tracker);
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Started, startResult.Kind);
+        Assert.True(tracker.HasActiveTransition);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+
+        var hoverDecrementAndLeaveIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            hoverDecrementAndLeaveIncrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(150));
+        var blockedBatch = StyleTransitionDecisionBatch.Create([
+            lifecycle.Batch.Entries[0],
+            new StyleTransitionDecisionBatchEntry(
+                StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(99)),
+                StyleTransitionRuntimeDecision.Start(
+                    new NodeKey(99),
+                    BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+                    BuildCompositionStyleProperties(opacity: 0.98, translateX: 0, translateY: 0),
+                    CompositionTimestamp.FromStopwatchTicks(150),
+                    CompositionDuration.FromMilliseconds(120),
+                    CompositionAnimationEasing.SineOut,
+                    CompositionAnimationRepeatMode.Once,
+                    new CompositionAnimationInstanceId(2002)))
+        ]);
+
+        var result = await CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(hoverDecrementAndLeaveIncrement),
+            blockedBatch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            tracker,
+            cancellationToken);
+        var abortResult = Program.AbortStyleTransitionPresentationForRuntime(
+            result,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            cancellationToken);
+
         Assert.Equal(hoverDecrementAndLeaveIncrement, runtime.CurrentModel.InputOwnership);
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransitionBatch, lifecycle.Action);
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Blocked, result.Kind);
+        Assert.Equal(StyleTransitionBatchPresentationActivationReason.RuntimePreflightNotReady, result.Reason);
+        Assert.False(result.PresentationStateChanged);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Canceled, abortResult.Kind);
+        Assert.Equal(new NodeKey(6), abortResult.TargetKey);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Equal(0, tracker.ActiveOwnerCount);
+        Assert.Equal(StyleTransitionCompletionResultKind.Aborted, tracker.LastResult.Kind);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Null(compositor.CompositionAnimationPresentationPlan);
     }
 
     [Fact]
