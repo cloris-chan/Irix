@@ -318,13 +318,13 @@ internal sealed class D3D12CompositionLayerContent
             var command = commands[i];
             if (command.Kind == DrawCommandKind.FillRect)
             {
-                rects[rectIndex++] = new D3D12CompositionLayerRectPayload(command.Rect, command.Color, command.ClipBounds);
+                rects[rectIndex++] = new D3D12CompositionLayerRectPayload(command.Rect, command.CanonicalColor, command.ClipBounds);
             }
             else if (command.Kind == DrawCommandKind.DrawTextRun)
             {
                 texts[textIndex++] = new D3D12CompositionLayerTextPayload(
                     command.Rect,
-                    command.Color,
+                    command.CanonicalColor,
                     command.Text,
                     command.Resource,
                     command.ClipBounds,
@@ -339,11 +339,11 @@ internal sealed class D3D12CompositionLayerContent
 
 internal readonly struct D3D12CompositionLayerRectPayload(
     DrawRect Rect,
-    DrawColor Color,
+    Color Color,
     DrawRect ClipBounds) : IEquatable<D3D12CompositionLayerRectPayload>
 {
     public DrawRect Rect { get; } = Rect;
-    public DrawColor Color { get; } = Color;
+    public Color Color { get; } = Color;
     public DrawRect ClipBounds { get; } = ClipBounds;
 
     public bool Equals(D3D12CompositionLayerRectPayload other) => Rect == other.Rect && Color == other.Color && ClipBounds == other.ClipBounds;
@@ -359,7 +359,7 @@ internal readonly struct D3D12CompositionLayerRectPayload(
 
 internal readonly struct D3D12CompositionLayerTextPayload(
     DrawRect Rect,
-    DrawColor Color,
+    Color Color,
     TextSlice Text,
     ResourceHandle Resource,
     DrawRect ClipBounds,
@@ -367,7 +367,7 @@ internal readonly struct D3D12CompositionLayerTextPayload(
     bool HasText) : IEquatable<D3D12CompositionLayerTextPayload>
 {
     public DrawRect Rect { get; } = Rect;
-    public DrawColor Color { get; } = Color;
+    public Color Color { get; } = Color;
     public TextSlice Text { get; } = Text;
     public ResourceHandle Resource { get; } = Resource;
     public DrawRect ClipBounds { get; } = ClipBounds;
@@ -811,7 +811,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     clipMode,
                     viewport,
                     command.Rect,
-                    command.Color,
+                    command.ToSdrColor(),
                     command.ClipBounds,
                     rects,
                     ref diagnostics,
@@ -823,7 +823,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     clipMode,
                     viewport,
                     command.Rect,
-                    command.Color,
+                    command.ToSdrColor(),
                     command.Text,
                     command.Resource,
                     command.ClipBounds,
@@ -1149,17 +1149,17 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         for (var i = 0; i < rectPayloads.Length; i++)
         {
             var payload = rectPayloads[i];
-            var command = ScaleCommandToPhysicalPixels(new DrawCommand(
+            var command = ScaleCommandToPhysicalPixels(DrawCommand.FromCanonicalColor(
                 DrawCommandKind.FillRect,
-                Translate(payload.Rect, layer.Transform),
-                ApplyOpacity(payload.Color, layer.Opacity),
+                Rect: Translate(payload.Rect, layer.Transform),
+                Color: ApplyOpacity(payload.Color, layer.Opacity),
                 ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
             diagnostics.AddCommandClip(command);
             AppendPhysicalFillRect(
                 clipMode,
                 viewport,
                 command.Rect,
-                command.Color,
+                command.ToSdrColor(),
                 command.ClipBounds,
                 rects,
                 ref diagnostics,
@@ -1171,19 +1171,19 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         for (var i = 0; i < textPayloads.Length; i++)
         {
             var payload = textPayloads[i];
-            var command = ScaleCommandToPhysicalPixels(new DrawCommand(
+            var command = ScaleCommandToPhysicalPixels(DrawCommand.FromCanonicalColor(
                 DrawCommandKind.DrawTextRun,
-                Translate(payload.Rect, layer.Transform),
-                ApplyOpacity(payload.Color, layer.Opacity),
-                payload.Resource,
-                payload.Text,
-                ResolveComposedClip(payload.ClipBounds, layer)), scale);
+                Rect: Translate(payload.Rect, layer.Transform),
+                Color: ApplyOpacity(payload.Color, layer.Opacity),
+                Resource: payload.Resource,
+                Text: payload.Text,
+                ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
             diagnostics.AddCommandClip(command);
             AppendPhysicalTextRun(
                 clipMode,
                 viewport,
                 command.Rect,
-                command.Color,
+                command.ToSdrColor(),
                 payload.Text,
                 payload.Resource,
                 command.ClipBounds,
@@ -1199,16 +1199,16 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     {
         var transform = layer.Transform;
         var opacity = layer.Opacity;
-        return new DrawCommand(
+        return DrawCommand.FromCanonicalColor(
             command.Kind,
-            Translate(command.Rect, transform),
-            ApplyOpacity(command.Color, opacity),
-            command.Resource,
-            command.Text,
-            ResolveComposedClip(command.ClipBounds, layer),
-            command.StrokeWidth,
-            command.Transform,
-            command.ZIndex);
+            Rect: Translate(command.Rect, transform),
+            Color: ApplyOpacity(command.CanonicalColor, opacity),
+            Resource: command.Resource,
+            Text: command.Text,
+            ClipBounds: ResolveComposedClip(command.ClipBounds, layer),
+            StrokeWidth: command.StrokeWidth,
+            Transform: command.Transform,
+            ZIndex: command.ZIndex);
     }
 
     private static DrawRect ResolveComposedClip(in DrawRect clipBounds, in CompositionLayer layer)
@@ -1271,10 +1271,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return x1 <= x0 || y1 <= y0 ? new DrawRect(x0, y0, -1f, -1f) : new DrawRect(x0, y0, x1 - x0, y1 - y0);
     }
 
-    private static DrawColor ApplyOpacity(DrawColor color, CompositionOpacity opacity)
+    private static Color ApplyOpacity(Color color, CompositionOpacity opacity)
     {
         var normalized = opacity.Normalized;
-        return normalized == 1f ? color : new DrawColor((byte)Math.Clamp(MathF.Round(color.A * normalized), 0f, 255f), color.R, color.G, color.B);
+        return normalized == 1f ? color : color.WithOpacity(normalized);
     }
 
     private static TextStyle ResolvePhysicalTextStyle(IFrameResourceResolver resources, ResourceHandle handle, DisplayScale scale)

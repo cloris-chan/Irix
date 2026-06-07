@@ -261,6 +261,8 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(0.5f, diagnostics.AppliedOpacity.Normalized);
         Assert.Equal(2, rects.Count);
         Assert.Equal(1, texts.Count);
+        Assert.InRange(commands[1].CanonicalColor.A, 0.999f, 1.001f);
+        Assert.Equal(DrawColor.Opaque(100, 120, 140), commands[1].ToSdrColor());
 
         var transformedRect = rects.Span[1];
         Assert.Equal(28, transformedRect.X);

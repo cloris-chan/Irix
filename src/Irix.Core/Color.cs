@@ -86,6 +86,12 @@ internal readonly struct Color : IEquatable<Color>
             ToByte(EncodeSrgb(linearB)));
     }
 
+    public Color WithOpacity(float opacity)
+    {
+        var normalized = NormalizeAlpha(opacity);
+        return normalized == 1f ? this : new Color(_r, _g, _b, NormalizeAlpha(_a * normalized));
+    }
+
     public bool Equals(Color other)
     {
         return _r.Equals(other._r)

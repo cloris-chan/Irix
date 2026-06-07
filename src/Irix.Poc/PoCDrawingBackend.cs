@@ -30,14 +30,14 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Rectangle,
                         ToPixelRectangle(command.Rect),
-                        BackgroundColor: ToWindowColor(command.Color)));
+                        BackgroundColor: ToWindowColor(command.ToSdrColor())));
                     break;
                 case DrawCommandKind.DrawTextRun:
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
                         CopyText(resources, command.Text),
-                        ForegroundColor: ToWindowColor(command.Color)));
+                        ForegroundColor: ToWindowColor(command.ToSdrColor())));
                     break;
             }
         }

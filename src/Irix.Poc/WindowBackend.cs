@@ -37,21 +37,21 @@ internal sealed class WindowBackend
                         buttonBounds,
                         button.Text,
                         ForegroundColor: button.TextColor,
-                        BackgroundColor: ToWindowColor(command.Color),
+                        BackgroundColor: ToWindowColor(command.ToSdrColor()),
                         BorderColor: WindowColor.Opaque(24, 48, 96)));
                     break;
                 case DrawCommandKind.FillRect:
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Rectangle,
                         ToPixelRectangle(command.Rect),
-                        BackgroundColor: ToWindowColor(command.Color)));
+                        BackgroundColor: ToWindowColor(command.ToSdrColor())));
                     break;
                 case DrawCommandKind.DrawTextRun:
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
                         command.Text,
-                        ForegroundColor: ToWindowColor(command.Color)));
+                        ForegroundColor: ToWindowColor(command.ToSdrColor())));
                     break;
             }
         }
@@ -73,7 +73,7 @@ internal sealed class WindowBackend
                 && ToPixelRectangle(candidate.Rect) == bounds)
             {
                 consumedTextIndices.Add(index);
-                return new ButtonPresentation(candidate.Text, ToWindowColor(candidate.Color));
+                return new ButtonPresentation(candidate.Text, ToWindowColor(candidate.ToSdrColor()));
             }
         }
 

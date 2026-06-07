@@ -2753,7 +2753,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Counter app/control integration now maps single-target `OwnershipSnapshot` deltas", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
         Assert.Contains("routed Counter multi-target transition policy", worklist);
-        Assert.Contains("Counter multi-target routing over the existing preflight are implemented", worklist);
+        Assert.Contains("Counter multi-target routing, routed multi-target completion tick-mode diagnostics, and blocked fallback batch activation diagnostics over the existing preflight are implemented", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -3084,7 +3084,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("coordinator batch validation against one retained snapshot", status);
         Assert.Contains("validation-only batch runtime preflight", status);
         Assert.Contains("compositor-side presentation-set validation/conflict reporting without install", status);
-        Assert.Contains("next useful style slice is hardening routed multi-target completion and blocked fallback diagnostics", status);
+        Assert.Contains("its internal lifecycle snapshot/formatter covers no-active, tick-rendered, completion-committed, tick-unavailable, error states, and active owner count", status);
         Assert.Contains("coordinator batch validation against one retained snapshot", worklist);
         Assert.Contains("validation-only batch runtime preflight", worklist);
         Assert.Contains("rendering-owned activation preflight/plan-set data", worklist);
@@ -3093,7 +3093,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Poc-owned all-ready start/retarget activation bridge", worklist);
         Assert.Contains("Poc-owned all-ready cancel/commit clear bridge", worklist);
         Assert.Contains("active presentation-set completion pumping", worklist);
-        Assert.Contains("Next slice should harden routed multi-target completion and blocked fallback diagnostics", worklist);
+        Assert.Contains("routed multi-target completion tick-mode diagnostics", worklist);
+        Assert.Contains("blocked fallback batch activation diagnostics", worklist);
         Assert.Contains("Concurrent multi-owner transition support is now implemented as a narrow Counter route over the preflight", styleDesign);
         Assert.Contains("deterministic acceptance/rejection tests", styleDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ValidateBatch", styleDesign);

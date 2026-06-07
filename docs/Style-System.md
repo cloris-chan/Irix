@@ -94,7 +94,7 @@ Visual style can be either draw-recorded or promoted to composition style if the
 
 Current implementation: internal semantic background/foreground declarations map to background/foreground color properties, which can override rectangle, button, and text draw-command colors. They are classified as visual-only and keep layout geometry, clips, and hit targets stable, but `RenderPipeline.Build` still performs the normal full layout publication when a dirty patch asks it to rebuild.
 
-Current color implementation stage: style/property color values use canonical linear BT.2020 `Color` internally and still downgrade to the active SDR/sRGB draw-command representation at the draw-recording boundary. This preserves the current renderer while leaving draw/material payload migration and HDR output mapping as future work.
+Current color implementation stage: style/property color values use canonical linear BT.2020 `Color` internally, and draw commands now retain that canonical payload while preserving `DrawColor` as an SDR authoring/output view. The active D3D12 and legacy window paths still downgrade to SDR/sRGB at explicit backend/output boundaries. This preserves the current renderer while leaving material/layer payload shape and HDR output mapping as future work.
 
 ## Text Shaping Style
 

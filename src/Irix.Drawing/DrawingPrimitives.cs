@@ -199,6 +199,32 @@ public readonly struct DrawColor(byte A, byte R, byte G, byte B) : IEquatable<Dr
     public static bool operator !=(DrawColor left, DrawColor right) => !left.Equals(right);
 }
 
+internal readonly struct DrawPayloadColor(Color Value) : IEquatable<DrawPayloadColor>
+{
+
+    public Color Value { get; } = Value;
+
+    public static DrawPayloadColor Transparent => default;
+
+    public static DrawPayloadColor FromSdr(DrawColor color) => new(Color.FromSrgb(color.A, color.R, color.G, color.B));
+
+    public DrawColor ToSdrColor()
+    {
+        var srgb = Value.ToSrgb();
+        return new DrawColor(srgb.A, srgb.R, srgb.G, srgb.B);
+    }
+
+    public bool Equals(DrawPayloadColor other) => Value == other.Value;
+
+    public override bool Equals(object? obj) => obj is DrawPayloadColor other && Equals(other);
+
+    public override int GetHashCode() => Value.GetHashCode();
+
+    public static bool operator ==(DrawPayloadColor left, DrawPayloadColor right) => left.Equals(right);
+
+    public static bool operator !=(DrawPayloadColor left, DrawPayloadColor right) => !left.Equals(right);
+}
+
 public readonly struct ResourceHandle(int Id, DrawingResourceKind Kind) : IEquatable<ResourceHandle>
 {
 
@@ -315,27 +341,80 @@ public readonly struct FrameContext(int Width, int Height, DisplayScale Scale = 
     public static bool operator !=(FrameContext left, FrameContext right) => !left.Equals(right);
 }
 
-public readonly struct DrawCommand(
-    DrawCommandKind Kind,
-    DrawRect Rect = default,
-    DrawColor Color = default,
-    ResourceHandle Resource = default,
-    TextSlice Text = default,
-    DrawRect ClipBounds = default,
-    float StrokeWidth = 1,
-    Matrix3x2 Transform = default,
-    int ZIndex = 0) : IEquatable<DrawCommand>
+public readonly struct DrawCommand : IEquatable<DrawCommand>
 {
+    private readonly DrawPayloadColor _color;
 
-    public DrawCommandKind Kind { get; } = Kind;
-    public DrawRect Rect { get; } = Rect;
-    public DrawColor Color { get; } = Color;
-    public ResourceHandle Resource { get; } = Resource;
-    public TextSlice Text { get; } = Text;
-    public DrawRect ClipBounds { get; } = ClipBounds;
-    public float StrokeWidth { get; } = StrokeWidth;
-    public Matrix3x2 Transform { get; } = Transform;
-    public int ZIndex { get; } = ZIndex;
+    public DrawCommand(
+        DrawCommandKind Kind,
+        DrawRect Rect = default,
+        DrawColor Color = default,
+        ResourceHandle Resource = default,
+        TextSlice Text = default,
+        DrawRect ClipBounds = default,
+        float StrokeWidth = 1,
+        Matrix3x2 Transform = default,
+        int ZIndex = 0)
+        : this(
+            Kind,
+            Rect,
+            DrawPayloadColor.FromSdr(Color),
+            Resource,
+            Text,
+            ClipBounds,
+            StrokeWidth,
+            Transform,
+            ZIndex)
+    {
+    }
+
+    private DrawCommand(
+        DrawCommandKind kind,
+        DrawRect rect,
+        DrawPayloadColor color,
+        ResourceHandle resource,
+        TextSlice text,
+        DrawRect clipBounds,
+        float strokeWidth,
+        Matrix3x2 transform,
+        int zIndex)
+    {
+        Kind = kind;
+        Rect = rect;
+        _color = color;
+        Resource = resource;
+        Text = text;
+        ClipBounds = clipBounds;
+        StrokeWidth = strokeWidth;
+        Transform = transform;
+        ZIndex = zIndex;
+    }
+
+    public DrawCommandKind Kind { get; }
+    public DrawRect Rect { get; }
+    public DrawColor Color => _color.ToSdrColor();
+    public ResourceHandle Resource { get; }
+    public TextSlice Text { get; }
+    public DrawRect ClipBounds { get; }
+    public float StrokeWidth { get; }
+    public Matrix3x2 Transform { get; }
+    public int ZIndex { get; }
+
+    internal Color CanonicalColor => _color.Value;
+
+    internal static DrawCommand FromCanonicalColor(
+        DrawCommandKind Kind,
+        DrawRect Rect = default,
+        Color Color = default,
+        ResourceHandle Resource = default,
+        TextSlice Text = default,
+        DrawRect ClipBounds = default,
+        float StrokeWidth = 1,
+        Matrix3x2 Transform = default,
+        int ZIndex = 0) =>
+        new(Kind, Rect, new DrawPayloadColor(Color), Resource, Text, ClipBounds, StrokeWidth, Transform, ZIndex);
+
+    internal DrawColor ToSdrColor() => _color.ToSdrColor();
 
     public DrawCommand Scale(DisplayScale scale)
     {
@@ -348,7 +427,7 @@ public readonly struct DrawCommand(
                 Rect.Y * scale.ScaleY,
                 Rect.Width * scale.ScaleX,
                 Rect.Height * scale.ScaleY),
-            Color,
+            _color,
             Resource,
             Text,
             new DrawRect(
@@ -365,7 +444,7 @@ public readonly struct DrawCommand(
     {
         return Kind == other.Kind
             && Rect == other.Rect
-            && Color == other.Color
+            && _color == other._color
             && Resource == other.Resource
             && Text == other.Text
             && ClipBounds == other.ClipBounds
@@ -381,7 +460,7 @@ public readonly struct DrawCommand(
         var hash = new HashCode();
         hash.Add(Kind);
         hash.Add(Rect);
-        hash.Add(Color);
+        hash.Add(_color);
         hash.Add(Resource);
         hash.Add(Text);
         hash.Add(ClipBounds);

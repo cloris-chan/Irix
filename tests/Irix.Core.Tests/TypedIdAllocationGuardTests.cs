@@ -238,6 +238,22 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void DrawCommand_color_payload_has_no_managed_references_and_uses_canonical_storage()
+    {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawCommand>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawPayloadColor>());
+
+        var command = DrawCommand.FromCanonicalColor(
+            DrawCommandKind.FillRect,
+            Color: Color.FromSrgb(255, 0, 0));
+
+        Assert.InRange(command.CanonicalColor.LinearBt2020R, 0.6273f, 0.6275f);
+        Assert.NotEqual(1, command.CanonicalColor.LinearBt2020R);
+        Assert.Equal(DrawColor.Opaque(255, 0, 0), command.Color);
+        Assert.Equal(DrawColor.Opaque(255, 0, 0), command.ToSdrColor());
+    }
+
+    [Fact]
     public void Internal_style_value_slots_have_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleColor>());
@@ -776,6 +792,19 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Color_WithOpacity_updates_canonical_alpha_before_sdr_output_mapping()
+    {
+        var color = Color.FromSrgb(255, 100, 120, 140);
+        var half = color.WithOpacity(0.5f);
+
+        Assert.Equal(color.LinearBt2020R, half.LinearBt2020R);
+        Assert.Equal(color.LinearBt2020G, half.LinearBt2020G);
+        Assert.Equal(color.LinearBt2020B, half.LinearBt2020B);
+        Assert.InRange(half.A, 0.499f, 0.501f);
+        Assert.Equal(SrgbColor.FromArgb(128, 100, 120, 140), half.ToSrgb());
+    }
+
+    [Fact]
     public void StyleColor_uses_canonical_color_while_preserving_srgb_output_bridge()
     {
         var styleColor = StyleColor.Opaque(255, 0, 0);
@@ -815,6 +844,26 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("ToneMapPolicy", source);
         Assert.DoesNotContain("HdrOutput", source);
         Assert.DoesNotContain("Swapchain", source);
+    }
+
+    [Fact]
+    public void DrawCommand_source_guard_keeps_canonical_payload_and_sdr_output_bridge_separate()
+    {
+        var drawingSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));
+        var recorderSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "DrawCommandRecorder.cs"));
+        var d3d12Source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Platform.Windows", "D3D12DrawingBackend.cs"));
+        var windowBackendSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "WindowBackend.cs"));
+
+        Assert.Contains("struct DrawPayloadColor(Color Value)", drawingSource);
+        Assert.Contains("private readonly DrawPayloadColor _color", drawingSource);
+        Assert.Contains("internal Color CanonicalColor => _color.Value", drawingSource);
+        Assert.Contains("internal DrawColor ToSdrColor() => _color.ToSdrColor()", drawingSource);
+        Assert.Contains("DrawCommand.FromCanonicalColor", recorderSource);
+        Assert.Contains("styleColor.Value.Value", recorderSource);
+        Assert.Contains("command.CanonicalColor", d3d12Source);
+        Assert.Contains("command.ToSdrColor()", d3d12Source);
+        Assert.Contains("command.ToSdrColor()", windowBackendSource);
+        Assert.DoesNotContain("var srgb = styleColor.Value.ToSrgb()", recorderSource);
     }
 
     // ── R13-25: Source-level guards — no string API in core/rendering ──

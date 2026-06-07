@@ -167,7 +167,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
             {
                 case LayoutElementKind.Text:
                     var text = resources.AddText(ResolveText(element.Text, textSnapshot));
-                    commands[commandCount++] = new DrawCommand(
+                    commands[commandCount++] = DrawCommand.FromCanonicalColor(
                         DrawCommandKind.DrawTextRun,
                         Rect: ToDrawRect(element.Bounds),
                         Resource: textStyle,
@@ -176,7 +176,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                         Color: ResolveColor(element.ForegroundColor, style.TextColor));
                     break;
                 case LayoutElementKind.Rectangle:
-                    commands[commandCount++] = new DrawCommand(
+                    commands[commandCount++] = DrawCommand.FromCanonicalColor(
                         DrawCommandKind.FillRect,
                         Rect: ToDrawRect(element.Bounds),
                         ClipBounds: clip,
@@ -184,7 +184,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                     break;
                 case LayoutElementKind.Button:
                     var bounds = ToDrawRect(element.Bounds);
-                    commands[commandCount++] = new DrawCommand(
+                    commands[commandCount++] = DrawCommand.FromCanonicalColor(
                         DrawCommandKind.FillRect,
                         Rect: bounds,
                         ClipBounds: clip,
@@ -193,7 +193,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                     if (!buttonSpan.IsEmpty)
                     {
                         var buttonText = resources.AddText(buttonSpan);
-                        commands[commandCount++] = new DrawCommand(
+                        commands[commandCount++] = DrawCommand.FromCanonicalColor(
                             DrawCommandKind.DrawTextRun,
                             Rect: bounds,
                             Resource: buttonTextStyle,
@@ -220,14 +220,13 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         return new DrawRect(bounds.X, bounds.Y, bounds.Width, bounds.Height);
     }
 
-    private static DrawColor ResolveColor(StyleColorSlot styleColor, DrawColor defaultColor)
+    private static Color ResolveColor(StyleColorSlot styleColor, DrawColor defaultColor)
     {
         if (!styleColor.HasValue)
         {
-            return defaultColor;
+            return Color.FromSrgb(defaultColor.A, defaultColor.R, defaultColor.G, defaultColor.B);
         }
 
-        var srgb = styleColor.Value.ToSrgb();
-        return new DrawColor(srgb.A, srgb.R, srgb.G, srgb.B);
+        return styleColor.Value.Value;
     }
 }

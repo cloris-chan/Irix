@@ -26,21 +26,23 @@ The active implementation now has the first internal SDR/sRGB color slice:
 - `SrgbColor` is an internal 4-byte SDR bridge value used for sRGB import/export.
 - `StyleColor` wraps canonical `Color` and treats `FromArgb` / `Opaque` as sRGB authoring adapters.
 - `PropertyValue.Color` stores the canonical `Color` value instead of only a `uint ARGB` payload.
-- `DrawColor` and `WindowColor` remain SDR/sRGB output payloads.
+- `DrawCommand` stores an internal canonical color payload while preserving `DrawColor` as an SDR authoring/output view.
+- `DrawColor` and `WindowColor` remain SDR/sRGB bridge payloads, not the canonical color value.
 
 The active renderer output is still the SDR/sRGB pipeline:
 
 ```text
 StyleColor / PropertyValue.Color: canonical Irix Color
-  -> sRGB downgrade at draw-recording/output boundary
-  -> DrawColor / draw command payload
+  -> DrawCommand canonical color payload
+  -> sRGB downgrade at backend/output boundary
+  -> DrawColor / WindowColor / D3D12 R8G8B8A8 output payload
   -> D3D12 rectangle or GlyphAtlas text pass
   -> sRGB SDR presentation
 ```
 
 `DrawColor` and `WindowColor` currently use compact 8-bit ARGB-like storage on the active output path. That storage is not the long-term definition of Irix color. It is the current SDR output representation and compatibility boundary while the renderer remains sRGB-only.
 
-The next color implementation work should decide whether draw/material payloads move from `DrawColor` to canonical `Color` or to a material handle. The current D3D12 output path may continue to downgrade to sRGB until the HDR path is implemented.
+The draw/material migration decision is now partially selected: draw commands carry canonical `Color` internally, while material handles remain deferred. The current D3D12 output path still downgrades to sRGB until the HDR path is implemented.
 
 ## Canonical Color Contract
 
@@ -81,7 +83,7 @@ Irix Color: linear BT.2020
   -> emit sRGB draw/backend payload
 ```
 
-For the current implementation stage, this means existing 8-bit `DrawColor` and `WindowColor` payloads remain valid as explicit SDR output payloads. They must not be treated as the canonical Irix color representation.
+For the current implementation stage, this means existing 8-bit `DrawColor` and `WindowColor` payloads remain valid as explicit SDR authoring/output bridges. They must not be treated as the canonical Irix color representation. `DrawCommand.Color` is an SDR view for compatibility and diagnostics; the retained draw payload uses canonical `Color` internally and exposes explicit SDR conversion only at output boundaries.
 
 The first implementation target should preserve current sRGB visual behavior for existing colors while changing the internal contract so that future wide-gamut and HDR support does not require redefining style color semantics again.
 
@@ -142,7 +144,8 @@ The current SDR/sRGB code slice is acceptable when:
 - A canonical internal color value exists for linear BT.2020 straight-alpha color.
 - sRGB authoring converts into that canonical value rather than being interpreted as BT.2020 coordinates.
 - Conversion back to sRGB preserves current SDR behavior for existing UI colors within a narrow tolerance.
-- `DrawColor` and `WindowColor` are documented and guarded as SDR output payloads, not canonical Irix color.
+- Draw commands retain canonical color payload internally while preserving existing SDR output behavior.
+- `DrawColor` and `WindowColor` are documented and guarded as SDR bridge/output payloads, not canonical Irix color.
 - HDR policy remains unimplemented but has a clear output mapping owner.
 
-Current status: implemented for internal style/property color and guarded by local tests. The draw/backend payload migration remains future work.
+Current status: implemented for internal style/property color and the draw-command payload bridge, guarded by local tests. Material handles and HDR backend output mapping remain future work.

@@ -166,6 +166,10 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(new DrawColor(0, 4, 5, 6), result.Commands.Memory.Span[1].Color);
         Assert.Equal(DrawColor.Opaque(7, 8, 9), result.Commands.Memory.Span[2].Color);
         Assert.Equal(DrawColor.Opaque(10, 11, 12), result.Commands.Memory.Span[3].Color);
+        Assert.Equal(StyleColor.Opaque(1, 2, 3).Value, result.Commands.Memory.Span[0].CanonicalColor);
+        Assert.Equal(StyleColor.FromArgb(0, 4, 5, 6).Value, result.Commands.Memory.Span[1].CanonicalColor);
+        Assert.Equal(StyleColor.Opaque(7, 8, 9).Value, result.Commands.Memory.Span[2].CanonicalColor);
+        Assert.Equal(StyleColor.Opaque(10, 11, 12).Value, result.Commands.Memory.Span[3].CanonicalColor);
 
         result.Commands.Dispose();
     }
