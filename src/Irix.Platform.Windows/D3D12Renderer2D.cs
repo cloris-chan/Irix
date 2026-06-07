@@ -254,14 +254,12 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
                 var y1 = 1f - (r.Y / vpH) * 2f;
                 var x2 = ((r.X + r.Width) / vpW) * 2f - 1f;
                 var y2 = 1f - ((r.Y + r.Height) / vpH) * 2f;
-                var c = new Vector4(r.R, r.G, r.B, r.A);
-
-                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y1), Color = c };
-                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
-                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
-                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y1), Color = c };
-                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y2), Color = c };
-                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y2), Color = c };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y1), Color = r.TopLeftColor };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y1), Color = r.TopRightColor };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y2), Color = r.BottomLeftColor };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y1), Color = r.TopRightColor };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x2, y2), Color = r.BottomRightColor };
+                verts[baseVertex + count++] = new Vertex { Position = new Vector2(x1, y2), Color = r.BottomLeftColor };
             }
         }
         finally
@@ -346,17 +344,69 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
         public Vector4 Color;
     }
 
-    internal readonly struct RectData(float X, float Y, float Width, float Height, float R, float G, float B, float A, IntegerScissorRect Scissor) : IEquatable<RectData>
+    internal readonly struct RectData : IEquatable<RectData>
     {
-        public float X { get; } = X;
-        public float Y { get; } = Y;
-        public float Width { get; } = Width;
-        public float Height { get; } = Height;
-        public float R { get; } = R;
-        public float G { get; } = G;
-        public float B { get; } = B;
-        public float A { get; } = A;
-        public IntegerScissorRect Scissor { get; } = Scissor;
+        public RectData(float x, float y, float width, float height, float r, float g, float b, float a, IntegerScissorRect scissor)
+            : this(
+                x,
+                y,
+                width,
+                height,
+                r,
+                g,
+                b,
+                a,
+                scissor,
+                new Vector4(r, g, b, a),
+                new Vector4(r, g, b, a),
+                new Vector4(r, g, b, a),
+                new Vector4(r, g, b, a))
+        {
+        }
+
+        public RectData(
+            float x,
+            float y,
+            float width,
+            float height,
+            float r,
+            float g,
+            float b,
+            float a,
+            IntegerScissorRect scissor,
+            Vector4 topLeftColor,
+            Vector4 topRightColor,
+            Vector4 bottomRightColor,
+            Vector4 bottomLeftColor)
+        {
+            X = x;
+            Y = y;
+            Width = width;
+            Height = height;
+            R = r;
+            G = g;
+            B = b;
+            A = a;
+            Scissor = scissor;
+            TopLeftColor = topLeftColor;
+            TopRightColor = topRightColor;
+            BottomRightColor = bottomRightColor;
+            BottomLeftColor = bottomLeftColor;
+        }
+
+        public float X { get; }
+        public float Y { get; }
+        public float Width { get; }
+        public float Height { get; }
+        public float R { get; }
+        public float G { get; }
+        public float B { get; }
+        public float A { get; }
+        public IntegerScissorRect Scissor { get; }
+        public Vector4 TopLeftColor { get; }
+        public Vector4 TopRightColor { get; }
+        public Vector4 BottomRightColor { get; }
+        public Vector4 BottomLeftColor { get; }
 
         public bool Equals(RectData other)
         {
@@ -368,7 +418,11 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
                 && G.Equals(other.G)
                 && B.Equals(other.B)
                 && A.Equals(other.A)
-                && Scissor == other.Scissor;
+                && Scissor == other.Scissor
+                && TopLeftColor.Equals(other.TopLeftColor)
+                && TopRightColor.Equals(other.TopRightColor)
+                && BottomRightColor.Equals(other.BottomRightColor)
+                && BottomLeftColor.Equals(other.BottomLeftColor);
         }
 
         public override bool Equals(object? obj) => obj is RectData other && Equals(other);
@@ -385,6 +439,10 @@ internal sealed unsafe class D3D12Renderer2D : IDisposable
             hash.Add(B);
             hash.Add(A);
             hash.Add(Scissor);
+            hash.Add(TopLeftColor);
+            hash.Add(TopRightColor);
+            hash.Add(BottomRightColor);
+            hash.Add(BottomLeftColor);
             return hash.ToHashCode();
         }
 

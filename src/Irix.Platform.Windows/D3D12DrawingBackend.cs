@@ -486,7 +486,8 @@ internal readonly struct D3D12CompositionLayerContentCacheEntry(
 /// </summary>
 internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Scissor) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability, IDeviceRecovery, ICompositionDrawingBackend
 {
-    private const int LinearGradientRectSegmentCount = 16;
+    private const int LinearGradientClampFallbackSegmentCount = 16;
+    private const float LinearGradientClampEpsilon = 0.00001f;
 
     private struct ExecuteDiagnosticsAccumulator
     {
@@ -1009,36 +1010,26 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             return;
         }
 
-        var dx = material.EndPoint.X - material.StartPoint.X;
-        var dy = material.EndPoint.Y - material.StartPoint.Y;
-        var splitHorizontally = MathF.Abs(dx) >= MathF.Abs(dy);
-        for (var segment = 0; segment < LinearGradientRectSegmentCount; segment++)
+        if (CanRepresentLinearGradientAsSingleVertexRect(material, rect.Width, rect.Height))
         {
-            var start = segment / (float)LinearGradientRectSegmentCount;
-            var end = (segment + 1) / (float)LinearGradientRectSegmentCount;
-            DrawRect segmentRect;
-            float sampleX;
-            float sampleY;
-            if (splitHorizontally)
-            {
-                var x0 = rect.X + rect.Width * start;
-                var x1 = rect.X + rect.Width * end;
-                segmentRect = new DrawRect(x0, rect.Y, x1 - x0, rect.Height);
-                sampleX = (x0 + x1) * 0.5f - rect.X;
-                sampleY = rect.Height * 0.5f;
-            }
-            else
-            {
-                var y0 = rect.Y + rect.Height * start;
-                var y1 = rect.Y + rect.Height * end;
-                segmentRect = new DrawRect(rect.X, y0, rect.Width, y1 - y0);
-                sampleX = rect.Width * 0.5f;
-                sampleY = (y0 + y1) * 0.5f - rect.Y;
-            }
-
-            var sample = SampleLinearGradient(material, sampleX, sampleY);
-            AddPhysicalRectData(segmentRect, outputMapping.MapToSdr(sample), scissorPlan.RenderScissor, rects);
+            AddPhysicalGradientRectData(
+                rect,
+                fallbackColor,
+                outputMapping.MapToSdr(SampleLinearGradient(material, 0f, 0f)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, rect.Width, 0f)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, rect.Width, rect.Height)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, 0f, rect.Height)),
+                scissorPlan.RenderScissor,
+                rects);
+            return;
         }
+
+        AppendPhysicalSegmentedLinearGradientRect(
+            rect,
+            material,
+            outputMapping,
+            scissorPlan.RenderScissor,
+            rects);
     }
 
     private static Color SampleLinearGradient(in DrawMaterial material, float x, float y)
@@ -1048,13 +1039,96 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         var lengthSquared = dx * dx + dy * dy;
         var t = lengthSquared <= float.Epsilon
             ? 0f
-            : Math.Clamp(((x - material.StartPoint.X) * dx + (y - material.StartPoint.Y) * dy) / lengthSquared, 0f, 1f);
+            : Math.Clamp(ProjectLinearGradient(material, x, y, dx, dy, lengthSquared), 0f, 1f);
 
         return Color.FromLinearBt2020(
             Lerp(material.Color.LinearBt2020R, material.EndColor.LinearBt2020R, t),
             Lerp(material.Color.LinearBt2020G, material.EndColor.LinearBt2020G, t),
             Lerp(material.Color.LinearBt2020B, material.EndColor.LinearBt2020B, t),
             Lerp(material.Color.A, material.EndColor.A, t));
+    }
+
+    private static bool CanRepresentLinearGradientAsSingleVertexRect(in DrawMaterial material, float width, float height)
+    {
+        var dx = material.EndPoint.X - material.StartPoint.X;
+        var dy = material.EndPoint.Y - material.StartPoint.Y;
+        var lengthSquared = dx * dx + dy * dy;
+        if (lengthSquared <= float.Epsilon)
+        {
+            return true;
+        }
+
+        var topLeft = ProjectLinearGradient(material, 0f, 0f, dx, dy, lengthSquared);
+        var topRight = ProjectLinearGradient(material, width, 0f, dx, dy, lengthSquared);
+        var bottomRight = ProjectLinearGradient(material, width, height, dx, dy, lengthSquared);
+        var bottomLeft = ProjectLinearGradient(material, 0f, height, dx, dy, lengthSquared);
+        var min = MathF.Min(MathF.Min(topLeft, topRight), MathF.Min(bottomRight, bottomLeft));
+        var max = MathF.Max(MathF.Max(topLeft, topRight), MathF.Max(bottomRight, bottomLeft));
+
+        return (min >= -LinearGradientClampEpsilon && max <= 1f + LinearGradientClampEpsilon)
+            || max <= LinearGradientClampEpsilon
+            || min >= 1f - LinearGradientClampEpsilon;
+    }
+
+    private static float ProjectLinearGradient(
+        in DrawMaterial material,
+        float x,
+        float y,
+        float dx,
+        float dy,
+        float lengthSquared) =>
+        ((x - material.StartPoint.X) * dx + (y - material.StartPoint.Y) * dy) / lengthSquared;
+
+    private static void AppendPhysicalSegmentedLinearGradientRect(
+        in DrawRect rect,
+        in DrawMaterial material,
+        ColorOutputMapping outputMapping,
+        in IntegerScissorRect scissor,
+        FrameRenderList<D3D12Renderer2D.RectData> rects)
+    {
+        var dx = material.EndPoint.X - material.StartPoint.X;
+        var dy = material.EndPoint.Y - material.StartPoint.Y;
+        var splitHorizontally = MathF.Abs(dx) >= MathF.Abs(dy);
+        for (var segment = 0; segment < LinearGradientClampFallbackSegmentCount; segment++)
+        {
+            var start = segment / (float)LinearGradientClampFallbackSegmentCount;
+            var end = (segment + 1) / (float)LinearGradientClampFallbackSegmentCount;
+            float x0;
+            float y0;
+            float x1;
+            float y1;
+            DrawRect segmentRect;
+            if (splitHorizontally)
+            {
+                x0 = rect.Width * start;
+                y0 = 0f;
+                x1 = rect.Width * end;
+                y1 = rect.Height;
+                segmentRect = new DrawRect(rect.X + x0, rect.Y, x1 - x0, rect.Height);
+            }
+            else
+            {
+                x0 = 0f;
+                y0 = rect.Height * start;
+                x1 = rect.Width;
+                y1 = rect.Height * end;
+                segmentRect = new DrawRect(rect.X, rect.Y + y0, rect.Width, y1 - y0);
+            }
+
+            var representativeColor = outputMapping.MapToSdr(SampleLinearGradient(
+                material,
+                (x0 + x1) * 0.5f,
+                (y0 + y1) * 0.5f));
+            AddPhysicalGradientRectData(
+                segmentRect,
+                representativeColor,
+                outputMapping.MapToSdr(SampleLinearGradient(material, x0, y0)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, x1, y0)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, x1, y1)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, x0, y1)),
+                scissor,
+                rects);
+        }
     }
 
     private static float Lerp(float start, float end, float t) => start + (end - start) * t;
@@ -1076,6 +1150,35 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             color.A / 255f,
             scissor));
     }
+
+    private static void AddPhysicalGradientRectData(
+        in DrawRect rect,
+        in DrawColor representativeColor,
+        in DrawColor topLeft,
+        in DrawColor topRight,
+        in DrawColor bottomRight,
+        in DrawColor bottomLeft,
+        in IntegerScissorRect scissor,
+        FrameRenderList<D3D12Renderer2D.RectData> rects)
+    {
+        rects.Add(new D3D12Renderer2D.RectData(
+            rect.X,
+            rect.Y,
+            rect.Width,
+            rect.Height,
+            representativeColor.R / 255f,
+            representativeColor.G / 255f,
+            representativeColor.B / 255f,
+            representativeColor.A / 255f,
+            scissor,
+            ToVector4(topLeft),
+            ToVector4(topRight),
+            ToVector4(bottomRight),
+            ToVector4(bottomLeft)));
+    }
+
+    private static System.Numerics.Vector4 ToVector4(in DrawColor color) =>
+        new(color.R / 255f, color.G / 255f, color.B / 255f, color.A / 255f);
 
     private static void AppendPhysicalTextRun(
         DrawingBackendClipMode clipMode,

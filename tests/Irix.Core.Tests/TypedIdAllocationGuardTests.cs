@@ -910,11 +910,16 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("ApplyOpacity(payload.Material", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", d3d12Source);
         Assert.Contains("outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities)", d3d12Source);
-        Assert.Contains("private const int LinearGradientRectSegmentCount = 16", d3d12Source);
         Assert.Contains("DrawMaterialBackendCapabilities.SolidColor | DrawMaterialBackendCapabilities.LinearGradient", d3d12Source);
         Assert.Contains("D3D12TextMaterialCapabilities => DrawMaterialBackendCapabilities.SolidColor", d3d12Source);
+        Assert.Contains("private const int LinearGradientClampFallbackSegmentCount = 16", d3d12Source);
+        Assert.Contains("CanRepresentLinearGradientAsSingleVertexRect", d3d12Source);
+        Assert.Contains("TopLeftColor", d3d12Renderer2DSource);
+        Assert.Contains("BottomRightColor", d3d12Renderer2DSource);
         Assert.Contains("AppendPhysicalFillMaterialRect", d3d12Source);
         Assert.Contains("AppendPhysicalLinearGradientRect", d3d12Source);
+        Assert.Contains("AppendPhysicalSegmentedLinearGradientRect", d3d12Source);
+        Assert.Contains("AddPhysicalGradientRectData", d3d12Source);
         Assert.Contains("outputMapping.MapToSdr(command.Material, D3D12TextMaterialCapabilities)", d3d12Source);
         Assert.Contains("diagnostics.AddMaterialOutput", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", windowBackendSource);
