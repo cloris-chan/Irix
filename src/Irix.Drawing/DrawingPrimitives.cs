@@ -199,6 +199,37 @@ public readonly struct DrawColor(byte A, byte R, byte G, byte B) : IEquatable<Dr
     public static bool operator !=(DrawColor left, DrawColor right) => !left.Equals(right);
 }
 
+internal enum ColorOutputKind : byte
+{
+    SdrSrgb
+}
+
+internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<ColorOutputMapping>
+{
+
+    public ColorOutputKind Kind { get; } = Kind;
+
+    public static ColorOutputMapping SdrSrgb => new(ColorOutputKind.SdrSrgb);
+
+    public DrawColor MapToSdr(Color color)
+    {
+        var srgb = color.ToSrgb();
+        return new DrawColor(srgb.A, srgb.R, srgb.G, srgb.B);
+    }
+
+    public DrawColor MapToSdr(in DrawCommand command) => MapToSdr(command.CanonicalColor);
+
+    public bool Equals(ColorOutputMapping other) => Kind == other.Kind;
+
+    public override bool Equals(object? obj) => obj is ColorOutputMapping other && Equals(other);
+
+    public override int GetHashCode() => Kind.GetHashCode();
+
+    public static bool operator ==(ColorOutputMapping left, ColorOutputMapping right) => left.Equals(right);
+
+    public static bool operator !=(ColorOutputMapping left, ColorOutputMapping right) => !left.Equals(right);
+}
+
 internal readonly struct DrawPayloadColor(Color Value) : IEquatable<DrawPayloadColor>
 {
 
@@ -208,11 +239,7 @@ internal readonly struct DrawPayloadColor(Color Value) : IEquatable<DrawPayloadC
 
     public static DrawPayloadColor FromSdr(DrawColor color) => new(Color.FromSrgb(color.A, color.R, color.G, color.B));
 
-    public DrawColor ToSdrColor()
-    {
-        var srgb = Value.ToSrgb();
-        return new DrawColor(srgb.A, srgb.R, srgb.G, srgb.B);
-    }
+    public DrawColor ToSdrColor() => ColorOutputMapping.SdrSrgb.MapToSdr(Value);
 
     public bool Equals(DrawPayloadColor other) => Value == other.Value;
 

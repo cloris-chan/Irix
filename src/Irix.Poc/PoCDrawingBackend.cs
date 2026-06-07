@@ -22,6 +22,7 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
     public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
     {
         _pendingElements ??= [];
+        var outputMapping = ColorOutputMapping.SdrSrgb;
         foreach (var command in commands)
         {
             switch (command.Kind)
@@ -30,14 +31,14 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Rectangle,
                         ToPixelRectangle(command.Rect),
-                        BackgroundColor: ToWindowColor(command.ToSdrColor())));
+                        BackgroundColor: ToWindowColor(outputMapping.MapToSdr(command))));
                     break;
                 case DrawCommandKind.DrawTextRun:
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
                         CopyText(resources, command.Text),
-                        ForegroundColor: ToWindowColor(command.ToSdrColor())));
+                        ForegroundColor: ToWindowColor(outputMapping.MapToSdr(command))));
                     break;
             }
         }

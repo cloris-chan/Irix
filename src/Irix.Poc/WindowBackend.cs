@@ -18,6 +18,7 @@ internal sealed class WindowBackend
 
         var elements = new List<WindowContentElement>();
         var consumedTextIndices = new HashSet<int>();
+        var outputMapping = ColorOutputMapping.SdrSrgb;
 
         for (var index = 0; index < commands.Length; index++)
         {
@@ -37,21 +38,21 @@ internal sealed class WindowBackend
                         buttonBounds,
                         button.Text,
                         ForegroundColor: button.TextColor,
-                        BackgroundColor: ToWindowColor(command.ToSdrColor()),
+                        BackgroundColor: ToWindowColor(outputMapping.MapToSdr(command)),
                         BorderColor: WindowColor.Opaque(24, 48, 96)));
                     break;
                 case DrawCommandKind.FillRect:
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Rectangle,
                         ToPixelRectangle(command.Rect),
-                        BackgroundColor: ToWindowColor(command.ToSdrColor())));
+                        BackgroundColor: ToWindowColor(outputMapping.MapToSdr(command))));
                     break;
                 case DrawCommandKind.DrawTextRun:
                     elements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
                         ToPixelRectangle(command.Rect),
                         command.Text,
-                        ForegroundColor: ToWindowColor(command.ToSdrColor())));
+                        ForegroundColor: ToWindowColor(outputMapping.MapToSdr(command))));
                     break;
             }
         }
@@ -66,6 +67,7 @@ internal sealed class WindowBackend
         IFrameResourceResolver resources,
         HashSet<int> consumedTextIndices)
     {
+        var outputMapping = ColorOutputMapping.SdrSrgb;
         for (var index = startIndex; index < commands.Length; index++)
         {
             var candidate = commands[index];
@@ -73,7 +75,7 @@ internal sealed class WindowBackend
                 && ToPixelRectangle(candidate.Rect) == bounds)
             {
                 consumedTextIndices.Add(index);
-                return new ButtonPresentation(candidate.Text, ToWindowColor(candidate.ToSdrColor()));
+                return new ButtonPresentation(candidate.Text, ToWindowColor(outputMapping.MapToSdr(candidate)));
             }
         }
 

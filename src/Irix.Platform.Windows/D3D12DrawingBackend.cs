@@ -764,6 +764,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     {
         scale = scale.Normalize();
         var diagnostics = new ExecuteDiagnosticsAccumulator();
+        var outputMapping = ColorOutputMapping.SdrSrgb;
         var hasBackgroundColor = false;
         var backgroundColor = default(DrawColor);
 
@@ -775,6 +776,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 logicalCommand,
                 resources,
                 scale,
+                outputMapping,
                 rects,
                 texts,
                 ref diagnostics,
@@ -795,6 +797,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         in DrawCommand logicalCommand,
         IFrameResourceResolver resources,
         DisplayScale scale,
+        ColorOutputMapping outputMapping,
         FrameRenderList<D3D12Renderer2D.RectData> rects,
         FrameRenderList<D3D12TextRun> texts,
         ref ExecuteDiagnosticsAccumulator diagnostics,
@@ -811,7 +814,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     clipMode,
                     viewport,
                     command.Rect,
-                    command.ToSdrColor(),
+                    outputMapping.MapToSdr(command),
                     command.ClipBounds,
                     rects,
                     ref diagnostics,
@@ -823,7 +826,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     clipMode,
                     viewport,
                     command.Rect,
-                    command.ToSdrColor(),
+                    outputMapping.MapToSdr(command),
                     command.Text,
                     command.Resource,
                     command.ClipBounds,
@@ -1012,6 +1015,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         }
 
         var accumulator = new ExecuteDiagnosticsAccumulator();
+        var outputMapping = ColorOutputMapping.SdrSrgb;
         var hasBackgroundColor = false;
         var backgroundColor = default(DrawColor);
         var translatedCommands = 0;
@@ -1052,6 +1056,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     viewport,
                     resources,
                     scale,
+                    outputMapping,
                     rects,
                     texts,
                     ref accumulator,
@@ -1067,6 +1072,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 commands[commandIndex],
                 resources,
                 scale,
+                outputMapping,
                 rects,
                 texts,
                 ref accumulator,
@@ -1139,6 +1145,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         in DrawRect viewport,
         IFrameResourceResolver resources,
         DisplayScale scale,
+        ColorOutputMapping outputMapping,
         FrameRenderList<D3D12Renderer2D.RectData> rects,
         FrameRenderList<D3D12TextRun> texts,
         ref ExecuteDiagnosticsAccumulator diagnostics,
@@ -1159,7 +1166,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 clipMode,
                 viewport,
                 command.Rect,
-                command.ToSdrColor(),
+                outputMapping.MapToSdr(command),
                 command.ClipBounds,
                 rects,
                 ref diagnostics,
@@ -1183,7 +1190,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 clipMode,
                 viewport,
                 command.Rect,
-                command.ToSdrColor(),
+                outputMapping.MapToSdr(command),
                 payload.Text,
                 payload.Resource,
                 command.ClipBounds,

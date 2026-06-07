@@ -242,15 +242,20 @@ public class TypedIdAllocationGuardTests
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawCommand>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawPayloadColor>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<ColorOutputMapping>());
 
         var command = DrawCommand.FromCanonicalColor(
             DrawCommandKind.FillRect,
             Color: Color.FromSrgb(255, 0, 0));
+        var outputMapping = ColorOutputMapping.SdrSrgb;
 
         Assert.InRange(command.CanonicalColor.LinearBt2020R, 0.6273f, 0.6275f);
         Assert.NotEqual(1, command.CanonicalColor.LinearBt2020R);
         Assert.Equal(DrawColor.Opaque(255, 0, 0), command.Color);
         Assert.Equal(DrawColor.Opaque(255, 0, 0), command.ToSdrColor());
+        Assert.Equal(DrawColor.Opaque(255, 0, 0), outputMapping.MapToSdr(command));
+        Assert.Equal(DrawColor.Opaque(255, 0, 0), outputMapping.MapToSdr(command.CanonicalColor));
+        Assert.Equal(ColorOutputKind.SdrSrgb, outputMapping.Kind);
     }
 
     [Fact]
@@ -855,15 +860,27 @@ public class TypedIdAllocationGuardTests
         var windowBackendSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "WindowBackend.cs"));
 
         Assert.Contains("struct DrawPayloadColor(Color Value)", drawingSource);
+        Assert.Contains("internal enum ColorOutputKind : byte", drawingSource);
+        Assert.Contains("internal readonly struct ColorOutputMapping", drawingSource);
+        Assert.Contains("public static ColorOutputMapping SdrSrgb", drawingSource);
+        Assert.Contains("public DrawColor MapToSdr(Color color)", drawingSource);
+        Assert.Contains("public DrawColor MapToSdr(in DrawCommand command)", drawingSource);
         Assert.Contains("private readonly DrawPayloadColor _color", drawingSource);
         Assert.Contains("internal Color CanonicalColor => _color.Value", drawingSource);
         Assert.Contains("internal DrawColor ToSdrColor() => _color.ToSdrColor()", drawingSource);
         Assert.Contains("DrawCommand.FromCanonicalColor", recorderSource);
         Assert.Contains("styleColor.Value.Value", recorderSource);
         Assert.Contains("command.CanonicalColor", d3d12Source);
-        Assert.Contains("command.ToSdrColor()", d3d12Source);
-        Assert.Contains("command.ToSdrColor()", windowBackendSource);
+        Assert.Contains("ColorOutputMapping.SdrSrgb", d3d12Source);
+        Assert.Contains("outputMapping.MapToSdr(command)", d3d12Source);
+        Assert.Contains("ColorOutputMapping.SdrSrgb", windowBackendSource);
+        Assert.Contains("outputMapping.MapToSdr(command)", windowBackendSource);
+        Assert.DoesNotContain("command.ToSdrColor()", d3d12Source);
+        Assert.DoesNotContain("command.ToSdrColor()", windowBackendSource);
         Assert.DoesNotContain("var srgb = styleColor.Value.ToSrgb()", recorderSource);
+        Assert.DoesNotContain("Hdr", drawingSource);
+        Assert.DoesNotContain("DisplayP3", drawingSource);
+        Assert.DoesNotContain("SourceSpace", drawingSource);
     }
 
     // ── R13-25: Source-level guards — no string API in core/rendering ──
