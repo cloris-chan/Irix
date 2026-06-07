@@ -65,6 +65,21 @@ Internal classification remains the renderer boundary. The UI-facing layer shoul
 
 No theme, resource dictionary, CSS-like cascade, or scheduler is introduced by this preflight. Those are separate design decisions and require ownership rules for resolution order, lifetime, invalidation, and runtime scheduling before code is promoted.
 
+## Public Material Authoring Policy Preflight
+
+This preflight selects the boundary for future public material authoring without adding the public surface yet. The future public authoring layer may describe semantic paint intent for concepts such as background, foreground, border, and state-specific variants, but it must not accept or expose renderer-owned objects. `DrawMaterial`, `DrawMaterialKind`, `DrawMaterialBackendCapabilities`, `ResourceHandle`, `IFrameBrushResolver`, backend fallback reasons, and layer-cache resource handles remain internal implementation details.
+
+The first accepted public material surface must satisfy these gates before code is promoted:
+
+- Semantic token boundary: public UI code names semantic paint slots and optional material tokens, not `DrawMaterial`, brush handles, backend capability flags, or output formats.
+- Resource lifetime: shared material/image resources need explicit ownership, retention, disposal, and frame/retained-frame publication rules before handles can leave renderer internals.
+- Coordinate and sampling policy: gradients, images, tiling, transforms, clipping, DPI scaling, and layer transforms need one written coordinate contract before public authoring can create non-solid paints.
+- Invalidation policy: each material change must declare whether it affects layout, text shaping, draw payloads, layer-cache identity, composition presentation, or only output diagnostics.
+- Backend fallback policy: unsupported material kinds must have deterministic fallback color, diagnostics, and capability reporting without changing backend execute contracts.
+- Output mapping separation: SDR/HDR mode, tone mapping, color-space conversion, system SDR brightness, and per-screen mapping remain compositor/backend output concerns, not public style value metadata.
+
+Until those gates are implemented and guarded, public/style authoring remains limited to semantic colors for background/foreground and compositor-eligible opacity/translation declarations. Internal `DrawMaterial` values may continue to serve draw-command, brush-resource, retained-frame, and D3D12 layer-cache payloads, but public UI code cannot construct or bind them.
+
 ## Invalidation Rules
 
 | Change | Required work | Notes |

@@ -2847,10 +2847,22 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Diagnostics and tests", colorDesign);
         Assert.Contains("Until public material authoring lands, non-solid materials stay out of `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring.", colorDesign);
         Assert.Contains("The active SDR/sRGB backend path may collapse unsupported non-solid materials through a deterministic `DrawMaterial.FallbackColor`", colorDesign);
+        Assert.Contains("The public material authoring policy preflight is now selected at the style boundary", colorDesign);
 
+        Assert.Contains("## Public Material Authoring Policy Preflight", styleDesign);
         Assert.Contains("Non-solid visual material authoring is blocked on the policy preflight", styleDesign);
+        Assert.Contains("future public authoring layer may describe semantic paint intent", styleDesign);
+        Assert.Contains("Semantic token boundary", styleDesign);
+        Assert.Contains("Resource lifetime", styleDesign);
+        Assert.Contains("Coordinate and sampling policy", styleDesign);
+        Assert.Contains("Invalidation policy", styleDesign);
+        Assert.Contains("Backend fallback policy", styleDesign);
+        Assert.Contains("Output mapping separation", styleDesign);
+        Assert.Contains("Until those gates are implemented and guarded, public/style authoring remains limited to semantic colors for background/foreground", styleDesign);
         Assert.Contains("internal solid-color and first linear-gradient `DrawMaterial`/brush resource shapes exist", status);
+        Assert.Contains("public material authoring is guard-deferred from style/property APIs and now has a policy preflight", status);
         Assert.Contains("Internal solid-color and linear-gradient material payloads exist", worklist);
+        Assert.Contains("public material authoring remains guard-deferred but now has a policy preflight", worklist);
 
         Assert.False(typeof(DrawMaterialKind).IsPublic);
         Assert.False(typeof(DrawMaterial).IsPublic);
@@ -2872,7 +2884,11 @@ public sealed class ProgramDiagnosticsTests
             "public static VirtualNodeProperty Material",
             "public static VirtualNodeProperty Brush",
             "public static VirtualNodeProperty Gradient",
-            "public static VirtualNodeProperty Image"
+            "public static VirtualNodeProperty Image",
+            "public static StyleDeclaration Material",
+            "public static StyleDeclaration Brush",
+            "public static StyleDeclaration Gradient",
+            "public static StyleDeclaration Image"
         };
 
         foreach (var file in EnumerateActiveSourceGuardFiles(root).Where(file => Path.GetExtension(file).Equals(".cs", StringComparison.OrdinalIgnoreCase)))

@@ -1691,6 +1691,104 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Public_material_authoring_policy_stays_semantic_not_renderer_owned()
+    {
+        var root = FindRepoRoot();
+        var styleDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Style-System.md")));
+        var colorDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Color-Pipeline.md")));
+        var coreSources = Directory
+            .GetFiles(Path.Combine(root, "src", "Irix.Core"), "*.cs", SearchOption.AllDirectories)
+            .Select(path => NormalizeLineEndings(File.ReadAllText(path)))
+            .ToArray();
+        var drawingSources = Directory
+            .GetFiles(Path.Combine(root, "src", "Irix.Drawing"), "*.cs", SearchOption.AllDirectories)
+            .Select(path => NormalizeLineEndings(File.ReadAllText(path)))
+            .ToArray();
+
+        Assert.Contains("## Public Material Authoring Policy Preflight", styleDesign);
+        Assert.Contains("Semantic token boundary", styleDesign);
+        Assert.Contains("public UI code cannot construct or bind them", styleDesign);
+        Assert.Contains("semantic paint slots and material tokens", colorDesign);
+
+        Assert.False(typeof(DrawMaterialKind).IsPublic);
+        Assert.False(typeof(DrawMaterialBackendCapabilities).IsPublic);
+        Assert.False(typeof(DrawMaterialFallbackReason).IsPublic);
+        Assert.False(typeof(DrawMaterialOutputMappingResult).IsPublic);
+        Assert.False(typeof(DrawMaterialOutputDiagnostics).IsPublic);
+
+        var publicStyleMethods = typeof(StyleDeclaration)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
+            .Select(FormatMethodSignature)
+            .ToArray();
+        AssertDoesNotContainAny(
+            publicStyleMethods,
+            "DrawMaterial",
+            "DrawMaterialKind",
+            "DrawMaterialBackendCapabilities",
+            "ResourceHandle",
+            "Brush",
+            "Material",
+            "Gradient",
+            "Image");
+
+        var publicStyleValueMethods = typeof(StyleValue)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
+            .Select(FormatMethodSignature)
+            .ToArray();
+        AssertDoesNotContainAny(
+            publicStyleValueMethods,
+            "DrawMaterial",
+            "ResourceHandle",
+            "Brush",
+            "Material",
+            "Gradient",
+            "Image");
+
+        var publicVirtualNodePropertyMethods = typeof(VirtualNodeProperty)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
+            .Select(FormatMethodSignature)
+            .ToArray();
+        AssertDoesNotContainAny(
+            publicVirtualNodePropertyMethods,
+            "DrawMaterial",
+            "DrawMaterialKind",
+            "DrawMaterialBackendCapabilities",
+            "Brush",
+            "Material",
+            "Gradient",
+            "Image");
+
+        var publicPropertyValueMethods = typeof(PropertyValue)
+            .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
+            .Select(FormatMethodSignature)
+            .ToArray();
+        AssertDoesNotContainAny(
+            publicPropertyValueMethods,
+            "DrawMaterial",
+            "ResourceHandle",
+            "Brush",
+            "Material",
+            "Gradient",
+            "Image");
+
+        foreach (var source in coreSources)
+        {
+            Assert.DoesNotContain("using Irix.Drawing;", source);
+            Assert.DoesNotContain("DrawMaterial", source);
+            Assert.DoesNotContain("IFrameBrushResolver", source);
+            Assert.DoesNotContain("DrawMaterialBackendCapabilities", source);
+            Assert.DoesNotContain("DrawMaterialFallbackReason", source);
+        }
+
+        foreach (var source in drawingSources)
+        {
+            Assert.DoesNotContain("public interface IFrameBrushResolver", source);
+            Assert.DoesNotContain("public ResourceHandle AddBrush", source);
+            Assert.DoesNotContain("public DrawMaterial ResolveBrush", source);
+        }
+    }
+
+    [Fact]
     public void Stored_display_scale_values_are_normalized_at_ingress()
     {
         var root = FindRepoRoot();
@@ -2018,6 +2116,9 @@ public class TypedIdAllocationGuardTests
             Assert.DoesNotContain(value, source);
         }
     }
+
+    private static string FormatMethodSignature(MethodInfo method) =>
+        $"{method.ReturnType.FullName} {method.Name}({string.Join(", ", method.GetParameters().Select(parameter => parameter.ParameterType.FullName))})";
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");
 
