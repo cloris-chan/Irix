@@ -66,21 +66,59 @@ internal sealed class StyleTransitionCompletionTracker
         CompletionRuntimeEventId,
         CompositionAnimationMarkerTrigger.AtProgress(1f));
 
+    private readonly Lock _gate = new();
     private TrackedTransition _active;
+    private StyleTransitionCompletionResult _lastResult;
 
-    internal StyleTransitionCompletionResult LastResult { get; private set; }
+    internal StyleTransitionCompletionResult LastResult
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _lastResult;
+            }
+        }
+    }
 
-    internal bool HasActiveTransition => _active.HasValue;
+    internal bool HasActiveTransition
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _active.HasValue;
+            }
+        }
+    }
 
-    internal NodeKey ActiveTargetKey => _active.TargetKey;
+    internal NodeKey ActiveTargetKey
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _active.TargetKey;
+            }
+        }
+    }
 
-    internal CompositionAnimationInstanceId ActiveInstanceId => _active.InstanceId;
+    internal CompositionAnimationInstanceId ActiveInstanceId
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _active.InstanceId;
+            }
+        }
+    }
 
     internal StyleTransitionRuntimeDecision AttachCompletionMarker(StyleTransitionRuntimeDecision decision)
     {
         if (!IsTrackableDecision(decision))
         {
-            LastResult = StyleTransitionCompletionResult.NotTracked();
+            SetLastResult(StyleTransitionCompletionResult.NotTracked());
             return decision;
         }
 
@@ -126,48 +164,56 @@ internal sealed class StyleTransitionCompletionTracker
             || !IsTrackableDecision(decision)
             || !HasCompletionMarker(decision.Markers))
         {
-            LastResult = StyleTransitionCompletionResult.NotTracked();
-            return LastResult;
+            return SetLastResult(StyleTransitionCompletionResult.NotTracked());
         }
 
-        _active = new TrackedTransition(decision.TargetKey, decision.InstanceId);
-        LastResult = runtimeResult.Kind == StyleTransitionRuntimeResultKind.Retargeted
-            ? StyleTransitionCompletionResult.TrackingRetargeted(decision.TargetKey, decision.InstanceId)
-            : StyleTransitionCompletionResult.TrackingStarted(decision.TargetKey, decision.InstanceId);
-        return LastResult;
+        lock (_gate)
+        {
+            _active = new TrackedTransition(decision.TargetKey, decision.InstanceId);
+            _lastResult = runtimeResult.Kind == StyleTransitionRuntimeResultKind.Retargeted
+                ? StyleTransitionCompletionResult.TrackingRetargeted(decision.TargetKey, decision.InstanceId)
+                : StyleTransitionCompletionResult.TrackingStarted(decision.TargetKey, decision.InstanceId);
+            return _lastResult;
+        }
     }
 
     internal bool TryCreateCompletionDecision(
         in CompositionAnimationMarkerEvent markerEvent,
         out StyleTransitionRuntimeDecision decision)
     {
-        if (!IsActiveCompletionEvent(markerEvent))
+        lock (_gate)
         {
-            decision = default;
-            LastResult = StyleTransitionCompletionResult.NotTracked();
-            return false;
-        }
+            if (!IsActiveCompletionEvent(markerEvent))
+            {
+                decision = default;
+                _lastResult = StyleTransitionCompletionResult.NotTracked();
+                return false;
+            }
 
-        var targetKey = _active.TargetKey;
-        var instanceId = _active.InstanceId;
-        decision = StyleTransitionRuntimeDecision.Commit(targetKey);
-        _active = default;
-        LastResult = StyleTransitionCompletionResult.Completed(targetKey, instanceId, decision);
-        return true;
+            var targetKey = _active.TargetKey;
+            var instanceId = _active.InstanceId;
+            decision = StyleTransitionRuntimeDecision.Commit(targetKey);
+            _active = default;
+            _lastResult = StyleTransitionCompletionResult.Completed(targetKey, instanceId, decision);
+            return true;
+        }
     }
 
     private StyleTransitionCompletionResult ClearIfActiveTarget(NodeKey targetKey)
     {
-        if (!_active.HasValue || _active.TargetKey != targetKey)
+        lock (_gate)
         {
-            LastResult = StyleTransitionCompletionResult.NotTracked();
-            return LastResult;
-        }
+            if (!_active.HasValue || _active.TargetKey != targetKey)
+            {
+                _lastResult = StyleTransitionCompletionResult.NotTracked();
+                return _lastResult;
+            }
 
-        var previous = _active;
-        _active = default;
-        LastResult = StyleTransitionCompletionResult.Cleared(previous.TargetKey, previous.InstanceId);
-        return LastResult;
+            var previous = _active;
+            _active = default;
+            _lastResult = StyleTransitionCompletionResult.Cleared(previous.TargetKey, previous.InstanceId);
+            return _lastResult;
+        }
     }
 
     private bool IsActiveCompletionEvent(in CompositionAnimationMarkerEvent markerEvent)
@@ -178,6 +224,15 @@ internal sealed class StyleTransitionCompletionTracker
             && markerEvent.InstanceId == _active.InstanceId
             && markerEvent.MarkerId == CompletionMarkerId
             && markerEvent.RuntimeEventId == CompletionRuntimeEventId;
+    }
+
+    private StyleTransitionCompletionResult SetLastResult(StyleTransitionCompletionResult result)
+    {
+        lock (_gate)
+        {
+            _lastResult = result;
+            return _lastResult;
+        }
     }
 
     private static bool IsTrackableDecision(in StyleTransitionRuntimeDecision decision)

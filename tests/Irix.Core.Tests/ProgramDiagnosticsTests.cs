@@ -2752,7 +2752,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, and the narrow marker-driven completion tracker are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, and the main-app completion pump are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2844,11 +2844,13 @@ public sealed class ProgramDiagnosticsTests
         var demoSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionTransformDemoRunner.cs")));
         var counterTransitionSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterStyleTransitionBridge.cs")));
         var completionTrackerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionCompletionTracker.cs")));
+        var completionPumpSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionCompletionPump.cs")));
         var programSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
 
         Assert.Contains("StyleTransitionRuntimeCoordinator", styleDesign);
         Assert.Contains("CounterStyleTransitionBridge", styleDesign);
         Assert.Contains("StyleTransitionCompletionTracker", styleDesign);
+        Assert.Contains("StyleTransitionCompletionPump", styleDesign);
         Assert.Contains("Current runtime ownership preflight", animationDesign);
         Assert.Contains("IStyleTransitionRuntimeAdapter", animationDesign);
         Assert.Contains("falls back before presentation ownership changes", animationDesign);
@@ -2894,6 +2896,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("StyleTransitionCompletionTracker?", counterTransitionSource);
         Assert.Contains("completionTracker.AttachCompletionMarker", counterTransitionSource);
         Assert.Contains("completionTracker.PublishRuntimeResult", counterTransitionSource);
+        Assert.Contains("StyleTransitionCompletionTracker", programSource);
+        Assert.Contains("StyleTransitionCompletionPump", programSource);
+        Assert.Contains("StyleTransitionCompletionPump)state!).EnsureRunning", programSource);
+        Assert.Contains("completionTracker: styleTransitionCompletionTracker", programSource);
         Assert.Contains("CounterButtonTransitionTarget", counterTransitionSource);
         Assert.Contains("OwnershipSnapshot", counterTransitionSource);
         Assert.Contains("StyleTransitionRuntimeDecisionKind.Retarget", counterTransitionSource);
@@ -2916,6 +2922,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("StyleTransitionScheduler", completionTrackerSource);
         Assert.DoesNotContain("Theme", completionTrackerSource);
         Assert.DoesNotContain("Cascade", completionTrackerSource);
+        Assert.Contains("sealed class StyleTransitionCompletionPump", completionPumpSource);
+        Assert.Contains("RenderCompositionAnimationTickAtAsync", completionPumpSource);
+        Assert.Contains("DrainCompositionMarkerEvents", completionPumpSource);
+        Assert.Contains("StyleTransitionRuntimeCoordinator.ApplyDecisionAsync", completionPumpSource);
+        Assert.DoesNotContain("StyleTransitionScheduler", completionPumpSource);
+        Assert.DoesNotContain("Theme", completionPumpSource);
+        Assert.DoesNotContain("Cascade", completionPumpSource);
 
         var renderingSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Rendering"), "*.cs", SearchOption.AllDirectories).Select(path => NormalizeLineEndings(File.ReadAllText(path))));
         var platformWindowsSource = string.Concat(Directory.GetFiles(Path.Combine(root, "src", "Irix.Platform.Windows"), "*.cs", SearchOption.AllDirectories).Select(path => NormalizeLineEndings(File.ReadAllText(path))));
@@ -2934,7 +2947,9 @@ public sealed class ProgramDiagnosticsTests
             "CounterStyleTransitionLifecycleCompletionPolicy",
             "CounterButtonTransitionTarget",
             "StyleTransitionCompletionTracker",
-            "StyleTransitionCompletionResult"
+            "StyleTransitionCompletionResult",
+            "StyleTransitionCompletionPump",
+            "StyleTransitionCompletionPumpResult"
         })
         {
             Assert.DoesNotContain(token, renderingSource);

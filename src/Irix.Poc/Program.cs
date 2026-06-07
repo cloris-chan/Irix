@@ -78,6 +78,12 @@ internal static partial class Program
         ConfigureDebugUi(args, counterApplication, window, d3d12Renderer, drawCommandTranslator, displayScale);
         await using var runtime = new Runtime<CounterModel, CounterMessage>(counterApplication, compositorLoop);
         var runtimeDispatchSink = new CounterRuntimeDispatchSink(runtime);
+        var styleTransitionCompletionTracker = new StyleTransitionCompletionTracker();
+        await using var styleTransitionCompletionPump = new StyleTransitionCompletionPump(
+            d3d12Compositor,
+            styleTransitionCompletionTracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator));
         SetDebugUiRuntime(runtime);
         var scrollFramePump = new ScrollFramePump();
         var scrollPresentationCoordinator = new ScrollPresentationCoordinator();
@@ -176,7 +182,21 @@ internal static partial class Program
                             message,
                             transitionLifecycle.Decision,
                             new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor),
-                            new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator)).AsTask();
+                            new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
+                            completionTracker: styleTransitionCompletionTracker).AsTask();
+                        _ = transitionTask.ContinueWith(
+                            static (task, state) =>
+                            {
+                                if (task.Status == TaskStatus.RanToCompletion
+                                    && task.Result.Kind is StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted)
+                                {
+                                    ((StyleTransitionCompletionPump)state!).EnsureRunning();
+                                }
+                            },
+                            styleTransitionCompletionPump,
+                            CancellationToken.None,
+                            TaskContinuationOptions.ExecuteSynchronously,
+                            TaskScheduler.Default);
                         _ = transitionTask.ContinueWith(
                             static task => _ = task.Exception,
                             CancellationToken.None,

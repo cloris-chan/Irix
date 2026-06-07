@@ -1124,6 +1124,74 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_completion_pump_commits_after_marker_tick()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var next = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            next,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var tracker = new StyleTransitionCompletionTracker();
+        await using var pump = new StyleTransitionCompletionPump(
+            compositor,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator));
+
+        var result = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(next),
+            lifecycle.Decision,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            cancellationToken,
+            tracker);
+
+        Assert.Equal(next, runtime.CurrentModel.InputOwnership);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Started, result.Kind);
+        Assert.True(tracker.HasActiveTransition);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+        Assert.Contains(
+            compositor.CompositionAnimationPlan!.Value.LayerAnimation.Markers.ToArray(),
+            marker => marker.Id == StyleTransitionCompletionTracker.CompletionMarkerId
+                && marker.RuntimeEventId == StyleTransitionCompletionTracker.CompletionRuntimeEventId);
+
+        var startTick = await pump.TickAndDrainAtAsync(lifecycle.Decision.StartTimestamp, cancellationToken);
+        var completionTick = await pump.TickAndDrainAtAsync(
+            lifecycle.Decision.StartTimestamp + lifecycle.Decision.Duration,
+            cancellationToken);
+
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.TickRendered, startTick.Kind);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.CompletionCommitted, completionTick.Kind);
+        Assert.True(completionTick.HasCommit);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Committed, completionTick.CommitResult.Kind);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Equal(2, backend.ExecuteCompositionCount);
+        Assert.Equal(2, pump.TickCount);
+        Assert.Equal(1, pump.CommitCount);
+        Assert.Equal(1, pump.DrainedEventCount);
+    }
+
+    [Fact]
     public void StyleTransitionCompletionTracker_decorates_once_decision_and_preserves_existing_markers()
     {
         var tracker = new StyleTransitionCompletionTracker();
@@ -4688,5 +4756,39 @@ public sealed class WindowLayoutPipelineTests
             LastCancelTarget = targetKey;
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class StyleTransitionCompositionBackend : IDrawingBackend, ICompositionDrawingBackend
+    {
+        public int ExecuteCount { get; private set; }
+        public int ExecuteCompositionCount { get; private set; }
+        public CompositionBackendCapabilities CompositionCapabilities =>
+            CompositionBackendCapabilities.TransformOpacity
+            | CompositionBackendCapabilities.MultiLayer;
+
+        public void BeginFrame(in FrameContext frameContext) { }
+
+        public void Execute(ReadOnlySpan<DrawCommand> commands, IFrameResourceResolver resources)
+        {
+            ExecuteCount++;
+        }
+
+        public CompositionBackendExecutionResult ExecuteComposition(
+            ReadOnlySpan<DrawCommand> commands,
+            IFrameResourceResolver resources,
+            in CompositionFrame compositionFrame)
+        {
+            ExecuteCompositionCount++;
+            return new CompositionBackendExecutionResult(
+                D3D12Backed: true,
+                LayerCount: compositionFrame.LayerCount,
+                CommandCount: commands.Length,
+                TranslatedCommands: compositionFrame.LayerCount,
+                OpacityAppliedCommands: compositionFrame.LayerCount);
+        }
+
+        public void EndFrame() { }
+
+        public void Dispose() { }
     }
 }
