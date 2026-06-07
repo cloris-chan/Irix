@@ -2605,7 +2605,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(first.Layer.CommandCount > 0);
         Assert.NotEqual(first.Layer.Transform, middle.Layer.Transform);
         Assert.NotEqual(first.Layer.Opacity, middle.Layer.Opacity);
-        Assert.Equal($"composition.demo finalComposition=D3D12 d3d12Backed=True layers=1 commands={frame.Commands.Count} translatedCommands={first.Layer.CommandCount} opacityAppliedCommands={first.Layer.CommandCount} clock=Stopwatch demoDurationMs=4000 animationDurationMs=1600 renderCount=1 compositionTicks=120 frameSerial=120 presentSerial=120 syncWaits=0 deviceRemoved=False", summary);
+        Assert.Equal($"composition.demo finalComposition=D3D12 d3d12Backed=True layers=1 commands={frame.Commands.Count} translatedCommands={first.Layer.CommandCount} opacityAppliedCommands={first.Layer.CommandCount} clock=CompositionClock demoDurationMs=4000 animationDurationMs=1600 renderCount=1 compositionTicks=120 frameSerial=120 presentSerial=120 syncWaits=0 deviceRemoved=False", summary);
     }
 
     [Fact]
@@ -2630,6 +2630,46 @@ public sealed class ProgramDiagnosticsTests
 
         Assert.Equal(frameAt60Hz.Transform, frameAt240Hz.Transform);
         Assert.Equal(frameAt60Hz.Opacity, frameAt240Hz.Opacity);
+    }
+
+    [Fact]
+    public void Composition_clock_is_single_animation_timeline_boundary_for_multi_output_pacing()
+    {
+        var root = FindRepoRoot();
+        var animationDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition.md")));
+        var gpuDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "GPU-Composition-Architecture.md")));
+        var d3d12Design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var compositionModelsSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "CompositionModels.cs")));
+        var demoSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionTransformDemoRunner.cs")));
+
+        Assert.Contains("## Authoritative Animation Clock", animationDesign);
+        Assert.Contains("one authoritative high-precision timeline", animationDesign);
+        Assert.Contains("platform display clocks, backend present fences, vblank cadence, and monitor refresh rates are pacing inputs only", animationDesign);
+        Assert.Contains("A 144 Hz output may sample the same animation more often than a 60 Hz output", animationDesign);
+        Assert.Contains("same `CompositionTimestamp` must evaluate to the same transform, opacity, scroll presentation value, marker progress, and completion state", animationDesign);
+        Assert.Contains("CompositorLoop` owns work scheduling, delayed ticks, idle waiters, cancellation, and backend-present pacing policy; it does not own a separate animation time domain", animationDesign);
+
+        Assert.Contains("## Multi-Output Timeline Authority", gpuDesign);
+        Assert.Contains("GPU composition must treat animation time as global Irix state", gpuDesign);
+        Assert.Contains("not as a property of one monitor, swapchain, or backend queue", gpuDesign);
+        Assert.Contains("frame counters, present counters, and per-output refresh ticks are not valid animation time", gpuDesign);
+        Assert.Contains("Do not introduce per-monitor animation clocks or derive animation progress from swapchain present serials", gpuDesign);
+        Assert.Contains("Future GPU-offloaded timelines must receive the same Irix timestamp", gpuDesign);
+
+        Assert.Contains("high-precision Irix `CompositionClock` ticks", d3d12Design);
+        Assert.Contains("frame indexes, present counters, and refresh-rate ticks out of animation progress", d3d12Design);
+        Assert.Contains("The animation clock is the internal Irix `CompositionClock`", d3d12Design);
+
+        Assert.Contains("The internal `CompositionClock` boundary now backs `CompositionTimestamp.Now()`", status);
+        Assert.Contains("backend present/vblank/fence timing as pacing and diagnostics only", status);
+        Assert.Contains("No per-monitor, backend-present, vblank, fence, or refresh-rate animation clock", status);
+
+        Assert.Contains("internal static class CompositionClock", compositionModelsSource);
+        Assert.Contains("public static CompositionTimestamp Now() => CompositionClock.TimestampNow();", compositionModelsSource);
+        Assert.Contains("CompositionTimestamp.FromStopwatchTicks(Stopwatch.GetTimestamp())", compositionModelsSource);
+        Assert.Contains("Animation clock: CompositionClock", demoSource);
+        Assert.Contains("clock=CompositionClock", demoSource);
     }
 
     [Fact]

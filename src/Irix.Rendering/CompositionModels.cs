@@ -94,7 +94,7 @@ internal readonly struct CompositionTimestamp(long StopwatchTicks) : IEquatable<
 
     public static CompositionTimestamp Zero => default;
 
-    public static CompositionTimestamp Now() => new(Stopwatch.GetTimestamp());
+    public static CompositionTimestamp Now() => CompositionClock.TimestampNow();
 
     public static CompositionTimestamp FromStopwatchTicks(long ticks) => new(ticks);
 
@@ -125,6 +125,13 @@ internal readonly struct CompositionTimestamp(long StopwatchTicks) : IEquatable<
     public static bool operator >(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks > right.StopwatchTicks;
 
     public static bool operator >=(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks >= right.StopwatchTicks;
+}
+
+internal static class CompositionClock
+{
+    internal static long Frequency => Stopwatch.Frequency;
+
+    internal static CompositionTimestamp TimestampNow() => CompositionTimestamp.FromStopwatchTicks(Stopwatch.GetTimestamp());
 }
 
 internal readonly struct CompositionDuration(long StopwatchTicks) : IEquatable<CompositionDuration>, IComparable<CompositionDuration>

@@ -61,7 +61,7 @@ internal static class CompositionTransformDemoRunner
         output.WriteLine($"Duration: {demoDurationMs}ms");
         output.WriteLine($"Display refresh: {screen.RefreshRateHz}Hz");
         output.WriteLine($"Initial display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
-        output.WriteLine($"Animation clock: Stopwatch, duration: {AnimationDurationMs}ms, repeat: alternate");
+        output.WriteLine($"Animation clock: CompositionClock, duration: {AnimationDurationMs}ms, repeat: alternate");
         output.WriteLine("Demo model: retained UI frame, NodeKey-targeted animation declaration, compositor-owned transform/opacity ticks, D3D12-backed presentation.");
 
         var demoEndTimestamp = animationStartTimestamp + CompositionDuration.FromMilliseconds(demoDurationMs);
@@ -179,7 +179,7 @@ internal static class CompositionTransformDemoRunner
         long syncWaits,
         bool deviceRemoved)
     {
-        return $"composition.demo finalComposition=D3D12 d3d12Backed={execution.D3D12Backed} layers={execution.LayerCount} commands={execution.CommandCount} translatedCommands={execution.TranslatedCommands} opacityAppliedCommands={execution.OpacityAppliedCommands} clock=Stopwatch demoDurationMs={demoDurationMs} animationDurationMs={AnimationDurationMs} renderCount={renderCount} compositionTicks={compositionTickCount} frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} deviceRemoved={deviceRemoved}";
+        return $"composition.demo finalComposition=D3D12 d3d12Backed={execution.D3D12Backed} layers={execution.LayerCount} commands={execution.CommandCount} translatedCommands={execution.TranslatedCommands} opacityAppliedCommands={execution.OpacityAppliedCommands} clock=CompositionClock demoDurationMs={demoDurationMs} animationDurationMs={AnimationDurationMs} renderCount={renderCount} compositionTicks={compositionTickCount} frameSerial={frameSerial} presentSerial={presentSerial} syncWaits={syncWaits} deviceRemoved={deviceRemoved}";
     }
 
     private static CompositionDuration AnimationDuration => CompositionDuration.FromMilliseconds(AnimationDurationMs);

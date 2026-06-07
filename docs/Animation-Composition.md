@@ -19,6 +19,23 @@
 - No public scroll animation API.
 - No retained-array or snapshot ownership changes.
 
+## Authoritative Animation Clock
+
+Irix animation has one authoritative high-precision timeline. `CompositionTimestamp` values come from the internal Irix composition clock boundary; platform display clocks, backend present fences, vblank cadence, and monitor refresh rates are pacing inputs only. They may decide when an output samples and presents a frame, but they must not decide how far an animation has progressed.
+
+For heterogeneous multi-display output, synchronization is defined by timeline sampling, not by identical physical presents. A 144 Hz output may sample the same animation more often than a 60 Hz output, but a sample taken at the same `CompositionTimestamp` must evaluate to the same transform, opacity, scroll presentation value, marker progress, and completion state on every output. A window spanning outputs or mirrored across outputs must therefore evaluate compositor plans from the same sampled Irix timestamp before each output pass; per-output refresh rate only affects how often that output asks for a sample.
+
+The current implementation has the first boundary for this rule: `CompositionClock` is the internal source behind `CompositionTimestamp.Now()`, while deterministic tests and diagnostics can still inject explicit timestamps through `RenderCompositionAnimationTickAtAsync`, `RenderCompositionAnimationPresentationTickAtAsync`, and `RenderCompositionScrollPresentationTickAtAsync`. `CompositorLoop` owns work scheduling, delayed ticks, idle waiters, cancellation, and backend-present pacing policy; it does not own a separate animation time domain. D3D12, future Vulkan/Metal backends, native windows, and sync diagnostics may measure input/present/sync timing, but those measurements are not animation timeline authority.
+
+Future multi-output implementation must keep this split:
+
+| Concept | Owner | Rule |
+|---------|-------|------|
+| Animation timestamp | Irix composition clock. | Single monotonic high-precision source for all outputs. |
+| Output pacing | Per-output compositor/backend. | Decides when to request a sample and present for one monitor/swapchain. |
+| Backend present/vblank/fence timing | Platform backend. | Provides cadence and diagnostics, never timeline progress. |
+| GPU-offloaded evaluation | Backend shader/compute/platform compositor. | Uses the same Irix timestamp payload as CPU evaluation. |
+
 ## Animation Ownership Classes
 
 | Class | Owner | Examples | Requires layout per tick? |
@@ -79,7 +96,7 @@ Ownership split:
 
 The current implementation supports scroll presentation for retained scroll containers by resolving child draw-command runs into one or more fixed-clip composition layers. The compositor moves content by `retainedScrollY - presentedScrollY` while each resolved clip remains fixed; nested/mixed-clip scroll targets are decomposed into ordered `CompositionFrame` layers on the D3D12 path. Hit testing is centralized through `CompositorHitTestSnapshot`, which combines retained hit targets, command-range-backed layer nodes, current presented transforms, fixed clips, and reverse paint-order selection.
 
-Logical scroll target/clamp still belongs to app/control runtime. The PoC runtime interrupt policy is commit/cancel/retarget: commit writes the presented value back to runtime state, cancel discards presentation and returns to the logical target, and retarget uses the presented value only as the visual animation origin while applying new input deltas to the accumulated logical target. Main-app wheel input runs through `ScrollPresentationCoordinator`, while `CompositorLoop` owns the presentation clock, queued compositor-only ticks, idle waiting, and reason-typed cancellation diagnostics. D3D12 marks composition as backend-present paced, so the loop lets `Present(1,0)` provide display cadence instead of adding a software frame cap.
+Logical scroll target/clamp still belongs to app/control runtime. The PoC runtime interrupt policy is commit/cancel/retarget: commit writes the presented value back to runtime state, cancel discards presentation and returns to the logical target, and retarget uses the presented value only as the visual animation origin while applying new input deltas to the accumulated logical target. Main-app wheel input runs through `ScrollPresentationCoordinator`, while `CompositorLoop` owns queued compositor-only ticks, idle waiting, and reason-typed cancellation diagnostics around the single Irix composition clock. D3D12 marks composition as backend-present paced, so the loop lets `Present(1,0)` provide display cadence instead of adding a software frame cap.
 
 Live wheel input probes the next logical target before cancellation, so repeated top/bottom boundary input does not restart a same-target segment. When a real retarget is needed, sampling and cancellation are serialized on the compositor thread before the replacement segment is installed.
 
@@ -99,11 +116,11 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 | Property | Transform, opacity, presented scroll offset, etc. |
 | From/to or keyframes | Values in platform-neutral units. |
 | Timing | Duration, delay, easing, repeat/cancel policy. |
-| Clock domain | Explicit composition clock values. Current internal units are `Stopwatch.GetTimestamp()` ticks carried by `CompositionTimestamp` and `CompositionDuration`, not frame indexes. |
+| Clock domain | Explicit Irix composition clock values. Current internal units are high-precision stopwatch ticks carried by `CompositionTimestamp` and `CompositionDuration`, not frame indexes, backend present counts, or per-output refresh ticks. |
 | Commit policy | Whether and when final presented state updates logical runtime state. |
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 
-The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path uses the compositor clock owned by `CompositorLoop`; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync` and `RenderCompositionScrollPresentationTickAtAsync` paths with typed timestamps. Normal render pipeline snapshots resolve internal `NodeKey`-addressable `CompositionTarget` and `ScrollCompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. `DrawingBackendCompositor.SetCompositionAnimationDeclaration` and `SetCompositionScrollPresentationDeclaration` install runtime declarations only after the declaration resolves against the retained frame, so the runtime path no longer guesses command ranges. After normal rendering, retained-frame staging, or a compositor-only tick, `DrawingBackendCompositor` publishes a `CompositorHitTestSnapshot`; input routing reads that snapshot instead of recomputing active layer transforms from scattered state.
+The runtime may create, cancel, or retarget animations. The backend/compositor advances compositor animations without requiring a full UI frame rebuild. The main runtime path samples the single Irix composition clock through `CompositionTimestamp.Now()`; tests and deterministic diagnostics may call the explicit `RenderCompositionAnimationTickAtAsync`, `RenderCompositionAnimationPresentationTickAtAsync`, and `RenderCompositionScrollPresentationTickAtAsync` paths with typed timestamps. Normal render pipeline snapshots resolve internal `NodeKey`-addressable `CompositionTarget` and `ScrollCompositionTarget` values that map retained UI nodes to command ranges and stable `CompositionLayerId` values without per-frame target-list allocation. `DrawingBackendCompositor.SetCompositionAnimationDeclaration` and `SetCompositionScrollPresentationDeclaration` install runtime declarations only after the declaration resolves against the retained frame, so the runtime path no longer guesses command ranges. After normal rendering, retained-frame staging, or a compositor-only tick, `DrawingBackendCompositor` publishes a `CompositorHitTestSnapshot`; input routing reads that snapshot instead of recomputing active layer transforms from scattered state.
 
 Future public style transitions should feed semantic style deltas into this internal compiler only after target property metadata, retained target resolution, backend capability, cancellation policy, and runtime commit policy are all explicit. The compiler must not allocate per-frame target lists or let diagnostics become the scheduler.
 

@@ -71,7 +71,29 @@ Composition IR should describe retained visual/layer intent without exposing bac
 | Dirty region | Optional invalidation region for content update. |
 | Animation descriptors | Data-driven compositor animations on eligible properties. |
 
-The IR must be immutable after publication for a frame. Backend implementations may cache translated GPU objects behind stable handles. The current internal runtime descriptors are `CompositionAnimationDeclaration` for transform/opacity and `CompositionScrollPresentationDeclaration` for fixed-clip scroll presentation; both target stable `NodeKey` values and resolve against `RenderPipelineRetainedInputSnapshot` into compositor plans. Declarations can include typed animation markers (`CompositionAnimationMarker`) and a `CompositionAnimationInstanceId`; marker evaluation stays in the compositor, emits `CompositionAnimationMarkerEvent` records into a queue, and never enters backend callback code. Runtime-facing code drains those events with `CompositionMarkerEventPump`, uses app-owned marker mapping, and dispatches through the Poc app runtime dispatch sink, keeping `Irix.Rendering` generic and the backend unaware of app messages. `CompositionFrame` now carries an ordered set of `CompositionLayer` values; single-layer frames remain the zero-allocation case, while explicit multi-layer frames copy layers into immutable publication state. `CompositorHitTestSnapshot` is the input-facing scene snapshot for retained hit targets plus active composition layers; it inverse-maps through presented transforms/fixed clips and resolves overlapping targets in reverse paint order. `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` and `RenderCompositionScrollPresentationTickAsync` evaluate those plans over the retained frame, and `ICompositionDrawingBackend.ExecuteComposition` consumes the resulting `CompositionFrame`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are `Stopwatch.GetTimestamp()` ticks; frame counters are not valid animation time.
+The IR must be immutable after publication for a frame. Backend implementations may cache translated GPU objects behind stable handles. The current internal runtime descriptors are `CompositionAnimationDeclaration` for transform/opacity and `CompositionScrollPresentationDeclaration` for fixed-clip scroll presentation; both target stable `NodeKey` values and resolve against `RenderPipelineRetainedInputSnapshot` into compositor plans. Declarations can include typed animation markers (`CompositionAnimationMarker`) and a `CompositionAnimationInstanceId`; marker evaluation stays in the compositor, emits `CompositionAnimationMarkerEvent` records into a queue, and never enters backend callback code. Runtime-facing code drains those events with `CompositionMarkerEventPump`, uses app-owned marker mapping, and dispatches through the Poc app runtime dispatch sink, keeping `Irix.Rendering` generic and the backend unaware of app messages. `CompositionFrame` now carries an ordered set of `CompositionLayer` values; single-layer frames remain the zero-allocation case, while explicit multi-layer frames copy layers into immutable publication state. `CompositorHitTestSnapshot` is the input-facing scene snapshot for retained hit targets plus active composition layers; it inverse-maps through presented transforms/fixed clips and resolves overlapping targets in reverse paint order. `DrawingBackendCompositor.RenderCompositionAnimationTickAsync` and `RenderCompositionScrollPresentationTickAsync` evaluate those plans over the retained frame, and `ICompositionDrawingBackend.ExecuteComposition` consumes the resulting `CompositionFrame`. Animation progress uses `CompositionTimestamp` and `CompositionDuration`, whose current units are sampled through the internal `CompositionClock`; frame counters, present counters, and per-output refresh ticks are not valid animation time.
+
+## Multi-Output Timeline Authority
+
+GPU composition must treat animation time as global Irix state, not as a property of one monitor, swapchain, or backend queue. The first implementation boundary is `CompositionClock`, which provides the single high-precision source behind `CompositionTimestamp.Now()`. Per-output compositor instances may sample at 60 Hz, 120 Hz, 144 Hz, VRR cadence, or backend-present cadence, but they must evaluate from the same timestamp domain.
+
+This matters for heterogeneous multi-display rendering:
+
+- A high-refresh output may present more samples than a low-refresh output, but equal timestamps must produce equal animation state.
+- A window that spans multiple outputs must use one sampled timestamp for all output passes that represent the same Irix frame decision.
+- Backend `Present`, vblank, fence, and refresh-rate data are pacing and diagnostics inputs, not animation clock sources.
+- Future GPU-offloaded timelines must receive the same Irix timestamp as a constant/uniform/root payload, so CPU and GPU evaluation remain equivalent.
+
+The design target is:
+
+```text
+CompositionClock
+  -> CompositionTimestamp sample
+  -> evaluate composition plans
+  -> per-output backend schedules/presents at its own cadence
+```
+
+Do not introduce per-monitor animation clocks or derive animation progress from swapchain present serials. If a backend cannot sample on a requested cadence, it reports pacing/skip diagnostics and uses the next available sample from the same Irix clock domain.
 
 ## Backend Capability Model
 
