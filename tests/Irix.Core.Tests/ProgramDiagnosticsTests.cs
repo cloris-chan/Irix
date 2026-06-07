@@ -2829,6 +2829,63 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Non_solid_material_policy_preflight_is_documented_and_source_guarded()
+    {
+        var root = FindRepoRoot();
+        var colorDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Color-Pipeline.md")));
+        var styleDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Style-System.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+
+        Assert.Contains("## Non-Solid Material Policy Preflight", colorDesign);
+        Assert.Contains("Non-solid materials are design-gated, not implemented.", colorDesign);
+        Assert.Contains("Material identity and lifetime", colorDesign);
+        Assert.Contains("Coordinate space", colorDesign);
+        Assert.Contains("Color interpolation", colorDesign);
+        Assert.Contains("Invalidation", colorDesign);
+        Assert.Contains("Backend capability and fallback", colorDesign);
+        Assert.Contains("Diagnostics and tests", colorDesign);
+        Assert.Contains("Until that slice lands, non-solid materials stay out of `DrawMaterial`, `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring.", colorDesign);
+
+        Assert.Contains("Non-solid visual material authoring is blocked on the policy preflight", styleDesign);
+        Assert.Contains("non-solid material policy preflight is documented and guard-covered", status);
+        Assert.Contains("non-solid material policy preflight names the required lifetime, coordinate, interpolation, invalidation, backend fallback, and diagnostics contracts", worklist);
+
+        Assert.False(typeof(DrawMaterialKind).IsPublic);
+        Assert.False(typeof(DrawMaterial).IsPublic);
+        Assert.Equal(["None", "SolidColor"], Enum.GetNames<DrawMaterialKind>());
+
+        var forbiddenSourceFragments = new[]
+        {
+            "DrawMaterialKind.LinearGradient",
+            "DrawMaterialKind.RadialGradient",
+            "DrawMaterialKind.Image",
+            "public static DrawMaterial LinearGradient",
+            "public static DrawMaterial RadialGradient",
+            "public static DrawMaterial Image",
+            "public static StyleValue FromMaterial",
+            "public static StyleValue FromGradient",
+            "public static StyleValue FromImage",
+            "public static PropertyValue FromMaterial",
+            "public static PropertyValue FromGradient",
+            "public static PropertyValue FromImage",
+            "public static VirtualNodeProperty Material",
+            "public static VirtualNodeProperty Brush",
+            "public static VirtualNodeProperty Gradient",
+            "public static VirtualNodeProperty Image"
+        };
+
+        foreach (var file in EnumerateActiveSourceGuardFiles(root).Where(file => Path.GetExtension(file).Equals(".cs", StringComparison.OrdinalIgnoreCase)))
+        {
+            var source = NormalizeLineEndings(File.ReadAllText(file));
+            foreach (var fragment in forbiddenSourceFragments)
+            {
+                Assert.DoesNotContain(fragment, source);
+            }
+        }
+    }
+
+    [Fact]
     public void Style_transition_runtime_ownership_preflight_stays_poc_owned()
     {
         var root = FindRepoRoot();

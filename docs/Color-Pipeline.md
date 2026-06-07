@@ -47,6 +47,19 @@ The draw/material migration decision is now partially selected: draw commands ca
 
 A source guard now pins that deferral: `DrawMaterial` and `IFrameBrushResolver` remain internal, `DrawMaterialKind` is limited to `None` and `SolidColor`, and style/property authoring does not expose brush, material, gradient, or image value factories. This guard is an architecture preflight only; it does not choose the future non-solid material model.
 
+## Non-Solid Material Policy Preflight
+
+Non-solid materials are design-gated, not implemented. `DrawMaterialKind` must not grow beyond `None` and `SolidColor`, and public/style authoring must not expose brush, material, gradient, or image factories, until a dedicated material policy slice selects and guards all of these contracts:
+
+- Material identity and lifetime: whether non-solid material resources are frame-scoped, retained-frame-scoped, app-owned, shared, or backend-owned; how `ResourceHandle` identity survives retained partial apply; and when image/gradient data can be released.
+- Coordinate space: whether gradients, image sampling rects, tiling, transforms, and clips are expressed in local node space, command space, layer space, or physical backend pixels.
+- Color interpolation: gradient stops use canonical Irix `Color`; interpolation must name linear BT.2020 vs output-space behavior, alpha handling, gamut clipping, and whether any backend approximation is acceptable.
+- Invalidation: material changes must classify whether they require layout, text shaping, draw command update, composition property update, layer-cache invalidation, or full fallback.
+- Backend capability and fallback: the D3D12-first path must expose capability checks and deterministic fallback before Vulkan/Metal or public authoring names are introduced.
+- Diagnostics and tests: selected material kind, resource owner, fallback reason, layer-cache reuse/invalidations, and SDR output mapping must be observable enough to protect the active SDR/sRGB path.
+
+Until that slice lands, non-solid materials stay out of `DrawMaterial`, `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring. Image handles and `DrawingResourceKind.Image` may remain low-level drawing/resource placeholders, but they are not style materials.
+
 ## Canonical Color Contract
 
 | Field | Contract |
@@ -151,7 +164,8 @@ The current SDR/sRGB code slice is acceptable when:
 - Current backend/window output converts canonical colors through the internal `ColorOutputMapping.SdrSrgb` stage.
 - Internal solid-color material/resource shape exists without exposing public material authoring.
 - Source guards keep public style/property authoring free of brush/material/gradient/image factories while the internal material shape remains solid-color only.
+- A non-solid material policy preflight documents the required lifetime, coordinate, interpolation, invalidation, backend fallback, and diagnostics contracts before gradient/image material implementation can start.
 - `DrawColor` and `WindowColor` are documented and guarded as SDR bridge/output payloads, not canonical Irix color.
 - HDR policy remains unimplemented but has a clear output mapping owner.
 
-Current status: implemented for internal style/property color, the draw-command payload bridge, the current SDR/sRGB output mapper, the internal solid-color material/resource preflight, and the public material-authoring deferral guard. Non-solid materials and HDR backend output mapping remain future work.
+Current status: implemented for internal style/property color, the draw-command payload bridge, the current SDR/sRGB output mapper, the internal solid-color material/resource preflight, the public material-authoring deferral guard, and the non-solid material policy preflight. Non-solid material implementation and HDR backend output mapping remain future work.

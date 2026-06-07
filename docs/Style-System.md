@@ -49,6 +49,8 @@ Forbidden public authoring names: `LayoutAffecting`, `VisualOnly`, `CompositeOnl
 
 Deferred public authoring names in the current color/material stage: `Brush`, `Material`, `Gradient`, `LinearGradient`, `RadialGradient`, and `Image`. These may exist as low-level internal drawing/resource concepts, but they are not public style tokens or style value factories yet.
 
+Non-solid visual material authoring is blocked on the policy preflight in [Color-Pipeline.md](Color-Pipeline.md). Until that material policy is implemented, future public UI style can name semantic background/foreground colors and state variants, but it cannot bind gradient/image/material resources through style declarations.
+
 Semantic-to-internal mapping remains one-way. The implemented internal `StyleDeclaration` layer is the current pre-public bridge for this mapping; it is not a public authoring API.
 
 | Future semantic authoring term | Internal target |
