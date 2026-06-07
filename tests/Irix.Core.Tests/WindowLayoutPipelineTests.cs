@@ -981,8 +981,10 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransition, lifecycle.Action);
         Assert.Equal(CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta, lifecycle.Reason);
         Assert.Equal(CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision, lifecycle.CompletionPolicy);
+        Assert.Equal(CounterStyleTransitionLifecyclePresentationPolicy.Preserve, lifecycle.PresentationPolicy);
         Assert.True(lifecycle.HasTransitionDecision);
         Assert.False(lifecycle.RequiresNormalDispatch);
+        Assert.False(lifecycle.RequiresStyleTransitionAbort);
         Assert.Equal(StyleTransitionRuntimeDecisionKind.Start, lifecycle.Decision.Kind);
         Assert.Equal(new NodeKey(6), lifecycle.Decision.TargetKey);
     }
@@ -1023,12 +1025,16 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(CounterStyleTransitionLifecycleAction.DispatchNormally, activeScroll.Action);
         Assert.Equal(CounterStyleTransitionLifecycleReason.ActiveScrollPresentation, activeScroll.Reason);
         Assert.True(activeScroll.RequiresNormalDispatch);
+        Assert.True(activeScroll.RequiresStyleTransitionAbort);
+        Assert.Equal(CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition, activeScroll.PresentationPolicy);
         Assert.False(activeScroll.HasTransitionDecision);
         Assert.Equal(default, activeScroll.Decision);
 
         Assert.Equal(CounterStyleTransitionLifecycleAction.DispatchNormally, multiTarget.Action);
         Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetUnsupported, multiTarget.Reason);
         Assert.True(multiTarget.RequiresNormalDispatch);
+        Assert.True(multiTarget.RequiresStyleTransitionAbort);
+        Assert.Equal(CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition, multiTarget.PresentationPolicy);
         Assert.False(multiTarget.HasTransitionDecision);
         Assert.Equal(default, multiTarget.Decision);
     }
@@ -1189,6 +1195,84 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(2, pump.TickCount);
         Assert.Equal(1, pump.CommitCount);
         Assert.Equal(1, pump.DrainedEventCount);
+    }
+
+    [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_multi_target_normal_dispatch_aborts_active_style_transition()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var tracker = new StyleTransitionCompletionTracker();
+        var hoverIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var startLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            hoverIncrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+
+        var startResult = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(hoverIncrement),
+            startLifecycle.Decision,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            cancellationToken,
+            tracker);
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Started, startResult.Kind);
+        Assert.True(tracker.HasActiveTransition);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+
+        var hoverDecrementAndLeaveIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            default,
+            default,
+            default,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+        var multiTargetLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            hoverDecrementAndLeaveIncrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(150));
+
+        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetUnsupported, multiTargetLifecycle.Reason);
+        Assert.True(multiTargetLifecycle.RequiresNormalDispatch);
+        Assert.True(multiTargetLifecycle.RequiresStyleTransitionAbort);
+
+        var abortResult = Program.AbortStyleTransitionPresentationForRuntime(
+            multiTargetLifecycle,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            cancellationToken);
+        var dispatched = Program.TryDispatchAppMessageForRuntime(
+            new CounterMessage.InputVisualStateChanged(hoverDecrementAndLeaveIncrement),
+            new CounterRuntimeDispatchSink(runtime));
+
+        Assert.True(dispatched);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Canceled, abortResult.Kind);
+        Assert.Equal(new NodeKey(6), abortResult.TargetKey);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Equal(StyleTransitionCompletionResultKind.Aborted, tracker.LastResult.Kind);
+        Assert.Equal(new NodeKey(6), tracker.LastResult.TargetKey);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Equal(hoverDecrementAndLeaveIncrement, runtime.CurrentModel.InputOwnership);
     }
 
     [Fact]

@@ -205,6 +205,10 @@ internal static partial class Program
                     }
                     else
                     {
+                        AbortStyleTransitionPresentationForRuntime(
+                            transitionLifecycle,
+                            styleTransitionCompletionTracker,
+                            new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor));
                         _ = TryDispatchAppMessageForRuntime(message, runtimeDispatchSink);
                     }
                 }
@@ -438,6 +442,33 @@ internal static partial class Program
         where TDispatchSink : struct, IAppRuntimeDispatchSink<CounterMessage>
     {
         return AppRuntimeDispatchAdapter.TryDispatchMessage(message, dispatchSink);
+    }
+
+    internal static StyleTransitionRuntimeResult AbortStyleTransitionPresentationForRuntime<TCompositor>(
+        in CounterStyleTransitionLifecycleResult lifecycle,
+        StyleTransitionCompletionTracker completionTracker,
+        TCompositor compositor,
+        CancellationToken cancellationToken = default)
+        where TCompositor : IStyleTransitionCompositorAdapter
+    {
+        ArgumentNullException.ThrowIfNull(completionTracker);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!lifecycle.RequiresStyleTransitionAbort)
+        {
+            return StyleTransitionRuntimeResult.NoOp();
+        }
+
+        var aborted = completionTracker.AbortActiveTransition();
+        if (aborted.Kind != StyleTransitionCompletionResultKind.Aborted)
+        {
+            return StyleTransitionRuntimeResult.NoOp();
+        }
+
+        return StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            StyleTransitionRuntimeDecision.Cancel(aborted.TargetKey),
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(null),
+            CancellationToken.None).GetAwaiter().GetResult();
     }
 
 }

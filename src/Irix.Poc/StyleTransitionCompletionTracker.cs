@@ -10,6 +10,7 @@ internal enum StyleTransitionCompletionResultKind : byte
     TrackingRetargeted,
     Completed,
     Cleared,
+    Aborted,
 }
 
 internal readonly struct StyleTransitionCompletionResult(
@@ -38,6 +39,9 @@ internal readonly struct StyleTransitionCompletionResult(
 
     public static StyleTransitionCompletionResult Cleared(NodeKey targetKey, CompositionAnimationInstanceId instanceId) =>
         new(StyleTransitionCompletionResultKind.Cleared, targetKey, instanceId);
+
+    public static StyleTransitionCompletionResult Aborted(NodeKey targetKey, CompositionAnimationInstanceId instanceId) =>
+        new(StyleTransitionCompletionResultKind.Aborted, targetKey, instanceId);
 
     public bool Equals(StyleTransitionCompletionResult other)
     {
@@ -196,6 +200,23 @@ internal sealed class StyleTransitionCompletionTracker
             _active = default;
             _lastResult = StyleTransitionCompletionResult.Completed(targetKey, instanceId, decision);
             return true;
+        }
+    }
+
+    internal StyleTransitionCompletionResult AbortActiveTransition()
+    {
+        lock (_gate)
+        {
+            if (!_active.HasValue)
+            {
+                _lastResult = StyleTransitionCompletionResult.NotTracked();
+                return _lastResult;
+            }
+
+            var previous = _active;
+            _active = default;
+            _lastResult = StyleTransitionCompletionResult.Aborted(previous.TargetKey, previous.InstanceId);
+            return _lastResult;
         }
     }
 

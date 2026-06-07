@@ -139,6 +139,13 @@ internal enum CounterStyleTransitionLifecycleAction : byte
     ApplyTransition,
 }
 
+internal enum CounterStyleTransitionLifecyclePresentationPolicy : byte
+{
+    None,
+    Preserve,
+    AbortActiveStyleTransition,
+}
+
 internal enum CounterStyleTransitionLifecycleReason : byte
 {
     None,
@@ -159,41 +166,55 @@ internal readonly struct CounterStyleTransitionLifecycleResult(
     CounterStyleTransitionLifecycleAction Action,
     CounterStyleTransitionLifecycleReason Reason,
     StyleTransitionRuntimeDecision Decision = default,
-    CounterStyleTransitionLifecycleCompletionPolicy CompletionPolicy = CounterStyleTransitionLifecycleCompletionPolicy.None) : IEquatable<CounterStyleTransitionLifecycleResult>
+    CounterStyleTransitionLifecycleCompletionPolicy CompletionPolicy = CounterStyleTransitionLifecycleCompletionPolicy.None,
+    CounterStyleTransitionLifecyclePresentationPolicy PresentationPolicy = CounterStyleTransitionLifecyclePresentationPolicy.None) : IEquatable<CounterStyleTransitionLifecycleResult>
 {
     public CounterStyleTransitionLifecycleAction Action { get; } = Action;
     public CounterStyleTransitionLifecycleReason Reason { get; } = Reason;
     public StyleTransitionRuntimeDecision Decision { get; } = Decision;
     public CounterStyleTransitionLifecycleCompletionPolicy CompletionPolicy { get; } = CompletionPolicy;
+    public CounterStyleTransitionLifecyclePresentationPolicy PresentationPolicy { get; } = PresentationPolicy;
     public bool HasTransitionDecision => Action == CounterStyleTransitionLifecycleAction.ApplyTransition
         && Decision.Kind is StyleTransitionRuntimeDecisionKind.Start or StyleTransitionRuntimeDecisionKind.Retarget;
     public bool RequiresNormalDispatch => Action == CounterStyleTransitionLifecycleAction.DispatchNormally;
+    public bool RequiresStyleTransitionAbort => PresentationPolicy == CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition;
 
     public static CounterStyleTransitionLifecycleResult DispatchNormally(CounterStyleTransitionLifecycleReason reason) =>
-        new(CounterStyleTransitionLifecycleAction.DispatchNormally, reason);
+        new(
+            CounterStyleTransitionLifecycleAction.DispatchNormally,
+            reason,
+            PresentationPolicy: RequiresPresentationAbort(reason)
+                ? CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition
+                : CounterStyleTransitionLifecyclePresentationPolicy.Preserve);
 
     public static CounterStyleTransitionLifecycleResult ApplyTransition(StyleTransitionRuntimeDecision decision) =>
         new(
             CounterStyleTransitionLifecycleAction.ApplyTransition,
             CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta,
             decision,
-            CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision);
+            CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision,
+            CounterStyleTransitionLifecyclePresentationPolicy.Preserve);
 
     public bool Equals(CounterStyleTransitionLifecycleResult other)
     {
         return Action == other.Action
             && Reason == other.Reason
             && Decision == other.Decision
-            && CompletionPolicy == other.CompletionPolicy;
+            && CompletionPolicy == other.CompletionPolicy
+            && PresentationPolicy == other.PresentationPolicy;
     }
 
     public override bool Equals(object? obj) => obj is CounterStyleTransitionLifecycleResult other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Action, Reason, Decision, CompletionPolicy);
+    public override int GetHashCode() => HashCode.Combine(Action, Reason, Decision, CompletionPolicy, PresentationPolicy);
 
     public static bool operator ==(CounterStyleTransitionLifecycleResult left, CounterStyleTransitionLifecycleResult right) => left.Equals(right);
 
     public static bool operator !=(CounterStyleTransitionLifecycleResult left, CounterStyleTransitionLifecycleResult right) => !left.Equals(right);
+
+    private static bool RequiresPresentationAbort(CounterStyleTransitionLifecycleReason reason) =>
+        reason is CounterStyleTransitionLifecycleReason.ActiveScrollPresentation
+            or CounterStyleTransitionLifecycleReason.MultiTargetUnsupported;
 }
 
 internal readonly struct CounterButtonTransitionTarget(ActionId ActionId, NodeKey NodeKey) : IEquatable<CounterButtonTransitionTarget>

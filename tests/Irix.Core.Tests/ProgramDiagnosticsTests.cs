@@ -2752,7 +2752,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, and the main-app completion pump are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, and the multi-target abort-and-dispatch boundary are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2856,11 +2856,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("falls back before presentation ownership changes", animationDesign);
         Assert.Contains("first concrete app/control integration is Counter-owned", animationDesign);
         Assert.Contains("Poc-owned marker-driven completion tracker", animationDesign);
+        Assert.Contains("aborts any active style transition presentation and clears tracker ownership", animationDesign);
+        Assert.Contains("not true concurrent multi-owner transition support", animationDesign);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("marker-driven completion tracker", status);
+        Assert.Contains("Unsupported active-scroll or multi-target outcomes now explicitly abort", status);
         Assert.Contains("Style transition runtime hardening", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice also exists", worklist);
         Assert.Contains("marker-driven completion tracker", worklist);
+        Assert.Contains("multi-target abort-and-dispatch boundary", worklist);
         Assert.Contains("Style transition runtime hardening", worklist);
 
         Assert.Contains("interface IStyleTransitionRuntimeAdapter", coordinatorSource);
@@ -2891,6 +2895,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("CounterStyleTransitionRuntimeAdapter", counterTransitionSource);
         Assert.Contains("CounterStyleTransitionLifecycleResult", counterTransitionSource);
         Assert.Contains("CounterStyleTransitionLifecycleCompletionPolicy.RequiresExplicitRuntimeDecision", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition", counterTransitionSource);
+        Assert.Contains("RequiresStyleTransitionAbort", counterTransitionSource);
         Assert.Contains("CounterStyleTransitionLifecycleReason.ActiveScrollPresentation", counterTransitionSource);
         Assert.Contains("CounterStyleTransitionLifecycleReason.MultiTargetUnsupported", counterTransitionSource);
         Assert.Contains("StyleTransitionCompletionTracker?", counterTransitionSource);
@@ -2900,6 +2906,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("StyleTransitionCompletionPump", programSource);
         Assert.Contains("StyleTransitionCompletionPump)state!).EnsureRunning", programSource);
         Assert.Contains("completionTracker: styleTransitionCompletionTracker", programSource);
+        Assert.Contains("AbortStyleTransitionPresentationForRuntime", programSource);
+        Assert.Contains("completionTracker.AbortActiveTransition", programSource);
+        Assert.Contains("StyleTransitionRuntimeDecision.Cancel(aborted.TargetKey)", programSource);
         Assert.Contains("CounterButtonTransitionTarget", counterTransitionSource);
         Assert.Contains("OwnershipSnapshot", counterTransitionSource);
         Assert.Contains("StyleTransitionRuntimeDecisionKind.Retarget", counterTransitionSource);
@@ -2919,6 +2928,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("CompositionAnimationRepeatMode.Once", completionTrackerSource);
         Assert.Contains("CompositionAnimationMarkerOwnerKind.TransformOpacity", completionTrackerSource);
         Assert.Contains("StyleTransitionRuntimeDecision.Commit", completionTrackerSource);
+        Assert.Contains("StyleTransitionCompletionResultKind.Aborted", completionTrackerSource);
+        Assert.Contains("AbortActiveTransition", completionTrackerSource);
         Assert.DoesNotContain("StyleTransitionScheduler", completionTrackerSource);
         Assert.DoesNotContain("Theme", completionTrackerSource);
         Assert.DoesNotContain("Cascade", completionTrackerSource);
@@ -2945,6 +2956,7 @@ public sealed class ProgramDiagnosticsTests
             "CounterStyleTransitionLifecycleResult",
             "CounterStyleTransitionLifecycleReason",
             "CounterStyleTransitionLifecycleCompletionPolicy",
+            "CounterStyleTransitionLifecyclePresentationPolicy",
             "CounterButtonTransitionTarget",
             "StyleTransitionCompletionTracker",
             "StyleTransitionCompletionResult",
