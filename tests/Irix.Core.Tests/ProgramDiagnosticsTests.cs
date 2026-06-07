@@ -2752,7 +2752,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, completion-pump lifecycle diagnostics, true concurrent multi-owner transition design preflight, Poc-owned batch/owner value types with deterministic acceptance/rejection tests, coordinator batch validation against one retained snapshot, and compositor-side presentation-set validation/conflict reporting without install are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, completion-pump lifecycle diagnostics, true concurrent multi-owner transition design preflight, Poc-owned batch/owner value types with deterministic acceptance/rejection tests, coordinator batch validation against one retained snapshot, compositor-side presentation-set validation/conflict reporting without install, and owner-table completion tracking are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2856,6 +2856,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("falls back before presentation ownership changes", animationDesign);
         Assert.Contains("first concrete app/control integration is Counter-owned", animationDesign);
         Assert.Contains("Poc-owned marker-driven completion tracker", animationDesign);
+        Assert.Contains("owner table keyed by `StyleTransitionOwnerKey`", animationDesign);
+        Assert.Contains("active owner count", animationDesign);
         Assert.Contains("aborts any active style transition presentation and clears tracker ownership", animationDesign);
         Assert.Contains("not true concurrent multi-owner transition support", animationDesign);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
@@ -2931,6 +2933,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("StyleTransitionRuntimeDecision.Commit", completionTrackerSource);
         Assert.Contains("StyleTransitionCompletionResultKind.Aborted", completionTrackerSource);
         Assert.Contains("AbortActiveTransition", completionTrackerSource);
+        Assert.Contains("private TrackedTransition[]? _activeOwners;", completionTrackerSource);
+        Assert.Contains("ActiveOwnerCount", completionTrackerSource);
+        Assert.Contains("StyleTransitionOwnerKey", completionTrackerSource);
         Assert.DoesNotContain("StyleTransitionScheduler", completionTrackerSource);
         Assert.DoesNotContain("Theme", completionTrackerSource);
         Assert.DoesNotContain("Cascade", completionTrackerSource);
@@ -2991,7 +2996,7 @@ public sealed class ProgramDiagnosticsTests
         var drawingCompositorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.cs")));
 
         Assert.Contains("## Concurrent Transition Owner Preflight", animationDesign);
-        Assert.Contains("This preflight is now a Poc-owned value-model plus coordinator and compositor presentation-set validation preflight only", animationDesign);
+        Assert.Contains("This preflight is now a Poc-owned value-model plus coordinator, compositor presentation-set validation, and owner-table completion preflight only", animationDesign);
         Assert.Contains("Transition owner key", animationDesign);
         Assert.Contains("Transition decision batch", animationDesign);
         Assert.Contains("Retained target snapshot", animationDesign);
@@ -3003,26 +3008,31 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("per-owner completion tracking", animationDesign);
         Assert.Contains("CompositionAnimationPresentationSetValidator", animationDesign);
         Assert.Contains("DrawingBackendCompositor.ValidateCompositionAnimationPresentationSet", animationDesign);
+        Assert.Contains("owner-keyed `StyleTransitionCompletionTracker` state", animationDesign);
+        Assert.Contains("owner-aware completion/cancel/fallback/abort operations", animationDesign);
         Assert.Contains("duplicate layer ids and overlapping command ranges", animationDesign);
         Assert.Contains("Batch order is runtime-owned and deterministic", animationDesign);
         Assert.Contains("A batch may be partially accepted only if rejected owners are reported before any accepted owner changes presentation state", animationDesign);
         Assert.Contains("Counter multi-target control-state deltas", animationDesign);
         Assert.Contains("Done: Poc-owned batch/owner value types and tests around deterministic acceptance/rejection exist without installing multiple compositor owners", animationDesign);
         Assert.Contains("Done: compositor-side presentation-set validation and conflict reporting exists for transform/opacity declarations without installing the set", animationDesign);
-        Assert.Contains("Next: extend completion tracking from one active transition to an owner table", animationDesign);
+        Assert.Contains("Done: completion tracking now uses an owner table so one owner completion, cancel, fallback, or abort does not clear another owner", animationDesign);
+        Assert.Contains("Next: add a validation-only batch apply/commit coordinator shape", animationDesign);
         Assert.Contains("StyleTransitionDecisionBatchPreflight", animationDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ValidateBatch", animationDesign);
         Assert.Contains("PresentationStateChanged=false", animationDesign);
         Assert.Contains("coordinator `ValidateBatch` coverage", status);
-        Assert.Contains("batch apply, compositor presentation-set install, and per-owner completion tracking remain deferred", status);
+        Assert.Contains("owner-table completion tracking", status);
+        Assert.Contains("batch apply and compositor presentation-set install remain deferred", status);
         Assert.Contains("coordinator batch validation against one retained snapshot", status);
         Assert.Contains("compositor-side presentation-set validation/conflict reporting without install", status);
-        Assert.Contains("next useful style slice is extending completion tracking from one active transition to an owner table", status);
+        Assert.Contains("next useful style slice is a validation-only batch apply/commit coordinator shape before compositor presentation-set install", status);
         Assert.Contains("coordinator batch validation against one retained snapshot", worklist);
         Assert.Contains("compositor-side presentation-set validation/conflict reporting without install", worklist);
-        Assert.Contains("Next slice should extend completion tracking from one active transition to an owner table", worklist);
+        Assert.Contains("owner-table completion tracking", worklist);
+        Assert.Contains("Next slice should add a validation-only batch apply/commit coordinator shape before compositor presentation-set install", worklist);
         Assert.Contains("Concurrent multi-owner transition support is now written as a preflight", styleDesign);
-        Assert.Contains("deterministic acceptance/rejection tests, `StyleTransitionRuntimeCoordinator.ValidateBatch`, and rendering-owned presentation-set validation exist", styleDesign);
+        Assert.Contains("deterministic acceptance/rejection tests, `StyleTransitionRuntimeCoordinator.ValidateBatch`, rendering-owned presentation-set validation, and owner-table completion tracking exist", styleDesign);
 
         Assert.Contains("namespace Irix.Poc;", batchSource);
         Assert.Contains("internal enum StyleTransitionOwnerKind", batchSource);
@@ -3047,7 +3057,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.DoesNotContain("ApplyBatch", coordinatorSource);
         Assert.DoesNotContain("StartBatch", coordinatorSource);
         Assert.DoesNotContain("SetCompositionAnimationPresentationSet", coordinatorSource);
-        Assert.Contains("private TrackedTransition _active;", completionTrackerSource);
+        Assert.Contains("private TrackedTransition[]? _activeOwners;", completionTrackerSource);
+        Assert.Contains("ActiveOwnerCount", completionTrackerSource);
+        Assert.Contains("StyleTransitionOwnerKey OwnerKey", completionTrackerSource);
         Assert.Contains("internal static class CompositionAnimationPresentationSetValidator", presentationSetValidatorSource);
         Assert.Contains("CompositionAnimationPresentationSetRejectionReason.DuplicateLayerId", presentationSetValidatorSource);
         Assert.Contains("CompositionAnimationPresentationSetRejectionReason.OverlappingCommandRange", presentationSetValidatorSource);
@@ -3087,7 +3099,8 @@ public sealed class ProgramDiagnosticsTests
                 Assert.DoesNotContain(forbiddenFragment, source);
             }
 
-            if (!relativePath.Equals("src/Irix.Poc/StyleTransitionDecisionBatch.cs", StringComparison.Ordinal))
+            if (!relativePath.Equals("src/Irix.Poc/StyleTransitionDecisionBatch.cs", StringComparison.Ordinal)
+                && !relativePath.Equals("src/Irix.Poc/StyleTransitionCompletionTracker.cs", StringComparison.Ordinal))
             {
                 Assert.DoesNotContain("StyleTransitionOwnerKey", source);
             }
@@ -4364,6 +4377,8 @@ public sealed class ProgramDiagnosticsTests
             HasActiveTransition: false,
             ActiveTargetKey: NodeKey.None,
             ActiveInstanceId: default,
+            ActiveOwnerCount: 0,
+            ActiveOwnerKind: StyleTransitionOwnerKind.None,
             LastResult: StyleTransitionCompletionPumpResult.CompletionCommitted(
                 1,
                 new StyleTransitionRuntimeResult(
@@ -4380,7 +4395,7 @@ public sealed class ProgramDiagnosticsTests
 
         var line = DiagnosticsFormatter.BuildStyleTransitionCompletionPumpDiagnosticLine(snapshot);
 
-        Assert.Equal("style-transition-completion-pump status isRunning=False hasActiveTransition=False activeTarget=- activeInstance=- lastResult=CompletionCommitted lastDrainedEvents=1 lastCommitResult=Committed lastCommitTarget=6 trackerResult=Completed trackerTarget=6 trackerInstance=1001 tickCount=2 commitCount=1 drainedEvents=1 hasError=False error=-", line);
+        Assert.Equal("style-transition-completion-pump status isRunning=False hasActiveTransition=False activeTarget=- activeInstance=- activeOwnerCount=0 activeOwnerKind=None lastResult=CompletionCommitted lastDrainedEvents=1 lastCommitResult=Committed lastCommitTarget=6 trackerResult=Completed trackerTarget=6 trackerInstance=1001 tickCount=2 commitCount=1 drainedEvents=1 hasError=False error=-", line);
     }
 
     [Fact]
@@ -4391,6 +4406,8 @@ public sealed class ProgramDiagnosticsTests
             HasActiveTransition: true,
             ActiveTargetKey: new NodeKey(22),
             ActiveInstanceId: new CompositionAnimationInstanceId(9),
+            ActiveOwnerCount: 1,
+            ActiveOwnerKind: StyleTransitionOwnerKind.ControlState,
             LastResult: StyleTransitionCompletionPumpResult.TickUnavailable(),
             TrackerResult: StyleTransitionCompletionResult.TrackingStarted(
                 new NodeKey(22),
@@ -4402,7 +4419,7 @@ public sealed class ProgramDiagnosticsTests
 
         var line = DiagnosticsFormatter.BuildStyleTransitionCompletionPumpDiagnosticLine(snapshot);
 
-        Assert.Equal("style-transition-completion-pump status isRunning=True hasActiveTransition=True activeTarget=22 activeInstance=9 lastResult=TickUnavailable lastDrainedEvents=0 lastCommitResult=None lastCommitTarget=- trackerResult=TrackingStarted trackerTarget=22 trackerInstance=9 tickCount=0 commitCount=0 drainedEvents=0 hasError=True error=InvalidOperationException", line);
+        Assert.Equal("style-transition-completion-pump status isRunning=True hasActiveTransition=True activeTarget=22 activeInstance=9 activeOwnerCount=1 activeOwnerKind=ControlState lastResult=TickUnavailable lastDrainedEvents=0 lastCommitResult=None lastCommitTarget=- trackerResult=TrackingStarted trackerTarget=22 trackerInstance=9 tickCount=0 commitCount=0 drainedEvents=0 hasError=True error=InvalidOperationException", line);
     }
 
     [Fact]

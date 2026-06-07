@@ -1822,6 +1822,168 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public async Task StyleTransitionCompletionTracker_owner_table_completes_one_owner_without_clearing_another()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshot = CreateStyleTransitionRetainedSnapshot();
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var tracker = new StyleTransitionCompletionTracker();
+        var firstOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22));
+        var secondOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23));
+        var firstDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9));
+        var secondDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(23),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+            BuildCompositionStyleProperties(opacity: 0.8, translateX: -8, translateY: 3),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(10));
+        var firstDecorated = tracker.AttachCompletionMarker(firstOwner, firstDecision);
+        var secondDecorated = tracker.AttachCompletionMarker(secondOwner, secondDecision);
+        var firstStart = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            firstDecorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var secondStart = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            secondDecorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+
+        var firstTracking = tracker.PublishRuntimeResult(firstOwner, firstDecorated, firstStart);
+        var secondTracking = tracker.PublishRuntimeResult(secondOwner, secondDecorated, secondStart);
+
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, firstTracking.Kind);
+        Assert.Equal(firstOwner, firstTracking.OwnerKey);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, secondTracking.Kind);
+        Assert.Equal(secondOwner, secondTracking.OwnerKey);
+        Assert.True(tracker.HasActiveTransition);
+        Assert.Equal(2, tracker.ActiveOwnerCount);
+        Assert.True(tracker.TryGetActiveTransition(firstOwner, out var firstTarget, out var firstInstance));
+        Assert.True(tracker.TryGetActiveTransition(secondOwner, out var secondTarget, out var secondInstance));
+        Assert.Equal(new NodeKey(22), firstTarget);
+        Assert.Equal(new CompositionAnimationInstanceId(9), firstInstance);
+        Assert.Equal(new NodeKey(23), secondTarget);
+        Assert.Equal(new CompositionAnimationInstanceId(10), secondInstance);
+
+        var completed = tracker.TryCreateCompletionDecision(
+            firstOwner,
+            BuildCompletionMarkerEvent(new NodeKey(22), new CompositionAnimationInstanceId(9)),
+            out var commitDecision);
+
+        Assert.True(completed);
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Commit, commitDecision.Kind);
+        Assert.Equal(new NodeKey(22), commitDecision.TargetKey);
+        Assert.Equal(StyleTransitionCompletionResultKind.Completed, tracker.LastResult.Kind);
+        Assert.Equal(firstOwner, tracker.LastResult.OwnerKey);
+        Assert.Equal(1, tracker.ActiveOwnerCount);
+        Assert.False(tracker.TryGetActiveTransition(firstOwner, out _, out _));
+        Assert.True(tracker.TryGetActiveTransition(secondOwner, out var remainingTarget, out var remainingInstance));
+        Assert.Equal(new NodeKey(23), remainingTarget);
+        Assert.Equal(new CompositionAnimationInstanceId(10), remainingInstance);
+        Assert.True(tracker.HasActiveTransition);
+
+        var staleCompleted = tracker.TryCreateCompletionDecision(
+            firstOwner,
+            BuildCompletionMarkerEvent(new NodeKey(23), new CompositionAnimationInstanceId(10)),
+            out _);
+        Assert.False(staleCompleted);
+        Assert.Equal(StyleTransitionCompletionResultKind.NotTracked, tracker.LastResult.Kind);
+        Assert.Equal(firstOwner, tracker.LastResult.OwnerKey);
+
+        var secondCompleted = tracker.TryCreateCompletionDecision(
+            secondOwner,
+            BuildCompletionMarkerEvent(new NodeKey(23), new CompositionAnimationInstanceId(10)),
+            out var secondCommitDecision);
+
+        Assert.True(secondCompleted);
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Commit, secondCommitDecision.Kind);
+        Assert.Equal(new NodeKey(23), secondCommitDecision.TargetKey);
+        Assert.Equal(StyleTransitionCompletionResultKind.Completed, tracker.LastResult.Kind);
+        Assert.Equal(secondOwner, tracker.LastResult.OwnerKey);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Equal(0, tracker.ActiveOwnerCount);
+    }
+
+    [Fact]
+    public async Task StyleTransitionCompletionTracker_owner_table_clears_only_matching_owner()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshot = CreateStyleTransitionRetainedSnapshot();
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var tracker = new StyleTransitionCompletionTracker();
+        var firstOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22));
+        var secondOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23));
+        var firstDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9));
+        var secondDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(23),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+            BuildCompositionStyleProperties(opacity: 0.8, translateX: -8, translateY: 3),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(10));
+        var firstDecorated = tracker.AttachCompletionMarker(firstOwner, firstDecision);
+        var secondDecorated = tracker.AttachCompletionMarker(secondOwner, secondDecision);
+        var firstStart = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            firstDecorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var secondStart = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            secondDecorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        tracker.PublishRuntimeResult(firstOwner, firstDecorated, firstStart);
+        tracker.PublishRuntimeResult(secondOwner, secondDecorated, secondStart);
+
+        var canceled = new StyleTransitionRuntimeResult(
+            StyleTransitionRuntimeResultKind.Canceled,
+            new NodeKey(22));
+        var firstCleared = tracker.PublishRuntimeResult(
+            firstOwner,
+            StyleTransitionRuntimeDecision.Cancel(new NodeKey(22)),
+            canceled);
+
+        Assert.Equal(StyleTransitionCompletionResultKind.Cleared, firstCleared.Kind);
+        Assert.Equal(firstOwner, firstCleared.OwnerKey);
+        Assert.Equal(1, tracker.ActiveOwnerCount);
+        Assert.False(tracker.TryGetActiveTransition(firstOwner, out _, out _));
+        Assert.True(tracker.TryGetActiveTransition(secondOwner, out _, out _));
+
+        var fallback = StyleTransitionRuntimeResult.Fallback(
+            new NodeKey(23),
+            StyleTransitionRuntimeFallbackReason.MissingRetainedSnapshot);
+        var secondCleared = tracker.PublishRuntimeResult(secondOwner, secondDecorated, fallback);
+
+        Assert.Equal(StyleTransitionCompletionResultKind.Cleared, secondCleared.Kind);
+        Assert.Equal(secondOwner, secondCleared.OwnerKey);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Equal(0, tracker.ActiveOwnerCount);
+    }
+
+    [Fact]
     public async Task StyleTransitionCompletionTracker_retarget_supersedes_previous_instance()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

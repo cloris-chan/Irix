@@ -56,6 +56,8 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
     bool HasActiveTransition,
     NodeKey ActiveTargetKey,
     CompositionAnimationInstanceId ActiveInstanceId,
+    int ActiveOwnerCount,
+    StyleTransitionOwnerKind ActiveOwnerKind,
     StyleTransitionCompletionPumpResult LastResult,
     StyleTransitionCompletionResult TrackerResult,
     long TickCount,
@@ -67,6 +69,8 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
     public bool HasActiveTransition { get; } = HasActiveTransition;
     public NodeKey ActiveTargetKey { get; } = ActiveTargetKey;
     public CompositionAnimationInstanceId ActiveInstanceId { get; } = ActiveInstanceId;
+    public int ActiveOwnerCount { get; } = ActiveOwnerCount;
+    public StyleTransitionOwnerKind ActiveOwnerKind { get; } = ActiveOwnerKind;
     public StyleTransitionCompletionPumpResult LastResult { get; } = LastResult;
     public StyleTransitionCompletionResult TrackerResult { get; } = TrackerResult;
     public long TickCount { get; } = TickCount;
@@ -81,6 +85,8 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
             && HasActiveTransition == other.HasActiveTransition
             && ActiveTargetKey == other.ActiveTargetKey
             && ActiveInstanceId == other.ActiveInstanceId
+            && ActiveOwnerCount == other.ActiveOwnerCount
+            && ActiveOwnerKind == other.ActiveOwnerKind
             && LastResult == other.LastResult
             && TrackerResult == other.TrackerResult
             && TickCount == other.TickCount
@@ -98,6 +104,8 @@ internal readonly struct StyleTransitionCompletionPumpDiagnosticSnapshot(
         hash.Add(HasActiveTransition);
         hash.Add(ActiveTargetKey);
         hash.Add(ActiveInstanceId);
+        hash.Add(ActiveOwnerCount);
+        hash.Add(ActiveOwnerKind);
         hash.Add(LastResult);
         hash.Add(TrackerResult);
         hash.Add(TickCount);
@@ -199,6 +207,8 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
                 tracker.HasActiveTransition,
                 tracker.ActiveTargetKey,
                 tracker.ActiveInstanceId,
+                tracker.ActiveOwnerCount,
+                tracker.ActiveOwnerKind,
                 _lastResult,
                 tracker.LastResult,
                 TickCount,

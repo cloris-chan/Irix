@@ -17,43 +17,81 @@ internal readonly struct StyleTransitionCompletionResult(
     StyleTransitionCompletionResultKind Kind,
     NodeKey TargetKey = default,
     CompositionAnimationInstanceId InstanceId = default,
-    StyleTransitionRuntimeDecision Decision = default) : IEquatable<StyleTransitionCompletionResult>
+    StyleTransitionRuntimeDecision Decision = default,
+    StyleTransitionOwnerKey OwnerKey = default) : IEquatable<StyleTransitionCompletionResult>
 {
     public StyleTransitionCompletionResultKind Kind { get; } = Kind;
     public NodeKey TargetKey { get; } = TargetKey;
     public CompositionAnimationInstanceId InstanceId { get; } = InstanceId;
     public StyleTransitionRuntimeDecision Decision { get; } = Decision;
+    public StyleTransitionOwnerKey OwnerKey { get; } = OwnerKey;
     public bool HasDecision => Decision.Kind != StyleTransitionRuntimeDecisionKind.None;
+    public bool HasOwner => !OwnerKey.IsNone;
 
     public static StyleTransitionCompletionResult NotTracked() =>
         new(StyleTransitionCompletionResultKind.NotTracked);
 
+    internal static StyleTransitionCompletionResult NotTracked(StyleTransitionOwnerKey ownerKey) =>
+        new(StyleTransitionCompletionResultKind.NotTracked, OwnerKey: ownerKey);
+
     public static StyleTransitionCompletionResult TrackingStarted(NodeKey targetKey, CompositionAnimationInstanceId instanceId) =>
         new(StyleTransitionCompletionResultKind.TrackingStarted, targetKey, instanceId);
+
+    internal static StyleTransitionCompletionResult TrackingStarted(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId) =>
+        new(StyleTransitionCompletionResultKind.TrackingStarted, targetKey, instanceId, OwnerKey: ownerKey);
 
     public static StyleTransitionCompletionResult TrackingRetargeted(NodeKey targetKey, CompositionAnimationInstanceId instanceId) =>
         new(StyleTransitionCompletionResultKind.TrackingRetargeted, targetKey, instanceId);
 
+    internal static StyleTransitionCompletionResult TrackingRetargeted(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId) =>
+        new(StyleTransitionCompletionResultKind.TrackingRetargeted, targetKey, instanceId, OwnerKey: ownerKey);
+
     public static StyleTransitionCompletionResult Completed(NodeKey targetKey, CompositionAnimationInstanceId instanceId, StyleTransitionRuntimeDecision decision) =>
         new(StyleTransitionCompletionResultKind.Completed, targetKey, instanceId, decision);
+
+    internal static StyleTransitionCompletionResult Completed(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId,
+        StyleTransitionRuntimeDecision decision) =>
+        new(StyleTransitionCompletionResultKind.Completed, targetKey, instanceId, decision, ownerKey);
 
     public static StyleTransitionCompletionResult Cleared(NodeKey targetKey, CompositionAnimationInstanceId instanceId) =>
         new(StyleTransitionCompletionResultKind.Cleared, targetKey, instanceId);
 
+    internal static StyleTransitionCompletionResult Cleared(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId) =>
+        new(StyleTransitionCompletionResultKind.Cleared, targetKey, instanceId, OwnerKey: ownerKey);
+
     public static StyleTransitionCompletionResult Aborted(NodeKey targetKey, CompositionAnimationInstanceId instanceId) =>
         new(StyleTransitionCompletionResultKind.Aborted, targetKey, instanceId);
+
+    internal static StyleTransitionCompletionResult Aborted(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId) =>
+        new(StyleTransitionCompletionResultKind.Aborted, targetKey, instanceId, OwnerKey: ownerKey);
 
     public bool Equals(StyleTransitionCompletionResult other)
     {
         return Kind == other.Kind
             && TargetKey == other.TargetKey
             && InstanceId == other.InstanceId
-            && Decision == other.Decision;
+            && Decision == other.Decision
+            && OwnerKey == other.OwnerKey;
     }
 
     public override bool Equals(object? obj) => obj is StyleTransitionCompletionResult other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Kind, TargetKey, InstanceId, Decision);
+    public override int GetHashCode() => HashCode.Combine(Kind, TargetKey, InstanceId, Decision, OwnerKey);
 
     public static bool operator ==(StyleTransitionCompletionResult left, StyleTransitionCompletionResult right) => left.Equals(right);
 
@@ -71,7 +109,8 @@ internal sealed class StyleTransitionCompletionTracker
         CompositionAnimationMarkerTrigger.AtProgress(1f));
 
     private readonly Lock _gate = new();
-    private TrackedTransition _active;
+    private TrackedTransition[]? _activeOwners;
+    private int _activeOwnerCount;
     private StyleTransitionCompletionResult _lastResult;
 
     internal StyleTransitionCompletionResult LastResult
@@ -85,13 +124,24 @@ internal sealed class StyleTransitionCompletionTracker
         }
     }
 
+    internal int ActiveOwnerCount
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _activeOwnerCount;
+            }
+        }
+    }
+
     internal bool HasActiveTransition
     {
         get
         {
             lock (_gate)
             {
-                return _active.HasValue;
+                return _activeOwnerCount > 0;
             }
         }
     }
@@ -102,7 +152,7 @@ internal sealed class StyleTransitionCompletionTracker
         {
             lock (_gate)
             {
-                return _active.TargetKey;
+                return GetPrimaryActiveTransition().TargetKey;
             }
         }
     }
@@ -113,7 +163,7 @@ internal sealed class StyleTransitionCompletionTracker
         {
             lock (_gate)
             {
-                return _active.InstanceId;
+                return GetPrimaryActiveTransition().InstanceId;
             }
         }
     }
@@ -122,23 +172,35 @@ internal sealed class StyleTransitionCompletionTracker
         bool HasActiveTransition,
         NodeKey ActiveTargetKey,
         CompositionAnimationInstanceId ActiveInstanceId,
+        int ActiveOwnerCount,
+        StyleTransitionOwnerKind ActiveOwnerKind,
         StyleTransitionCompletionResult LastResult) CaptureDiagnosticState()
     {
         lock (_gate)
         {
+            var active = GetPrimaryActiveTransition();
             return (
-                _active.HasValue,
-                _active.TargetKey,
-                _active.InstanceId,
+                _activeOwnerCount > 0,
+                active.TargetKey,
+                active.InstanceId,
+                _activeOwnerCount,
+                active.OwnerKey.Kind,
                 _lastResult);
         }
     }
 
     internal StyleTransitionRuntimeDecision AttachCompletionMarker(StyleTransitionRuntimeDecision decision)
     {
-        if (!IsTrackableDecision(decision))
+        return AttachCompletionMarker(CreateLegacyOwnerKey(decision.TargetKey), decision);
+    }
+
+    internal StyleTransitionRuntimeDecision AttachCompletionMarker(
+        StyleTransitionOwnerKey ownerKey,
+        StyleTransitionRuntimeDecision decision)
+    {
+        if (!IsValidOwnerForDecision(ownerKey, decision) || !IsTrackableDecision(decision))
         {
-            SetLastResult(StyleTransitionCompletionResult.NotTracked());
+            SetLastResult(StyleTransitionCompletionResult.NotTracked(ownerKey));
             return decision;
         }
 
@@ -172,27 +234,36 @@ internal sealed class StyleTransitionCompletionTracker
         StyleTransitionRuntimeDecision decision,
         StyleTransitionRuntimeResult runtimeResult)
     {
+        return PublishRuntimeResult(CreateLegacyOwnerKey(decision.TargetKey), decision, runtimeResult);
+    }
+
+    internal StyleTransitionCompletionResult PublishRuntimeResult(
+        StyleTransitionOwnerKey ownerKey,
+        StyleTransitionRuntimeDecision decision,
+        StyleTransitionRuntimeResult runtimeResult)
+    {
         if (runtimeResult.Kind is StyleTransitionRuntimeResultKind.Canceled
             or StyleTransitionRuntimeResultKind.Committed
             or StyleTransitionRuntimeResultKind.Fallback)
         {
-            return ClearIfActiveTarget(runtimeResult.TargetKey);
+            return ClearIfActiveOwner(ownerKey, runtimeResult.TargetKey);
         }
 
         if (!runtimeResult.HasDeclaration
             || runtimeResult.Kind is not (StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted)
+            || !IsValidOwnerForDecision(ownerKey, decision)
             || !IsTrackableDecision(decision)
             || !HasCompletionMarker(decision.Markers))
         {
-            return SetLastResult(StyleTransitionCompletionResult.NotTracked());
+            return SetLastResult(StyleTransitionCompletionResult.NotTracked(ownerKey));
         }
 
         lock (_gate)
         {
-            _active = new TrackedTransition(decision.TargetKey, decision.InstanceId);
+            UpsertActiveOwner(ownerKey, decision.TargetKey, decision.InstanceId);
             _lastResult = runtimeResult.Kind == StyleTransitionRuntimeResultKind.Retargeted
-                ? StyleTransitionCompletionResult.TrackingRetargeted(decision.TargetKey, decision.InstanceId)
-                : StyleTransitionCompletionResult.TrackingStarted(decision.TargetKey, decision.InstanceId);
+                ? StyleTransitionCompletionResult.TrackingRetargeted(ownerKey, decision.TargetKey, decision.InstanceId)
+                : StyleTransitionCompletionResult.TrackingStarted(ownerKey, decision.TargetKey, decision.InstanceId);
             return _lastResult;
         }
     }
@@ -201,20 +272,30 @@ internal sealed class StyleTransitionCompletionTracker
         in CompositionAnimationMarkerEvent markerEvent,
         out StyleTransitionRuntimeDecision decision)
     {
+        return TryCreateCompletionDecision(default, markerEvent, out decision);
+    }
+
+    internal bool TryCreateCompletionDecision(
+        StyleTransitionOwnerKey ownerKey,
+        in CompositionAnimationMarkerEvent markerEvent,
+        out StyleTransitionRuntimeDecision decision)
+    {
         lock (_gate)
         {
-            if (!IsActiveCompletionEvent(markerEvent))
+            var activeIndex = FindActiveCompletionEventIndex(ownerKey, markerEvent);
+            if (activeIndex < 0)
             {
                 decision = default;
-                _lastResult = StyleTransitionCompletionResult.NotTracked();
+                _lastResult = StyleTransitionCompletionResult.NotTracked(ownerKey);
                 return false;
             }
 
-            var targetKey = _active.TargetKey;
-            var instanceId = _active.InstanceId;
+            var active = _activeOwners![activeIndex];
+            var targetKey = active.TargetKey;
+            var instanceId = active.InstanceId;
             decision = StyleTransitionRuntimeDecision.Commit(targetKey);
-            _active = default;
-            _lastResult = StyleTransitionCompletionResult.Completed(targetKey, instanceId, decision);
+            RemoveActiveOwnerAt(activeIndex);
+            _lastResult = StyleTransitionCompletionResult.Completed(active.OwnerKey, targetKey, instanceId, decision);
             return true;
         }
     }
@@ -223,44 +304,106 @@ internal sealed class StyleTransitionCompletionTracker
     {
         lock (_gate)
         {
-            if (!_active.HasValue)
+            if (_activeOwnerCount == 0)
             {
                 _lastResult = StyleTransitionCompletionResult.NotTracked();
                 return _lastResult;
             }
 
-            var previous = _active;
-            _active = default;
-            _lastResult = StyleTransitionCompletionResult.Aborted(previous.TargetKey, previous.InstanceId);
+            var previous = GetPrimaryActiveTransition();
+            RemoveActiveOwnerAt(0);
+            _lastResult = StyleTransitionCompletionResult.Aborted(previous.OwnerKey, previous.TargetKey, previous.InstanceId);
             return _lastResult;
         }
     }
 
-    private StyleTransitionCompletionResult ClearIfActiveTarget(NodeKey targetKey)
+    internal StyleTransitionCompletionResult AbortActiveTransition(StyleTransitionOwnerKey ownerKey)
     {
         lock (_gate)
         {
-            if (!_active.HasValue || _active.TargetKey != targetKey)
+            var activeIndex = FindActiveOwnerIndex(ownerKey);
+            if (activeIndex < 0)
             {
-                _lastResult = StyleTransitionCompletionResult.NotTracked();
+                _lastResult = StyleTransitionCompletionResult.NotTracked(ownerKey);
                 return _lastResult;
             }
 
-            var previous = _active;
-            _active = default;
-            _lastResult = StyleTransitionCompletionResult.Cleared(previous.TargetKey, previous.InstanceId);
+            var previous = _activeOwners![activeIndex];
+            RemoveActiveOwnerAt(activeIndex);
+            _lastResult = StyleTransitionCompletionResult.Aborted(previous.OwnerKey, previous.TargetKey, previous.InstanceId);
             return _lastResult;
         }
     }
 
-    private bool IsActiveCompletionEvent(in CompositionAnimationMarkerEvent markerEvent)
+    internal bool TryGetActiveTransition(
+        StyleTransitionOwnerKey ownerKey,
+        out NodeKey targetKey,
+        out CompositionAnimationInstanceId instanceId)
     {
-        return _active.HasValue
-            && markerEvent.OwnerKind == CompositionAnimationMarkerOwnerKind.TransformOpacity
-            && markerEvent.TargetKey == _active.TargetKey
-            && markerEvent.InstanceId == _active.InstanceId
-            && markerEvent.MarkerId == CompletionMarkerId
-            && markerEvent.RuntimeEventId == CompletionRuntimeEventId;
+        lock (_gate)
+        {
+            var activeIndex = FindActiveOwnerIndex(ownerKey);
+            if (activeIndex < 0)
+            {
+                targetKey = default;
+                instanceId = default;
+                return false;
+            }
+
+            var active = _activeOwners![activeIndex];
+            targetKey = active.TargetKey;
+            instanceId = active.InstanceId;
+            return true;
+        }
+    }
+
+    private StyleTransitionCompletionResult ClearIfActiveOwner(StyleTransitionOwnerKey ownerKey, NodeKey targetKey)
+    {
+        lock (_gate)
+        {
+            var activeIndex = FindActiveOwnerIndex(ownerKey);
+            if (activeIndex < 0)
+            {
+                _lastResult = StyleTransitionCompletionResult.NotTracked(ownerKey);
+                return _lastResult;
+            }
+
+            var previous = _activeOwners![activeIndex];
+            if (previous.TargetKey != targetKey)
+            {
+                _lastResult = StyleTransitionCompletionResult.NotTracked(ownerKey);
+                return _lastResult;
+            }
+
+            RemoveActiveOwnerAt(activeIndex);
+            _lastResult = StyleTransitionCompletionResult.Cleared(previous.OwnerKey, previous.TargetKey, previous.InstanceId);
+            return _lastResult;
+        }
+    }
+
+    private int FindActiveCompletionEventIndex(
+        StyleTransitionOwnerKey ownerKey,
+        in CompositionAnimationMarkerEvent markerEvent)
+    {
+        if (markerEvent.OwnerKind != CompositionAnimationMarkerOwnerKind.TransformOpacity
+            || markerEvent.MarkerId != CompletionMarkerId
+            || markerEvent.RuntimeEventId != CompletionRuntimeEventId)
+        {
+            return -1;
+        }
+
+        for (var i = 0; i < _activeOwnerCount; i++)
+        {
+            var active = _activeOwners![i];
+            if ((ownerKey.IsNone || active.OwnerKey == ownerKey)
+                && markerEvent.TargetKey == active.TargetKey
+                && markerEvent.InstanceId == active.InstanceId)
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private StyleTransitionCompletionResult SetLastResult(StyleTransitionCompletionResult result)
@@ -280,6 +423,95 @@ internal sealed class StyleTransitionCompletionTracker
             && decision.RepeatMode == CompositionAnimationRepeatMode.Once;
     }
 
+    private static bool IsValidOwnerForDecision(
+        StyleTransitionOwnerKey ownerKey,
+        in StyleTransitionRuntimeDecision decision)
+    {
+        return !ownerKey.IsNone
+            && ownerKey.TargetKey == decision.TargetKey;
+    }
+
+    private void UpsertActiveOwner(
+        StyleTransitionOwnerKey ownerKey,
+        NodeKey targetKey,
+        CompositionAnimationInstanceId instanceId)
+    {
+        var activeIndex = FindActiveOwnerIndex(ownerKey);
+        if (activeIndex >= 0)
+        {
+            _activeOwners![activeIndex] = new TrackedTransition(ownerKey, targetKey, instanceId);
+            return;
+        }
+
+        EnsureActiveOwnerCapacity();
+        _activeOwners![_activeOwnerCount++] = new TrackedTransition(ownerKey, targetKey, instanceId);
+    }
+
+    private void EnsureActiveOwnerCapacity()
+    {
+        if (_activeOwners is null)
+        {
+            _activeOwners = new TrackedTransition[4];
+            return;
+        }
+
+        if (_activeOwnerCount < _activeOwners.Length)
+        {
+            return;
+        }
+
+        Array.Resize(ref _activeOwners, _activeOwners.Length * 2);
+    }
+
+    private int FindActiveOwnerIndex(StyleTransitionOwnerKey ownerKey)
+    {
+        if (ownerKey.IsNone)
+        {
+            return -1;
+        }
+
+        for (var i = 0; i < _activeOwnerCount; i++)
+        {
+            if (_activeOwners![i].OwnerKey == ownerKey)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private void RemoveActiveOwnerAt(int index)
+    {
+        if (index < 0 || index >= _activeOwnerCount)
+        {
+            return;
+        }
+
+        var moveCount = _activeOwnerCount - index - 1;
+        if (moveCount > 0)
+        {
+            Array.Copy(_activeOwners!, index + 1, _activeOwners!, index, moveCount);
+        }
+
+        _activeOwnerCount--;
+        _activeOwners![_activeOwnerCount] = default;
+    }
+
+    private TrackedTransition GetPrimaryActiveTransition()
+    {
+        return _activeOwnerCount == 0
+            ? default
+            : _activeOwners![0];
+    }
+
+    private static StyleTransitionOwnerKey CreateLegacyOwnerKey(NodeKey targetKey)
+    {
+        return targetKey == NodeKey.None
+            ? default
+            : StyleTransitionOwnerKey.ControlState(default, targetKey);
+    }
+
     private static bool HasCompletionMarker(ReadOnlySpan<CompositionAnimationMarker> markers)
     {
         for (var i = 0; i < markers.Length; i++)
@@ -294,10 +526,13 @@ internal sealed class StyleTransitionCompletionTracker
         return false;
     }
 
-    private readonly struct TrackedTransition(NodeKey TargetKey, CompositionAnimationInstanceId InstanceId)
+    private readonly struct TrackedTransition(
+        StyleTransitionOwnerKey OwnerKey,
+        NodeKey TargetKey,
+        CompositionAnimationInstanceId InstanceId)
     {
+        public StyleTransitionOwnerKey OwnerKey { get; } = OwnerKey;
         public NodeKey TargetKey { get; } = TargetKey;
         public CompositionAnimationInstanceId InstanceId { get; } = InstanceId;
-        public bool HasValue => TargetKey != NodeKey.None && InstanceId.IsValid;
     }
 }
