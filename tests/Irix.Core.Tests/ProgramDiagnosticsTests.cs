@@ -4715,7 +4715,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(lastEffectiveScissor, snapshot.LastEffectiveScissor);
         Assert.Equal(lastEffectiveTextClip, snapshot.LastEffectiveTextClip);
         Assert.Equal(ColorOutputKind.SdrSrgb, snapshot.MaterialOutput.OutputKind);
-        Assert.Equal(DrawMaterialBackendCapabilities.SolidColor, snapshot.MaterialOutput.BackendCapabilities);
+        Assert.Equal(DrawMaterialBackendCapabilities.SolidColor | DrawMaterialBackendCapabilities.LinearGradient, snapshot.MaterialOutput.BackendCapabilities);
         Assert.Equal(DrawMaterialKind.SolidColor, snapshot.MaterialOutput.SelectedMaterialKind);
         Assert.Equal(DrawMaterialFallbackReason.None, snapshot.MaterialOutput.FallbackReason);
         Assert.Equal(4, snapshot.TextClipSkippedCount);
@@ -4729,17 +4729,17 @@ public sealed class ProgramDiagnosticsTests
     {
         var snapshot = new DrawMaterialOutputDiagnostics(
             ColorOutputKind.SdrSrgb,
-            DrawMaterialBackendCapabilities.SolidColor,
+            DrawMaterialBackendCapabilities.SolidColor | DrawMaterialBackendCapabilities.LinearGradient,
             DrawMaterialKind.LinearGradient,
-            DrawMaterialFallbackReason.UnsupportedNonSolidMaterial,
+            DrawMaterialFallbackReason.None,
             CommandCount: 3,
             SolidColorCommandCount: 2,
             LinearGradientCommandCount: 1,
-            FallbackCommandCount: 1);
+            FallbackCommandCount: 0);
 
         var line = DiagnosticsFormatter.BuildMaterialOutputDiagnosticLine(snapshot);
 
-        Assert.Equal("Material output status: outputKind=SdrSrgb backendCapabilities=SolidColor selectedMaterialKind=LinearGradient fallbackReason=UnsupportedNonSolidMaterial fallbackApplied=True commandCount=3 solidColorCommands=2 linearGradientCommands=1 fallbackCommands=1", line);
+        Assert.Equal("Material output status: outputKind=SdrSrgb backendCapabilities=SolidColor, LinearGradient selectedMaterialKind=LinearGradient fallbackReason=None fallbackApplied=False commandCount=3 solidColorCommands=2 linearGradientCommands=1 fallbackCommands=0", line);
     }
 
     [Fact]
@@ -5211,7 +5211,7 @@ public sealed class ProgramDiagnosticsTests
             lastEffectiveTextClip,
             new DrawMaterialOutputDiagnostics(
                 ColorOutputKind.SdrSrgb,
-                DrawMaterialBackendCapabilities.SolidColor,
+                DrawMaterialBackendCapabilities.SolidColor | DrawMaterialBackendCapabilities.LinearGradient,
                 DrawMaterialKind.SolidColor,
                 DrawMaterialFallbackReason.None,
                 CommandCount: 1,

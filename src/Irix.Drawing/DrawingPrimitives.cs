@@ -225,7 +225,8 @@ internal enum ColorOutputKind : byte
 internal enum DrawMaterialBackendCapabilities : byte
 {
     None = 0,
-    SolidColor = 1
+    SolidColor = 1,
+    LinearGradient = 2
 }
 
 internal enum DrawMaterialFallbackReason : byte
@@ -364,7 +365,9 @@ internal readonly struct ColorOutputMapping(ColorOutputKind Kind) : IEquatable<C
             DrawMaterialKind.SolidColor => (backendCapabilities & DrawMaterialBackendCapabilities.SolidColor) != DrawMaterialBackendCapabilities.None
                 ? DrawMaterialFallbackReason.None
                 : DrawMaterialFallbackReason.UnsupportedMaterialKind,
-            DrawMaterialKind.LinearGradient => DrawMaterialFallbackReason.UnsupportedNonSolidMaterial,
+            DrawMaterialKind.LinearGradient => (backendCapabilities & DrawMaterialBackendCapabilities.LinearGradient) != DrawMaterialBackendCapabilities.None
+                ? DrawMaterialFallbackReason.None
+                : DrawMaterialFallbackReason.UnsupportedNonSolidMaterial,
             _ => DrawMaterialFallbackReason.UnsupportedMaterialKind
         };
     }
@@ -409,6 +412,21 @@ internal readonly struct DrawMaterial(
                 EndPoint),
             _ => this
         };
+
+    internal DrawMaterial Scale(DisplayScale scale)
+    {
+        scale = scale.Normalize();
+        if (scale.IsIdentity || Kind != DrawMaterialKind.LinearGradient)
+        {
+            return this;
+        }
+
+        return LinearGradient(
+            Color,
+            EndColor,
+            new DrawPoint(StartPoint.X * scale.ScaleX, StartPoint.Y * scale.ScaleY),
+            new DrawPoint(EndPoint.X * scale.ScaleX, EndPoint.Y * scale.ScaleY));
+    }
 
     public Color FallbackColor => Kind switch
     {
@@ -684,7 +702,7 @@ public readonly struct DrawCommand : IEquatable<DrawCommand>
                 Rect.Y * scale.ScaleY,
                 Rect.Width * scale.ScaleX,
                 Rect.Height * scale.ScaleY),
-            _material,
+            _material.Scale(scale),
             Resource,
             Text,
             new DrawRect(

@@ -910,6 +910,12 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("ApplyOpacity(payload.Material", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", d3d12Source);
         Assert.Contains("outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities)", d3d12Source);
+        Assert.Contains("private const int LinearGradientRectSegmentCount = 16", d3d12Source);
+        Assert.Contains("DrawMaterialBackendCapabilities.SolidColor | DrawMaterialBackendCapabilities.LinearGradient", d3d12Source);
+        Assert.Contains("D3D12TextMaterialCapabilities => DrawMaterialBackendCapabilities.SolidColor", d3d12Source);
+        Assert.Contains("AppendPhysicalFillMaterialRect", d3d12Source);
+        Assert.Contains("AppendPhysicalLinearGradientRect", d3d12Source);
+        Assert.Contains("outputMapping.MapToSdr(command.Material, D3D12TextMaterialCapabilities)", d3d12Source);
         Assert.Contains("diagnostics.AddMaterialOutput", d3d12Source);
         Assert.Contains("ColorOutputMapping.SdrSrgb", windowBackendSource);
         Assert.Contains("outputMapping.MapToSdr(command)", windowBackendSource);
@@ -917,7 +923,7 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("command.ToSdrColor()", windowBackendSource);
         Assert.DoesNotContain("var srgb = styleColor.Value.ToSrgb()", recorderSource);
         Assert.Equal(["SdrSrgb"], Enum.GetNames<ColorOutputKind>());
-        Assert.Equal(["None", "SolidColor"], Enum.GetNames<DrawMaterialBackendCapabilities>());
+        Assert.Equal(["None", "SolidColor", "LinearGradient"], Enum.GetNames<DrawMaterialBackendCapabilities>());
         Assert.Equal(["None", "UnsupportedNonSolidMaterial", "UnsupportedMaterialKind"], Enum.GetNames<DrawMaterialFallbackReason>());
         Assert.DoesNotContain("ScRgb", drawingSource);
         Assert.DoesNotContain("Rec2100", drawingSource);

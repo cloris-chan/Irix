@@ -486,6 +486,8 @@ internal readonly struct D3D12CompositionLayerContentCacheEntry(
 /// </summary>
 internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackendClipMode clipMode = DrawingBackendClipMode.Scissor) : IDrawingBackend, IDirtyRangeAware, IClipScissorCapability, IDeviceRecovery, ICompositionDrawingBackend
 {
+    private const int LinearGradientRectSegmentCount = 16;
+
     private struct ExecuteDiagnosticsAccumulator
     {
         private int _clippedCommandCount;
@@ -540,7 +542,9 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         public void AddMaterialOutput(in DrawMaterialOutputMappingResult result)
         {
             _materialCommandCount++;
-            if (_selectedMaterialKind == DrawMaterialKind.None || result.FallbackApplied)
+            if (_selectedMaterialKind == DrawMaterialKind.None
+                || result.FallbackApplied
+                || result.MaterialKind > _selectedMaterialKind)
             {
                 _selectedMaterialKind = result.MaterialKind;
             }
@@ -598,7 +602,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
     private DrawMaterialOutputDiagnostics _materialOutputDiagnostics;
     private FrameContext _frameContext;
 
-    internal static DrawMaterialBackendCapabilities D3D12MaterialCapabilities => DrawMaterialBackendCapabilities.SolidColor;
+    internal static DrawMaterialBackendCapabilities D3D12MaterialCapabilities =>
+        DrawMaterialBackendCapabilities.SolidColor | DrawMaterialBackendCapabilities.LinearGradient;
+
+    private static DrawMaterialBackendCapabilities D3D12TextMaterialCapabilities => DrawMaterialBackendCapabilities.SolidColor;
 
     /// <summary>Dirty command ranges from the last SetDirtyCommandRanges call.</summary>
     public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges => _dirtyCommandRanges;
@@ -868,11 +875,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             case DrawCommandKind.FillRect:
                 var fillMaterial = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
                 diagnostics.AddMaterialOutput(fillMaterial);
-                AppendPhysicalFillRect(
+                AppendPhysicalFillMaterialRect(
                     clipMode,
                     viewport,
                     command.Rect,
-                    fillMaterial.Color,
+                    command.Material,
+                    fillMaterial,
+                    outputMapping,
                     command.ClipBounds,
                     rects,
                     ref diagnostics,
@@ -880,7 +889,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     ref backgroundColor);
                 break;
             case DrawCommandKind.DrawTextRun:
-                var textMaterial = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
+                var textMaterial = outputMapping.MapToSdr(command.Material, D3D12TextMaterialCapabilities);
                 diagnostics.AddMaterialOutput(textMaterial);
                 AppendPhysicalTextRun(
                     clipMode,
@@ -897,6 +906,48 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     !resources.Resolve(command.Text).IsEmpty);
                 break;
         }
+    }
+
+    private static void AppendPhysicalFillMaterialRect(
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        in DrawRect rect,
+        in DrawMaterial material,
+        in DrawMaterialOutputMappingResult mappedMaterial,
+        ColorOutputMapping outputMapping,
+        in DrawRect clipBounds,
+        FrameRenderList<D3D12Renderer2D.RectData> rects,
+        ref ExecuteDiagnosticsAccumulator diagnostics,
+        ref bool hasBackgroundColor,
+        ref DrawColor backgroundColor)
+    {
+        if (material.Kind == DrawMaterialKind.LinearGradient && !mappedMaterial.FallbackApplied)
+        {
+            AppendPhysicalLinearGradientRect(
+                clipMode,
+                viewport,
+                rect,
+                material,
+                mappedMaterial.Color,
+                outputMapping,
+                clipBounds,
+                rects,
+                ref diagnostics,
+                ref hasBackgroundColor,
+                ref backgroundColor);
+            return;
+        }
+
+        AppendPhysicalFillRect(
+            clipMode,
+            viewport,
+            rect,
+            mappedMaterial.Color,
+            clipBounds,
+            rects,
+            ref diagnostics,
+            ref hasBackgroundColor,
+            ref backgroundColor);
     }
 
     private static void AppendPhysicalFillRect(
@@ -923,6 +974,97 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             hasBackgroundColor = true;
         }
 
+        AddPhysicalRectData(rect, color, scissorPlan.RenderScissor, rects);
+    }
+
+    private static void AppendPhysicalLinearGradientRect(
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        in DrawRect rect,
+        in DrawMaterial material,
+        in DrawColor fallbackColor,
+        ColorOutputMapping outputMapping,
+        in DrawRect clipBounds,
+        FrameRenderList<D3D12Renderer2D.RectData> rects,
+        ref ExecuteDiagnosticsAccumulator diagnostics,
+        ref bool hasBackgroundColor,
+        ref DrawColor backgroundColor)
+    {
+        var scissorPlan = ResolveFillRectScissor(clipMode, viewport, clipBounds);
+        diagnostics.AddFillRectPlan(clipMode, scissorPlan);
+        if (scissorPlan.Skip)
+        {
+            return;
+        }
+
+        if (rects.Count == 0 && !hasBackgroundColor)
+        {
+            backgroundColor = fallbackColor;
+            hasBackgroundColor = true;
+        }
+
+        if (rect.Width <= 0f || rect.Height <= 0f)
+        {
+            AddPhysicalRectData(rect, fallbackColor, scissorPlan.RenderScissor, rects);
+            return;
+        }
+
+        var dx = material.EndPoint.X - material.StartPoint.X;
+        var dy = material.EndPoint.Y - material.StartPoint.Y;
+        var splitHorizontally = MathF.Abs(dx) >= MathF.Abs(dy);
+        for (var segment = 0; segment < LinearGradientRectSegmentCount; segment++)
+        {
+            var start = segment / (float)LinearGradientRectSegmentCount;
+            var end = (segment + 1) / (float)LinearGradientRectSegmentCount;
+            DrawRect segmentRect;
+            float sampleX;
+            float sampleY;
+            if (splitHorizontally)
+            {
+                var x0 = rect.X + rect.Width * start;
+                var x1 = rect.X + rect.Width * end;
+                segmentRect = new DrawRect(x0, rect.Y, x1 - x0, rect.Height);
+                sampleX = (x0 + x1) * 0.5f - rect.X;
+                sampleY = rect.Height * 0.5f;
+            }
+            else
+            {
+                var y0 = rect.Y + rect.Height * start;
+                var y1 = rect.Y + rect.Height * end;
+                segmentRect = new DrawRect(rect.X, y0, rect.Width, y1 - y0);
+                sampleX = rect.Width * 0.5f;
+                sampleY = (y0 + y1) * 0.5f - rect.Y;
+            }
+
+            var sample = SampleLinearGradient(material, sampleX, sampleY);
+            AddPhysicalRectData(segmentRect, outputMapping.MapToSdr(sample), scissorPlan.RenderScissor, rects);
+        }
+    }
+
+    private static Color SampleLinearGradient(in DrawMaterial material, float x, float y)
+    {
+        var dx = material.EndPoint.X - material.StartPoint.X;
+        var dy = material.EndPoint.Y - material.StartPoint.Y;
+        var lengthSquared = dx * dx + dy * dy;
+        var t = lengthSquared <= float.Epsilon
+            ? 0f
+            : Math.Clamp(((x - material.StartPoint.X) * dx + (y - material.StartPoint.Y) * dy) / lengthSquared, 0f, 1f);
+
+        return Color.FromLinearBt2020(
+            Lerp(material.Color.LinearBt2020R, material.EndColor.LinearBt2020R, t),
+            Lerp(material.Color.LinearBt2020G, material.EndColor.LinearBt2020G, t),
+            Lerp(material.Color.LinearBt2020B, material.EndColor.LinearBt2020B, t),
+            Lerp(material.Color.A, material.EndColor.A, t));
+    }
+
+    private static float Lerp(float start, float end, float t) => start + (end - start) * t;
+
+    private static void AddPhysicalRectData(
+        in DrawRect rect,
+        in DrawColor color,
+        in IntegerScissorRect scissor,
+        FrameRenderList<D3D12Renderer2D.RectData> rects)
+    {
         rects.Add(new D3D12Renderer2D.RectData(
             rect.X,
             rect.Y,
@@ -932,7 +1074,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             color.G / 255f,
             color.B / 255f,
             color.A / 255f,
-            scissorPlan.RenderScissor));
+            scissor));
     }
 
     private static void AppendPhysicalTextRun(
@@ -1225,11 +1367,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             diagnostics.AddCommandClip(command);
             var material = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
             diagnostics.AddMaterialOutput(material);
-            AppendPhysicalFillRect(
+            AppendPhysicalFillMaterialRect(
                 clipMode,
                 viewport,
                 command.Rect,
-                material.Color,
+                command.Material,
+                material,
+                outputMapping,
                 command.ClipBounds,
                 rects,
                 ref diagnostics,
@@ -1249,7 +1393,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 Text: payload.Text,
                 ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
             diagnostics.AddCommandClip(command);
-            var material = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
+            var material = outputMapping.MapToSdr(command.Material, D3D12TextMaterialCapabilities);
             diagnostics.AddMaterialOutput(material);
             AppendPhysicalTextRun(
                 clipMode,
