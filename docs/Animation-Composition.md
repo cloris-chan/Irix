@@ -127,6 +127,45 @@ Unsupported or mixed-property transitions fall back before presentation ownershi
 
 Current runtime ownership preflight: `IStyleTransitionRuntimeAdapter`, `StyleTransitionRuntimeCoordinator`, `IStyleTransitionCompositorAdapter`, and `IStyleTransitionRetainedSnapshotProvider` live in `Irix.Poc`. The runtime adapter supplies a decision (`Start`, `Cancel`, `Retarget`, or `Commit`) and receives the result; the coordinator compiles only start/retarget decisions, installs compositor declarations only through the compositor adapter, and falls back before presentation ownership changes when the retained snapshot is missing or the compiler rejects a non-compositor-owned delta. The first concrete app/control integration is Counter-owned: `CounterStyleTransitionBridge` maps a single button control-state delta from `OwnershipSnapshot` into a semantic transform/opacity decision, classifies active scroll presentation and multi-target state changes as typed normal-dispatch outcomes, and records that completion/commit still requires an explicit runtime decision rather than happening after start. Those unsupported normal-dispatch outcomes now carry an explicit presentation policy: the Poc path aborts any active style transition presentation and clears tracker ownership before app-owned state is published, instead of leaving a stale single-target compositor owner alive. `StyleTransitionCompletionTracker` is a Poc-owned marker-driven completion tracker for this narrow path: it only tracks `Once` transform/opacity start or retarget decisions with valid animation instances, appends a progress-1 marker, preserves any existing markers, and converts the matching `CompositionAnimationMarkerEvent` into an explicit `Commit` decision that the runtime coordinator must still apply. `StyleTransitionCompletionPump` is the main-app integration for that tracker: it runs transform/opacity compositor ticks on the Poc side, drains marker events from `DrawingBackendCompositor`, and applies the commit decision through `StyleTransitionRuntimeCoordinator`. The pump now has internal lifecycle diagnostics for no-active, tick-rendered, completion-committed, tick-unavailable, and error states, but those diagnostics are not a public timeline scheduler or runtime API. Loop and alternate timelines are not auto-completed by this slice. `CounterStyleTransitionRuntimeBridge` waits for the app runtime render to publish the retained snapshot before the coordinator installs the declaration. `DrawingBackendCompositor` still exposes only one internal transform/opacity animation compositor boundary for this path, so this is not true concurrent multi-owner transition support. There is still no public transition API, theme/cascade resolver, multi-target transition owner, implicit compiler/compositor commit path, or timeline scheduler.
 
+## Concurrent Transition Owner Preflight
+
+True concurrent style transitions require a design boundary before code changes. The current Counter path deliberately keeps multi-target control-state deltas on normal app dispatch because there is only one transform/opacity presentation owner. The next implementation must not relax that fallback until the runtime and compositor can represent multiple active owners without losing commit, cancel, retarget, marker, and hit-test semantics.
+
+This preflight is design-only. It does not add a public transition API, does not add a generic scheduler, does not move Poc runtime types into `Irix.Rendering`, and does not change `DrawingBackendCompositor` execution contracts.
+
+The minimum accepted design is runtime-owned owner identity and decision batching, retained target validation against one publication, compositor presentation-set validation, per-owner completion tracking, and diagnostics that report accepted and rejected owners before presentation state changes.
+
+Required future shapes:
+
+| Shape | Owner | Purpose |
+|-------|-------|---------|
+| Transition owner key | App/control runtime | Stable identity for one logical control/property transition, separate from `NodeKey` and from app message identity. |
+| Transition decision batch | App/control runtime | Groups one or more start, retarget, cancel, or commit decisions produced by one input/control update. Batch order is runtime-owned and deterministic. |
+| Retained target snapshot | Rendering/layout pipeline | Resolves each decision target against the same retained publication before compositor install. A missing or stale target rejects the affected owner before presentation changes. |
+| Compositor presentation set | Compositor/backend boundary | Installs multiple transform/opacity declarations as one validated set when their retained command ranges and layer ids do not conflict. |
+| Completion tracker table | App/control runtime | Tracks completion markers per owner/instance so one completed owner cannot commit or clear another owner. |
+| Lifecycle diagnostics | Poc/internal diagnostics | Reports accepted owners, rejected owners, fallback reason, active owner count, marker-drain count, and whether app-owned fallback aborted any active presentation. |
+
+Ownership rules:
+
+- The runtime owns batching, owner identity, logical state, start/cancel/retarget/commit policy, and final value publication.
+- Rendering owns retained target resolution and the immutable snapshot used for a batch.
+- The compositor owns presented interpolation only after the full accepted set validates against the retained frame.
+- A batch may be partially accepted only if rejected owners are reported before any accepted owner changes presentation state; otherwise the whole batch must fall back to normal app dispatch.
+- Active scroll presentation and transform/opacity style transition may coexist only after a written conflict policy proves target ranges, hit-test remapping, marker events, and lifecycle cancellation are deterministic.
+- Completion markers must include owner identity or an owner table lookup; marker ids alone are not enough for concurrent owners.
+- Diagnostics can observe accepted/rejected owners and lifecycle state, but diagnostics must not produce runtime decisions or schedule ticks.
+
+Implementation order:
+
+1. Add Poc-owned batch/owner value types and tests around deterministic acceptance/rejection without installing multiple compositor owners.
+2. Teach the coordinator to validate a batch against one retained snapshot and report per-owner results while preserving current single-owner behavior.
+3. Add compositor-side presentation-set validation and conflict reporting for transform/opacity declarations.
+4. Extend completion tracking from one active transition to an owner table.
+5. Only then allow Counter multi-target control-state deltas to use concurrent transitions instead of the current abort-and-normal-dispatch path.
+
+Non-goals for the first concurrent-owner slice: public authoring syntax, theme/cascade resolution, loop/alternate auto-completion, layout-skip, color/material animation, scroll runtime extraction, or a generic app scheduler.
+
 ## Animation Markers
 
 Compositor/GPU animations can publish runtime-facing marker events without letting the backend call runtime callbacks. A marker is immutable data attached to the animation declaration:

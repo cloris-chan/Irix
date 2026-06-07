@@ -2752,7 +2752,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("public style/transition authoring preflight is documented and guard-covered", status);
         Assert.Contains("first Counter app/control integration and lifecycle preflight slice now maps", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
-        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, and completion-pump lifecycle diagnostics are written", worklist);
+        Assert.Contains("Public style/transition authoring, Poc runtime ownership, first Counter app/control transition integration, lifecycle preflight, the narrow marker-driven completion tracker, the main-app completion pump, the multi-target abort-and-dispatch boundary, completion-pump lifecycle diagnostics, and the true concurrent multi-owner transition design preflight are written", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -2971,6 +2971,71 @@ public sealed class ProgramDiagnosticsTests
         {
             Assert.DoesNotContain(token, renderingSource);
             Assert.DoesNotContain(token, platformWindowsSource);
+        }
+    }
+
+    [Fact]
+    public void Style_transition_multi_owner_preflight_is_design_only_before_runtime_implementation()
+    {
+        var root = FindRepoRoot();
+        var styleDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Style-System.md")));
+        var animationDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Animation-Composition.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+        var counterTransitionSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CounterStyleTransitionBridge.cs")));
+        var coordinatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionRuntimeCoordinator.cs")));
+        var completionTrackerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionCompletionTracker.cs")));
+        var drawingCompositorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.cs")));
+
+        Assert.Contains("## Concurrent Transition Owner Preflight", animationDesign);
+        Assert.Contains("This preflight is design-only", animationDesign);
+        Assert.Contains("Transition owner key", animationDesign);
+        Assert.Contains("Transition decision batch", animationDesign);
+        Assert.Contains("Retained target snapshot", animationDesign);
+        Assert.Contains("Compositor presentation set", animationDesign);
+        Assert.Contains("Completion tracker table", animationDesign);
+        Assert.Contains("runtime-owned owner identity and decision batching", animationDesign);
+        Assert.Contains("retained target validation against one publication", animationDesign);
+        Assert.Contains("presentation-set validation", animationDesign);
+        Assert.Contains("per-owner completion tracking", animationDesign);
+        Assert.Contains("Batch order is runtime-owned and deterministic", animationDesign);
+        Assert.Contains("A batch may be partially accepted only if rejected owners are reported before any accepted owner changes presentation state", animationDesign);
+        Assert.Contains("Counter multi-target control-state deltas", animationDesign);
+        Assert.Contains("Add Poc-owned batch/owner value types", animationDesign);
+        Assert.Contains("without installing multiple compositor owners", status);
+        Assert.Contains("true concurrent multi-owner transition design preflight", status);
+        Assert.Contains("true concurrent multi-owner transition design preflight are written", worklist);
+        Assert.Contains("Poc-owned batch/owner value types plus deterministic acceptance/rejection tests", worklist);
+        Assert.Contains("Concurrent multi-owner transition support is now written as a design preflight", styleDesign);
+
+        Assert.Contains("CounterStyleTransitionLifecycleReason.MultiTargetUnsupported", counterTransitionSource);
+        Assert.Contains("CounterStyleTransitionLifecyclePresentationPolicy.AbortActiveStyleTransition", counterTransitionSource);
+        Assert.Contains("StyleTransitionRuntimeDecision ConsumeStyleTransitionDecision()", coordinatorSource);
+        Assert.Contains("private TrackedTransition _active;", completionTrackerSource);
+        Assert.Contains("CompositionAnimationPlan?", drawingCompositorSource);
+
+        foreach (var sourcePath in EnumerateActiveSourceGuardFiles(root).Where(file => Path.GetExtension(file).Equals(".cs", StringComparison.OrdinalIgnoreCase)))
+        {
+            var source = NormalizeLineEndings(File.ReadAllText(sourcePath));
+            foreach (var forbiddenFragment in new[]
+            {
+                "public readonly struct StyleTransitionOwnerKey",
+                "public readonly struct StyleTransitionDecisionBatch",
+                "public sealed class StyleTransitionMultiOwnerCoordinator",
+                "public class StyleTransitionMultiOwnerCoordinator",
+                "public interface IStyleTransitionMultiOwnerCoordinator",
+                "public sealed class StyleTransitionScheduler",
+                "public interface IStyleTransitionScheduler",
+                "internal readonly struct StyleTransitionDecisionBatch",
+                "internal sealed class StyleTransitionMultiOwnerCoordinator",
+                "internal interface IStyleTransitionMultiOwnerCoordinator",
+                "SetCompositionAnimationDeclarations",
+                "SetCompositionAnimationPresentationSet",
+                "Dictionary<StyleTransitionOwnerKey"
+            })
+            {
+                Assert.DoesNotContain(forbiddenFragment, source);
+            }
         }
     }
 
