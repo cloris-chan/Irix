@@ -129,6 +129,19 @@ The HDR implementation must be introduced with an explicit output mapping contex
 
 None of those policies belong inside the `Color` value.
 
+## HDR Output Mapping Preflight
+
+HDR output mapping is design-gated, not implemented. `ColorOutputKind` must stay limited to `SdrSrgb`, the active D3D12 swapchain/render-target formats must stay on the current SDR path, and `Color` must not grow output-mode metadata until a dedicated output mapping slice selects and guards all of these contracts:
+
+- Output mapping context: a value or service owned by the compositor/backend boundary, not by `Color`, style declarations, draw commands, or Poc diagnostics.
+- Screen-region policy: how a window spanning multiple screens chooses a dominant mapping or splits regions, and how that decision interacts with retained composition, hit testing, and presentation state.
+- SDR reference white and tone mapping: how system SDR brightness, SDR reference white, peak luminance assumptions, clipping, and tone-mapping policy are read and represented.
+- Swapchain and color-space capability: how the backend discovers support for sRGB SDR, scRGB FP16, Rec.2100 HLG/PQ, HDR metadata, and required fallback paths.
+- Backend payload format: whether the active output uses sRGB bytes, scRGB/FP16, or another HDR payload; how glyph atlas and rectangle passes share that format.
+- Diagnostics and fallback: selected output kind, monitor/screen decision, swapchain format, SDR white, tone-mapping policy, and fallback reason must be observable before the active renderer changes output mode.
+
+Until that slice lands, HDR output stays out of `ColorOutputMapping`, `DrawColor`, `WindowColor`, `DrawCommand`, D3D12 swapchain selection, D3D12 PSO render-target formats, and public style/color authoring. Platform screen metadata may report available color spaces such as HDR10, but that information is not yet consumed by renderer output mapping.
+
 ## Compositor And Screen Regions
 
 The compositor/output boundary owns final mapping from Irix color to the screen/backend payload. This keeps color management aligned with multi-monitor and future per-region output:
@@ -165,7 +178,8 @@ The current SDR/sRGB code slice is acceptable when:
 - Internal solid-color material/resource shape exists without exposing public material authoring.
 - Source guards keep public style/property authoring free of brush/material/gradient/image factories while the internal material shape remains solid-color only.
 - A non-solid material policy preflight documents the required lifetime, coordinate, interpolation, invalidation, backend fallback, and diagnostics contracts before gradient/image material implementation can start.
+- An HDR output mapping preflight documents the required output mapping context, screen-region policy, SDR white/tone mapping, swapchain capability, backend payload format, diagnostics, and fallback contracts before HDR output implementation can start.
 - `DrawColor` and `WindowColor` are documented and guarded as SDR bridge/output payloads, not canonical Irix color.
 - HDR policy remains unimplemented but has a clear output mapping owner.
 
-Current status: implemented for internal style/property color, the draw-command payload bridge, the current SDR/sRGB output mapper, the internal solid-color material/resource preflight, the public material-authoring deferral guard, and the non-solid material policy preflight. Non-solid material implementation and HDR backend output mapping remain future work.
+Current status: implemented for internal style/property color, the draw-command payload bridge, the current SDR/sRGB output mapper, the internal solid-color material/resource preflight, the public material-authoring deferral guard, the non-solid material policy preflight, and the HDR output mapping preflight. Non-solid material implementation and HDR backend output mapping remain future work.

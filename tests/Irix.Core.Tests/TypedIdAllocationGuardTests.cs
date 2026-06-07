@@ -861,12 +861,16 @@ public class TypedIdAllocationGuardTests
     [Fact]
     public void DrawCommand_source_guard_keeps_canonical_payload_and_sdr_output_bridge_separate()
     {
-        var drawingSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "DrawingPrimitives.cs"));
-        var resourceSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Drawing", "FrameDrawingResources.cs"));
-        var recorderSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Rendering", "DrawCommandRecorder.cs"));
-        var d3d12Source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Platform.Windows", "D3D12DrawingBackend.cs"));
+        var root = FindRepoRoot();
+        var drawingSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Drawing", "DrawingPrimitives.cs"));
+        var resourceSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Drawing", "FrameDrawingResources.cs"));
+        var recorderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawCommandRecorder.cs"));
+        var d3d12Source = File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12DrawingBackend.cs"));
         var normalizedD3D12Source = NormalizeLineEndings(d3d12Source);
-        var windowBackendSource = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "WindowBackend.cs"));
+        var windowBackendSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "WindowBackend.cs"));
+        var d3d12RendererSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer.cs"));
+        var d3d12Renderer2DSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer2D.cs"));
+        var d3d12GlyphAtlasSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.DrawPipeline.cs"));
 
         Assert.Contains("struct DrawPayloadColor(Color Value)", drawingSource);
         Assert.Contains("internal enum ColorOutputKind : byte", drawingSource);
@@ -901,6 +905,26 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("command.ToSdrColor()", d3d12Source);
         Assert.DoesNotContain("command.ToSdrColor()", windowBackendSource);
         Assert.DoesNotContain("var srgb = styleColor.Value.ToSrgb()", recorderSource);
+        Assert.Equal(["SdrSrgb"], Enum.GetNames<ColorOutputKind>());
+        Assert.DoesNotContain("ScRgb", drawingSource);
+        Assert.DoesNotContain("Rec2100", drawingSource);
+        Assert.DoesNotContain("ColorOutputKind.Hdr", drawingSource);
+        Assert.DoesNotContain("MapToHdr", drawingSource);
+        Assert.DoesNotContain("OutputMappingContext", drawingSource);
+        Assert.DoesNotContain("ToneMapping", drawingSource);
+        Assert.Contains("DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM", d3d12RendererSource);
+        Assert.Contains("DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM", d3d12Renderer2DSource);
+        Assert.Contains("DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM", d3d12GlyphAtlasSource);
+        AssertDoesNotContainAny(
+            d3d12RendererSource + d3d12Renderer2DSource + d3d12GlyphAtlasSource,
+            "DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16",
+            "DXGI_FORMAT_R16G16B16A16",
+            "SetColorSpace1",
+            "DXGI_COLOR_SPACE_TYPE.",
+            "DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020",
+            "DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709",
+            "DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020",
+            "DXGI_HDR_METADATA_HDR10");
         Assert.DoesNotContain("public enum DrawMaterialKind", drawingSource);
         Assert.DoesNotContain("public readonly struct DrawMaterial", drawingSource);
         Assert.DoesNotContain("Hdr", drawingSource);

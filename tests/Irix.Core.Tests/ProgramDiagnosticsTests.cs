@@ -2886,6 +2886,58 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    public void Hdr_output_mapping_preflight_is_documented_and_source_guarded()
+    {
+        var root = FindRepoRoot();
+        var colorDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Color-Pipeline.md")));
+        var d3d12Design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
+        var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+        var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
+        var drawingSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Drawing", "DrawingPrimitives.cs")));
+        var d3d12RendererSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer.cs")));
+        var d3d12Renderer2DSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12Renderer2D.cs")));
+        var d3d12GlyphAtlasSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Platform.Windows", "D3D12GlyphAtlasTextRenderer.DrawPipeline.cs")));
+
+        Assert.Contains("## HDR Output Mapping Preflight", colorDesign);
+        Assert.Contains("HDR output mapping is design-gated, not implemented.", colorDesign);
+        Assert.Contains("Output mapping context", colorDesign);
+        Assert.Contains("Screen-region policy", colorDesign);
+        Assert.Contains("SDR reference white and tone mapping", colorDesign);
+        Assert.Contains("Swapchain and color-space capability", colorDesign);
+        Assert.Contains("Backend payload format", colorDesign);
+        Assert.Contains("Diagnostics and fallback", colorDesign);
+        Assert.Contains("Until that slice lands, HDR output stays out of `ColorOutputMapping`, `DrawColor`, `WindowColor`, `DrawCommand`, D3D12 swapchain selection, D3D12 PSO render-target formats, and public style/color authoring.", colorDesign);
+
+        Assert.Contains("The HDR output mapping preflight in [Color-Pipeline.md](Color-Pipeline.md) is the gate for changing this backend", d3d12Design);
+        Assert.Contains("HDR output mapping preflight is documented and guard-covered", status);
+        Assert.Contains("HDR output mapping preflight names the output context, screen-region, SDR white/tone mapping, swapchain capability, payload format, diagnostics, and fallback contracts", worklist);
+
+        Assert.Equal(["SdrSrgb"], Enum.GetNames<ColorOutputKind>());
+        Assert.Contains("DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM", d3d12RendererSource);
+        Assert.Contains("DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM", d3d12Renderer2DSource);
+        Assert.Contains("DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM", d3d12GlyphAtlasSource);
+        Assert.DoesNotContain("MapToHdr", drawingSource);
+        Assert.DoesNotContain("OutputMappingContext", drawingSource);
+        Assert.DoesNotContain("ToneMapping", drawingSource);
+
+        var d3d12ActiveOutputSource = d3d12RendererSource + d3d12Renderer2DSource + d3d12GlyphAtlasSource;
+        foreach (var fragment in new[]
+        {
+            "DXGI_FORMAT.DXGI_FORMAT_R16G16B16A16",
+            "DXGI_FORMAT_R16G16B16A16",
+            "SetColorSpace1",
+            "DXGI_COLOR_SPACE_TYPE.",
+            "DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020",
+            "DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709",
+            "DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020",
+            "DXGI_HDR_METADATA_HDR10"
+        })
+        {
+            Assert.DoesNotContain(fragment, d3d12ActiveOutputSource);
+        }
+    }
+
+    [Fact]
     public void Style_transition_runtime_ownership_preflight_stays_poc_owned()
     {
         var root = FindRepoRoot();
