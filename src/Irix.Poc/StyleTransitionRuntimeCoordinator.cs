@@ -55,6 +55,11 @@ internal interface IStyleTransitionPresentationActivationCompositorAdapter
     void ActivatePresentationPlan(in CompositionAnimationPresentationSetPlan plan);
 }
 
+internal interface IStyleTransitionPresentationClearCompositorAdapter
+{
+    void ClearActivePresentation();
+}
+
 internal interface IStyleTransitionRetainedSnapshotProvider
 {
     RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; }
@@ -293,6 +298,24 @@ internal sealed class StyleTransitionRuntimeCoordinator
         cancellationToken.ThrowIfCancellationRequested();
         var snapshot = snapshotProvider.LastRetainedInputSnapshot;
         return StyleTransitionBatchPresentationActivation.Activate(
+            batch,
+            compositor,
+            snapshot,
+            completionTracker);
+    }
+
+    internal StyleTransitionBatchPresentationClearResult ClearBatchPresentation<TCompositor, TSnapshotProvider>(
+        in StyleTransitionDecisionBatch batch,
+        TCompositor compositor,
+        TSnapshotProvider snapshotProvider,
+        StyleTransitionCompletionTracker completionTracker,
+        CancellationToken cancellationToken = default)
+        where TCompositor : IStyleTransitionPresentationClearCompositorAdapter
+        where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var snapshot = snapshotProvider.LastRetainedInputSnapshot;
+        return StyleTransitionBatchPresentationClear.Clear(
             batch,
             compositor,
             snapshot,

@@ -97,6 +97,25 @@ internal enum StyleTransitionBatchPresentationActivationReason : byte
     ActivationFailed,
 }
 
+internal enum StyleTransitionBatchPresentationClearKind : byte
+{
+    None,
+    Empty,
+    Blocked,
+    Cleared,
+}
+
+internal enum StyleTransitionBatchPresentationClearReason : byte
+{
+    None,
+    EmptyBatch,
+    RuntimePreflightNotReady,
+    MissingRetainedSnapshot,
+    UnsupportedRuntimeAction,
+    NoTrackedOwnerClear,
+    ClearFailed,
+}
+
 internal readonly struct StyleTransitionOwnerKey(
     StyleTransitionOwnerKind Kind,
     ActionId ActionId,
@@ -354,6 +373,110 @@ internal readonly struct StyleTransitionOwnerValidationResult(
             CompositionAnimationPresentationSetRejectionReason.OverlappingCommandRange => StyleTransitionOwnerRejectionReason.PresentationSetOverlappingCommandRange,
             _ => StyleTransitionOwnerRejectionReason.PresentationSetInvalidResolvedPlan,
         };
+    }
+}
+
+internal static class StyleTransitionBatchPresentationClear
+{
+    internal static StyleTransitionBatchPresentationClearResult Clear<TCompositor>(
+        in StyleTransitionDecisionBatch batch,
+        TCompositor compositor,
+        RenderPipelineRetainedInputSnapshot? snapshot,
+        StyleTransitionCompletionTracker completionTracker)
+        where TCompositor : IStyleTransitionPresentationClearCompositorAdapter
+    {
+        ArgumentNullException.ThrowIfNull(compositor);
+        ArgumentNullException.ThrowIfNull(completionTracker);
+
+        var runtimePreflight = StyleTransitionBatchRuntimePreflight.Validate(
+            batch,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            completionTracker);
+        if (runtimePreflight.Kind == StyleTransitionBatchRuntimePreflightKind.Empty)
+        {
+            return StyleTransitionBatchPresentationClearResult.Empty(runtimePreflight);
+        }
+
+        if (snapshot is null)
+        {
+            return StyleTransitionBatchPresentationClearResult.Blocked(
+                StyleTransitionBatchPresentationClearReason.MissingRetainedSnapshot,
+                runtimePreflight);
+        }
+
+        if (runtimePreflight.Kind != StyleTransitionBatchRuntimePreflightKind.Ready)
+        {
+            return StyleTransitionBatchPresentationClearResult.Blocked(
+                StyleTransitionBatchPresentationClearReason.RuntimePreflightNotReady,
+                runtimePreflight);
+        }
+
+        var ownerResults = runtimePreflight.OwnerResults;
+        var entries = batch.Entries;
+        for (var i = 0; i < ownerResults.Length; i++)
+        {
+            var ownerResult = ownerResults[i];
+            if (ownerResult.ActionKind is not (StyleTransitionOwnerRuntimeActionKind.CancelPresentation
+                or StyleTransitionOwnerRuntimeActionKind.CommitPresentation))
+            {
+                return StyleTransitionBatchPresentationClearResult.Blocked(
+                    StyleTransitionBatchPresentationClearReason.UnsupportedRuntimeAction,
+                    runtimePreflight);
+            }
+
+            if (!ownerResult.ClearsTrackedOwner || !ownerResult.HasTrackedOwner)
+            {
+                return StyleTransitionBatchPresentationClearResult.Blocked(
+                    StyleTransitionBatchPresentationClearReason.NoTrackedOwnerClear,
+                    runtimePreflight);
+            }
+
+            if (entries[i].Decision.TargetKey != ownerResult.TargetKey)
+            {
+                return StyleTransitionBatchPresentationClearResult.Blocked(
+                    StyleTransitionBatchPresentationClearReason.RuntimePreflightNotReady,
+                    runtimePreflight);
+            }
+        }
+
+        try
+        {
+            compositor.ClearActivePresentation();
+        }
+        catch (ArgumentException)
+        {
+            return StyleTransitionBatchPresentationClearResult.Blocked(
+                StyleTransitionBatchPresentationClearReason.ClearFailed,
+                runtimePreflight);
+        }
+        catch (InvalidOperationException)
+        {
+            return StyleTransitionBatchPresentationClearResult.Blocked(
+                StyleTransitionBatchPresentationClearReason.ClearFailed,
+                runtimePreflight);
+        }
+
+        var clearedOwnerCount = 0;
+        var lastTrackerResult = default(StyleTransitionCompletionResult);
+        for (var i = 0; i < ownerResults.Length; i++)
+        {
+            var entry = entries[i];
+            var resultKind = entry.Decision.Kind == StyleTransitionRuntimeDecisionKind.Commit
+                ? StyleTransitionRuntimeResultKind.Committed
+                : StyleTransitionRuntimeResultKind.Canceled;
+            var runtimeResult = new StyleTransitionRuntimeResult(resultKind, entry.Decision.TargetKey);
+            var trackerResult = completionTracker.PublishRuntimeResult(entry.OwnerKey, entry.Decision, runtimeResult);
+            lastTrackerResult = trackerResult;
+            if (trackerResult.Kind == StyleTransitionCompletionResultKind.Cleared)
+            {
+                clearedOwnerCount++;
+            }
+        }
+
+        return StyleTransitionBatchPresentationClearResult.Cleared(
+            runtimePreflight,
+            clearedOwnerCount,
+            lastTrackerResult);
     }
 }
 
@@ -736,6 +859,69 @@ internal readonly struct StyleTransitionBatchPresentationActivationResult(
         left.Equals(right);
 
     public static bool operator !=(StyleTransitionBatchPresentationActivationResult left, StyleTransitionBatchPresentationActivationResult right) =>
+        !left.Equals(right);
+}
+
+internal readonly struct StyleTransitionBatchPresentationClearResult(
+    StyleTransitionBatchPresentationClearKind Kind,
+    StyleTransitionBatchPresentationClearReason Reason,
+    StyleTransitionBatchRuntimePreflightResult RuntimePreflight = default,
+    int ClearedOwnerCount = 0,
+    StyleTransitionCompletionResult LastTrackerResult = default,
+    bool PresentationStateChanged = false) : IEquatable<StyleTransitionBatchPresentationClearResult>
+{
+    public StyleTransitionBatchPresentationClearKind Kind { get; } = Kind;
+    public StyleTransitionBatchPresentationClearReason Reason { get; } = Reason;
+    public StyleTransitionBatchRuntimePreflightResult RuntimePreflight { get; } = RuntimePreflight;
+    public int ClearedOwnerCount { get; } = ClearedOwnerCount;
+    public StyleTransitionCompletionResult LastTrackerResult { get; } = LastTrackerResult;
+    public bool PresentationStateChanged { get; } = PresentationStateChanged;
+    public bool IsCleared => Kind == StyleTransitionBatchPresentationClearKind.Cleared;
+
+    internal static StyleTransitionBatchPresentationClearResult Empty(
+        in StyleTransitionBatchRuntimePreflightResult runtimePreflight) =>
+        new(
+            StyleTransitionBatchPresentationClearKind.Empty,
+            StyleTransitionBatchPresentationClearReason.EmptyBatch,
+            runtimePreflight);
+
+    internal static StyleTransitionBatchPresentationClearResult Blocked(
+        StyleTransitionBatchPresentationClearReason reason,
+        in StyleTransitionBatchRuntimePreflightResult runtimePreflight) =>
+        new(
+            StyleTransitionBatchPresentationClearKind.Blocked,
+            reason,
+            runtimePreflight);
+
+    internal static StyleTransitionBatchPresentationClearResult Cleared(
+        in StyleTransitionBatchRuntimePreflightResult runtimePreflight,
+        int clearedOwnerCount,
+        in StyleTransitionCompletionResult lastTrackerResult) =>
+        new(
+            StyleTransitionBatchPresentationClearKind.Cleared,
+            StyleTransitionBatchPresentationClearReason.None,
+            runtimePreflight,
+            clearedOwnerCount,
+            lastTrackerResult,
+            PresentationStateChanged: true);
+
+    public bool Equals(StyleTransitionBatchPresentationClearResult other) =>
+        Kind == other.Kind
+        && Reason == other.Reason
+        && RuntimePreflight == other.RuntimePreflight
+        && ClearedOwnerCount == other.ClearedOwnerCount
+        && LastTrackerResult == other.LastTrackerResult
+        && PresentationStateChanged == other.PresentationStateChanged;
+
+    public override bool Equals(object? obj) => obj is StyleTransitionBatchPresentationClearResult other && Equals(other);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Kind, Reason, RuntimePreflight, ClearedOwnerCount, LastTrackerResult, PresentationStateChanged);
+
+    public static bool operator ==(StyleTransitionBatchPresentationClearResult left, StyleTransitionBatchPresentationClearResult right) =>
+        left.Equals(right);
+
+    public static bool operator !=(StyleTransitionBatchPresentationClearResult left, StyleTransitionBatchPresentationClearResult right) =>
         !left.Equals(right);
 }
 

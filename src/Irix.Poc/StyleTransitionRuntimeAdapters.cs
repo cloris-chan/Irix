@@ -39,6 +39,15 @@ internal readonly struct DrawingBackendStyleTransitionPresentationActivationComp
     }
 }
 
+internal readonly struct DrawingBackendStyleTransitionPresentationClearCompositorAdapter(
+    DrawingBackendCompositor Compositor) : IStyleTransitionPresentationClearCompositorAdapter
+{
+    public void ClearActivePresentation()
+    {
+        Compositor.ClearCompositionAnimation();
+    }
+}
+
 internal readonly struct FixedStyleTransitionRetainedSnapshotProvider(
     RenderPipelineRetainedInputSnapshot? Snapshot) : IStyleTransitionRetainedSnapshotProvider
 {

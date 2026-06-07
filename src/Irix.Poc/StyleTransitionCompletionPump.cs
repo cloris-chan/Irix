@@ -240,6 +240,28 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         return await DrainAndApplyCompletionAsync(cancellationToken);
     }
 
+    internal async ValueTask<StyleTransitionCompletionPumpResult> TickPresentationAndDrainAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken = default)
+    {
+        if (!_tracker.HasActiveTransition)
+        {
+            return SetLastResult(StyleTransitionCompletionPumpResult.NoActiveTransition());
+        }
+
+        try
+        {
+            _ = await _compositor.RenderCompositionAnimationPresentationTickAtAsync(timestamp, cancellationToken);
+            IncrementTickCount();
+        }
+        catch (InvalidOperationException)
+        {
+            return SetLastResult(StyleTransitionCompletionPumpResult.TickUnavailable());
+        }
+
+        return DrainPresentationCompletion(cancellationToken);
+    }
+
     public async ValueTask DisposeAsync()
     {
         _disposeCancellationTokenSource.Cancel();
@@ -325,6 +347,50 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
                 IncrementCommitCount();
                 AddDrainedEventCount(drainedEvents);
                 return SetLastResult(StyleTransitionCompletionPumpResult.CompletionCommitted(drainedEvents, commitResult));
+            }
+        }
+    }
+
+    private StyleTransitionCompletionPumpResult DrainPresentationCompletion(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var events = new CompositionAnimationMarkerEvent[StackEventCapacity];
+        var drainedEvents = 0;
+        var commitCount = 0;
+        var lastCommitResult = default(StyleTransitionRuntimeResult);
+        while (true)
+        {
+            var count = _compositor.DrainCompositionMarkerEvents(events);
+            if (count == 0)
+            {
+                AddDrainedEventCount(drainedEvents);
+                if (commitCount == 0)
+                {
+                    return SetLastResult(StyleTransitionCompletionPumpResult.TickRendered(drainedEvents));
+                }
+
+                if (!_tracker.HasActiveTransition)
+                {
+                    _compositor.ClearCompositionAnimation();
+                }
+
+                return SetLastResult(StyleTransitionCompletionPumpResult.CompletionCommitted(drainedEvents, lastCommitResult));
+            }
+
+            drainedEvents += count;
+            for (var i = 0; i < count; i++)
+            {
+                if (!_tracker.TryCreateCompletionDecision(events[i], out var commitDecision))
+                {
+                    continue;
+                }
+
+                IncrementCommitCount();
+                commitCount++;
+                lastCommitResult = new StyleTransitionRuntimeResult(
+                    StyleTransitionRuntimeResultKind.Committed,
+                    commitDecision.TargetKey);
             }
         }
     }
