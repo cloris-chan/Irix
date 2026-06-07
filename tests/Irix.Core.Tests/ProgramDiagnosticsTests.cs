@@ -2852,6 +2852,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("linearGradientSingleRectCommands", colorDesign);
         Assert.Contains("linearGradientSegmentedCommands", colorDesign);
         Assert.Contains("linearGradientSegmentRects", colorDesign);
+        Assert.Contains("Degenerate D3D12 FillRect gradients whose start and end points are equal rasterize as the start stop", colorDesign);
+        Assert.Contains("treats degenerate equal-point gradients as start-color single rects", colorDesign);
 
         Assert.Contains("## Public Material Authoring Policy Preflight", styleDesign);
         Assert.Contains("Non-solid visual material authoring is blocked on the policy preflight", styleDesign);
@@ -2864,6 +2866,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Output mapping separation", styleDesign);
         Assert.Contains("Until those gates are implemented and guarded, public/style authoring remains limited to semantic colors for background/foreground", styleDesign);
         Assert.Contains("internal solid-color and first linear-gradient `DrawMaterial`/brush resource shapes exist", status);
+        Assert.Contains("treats degenerate equal-point gradients as start-color single rects", status);
         Assert.Contains("D3D12 material output diagnostics expose selected material kind/backend capability/fallback reason/fallback counts plus linear-gradient single-rect versus segmented rasterization counters", status);
         Assert.Contains("public material authoring is guard-deferred from style/property APIs and now has a policy preflight", status);
         Assert.Contains("Internal solid-color and linear-gradient material payloads exist", worklist);

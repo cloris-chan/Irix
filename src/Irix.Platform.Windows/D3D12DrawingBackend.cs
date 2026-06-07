@@ -1017,16 +1017,17 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             return;
         }
 
+        var representativeColor = ResolveLinearGradientRepresentativeColor(material, fallbackColor, outputMapping);
         if (rects.Count == 0 && !hasBackgroundColor)
         {
-            backgroundColor = fallbackColor;
+            backgroundColor = representativeColor;
             hasBackgroundColor = true;
         }
 
         if (rect.Width <= 0f || rect.Height <= 0f)
         {
             diagnostics.AddLinearGradientRasterization(segmented: false, segmentRectCount: 1);
-            AddPhysicalRectData(rect, fallbackColor, scissorPlan.RenderScissor, rects);
+            AddPhysicalRectData(rect, representativeColor, scissorPlan.RenderScissor, rects);
             return;
         }
 
@@ -1034,7 +1035,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         {
             AddPhysicalGradientRectData(
                 rect,
-                fallbackColor,
+                representativeColor,
                 outputMapping.MapToSdr(SampleLinearGradient(material, 0f, 0f)),
                 outputMapping.MapToSdr(SampleLinearGradient(material, rect.Width, 0f)),
                 outputMapping.MapToSdr(SampleLinearGradient(material, rect.Width, rect.Height)),
@@ -1053,6 +1054,14 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             rects);
         diagnostics.AddLinearGradientRasterization(segmented: true, segmentRectCount: LinearGradientClampFallbackSegmentCount);
     }
+
+    private static DrawColor ResolveLinearGradientRepresentativeColor(
+        in DrawMaterial material,
+        in DrawColor fallbackColor,
+        ColorOutputMapping outputMapping) =>
+        IsDegenerateLinearGradient(material)
+            ? outputMapping.MapToSdr(material.Color)
+            : fallbackColor;
 
     private static Color SampleLinearGradient(in DrawMaterial material, float x, float y)
     {
@@ -1090,6 +1099,13 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         return (min >= -LinearGradientClampEpsilon && max <= 1f + LinearGradientClampEpsilon)
             || max <= LinearGradientClampEpsilon
             || min >= 1f - LinearGradientClampEpsilon;
+    }
+
+    private static bool IsDegenerateLinearGradient(in DrawMaterial material)
+    {
+        var dx = material.EndPoint.X - material.StartPoint.X;
+        var dy = material.EndPoint.Y - material.StartPoint.Y;
+        return dx * dx + dy * dy <= float.Epsilon;
     }
 
     private static float ProjectLinearGradient(

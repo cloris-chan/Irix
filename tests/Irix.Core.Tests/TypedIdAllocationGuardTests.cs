@@ -914,6 +914,8 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("D3D12TextMaterialCapabilities => DrawMaterialBackendCapabilities.SolidColor", d3d12Source);
         Assert.Contains("private const int LinearGradientClampFallbackSegmentCount = 16", d3d12Source);
         Assert.Contains("CanRepresentLinearGradientAsSingleVertexRect", d3d12Source);
+        Assert.Contains("ResolveLinearGradientRepresentativeColor", d3d12Source);
+        Assert.Contains("IsDegenerateLinearGradient", d3d12Source);
         Assert.Contains("TopLeftColor", d3d12Renderer2DSource);
         Assert.Contains("BottomRightColor", d3d12Renderer2DSource);
         Assert.Contains("AppendPhysicalFillMaterialRect", d3d12Source);

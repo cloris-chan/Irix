@@ -542,6 +542,50 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCore_rasterizes_degenerate_linear_gradient_as_start_color_single_rect()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var start = Color.FromSrgb(255, 0, 0);
+        var end = Color.FromSrgb(0, 255, 0);
+        var gradient = DrawMaterial.LinearGradient(
+            start,
+            end,
+            new DrawPoint(24, 12),
+            new DrawPoint(24, 12));
+        var command = DrawCommand.FromMaterial(
+            DrawCommandKind.FillRect,
+            Rect: new DrawRect(8, 6, 40, 24),
+            Material: gradient);
+
+        var result = D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            [command],
+            resources,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        var startSdr = ColorOutputMapping.SdrSrgb.MapToSdr(start);
+        Assert.Equal(DrawMaterialKind.LinearGradient, result.MaterialDiagnostics.SelectedMaterialKind);
+        Assert.Equal(DrawMaterialFallbackReason.None, result.MaterialDiagnostics.FallbackReason);
+        Assert.False(result.MaterialDiagnostics.FallbackApplied);
+        Assert.Equal(1, result.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, result.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSegmentedCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.LinearGradientSegmentRectCount);
+        Assert.Equal(0, result.MaterialDiagnostics.FallbackCommandCount);
+        Assert.Equal(startSdr, result.BackgroundColor);
+        Assert.Equal(1, rects.Count);
+        var rect = rects.Span[0];
+        AssertRectColor(rect, startSdr);
+        AssertRectGradientColors(rect, gradient, 40, 24, startSdr);
+    }
+
+    [Fact]
     public void ExecuteCore_keeps_internal_linear_gradient_text_material_on_fallback_path()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
@@ -1610,11 +1654,16 @@ public sealed class D3D12DrawingBackendScissorTests
 
     private static void AssertRectGradientColors(D3D12Renderer2D.RectData rect, DrawMaterial material, float width, float height)
     {
+        AssertRectGradientColors(rect, material, width, height, ColorOutputMapping.SdrSrgb.MapToSdr(material));
+    }
+
+    private static void AssertRectGradientColors(D3D12Renderer2D.RectData rect, DrawMaterial material, float width, float height, DrawColor representativeColor)
+    {
         AssertVectorColor(rect.TopLeftColor, SampleLinearGradientSdr(material, 0, 0));
         AssertVectorColor(rect.TopRightColor, SampleLinearGradientSdr(material, width, 0));
         AssertVectorColor(rect.BottomRightColor, SampleLinearGradientSdr(material, width, height));
         AssertVectorColor(rect.BottomLeftColor, SampleLinearGradientSdr(material, 0, height));
-        AssertRectColor(rect, ColorOutputMapping.SdrSrgb.MapToSdr(material));
+        AssertRectColor(rect, representativeColor);
     }
 
     private static void AssertRectGradientSegmentColors(
