@@ -2094,6 +2094,49 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void CounterStyleTransitionBridge_keeps_hovered_cross_focus_press_as_single_pressed_transition()
+    {
+        var previous = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+        var next = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: true);
+
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            previous,
+            next,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransition, lifecycle.Action);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta, lifecycle.Reason);
+        Assert.True(lifecycle.HasTransitionDecision);
+        Assert.False(lifecycle.HasTransitionBatch);
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Retarget, lifecycle.Decision.Kind);
+        Assert.Equal(new NodeKey(7), lifecycle.Decision.TargetKey);
+
+        var compileResult = StyleTransitionCompiler.Compile(lifecycle.Decision.ToCompileRequest());
+        Assert.True(compileResult.HasDeclaration);
+        Assert.Equal(0.98f, compileResult.From.Opacity);
+        Assert.Equal(0.92f, compileResult.To.Opacity);
+        Assert.Equal(0f, compileResult.From.TranslateY);
+        Assert.Equal(2f, compileResult.To.TranslateY);
+    }
+
+    [Fact]
     public void CounterStyleTransitionBridge_maps_single_control_state_delta_to_semantic_composition_decision()
     {
         var previous = default(OwnershipSnapshot);
@@ -2670,6 +2713,93 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(2, tracker.ActiveOwnerCount);
         Assert.Equal(executeCountBeforeActivation + 1, backend.ExecuteCompositionCount);
 
+        Assert.True(TryGetLayer(compositor.LastCompositionFrame, new CompositionLayerId(7), out var decrementLayer));
+        Assert.True(decrementLayer.Transform.TranslateY > 0f);
+        Assert.True(decrementLayer.Opacity.Normalized < 1f);
+    }
+
+    [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_hovered_cross_focus_press_uses_single_initial_pressed_tick()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var focusIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        await runtime.DispatchAndWaitAsync(new CounterMessage.InputVisualStateChanged(focusIncrement), cancellationToken);
+
+        var hoverDecrementWithIncrementFocus = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+        var hoverLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            hoverDecrementWithIncrementFocus,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var tracker = new StyleTransitionCompletionTracker();
+        var hoverResult = await CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(hoverDecrementWithIncrementFocus),
+            hoverLifecycle.Batch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            tracker,
+            cancellationToken,
+            retimestampAfterDispatch: true);
+
+        var pressDecrement = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: true);
+        var pressLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            pressDecrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.Zero);
+        var executeCountBeforePress = backend.ExecuteCompositionCount;
+
+        var pressResult = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(pressDecrement),
+            pressLifecycle.Decision,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            cancellationToken,
+            tracker,
+            retimestampAfterDispatch: true);
+
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Activated, hoverResult.Kind);
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransition, pressLifecycle.Action);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.SingleTargetControlStateDelta, pressLifecycle.Reason);
+        Assert.Equal(new NodeKey(7), pressLifecycle.Decision.TargetKey);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Retargeted, pressResult.Kind);
+        Assert.Null(compositor.CompositionAnimationPresentationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+        Assert.Equal(executeCountBeforePress + 1, backend.ExecuteCompositionCount);
         Assert.True(TryGetLayer(compositor.LastCompositionFrame, new CompositionLayerId(7), out var decrementLayer));
         Assert.True(decrementLayer.Transform.TranslateY > 0f);
         Assert.True(decrementLayer.Opacity.Normalized < 1f);

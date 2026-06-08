@@ -92,6 +92,11 @@ internal static class CounterStyleTransitionBridge
                 continue;
             }
 
+            if (!HasCompositionPropertyDelta(previousState, nextState))
+            {
+                continue;
+            }
+
             var entryDecision = CreateDecision(target, previousState, nextState, startTimestamp, next.HoverChangeCount);
             entries[count++] = new StyleTransitionDecisionBatchEntry(
                 StyleTransitionOwnerKey.ControlState(target.ActionId, target.NodeKey),
@@ -167,17 +172,25 @@ internal static class CounterStyleTransitionBridge
     private static bool RequiresRetarget(ControlVisualState previous, ControlVisualState next) =>
         previous.IsHovered || previous.IsPressed || previous.IsFocused || next.IsPressed || next.IsFocused;
 
+    private static bool HasCompositionPropertyDelta(ControlVisualState previous, ControlVisualState next) =>
+        GetCompositionTranslateY(previous) != GetCompositionTranslateY(next)
+        || GetCompositionOpacity(previous) != GetCompositionOpacity(next);
+
     private static VirtualNodeProperty[] ToCompositionProperties(ControlVisualState state)
     {
-        var translateY = state.IsPressed ? 2 : 0;
-        var opacity = state.IsPressed ? 0.92 : state.IsHovered ? 0.98 : 1.0;
         return StyleDeclarationMapper.ToVirtualNodeProperties(
         [
             StyleDeclaration.TranslationX(0),
-            StyleDeclaration.TranslationY(translateY),
-            StyleDeclaration.Opacity(opacity)
+            StyleDeclaration.TranslationY(GetCompositionTranslateY(state)),
+            StyleDeclaration.Opacity(GetCompositionOpacity(state))
         ]);
     }
+
+    private static double GetCompositionTranslateY(ControlVisualState state) =>
+        state.IsPressed ? 2 : 0;
+
+    private static double GetCompositionOpacity(ControlVisualState state) =>
+        state.IsPressed ? 0.92 : state.IsHovered ? 0.98 : 1.0;
 
     private static CompositionAnimationInstanceId CreateInstanceId(ActionId actionId, long hoverChangeCount)
     {
