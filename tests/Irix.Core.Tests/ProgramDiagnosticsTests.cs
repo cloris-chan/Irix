@@ -2793,15 +2793,18 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("validation.guard status=Failed mode=$Mode", validate);
         Assert.Contains("Category!=D3D12&Category!=Performance&Category!=Guard", validate);
         Assert.Contains("Category=Guard&Category!=DocGuard", validate);
+        Assert.Contains("Category!=DocGuard&(FullyQualifiedName~PartialApply|FullyQualifiedName~DrawingBackendCompositor)", validate);
+        Assert.Contains("Category!=DocGuard&(FullyQualifiedName~Composition|FullyQualifiedName~Scroll|FullyQualifiedName~CounterInputRouter|FullyQualifiedName~WindowLayoutPipeline)", validate);
         Assert.Contains("FullyQualifiedName~PartialApply|FullyQualifiedName~DrawingBackendCompositor", validate);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode Quick", status);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode Focused", status);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode GlyphSmoke", status);
-        Assert.Contains("`Focused` validates source/architecture `Guard` checks while skipping lower-frequency `DocGuard` wording checks", worklist);
+        Assert.Contains("`Focused` validates high-signal source/architecture `Guard` checks while skipping lower-frequency `DocGuard` wording and source-shape audits across the category and name-filter lanes", worklist);
         Assert.Contains("`Full` runs the Release test suite", worklist);
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Public_style_transition_authoring_preflight_is_documented_and_source_guarded()
     {
         var root = FindRepoRoot();
@@ -2904,6 +2907,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Non_solid_material_policy_preflight_is_documented_and_source_guarded()
     {
         var root = FindRepoRoot();
@@ -2989,6 +2993,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Hdr_output_mapping_preflight_is_documented_and_source_guarded()
     {
         var root = FindRepoRoot();
@@ -3041,6 +3046,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Style_transition_runtime_ownership_preflight_stays_poc_owned()
     {
         var root = FindRepoRoot();
@@ -3217,6 +3223,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Style_transition_multi_owner_counter_route_stays_poc_owned()
     {
         var root = FindRepoRoot();
@@ -3455,14 +3462,15 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GitHub Actions quota is currently exhausted", status);
         Assert.Contains("current CI/source-of-truth status lives in [Project_Status_and_Todo.md]", design);
         Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
-        Assert.Contains("Run `Quick` for routine changes and `Focused` after source/architecture guard", worklist);
-        Assert.Contains("Run `Full` when lower-frequency `DocGuard` wording checks matter", worklist);
+        Assert.Contains("Run `Quick` for routine changes and `Focused` after high-signal source/architecture guard", worklist);
+        Assert.Contains("Run `Full` when lower-frequency `DocGuard` wording or source-shape audits matter", worklist);
         Assert.Contains("Run `Smoke` before/after broad rendering changes", worklist);
         Assert.Contains("Do not add artifact-upload work until Actions quota returns", worklist);
         Assert.Contains("`Nightly` after page-policy, eviction, or shaping overhauls", worklist);
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Scroll_input_runtime_owner_boundary_is_documented_before_extraction()
     {
         var root = FindRepoRoot();
@@ -3533,6 +3541,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Marker_runtime_dispatch_boundary_stays_app_owned_before_runtime_extraction()
     {
         var root = FindRepoRoot();
