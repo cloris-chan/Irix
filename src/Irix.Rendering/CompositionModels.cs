@@ -98,9 +98,9 @@ internal readonly struct CompositionTimestamp(long StopwatchTicks) : IEquatable<
 
     public static CompositionTimestamp FromStopwatchTicks(long ticks) => new(ticks);
 
-    public CompositionTimestamp Add(CompositionDuration duration) => new(StopwatchTicks + duration.StopwatchTicks);
+    public CompositionTimestamp Add(CompositionDuration duration) => new(SaturatingAdd(StopwatchTicks, duration.StopwatchTicks));
 
-    public CompositionDuration ElapsedSince(CompositionTimestamp start) => new(StopwatchTicks - start.StopwatchTicks);
+    public CompositionDuration ElapsedSince(CompositionTimestamp start) => new(SaturatingSubtract(StopwatchTicks, start.StopwatchTicks));
 
     public int CompareTo(CompositionTimestamp other) => StopwatchTicks.CompareTo(other.StopwatchTicks);
 
@@ -125,6 +125,36 @@ internal readonly struct CompositionTimestamp(long StopwatchTicks) : IEquatable<
     public static bool operator >(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks > right.StopwatchTicks;
 
     public static bool operator >=(CompositionTimestamp left, CompositionTimestamp right) => left.StopwatchTicks >= right.StopwatchTicks;
+
+    private static long SaturatingAdd(long left, long right)
+    {
+        if (right > 0 && left > long.MaxValue - right)
+        {
+            return long.MaxValue;
+        }
+
+        if (right < 0 && left < long.MinValue - right)
+        {
+            return long.MinValue;
+        }
+
+        return left + right;
+    }
+
+    private static long SaturatingSubtract(long left, long right)
+    {
+        if (right > 0 && left < long.MinValue + right)
+        {
+            return long.MinValue;
+        }
+
+        if (right < 0 && left > long.MaxValue + right)
+        {
+            return long.MaxValue;
+        }
+
+        return left - right;
+    }
 }
 
 internal static class CompositionClock

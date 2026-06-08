@@ -21,7 +21,7 @@
 
 ## Authoritative Animation Clock
 
-Irix animation has one authoritative high-precision timeline. `CompositionTimestamp` values come from the internal Irix composition clock boundary; platform display clocks, backend present fences, vblank cadence, and monitor refresh rates are pacing inputs only. They may decide when an output samples and presents a frame, but they must not decide how far an animation has progressed.
+Irix animation has one authoritative high-precision timeline. `CompositionTimestamp` values come from the internal Irix composition clock boundary; platform display clocks, backend present fences, vblank cadence, and monitor refresh rates are pacing inputs only. Timestamp arithmetic saturates at the typed clock boundary so extreme samples clamp progress instead of overflowing back into an earlier animation state. Pacing inputs may decide when an output samples and presents a frame, but they must not decide how far an animation has progressed.
 
 For heterogeneous multi-display output, synchronization is defined by timeline sampling, not by identical physical presents. A 144 Hz output may sample the same animation more often than a 60 Hz output, but a sample taken at the same `CompositionTimestamp` must evaluate to the same transform, opacity, scroll presentation value, marker progress, and completion state on every output. A window spanning outputs or mirrored across outputs must therefore evaluate compositor plans from the same sampled Irix timestamp before each output pass; per-output refresh rate only affects how often that output asks for a sample.
 
@@ -116,7 +116,7 @@ Compositor animation entries are expressed as data, not as callbacks into app/ru
 | Property | Transform, opacity, presented scroll offset, etc. |
 | From/to or keyframes | Values in platform-neutral units. |
 | Timing | Duration, delay, easing, repeat/cancel policy. |
-| Clock domain | Explicit Irix composition clock values. Current internal units are high-precision stopwatch ticks carried by `CompositionTimestamp` and `CompositionDuration`, not frame indexes, backend present counts, or per-output refresh ticks. |
+| Clock domain | Explicit Irix composition clock values. Current internal units are high-precision stopwatch ticks carried by `CompositionTimestamp` and `CompositionDuration`, with saturating timestamp arithmetic for extreme samples, not frame indexes, backend present counts, or per-output refresh ticks. |
 | Commit policy | Whether and when final presented state updates logical runtime state. |
 | Cancellation policy | What happens on new input, layout change, or layer destruction. |
 

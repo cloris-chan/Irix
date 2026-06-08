@@ -924,6 +924,36 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task RenderCompositionAnimationTickAsync_saturates_extreme_timeline_elapsed()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(long.MinValue),
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(0, 40),
+                new CompositionScalarAnimation(0, 12)),
+            new CompositionScalarAnimation(0, 1))));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(
+            CompositionTimestamp.FromStopwatchTicks(long.MaxValue),
+            cancellationToken);
+
+        var layer = backend.LastCompositionFrame.Layer;
+        Assert.Equal(40, layer.Transform.TranslateX);
+        Assert.Equal(12, layer.Transform.TranslateY);
+        Assert.Equal(1, layer.Opacity.Normalized);
+    }
+
+    [Fact]
     public async Task RenderCompositionAnimationTickAsync_uses_injected_composition_clock_source()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1096,6 +1126,46 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(0, sineOut.Evaluate(0));
         Assert.InRange(sineOut.Evaluate(0.5f), 70.7f, 70.8f);
         Assert.Equal(100, sineOut.Evaluate(1));
+    }
+
+    [Fact]
+    public void CompositionTimestamp_arithmetic_saturates_extreme_ticks()
+    {
+        var max = CompositionTimestamp.FromStopwatchTicks(long.MaxValue);
+        var min = CompositionTimestamp.FromStopwatchTicks(long.MinValue);
+
+        Assert.Equal(long.MaxValue, max.Add(CompositionDuration.FromStopwatchTicks(1)).StopwatchTicks);
+        Assert.Equal(long.MinValue, min.Add(CompositionDuration.FromStopwatchTicks(-1)).StopwatchTicks);
+        Assert.Equal(long.MaxValue, max.ElapsedSince(min).StopwatchTicks);
+        Assert.Equal(long.MinValue, min.ElapsedSince(max).StopwatchTicks);
+        Assert.Equal(long.MaxValue, (max + CompositionDuration.FromStopwatchTicks(1)).StopwatchTicks);
+        Assert.Equal(long.MaxValue, (max - min).StopwatchTicks);
+    }
+
+    [Fact]
+    public void CompositionAnimationTimeline_saturates_extreme_elapsed_without_progress_wrap()
+    {
+        var start = CompositionTimestamp.FromStopwatchTicks(long.MinValue);
+        var timestamp = CompositionTimestamp.FromStopwatchTicks(long.MaxValue);
+        var duration = CompositionDuration.FromStopwatchTicks(10);
+        var once = new CompositionAnimationTimeline(start, duration);
+
+        var onceSample = once.SampleAt(timestamp);
+
+        Assert.Equal(long.MaxValue, onceSample.Elapsed.StopwatchTicks);
+        Assert.Equal(1f, onceSample.Progress);
+        Assert.Equal(0, onceSample.Iteration);
+        Assert.Equal(CompositionPlaybackDirection.Forward, onceSample.Direction);
+
+        var loopSample = new CompositionAnimationTimeline(start, duration, CompositionAnimationRepeatMode.Loop).SampleAt(timestamp);
+        Assert.Equal(int.MaxValue, loopSample.Iteration);
+        Assert.InRange(loopSample.Progress, 0f, 1f);
+        Assert.True(float.IsFinite(loopSample.Progress));
+
+        var alternateSample = new CompositionAnimationTimeline(start, duration, CompositionAnimationRepeatMode.Alternate).SampleAt(timestamp);
+        Assert.Equal(int.MaxValue, alternateSample.Iteration);
+        Assert.InRange(alternateSample.Progress, 0f, 1f);
+        Assert.True(float.IsFinite(alternateSample.Progress));
     }
 
     [Fact]
