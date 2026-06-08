@@ -34,13 +34,29 @@ internal sealed class ScrollPresentationCoordinator
 
     public void AddPendingPixels(double pixels)
     {
+        if (!HasPendingPixels(pixels))
+        {
+            return;
+        }
+
         long current;
         long updated;
         do
         {
             current = Volatile.Read(ref _pendingPixelsBits);
             var currentDouble = BitConverter.Int64BitsToDouble(current);
-            updated = BitConverter.DoubleToInt64Bits(currentDouble + pixels);
+            if (!double.IsFinite(currentDouble))
+            {
+                currentDouble = 0;
+            }
+
+            var next = currentDouble + pixels;
+            if (!double.IsFinite(next))
+            {
+                return;
+            }
+
+            updated = BitConverter.DoubleToInt64Bits(next);
         } while (Interlocked.CompareExchange(ref _pendingPixelsBits, updated, current) != current);
     }
 
@@ -140,7 +156,7 @@ internal sealed class ScrollPresentationCoordinator
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var pendingPixels = DrainPendingPixels();
-                if (pendingPixels != 0)
+                if (HasPendingPixels(pendingPixels))
                 {
                     if (!await RetargetAsync(runtime, compositor, snapshotProvider, scrollTargetKey, pendingPixels, cancellationToken))
                     {
@@ -163,7 +179,7 @@ internal sealed class ScrollPresentationCoordinator
                 Interlocked.Exchange(ref _loopRunning, 0);
             }
 
-            if (PendingPixels != 0 && !cancellationToken.IsCancellationRequested)
+            if (HasPendingPixels(PendingPixels) && !cancellationToken.IsCancellationRequested)
             {
                 EnsureRunning(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken);
             }
@@ -262,4 +278,8 @@ internal sealed class ScrollPresentationCoordinator
         Interlocked.Exchange(ref bits, BitConverter.DoubleToInt64Bits(value));
     }
 
+    private static bool HasPendingPixels(double pixels)
+    {
+        return pixels != 0 && double.IsFinite(pixels);
+    }
 }

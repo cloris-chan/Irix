@@ -2171,6 +2171,37 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public async Task ScrollPresentationCoordinator_ignores_zero_and_non_finite_pending_pixels()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var coordinator = new ScrollPresentationCoordinator();
+        var runtime = new RecordingScrollPresentationRuntimeAdapter(
+            new ScrollState
+            {
+                Position = 0,
+                TargetPosition = 0,
+                MaxScrollY = 240,
+                HasMaxScrollY = true
+            });
+        var compositor = new RecordingScrollPresentationCompositorAdapter();
+        var snapshotProvider = new FixedScrollPresentationSnapshotProvider(BuildScrollSnapshot());
+
+        coordinator.AddPendingPixels(0);
+        coordinator.AddPendingPixels(double.NaN);
+        coordinator.AddPendingPixels(double.PositiveInfinity);
+        coordinator.AddPendingPixels(double.NegativeInfinity);
+        await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, new NodeKey(1), cancellationToken);
+
+        Assert.Empty(runtime.Decisions);
+        Assert.Equal(0, compositor.SampleAndCancelCount);
+        Assert.Empty(compositor.Declarations);
+        Assert.Equal(0, coordinator.RetargetCount);
+        Assert.Equal(0, coordinator.PendingPixels);
+        Assert.Equal(0, runtime.CurrentScroll.Position);
+        Assert.Equal(0, runtime.CurrentScroll.TargetPosition);
+    }
+
+    [Fact]
     public async Task ScrollPresentationCoordinator_replacement_segment_starts_from_sampled_presented_value()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
