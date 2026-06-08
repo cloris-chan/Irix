@@ -413,6 +413,10 @@ internal static class StyleTransitionBatchPresentationClear
 
         var ownerResults = runtimePreflight.OwnerResults;
         var entries = batch.Entries;
+        Span<NodeKey> targetKeys = ownerResults.Length <= 8
+            ? stackalloc NodeKey[ownerResults.Length]
+            : new NodeKey[ownerResults.Length];
+        var targetKeyCount = 0;
         for (var i = 0; i < ownerResults.Length; i++)
         {
             var ownerResult = ownerResults[i];
@@ -437,11 +441,13 @@ internal static class StyleTransitionBatchPresentationClear
                     StyleTransitionBatchPresentationClearReason.RuntimePreflightNotReady,
                     runtimePreflight);
             }
+
+            targetKeys[targetKeyCount++] = ownerResult.TargetKey;
         }
 
         try
         {
-            compositor.ClearActivePresentation();
+            compositor.ClearActivePresentationTargets(targetKeys.Slice(0, targetKeyCount));
         }
         catch (ArgumentException)
         {

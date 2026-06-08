@@ -3080,7 +3080,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Batch activation diagnostics report activation kind/reason", animationDesign);
         Assert.Contains("Active-scroll fallback and blocked batch activation carry an explicit presentation policy", animationDesign);
         Assert.Contains("narrow Counter multi-target route over the existing concurrent-owner preflight", animationDesign);
-        Assert.Contains("per-owner compositor partial clear inside an active presentation plan is not implemented", animationDesign);
+        Assert.Contains("per-owner compositor partial clear for active presentation plans", animationDesign);
         Assert.Contains("Counter app/control integration now maps single-target `OwnershipSnapshot` deltas", status);
         Assert.Contains("marker-driven completion tracker", status);
         Assert.Contains("blocked batch activation clears stale style transition presentation/tracker state", status);
@@ -3259,6 +3259,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("DrawingBackendCompositor.ValidateCompositionAnimationPresentationSet", animationDesign);
         Assert.Contains("DrawingBackendCompositor.PrepareCompositionAnimationPresentationSetActivation", animationDesign);
         Assert.Contains("DrawingBackendCompositor.ActivateCompositionAnimationPresentationPlan", animationDesign);
+        Assert.Contains("DrawingBackendCompositor.ClearCompositionAnimationPresentationTargets", animationDesign);
         Assert.Contains("DrawingBackendCompositor.RenderCompositionAnimationPresentationTickAtAsync", animationDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ValidateBatchRuntime", animationDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ActivateBatchPresentation", animationDesign);

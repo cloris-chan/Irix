@@ -57,7 +57,7 @@ internal interface IStyleTransitionPresentationActivationCompositorAdapter
 
 internal interface IStyleTransitionPresentationClearCompositorAdapter
 {
-    void ClearActivePresentation();
+    void ClearActivePresentationTargets(ReadOnlySpan<NodeKey> targetKeys);
 }
 
 internal interface IStyleTransitionRetainedSnapshotProvider

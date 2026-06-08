@@ -42,9 +42,9 @@ internal readonly struct DrawingBackendStyleTransitionPresentationActivationComp
 internal readonly struct DrawingBackendStyleTransitionPresentationClearCompositorAdapter(
     DrawingBackendCompositor Compositor) : IStyleTransitionPresentationClearCompositorAdapter
 {
-    public void ClearActivePresentation()
+    public void ClearActivePresentationTargets(ReadOnlySpan<NodeKey> targetKeys)
     {
-        Compositor.ClearCompositionAnimation();
+        Compositor.ClearCompositionAnimationPresentationTargets(targetKeys);
     }
 }
 

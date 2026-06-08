@@ -2089,6 +2089,64 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task ClearCompositionAnimationPresentationTargets_removes_target_and_preserves_remaining_plan()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(CreatePresentationSetRoot(), new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var firstMarker = new CompositionAnimationMarker(
+            new CompositionAnimationMarkerId(3),
+            new CompositionRuntimeEventId(301),
+            CompositionAnimationMarkerTrigger.EveryTick());
+        var secondMarker = new CompositionAnimationMarker(
+            new CompositionAnimationMarkerId(4),
+            new CompositionRuntimeEventId(302),
+            CompositionAnimationMarkerTrigger.EveryTick());
+        var preflight = compositor.PrepareCompositionAnimationPresentationSetActivation(
+            [
+                CreatePresentationSetDeclaration(
+                    new NodeKey(22),
+                    new CompositionAnimationInstanceId(25),
+                    [firstMarker]),
+                CreatePresentationSetDeclaration(
+                    new NodeKey(23),
+                    new CompositionAnimationInstanceId(26),
+                    [secondMarker])
+            ],
+            snapshot);
+
+        compositor.ActivateCompositionAnimationPresentationPlan(preflight.Plan);
+        _ = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(1), cancellationToken);
+
+        Assert.Equal(2, compositor.PendingCompositionMarkerEventCount);
+
+        var removed = compositor.ClearCompositionAnimationPresentationTargets([new NodeKey(22)]);
+
+        Assert.Equal(1, removed);
+        Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
+        Assert.Equal(1, compositor.CompositionAnimationPresentationPlan!.Value.Count);
+        Assert.Equal(new NodeKey(23), compositor.CompositionAnimationPresentationPlan.Value.GetPlan(0).LayerAnimation.TargetKey);
+        Assert.Equal(1, compositor.PendingCompositionMarkerEventCount);
+
+        Span<CompositionAnimationMarkerEvent> events = stackalloc CompositionAnimationMarkerEvent[4];
+        var count = compositor.DrainCompositionMarkerEvents(events);
+        Assert.Equal(1, count);
+        Assert.Equal(new NodeKey(23), events[0].TargetKey);
+        Assert.Equal(new CompositionRuntimeEventId(302), events[0].RuntimeEventId);
+
+        var result = await compositor.RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(2), cancellationToken);
+
+        Assert.Equal(1, result.LayerCount);
+        Assert.Equal(1, backend.LastCompositionFrame.LayerCount);
+        Assert.Equal(new CompositionLayerId(23), backend.LastCompositionFrame.GetLayer(0).Id);
+        Assert.Equal(new NodeKey(23), compositor.CompositionAnimationPresentationPlan.Value.GetPlan(0).LayerAnimation.TargetKey);
+    }
+
+    [Fact]
     public async Task ActivateCompositionAnimationPresentationPlan_is_exclusive_and_clear_discards_events()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

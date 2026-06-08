@@ -689,6 +689,40 @@ internal readonly struct CompositionAnimationPresentationSetPlan : IEquatable<Co
         return CompositionFrame.FromLayers(layers);
     }
 
+    public bool TryRemoveTargets(ReadOnlySpan<NodeKey> targetKeys, out CompositionAnimationPresentationSetPlan remainingPlan, out int removedCount)
+    {
+        remainingPlan = default;
+        removedCount = 0;
+        var plans = Plans;
+        if (plans.IsEmpty || targetKeys.IsEmpty)
+        {
+            return false;
+        }
+
+        var remaining = new CompositionAnimationPlan[plans.Length];
+        var remainingCount = 0;
+        for (var i = 0; i < plans.Length; i++)
+        {
+            if (ContainsTargetKey(targetKeys, plans[i].LayerAnimation.TargetKey))
+            {
+                removedCount++;
+                continue;
+            }
+
+            remaining[remainingCount++] = plans[i];
+        }
+
+        if (removedCount == 0)
+        {
+            return false;
+        }
+
+        remainingPlan = remainingCount == 0
+            ? default
+            : new CompositionAnimationPresentationSetPlan(remaining.AsSpan(0, remainingCount));
+        return true;
+    }
+
     public bool Equals(CompositionAnimationPresentationSetPlan other)
     {
         var plans = Plans;
@@ -727,6 +761,24 @@ internal readonly struct CompositionAnimationPresentationSetPlan : IEquatable<Co
 
     public static bool operator !=(CompositionAnimationPresentationSetPlan left, CompositionAnimationPresentationSetPlan right) =>
         !left.Equals(right);
+
+    private static bool ContainsTargetKey(ReadOnlySpan<NodeKey> targetKeys, NodeKey targetKey)
+    {
+        if (targetKey == NodeKey.None)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < targetKeys.Length; i++)
+        {
+            if (targetKeys[i] == targetKey)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static bool HasDuplicateLayerId(
         ReadOnlySpan<CompositionAnimationPlan> plans,
