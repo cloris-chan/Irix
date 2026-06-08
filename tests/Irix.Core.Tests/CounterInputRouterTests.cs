@@ -849,6 +849,21 @@ public sealed class CounterInputRouterTests
         Assert.Equal(42, reset.Value);
     }
 
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void Program_feedback_mapping_skips_invalid_max_scroll_values(double maxScrollY)
+    {
+        var feedbackMapper = new MaxScrollResetDispatchMapper();
+
+        var mapped = Program.TryMapMaxScrollFeedbackForRuntime(maxScrollY, feedbackMapper, out var message);
+
+        Assert.False(mapped);
+        Assert.Null(message);
+    }
+
     [Fact]
     public void Program_max_scroll_feedback_dispatch_accepts_first_value()
     {
@@ -883,6 +898,32 @@ public sealed class CounterInputRouterTests
 
         var accepted = Program.TryDispatchMaxScrollFeedbackForRuntime(
             nextMaxScrollY,
+            lastKnownMaxScrollY: 100,
+            out var nextKnownMaxScrollY,
+            cancelRecorder.Cancel,
+            new CounterAppMessageDispatchMapper(),
+            dispatchSink);
+
+        Assert.False(accepted);
+        Assert.Equal(100, nextKnownMaxScrollY);
+        Assert.Equal(0, cancelRecorder.CancelCount);
+        Assert.Equal(0, dispatchRecorder.DispatchCount);
+        Assert.Null(dispatchRecorder.LastMessage);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void Program_max_scroll_feedback_dispatch_skips_invalid_values(double maxScrollY)
+    {
+        var cancelRecorder = new FeedbackCancelRecorder();
+        var dispatchRecorder = new AppRuntimeDispatchRecorder();
+        var dispatchSink = new RecordingAppRuntimeDispatchSink(dispatchRecorder);
+
+        var accepted = Program.TryDispatchMaxScrollFeedbackForRuntime(
+            maxScrollY,
             lastKnownMaxScrollY: 100,
             out var nextKnownMaxScrollY,
             cancelRecorder.Cancel,
@@ -2464,6 +2505,24 @@ public sealed class CounterInputRouterTests
         state = ScrollController.WithMaxScrollY(state, 0);
         Assert.True(state.HasMaxScrollY);
         Assert.Equal(0.0, state.MaxScrollY);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void HasMaxScrollY_withMaxScrollY_invalid_values_normalize_to_zero(double maxScrollY)
+    {
+        var state = new ScrollState { Position = 10, TargetPosition = 12, IsAnimating = true };
+
+        state = ScrollController.WithMaxScrollY(state, maxScrollY);
+
+        Assert.True(state.HasMaxScrollY);
+        Assert.Equal(0, state.MaxScrollY);
+        Assert.Equal(0, state.Position);
+        Assert.Equal(0, state.TargetPosition);
+        Assert.False(state.IsAnimating);
     }
 
     // ── Coalescing / rapid input tests ─────────────────────────────────

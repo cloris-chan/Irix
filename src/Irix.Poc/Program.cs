@@ -435,6 +435,12 @@ internal static partial class Program
         out CounterMessage? message)
         where TFeedbackMapper : struct, IControlFeedbackDispatchMapper<CounterMessage>
     {
+        if (!IsValidMaxScrollY(maxScrollY))
+        {
+            message = null;
+            return false;
+        }
+
         var intent = AppDispatchIntent<CounterMessage>.MaxScrollFeedback(maxScrollY);
         if (feedbackMapper.TryMapControlFeedbackIntent(in intent, out var mappedMessage))
         {
@@ -458,6 +464,11 @@ internal static partial class Program
     {
         ArgumentNullException.ThrowIfNull(cancelScrollPresentation);
         nextKnownMaxScrollY = lastKnownMaxScrollY;
+        if (!IsValidMaxScrollY(maxScrollY))
+        {
+            return false;
+        }
+
         if (lastKnownMaxScrollY.HasValue && Math.Abs(maxScrollY - lastKnownMaxScrollY.Value) <= 0.5)
         {
             return false;
@@ -471,6 +482,11 @@ internal static partial class Program
         }
 
         return true;
+    }
+
+    private static bool IsValidMaxScrollY(double maxScrollY)
+    {
+        return maxScrollY >= 0 && double.IsFinite(maxScrollY);
     }
 
     internal static bool TryDispatchWheelInputForRuntime<TDispatchSink>(

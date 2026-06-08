@@ -207,6 +207,8 @@ internal static class ScrollController
     /// </summary>
     public static ScrollState WithMaxScrollY(ScrollState state, double maxScrollY)
     {
+        maxScrollY = NormalizeMaxScrollY(maxScrollY);
+
         // HasMaxScrollY=true means maxScrollY is a known value from layout.
         // When maxScrollY=0, content fits in viewport — clamp to 0.
         var clampedTarget = Math.Clamp(state.TargetPosition, 0, maxScrollY);
@@ -327,6 +329,11 @@ internal static class ScrollController
     {
         var finite = double.IsFinite(value) ? value : 0;
         return state.HasMaxScrollY ? Math.Clamp(finite, 0, state.MaxScrollY) : Math.Max(finite, 0);
+    }
+
+    private static double NormalizeMaxScrollY(double maxScrollY)
+    {
+        return maxScrollY >= 0 && double.IsFinite(maxScrollY) ? maxScrollY : 0;
     }
 
     private static double ClampBoundaryAccumulator(ScrollState state, double accumulator)
