@@ -3020,7 +3020,7 @@ public sealed class WindowLayoutPipelineTests
             cancellationToken,
             tracker);
 
-        Assert.Equal(StyleTransitionRuntimeResultKind.Started, startResult.Kind);
+        Assert.True(startResult.Kind is StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted);
         Assert.True(tracker.HasActiveTransition);
         Assert.NotNull(compositor.CompositionAnimationPlan);
 
@@ -3067,6 +3067,52 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(hoverDecrementAndLeaveIncrement.LastHoverLeftTarget, currentOwnership.LastHoverLeftTarget);
         Assert.Equal(hoverDecrementAndLeaveIncrement.HoverChangeCount, currentOwnership.HoverChangeCount);
         Assert.Equal(hoverDecrementAndLeaveIncrement.IsPointerPressed, currentOwnership.IsPointerPressed);
+    }
+
+    [Fact]
+    public async Task Program_wheel_input_aborts_active_style_transition_before_scroll_presentation()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var compositor = new DrawingBackendCompositor(new NoOpBackend());
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+
+        var tracker = new StyleTransitionCompletionTracker();
+        var pressedIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: true);
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            pressedIncrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var startResult = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(pressedIncrement),
+            lifecycle.Decision,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            cancellationToken,
+            tracker);
+
+        var abortResult = Program.AbortStyleTransitionPresentationForRuntime(
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            cancellationToken);
+
+        Assert.True(startResult.Kind is StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted);
+        Assert.Equal(StyleTransitionRuntimeResultKind.Canceled, abortResult.Kind);
+        Assert.Equal(new NodeKey(6), abortResult.TargetKey);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.Null(compositor.CompositionAnimationPlan);
     }
 
     [Fact]

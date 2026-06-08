@@ -169,6 +169,7 @@ Current ownership:
 |----------------|---------------|----------|
 | `InputOwnershipState` / `OwnershipSnapshot` | `Irix.Poc` app runtime state | Tracks single-pointer hover, pressed, captured, and focused targets for Counter. Candidate runtime state, but not movable until multi-control ownership and action dispatch are no longer Counter-specific. |
 | `InputOwnershipEvent` / diagnostics ring | `Irix.Poc` diagnostics over app input state | Diagnostic observation only. It should follow the input owner if a future runtime extraction happens. |
+| `PocInputEventPump` | `Irix.Poc` native-input scheduling glue | Keeps Windows native input callbacks from synchronously running Counter runtime/compositor work. It is a single-reader FIFO pump for the current PoC path, not a framework scheduler or reusable input runtime. |
 | `IInputHitTestService`, `IActionHitTestResolver`, and resolver/service implementations | `Irix.Poc` input adapter | Bridges physical input coordinates to `ActionId` through Poc/compositor hit targets. The first renderer-neutral service shape exists, but the identity model is still Counter/Poc `ActionId`. |
 | `AppDispatchIntent`, `WheelInputDispatchIntent`, `IAppMessageDispatchMapper`, `IControlFeedbackDispatchMapper`, and `CounterAppMessageDispatchMapper` | `Irix.Poc` app message/input adapter | Groups routed input results, ownership snapshots, max-scroll feedback, scroll-presentation interrupt decisions, and wheel pixel dispatch into Poc-owned intents before converting them into `CounterMessage` dispatch values or scroll presentation pixels. Runtime and marker dispatch use a separate Poc dispatch sink, and wheel raw input dispatches through a Poc scroll presentation sink; broader framework runtime ownership still needs a non-Counter action/message contract. |
 | `CounterInputRouter` | `Irix.Poc` sample app router | Maps raw input plus ownership state to `CounterMessage`; it must not be promoted as framework runtime. |
@@ -177,6 +178,7 @@ Current ownership:
 Rules:
 
 - Input ownership is app/control runtime state, not rendering diagnostics and not platform backend state.
+- Native platform input callbacks should enqueue Poc input and return; Counter runtime dispatch, scroll presentation, and style/compositor work must not run synchronously on the Win32 platform thread.
 - Hit testing may consume renderer-produced hit targets, but the input owner must not own retained render frames.
 - `ControlVisualState` projection is a control feedback/projection layer. It should not move into `Irix.Rendering` because it emits `VirtualNodeProperty` updates for app/control state.
 - `AppDispatchIntent` and `WheelInputDispatchIntent` are internal Poc grouping shapes, not diagnostics event buses, subscription APIs, runtime schedulers, or public dispatch contracts.
@@ -191,6 +193,7 @@ The current Poc path already has the correct split, even though the names still 
 
 ```text
 platform input
+  -> Poc input pump queues native events off the platform callback
   -> app input owner resolves hit target
   -> app/control runtime updates logical state
   -> translator projects layout feedback after render
@@ -207,6 +210,7 @@ Framework extraction may introduce these contracts, in this order:
 | Compositor sampling owner | App/control scroll presentation coordinator | Calls compositor-loop sample/cancel APIs to preserve presented-origin continuity before dispatching a new logical layout frame. The compositor owns the presented value only while the presentation is active. |
 | Hit-test service access | Input/control adapter | Reads a renderer-neutral hit-test service that accounts for active compositor presentation. The adapter resolves input coordinates to control/action identity without owning retained render frames. |
 | App message dispatch owner | App runtime dispatcher | Maps control actions, scroll interrupts, wheel deltas, marker events, and feedback corrections into app messages. `Irix.Rendering` and platform backends must not construct app messages. |
+| Native input scheduling | App/control runtime adapter | Queues platform input events and drains them through the app-owned input route without blocking the platform message thread. |
 
 Required interface shapes before code moves:
 
@@ -217,12 +221,14 @@ Required interface shapes before code moves:
 | Hit-test service | Resolves physical or logical input coordinates against the current retained/composited hit-test snapshot. | `ActionIdRegistry`, `CounterApplication`, or renderer ownership transfer. |
 | Input action mapper | Maps resolved control identity plus raw input to runtime messages. | Retained frame access, D3D12/backend types, or layout mutation. |
 | App message dispatch mapper | Maps routed input/control results and ownership snapshots into app dispatch messages. | Renderer/backend types, retained-frame access, or direct `Runtime<TModel, TMessage>` dispatch calls. |
+| Native input event pump | Serializes raw platform input events before app input mapping. | Public scheduler semantics, app message construction in platform code, renderer/backend ownership, or diagnostics event bus behavior. |
 
 Extraction guardrails:
 
 - Moving pure scroll state/update functions is allowed only after the new owner can dispatch runtime messages without `CounterMessage`.
 - Moving `ScrollPresentationCoordinator` requires a compositor sampler interface and a retained-snapshot provider interface; it must not depend on `WindowDrawCommandTranslator`.
 - Moving input ownership requires a renderer-neutral hit-test service and a control identity model wider than `ActionIdRegistry`.
+- Moving native input scheduling requires an app/runtime input pump contract that preserves FIFO input order while keeping platform callbacks non-blocking.
 - Moving control visual projection requires a framework control-state contract; button property publishing alone is not enough.
 - Diagnostics may follow the owner as read-only snapshots, but diagnostics must not become the scheduling, feedback, or message-dispatch channel.
 - No extraction commit may also move renderer, glyph, D3D12 backend, or allocation-optimization code.

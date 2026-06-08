@@ -989,6 +989,56 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public async Task Poc_input_event_pump_enqueue_does_not_wait_for_blocked_dispatch()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var dispatchEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var pump = new PocInputEventPump(inputEvent =>
+        {
+            dispatchEntered.TrySetResult();
+            releaseDispatch.Task.GetAwaiter().GetResult();
+        });
+
+        Assert.True(pump.TryEnqueue(new RawInputEvent(RawInputEventKind.PointerPressed, 1, 10, 10, Button: PointerButton.Left)));
+        await dispatchEntered.Task.WaitAsync(cancellationToken);
+
+        var enqueueWait = Task.Run(
+            () => pump.TryEnqueue(new RawInputEvent(RawInputEventKind.PointerWheel, 2, 10, 10, Delta: -120)),
+            cancellationToken);
+
+        Assert.True(await enqueueWait.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken));
+        Assert.Equal(2, pump.EnqueuedCount);
+
+        releaseDispatch.TrySetResult();
+        await WaitForConditionAsync(() => pump.DispatchedCount == 2, cancellationToken);
+        Assert.Null(pump.LastError);
+    }
+
+    [Fact]
+    public async Task Poc_input_event_pump_dispatches_enqueued_events_in_order()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var dispatched = new List<RawInputEventKind>();
+        await using var pump = new PocInputEventPump(inputEvent => dispatched.Add(inputEvent.Kind));
+
+        Assert.True(pump.TryEnqueue(new RawInputEvent(RawInputEventKind.PointerPressed, 1, 10, 10, Button: PointerButton.Left)));
+        Assert.True(pump.TryEnqueue(new RawInputEvent(RawInputEventKind.PointerWheel, 2, 10, 10, Delta: -120)));
+        Assert.True(pump.TryEnqueue(new RawInputEvent(RawInputEventKind.PointerReleased, 3, 10, 10, Button: PointerButton.Left)));
+
+        await WaitForConditionAsync(() => pump.DispatchedCount == 3, cancellationToken);
+
+        Assert.Equal(
+            [
+                RawInputEventKind.PointerPressed,
+                RawInputEventKind.PointerWheel,
+                RawInputEventKind.PointerReleased
+            ],
+            dispatched);
+        Assert.Null(pump.LastError);
+    }
+
+    [Fact]
     public void Scroll_input_dispatch_adapter_dispatches_wheel_intent_pixels()
     {
         var recorder = new WheelDispatchRecorder();

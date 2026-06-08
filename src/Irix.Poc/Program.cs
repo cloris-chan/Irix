@@ -132,7 +132,8 @@ internal static partial class Program
             Console.WriteLine($"DPI changed: scale={displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         };
 
-        using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(HandleInput));
+        await using var inputEventPump = new PocInputEventPump(HandleInput);
+        using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(inputEvent => inputEventPump.TryEnqueue(inputEvent)));
 
         platformHost.TopologyChanged += OnTopologyChanged;
 
@@ -159,6 +160,9 @@ internal static partial class Program
                 var nextOwnership = inputOwnershipState.Snapshot;
                 if (message is CounterMessage.WheelRaw wheel)
                 {
+                    AbortStyleTransitionPresentationForRuntime(
+                        styleTransitionCompletionTracker,
+                        new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor));
                     var wheelDispatchSink = new ScrollPresentationWheelDispatchSink(
                         scrollPresentationCoordinator,
                         runtime,
@@ -510,6 +514,28 @@ internal static partial class Program
     }
 
     internal static StyleTransitionRuntimeResult AbortStyleTransitionPresentationForRuntime<TCompositor>(
+        StyleTransitionCompletionTracker completionTracker,
+        TCompositor compositor,
+        CancellationToken cancellationToken = default)
+        where TCompositor : IStyleTransitionCompositorAdapter
+    {
+        ArgumentNullException.ThrowIfNull(completionTracker);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var aborted = completionTracker.AbortActiveTransition();
+        if (aborted.Kind != StyleTransitionCompletionResultKind.Aborted)
+        {
+            return StyleTransitionRuntimeResult.NoOp();
+        }
+
+        return StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            StyleTransitionRuntimeDecision.Cancel(aborted.TargetKey),
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(null),
+            CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    internal static StyleTransitionRuntimeResult AbortStyleTransitionPresentationForRuntime<TCompositor>(
         in CounterStyleTransitionLifecycleResult lifecycle,
         StyleTransitionCompletionTracker completionTracker,
         TCompositor compositor,
@@ -523,17 +549,7 @@ internal static partial class Program
             return StyleTransitionRuntimeResult.NoOp();
         }
 
-        var aborted = completionTracker.AbortActiveTransition();
-        if (aborted.Kind != StyleTransitionCompletionResultKind.Aborted)
-        {
-            return StyleTransitionRuntimeResult.NoOp();
-        }
-
-        return StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
-            StyleTransitionRuntimeDecision.Cancel(aborted.TargetKey),
-            compositor,
-            new FixedStyleTransitionRetainedSnapshotProvider(null),
-            CancellationToken.None).GetAwaiter().GetResult();
+        return AbortStyleTransitionPresentationForRuntime(completionTracker, compositor, cancellationToken);
     }
 
     internal static StyleTransitionRuntimeResult AbortStyleTransitionPresentationForRuntime<TCompositor>(
@@ -550,17 +566,7 @@ internal static partial class Program
             return StyleTransitionRuntimeResult.NoOp();
         }
 
-        var aborted = completionTracker.AbortActiveTransition();
-        if (aborted.Kind != StyleTransitionCompletionResultKind.Aborted)
-        {
-            return StyleTransitionRuntimeResult.NoOp();
-        }
-
-        return StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
-            StyleTransitionRuntimeDecision.Cancel(aborted.TargetKey),
-            compositor,
-            new FixedStyleTransitionRetainedSnapshotProvider(null),
-            CancellationToken.None).GetAwaiter().GetResult();
+        return AbortStyleTransitionPresentationForRuntime(completionTracker, compositor, cancellationToken);
     }
 
     private sealed class StyleTransitionBatchContinuationContext(
