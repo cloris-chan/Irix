@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 using Irix.Poc;
 using Xunit;
 
@@ -32,6 +33,73 @@ public sealed class ScrollFramePumpTests
         Assert.Equal(54, pump.DrainedPixels);
         Assert.Equal(0, pump.LastDt);
         Assert.True(pump.RenderWaitMs >= 0);
+    }
+
+    [Fact]
+    public async Task Zero_and_non_finite_pending_pixels_do_not_dispatch_scroll_frame()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pump = new ScrollFramePump();
+        var frames = new ConcurrentQueue<CounterMessage.ScrollFrame>();
+
+        pump.AddPendingPixels(0);
+        pump.AddPendingPixels(double.NaN);
+        pump.AddPendingPixels(double.PositiveInfinity);
+        pump.AddPendingPixels(double.NegativeInfinity);
+
+        await pump.RunUntilIdleAsync(
+            (frame, _) =>
+            {
+                frames.Enqueue(frame);
+                return Task.CompletedTask;
+            },
+            () => ScrollState.Default,
+            cancellationToken);
+
+        Assert.Empty(frames);
+        Assert.Equal(0, pump.PendingPixels);
+        Assert.Equal(0, pump.DrainedPixels);
+        Assert.Equal(0, pump.DispatchedFrameCount);
+    }
+
+    [Fact]
+    public async Task Non_finite_pending_pixels_normalize_to_zero_when_animation_frame_is_required()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pump = new ScrollFramePump();
+        var frames = new ConcurrentQueue<CounterMessage.ScrollFrame>();
+        var frameCount = 0;
+
+        SetPendingPixels(pump, double.NaN);
+
+        await pump.RunUntilIdleAsync(
+            (frame, _) =>
+            {
+                frames.Enqueue(frame);
+                frameCount++;
+                return Task.CompletedTask;
+            },
+            () => frameCount == 0
+                ? new ScrollState { TargetPosition = 54, Position = 12, IsAnimating = true }
+                : ScrollState.Default,
+            cancellationToken);
+
+        var frame = Assert.Single(frames);
+        Assert.Equal(ScrollDeltaUnit.Pixel, frame.Delta.Unit);
+        Assert.Equal(0, frame.Delta.Value);
+        Assert.Equal(0, pump.DrainedPixels);
+        Assert.Equal(1, pump.DispatchedFrameCount);
+    }
+
+    [Fact]
+    public void Finite_delta_recovers_from_non_finite_pending_accumulator()
+    {
+        var pump = new ScrollFramePump();
+
+        SetPendingPixels(pump, double.NaN);
+        pump.AddPendingPixels(27);
+
+        Assert.Equal(27, pump.PendingPixels);
     }
 
     [Fact]
@@ -140,6 +208,12 @@ public sealed class ScrollFramePumpTests
                 completion.TrySetResult();
             }
         }
+    }
+
+    private static void SetPendingPixels(ScrollFramePump pump, double pixels)
+    {
+        var field = typeof(ScrollFramePump).GetField("_pendingScrollDeltaBits", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        field.SetValue(pump, BitConverter.DoubleToInt64Bits(pixels));
     }
 
     private static async Task WaitForConditionAsync(Func<bool> condition, CancellationToken cancellationToken)

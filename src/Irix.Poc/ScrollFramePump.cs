@@ -37,14 +37,29 @@ internal sealed class ScrollFramePump
 
     public void AddPendingPixels(double pixels)
     {
+        if (!HasPendingPixels(pixels))
+        {
+            return;
+        }
+
         long current;
         long updated;
         do
         {
             current = Volatile.Read(ref _pendingScrollDeltaBits);
             var currentDouble = BitConverter.Int64BitsToDouble(current);
-            var newDouble = currentDouble + pixels;
-            updated = BitConverter.DoubleToInt64Bits(newDouble);
+            if (!double.IsFinite(currentDouble))
+            {
+                currentDouble = 0;
+            }
+
+            var next = currentDouble + pixels;
+            if (!double.IsFinite(next))
+            {
+                return;
+            }
+
+            updated = BitConverter.DoubleToInt64Bits(next);
         } while (Interlocked.CompareExchange(ref _pendingScrollDeltaBits, updated, current) != current);
     }
 
@@ -99,9 +114,9 @@ internal sealed class ScrollFramePump
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var pendingPixels = DrainPendingPixels();
+                var pendingPixels = NormalizePendingPixels(DrainPendingPixels());
                 var scrollState = getScrollState();
-                if (pendingPixels == 0 && !scrollState.IsAnimating)
+                if (!HasPendingPixels(pendingPixels) && !scrollState.IsAnimating)
                 {
                     consecutiveIdleFrames++;
                     if (consecutiveIdleFrames >= IdleFrameExitThreshold)
@@ -139,7 +154,7 @@ internal sealed class ScrollFramePump
                     WriteDouble(ref _renderWaitMsBits, (stopwatch.Elapsed - renderWaitStartedAt).TotalMilliseconds);
                     Volatile.Write(ref _scrollFrameQueued, 0);
                 }
-                consecutiveIdleFrames = PendingPixels == 0 && !getScrollState().IsAnimating
+                consecutiveIdleFrames = !HasPendingPixels(PendingPixels) && !getScrollState().IsAnimating
                     ? consecutiveIdleFrames + 1
                     : 0;
             }
@@ -149,7 +164,7 @@ internal sealed class ScrollFramePump
             Volatile.Write(ref _scrollFrameQueued, 0);
             Interlocked.Exchange(ref _loopRunning, 0);
 
-            if (restartOnLatePending && PendingPixels != 0 && !cancellationToken.IsCancellationRequested)
+            if (restartOnLatePending && HasPendingPixels(PendingPixels) && !cancellationToken.IsCancellationRequested)
             {
                 EnsureRunning(dispatchFrameAsync, getScrollState, cancellationToken);
             }
@@ -162,6 +177,11 @@ internal sealed class ScrollFramePump
         return BitConverter.Int64BitsToDouble(bits);
     }
 
+    private static double NormalizePendingPixels(double pixels)
+    {
+        return double.IsFinite(pixels) ? pixels : 0;
+    }
+
     private static double ReadDouble(ref long bits)
     {
         return BitConverter.Int64BitsToDouble(Volatile.Read(ref bits));
@@ -170,5 +190,10 @@ internal sealed class ScrollFramePump
     private static void WriteDouble(ref long bits, double value)
     {
         Interlocked.Exchange(ref bits, BitConverter.DoubleToInt64Bits(value));
+    }
+
+    private static bool HasPendingPixels(double pixels)
+    {
+        return pixels != 0 && double.IsFinite(pixels);
     }
 }
