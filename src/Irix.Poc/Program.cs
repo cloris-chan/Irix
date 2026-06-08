@@ -169,7 +169,7 @@ internal static partial class Program
                 }
                 else if (message is not null)
                 {
-                    var hasActiveScrollPresentation = compositorLoop.TryGetPresentedScrollY(new NodeKey(1), out _);
+                    var hasActiveScrollPresentation = compositorLoop.HasActiveScrollPresentation(new NodeKey(1));
                     var transitionLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
                         previousOwnership,
                         nextOwnership,

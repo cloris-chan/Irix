@@ -209,6 +209,7 @@ public sealed class BatchOwnershipTests
         Assert.Equal(compositor.TickCount, loop.ScrollPresentationTickCount);
         Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
         Assert.Equal(54, presentedScrollY);
+        Assert.False(loop.HasActiveScrollPresentation(new NodeKey(1)));
     }
 
     [Fact]
@@ -238,6 +239,7 @@ public sealed class BatchOwnershipTests
         await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
         Assert.Equal(1, compositor.TickCount);
         Assert.Equal(CompositionTimestamp.FromStopwatchTicks(100), compositor.LastTickTimestamp);
+        Assert.True(loop.HasActiveScrollPresentation(new NodeKey(1)));
 
         clock.Set(CompositionTimestamp.FromStopwatchTicks(150));
         await WaitForConditionAsync(() => compositor.TickCount >= 2, cancellationToken);
@@ -247,6 +249,35 @@ public sealed class BatchOwnershipTests
         Assert.Equal(27, presentedScrollY);
 
         await loop.CancelCompositionScrollPresentationAsync(cancellationToken);
+    }
+
+    [Fact]
+    public async Task CompositorLoop_completed_scroll_presentation_retains_sample_but_is_not_active_for_input()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(CompositionTimestamp.Now(), CompositionDuration.Zero),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+
+        Assert.False(loop.HasActiveScrollPresentation(new NodeKey(1)));
+        Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(54, presentedScrollY);
+        Assert.False(loop.HasActiveScrollPresentation(new NodeKey(404)));
     }
 
     [Fact]

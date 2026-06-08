@@ -115,6 +115,20 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         CompositionRenderInvalidationKind invalidationKind,
         bool canceled);
 
+    internal bool HasActiveScrollPresentation(NodeKey targetKey)
+    {
+        if (targetKey == NodeKey.None)
+        {
+            return false;
+        }
+
+        lock (_compositionScheduleGate)
+        {
+            return _scrollPresentationSchedule.IsActive
+                && _scrollPresentationSchedule.TargetKey == targetKey;
+        }
+    }
+
     internal bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
     {
         if (_compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor)
