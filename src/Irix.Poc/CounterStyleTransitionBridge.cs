@@ -346,6 +346,8 @@ internal sealed class CounterStyleTransitionRuntimeAdapter(
 
 internal static class CounterStyleTransitionRuntimeBridge
 {
+    private static readonly CompositionDuration InitialVisibleTransitionLead = CompositionDuration.FromMilliseconds(24);
+
     internal static async ValueTask<StyleTransitionRuntimeResult> DispatchAndApplyInputTransitionAsync<TCompositor, TSnapshotProvider>(
         Runtime<CounterModel, CounterMessage> runtime,
         CounterMessage appMessage,
@@ -355,7 +357,8 @@ internal static class CounterStyleTransitionRuntimeBridge
         TSnapshotProvider snapshotProvider,
         CompositionTimestamp startTimestamp,
         CancellationToken cancellationToken = default,
-        StyleTransitionCompletionTracker? completionTracker = null)
+        StyleTransitionCompletionTracker? completionTracker = null,
+        bool retimestampAfterDispatch = false)
         where TCompositor : IStyleTransitionCompositorAdapter
         where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
     {
@@ -364,12 +367,18 @@ internal static class CounterStyleTransitionRuntimeBridge
 
         await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
 
+        var activationTimestamp = retimestampAfterDispatch ? CompositionTimestamp.Now() : (CompositionTimestamp?)null;
+        var postDispatchStartTimestamp = activationTimestamp is { } timestamp
+            ? CreatePostDispatchStartTimestamp(timestamp)
+            : (CompositionTimestamp?)null;
         var adapter = new CounterStyleTransitionRuntimeAdapter(previous, next, startTimestamp);
         return await ApplyNextWithOptionalCompletionTrackerAsync(
             adapter,
             compositor,
             snapshotProvider,
             completionTracker,
+            postDispatchStartTimestamp,
+            activationTimestamp,
             cancellationToken);
     }
 
@@ -380,7 +389,8 @@ internal static class CounterStyleTransitionRuntimeBridge
         TCompositor compositor,
         TSnapshotProvider snapshotProvider,
         CancellationToken cancellationToken = default,
-        StyleTransitionCompletionTracker? completionTracker = null)
+        StyleTransitionCompletionTracker? completionTracker = null,
+        bool retimestampAfterDispatch = false)
         where TCompositor : IStyleTransitionCompositorAdapter
         where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
     {
@@ -389,12 +399,18 @@ internal static class CounterStyleTransitionRuntimeBridge
 
         await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
 
+        var activationTimestamp = retimestampAfterDispatch ? CompositionTimestamp.Now() : (CompositionTimestamp?)null;
+        var postDispatchStartTimestamp = activationTimestamp is { } timestamp
+            ? CreatePostDispatchStartTimestamp(timestamp)
+            : (CompositionTimestamp?)null;
         var adapter = new SingleStyleTransitionRuntimeAdapter(decision);
         return await ApplyNextWithOptionalCompletionTrackerAsync(
             adapter,
             compositor,
             snapshotProvider,
             completionTracker,
+            postDispatchStartTimestamp,
+            activationTimestamp,
             cancellationToken);
     }
 
@@ -405,7 +421,8 @@ internal static class CounterStyleTransitionRuntimeBridge
         TCompositor compositor,
         TSnapshotProvider snapshotProvider,
         StyleTransitionCompletionTracker completionTracker,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool retimestampAfterDispatch = false)
         where TCompositor : IStyleTransitionPresentationActivationCompositorAdapter
         where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
     {
@@ -415,13 +432,24 @@ internal static class CounterStyleTransitionRuntimeBridge
 
         await runtime.DispatchAndWaitAsync(appMessage, cancellationToken);
 
+        var activationTimestamp = retimestampAfterDispatch ? CompositionTimestamp.Now() : (CompositionTimestamp?)null;
+        var activationBatch = activationTimestamp is { } timestamp
+            ? batch.WithStartTimestamp(CreatePostDispatchStartTimestamp(timestamp))
+            : batch;
         var coordinator = new StyleTransitionRuntimeCoordinator();
-        return coordinator.ActivateBatchPresentation(
-            batch,
+        var result = coordinator.ActivateBatchPresentation(
+            activationBatch,
             compositor,
             snapshotProvider,
             completionTracker,
             cancellationToken);
+        if (result.Kind == StyleTransitionBatchPresentationActivationKind.Activated
+            && activationTimestamp is { } initialTickTimestamp)
+        {
+            await TryRenderInitialPresentationTickAsync(compositor, initialTickTimestamp, cancellationToken);
+        }
+
+        return result;
     }
 
     private static async ValueTask<StyleTransitionRuntimeResult> ApplyNextWithOptionalCompletionTrackerAsync<TRuntime, TCompositor, TSnapshotProvider>(
@@ -429,18 +457,31 @@ internal static class CounterStyleTransitionRuntimeBridge
         TCompositor compositor,
         TSnapshotProvider snapshotProvider,
         StyleTransitionCompletionTracker? completionTracker,
+        CompositionTimestamp? startTimestamp,
+        CompositionTimestamp? initialTickTimestamp,
         CancellationToken cancellationToken)
         where TRuntime : IStyleTransitionRuntimeAdapter
         where TCompositor : IStyleTransitionCompositorAdapter
         where TSnapshotProvider : IStyleTransitionRetainedSnapshotProvider
     {
-        if (completionTracker is null)
+        var decision = runtime.ConsumeStyleTransitionDecision();
+        if (startTimestamp is { } timestamp)
         {
-            var coordinator = new StyleTransitionRuntimeCoordinator();
-            return await coordinator.ApplyNextAsync(runtime, compositor, snapshotProvider, cancellationToken);
+            decision = decision.WithStartTimestamp(timestamp);
         }
 
-        var decision = runtime.ConsumeStyleTransitionDecision();
+        if (completionTracker is null)
+        {
+            var resultWithoutTracking = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+                decision,
+                compositor,
+                snapshotProvider,
+                cancellationToken);
+            runtime.PublishStyleTransitionResult(resultWithoutTracking);
+            await TryRenderInitialAnimationTickAsync(compositor, resultWithoutTracking, initialTickTimestamp, cancellationToken);
+            return resultWithoutTracking;
+        }
+
         var ownerKey = CreateCounterOwnerKey(decision);
         var trackedDecision = ownerKey.IsNone
             ? completionTracker.AttachCompletionMarker(decision)
@@ -460,7 +501,56 @@ internal static class CounterStyleTransitionRuntimeBridge
             completionTracker.PublishRuntimeResult(ownerKey, trackedDecision, result);
         }
 
+        await TryRenderInitialAnimationTickAsync(compositor, result, initialTickTimestamp, cancellationToken);
         return result;
+    }
+
+    private static CompositionTimestamp CreatePostDispatchStartTimestamp(CompositionTimestamp activationTimestamp)
+    {
+        return activationTimestamp + CompositionDuration.FromStopwatchTicks(-InitialVisibleTransitionLead.StopwatchTicks);
+    }
+
+    private static async ValueTask TryRenderInitialAnimationTickAsync<TCompositor>(
+        TCompositor compositor,
+        StyleTransitionRuntimeResult result,
+        CompositionTimestamp? timestamp,
+        CancellationToken cancellationToken)
+        where TCompositor : IStyleTransitionCompositorAdapter
+    {
+        if (timestamp is null
+            || result.Kind is not (StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted)
+            || compositor is not IStyleTransitionAnimationTickCompositorAdapter animationTickCompositor)
+        {
+            return;
+        }
+
+        try
+        {
+            await animationTickCompositor.RenderAnimationTickAtAsync(timestamp.Value, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private static async ValueTask TryRenderInitialPresentationTickAsync<TCompositor>(
+        TCompositor compositor,
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken)
+        where TCompositor : IStyleTransitionPresentationActivationCompositorAdapter
+    {
+        if (compositor is not IStyleTransitionAnimationPresentationTickCompositorAdapter presentationTickCompositor)
+        {
+            return;
+        }
+
+        try
+        {
+            await presentationTickCompositor.RenderAnimationPresentationTickAtAsync(timestamp, cancellationToken);
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private static StyleTransitionOwnerKey CreateCounterOwnerKey(in StyleTransitionRuntimeDecision decision)

@@ -183,7 +183,8 @@ internal static partial class Program
                             transitionLifecycle.Batch,
                             new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(d3d12Compositor),
                             new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
-                            styleTransitionCompletionTracker).AsTask();
+                            styleTransitionCompletionTracker,
+                            retimestampAfterDispatch: true).AsTask();
                         _ = transitionTask.ContinueWith(
                             static (task, state) =>
                             {
@@ -225,7 +226,8 @@ internal static partial class Program
                             transitionLifecycle.Decision,
                             new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor),
                             new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
-                            completionTracker: styleTransitionCompletionTracker).AsTask();
+                            completionTracker: styleTransitionCompletionTracker,
+                            retimestampAfterDispatch: true).AsTask();
                         _ = transitionTask.ContinueWith(
                             static (task, state) =>
                             {

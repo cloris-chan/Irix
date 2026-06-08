@@ -2610,6 +2610,72 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_batch_activation_can_retimestamp_after_dispatch()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var focusIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        await runtime.DispatchAndWaitAsync(new CounterMessage.InputVisualStateChanged(focusIncrement), cancellationToken);
+
+        var staleInputTimestamp = CompositionTimestamp.Zero;
+        var pressDecrement = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: true);
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            pressDecrement,
+            hasActiveScrollPresentation: false,
+            staleInputTimestamp);
+        var tracker = new StyleTransitionCompletionTracker();
+        var executeCountBeforeActivation = backend.ExecuteCompositionCount;
+
+        var result = await CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(pressDecrement),
+            lifecycle.Batch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            tracker,
+            cancellationToken,
+            retimestampAfterDispatch: true);
+
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Activated, result.Kind);
+        Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
+        var plan = compositor.CompositionAnimationPresentationPlan!.Value;
+        Assert.Equal(2, plan.Count);
+        var planStartTimestamp = plan.GetPlan(0).LayerAnimation.Timeline.StartTimestamp;
+        Assert.True(planStartTimestamp > staleInputTimestamp);
+        Assert.Equal(planStartTimestamp, plan.GetPlan(1).LayerAnimation.Timeline.StartTimestamp);
+        Assert.Equal(2, tracker.ActiveOwnerCount);
+        Assert.Equal(executeCountBeforeActivation + 1, backend.ExecuteCompositionCount);
+
+        Assert.True(TryGetLayer(compositor.LastCompositionFrame, new CompositionLayerId(7), out var decrementLayer));
+        Assert.True(decrementLayer.Transform.TranslateY > 0f);
+        Assert.True(decrementLayer.Opacity.Normalized < 1f);
+    }
+
+    [Fact]
     public async Task StyleTransitionCompletionPump_running_single_tick_switches_to_cross_button_presentation_batch()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

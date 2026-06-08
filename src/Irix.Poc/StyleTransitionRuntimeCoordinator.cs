@@ -46,6 +46,13 @@ internal interface IStyleTransitionCompositorAdapter
     ValueTask CancelAsync(NodeKey targetKey, CancellationToken cancellationToken = default);
 }
 
+internal interface IStyleTransitionAnimationTickCompositorAdapter
+{
+    ValueTask RenderAnimationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken = default);
+}
+
 internal interface IStyleTransitionPresentationActivationCompositorAdapter
 {
     CompositionAnimationPresentationSetActivationPreflightResult PreparePresentationActivation(
@@ -53,6 +60,13 @@ internal interface IStyleTransitionPresentationActivationCompositorAdapter
         RenderPipelineRetainedInputSnapshot? snapshot);
 
     void ActivatePresentationPlan(in CompositionAnimationPresentationSetPlan plan);
+}
+
+internal interface IStyleTransitionAnimationPresentationTickCompositorAdapter
+{
+    ValueTask RenderAnimationPresentationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken = default);
 }
 
 internal interface IStyleTransitionPresentationClearCompositorAdapter
@@ -146,6 +160,26 @@ internal readonly struct StyleTransitionRuntimeDecision(
 
     public static StyleTransitionRuntimeDecision Commit(NodeKey targetKey) =>
         new(StyleTransitionRuntimeDecisionKind.Commit, targetKey, default, default, default, default);
+
+    internal StyleTransitionRuntimeDecision WithStartTimestamp(CompositionTimestamp startTimestamp)
+    {
+        if (!RequiresCompilation || StartTimestamp == startTimestamp)
+        {
+            return this;
+        }
+
+        return new StyleTransitionRuntimeDecision(
+            Kind,
+            TargetKey,
+            PreviousProperties,
+            NextProperties,
+            startTimestamp,
+            Duration,
+            Easing,
+            RepeatMode,
+            InstanceId,
+            MarkerArray);
+    }
 
     internal StyleTransitionCompileRequest ToCompileRequest()
     {

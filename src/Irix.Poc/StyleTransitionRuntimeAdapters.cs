@@ -3,7 +3,7 @@ using Irix.Rendering;
 namespace Irix.Poc;
 
 internal readonly struct DrawingBackendStyleTransitionCompositorAdapter(
-    DrawingBackendCompositor Compositor) : IStyleTransitionCompositorAdapter
+    DrawingBackendCompositor Compositor) : IStyleTransitionCompositorAdapter, IStyleTransitionAnimationTickCompositorAdapter
 {
     public ValueTask StartAsync(
         in CompositionAnimationDeclaration declaration,
@@ -21,10 +21,17 @@ internal readonly struct DrawingBackendStyleTransitionCompositorAdapter(
         ((ICompositionAnimationCompositor)Compositor).ClearCompositionAnimation();
         return ValueTask.CompletedTask;
     }
+
+    public async ValueTask RenderAnimationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await Compositor.RenderCompositionAnimationTickAtAsync(timestamp, cancellationToken);
+    }
 }
 
 internal readonly struct DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(
-    DrawingBackendCompositor Compositor) : IStyleTransitionPresentationActivationCompositorAdapter
+    DrawingBackendCompositor Compositor) : IStyleTransitionPresentationActivationCompositorAdapter, IStyleTransitionAnimationPresentationTickCompositorAdapter
 {
     public CompositionAnimationPresentationSetActivationPreflightResult PreparePresentationActivation(
         ReadOnlySpan<CompositionAnimationDeclaration> declarations,
@@ -36,6 +43,13 @@ internal readonly struct DrawingBackendStyleTransitionPresentationActivationComp
     public void ActivatePresentationPlan(in CompositionAnimationPresentationSetPlan plan)
     {
         Compositor.ActivateCompositionAnimationPresentationPlan(plan);
+    }
+
+    public async ValueTask RenderAnimationPresentationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await Compositor.RenderCompositionAnimationPresentationTickAtAsync(timestamp, cancellationToken);
     }
 }
 

@@ -184,6 +184,25 @@ internal readonly struct StyleTransitionDecisionBatch : IEquatable<StyleTransiti
     public static StyleTransitionDecisionBatch Create(ReadOnlySpan<StyleTransitionDecisionBatchEntry> entries) =>
         new(entries);
 
+    internal StyleTransitionDecisionBatch WithStartTimestamp(CompositionTimestamp startTimestamp)
+    {
+        var entries = Entries;
+        if (entries.IsEmpty)
+        {
+            return this;
+        }
+
+        var updated = new StyleTransitionDecisionBatchEntry[entries.Length];
+        for (var i = 0; i < entries.Length; i++)
+        {
+            updated[i] = new StyleTransitionDecisionBatchEntry(
+                entries[i].OwnerKey,
+                entries[i].Decision.WithStartTimestamp(startTimestamp));
+        }
+
+        return new StyleTransitionDecisionBatch(updated);
+    }
+
     public bool Equals(StyleTransitionDecisionBatch other)
     {
         var entries = Entries;
