@@ -2758,6 +2758,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Glyph_atlas_regression_lane_is_manual_ci_validation()
     {
         var root = FindRepoRoot();
@@ -2779,6 +2780,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Local_validate_script_documents_quick_focused_glyph_and_full_lanes()
     {
         var root = FindRepoRoot();
@@ -2790,12 +2792,12 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("validation.guard status=Passed mode=$Mode", validate);
         Assert.Contains("validation.guard status=Failed mode=$Mode", validate);
         Assert.Contains("Category!=D3D12&Category!=Performance&Category!=Guard", validate);
-        Assert.Contains("Category=Guard", validate);
+        Assert.Contains("Category=Guard&Category!=DocGuard", validate);
         Assert.Contains("FullyQualifiedName~PartialApply|FullyQualifiedName~DrawingBackendCompositor", validate);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode Quick", status);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode Focused", status);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode GlyphSmoke", status);
-        Assert.Contains("`Focused` validates the `Guard` category", worklist);
+        Assert.Contains("`Focused` validates source/architecture `Guard` checks while skipping lower-frequency `DocGuard` wording checks", worklist);
         Assert.Contains("`Full` runs the Release test suite", worklist);
     }
 
@@ -3442,6 +3444,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Glyph_atlas_status_documents_actions_quota_and_local_guard_source()
     {
         var root = FindRepoRoot();
@@ -3452,7 +3455,8 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GitHub Actions quota is currently exhausted", status);
         Assert.Contains("current CI/source-of-truth status lives in [Project_Status_and_Todo.md]", design);
         Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
-        Assert.Contains("Run `Quick` for routine changes and `Focused` after source/doc guard", worklist);
+        Assert.Contains("Run `Quick` for routine changes and `Focused` after source/architecture guard", worklist);
+        Assert.Contains("Run `Full` when lower-frequency `DocGuard` wording checks matter", worklist);
         Assert.Contains("Run `Smoke` before/after broad rendering changes", worklist);
         Assert.Contains("Do not add artifact-upload work until Actions quota returns", worklist);
         Assert.Contains("`Nightly` after page-policy, eviction, or shaping overhauls", worklist);
@@ -3654,6 +3658,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Project_docs_do_not_use_obsolete_release_or_version_stage_labels()
     {
         var root = FindRepoRoot();
@@ -3726,6 +3731,7 @@ public sealed class ProgramDiagnosticsTests
     }
 
     [Fact]
+    [Trait("Category", "DocGuard")]
     public void Glyph_atlas_design_guard_gates_coverage_expansion()
     {
         var root = FindRepoRoot();

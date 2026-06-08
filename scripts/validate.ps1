@@ -5,10 +5,11 @@
 .DESCRIPTION
     Runs the local validation lanes that currently stand in for the constrained
     GitHub Actions setup. Quick mirrors the lightweight CI lane and excludes
-    heavy/source/doc guard suites. Focused runs those guard suites plus the
-    partial-apply, composition, and scroll/input preflight coverage. GlyphSmoke
-    delegates to the guarded glyph atlas smoke script. Full runs the Release
-    test suite and can optionally add GlyphSmoke.
+    heavy/source/architecture guard suites. Focused runs architecture/source guards but
+    skips lower-frequency DocGuard wording checks, then runs partial-apply,
+    composition, and scroll/input preflight coverage. GlyphSmoke delegates to
+    the guarded glyph atlas smoke script. Full runs the Release test suite and
+    can optionally add GlyphSmoke.
 
 .EXAMPLE
     .\scripts\validate.ps1
@@ -137,7 +138,7 @@ function Invoke-Focused {
             "Release",
             "--no-restore",
             "--filter",
-            "Category=Guard",
+            "Category=Guard&Category!=DocGuard",
             "--verbosity",
             "normal")
     }
