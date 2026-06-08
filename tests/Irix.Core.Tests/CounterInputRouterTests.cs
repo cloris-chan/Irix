@@ -2115,6 +2115,30 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public async Task ScrollPresentationCoordinator_retarget_segment_samples_injected_composition_clock_source()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var segmentStart = CompositionTimestamp.FromStopwatchTicks(777);
+        var coordinator = new ScrollPresentationCoordinator(new FixedCompositionClockSource(segmentStart));
+        var runtime = new RecordingScrollPresentationRuntimeAdapter(
+            new ScrollState { Position = 0, TargetPosition = 0, MaxScrollY = 240, HasMaxScrollY = true });
+        var compositor = new RecordingScrollPresentationCompositorAdapter(new ScrollPresentationSample(false, 0));
+        var snapshotProvider = new FixedScrollPresentationSnapshotProvider(BuildScrollSnapshot());
+        var scrollTargetKey = new NodeKey(1);
+
+        coordinator.AddPendingPixels(54);
+        await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken);
+
+        Assert.Single(compositor.Declarations);
+        Assert.Equal(segmentStart, compositor.Declarations[0].Timeline.StartTimestamp);
+        Assert.Equal(0, compositor.Declarations[0].PresentedScrollY.From);
+        Assert.Equal(54, compositor.Declarations[0].PresentedScrollY.To);
+        Assert.Equal(54, runtime.CurrentScroll.Position);
+        Assert.Equal(54, runtime.CurrentScroll.TargetPosition);
+        Assert.Equal(1, coordinator.RetargetCount);
+    }
+
+    [Fact]
     public async Task ScrollPresentationCoordinator_active_loop_drains_pending_pixels_after_ensure_running_returns_false()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -2545,6 +2569,11 @@ public sealed class CounterInputRouterTests
             presentedScrollY = _presentedScrollY;
             return _hasPresentedScrollY;
         }
+    }
+
+    private sealed class FixedCompositionClockSource(CompositionTimestamp timestamp) : ICompositionClockSource
+    {
+        public CompositionTimestamp TimestampNow() => timestamp;
     }
 
     private sealed class FixedScrollPresentationSnapshotProvider(RenderPipelineRetainedInputSnapshot snapshot) : IScrollPresentationRetainedSnapshotProvider

@@ -9,10 +9,23 @@ internal sealed class ScrollPresentationCoordinator
     private const double TargetEpsilon = 0.001;
     private const CompositionAnimationEasing RetargetEasing = CompositionAnimationEasing.SineOut;
 
+    private readonly ICompositionClockSource _clockSource;
     private int _loopRunning;
     private long _pendingPixelsBits;
     private long _retargetCount;
     private long _lastPresentedScrollYBits;
+
+    internal ScrollPresentationCoordinator()
+        : this(new SystemCompositionClockSource())
+    {
+    }
+
+    internal ScrollPresentationCoordinator(ICompositionClockSource clockSource)
+    {
+        ArgumentNullException.ThrowIfNull(clockSource);
+
+        _clockSource = clockSource;
+    }
 
     public bool IsLoopRunning => Volatile.Read(ref _loopRunning) != 0;
     public double PendingPixels => ReadDouble(ref _pendingPixelsBits);
@@ -207,7 +220,7 @@ internal sealed class ScrollPresentationCoordinator
         }
 
         var retainedScrollY = ScrollController.GetScrollY(runtime.CurrentScroll);
-        var segmentStart = CompositionTimestamp.Now();
+        var segmentStart = _clockSource.TimestampNow();
         var segmentDuration = CompositionDuration.FromMilliseconds(AnimationDurationMs);
         var declaration = new CompositionScrollPresentationDeclaration(
             scrollTargetKey,

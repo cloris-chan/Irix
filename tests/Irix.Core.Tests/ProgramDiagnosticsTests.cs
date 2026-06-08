@@ -2644,6 +2644,7 @@ public sealed class ProgramDiagnosticsTests
         var drawingCompositorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawingBackendCompositor.cs")));
         var compositorLoopSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "CompositorLoop.cs")));
         var completionPumpSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "StyleTransitionCompletionPump.cs")));
+        var scrollCoordinatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ScrollPresentationCoordinator.cs")));
         var demoSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionTransformDemoRunner.cs")));
 
         Assert.Contains("## Authoritative Animation Clock", animationDesign);
@@ -2651,25 +2652,26 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("platform display clocks, backend present fences, vblank cadence, and monitor refresh rates are pacing inputs only", animationDesign);
         Assert.Contains("A 144 Hz output may sample the same animation more often than a 60 Hz output", animationDesign);
         Assert.Contains("same `CompositionTimestamp` must evaluate to the same transform, opacity, scroll presentation value, marker progress, and completion state", animationDesign);
-        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, and `StyleTransitionCompletionPump` also accept an internal `ICompositionClockSource`", animationDesign);
+        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, `StyleTransitionCompletionPump`, and `ScrollPresentationCoordinator` also accept an internal `ICompositionClockSource`", animationDesign);
+        Assert.Contains("scroll retarget segment starts", animationDesign);
         Assert.Contains("CompositorLoop` owns work scheduling, delayed ticks, idle waiters, cancellation, and backend-present pacing policy; it does not own a separate animation time domain", animationDesign);
 
         Assert.Contains("## Multi-Output Timeline Authority", gpuDesign);
         Assert.Contains("GPU composition must treat animation time as global Irix state", gpuDesign);
         Assert.Contains("not as a property of one monitor, swapchain, or backend queue", gpuDesign);
-        Assert.Contains("the compositor's default tick helpers use the same `ICompositionClockSource` boundary", gpuDesign);
-        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, and `StyleTransitionCompletionPump` use an internal `ICompositionClockSource` seam", gpuDesign);
+        Assert.Contains("the compositor's default tick helpers and Poc scroll retarget coordinator use the same `ICompositionClockSource` boundary", gpuDesign);
+        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, `StyleTransitionCompletionPump`, and `ScrollPresentationCoordinator` use an internal `ICompositionClockSource` seam", gpuDesign);
         Assert.Contains("frame counters, present counters, and per-output refresh ticks are not valid animation time", gpuDesign);
         Assert.Contains("Do not introduce per-monitor animation clocks or derive animation progress from swapchain present serials", gpuDesign);
         Assert.Contains("Future GPU-offloaded timelines must receive the same Irix timestamp", gpuDesign);
 
         Assert.Contains("high-precision Irix `CompositionClock` ticks", d3d12Design);
-        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, and Poc `StyleTransitionCompletionPump` use an internal `ICompositionClockSource`", d3d12Design);
+        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, and Poc `StyleTransitionCompletionPump` plus `ScrollPresentationCoordinator` use an internal `ICompositionClockSource`", d3d12Design);
         Assert.Contains("frame indexes, present counters, and refresh-rate ticks out of animation progress", d3d12Design);
         Assert.Contains("The animation clock is the internal Irix `CompositionClock`", d3d12Design);
 
         Assert.Contains("The internal `CompositionClock` boundary now backs `CompositionTimestamp.Now()`", status);
-        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, and `StyleTransitionCompletionPump` sample the same internal `ICompositionClockSource` boundary", status);
+        Assert.Contains("`DrawingBackendCompositor`, `CompositorLoop`, `StyleTransitionCompletionPump`, and `ScrollPresentationCoordinator` sample the same internal `ICompositionClockSource` boundary", status);
         Assert.Contains("backend present/vblank/fence timing as pacing and diagnostics only", status);
         Assert.Contains("No per-monitor, backend-present, vblank, fence, or refresh-rate animation clock", status);
 
@@ -2693,6 +2695,11 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("_clockSource.TimestampNow()", completionPumpSource);
         Assert.DoesNotContain("TickPresentationAndDrainAtAsync(CompositionTimestamp.Now()", completionPumpSource);
         Assert.DoesNotContain("TickAndDrainAtAsync(CompositionTimestamp.Now()", completionPumpSource);
+        Assert.Contains("private readonly ICompositionClockSource _clockSource;", scrollCoordinatorSource);
+        Assert.Contains("ICompositionClockSource clockSource", scrollCoordinatorSource);
+        Assert.Contains("new SystemCompositionClockSource()", scrollCoordinatorSource);
+        Assert.Contains("_clockSource.TimestampNow()", scrollCoordinatorSource);
+        Assert.DoesNotContain("CompositionTimestamp.Now()", scrollCoordinatorSource);
         Assert.Contains("Animation clock: CompositionClock", demoSource);
         Assert.Contains("clock=CompositionClock", demoSource);
     }
