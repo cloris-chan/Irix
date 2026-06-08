@@ -2445,6 +2445,35 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public async Task ScrollPresentationCoordinator_coalesces_counteracting_pending_pixels_before_sampling()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var coordinator = new ScrollPresentationCoordinator();
+        var runtime = new RecordingScrollPresentationRuntimeAdapter(
+            new ScrollState
+            {
+                Position = 24,
+                TargetPosition = 24,
+                MaxScrollY = 240,
+                HasMaxScrollY = true
+            });
+        var compositor = new RecordingScrollPresentationCompositorAdapter(new ScrollPresentationSample(true, 12));
+        var snapshotProvider = new FixedScrollPresentationSnapshotProvider(BuildScrollSnapshot());
+
+        coordinator.AddPendingPixels(54);
+        coordinator.AddPendingPixels(-54);
+        await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, new NodeKey(1), cancellationToken);
+
+        Assert.Empty(runtime.Decisions);
+        Assert.Equal(0, compositor.SampleAndCancelCount);
+        Assert.Empty(compositor.Declarations);
+        Assert.Equal(0, coordinator.RetargetCount);
+        Assert.Equal(0, coordinator.PendingPixels);
+        Assert.Equal(24, runtime.CurrentScroll.Position);
+        Assert.Equal(24, runtime.CurrentScroll.TargetPosition);
+    }
+
+    [Fact]
     public async Task ScrollPresentationCoordinator_replacement_segment_starts_from_sampled_presented_value()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -2530,6 +2559,42 @@ public sealed class CounterInputRouterTests
         Assert.Equal(108, compositor.Declarations[1].PresentedScrollY.To);
         Assert.Equal(108, runtime.CurrentScroll.Position);
         Assert.Equal(108, runtime.CurrentScroll.TargetPosition);
+        Assert.Equal(2, coordinator.RetargetCount);
+    }
+
+    [Fact]
+    public async Task ScrollPresentationCoordinator_active_loop_retargets_reverse_input_from_sampled_presented_value()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var coordinator = new ScrollPresentationCoordinator();
+        var runtime = new RecordingScrollPresentationRuntimeAdapter(
+            new ScrollState { Position = 0, TargetPosition = 0, MaxScrollY = 240, HasMaxScrollY = true });
+        var compositor = new GatedStartScrollPresentationCompositorAdapter(
+            new ScrollPresentationSample(false, 0),
+            new ScrollPresentationSample(true, 42));
+        var snapshotProvider = new FixedScrollPresentationSnapshotProvider(BuildScrollSnapshot());
+        var scrollTargetKey = new NodeKey(1);
+
+        coordinator.AddPendingPixels(108);
+        var firstStarted = coordinator.EnsureRunning(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken);
+        await compositor.WaitForFirstStartAsync(cancellationToken);
+
+        coordinator.AddPendingPixels(-54);
+        var secondStarted = coordinator.EnsureRunning(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken);
+        compositor.AllowFirstStart();
+        await WaitForConditionAsync(() => !coordinator.IsLoopRunning, cancellationToken);
+
+        Assert.True(firstStarted);
+        Assert.False(secondStarted);
+        Assert.Equal(0, coordinator.PendingPixels);
+        Assert.Equal(2, compositor.SampleAndCancelCount);
+        Assert.Equal(2, compositor.Declarations.Count);
+        Assert.Equal(0, compositor.Declarations[0].PresentedScrollY.From);
+        Assert.Equal(108, compositor.Declarations[0].PresentedScrollY.To);
+        Assert.Equal(42, compositor.Declarations[1].PresentedScrollY.From);
+        Assert.Equal(54, compositor.Declarations[1].PresentedScrollY.To);
+        Assert.Equal(54, runtime.CurrentScroll.Position);
+        Assert.Equal(54, runtime.CurrentScroll.TargetPosition);
         Assert.Equal(2, coordinator.RetargetCount);
     }
 
