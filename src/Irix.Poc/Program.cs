@@ -478,7 +478,9 @@ internal static partial class Program
         TDispatchSink dispatchSink)
         where TDispatchSink : struct, IWheelInputDispatchSink
     {
-        return ScrollInputDispatchAdapter.TryDispatchWheelRaw(wheel, dispatchSink);
+        ArgumentNullException.ThrowIfNull(wheel);
+        var intent = WheelInputDispatchIntent.FromRawDelta(wheel.RawDelta);
+        return ScrollInputDispatchAdapter.TryDispatchIntent(in intent, dispatchSink);
     }
 
     internal static bool TryDispatchAppMessageForRuntime<TDispatchSink>(

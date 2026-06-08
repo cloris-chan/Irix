@@ -935,6 +935,20 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Scroll_input_dispatch_adapter_dispatches_wheel_intent_pixels()
+    {
+        var recorder = new WheelDispatchRecorder();
+        var sink = new RecordingWheelDispatchSink(recorder);
+        var intent = WheelInputDispatchIntent.FromRawDelta(240);
+
+        var dispatched = ScrollInputDispatchAdapter.TryDispatchIntent(in intent, sink);
+
+        Assert.True(dispatched);
+        Assert.Equal(-108.0, recorder.LastPixels);
+        Assert.Equal(1, recorder.DispatchCount);
+    }
+
+    [Fact]
     public void Program_runtime_dispatch_uses_app_runtime_dispatch_sink()
     {
         var recorder = new AppRuntimeDispatchRecorder();

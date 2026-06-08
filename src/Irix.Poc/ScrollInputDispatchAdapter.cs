@@ -7,8 +7,36 @@ internal interface IWheelInputDispatchSink
     void DispatchWheelPixels(double pixels);
 }
 
+internal readonly struct WheelInputDispatchIntent
+{
+    private WheelInputDispatchIntent(double pixels)
+    {
+        Pixels = pixels;
+    }
+
+    public double Pixels { get; }
+
+    public static WheelInputDispatchIntent FromRawDelta(int rawDelta)
+    {
+        var pixels = ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, rawDelta),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+        return new WheelInputDispatchIntent(pixels);
+    }
+}
+
 internal static class ScrollInputDispatchAdapter
 {
+    public static bool TryDispatchIntent<TDispatchSink>(
+        in WheelInputDispatchIntent intent,
+        TDispatchSink dispatchSink)
+        where TDispatchSink : struct, IWheelInputDispatchSink
+    {
+        dispatchSink.DispatchWheelPixels(intent.Pixels);
+        return true;
+    }
+
     public static bool TryDispatchWheelRaw<TDispatchSink>(
         CounterMessage.WheelRaw wheel,
         TDispatchSink dispatchSink)
@@ -16,12 +44,8 @@ internal static class ScrollInputDispatchAdapter
     {
         ArgumentNullException.ThrowIfNull(wheel);
 
-        var pixels = ScrollController.ConvertToPixels(
-            new ScrollDelta(ScrollDeltaUnit.WheelRaw, wheel.RawDelta),
-            ScrollMetrics.DefaultText,
-            SystemScrollSettings.Default);
-        dispatchSink.DispatchWheelPixels(pixels);
-        return true;
+        var intent = WheelInputDispatchIntent.FromRawDelta(wheel.RawDelta);
+        return TryDispatchIntent(in intent, dispatchSink);
     }
 }
 

@@ -3629,7 +3629,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("interface IAppRuntimeDispatchSink", appRuntimeDispatchSource);
         Assert.Contains("struct CounterRuntimeDispatchSink", appRuntimeDispatchSource);
         Assert.Contains("interface IWheelInputDispatchSink", scrollInputDispatchSource);
+        Assert.Contains("readonly struct WheelInputDispatchIntent", scrollInputDispatchSource);
+        Assert.Contains("TryDispatchIntent", scrollInputDispatchSource);
         Assert.Contains("struct ScrollPresentationWheelDispatchSink", scrollInputDispatchSource);
+        Assert.Contains("WheelInputDispatchIntent.FromRawDelta(wheel.RawDelta)", NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "Program.cs"))));
         Assert.Contains("struct CounterCompositionMarkerMapper", markerMapperSource);
         Assert.Contains("CounterCompositionMarkerRuntimeEventIds", markerMapperSource);
     }
