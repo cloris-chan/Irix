@@ -12,6 +12,7 @@ The current implementation owns:
 - Layer translation in logical pixels.
 - Layer opacity in normalized `[0, 1]`.
 - Fixed layer clip mode for retained scroll targets, with nested/mixed child clips decomposed into ordered layers.
+- Composition layer values normalize non-finite transform/opacity input at the model boundary, and fixed clips require finite positive rectangles before a layer can participate in backend execution or active hit testing.
 - Multi-layer `CompositionFrame` publication with ordered `CompositionLayer` application on the D3D12 execution path.
 - `CompositionAnimationPlan` data in `Irix.Rendering`.
 - `CompositionAnimationDeclaration` data that targets stable retained `NodeKey` values and resolves through the retained input snapshot.
@@ -50,9 +51,9 @@ The current implementation owns:
 | Type | Role |
 |------|------|
 | `CompositionLayerId` | Stable layer identity for diagnostics and future retained mapping. |
-| `CompositionTransform` | Translation transform. |
+| `CompositionTransform` | Translation transform normalized to finite logical pixels. |
 | `CompositionOpacity` | Strong normalized opacity value. |
-| `CompositionLayer` | Layer id, command range, transform, opacity, and clip mode. |
+| `CompositionLayer` | Layer id, command range, normalized transform/opacity, and finite fixed-clip mode. |
 | `CompositionFrame` | Ordered multi-layer frame wrapper; single-layer frames remain allocation-free. |
 | `CompositionAnimationDeclaration` | Runtime-facing internal descriptor keyed by retained `NodeKey`, with transform/opacity timeline data and no command-range knowledge. |
 | `CompositionAnimationPlan` | Resolved data-driven transform/opacity animation descriptor for the layer command range. |

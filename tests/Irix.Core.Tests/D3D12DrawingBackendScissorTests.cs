@@ -273,6 +273,45 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_normalizes_invalid_layer_transform_and_opacity()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var commands = new DrawCommand[]
+        {
+            new(DrawCommandKind.FillRect, Rect: new DrawRect(16, 20, 40, 24), Color: DrawColor.Opaque(100, 120, 140))
+        };
+        var frame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(7),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionTransform(float.NaN, float.PositiveInfinity),
+            new CompositionOpacity(float.NegativeInfinity)));
+
+        var diagnostics = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            commands,
+            resources,
+            frame,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.True(diagnostics.D3D12Backed);
+        Assert.Equal(0, diagnostics.TranslatedCommands);
+        Assert.Equal(0, diagnostics.OpacityAppliedCommands);
+        Assert.Equal(CompositionTransform.Identity, diagnostics.AppliedTransform);
+        Assert.Equal(1f, diagnostics.AppliedOpacity.Normalized);
+        Assert.Equal(1, rects.Count);
+        Assert.Equal(16, rects.Span[0].X);
+        Assert.Equal(20, rects.Span[0].Y);
+        Assert.Equal(1f, rects.Span[0].A);
+    }
+
+    [Fact]
     public void ExecuteCompositionDiagnosticCore_reuses_layer_content_cache_for_stable_disjoint_layer()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();

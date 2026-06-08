@@ -149,6 +149,37 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public void CompositorHitTestSnapshot_uses_normalized_layer_transform_values()
+    {
+        var hitTargets = new[]
+        {
+            new HitTestTarget(
+                new PixelRectangle(16, 20, 140, 40),
+                new ActionId(100),
+                default,
+                0,
+                1)
+        };
+        var layer = new CompositionLayer(
+            new CompositionLayerId(1),
+            0,
+            1,
+            new CompositionTransform(float.NaN, float.PositiveInfinity),
+            new CompositionOpacity(float.NegativeInfinity));
+        var snapshot = CompositorHitTestSnapshot.Create(hitTargets, 1, new CompositionFrame(layer));
+
+        Assert.True(snapshot.TryHitTestLogicalPixel(16, 20, out var result));
+        Assert.Equal(new ActionId(100), result.ActionId);
+        Assert.Equal(16f, result.LocalX);
+        Assert.Equal(20f, result.LocalY);
+        Assert.Equal(new CompositionLayerId(1), result.LayerId);
+        Assert.Equal(1, result.AppliedLayerCount);
+        Assert.True(result.MappedThroughComposition);
+        Assert.Equal(CompositionTransform.Identity, layer.Transform);
+        Assert.Equal(1f, layer.Opacity.Normalized);
+    }
+
+    [Fact]
     public void CompositorHitTestSnapshot_marks_fixed_clip_remap_when_presented_layer_hits_inside_clip()
     {
         var hitTargets = new[]
@@ -178,6 +209,36 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(1, result.AppliedLayerCount);
         Assert.True(result.MappedThroughComposition);
         Assert.True(result.MappedThroughFixedClip);
+    }
+
+    [Fact]
+    public void CompositorHitTestSnapshot_ignores_invalid_fixed_clip_layer()
+    {
+        var hitTargets = new[]
+        {
+            new HitTestTarget(
+                new PixelRectangle(20, 20, 120, 40),
+                new ActionId(100),
+                default,
+                0,
+                1)
+        };
+        var layer = new CompositionLayer(
+            new CompositionLayerId(1),
+            0,
+            1,
+            new CompositionTransform(0, 8),
+            CompositionOpacity.Opaque,
+            CompositionClipMode.Fixed,
+            new DrawRect(float.NaN, 0, 200, 60));
+        var frame = new CompositionFrame(layer);
+        var snapshot = CompositorHitTestSnapshot.Create(hitTargets, 1, frame);
+
+        Assert.False(frame.IsValidForCommandCount(1));
+        Assert.Equal(0, snapshot.LayerCount);
+        Assert.True(snapshot.TryHitTestLogicalPixel(20, 20, out var result));
+        Assert.Equal(new ActionId(100), result.ActionId);
+        Assert.False(result.MappedThroughComposition);
     }
 
     [Fact]

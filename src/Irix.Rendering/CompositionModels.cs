@@ -23,17 +23,20 @@ internal readonly struct CompositionLayerId(int Value) : IEquatable<CompositionL
 
 internal readonly struct CompositionTransform(float TranslateX, float TranslateY) : IEquatable<CompositionTransform>
 {
-    public float TranslateX { get; } = TranslateX;
-    public float TranslateY { get; } = TranslateY;
+    public float TranslateX { get; } = NormalizeTranslation(TranslateX);
+    public float TranslateY { get; } = NormalizeTranslation(TranslateY);
 
     public static CompositionTransform Identity => default;
 
     public bool IsIdentity => TranslateX == 0f && TranslateY == 0f;
+    public bool IsFinite => float.IsFinite(TranslateX) && float.IsFinite(TranslateY);
 
     public CompositionTransform Scale(DisplayScale scale)
     {
         scale = scale.Normalize();
-        return scale.IsIdentity ? this : new CompositionTransform(TranslateX * scale.ScaleX, TranslateY * scale.ScaleY);
+        return scale.IsIdentity
+            ? this
+            : new CompositionTransform(ScaleTranslation(TranslateX, scale.ScaleX), ScaleTranslation(TranslateY, scale.ScaleY));
     }
 
     public bool Equals(CompositionTransform other) => TranslateX.Equals(other.TranslateX) && TranslateY.Equals(other.TranslateY);
@@ -45,15 +48,25 @@ internal readonly struct CompositionTransform(float TranslateX, float TranslateY
     public static bool operator ==(CompositionTransform left, CompositionTransform right) => left.Equals(right);
 
     public static bool operator !=(CompositionTransform left, CompositionTransform right) => !left.Equals(right);
+
+    private static float NormalizeTranslation(float value)
+    {
+        return float.IsFinite(value) ? value : 0f;
+    }
+
+    private static float ScaleTranslation(float value, float scale)
+    {
+        return NormalizeTranslation(value * scale);
+    }
 }
 
 internal readonly struct CompositionOpacity(float Value) : IEquatable<CompositionOpacity>
 {
-    public float Value { get; } = Value;
+    public float Value { get; } = Normalize(Value);
 
     public static CompositionOpacity Opaque => new(1f);
 
-    public float Normalized => float.IsFinite(Value) ? Math.Clamp(Value, 0f, 1f) : 1f;
+    public float Normalized => Value;
 
     public bool IsOpaque => Normalized == 1f;
 
@@ -66,6 +79,11 @@ internal readonly struct CompositionOpacity(float Value) : IEquatable<Compositio
     public static bool operator ==(CompositionOpacity left, CompositionOpacity right) => left.Equals(right);
 
     public static bool operator !=(CompositionOpacity left, CompositionOpacity right) => !left.Equals(right);
+
+    private static float Normalize(float value)
+    {
+        return float.IsFinite(value) ? Math.Clamp(value, 0f, 1f) : 1f;
+    }
 }
 
 internal enum CompositionAnimationRepeatMode : byte
@@ -1080,7 +1098,7 @@ internal readonly struct CompositionLayer(
     public CompositionClipMode ClipMode { get; } = ClipMode;
     public DrawRect ClipBounds { get; } = ClipBounds;
 
-    public bool HasFixedClip => ClipMode == CompositionClipMode.Fixed && ClipBounds.Width > 0f && ClipBounds.Height > 0f;
+    public bool HasFixedClip => ClipMode == CompositionClipMode.Fixed && IsPositiveFiniteRect(ClipBounds);
 
     public bool IsValidForCommandCount(int commandCount)
     {
@@ -1089,6 +1107,7 @@ internal readonly struct CompositionLayer(
             && CommandCount > 0
             && CommandStart <= commandCount
             && CommandStart + CommandCount <= commandCount
+            && Transform.IsFinite
             && (ClipMode != CompositionClipMode.Fixed || HasFixedClip);
     }
 
@@ -1110,6 +1129,16 @@ internal readonly struct CompositionLayer(
     public static bool operator ==(CompositionLayer left, CompositionLayer right) => left.Equals(right);
 
     public static bool operator !=(CompositionLayer left, CompositionLayer right) => !left.Equals(right);
+
+    private static bool IsPositiveFiniteRect(in DrawRect rect)
+    {
+        return float.IsFinite(rect.X)
+            && float.IsFinite(rect.Y)
+            && rect.Width > 0f
+            && float.IsFinite(rect.Width)
+            && rect.Height > 0f
+            && float.IsFinite(rect.Height);
+    }
 }
 
 internal readonly struct CompositionFrame : IEquatable<CompositionFrame>
