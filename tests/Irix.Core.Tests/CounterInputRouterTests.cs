@@ -813,6 +813,31 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Counter_app_message_dispatch_mapper_maps_scroll_presentation_interrupt_intent()
+    {
+        var mapper = new CounterAppMessageDispatchMapper();
+        var decision = new ScrollPresentationInterruptDecision(
+            ScrollPresentationInterruptPolicy.RetargetFromPresentedToLogicalTarget,
+            ScrollState.Default with
+            {
+                Position = 18,
+                TargetPosition = 54,
+                IsAnimating = true,
+            },
+            PresentedScrollY: 12,
+            LogicalTargetScrollY: 54,
+            AppliedDeltaPixels: 42,
+            DispatchesLayoutFrame: true);
+        var intent = AppDispatchIntent<CounterMessage>.ScrollPresentationInterrupted(in decision);
+
+        var mapped = mapper.TryMapIntent(in intent, out var message);
+
+        var interrupted = Assert.IsType<CounterMessage.ScrollPresentationInterrupted>(message);
+        Assert.True(mapped);
+        Assert.Equal(decision, interrupted.Decision);
+    }
+
+    [Fact]
     public void Program_feedback_mapping_uses_control_feedback_dispatch_mapper()
     {
         var feedbackMapper = new MaxScrollResetDispatchMapper();

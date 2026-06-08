@@ -3502,10 +3502,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("interface IAppMessageDispatchMapper", appMessageDispatchMapperSource);
         Assert.Contains("enum AppDispatchIntentKind", appMessageDispatchMapperSource);
         Assert.Contains("readonly struct AppDispatchIntent", appMessageDispatchMapperSource);
+        Assert.Contains("ScrollPresentationInterrupted", appMessageDispatchMapperSource);
         Assert.Contains("struct CounterAppMessageDispatchMapper", appMessageDispatchMapperSource);
         Assert.Contains("TryMapIntent(", appMessageDispatchMapperSource);
         Assert.Contains("TryMapInputMessage(", appMessageDispatchMapperSource);
         Assert.Contains("TryMapInputOwnershipChanged(", appMessageDispatchMapperSource);
+        Assert.Contains("CounterAppMessageDispatchMapper DispatchMapper", adapterSource);
+        Assert.Contains("AppDispatchIntent<CounterMessage>.ScrollPresentationInterrupted(in decision)", adapterSource);
+        Assert.Contains("DispatchMapper.TryMapIntent(in intent, out var message)", adapterSource);
         Assert.Contains("where THitTestService : struct, IInputHitTestService", inputOwnershipSource);
         Assert.Contains("hitTestService.TryHitTestPhysicalPixel(inputEvent.X, inputEvent.Y, out var actionId)", inputOwnershipSource);
         Assert.Contains("where THitTestService : struct, IInputHitTestService", counterInputRouterSource);
@@ -3522,6 +3526,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("DispatchScrollPresentationInterruptedAsync", coordinatorSource);
         Assert.Contains("SampleAndCancelAsync", coordinatorSource);
         Assert.Contains("snapshotProvider.LastRetainedInputSnapshot", coordinatorSource);
+        Assert.DoesNotContain("new CounterMessage.ScrollPresentationInterrupted(decision)", adapterSource);
         Assert.DoesNotContain("SampleAndCancelCompositionScrollPresentationAsync", coordinatorSource);
         Assert.DoesNotContain("StartCompositionScrollPresentationAsync", coordinatorSource);
         Assert.DoesNotContain("translator.LastRetainedInputSnapshot", coordinatorSource);

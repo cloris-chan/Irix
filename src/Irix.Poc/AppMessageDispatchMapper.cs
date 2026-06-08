@@ -5,7 +5,8 @@ internal enum AppDispatchIntentKind
     None,
     InputMessage,
     InputOwnershipChanged,
-    MaxScrollFeedback
+    MaxScrollFeedback,
+    ScrollPresentationInterrupted
 }
 
 internal readonly struct AppDispatchIntent<TInputMessage>
@@ -14,30 +15,37 @@ internal readonly struct AppDispatchIntent<TInputMessage>
         AppDispatchIntentKind kind,
         TInputMessage? inputMessage,
         OwnershipSnapshot ownershipSnapshot,
-        double maxScrollY)
+        double maxScrollY,
+        ScrollPresentationInterruptDecision scrollPresentationInterruptDecision)
     {
         Kind = kind;
         InputMessage = inputMessage;
         OwnershipSnapshot = ownershipSnapshot;
         MaxScrollY = maxScrollY;
+        ScrollPresentationInterruptDecision = scrollPresentationInterruptDecision;
     }
 
     public AppDispatchIntentKind Kind { get; }
     public TInputMessage? InputMessage { get; }
     public OwnershipSnapshot OwnershipSnapshot { get; }
     public double MaxScrollY { get; }
+    public ScrollPresentationInterruptDecision ScrollPresentationInterruptDecision { get; }
 
     public static AppDispatchIntent<TInputMessage> Input(
         TInputMessage inputMessage,
         in OwnershipSnapshot ownershipSnapshot) =>
-        new(AppDispatchIntentKind.InputMessage, inputMessage, ownershipSnapshot, 0);
+        new(AppDispatchIntentKind.InputMessage, inputMessage, ownershipSnapshot, 0, default);
 
     public static AppDispatchIntent<TInputMessage> InputOwnershipChanged(
         in OwnershipSnapshot ownershipSnapshot) =>
-        new(AppDispatchIntentKind.InputOwnershipChanged, default, ownershipSnapshot, 0);
+        new(AppDispatchIntentKind.InputOwnershipChanged, default, ownershipSnapshot, 0, default);
 
     public static AppDispatchIntent<TInputMessage> MaxScrollFeedback(double maxScrollY) =>
-        new(AppDispatchIntentKind.MaxScrollFeedback, default, default, maxScrollY);
+        new(AppDispatchIntentKind.MaxScrollFeedback, default, default, maxScrollY, default);
+
+    public static AppDispatchIntent<TInputMessage> ScrollPresentationInterrupted(
+        in ScrollPresentationInterruptDecision decision) =>
+        new(AppDispatchIntentKind.ScrollPresentationInterrupted, default, default, 0, decision);
 }
 
 internal interface IAppMessageDispatchMapper<TInputMessage, TAppMessage>
@@ -106,6 +114,9 @@ internal readonly struct CounterAppMessageDispatchMapper :
                 return true;
             case AppDispatchIntentKind.MaxScrollFeedback:
                 appMessage = new CounterMessage.UpdateMaxScrollY(intent.MaxScrollY);
+                return true;
+            case AppDispatchIntentKind.ScrollPresentationInterrupted:
+                appMessage = new CounterMessage.ScrollPresentationInterrupted(intent.ScrollPresentationInterruptDecision);
                 return true;
             default:
                 appMessage = null!;

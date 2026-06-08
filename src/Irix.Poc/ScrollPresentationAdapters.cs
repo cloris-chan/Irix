@@ -53,16 +53,28 @@ internal readonly struct ScrollPresentationSample(
 }
 
 internal readonly struct CounterScrollPresentationRuntimeAdapter(
-    Runtime<CounterModel, CounterMessage> Runtime) : IScrollPresentationRuntimeAdapter
+    Runtime<CounterModel, CounterMessage> Runtime,
+    CounterAppMessageDispatchMapper DispatchMapper) : IScrollPresentationRuntimeAdapter
 {
+    public CounterScrollPresentationRuntimeAdapter(Runtime<CounterModel, CounterMessage> runtime)
+        : this(runtime, new CounterAppMessageDispatchMapper())
+    {
+    }
+
     public ScrollState CurrentScroll => Runtime.CurrentModel.Scroll;
 
     public Task DispatchScrollPresentationInterruptedAsync(
         ScrollPresentationInterruptDecision decision,
         CancellationToken cancellationToken = default)
     {
+        var intent = AppDispatchIntent<CounterMessage>.ScrollPresentationInterrupted(in decision);
+        if (!DispatchMapper.TryMapIntent(in intent, out var message))
+        {
+            return Task.CompletedTask;
+        }
+
         return Runtime.DispatchAndStageRetainedFrameAsync(
-            new CounterMessage.ScrollPresentationInterrupted(decision),
+            message,
             cancellationToken);
     }
 }
