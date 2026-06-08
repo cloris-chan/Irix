@@ -893,11 +893,12 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
-    public async Task RenderCompositionAnimationTickAsync_uses_compositor_clock()
+    public async Task RenderCompositionAnimationTickAsync_uses_injected_composition_clock_source()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var backend = new CompositionTrackingBackend();
-        using var compositor = new DrawingBackendCompositor(backend);
+        var tickTimestamp = CompositionTimestamp.FromStopwatchTicks(125);
+        using var compositor = new DrawingBackendCompositor(backend, new FixedCompositionClockSource(tickTimestamp));
         var resources = FrameDrawingResources.Rent();
         resources.Seal();
         using var frame = new RenderFrameBatch(
@@ -909,22 +910,24 @@ public sealed class DrawingBackendCompositorTests
             resources);
 
         await compositor.RenderAsync(frame, cancellationToken);
-        var start = CompositionTimestamp.Now();
         compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
             new CompositionLayerId(1),
             CommandStart: 0,
             CommandCount: 1,
             new CompositionAnimationTimeline(
-                start,
-                CompositionDuration.FromStopwatchTicks(10)),
-            CompositionTransformAnimation.Identity,
-            CompositionScalarAnimation.Constant(1f))));
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(50)),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(0, 20),
+                new CompositionScalarAnimation(0, 10)),
+            new CompositionScalarAnimation(1f, 0.5f))));
 
         _ = await compositor.RenderCompositionAnimationTickAsync(cancellationToken);
-        var end = CompositionTimestamp.Now();
 
         Assert.Equal(1, backend.ExecuteCompositionCount);
-        Assert.InRange(backend.LastBeginFrameContext.Timestamp, start.StopwatchTicks, end.StopwatchTicks);
+        Assert.Equal(tickTimestamp.StopwatchTicks, backend.LastBeginFrameContext.Timestamp);
+        Assert.Equal(new CompositionTransform(10, 5), backend.LastCompositionFrame.Layer.Transform);
+        Assert.Equal(0.75f, backend.LastCompositionFrame.Layer.Opacity.Normalized);
     }
 
     [Fact]
@@ -2645,6 +2648,11 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(CompositionFramePacing.SoftwareTimer, status.FramePacing);
         Assert.Equal(layerCount, status.LayerCount);
         Assert.Equal(commandCount, status.CommandCount);
+    }
+
+    private sealed class FixedCompositionClockSource(CompositionTimestamp timestamp) : ICompositionClockSource
+    {
+        public CompositionTimestamp TimestampNow() => timestamp;
     }
 
     private sealed class DirtyRangeTrackingBackend : IDrawingBackend, IDirtyRangeAware

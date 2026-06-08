@@ -15,6 +15,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
 {
     private readonly IDrawingBackend _backend = backend;
     private readonly DrawingBackendCompositorHandoffOptions _handoffOptions;
+    private readonly ICompositionClockSource _clockSource = new SystemCompositionClockSource();
     private readonly Lock _frameGate = new();
     private readonly Lock _hitTargetsLock = new();
     private readonly Lock _compositionStateLock = new();
@@ -109,7 +110,25 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     internal DrawingBackendCompositor(
         IDrawingBackend backend,
         DrawingBackendCompositorHandoffOptions handoffOptions)
+        : this(backend, handoffOptions, new SystemCompositionClockSource())
+    {
+    }
+
+    internal DrawingBackendCompositor(
+        IDrawingBackend backend,
+        ICompositionClockSource clockSource)
         : this(backend)
+    {
+        ArgumentNullException.ThrowIfNull(clockSource);
+
+        _clockSource = clockSource;
+    }
+
+    internal DrawingBackendCompositor(
+        IDrawingBackend backend,
+        DrawingBackendCompositorHandoffOptions handoffOptions,
+        ICompositionClockSource clockSource)
+        : this(backend, clockSource)
     {
         _handoffOptions = handoffOptions;
     }
@@ -719,7 +738,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAsync(
         CancellationToken cancellationToken = default)
     {
-        return RenderCompositionAnimationTickAtAsync(CompositionTimestamp.Now(), cancellationToken);
+        return RenderCompositionAnimationTickAtAsync(_clockSource.TimestampNow(), cancellationToken);
     }
 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAtAsync(
@@ -841,7 +860,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationPresentationTickAsync(
         CancellationToken cancellationToken = default)
     {
-        return RenderCompositionAnimationPresentationTickAtAsync(CompositionTimestamp.Now(), cancellationToken);
+        return RenderCompositionAnimationPresentationTickAtAsync(_clockSource.TimestampNow(), cancellationToken);
     }
 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationPresentationTickAtAsync(
@@ -984,7 +1003,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAsync(
         CancellationToken cancellationToken = default)
     {
-        return RenderCompositionScrollPresentationTickAtAsync(CompositionTimestamp.Now(), cancellationToken);
+        return RenderCompositionScrollPresentationTickAtAsync(_clockSource.TimestampNow(), cancellationToken);
     }
 
     internal ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(
@@ -1159,7 +1178,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             return false;
         }
 
-        var timestamp = CompositionTimestamp.Now();
+        var timestamp = _clockSource.TimestampNow();
         var compositionFrame = plan.Evaluate(commands.Length, timestamp);
         var sample = plan.LayerAnimation.Timeline.SampleAt(timestamp);
         result = RenderCompositionScrollPresentationFrameAtAsync(
