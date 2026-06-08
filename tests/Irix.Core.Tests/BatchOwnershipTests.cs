@@ -212,6 +212,44 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_scroll_presentation_uses_injected_composition_clock_source_for_ticks()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        var clock = new ManualCompositionClockSource(CompositionTimestamp.FromStopwatchTicks(100));
+        await using var loop = new CompositorLoop(translator, compositor, ownershipProvider: null, clock);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        Assert.Equal(1, compositor.TickCount);
+        Assert.Equal(CompositionTimestamp.FromStopwatchTicks(100), compositor.LastTickTimestamp);
+
+        clock.Set(CompositionTimestamp.FromStopwatchTicks(150));
+        await WaitForConditionAsync(() => compositor.TickCount >= 2, cancellationToken);
+
+        Assert.Equal(CompositionTimestamp.FromStopwatchTicks(150), compositor.LastTickTimestamp);
+        Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(27, presentedScrollY);
+
+        await loop.CancelCompositionScrollPresentationAsync(cancellationToken);
+    }
+
+    [Fact]
     public async Task CompositorLoop_cancel_scroll_presentation_clears_active_schedule()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1004,6 +1042,7 @@ public sealed class BatchOwnershipTests
         public int ClearCount { get; private set; }
         public long TickCount { get; private set; }
         public bool PresentationActiveDuringLastRender { get; private set; }
+        public CompositionTimestamp LastTickTimestamp { get; private set; }
 
         public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
         {
@@ -1033,6 +1072,7 @@ public sealed class BatchOwnershipTests
             CancellationToken cancellationToken = default)
         {
             TickCount++;
+            LastTickTimestamp = timestamp;
             _presentedScrollY = _declaration.PresentedScrollY.Evaluate(_declaration.Timeline.ProgressAt(timestamp));
             return ValueTask.FromResult(default(CompositionBackendExecutionResult));
         }
@@ -1047,6 +1087,18 @@ public sealed class BatchOwnershipTests
 
             presentedScrollY = 0;
             return false;
+        }
+    }
+
+    private sealed class ManualCompositionClockSource(CompositionTimestamp timestamp) : ICompositionClockSource
+    {
+        private long _stopwatchTicks = timestamp.StopwatchTicks;
+
+        public CompositionTimestamp TimestampNow() => CompositionTimestamp.FromStopwatchTicks(Volatile.Read(ref _stopwatchTicks));
+
+        public void Set(CompositionTimestamp timestamp)
+        {
+            Volatile.Write(ref _stopwatchTicks, timestamp.StopwatchTicks);
         }
     }
 

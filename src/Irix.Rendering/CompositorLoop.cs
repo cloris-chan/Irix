@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Threading.Channels;
 
 namespace Irix.Rendering;
@@ -6,10 +5,11 @@ namespace Irix.Rendering;
 public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchSink, IAsyncDisposable
 {
     private const int CompositionTargetFrameRate = 240;
-    private static readonly CompositionDuration CompositionTargetFrameInterval = CompositionDuration.FromStopwatchTicks(Math.Max(1, Stopwatch.Frequency / CompositionTargetFrameRate));
+    private static readonly CompositionDuration CompositionTargetFrameInterval = CompositionDuration.FromStopwatchTicks(Math.Max(1, CompositionClock.Frequency / CompositionTargetFrameRate));
     private readonly ICompositor _compositor;
     private readonly IPatchBatchTranslator _translator;
     private readonly Func<RetainedRenderFrameSegmentOwnership?>? _ownershipProvider;
+    private readonly ICompositionClockSource _clockSource;
     private readonly Channel<CompositorWorkItem> _channel;
     private readonly Lock _renderRequestGate = new();
     private readonly Lock _compositionScheduleGate = new();
@@ -31,10 +31,20 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     }
 
     internal CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor, Func<RetainedRenderFrameSegmentOwnership?>? ownershipProvider)
+        : this(translator, compositor, ownershipProvider, new SystemCompositionClockSource())
+    {
+    }
+
+    internal CompositorLoop(
+        IPatchBatchTranslator translator,
+        ICompositor compositor,
+        Func<RetainedRenderFrameSegmentOwnership?>? ownershipProvider,
+        ICompositionClockSource clockSource)
     {
         _translator = translator;
         _compositor = compositor;
         _ownershipProvider = ownershipProvider;
+        _clockSource = clockSource;
         _channel = Channel.CreateUnbounded<CompositorWorkItem>(new UnboundedChannelOptions
         {
             SingleReader = true,
@@ -376,7 +386,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             throw new InvalidOperationException("The current compositor does not support composition scroll presentation scheduling.");
         }
 
-        var timestamp = CompositionTimestamp.Now();
+        var timestamp = _clockSource.TimestampNow();
         if (timestamp > schedule.EndTimestamp)
         {
             timestamp = schedule.EndTimestamp;
@@ -594,7 +604,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
 
             delay = ComputeNextTickDelay(
                 lastTickTimestamp,
-                CompositionTimestamp.Now(),
+                _clockSource.TimestampNow(),
                 CompositionTargetFrameInterval,
                 ResolveScrollPresentationFramePacing());
             _scrollPresentationTickQueued = true;
@@ -679,7 +689,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             return 0;
         }
 
-        var milliseconds = delay.StopwatchTicks * 1000 / Stopwatch.Frequency;
+        var milliseconds = delay.StopwatchTicks * 1000 / CompositionClock.Frequency;
         return milliseconds > int.MaxValue ? int.MaxValue : Math.Max(1, (int)milliseconds);
     }
 

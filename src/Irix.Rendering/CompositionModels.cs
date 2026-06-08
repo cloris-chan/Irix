@@ -134,6 +134,16 @@ internal static class CompositionClock
     internal static CompositionTimestamp TimestampNow() => CompositionTimestamp.FromStopwatchTicks(Stopwatch.GetTimestamp());
 }
 
+internal interface ICompositionClockSource
+{
+    CompositionTimestamp TimestampNow();
+}
+
+internal readonly struct SystemCompositionClockSource : ICompositionClockSource
+{
+    public CompositionTimestamp TimestampNow() => CompositionClock.TimestampNow();
+}
+
 internal readonly struct CompositionDuration(long StopwatchTicks) : IEquatable<CompositionDuration>, IComparable<CompositionDuration>
 {
     public long StopwatchTicks { get; } = StopwatchTicks;

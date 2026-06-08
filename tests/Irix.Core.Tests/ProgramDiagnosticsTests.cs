@@ -2641,6 +2641,7 @@ public sealed class ProgramDiagnosticsTests
         var d3d12Design = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "D3D12-Composition.md")));
         var status = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
         var compositionModelsSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "CompositionModels.cs")));
+        var compositorLoopSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "CompositorLoop.cs")));
         var demoSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "CompositionTransformDemoRunner.cs")));
 
         Assert.Contains("## Authoritative Animation Clock", animationDesign);
@@ -2648,26 +2649,36 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("platform display clocks, backend present fences, vblank cadence, and monitor refresh rates are pacing inputs only", animationDesign);
         Assert.Contains("A 144 Hz output may sample the same animation more often than a 60 Hz output", animationDesign);
         Assert.Contains("same `CompositionTimestamp` must evaluate to the same transform, opacity, scroll presentation value, marker progress, and completion state", animationDesign);
+        Assert.Contains("CompositorLoop` also accepts an internal `ICompositionClockSource`", animationDesign);
         Assert.Contains("CompositorLoop` owns work scheduling, delayed ticks, idle waiters, cancellation, and backend-present pacing policy; it does not own a separate animation time domain", animationDesign);
 
         Assert.Contains("## Multi-Output Timeline Authority", gpuDesign);
         Assert.Contains("GPU composition must treat animation time as global Irix state", gpuDesign);
         Assert.Contains("not as a property of one monitor, swapchain, or backend queue", gpuDesign);
+        Assert.Contains("CompositorLoop` scroll presentation scheduling now uses an internal `ICompositionClockSource`", gpuDesign);
         Assert.Contains("frame counters, present counters, and per-output refresh ticks are not valid animation time", gpuDesign);
         Assert.Contains("Do not introduce per-monitor animation clocks or derive animation progress from swapchain present serials", gpuDesign);
         Assert.Contains("Future GPU-offloaded timelines must receive the same Irix timestamp", gpuDesign);
 
         Assert.Contains("high-precision Irix `CompositionClock` ticks", d3d12Design);
+        Assert.Contains("CompositorLoop` scroll presentation scheduling uses an internal `ICompositionClockSource`", d3d12Design);
         Assert.Contains("frame indexes, present counters, and refresh-rate ticks out of animation progress", d3d12Design);
         Assert.Contains("The animation clock is the internal Irix `CompositionClock`", d3d12Design);
 
         Assert.Contains("The internal `CompositionClock` boundary now backs `CompositionTimestamp.Now()`", status);
+        Assert.Contains("`CompositorLoop` scroll presentation scheduling uses an internal `ICompositionClockSource`", status);
         Assert.Contains("backend present/vblank/fence timing as pacing and diagnostics only", status);
         Assert.Contains("No per-monitor, backend-present, vblank, fence, or refresh-rate animation clock", status);
 
         Assert.Contains("internal static class CompositionClock", compositionModelsSource);
+        Assert.Contains("internal interface ICompositionClockSource", compositionModelsSource);
+        Assert.Contains("internal readonly struct SystemCompositionClockSource", compositionModelsSource);
         Assert.Contains("public static CompositionTimestamp Now() => CompositionClock.TimestampNow();", compositionModelsSource);
         Assert.Contains("CompositionTimestamp.FromStopwatchTicks(Stopwatch.GetTimestamp())", compositionModelsSource);
+        Assert.Contains("private readonly ICompositionClockSource _clockSource;", compositorLoopSource);
+        Assert.Contains("new SystemCompositionClockSource()", compositorLoopSource);
+        Assert.Contains("_clockSource.TimestampNow()", compositorLoopSource);
+        Assert.Contains("CompositionClock.Frequency", compositorLoopSource);
         Assert.Contains("Animation clock: CompositionClock", demoSource);
         Assert.Contains("clock=CompositionClock", demoSource);
     }

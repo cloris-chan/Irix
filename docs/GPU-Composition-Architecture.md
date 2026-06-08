@@ -75,7 +75,7 @@ The IR must be immutable after publication for a frame. Backend implementations 
 
 ## Multi-Output Timeline Authority
 
-GPU composition must treat animation time as global Irix state, not as a property of one monitor, swapchain, or backend queue. The first implementation boundary is `CompositionClock`, which provides the single high-precision source behind `CompositionTimestamp.Now()`. Per-output compositor instances may sample at 60 Hz, 120 Hz, 144 Hz, VRR cadence, or backend-present cadence, but they must evaluate from the same timestamp domain.
+GPU composition must treat animation time as global Irix state, not as a property of one monitor, swapchain, or backend queue. The first implementation boundary is `CompositionClock`, which provides the single high-precision source behind `CompositionTimestamp.Now()`. `CompositorLoop` scroll presentation scheduling now uses an internal `ICompositionClockSource` seam so runtime scheduling can be deterministic while still sharing that same timestamp domain. Per-output compositor instances may sample at 60 Hz, 120 Hz, 144 Hz, VRR cadence, or backend-present cadence, but they must evaluate from the same timestamp domain.
 
 This matters for heterogeneous multi-display rendering:
 
