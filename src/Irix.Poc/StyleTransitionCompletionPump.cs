@@ -139,6 +139,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     private readonly StyleTransitionCompletionTracker _tracker;
     private readonly IStyleTransitionCompositorAdapter _styleCompositor;
     private readonly IStyleTransitionRetainedSnapshotProvider _snapshotProvider;
+    private readonly ICompositionClockSource _clockSource;
     private readonly CancellationTokenSource _disposeCancellationTokenSource = new();
     private readonly Lock _gate = new();
     private Task? _pumpTask;
@@ -151,16 +152,33 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         StyleTransitionCompletionTracker tracker,
         IStyleTransitionCompositorAdapter styleCompositor,
         IStyleTransitionRetainedSnapshotProvider snapshotProvider)
+        : this(
+            compositor,
+            tracker,
+            styleCompositor,
+            snapshotProvider,
+            new SystemCompositionClockSource())
+    {
+    }
+
+    internal StyleTransitionCompletionPump(
+        DrawingBackendCompositor compositor,
+        StyleTransitionCompletionTracker tracker,
+        IStyleTransitionCompositorAdapter styleCompositor,
+        IStyleTransitionRetainedSnapshotProvider snapshotProvider,
+        ICompositionClockSource clockSource)
     {
         ArgumentNullException.ThrowIfNull(compositor);
         ArgumentNullException.ThrowIfNull(tracker);
         ArgumentNullException.ThrowIfNull(styleCompositor);
         ArgumentNullException.ThrowIfNull(snapshotProvider);
+        ArgumentNullException.ThrowIfNull(clockSource);
 
         _compositor = compositor;
         _tracker = tracker;
         _styleCompositor = styleCompositor;
         _snapshotProvider = snapshotProvider;
+        _clockSource = clockSource;
     }
 
     internal long TickCount { get; private set; }
@@ -313,9 +331,10 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         {
             while (!cancellationToken.IsCancellationRequested && _tracker.HasActiveTransition)
             {
+                var timestamp = _clockSource.TimestampNow();
                 var result = _usePresentationTick
-                    ? await TickPresentationAndDrainAtAsync(CompositionTimestamp.Now(), cancellationToken)
-                    : await TickAndDrainAtAsync(CompositionTimestamp.Now(), cancellationToken);
+                    ? await TickPresentationAndDrainAtAsync(timestamp, cancellationToken)
+                    : await TickAndDrainAtAsync(timestamp, cancellationToken);
                 if (result.Kind is StyleTransitionCompletionPumpResultKind.NoActiveTransition
                     or StyleTransitionCompletionPumpResultKind.TickUnavailable)
                 {

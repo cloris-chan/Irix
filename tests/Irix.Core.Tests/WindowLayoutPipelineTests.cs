@@ -2299,6 +2299,80 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public async Task StyleTransitionCompletionPump_run_loop_samples_injected_composition_clock_source()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var pipeline = new RenderPipeline();
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(
+                new NodeKey(22),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.LayerOpacity(1),
+                VirtualNodeProperty.TranslateX(0),
+                VirtualNodeProperty.TranslateY(0)));
+        using var frame = pipeline.Build(
+            root,
+            new PixelRectangle(0, 0, 960, 540),
+            _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        var snapshot = pipeline.LastRetainedInputSnapshot!;
+        var tracker = new StyleTransitionCompletionTracker();
+        var owner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22));
+        var decision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 0),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 4),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(171));
+        var decorated = tracker.AttachCompletionMarker(owner, decision);
+        var runtimeResult = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            decorated,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var tracking = tracker.PublishRuntimeResult(owner, decorated, runtimeResult);
+        var clockSource = new ScriptedCompositionClockSource(
+            decision.StartTimestamp,
+            decision.StartTimestamp + decision.Duration);
+        await using var pump = new StyleTransitionCompletionPump(
+            compositor,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            clockSource);
+
+        var started = pump.EnsureRunning();
+        await WaitForConditionAsync(
+            () => !pump.IsRunning && pump.CommitCount == 1 && !tracker.HasActiveTransition,
+            cancellationToken);
+        var diagnostic = pump.CaptureDiagnosticSnapshot();
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Started, runtimeResult.Kind);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, tracking.Kind);
+        Assert.True(started);
+        Assert.Equal(2, clockSource.ReadCount);
+        Assert.Equal(2, pump.TickCount);
+        Assert.Equal(1, pump.CommitCount);
+        Assert.Equal(1, pump.DrainedEventCount);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.CompletionCommitted, pump.LastResult.Kind);
+        Assert.Equal(new NodeKey(22), pump.LastResult.CommitResult.TargetKey);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.SingleAnimation, diagnostic.TickMode);
+        Assert.Equal(2, diagnostic.TickCount);
+        Assert.Equal(1, diagnostic.CommitCount);
+        Assert.Equal(1, diagnostic.DrainedEventCount);
+        Assert.False(diagnostic.HasActiveTransition);
+        Assert.False(diagnostic.HasError);
+        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.Equal(2, backend.ExecuteCompositionCount);
+    }
+
+    [Fact]
     public async Task CounterStyleTransitionRuntimeBridge_multi_target_batch_dispatch_activates_presentation_set_and_tracks_owners()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -6458,6 +6532,30 @@ public sealed class WindowLayoutPipelineTests
                 AccessCount++;
                 return Snapshot;
             }
+        }
+    }
+
+    private sealed class ScriptedCompositionClockSource(
+        CompositionTimestamp firstTimestamp,
+        CompositionTimestamp subsequentTimestamp) : ICompositionClockSource
+    {
+        private int _readCount;
+
+        public int ReadCount => Volatile.Read(ref _readCount);
+
+        public CompositionTimestamp TimestampNow()
+        {
+            return Interlocked.Increment(ref _readCount) == 1
+                ? firstTimestamp
+                : subsequentTimestamp;
+        }
+    }
+
+    private static async Task WaitForConditionAsync(Func<bool> condition, CancellationToken cancellationToken)
+    {
+        while (!condition())
+        {
+            await Task.Delay(10, cancellationToken);
         }
     }
 
