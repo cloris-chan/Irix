@@ -2610,6 +2610,102 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public async Task StyleTransitionCompletionPump_running_single_tick_switches_to_cross_button_presentation_batch()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        Assert.NotNull(translator.LastRetainedInputSnapshot);
+
+        var focusIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var focusLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            focusIncrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var tracker = new StyleTransitionCompletionTracker();
+        var clockSource = new ScriptedCompositionClockSource(
+            focusLifecycle.Decision.StartTimestamp,
+            focusLifecycle.Decision.StartTimestamp + CompositionDuration.FromStopwatchTicks(30));
+        await using var pump = new StyleTransitionCompletionPump(
+            compositor,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            clockSource);
+
+        var focusResult = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(focusIncrement),
+            focusLifecycle.Decision,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            cancellationToken,
+            tracker);
+        var incrementOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(6));
+        Assert.True(tracker.TryGetActiveTransition(incrementOwner, out _, out _));
+        var started = pump.EnsureRunning();
+        await WaitForConditionAsync(
+            () => backend.ExecuteCompositionCount >= 1 && pump.IsRunning,
+            cancellationToken);
+        var executeCountBeforePress = backend.ExecuteCompositionCount;
+
+        var pressDecrement = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: true);
+        var pressLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            pressDecrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(110));
+        var pressResult = await CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(pressDecrement),
+            pressLifecycle.Batch,
+            new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            tracker,
+            cancellationToken);
+        var restarted = pump.EnsureRunning();
+
+        await WaitForConditionAsync(
+            () => backend.ExecuteCompositionCount > executeCountBeforePress
+                && backend.LastCompositionFrame.LayerCount == 2,
+            cancellationToken);
+        var snapshot = pump.CaptureDiagnosticSnapshot();
+
+        Assert.Equal(StyleTransitionRuntimeResultKind.Retargeted, focusResult.Kind);
+        Assert.True(started);
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransitionBatch, pressLifecycle.Action);
+        Assert.Equal(StyleTransitionBatchPresentationActivationKind.Activated, pressResult.Kind);
+        Assert.False(restarted);
+        Assert.Equal(pressDecrement, runtime.CurrentModel.InputOwnership);
+        Assert.Equal(StyleTransitionCompletionPumpTickMode.PresentationSet, snapshot.TickMode);
+        Assert.Equal(2, snapshot.ActiveOwnerCount);
+        Assert.True(TryGetLayer(backend.LastCompositionFrame, new CompositionLayerId(7), out var decrementLayer));
+        Assert.True(decrementLayer.Transform.TranslateY > 0f);
+        Assert.True(decrementLayer.Opacity.Normalized < 1f);
+    }
+
+    [Fact]
     public async Task StyleTransitionCompletionPump_snapshot_captures_no_active_transition()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -3104,6 +3200,74 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(secondOwner, tracker.LastResult.OwnerKey);
         Assert.False(tracker.HasActiveTransition);
         Assert.Equal(0, tracker.ActiveOwnerCount);
+    }
+
+    [Fact]
+    public async Task StyleTransitionCompletionTracker_owner_table_supersedes_previous_owner_for_same_target()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var snapshot = CreateStyleTransitionRetainedSnapshot();
+        var compositor = new RecordingStyleTransitionCompositorAdapter();
+        var tracker = new StyleTransitionCompletionTracker();
+        var firstOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(22));
+        var secondOwner = StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(22));
+        var firstDecision = StyleTransitionRuntimeDecision.Start(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 1, translateX: 0, translateY: 4),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            CompositionTimestamp.FromStopwatchTicks(100),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(9));
+        var secondDecision = StyleTransitionRuntimeDecision.Retarget(
+            new NodeKey(22),
+            BuildCompositionStyleProperties(opacity: 0.75, translateX: 12, translateY: 8),
+            BuildCompositionStyleProperties(opacity: 0.9, translateX: 0, translateY: 2),
+            CompositionTimestamp.FromStopwatchTicks(110),
+            CompositionDuration.FromStopwatchTicks(50),
+            CompositionAnimationEasing.SineOut,
+            CompositionAnimationRepeatMode.Once,
+            new CompositionAnimationInstanceId(10));
+        var firstDecorated = tracker.AttachCompletionMarker(firstOwner, firstDecision);
+        var secondDecorated = tracker.AttachCompletionMarker(secondOwner, secondDecision);
+        var firstStart = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            firstDecorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+        var secondStart = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
+            secondDecorated,
+            compositor,
+            new FixedStyleTransitionRetainedSnapshotProvider(snapshot),
+            cancellationToken);
+
+        var firstTracking = tracker.PublishRuntimeResult(firstOwner, firstDecorated, firstStart);
+        var secondTracking = tracker.PublishRuntimeResult(secondOwner, secondDecorated, secondStart);
+
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingStarted, firstTracking.Kind);
+        Assert.Equal(StyleTransitionCompletionResultKind.TrackingRetargeted, secondTracking.Kind);
+        Assert.True(tracker.HasActiveTransition);
+        Assert.Equal(1, tracker.ActiveOwnerCount);
+        Assert.False(tracker.TryGetActiveTransition(firstOwner, out _, out _));
+        Assert.True(tracker.TryGetActiveTransition(secondOwner, out var target, out var instance));
+        Assert.Equal(new NodeKey(22), target);
+        Assert.Equal(new CompositionAnimationInstanceId(10), instance);
+
+        var firstCompleted = tracker.TryCreateCompletionDecision(
+            firstOwner,
+            BuildCompletionMarkerEvent(new NodeKey(22), new CompositionAnimationInstanceId(9)),
+            out _);
+        var secondCompleted = tracker.TryCreateCompletionDecision(
+            secondOwner,
+            BuildCompletionMarkerEvent(new NodeKey(22), new CompositionAnimationInstanceId(10)),
+            out var commitDecision);
+
+        Assert.False(firstCompleted);
+        Assert.True(secondCompleted);
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Commit, commitDecision.Kind);
+        Assert.Equal(new NodeKey(22), commitDecision.TargetKey);
+        Assert.False(tracker.HasActiveTransition);
     }
 
     [Fact]
@@ -6699,6 +6863,24 @@ public sealed class WindowLayoutPipelineTests
         }
     }
 
+    private static bool TryGetLayer(
+        in CompositionFrame frame,
+        CompositionLayerId layerId,
+        out CompositionLayer layer)
+    {
+        for (var i = 0; i < frame.LayerCount; i++)
+        {
+            layer = frame.GetLayer(i);
+            if (layer.Id == layerId)
+            {
+                return true;
+            }
+        }
+
+        layer = default;
+        return false;
+    }
+
     private sealed class RecordingStyleTransitionCompositorAdapter : IStyleTransitionCompositorAdapter
     {
         public int StartCount { get; private set; }
@@ -6732,6 +6914,7 @@ public sealed class WindowLayoutPipelineTests
     {
         public int ExecuteCount { get; private set; }
         public int ExecuteCompositionCount { get; private set; }
+        public CompositionFrame LastCompositionFrame { get; private set; }
         public CompositionBackendCapabilities CompositionCapabilities =>
             CompositionBackendCapabilities.TransformOpacity
             | CompositionBackendCapabilities.MultiLayer;
@@ -6749,6 +6932,7 @@ public sealed class WindowLayoutPipelineTests
             in CompositionFrame compositionFrame)
         {
             ExecuteCompositionCount++;
+            LastCompositionFrame = compositionFrame;
             return new CompositionBackendExecutionResult(
                 D3D12Backed: true,
                 LayerCount: compositionFrame.LayerCount,

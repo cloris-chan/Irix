@@ -2831,7 +2831,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Counter app/control integration now maps single-target `OwnershipSnapshot` deltas", status);
         Assert.Contains("Public style/transition authoring preflight is documented and guard-covered", worklist);
         Assert.Contains("routed Counter multi-target transition policy", worklist);
-        Assert.Contains("Counter multi-target routing, routed multi-target completion tick-mode diagnostics, and blocked fallback batch activation diagnostics over the existing preflight are implemented", worklist);
+        Assert.Contains("running-pump single-to-presentation tick-mode switching", worklist);
+        Assert.Contains("routed multi-target completion tick-mode diagnostics", worklist);
+        Assert.Contains("blocked fallback batch activation diagnostics over the existing preflight are implemented", worklist);
 
         var publicAuthoringNames = typeof(VirtualNodeProperty)
             .GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
@@ -3281,7 +3283,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("multi-target button control-state deltas", animationDesign);
         Assert.Contains("Done: Poc-owned batch/owner value types and tests around deterministic acceptance/rejection exist without installing multiple compositor owners", animationDesign);
         Assert.Contains("Done: compositor-side presentation-set validation and conflict reporting exists for transform/opacity declarations without activating the set", animationDesign);
-        Assert.Contains("Done: completion tracking now uses an owner table so one owner completion, cancel, fallback, or abort does not clear another owner", animationDesign);
+        Assert.Contains("Done: completion tracking now uses an owner table so one owner completion, cancel, fallback, or abort does not clear another target; a new owner for the same target supersedes the stale active owner", animationDesign);
         Assert.Contains("Done: validation-only batch runtime preflight now pairs accepted owners, rejected owners, presentation-set install requirements, and owner-table completion state", animationDesign);
         Assert.Contains("Done: rendering-owned presentation-set activation preflight now builds a validated `CompositionAnimationPresentationSetPlan`", animationDesign);
         Assert.Contains("Done: active presentation-set compositor state and tick contract can execute a validated `CompositionAnimationPresentationSetPlan` internally", animationDesign);

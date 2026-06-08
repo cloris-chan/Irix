@@ -149,6 +149,21 @@ internal static class CounterStyleTransitionBridge
         return false;
     }
 
+    internal static bool TryMapNodeKeyToAction(NodeKey nodeKey, out ActionId actionId)
+    {
+        foreach (var target in CounterButtonTransitionTarget.All)
+        {
+            if (target.NodeKey == nodeKey)
+            {
+                actionId = target.ActionId;
+                return true;
+            }
+        }
+
+        actionId = default;
+        return false;
+    }
+
     private static bool RequiresRetarget(ControlVisualState previous, ControlVisualState next) =>
         previous.IsHovered || previous.IsPressed || previous.IsFocused || next.IsPressed || next.IsFocused;
 
@@ -426,14 +441,32 @@ internal static class CounterStyleTransitionRuntimeBridge
         }
 
         var decision = runtime.ConsumeStyleTransitionDecision();
-        var trackedDecision = completionTracker.AttachCompletionMarker(decision);
+        var ownerKey = CreateCounterOwnerKey(decision);
+        var trackedDecision = ownerKey.IsNone
+            ? completionTracker.AttachCompletionMarker(decision)
+            : completionTracker.AttachCompletionMarker(ownerKey, decision);
         var result = await StyleTransitionRuntimeCoordinator.ApplyDecisionAsync(
             trackedDecision,
             compositor,
             snapshotProvider,
             cancellationToken);
         runtime.PublishStyleTransitionResult(result);
-        completionTracker.PublishRuntimeResult(trackedDecision, result);
+        if (ownerKey.IsNone)
+        {
+            completionTracker.PublishRuntimeResult(trackedDecision, result);
+        }
+        else
+        {
+            completionTracker.PublishRuntimeResult(ownerKey, trackedDecision, result);
+        }
+
         return result;
+    }
+
+    private static StyleTransitionOwnerKey CreateCounterOwnerKey(in StyleTransitionRuntimeDecision decision)
+    {
+        return CounterStyleTransitionBridge.TryMapNodeKeyToAction(decision.TargetKey, out var actionId)
+            ? StyleTransitionOwnerKey.ControlState(actionId, decision.TargetKey)
+            : default;
     }
 }

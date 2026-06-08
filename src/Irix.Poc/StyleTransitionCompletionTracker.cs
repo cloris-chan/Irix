@@ -436,6 +436,7 @@ internal sealed class StyleTransitionCompletionTracker
         NodeKey targetKey,
         CompositionAnimationInstanceId instanceId)
     {
+        RemoveActiveOwnersForTargetExcept(targetKey, ownerKey);
         var activeIndex = FindActiveOwnerIndex(ownerKey);
         if (activeIndex >= 0)
         {
@@ -445,6 +446,23 @@ internal sealed class StyleTransitionCompletionTracker
 
         EnsureActiveOwnerCapacity();
         _activeOwners![_activeOwnerCount++] = new TrackedTransition(ownerKey, targetKey, instanceId);
+    }
+
+    private void RemoveActiveOwnersForTargetExcept(NodeKey targetKey, StyleTransitionOwnerKey ownerKey)
+    {
+        if (targetKey == NodeKey.None)
+        {
+            return;
+        }
+
+        for (var i = _activeOwnerCount - 1; i >= 0; i--)
+        {
+            var active = _activeOwners![i];
+            if (active.TargetKey == targetKey && active.OwnerKey != ownerKey)
+            {
+                RemoveActiveOwnerAt(i);
+            }
+        }
     }
 
     private void EnsureActiveOwnerCapacity()

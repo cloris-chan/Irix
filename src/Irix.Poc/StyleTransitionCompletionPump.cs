@@ -215,16 +215,21 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
     {
         lock (_gate)
         {
-            if (_pumpTask is { IsCompleted: false } || !_tracker.HasActiveTransition)
+            if (!_tracker.HasActiveTransition)
+            {
+                return false;
+            }
+
+            _usePresentationTick = _compositor.CompositionAnimationPresentationPlan is not null;
+            _tickMode = _usePresentationTick
+                ? StyleTransitionCompletionPumpTickMode.PresentationSet
+                : StyleTransitionCompletionPumpTickMode.SingleAnimation;
+            if (_pumpTask is { IsCompleted: false })
             {
                 return false;
             }
 
             LastError = null;
-            _usePresentationTick = _compositor.CompositionAnimationPresentationPlan is not null;
-            _tickMode = _usePresentationTick
-                ? StyleTransitionCompletionPumpTickMode.PresentationSet
-                : StyleTransitionCompletionPumpTickMode.SingleAnimation;
             _pumpTask = Task.Run(
                 () => RunAsync(_disposeCancellationTokenSource.Token),
                 _disposeCancellationTokenSource.Token);
@@ -332,17 +337,19 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
             while (!cancellationToken.IsCancellationRequested && _tracker.HasActiveTransition)
             {
                 var timestamp = _clockSource.TimestampNow();
-                var result = _usePresentationTick
+                var tickMode = SetTickModeForActiveCompositorPlan();
+                var result = tickMode == StyleTransitionCompletionPumpTickMode.PresentationSet
                     ? await TickPresentationAndDrainAtAsync(timestamp, cancellationToken)
                     : await TickAndDrainAtAsync(timestamp, cancellationToken);
                 if (result.Kind is StyleTransitionCompletionPumpResultKind.NoActiveTransition
-                    or StyleTransitionCompletionPumpResultKind.TickUnavailable)
+                    || (result.Kind == StyleTransitionCompletionPumpResultKind.TickUnavailable
+                        && (!_tracker.HasActiveTransition || SetTickModeForActiveCompositorPlan() == tickMode)))
                 {
                     return;
                 }
 
                 if (result.Kind == StyleTransitionCompletionPumpResultKind.CompletionCommitted
-                    && (!_usePresentationTick || !_tracker.HasActiveTransition))
+                    && (tickMode == StyleTransitionCompletionPumpTickMode.SingleAnimation || !_tracker.HasActiveTransition))
                 {
                     return;
                 }
@@ -363,6 +370,19 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         catch (Exception ex)
         {
             SetLastError(ex);
+        }
+    }
+
+    private StyleTransitionCompletionPumpTickMode SetTickModeForActiveCompositorPlan()
+    {
+        var usePresentationTick = _compositor.CompositionAnimationPresentationPlan is not null;
+        lock (_gate)
+        {
+            _usePresentationTick = usePresentationTick;
+            _tickMode = usePresentationTick
+                ? StyleTransitionCompletionPumpTickMode.PresentationSet
+                : StyleTransitionCompletionPumpTickMode.SingleAnimation;
+            return _tickMode;
         }
     }
 
