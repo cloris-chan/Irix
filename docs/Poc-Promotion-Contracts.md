@@ -170,7 +170,7 @@ Current ownership:
 | `InputOwnershipState` / `OwnershipSnapshot` | `Irix.Poc` app runtime state | Tracks single-pointer hover, pressed, captured, and focused targets for Counter. Candidate runtime state, but not movable until multi-control ownership and action dispatch are no longer Counter-specific. |
 | `InputOwnershipEvent` / diagnostics ring | `Irix.Poc` diagnostics over app input state | Diagnostic observation only. It should follow the input owner if a future runtime extraction happens. |
 | `IInputHitTestService`, `IActionHitTestResolver`, and resolver/service implementations | `Irix.Poc` input adapter | Bridges physical input coordinates to `ActionId` through Poc/compositor hit targets. The first renderer-neutral service shape exists, but the identity model is still Counter/Poc `ActionId`. |
-| `IAppMessageDispatchMapper`, `IControlFeedbackDispatchMapper`, and `CounterAppMessageDispatchMapper` | `Irix.Poc` app message adapter | Converts routed input results, ownership snapshots, and max-scroll feedback into `CounterMessage` dispatch values. Runtime and marker dispatch use a separate Poc dispatch sink, and wheel raw input dispatches through a Poc scroll presentation sink; broader framework runtime ownership still needs a non-Counter contract. |
+| `AppDispatchIntent`, `IAppMessageDispatchMapper`, `IControlFeedbackDispatchMapper`, and `CounterAppMessageDispatchMapper` | `Irix.Poc` app message adapter | Groups routed input results, ownership snapshots, and max-scroll feedback into a Poc-owned intent before converting them into `CounterMessage` dispatch values. Runtime and marker dispatch use a separate Poc dispatch sink, and wheel raw input dispatches through a Poc scroll presentation sink; broader framework runtime ownership still needs a non-Counter action/message contract. |
 | `CounterInputRouter` | `Irix.Poc` sample app router | Maps raw input plus ownership state to `CounterMessage`; it must not be promoted as framework runtime. |
 | `ControlVisualState`, `ControlVisualStateProjection`, `ControlVisualStatePropertyAdapter`, `ButtonPropertyBundle` | `Irix.Poc` control projection | Converts ownership snapshot into Counter button properties. Candidate concept, but current shape is button-specific and property-array publishing remains app-authoring glue. |
 
@@ -179,6 +179,7 @@ Rules:
 - Input ownership is app/control runtime state, not rendering diagnostics and not platform backend state.
 - Hit testing may consume renderer-produced hit targets, but the input owner must not own retained render frames.
 - `ControlVisualState` projection is a control feedback/projection layer. It should not move into `Irix.Rendering` because it emits `VirtualNodeProperty` updates for app/control state.
+- `AppDispatchIntent` is an internal Poc grouping shape, not a diagnostics event bus, subscription API, runtime scheduler, or public dispatch contract.
 - `ActionId` dispatch and `CounterMessage` mapping are sample-app concerns. A framework extraction must introduce typed control actions or routed commands first.
 - Keep the current code in `Irix.Poc` until a future commit can move one coherent unit with tests and without Counter-specific assumptions.
 

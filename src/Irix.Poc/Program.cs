@@ -415,12 +415,14 @@ internal static partial class Program
 
         if (mapped)
         {
-            return dispatchMapper.TryMapInputMessage(mappedMessage, in after, out message);
+            var intent = AppDispatchIntent<CounterMessage>.Input(mappedMessage, in after);
+            return dispatchMapper.TryMapIntent(in intent, out message);
         }
 
         if (before != after)
         {
-            return dispatchMapper.TryMapInputOwnershipChanged(in after, out message);
+            var intent = AppDispatchIntent<CounterMessage>.InputOwnershipChanged(in after);
+            return dispatchMapper.TryMapIntent(in intent, out message);
         }
 
         message = null;
@@ -433,7 +435,8 @@ internal static partial class Program
         out CounterMessage? message)
         where TFeedbackMapper : struct, IControlFeedbackDispatchMapper<CounterMessage>
     {
-        if (feedbackMapper.TryMapMaxScrollY(maxScrollY, out var mappedMessage))
+        var intent = AppDispatchIntent<CounterMessage>.MaxScrollFeedback(maxScrollY);
+        if (feedbackMapper.TryMapControlFeedbackIntent(in intent, out var mappedMessage))
         {
             message = mappedMessage;
             return true;

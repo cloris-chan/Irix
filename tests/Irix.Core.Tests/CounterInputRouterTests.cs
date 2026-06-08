@@ -755,11 +755,57 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Counter_app_message_dispatch_mapper_maps_input_intent()
+    {
+        var mapper = new CounterAppMessageDispatchMapper();
+        var snapshot = new OwnershipSnapshot(
+            HoveredTarget: new ActionId(2),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: ActionId.None,
+            CapturedTarget: ActionId.None,
+            LastHoverEnteredTarget: new ActionId(2),
+            LastHoverLeftTarget: new ActionId(1),
+            HoverChangeCount: 2,
+            IsPointerPressed: false);
+        var intent = AppDispatchIntent<CounterMessage>.Input(new CounterMessage.Increment(), in snapshot);
+
+        var mapped = mapper.TryMapIntent(in intent, out var message);
+
+        var routed = Assert.IsType<CounterMessage.RoutedInput>(message);
+        Assert.True(mapped);
+        Assert.IsType<CounterMessage.Increment>(routed.Action);
+        Assert.Equal(snapshot, routed.Snapshot);
+    }
+
+    [Fact]
+    public void Counter_app_message_dispatch_mapper_maps_ownership_intent()
+    {
+        var mapper = new CounterAppMessageDispatchMapper();
+        var snapshot = new OwnershipSnapshot(
+            HoveredTarget: new ActionId(2),
+            FocusedTarget: ActionId.None,
+            PressedTarget: ActionId.None,
+            CapturedTarget: ActionId.None,
+            LastHoverEnteredTarget: new ActionId(2),
+            LastHoverLeftTarget: ActionId.None,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var intent = AppDispatchIntent<CounterMessage>.InputOwnershipChanged(in snapshot);
+
+        var mapped = mapper.TryMapIntent(in intent, out var message);
+
+        var refresh = Assert.IsType<CounterMessage.InputVisualStateChanged>(message);
+        Assert.True(mapped);
+        Assert.Equal(snapshot, refresh.Snapshot);
+    }
+
+    [Fact]
     public void Counter_app_message_dispatch_mapper_maps_max_scroll_feedback()
     {
         var mapper = new CounterAppMessageDispatchMapper();
+        var intent = AppDispatchIntent<CounterMessage>.MaxScrollFeedback(42.5);
 
-        var mapped = mapper.TryMapMaxScrollY(42.5, out var message);
+        var mapped = mapper.TryMapIntent(in intent, out var message);
 
         var update = Assert.IsType<CounterMessage.UpdateMaxScrollY>(message);
         Assert.True(mapped);

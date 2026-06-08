@@ -3500,7 +3500,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("struct CounterInputActionMapper", inputActionMapperSource);
         Assert.Contains("TryMapAction(ActionId actionId, in RawInputEvent inputEvent", inputActionMapperSource);
         Assert.Contains("interface IAppMessageDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("enum AppDispatchIntentKind", appMessageDispatchMapperSource);
+        Assert.Contains("readonly struct AppDispatchIntent", appMessageDispatchMapperSource);
         Assert.Contains("struct CounterAppMessageDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("TryMapIntent(", appMessageDispatchMapperSource);
         Assert.Contains("TryMapInputMessage(", appMessageDispatchMapperSource);
         Assert.Contains("TryMapInputOwnershipChanged(", appMessageDispatchMapperSource);
         Assert.Contains("where THitTestService : struct, IInputHitTestService", inputOwnershipSource);
@@ -3513,8 +3516,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("var actionMapper = new CounterInputActionMapper();", programSource);
         Assert.Contains("var dispatchMapper = new CounterAppMessageDispatchMapper();", programSource);
         Assert.Contains("where TDispatchMapper : struct, IAppMessageDispatchMapper<CounterMessage, CounterMessage>", programSource);
-        Assert.Contains("dispatchMapper.TryMapInputMessage(mappedMessage, in after, out message)", programSource);
-        Assert.Contains("dispatchMapper.TryMapInputOwnershipChanged(in after, out message)", programSource);
+        Assert.Contains("AppDispatchIntent<CounterMessage>.Input(mappedMessage, in after)", programSource);
+        Assert.Contains("AppDispatchIntent<CounterMessage>.InputOwnershipChanged(in after)", programSource);
+        Assert.Contains("dispatchMapper.TryMapIntent(in intent, out message)", programSource);
         Assert.Contains("DispatchScrollPresentationInterruptedAsync", coordinatorSource);
         Assert.Contains("SampleAndCancelAsync", coordinatorSource);
         Assert.Contains("snapshotProvider.LastRetainedInputSnapshot", coordinatorSource);
@@ -3615,6 +3619,7 @@ public sealed class ProgramDiagnosticsTests
         var markerMapperSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(pocRoot, "CounterCompositionMarkerMapper.cs")));
         Assert.Contains("interface IAppMessageDispatchMapper", appMessageDispatchMapperSource);
         Assert.Contains("interface IControlFeedbackDispatchMapper", appMessageDispatchMapperSource);
+        Assert.Contains("readonly struct AppDispatchIntent", appMessageDispatchMapperSource);
         Assert.Contains("struct CounterAppMessageDispatchMapper", appMessageDispatchMapperSource);
         Assert.Contains("interface IAppRuntimeDispatchSink", appRuntimeDispatchSource);
         Assert.Contains("struct CounterRuntimeDispatchSink", appRuntimeDispatchSource);
