@@ -116,6 +116,7 @@ internal static class ScrollController
         in ScrollMetrics metrics,
         in SystemScrollSettings settings)
     {
+        state = NormalizeState(state);
         var pixels = ConvertToPixels(delta, metrics, settings);
         return ApplyPixelDelta(state, pixels);
     }
@@ -124,7 +125,18 @@ internal static class ScrollController
 
     private static ScrollState ApplyPixelDelta(ScrollState state, double pixelDelta)
     {
+        pixelDelta = NormalizeDelta(pixelDelta);
+        if (pixelDelta == 0)
+        {
+            return state with { Accumulator = ClampBoundaryAccumulator(state, state.Accumulator) };
+        }
+
         var newAccumulator = state.Accumulator + pixelDelta;
+        if (!double.IsFinite(newAccumulator))
+        {
+            return state with { Accumulator = 0 };
+        }
+
         var wholePixels = Math.Truncate(newAccumulator);
         var remainder = newAccumulator - wholePixels;
 
@@ -152,22 +164,31 @@ internal static class ScrollController
         in ScrollMetrics metrics,
         in SystemScrollSettings settings)
     {
-        var lineExtent = metrics.LineExtent > 0 ? metrics.LineExtent : 18;
-        var pageExtent = metrics.PageExtent > 0
+        var value = NormalizeDelta(delta.Value);
+        var lineExtent = NormalizePositive(metrics.LineExtent, 18);
+        var viewportExtent = NormalizePositive(metrics.ViewportExtent, 0);
+        var pageExtent = IsPositiveFinite(metrics.PageExtent)
             ? metrics.PageExtent
-            : (metrics.ViewportExtent > 0 ? metrics.ViewportExtent * 0.9 : lineExtent * 10);
+            : (viewportExtent > 0 ? viewportExtent * 0.9 : lineExtent * 10);
+        var wheelUnitsPerNotch = settings.WheelUnitsPerNotch > 0
+            ? settings.WheelUnitsPerNotch
+            : SystemScrollSettings.Default.WheelUnitsPerNotch;
+        var linesPerWheelNotch = settings.LinesPerWheelNotch > 0
+            ? settings.LinesPerWheelNotch
+            : SystemScrollSettings.Default.LinesPerWheelNotch;
 
-        return delta.Unit switch
+        var pixels = delta.Unit switch
         {
-            ScrollDeltaUnit.Line => delta.Value * lineExtent,
-            ScrollDeltaUnit.Pixel => delta.Value,
-            ScrollDeltaUnit.Page => delta.Value * pageExtent,
-            ScrollDeltaUnit.WheelRaw => -delta.Value
-                / settings.WheelUnitsPerNotch
-                * settings.LinesPerWheelNotch
+            ScrollDeltaUnit.Line => value * lineExtent,
+            ScrollDeltaUnit.Pixel => value,
+            ScrollDeltaUnit.Page => value * pageExtent,
+            ScrollDeltaUnit.WheelRaw => -value
+                / wheelUnitsPerNotch
+                * linesPerWheelNotch
                 * lineExtent,
             _ => 0,
         };
+        return NormalizeDelta(pixels);
     }
 
     // ── animation tick ───────────────────────────────────────────────
@@ -177,7 +198,14 @@ internal static class ScrollController
     /// </summary>
     public static ScrollState Tick(ScrollState state, double dt)
     {
+        state = NormalizeState(state);
         if (!state.IsAnimating)
+        {
+            return state;
+        }
+
+        dt = NormalizeDeltaTime(dt);
+        if (dt == 0)
         {
             return state;
         }
@@ -194,19 +222,32 @@ internal static class ScrollController
         }
 
         var factor = 1.0 - Math.Exp(-EaseSpeed * dt);
-        return state with { Position = state.Position + diff * factor };
+        var nextPosition = state.Position + diff * factor;
+        if (!double.IsFinite(nextPosition))
+        {
+            nextPosition = state.TargetPosition;
+        }
+
+        nextPosition = ClampToKnownRange(nextPosition, state);
+        return state with { Position = nextPosition, IsAnimating = nextPosition != state.TargetPosition };
     }
 
     // ── layout helper ────────────────────────────────────────────────
 
     /// <summary>Integer scroll offset for layout.</summary>
-    public static int GetScrollY(ScrollState state) => (int)Math.Round(state.Position);
+    public static int GetScrollY(ScrollState state)
+    {
+        state = NormalizeState(state);
+        var rounded = Math.Round(state.Position);
+        return rounded >= int.MaxValue ? int.MaxValue : (int)rounded;
+    }
 
     /// <summary>
     /// Update MaxScrollY from the layout pass. Also re-clamps TargetPosition.
     /// </summary>
     public static ScrollState WithMaxScrollY(ScrollState state, double maxScrollY)
     {
+        state = NormalizeState(state, clampToKnownRange: false);
         maxScrollY = NormalizeMaxScrollY(maxScrollY);
 
         // HasMaxScrollY=true means maxScrollY is a known value from layout.
@@ -231,6 +272,7 @@ internal static class ScrollController
         in SystemScrollSettings settings,
         ScrollPresentationInterruptPolicy policy)
     {
+        state = NormalizeState(state);
         var normalizedPresented = ClampToKnownRange(presentedScrollY, state);
         return policy switch
         {
@@ -243,6 +285,7 @@ internal static class ScrollController
 
     public static ScrollState CommitPresented(ScrollState state, double presentedScrollY)
     {
+        state = NormalizeState(state);
         var committed = ClampToKnownRange(presentedScrollY, state);
         return state with
         {
@@ -255,6 +298,7 @@ internal static class ScrollController
 
     public static ScrollState CancelPresentation(ScrollState state)
     {
+        state = NormalizeState(state);
         var target = ClampToKnownRange(state.TargetPosition, state);
         return state with
         {
@@ -272,6 +316,7 @@ internal static class ScrollController
         in ScrollMetrics metrics,
         in SystemScrollSettings settings)
     {
+        state = NormalizeState(state);
         var normalizedPresented = ClampToKnownRange(presentedScrollY, state);
         var targetState = ApplyScrollDelta(state, delta, metrics, settings);
         return targetState with
@@ -327,13 +372,60 @@ internal static class ScrollController
 
     private static double ClampToKnownRange(double value, ScrollState state)
     {
-        var finite = double.IsFinite(value) ? value : 0;
-        return state.HasMaxScrollY ? Math.Clamp(finite, 0, state.MaxScrollY) : Math.Max(finite, 0);
+        var finite = NormalizeScrollCoordinate(value);
+        var maxScrollY = NormalizeMaxScrollY(state.MaxScrollY);
+        return state.HasMaxScrollY ? Math.Clamp(finite, 0, maxScrollY) : finite;
     }
 
     private static double NormalizeMaxScrollY(double maxScrollY)
     {
         return maxScrollY >= 0 && double.IsFinite(maxScrollY) ? maxScrollY : 0;
+    }
+
+    private static ScrollState NormalizeState(ScrollState state, bool clampToKnownRange = true)
+    {
+        var maxScrollY = NormalizeMaxScrollY(state.MaxScrollY);
+        var target = NormalizeScrollCoordinate(state.TargetPosition);
+        var position = NormalizeScrollCoordinate(state.Position);
+        if (clampToKnownRange && state.HasMaxScrollY)
+        {
+            target = Math.Clamp(target, 0, maxScrollY);
+            position = Math.Clamp(position, 0, maxScrollY);
+        }
+
+        return state with
+        {
+            Accumulator = double.IsFinite(state.Accumulator) ? state.Accumulator : 0,
+            TargetPosition = target,
+            Position = position,
+            MaxScrollY = maxScrollY,
+            IsAnimating = state.IsAnimating && target != position,
+        };
+    }
+
+    private static double NormalizeScrollCoordinate(double value)
+    {
+        return value >= 0 && double.IsFinite(value) ? value : 0;
+    }
+
+    private static double NormalizeDelta(double value)
+    {
+        return double.IsFinite(value) ? value : 0;
+    }
+
+    private static double NormalizeDeltaTime(double value)
+    {
+        return value > 0 && double.IsFinite(value) ? value : 0;
+    }
+
+    private static double NormalizePositive(double value, double fallback)
+    {
+        return IsPositiveFinite(value) ? value : fallback;
+    }
+
+    private static bool IsPositiveFinite(double value)
+    {
+        return value > 0 && double.IsFinite(value);
     }
 
     private static double ClampBoundaryAccumulator(ScrollState state, double accumulator)

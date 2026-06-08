@@ -1884,6 +1884,50 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void ConvertToPixels_invalid_delta_values_return_zero()
+    {
+        Assert.Equal(0, ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.Line, double.NaN),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default));
+        Assert.Equal(0, ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.Pixel, double.PositiveInfinity),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default));
+        Assert.Equal(0, ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.Page, double.NegativeInfinity),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default));
+        Assert.Equal(0, ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, double.NaN),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default));
+    }
+
+    [Fact]
+    public void ConvertToPixels_invalid_metrics_and_settings_use_defaults()
+    {
+        var metrics = new ScrollMetrics(
+            LineExtent: double.NaN,
+            PageExtent: double.NaN,
+            ViewportExtent: double.PositiveInfinity,
+            ContentExtent: double.NaN);
+        var settings = new SystemScrollSettings(LinesPerWheelNotch: 0, WheelUnitsPerNotch: 0);
+
+        var wheelPixels = ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.WheelRaw, -120),
+            metrics,
+            settings);
+        var pagePixels = ScrollController.ConvertToPixels(
+            new ScrollDelta(ScrollDeltaUnit.Page, 1),
+            metrics,
+            settings);
+
+        Assert.Equal(54, wheelPixels);
+        Assert.Equal(180, pagePixels);
+    }
+
+    [Fact]
     public void ApplyScrollDelta_maxScroll_clamp()
     {
         var metrics = new ScrollMetrics(LineExtent: 18, PageExtent: 0, ViewportExtent: 0, ContentExtent: 200);
@@ -1898,6 +1942,51 @@ public sealed class CounterInputRouterTests
         // doesn't clamp �?it's the layout builder's job. So target is just large.
         Assert.True(state.TargetPosition > 0);
         Assert.True(state.IsAnimating);
+    }
+
+    [Fact]
+    public void ApplyScrollDelta_recovers_from_non_finite_state_before_applying_delta()
+    {
+        var state = new ScrollState
+        {
+            Accumulator = double.NaN,
+            TargetPosition = double.PositiveInfinity,
+            Position = double.NaN,
+            IsAnimating = true,
+        };
+
+        var next = ScrollController.ApplyScrollDelta(
+            state,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, 12),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+
+        AssertFiniteScrollState(next);
+        Assert.Equal(0, next.Accumulator);
+        Assert.Equal(0, next.Position);
+        Assert.Equal(12, next.TargetPosition);
+        Assert.True(next.IsAnimating);
+    }
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void ApplyScrollDelta_ignores_non_finite_pixel_delta(double delta)
+    {
+        var state = new ScrollState { Position = 12, TargetPosition = 54, Accumulator = 0.5, IsAnimating = true };
+
+        var next = ScrollController.ApplyScrollDelta(
+            state,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, delta),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+
+        AssertFiniteScrollState(next);
+        Assert.Equal(12, next.Position);
+        Assert.Equal(54, next.TargetPosition);
+        Assert.Equal(0.5, next.Accumulator);
+        Assert.True(next.IsAnimating);
     }
 
     [Fact]
@@ -1996,6 +2085,57 @@ public sealed class CounterInputRouterTests
         Assert.Equal(108, scrollY);
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    [InlineData(-1)]
+    public void ScrollController_tick_ignores_invalid_delta_time(double deltaTime)
+    {
+        var state = new ScrollState { Position = 12, TargetPosition = 54, IsAnimating = true };
+
+        var next = ScrollController.Tick(state, deltaTime);
+
+        AssertFiniteScrollState(next);
+        Assert.Equal(12, next.Position);
+        Assert.Equal(54, next.TargetPosition);
+        Assert.True(next.IsAnimating);
+    }
+
+    [Fact]
+    public void ScrollController_tick_normalizes_corrupt_state_before_advancing()
+    {
+        var state = new ScrollState
+        {
+            Position = double.NaN,
+            TargetPosition = 54,
+            Accumulator = double.PositiveInfinity,
+            IsAnimating = true,
+        };
+
+        var next = ScrollController.Tick(state, 1.0 / 60.0);
+
+        AssertFiniteScrollState(next);
+        Assert.Equal(0, next.Accumulator);
+        Assert.True(next.Position > 0);
+        Assert.Equal(54, next.TargetPosition);
+        Assert.True(next.IsAnimating);
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 0)]
+    [InlineData(double.NegativeInfinity, 0)]
+    [InlineData(double.PositiveInfinity, 0)]
+    [InlineData(double.MaxValue, int.MaxValue)]
+    public void GetScrollY_normalizes_invalid_or_large_positions(double position, int expected)
+    {
+        var state = new ScrollState { Position = position, TargetPosition = position };
+
+        var scrollY = ScrollController.GetScrollY(state);
+
+        Assert.Equal(expected, scrollY);
+    }
+
     [Fact]
     public void MaxScrollY_clamps_target_position()
     {
@@ -2074,6 +2214,23 @@ public sealed class CounterInputRouterTests
         Assert.Equal(0, next.Accumulator);
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void ScrollPresentationInterrupt_commit_invalid_presented_value_normalizes_to_zero(double presentedScrollY)
+    {
+        var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 240, HasMaxScrollY = true };
+
+        var next = ScrollController.CommitPresented(state, presentedScrollY);
+
+        AssertFiniteScrollState(next);
+        Assert.Equal(0, next.Position);
+        Assert.Equal(0, next.TargetPosition);
+        Assert.False(next.IsAnimating);
+        Assert.Equal(0, next.Accumulator);
+    }
+
     [Fact]
     public void ScrollPresentationInterrupt_cancel_returns_to_logical_target()
     {
@@ -2135,6 +2292,24 @@ public sealed class CounterInputRouterTests
 
         Assert.Equal(150, next.Position);
         Assert.Equal(160, next.TargetPosition);
+        Assert.True(next.IsAnimating);
+    }
+
+    [Fact]
+    public void ScrollPresentationInterrupt_retarget_ignores_invalid_delta_without_poisoning_state()
+    {
+        var state = new ScrollState { Position = 120, TargetPosition = 180, IsAnimating = true, MaxScrollY = 240, HasMaxScrollY = true };
+
+        var next = ScrollController.RetargetFromPresentedToLogicalTarget(
+            state,
+            double.NaN,
+            new ScrollDelta(ScrollDeltaUnit.Pixel, double.NaN),
+            ScrollMetrics.DefaultText,
+            SystemScrollSettings.Default);
+
+        AssertFiniteScrollState(next);
+        Assert.Equal(0, next.Position);
+        Assert.Equal(180, next.TargetPosition);
         Assert.True(next.IsAnimating);
     }
 
@@ -2525,6 +2700,27 @@ public sealed class CounterInputRouterTests
         Assert.False(state.IsAnimating);
     }
 
+    [Fact]
+    public void HasMaxScrollY_withMaxScrollY_uses_new_valid_max_when_previous_max_is_invalid()
+    {
+        var state = new ScrollState
+        {
+            Position = 50,
+            TargetPosition = 80,
+            MaxScrollY = double.NaN,
+            HasMaxScrollY = true,
+            IsAnimating = true,
+        };
+
+        state = ScrollController.WithMaxScrollY(state, 100);
+
+        Assert.True(state.HasMaxScrollY);
+        Assert.Equal(100, state.MaxScrollY);
+        Assert.Equal(50, state.Position);
+        Assert.Equal(80, state.TargetPosition);
+        Assert.True(state.IsAnimating);
+    }
+
     // ── Coalescing / rapid input tests ─────────────────────────────────
 
     [Fact]
@@ -2789,6 +2985,14 @@ public sealed class CounterInputRouterTests
         {
             await Task.Delay(10, cancellationToken);
         }
+    }
+
+    private static void AssertFiniteScrollState(ScrollState state)
+    {
+        Assert.True(double.IsFinite(state.Accumulator));
+        Assert.True(double.IsFinite(state.TargetPosition));
+        Assert.True(double.IsFinite(state.Position));
+        Assert.True(double.IsFinite(state.MaxScrollY));
     }
 
     private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
