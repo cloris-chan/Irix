@@ -33,6 +33,11 @@ internal static class ScrollInputDispatchAdapter
         TDispatchSink dispatchSink)
         where TDispatchSink : struct, IWheelInputDispatchSink
     {
+        if (!HasDispatchablePixels(intent.Pixels))
+        {
+            return false;
+        }
+
         dispatchSink.DispatchWheelPixels(intent.Pixels);
         return true;
     }
@@ -46,6 +51,11 @@ internal static class ScrollInputDispatchAdapter
 
         var intent = WheelInputDispatchIntent.FromRawDelta(wheel.RawDelta);
         return TryDispatchIntent(in intent, dispatchSink);
+    }
+
+    private static bool HasDispatchablePixels(double pixels)
+    {
+        return pixels != 0 && double.IsFinite(pixels);
     }
 }
 

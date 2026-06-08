@@ -935,6 +935,19 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Program_wheel_dispatch_skips_zero_raw_delta()
+    {
+        var recorder = new WheelDispatchRecorder();
+        var sink = new RecordingWheelDispatchSink(recorder);
+
+        var dispatched = Program.TryDispatchWheelInputForRuntime(new CounterMessage.WheelRaw(0), sink);
+
+        Assert.False(dispatched);
+        Assert.Equal(0, recorder.LastPixels);
+        Assert.Equal(0, recorder.DispatchCount);
+    }
+
+    [Fact]
     public void Scroll_input_dispatch_adapter_dispatches_wheel_intent_pixels()
     {
         var recorder = new WheelDispatchRecorder();
@@ -946,6 +959,20 @@ public sealed class CounterInputRouterTests
         Assert.True(dispatched);
         Assert.Equal(-108.0, recorder.LastPixels);
         Assert.Equal(1, recorder.DispatchCount);
+    }
+
+    [Fact]
+    public void Scroll_input_dispatch_adapter_skips_zero_wheel_intent_pixels()
+    {
+        var recorder = new WheelDispatchRecorder();
+        var sink = new RecordingWheelDispatchSink(recorder);
+        var intent = WheelInputDispatchIntent.FromRawDelta(0);
+
+        var dispatched = ScrollInputDispatchAdapter.TryDispatchIntent(in intent, sink);
+
+        Assert.False(dispatched);
+        Assert.Equal(0, recorder.LastPixels);
+        Assert.Equal(0, recorder.DispatchCount);
     }
 
     [Fact]
