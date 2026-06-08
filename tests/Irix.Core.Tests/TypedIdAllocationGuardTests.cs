@@ -8,6 +8,7 @@ using Xunit;
 
 namespace Irix.Core.Tests;
 
+[Trait("Category", "Guard")]
 public class TypedIdAllocationGuardTests
 {
     private readonly VirtualTextArena _arena = new();

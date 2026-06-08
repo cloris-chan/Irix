@@ -31,12 +31,12 @@ The Windows PoC separates target framework, CI toolchain check, and runtime mini
 
 | Task | Current state | Acceptance |
 |------|---------------|------------|
-| Local validation entrypoint | `.\scripts\validate.ps1` is the fixed local runner while GitHub Actions quota is exhausted. `Quick` mirrors CI quick validation, `Focused` validates source guards, partial apply, composition, and scroll/input preflights, `GlyphSmoke` delegates the guarded glyph smoke lane, and `Full` runs the Release test suite with optional glyph smoke. | `validation.guard status=Passed`; failed lanes report non-zero exit codes and the lane name. |
+| Local validation entrypoint | `.\scripts\validate.ps1` is the fixed local runner while GitHub Actions quota is exhausted. `Quick` mirrors CI quick validation and skips the heavy `Guard` category, `Focused` validates the `Guard` category plus partial apply, composition, and scroll/input preflights, `GlyphSmoke` delegates the guarded glyph smoke lane, and `Full` runs the Release test suite with optional glyph smoke. | `validation.guard status=Passed`; failed lanes report non-zero exit codes and the lane name. |
 | Local Smoke gate | GitHub Actions quota is exhausted, so local `.\scripts\glyph-atlas-regression.ps1 -Mode Smoke` remains the broad rendering/glyph gate. | Guard `status=Passed`; matrix `degradedRuns=0`, `glyphAtlasInitialized=True`, `finalComposition=D3D12`; soak `deviceLost=False`, `syncWaits=0`, `hardFullWithoutReuse=0`, `RecordFailed=0`. |
 | Guarded glyph coverage | Glyph atlas script/format support is guard-gated by oracle/regression/degradation coverage. | Add new coverage only when it has matching oracle/regression coverage; reject unguarded coverage drift. |
 | Source boundary guards | Active guards keep final text composition on D3D12 GlyphAtlas, block runtime shader compile, block raw retained text strings, and prevent premature compositor/runtime extraction. | Guards stay green after renderer, text, diagnostics, or architecture-boundary changes. |
 
-Run `Quick` for routine changes and `Focused` after architecture-boundary, diagnostics, partial-apply, composition, scroll/input, or status-doc edits. Run `Smoke` before/after broad rendering changes. Do not add artifact-upload work until Actions quota returns.
+Run `Quick` for routine changes and `Focused` after source/doc guard, architecture-boundary, diagnostics, partial-apply, composition, scroll/input, or status-doc edits. Run `Smoke` before/after broad rendering changes. Do not add artifact-upload work until Actions quota returns.
 Push/PR CI intentionally stays lightweight while quota is constrained; run the manual `glyph-atlas-smoke` workflow_dispatch suite only when remote confirmation is worth the cost.
 
 ### Near-Term Plan

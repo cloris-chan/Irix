@@ -4,11 +4,11 @@
 
 .DESCRIPTION
     Runs the local validation lanes that currently stand in for the constrained
-    GitHub Actions setup. Quick mirrors the lightweight CI lane. Focused runs the
-    architecture/source-boundary, diagnostics, partial-apply, composition, and
-    scroll/input preflight coverage. GlyphSmoke delegates to the guarded glyph
-    atlas smoke script. Full runs the Release test suite and can optionally add
-    GlyphSmoke.
+    GitHub Actions setup. Quick mirrors the lightweight CI lane and excludes
+    heavy/source/doc guard suites. Focused runs those guard suites plus the
+    partial-apply, composition, and scroll/input preflight coverage. GlyphSmoke
+    delegates to the guarded glyph atlas smoke script. Full runs the Release
+    test suite and can optionally add GlyphSmoke.
 
 .EXAMPLE
     .\scripts\validate.ps1
@@ -116,7 +116,7 @@ function Invoke-Quick {
             "Release",
             "--no-build",
             "--filter",
-            "Category!=D3D12&Category!=Performance",
+            "Category!=D3D12&Category!=Performance&Category!=Guard",
             "--verbosity",
             "normal")
     }
@@ -129,7 +129,7 @@ function Invoke-Focused {
         }
     }
 
-    Invoke-ValidationLane "Focused source and diagnostics guards" {
+    Invoke-ValidationLane "Focused Guard category" {
         Invoke-Dotnet @(
             "test",
             $solution,
@@ -137,7 +137,7 @@ function Invoke-Focused {
             "Release",
             "--no-restore",
             "--filter",
-            "FullyQualifiedName~ProgramDiagnosticsTests",
+            "Category=Guard",
             "--verbosity",
             "normal")
     }

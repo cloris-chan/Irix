@@ -11,6 +11,7 @@ using Xunit;
 
 namespace Irix.Core.Tests;
 
+[Trait("Category", "Guard")]
 public sealed class ProgramDiagnosticsTests
 {
     [Fact]
@@ -2767,7 +2768,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("glyph-atlas-smoke", workflow);
         Assert.Contains("Glyph atlas regression lane", workflow);
         Assert.Contains(".\\scripts\\glyph-atlas-regression.ps1 -Mode Smoke", workflow);
-        Assert.Contains("Category!=D3D12&Category!=Performance", workflow);
+        Assert.Contains("Category!=D3D12&Category!=Performance&Category!=Guard", workflow);
         Assert.Contains("CI_WINDOWS_SDK_MIN_VERSION: 10.0.26100.0", workflow);
         Assert.Contains("Windows SDK 26100+", workflow);
         Assert.DoesNotContain("IrixWindowsRequiredSdkVersion", workflow);
@@ -2788,13 +2789,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("[ValidateSet(\"Quick\", \"Focused\", \"GlyphSmoke\", \"Full\")]", validate);
         Assert.Contains("validation.guard status=Passed mode=$Mode", validate);
         Assert.Contains("validation.guard status=Failed mode=$Mode", validate);
-        Assert.Contains("Category!=D3D12&Category!=Performance", validate);
-        Assert.Contains("FullyQualifiedName~ProgramDiagnosticsTests", validate);
+        Assert.Contains("Category!=D3D12&Category!=Performance&Category!=Guard", validate);
+        Assert.Contains("Category=Guard", validate);
         Assert.Contains("FullyQualifiedName~PartialApply|FullyQualifiedName~DrawingBackendCompositor", validate);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode Quick", status);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode Focused", status);
         Assert.Contains(".\\scripts\\validate.ps1 -Mode GlyphSmoke", status);
-        Assert.Contains("`Focused` validates source guards", worklist);
+        Assert.Contains("`Focused` validates the `Guard` category", worklist);
         Assert.Contains("`Full` runs the Release test suite", worklist);
     }
 
@@ -3451,7 +3452,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("GitHub Actions quota is currently exhausted", status);
         Assert.Contains("current CI/source-of-truth status lives in [Project_Status_and_Todo.md]", design);
         Assert.Contains("TestResults\\glyph-atlas-regression-*-*.guard.summary.txt", status);
-        Assert.Contains("Run `Quick` for routine changes and `Focused` after architecture-boundary", worklist);
+        Assert.Contains("Run `Quick` for routine changes and `Focused` after source/doc guard", worklist);
         Assert.Contains("Run `Smoke` before/after broad rendering changes", worklist);
         Assert.Contains("Do not add artifact-upload work until Actions quota returns", worklist);
         Assert.Contains("`Nightly` after page-policy, eviction, or shaping overhauls", worklist);

@@ -68,7 +68,7 @@ jobs:
         run: dotnet build --no-restore -c Release
 
       - name: Test
-        run: dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance" --verbosity normal
+        run: dotnet test --no-build -c Release --filter "Category!=D3D12&Category!=Performance&Category!=Guard" --verbosity normal
 
   optional-validation:
     name: Windows 2025 / SDK 26100+ / optional ${{ inputs.validation_suite }}
