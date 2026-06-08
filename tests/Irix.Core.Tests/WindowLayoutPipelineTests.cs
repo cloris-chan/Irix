@@ -1835,7 +1835,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public async Task StyleTransitionCompletionPump_presentation_tick_commits_completed_owners_and_clears_plan_after_last_owner()
+    public async Task StyleTransitionCompletionPump_presentation_tick_clears_completed_targets_and_plan_after_last_owner()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var pipeline = new RenderPipeline();
@@ -1904,7 +1904,10 @@ public sealed class WindowLayoutPipelineTests
         Assert.True(tracker.TryGetActiveTransition(secondOwner, out var remainingTarget, out var remainingInstance));
         Assert.Equal(new NodeKey(23), remainingTarget);
         Assert.Equal(new CompositionAnimationInstanceId(152), remainingInstance);
-        Assert.NotNull(compositor.CompositionAnimationPresentationPlan);
+        var remainingPresentationPlan = compositor.CompositionAnimationPresentationPlan;
+        Assert.NotNull(remainingPresentationPlan);
+        Assert.Equal(1, remainingPresentationPlan.Value.Count);
+        Assert.Equal(new NodeKey(23), remainingPresentationPlan.Value.GetPlan(0).LayerAnimation.TargetKey);
         Assert.True(afterFirstCompletion.HasActiveTransition);
         Assert.Equal(1, afterFirstCompletion.ActiveOwnerCount);
         Assert.Equal(StyleTransitionCompletionPumpTickMode.PresentationSet, afterFirstCompletion.TickMode);
@@ -2033,6 +2036,60 @@ public sealed class WindowLayoutPipelineTests
                 Assert.Equal(StyleTransitionRuntimeDecisionKind.Start, second.Decision.Kind);
                 Assert.Equal(new NodeKey(7), second.Decision.TargetKey);
                 Assert.Equal(new CompositionAnimationInstanceId(2002), second.Decision.InstanceId);
+            });
+    }
+
+    [Fact]
+    public void CounterStyleTransitionBridge_routes_focused_to_pressed_cross_button_delta_to_transition_batch()
+    {
+        var previous = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            default,
+            default,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: false);
+        var next = new OwnershipSnapshot(
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Decrement,
+            ActionIdRegistry.Increment,
+            HoverChangeCount: 2,
+            IsPointerPressed: true);
+
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            previous,
+            next,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+
+        Assert.Equal(CounterStyleTransitionLifecycleAction.ApplyTransitionBatch, lifecycle.Action);
+        Assert.Equal(CounterStyleTransitionLifecycleReason.MultiTargetControlStateDelta, lifecycle.Reason);
+        Assert.True(lifecycle.HasTransitionBatch);
+        Assert.Equal(2, lifecycle.Batch.Count);
+
+        Assert.Collection(
+            lifecycle.Batch.Entries.ToArray(),
+            first =>
+            {
+                Assert.Equal(StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Increment, new NodeKey(6)), first.OwnerKey);
+                Assert.Equal(StyleTransitionRuntimeDecisionKind.Retarget, first.Decision.Kind);
+                Assert.Equal(new NodeKey(6), first.Decision.TargetKey);
+            },
+            second =>
+            {
+                Assert.Equal(StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(7)), second.OwnerKey);
+                Assert.Equal(StyleTransitionRuntimeDecisionKind.Retarget, second.Decision.Kind);
+                Assert.Equal(new NodeKey(7), second.Decision.TargetKey);
+
+                var compileResult = StyleTransitionCompiler.Compile(second.Decision.ToCompileRequest());
+                Assert.True(compileResult.HasDeclaration);
+                Assert.Equal(0.92f, compileResult.To.Opacity);
+                Assert.Equal(2f, compileResult.To.TranslateY);
             });
     }
 

@@ -404,6 +404,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
         cancellationToken.ThrowIfCancellationRequested();
 
         var events = new CompositionAnimationMarkerEvent[StackEventCapacity];
+        var completedTargetKeys = new NodeKey[StackEventCapacity];
         var drainedEvents = 0;
         var commitCount = 0;
         var lastCommitResult = default(StyleTransitionRuntimeResult);
@@ -427,6 +428,7 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
             }
 
             drainedEvents += count;
+            var completedTargetKeyCount = 0;
             for (var i = 0; i < count; i++)
             {
                 if (!_tracker.TryCreateCompletionDecision(events[i], out var commitDecision))
@@ -439,6 +441,13 @@ internal sealed class StyleTransitionCompletionPump : IAsyncDisposable
                 lastCommitResult = new StyleTransitionRuntimeResult(
                     StyleTransitionRuntimeResultKind.Committed,
                     commitDecision.TargetKey);
+                completedTargetKeys[completedTargetKeyCount++] = commitDecision.TargetKey;
+            }
+
+            if (completedTargetKeyCount > 0)
+            {
+                _compositor.ClearCompositionAnimationPresentationTargets(
+                    completedTargetKeys.AsSpan(0, completedTargetKeyCount));
             }
         }
     }

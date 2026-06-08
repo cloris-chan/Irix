@@ -3287,7 +3287,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("Done: active presentation-set compositor state and tick contract can execute a validated `CompositionAnimationPresentationSetPlan` internally", animationDesign);
         Assert.Contains("Done: Poc-owned presentation activation bridge moves all-ready start/retarget batches into the active presentation-set compositor contract", animationDesign);
         Assert.Contains("Done: Poc-owned batch cancellation/commit bridge clears an all-ready active presentation once and clears matching owner-table entries while blocking mixed, unsupported, or untracked clear batches before mutation", animationDesign);
-        Assert.Contains("Done: active presentation-set completion pump preflight drains per-layer completion markers, commits completed owners in the owner table, preserves remaining owners, and clears the active presentation plan only after the last tracked owner completes", animationDesign);
+        Assert.Contains("Done: active presentation-set completion pump preflight drains per-layer completion markers, commits completed owners in the owner table, clears completed targets from the active presentation plan, and preserves remaining owners until the last tracked owner completes", animationDesign);
         Assert.Contains("Done: Counter multi-target control-state routing now builds a Poc-owned decision batch", animationDesign);
         Assert.Contains("StyleTransitionDecisionBatchPreflight", animationDesign);
         Assert.Contains("StyleTransitionRuntimeCoordinator.ValidateBatch", animationDesign);

@@ -1,7 +1,7 @@
 # Irix Project Status
 
 > Current developer handoff note for the Irix Windows PoC.
-> Last verified: 2026-06-08.
+> Last verified: 2026-06-09.
 
 ---
 
