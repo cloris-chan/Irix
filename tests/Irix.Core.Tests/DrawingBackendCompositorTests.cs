@@ -893,6 +893,37 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task RenderCompositionAnimationTickAsync_normalizes_non_finite_scalar_outputs()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        using var frame = CreateSingleRectFrame();
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionAnimationPlan(new CompositionAnimationPlan(new CompositionLayerAnimation(
+            new CompositionLayerId(1),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionTransformAnimation(
+                new CompositionScalarAnimation(float.NaN, 20),
+                new CompositionScalarAnimation(10, float.PositiveInfinity)),
+            new CompositionScalarAnimation(float.NegativeInfinity, 0.5f))));
+
+        _ = await compositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(5), cancellationToken);
+
+        var layer = backend.LastCompositionFrame.Layer;
+        Assert.True(float.IsFinite(layer.Transform.TranslateX));
+        Assert.True(float.IsFinite(layer.Transform.TranslateY));
+        Assert.True(float.IsFinite(layer.Opacity.Normalized));
+        Assert.Equal(20, layer.Transform.TranslateX);
+        Assert.Equal(10, layer.Transform.TranslateY);
+        Assert.Equal(0.5f, layer.Opacity.Normalized);
+    }
+
+    [Fact]
     public async Task RenderCompositionAnimationTickAsync_uses_injected_composition_clock_source()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1065,6 +1096,19 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(0, sineOut.Evaluate(0));
         Assert.InRange(sineOut.Evaluate(0.5f), 70.7f, 70.8f);
         Assert.Equal(100, sineOut.Evaluate(1));
+    }
+
+    [Fact]
+    public void CompositionScalarAnimation_normalizes_invalid_progress_and_endpoints()
+    {
+        var range = new CompositionScalarAnimation(10, 20);
+        Assert.Equal(10, range.Evaluate(float.NaN));
+        Assert.Equal(10, range.Evaluate(float.NegativeInfinity));
+        Assert.Equal(20, range.Evaluate(float.PositiveInfinity));
+
+        Assert.Equal(20, new CompositionScalarAnimation(float.NaN, 20).Evaluate(0.5f));
+        Assert.Equal(10, new CompositionScalarAnimation(10, float.PositiveInfinity).Evaluate(0.5f));
+        Assert.Equal(0, new CompositionScalarAnimation(float.NaN, float.NegativeInfinity).Evaluate(0.5f));
     }
 
     [Fact]
@@ -1537,6 +1581,35 @@ public sealed class DrawingBackendCompositorTests
         Assert.Equal(CompositionClipMode.Fixed, layer.ClipMode);
         Assert.Equal(new DrawRect(target.ClipBounds.X, target.ClipBounds.Y, target.ClipBounds.Width, target.ClipBounds.Height), layer.ClipBounds);
         Assert.Equal(30, layer.Transform.TranslateY);
+    }
+
+    [Theory]
+    [InlineData(float.NaN, 10)]
+    [InlineData(40, float.NaN)]
+    [InlineData(float.PositiveInfinity, 10)]
+    [InlineData(40, float.NegativeInfinity)]
+    public void CompositionScrollPresentationDeclaration_rejects_non_finite_presented_range(float from, float to)
+    {
+        var pipeline = new RenderPipeline();
+        var root = new VirtualNode(
+            VirtualNodeKind.ScrollContainer,
+            key: 1,
+            properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
+            children:
+            [
+                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+            ]);
+        using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.Zero,
+                CompositionDuration.FromStopwatchTicks(10)),
+            new CompositionScalarAnimation(from, to));
+
+        Assert.False(declaration.TryResolve(pipeline.LastRetainedInputSnapshot!, frame.Commands.Count, out _));
     }
 
     [Fact]

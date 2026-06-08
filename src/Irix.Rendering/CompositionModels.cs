@@ -287,7 +287,9 @@ internal readonly struct CompositionScalarAnimation(
 
     public float Evaluate(float progress)
     {
-        progress = Math.Clamp(progress, 0f, 1f);
+        progress = NormalizeProgress(progress);
+        var from = NormalizeEndpoint(From, To);
+        var to = NormalizeEndpoint(To, from);
         if (Easing == CompositionAnimationEasing.SineInOut)
         {
             progress = 0.5f - MathF.Cos(progress * MathF.PI) * 0.5f;
@@ -297,7 +299,8 @@ internal readonly struct CompositionScalarAnimation(
             progress = MathF.Sin(progress * MathF.PI * 0.5f);
         }
 
-        return From + (To - From) * progress;
+        var value = from + (to - from) * progress;
+        return float.IsFinite(value) ? value : 0f;
     }
 
     public bool Equals(CompositionScalarAnimation other)
@@ -314,6 +317,16 @@ internal readonly struct CompositionScalarAnimation(
     public static bool operator ==(CompositionScalarAnimation left, CompositionScalarAnimation right) => left.Equals(right);
 
     public static bool operator !=(CompositionScalarAnimation left, CompositionScalarAnimation right) => !left.Equals(right);
+
+    private static float NormalizeProgress(float progress)
+    {
+        return float.IsNaN(progress) ? 0f : Math.Clamp(progress, 0f, 1f);
+    }
+
+    private static float NormalizeEndpoint(float value, float fallback)
+    {
+        return float.IsFinite(value) ? value : (float.IsFinite(fallback) ? fallback : 0f);
+    }
 }
 
 internal readonly struct CompositionTransformAnimation(
