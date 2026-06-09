@@ -56,6 +56,10 @@ GitHub Actions quota is currently exhausted. `.github/workflows/ci.yml` now keep
 | Diagnostics | Optional diagnostics are built with `IrixDiagnostics=true`, compile out by default, and use separate `bin/diagnostics` / `obj/diagnostics` outputs from normal `bin/runtime` / `obj/runtime` builds to avoid stale mixed-ABI incremental outputs. A guard-scoped scenario transcript fixture now reuses existing snapshots and formatters for scroll presentation continuity, style transition completion, and material output diagnostics; expand it only for concrete regressions and keep unified diagnostics channel work postponed. |
 | Docs | Current docs describe active architecture and remaining work, not process history. |
 
+## Current Design Notes
+
+- The Counter PoC button currently applies press `TranslateY` to the same visual node that carries action/hit-test metadata. This intentionally exercises active/presented hit-test remapping: pointer input can target the visual position while a transform animation is in flight. Top/bottom edge hover or pressed-state flicker during that PoC press animation is not tracked as a current runtime bug. Future public controls should keep the outer interaction, capture, focus, and release-activation bounds stable, and apply hover/press motion to an inner visual/content layer so visual feedback does not move the control's own activation boundary.
+
 Performance allocation note: `layout.nodeWalk=0` means the layout bucket is retained publication cost, not property-read or clip-propagation allocation. `LayoutTreeResult` arrays are retained across frames and must not expose pooled mutable storage. `tree.buildRoot` attribution is diagnostic-only; it does not change `VirtualNode` or builder APIs. Reopen retained-array, layout-result, or snapshot work only with a written ownership design and one measured target bucket.
 
 ---
