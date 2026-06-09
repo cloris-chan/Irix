@@ -34,19 +34,16 @@ internal static partial class Program
         window.ExternalRenderingEnabled = true;
         window.Show();
 
+        var runtimeSettings = PocRuntimeSettings.Parse(args);
+
         // D3D12 rendering path
         var d3d12Renderer = new D3D12Renderer(window.Handle, window.Region.PhysicalBounds.Width, window.Region.PhysicalBounds.Height);
-        var clipMode = ParseClipMode(args);
-        var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, clipMode);
-        var enablePartialApply = !args.Contains("--no-partial-apply");
-        d3d12Renderer.TextCompositionMode = ParseTextCompositionMode(args);
+        var d3d12Backend = new D3D12DrawingBackend(d3d12Renderer, runtimeSettings.ClipMode);
+        d3d12Renderer.TextCompositionMode = runtimeSettings.TextCompositionMode;
         var displayScale = platformHost.Screens[0].Scale.Normalize();
 
         Action<double>? maxScrollYCallback = null;
         WindowDrawCommandTranslator? drawCommandTranslator = null;
-        var ownerOptions = enablePartialApply
-            ? RenderPipelineProductionOwnerOptions.SegmentedRetainedFrameRuntimeOwnerEnabled
-            : RenderPipelineProductionOwnerOptions.Disabled;
         drawCommandTranslator = new WindowDrawCommandTranslator(
             window,
             () => _ = d3d12Renderer.ApplyPendingResize(),
@@ -60,17 +57,14 @@ internal static partial class Program
                 maxScrollYCallback?.Invoke(maxScrollY);
                 RefreshDebugUiLayoutDiagnosticsAfterFrame(drawCommandTranslator);
             },
-            ownerOptions: ownerOptions,
+            ownerOptions: runtimeSettings.RenderProductionOwnerOptions,
             displayScale: displayScale);
-        var handoffOptions = enablePartialApply
-            ? DrawingBackendCompositorHandoffOptions.Enabled
-            : DrawingBackendCompositorHandoffOptions.Disabled;
-        using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend, handoffOptions);
+        using var d3d12Compositor = new DrawingBackendCompositor(d3d12Backend, runtimeSettings.CompositorHandoffOptions);
         d3d12Compositor.SetViewport(window.Region.PhysicalBounds, displayScale);
-        var compositor = args.Contains("--console")
+        var compositor = runtimeSettings.EnableConsoleMirror
             ? new CompositeCompositor(new ConsoleCompositor(Console.Out), d3d12Compositor)
             : (ICompositor)d3d12Compositor;
-        Func<RetainedRenderFrameSegmentOwnership?>? ownershipProvider = enablePartialApply
+        Func<RetainedRenderFrameSegmentOwnership?>? ownershipProvider = runtimeSettings.EnablePartialApply
             ? () => drawCommandTranslator?.SegmentOwnership
             : null;
         await using var compositorLoop = new CompositorLoop(drawCommandTranslator, compositor, ownershipProvider);
@@ -140,7 +134,7 @@ internal static partial class Program
         Console.WriteLine($"Detected screens: {platformHost.Screens.Count}");
         Console.WriteLine("Rendering: D3D12 (clear color from FillRect)");
         Console.WriteLine($"Backend clip mode: {d3d12Backend.ClipMode}");
-        Console.WriteLine($"Partial apply: {(enablePartialApply ? "ENABLED (default)" : "DISABLED (--no-partial-apply)")}");
+        Console.WriteLine($"Partial apply: {runtimeSettings.PartialApplyConsoleStatus}");
         Console.WriteLine($"Text composition mode: {d3d12Renderer.TextCompositionMode}");
         Console.WriteLine($"Display scale: {displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         Console.WriteLine("Controls: Click buttons, Up/Down = +/-1, R = reset, Mouse wheel = +/-1.");
@@ -300,32 +294,11 @@ internal static partial class Program
         return new StreamWriter(fullPath, false) { AutoFlush = true };
     }
 
-    internal static TextCompositionMode ParseTextCompositionMode(string[] args)
-    {
-        var value = args.SkipWhile(a => a != "--text-composition").Skip(1).FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return TextCompositionMode.GlyphAtlas;
-        }
+    internal static TextCompositionMode ParseTextCompositionMode(string[] args) =>
+        PocRuntimeSettings.ParseTextCompositionMode(args);
 
-        return value?.ToLowerInvariant() switch
-        {
-            "glyph-atlas" or "glyphatlas" or "atlas" => TextCompositionMode.GlyphAtlas,
-            _ => throw new ArgumentException($"Unsupported text composition mode '{value}'. GlyphAtlas is the only active text composition mode.")
-        };
-    }
-
-    internal static DrawingBackendClipMode ParseClipMode(string[] args)
-    {
-        var value = args.SkipWhile(a => a != "--clip-mode").Skip(1).FirstOrDefault();
-        return value?.ToLowerInvariant() switch
-        {
-            "diagnostic" or "diagnostics" => DrawingBackendClipMode.Diagnostic,
-            "scissor" => DrawingBackendClipMode.Scissor,
-            _ when args.Contains("--disable-scissor") => DrawingBackendClipMode.Diagnostic,
-            _ => DrawingBackendClipMode.Scissor
-        };
-    }
+    internal static DrawingBackendClipMode ParseClipMode(string[] args) =>
+        PocRuntimeSettings.ParseClipMode(args);
 
     internal static DisplayScale ParseDiagnosticScale(string[] args)
     {
