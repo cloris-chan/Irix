@@ -68,6 +68,25 @@ public sealed class CompositeCompositor(params ICompositor[] compositors) : ICom
         }
     }
 
+    bool ICompositionScrollPresentationCompositor.TryPrepareCompositionScrollPresentationRetainedFrameUpdate(
+        in CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        var prepared = false;
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor
+                && !scrollPresentationCompositor.TryPrepareCompositionScrollPresentationRetainedFrameUpdate(declaration, snapshot))
+            {
+                return false;
+            }
+
+            prepared |= compositor is ICompositionScrollPresentationCompositor;
+        }
+
+        return prepared;
+    }
+
     void ICompositionScrollPresentationCompositor.ClearCompositionScrollPresentation()
     {
         foreach (var compositor in compositors)

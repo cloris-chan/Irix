@@ -19,6 +19,10 @@ internal interface ICompositionScrollPresentationCompositor
         in CompositionScrollPresentationDeclaration declaration,
         RenderPipelineRetainedInputSnapshot snapshot);
 
+    bool TryPrepareCompositionScrollPresentationRetainedFrameUpdate(
+        in CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot);
+
     void ClearCompositionScrollPresentation();
 
     ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(

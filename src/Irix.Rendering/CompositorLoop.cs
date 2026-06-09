@@ -20,6 +20,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     private CompositionScrollPresentationSchedule _scrollPresentationSchedule;
     private bool _scrollPresentationTickQueued;
     private int _scrollPresentationGeneration;
+    private CompositionScrollPresentationDeclaration _activeScrollPresentationDeclaration;
     private long _scrollPresentationTickCount;
     private long _scrollPresentationCancelCount;
     private long _scrollPresentationStaleDelayedTickSkipCount;
@@ -347,7 +348,9 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             using (patchBatch)
             {
                 using var renderFrameBatch = _translator.Translate(patchBatch);
-                CancelScrollPresentationForInvalidation(ResolveCompositionInvalidation());
+                var invalidation = ResolveCompositionInvalidation();
+                var retainedSnapshot = ResolveRetainedInputSnapshot();
+                CancelScrollPresentationForInvalidation(invalidation, retainedSnapshot);
                 var ownership = _ownershipProvider?.Invoke();
                 if (workItem.Mode == CompositorWorkMode.RetainedFrameStage)
                 {
@@ -547,15 +550,58 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             : CompositionRenderInvalidation.None;
     }
 
-    private void CancelScrollPresentationForInvalidation(in CompositionRenderInvalidation invalidation)
+    private RenderPipelineRetainedInputSnapshot? ResolveRetainedInputSnapshot()
     {
-        if (invalidation.CancelsScrollPresentation)
+        return _translator is IRetainedInputSnapshotProvider snapshotProvider
+            ? snapshotProvider.LastRetainedInputSnapshot
+            : null;
+    }
+
+    private void CancelScrollPresentationForInvalidation(
+        in CompositionRenderInvalidation invalidation,
+        RenderPipelineRetainedInputSnapshot? retainedSnapshot)
+    {
+        if (ShouldCancelScrollPresentationForInvalidation(invalidation, retainedSnapshot))
         {
             CancelScrollPresentationCore(
                 countCancellation: true,
                 2,
                 invalidation.Kind);
         }
+    }
+
+    private bool ShouldCancelScrollPresentationForInvalidation(
+        in CompositionRenderInvalidation invalidation,
+        RenderPipelineRetainedInputSnapshot? retainedSnapshot)
+    {
+        if (!invalidation.CancelsScrollPresentation)
+        {
+            return false;
+        }
+
+        return !TryPrepareActiveScrollPresentationRetainedFrameUpdate(invalidation, retainedSnapshot);
+    }
+
+    private bool TryPrepareActiveScrollPresentationRetainedFrameUpdate(
+        in CompositionRenderInvalidation invalidation,
+        RenderPipelineRetainedInputSnapshot? retainedSnapshot)
+    {
+        if (!CanPreserveScrollPresentationAcrossInvalidation(invalidation.Kind)
+            || retainedSnapshot is null
+            || _compositor is not ICompositionScrollPresentationCompositor scrollPresentationCompositor
+            || !TryGetActiveScrollPresentationDeclaration(out var declaration))
+        {
+            return false;
+        }
+
+        return scrollPresentationCompositor.TryPrepareCompositionScrollPresentationRetainedFrameUpdate(
+            declaration,
+            retainedSnapshot);
+    }
+
+    private static bool CanPreserveScrollPresentationAcrossInvalidation(CompositionRenderInvalidationKind kind)
+    {
+        return kind == CompositionRenderInvalidationKind.TextSizeAffecting;
     }
 
     private void CancelScrollPresentationCore(
@@ -593,6 +639,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             }
 
             _scrollPresentationSchedule = default;
+            _activeScrollPresentationDeclaration = default;
             _scrollPresentationTickQueued = false;
             unchecked
             {
@@ -630,6 +677,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 declaration.TargetKey,
                 declaration.Timeline.StartTimestamp,
                 declaration.Timeline.StartTimestamp + declaration.Timeline.Duration);
+            _activeScrollPresentationDeclaration = declaration;
             _scrollPresentationTickQueued = false;
         }
 
@@ -661,6 +709,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             if (_scrollPresentationSchedule.IsActive && _scrollPresentationSchedule.Generation == generation)
             {
                 _scrollPresentationSchedule = default;
+                _activeScrollPresentationDeclaration = default;
                 _scrollPresentationTickQueued = false;
                 idleWaitGroup = _scrollPresentationIdleWaitGroup;
                 _scrollPresentationIdleWaitGroup = null;
@@ -678,6 +727,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         {
             canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
             _scrollPresentationSchedule = default;
+            _activeScrollPresentationDeclaration = default;
             _scrollPresentationTickQueued = false;
             unchecked
             {
@@ -704,6 +754,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         {
             canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
             _scrollPresentationSchedule = default;
+            _activeScrollPresentationDeclaration = default;
             _scrollPresentationTickQueued = false;
             idleWaitGroup = _scrollPresentationIdleWaitGroup;
             _scrollPresentationIdleWaitGroup = null;
@@ -740,6 +791,21 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         }
 
         _ = ScheduleDelayedScrollPresentationTickAsync(delay, generation);
+    }
+
+    private bool TryGetActiveScrollPresentationDeclaration(out CompositionScrollPresentationDeclaration declaration)
+    {
+        lock (_compositionScheduleGate)
+        {
+            if (_scrollPresentationSchedule.IsActive)
+            {
+                declaration = _activeScrollPresentationDeclaration;
+                return declaration.TargetKey == _scrollPresentationSchedule.TargetKey;
+            }
+
+            declaration = default;
+            return false;
+        }
     }
 
     private async Task ScheduleDelayedScrollPresentationTickAsync(CompositionDuration delay, int generation)

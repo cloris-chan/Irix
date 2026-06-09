@@ -39,6 +39,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     private CompositionAnimationPlan? _compositionAnimationPlan;
     private CompositionAnimationPresentationSetPlan? _compositionAnimationPresentationPlan;
     private CompositionScrollPresentationPlan? _compositionScrollPresentationPlan;
+    private PendingCompositionScrollPresentationRetainedFrameUpdate _pendingScrollPresentationRetainedFrameUpdate;
     private CompositionFrame _lastCompositionFrame;
     private CompositionBackendExecutionResult _lastCompositionExecutionResult;
     private readonly List<CompositionAnimationMarkerEvent> _compositionMarkerEvents = [];
@@ -298,6 +299,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
 
             _compositionScrollPresentationPlan = null;
             _compositionAnimationPresentationPlan = null;
+            _pendingScrollPresentationRetainedFrameUpdate = default;
             _compositionAnimationPlan = plan;
             _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
             ClearCompositionAnimationPresentationPlaybackState();
@@ -330,6 +332,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
 
             _compositionScrollPresentationPlan = null;
             _compositionAnimationPresentationPlan = null;
+            _pendingScrollPresentationRetainedFrameUpdate = default;
             _compositionAnimationPlan = plan;
             _compositionAnimationMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
             ClearCompositionAnimationPresentationPlaybackState();
@@ -387,6 +390,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
 
             _compositionAnimationPlan = null;
             _compositionScrollPresentationPlan = null;
+            _pendingScrollPresentationRetainedFrameUpdate = default;
             _compositionAnimationPresentationPlan = plan;
             _compositionAnimationMarkerStates = [];
             _compositionScrollMarkerStates = [];
@@ -440,6 +444,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             _compositionAnimationPlan = null;
             _compositionAnimationPresentationPlan = null;
             _compositionAnimationMarkerStates = [];
+            _pendingScrollPresentationRetainedFrameUpdate = default;
             ClearCompositionAnimationPresentationPlaybackState();
             ClearCompositionPresentationState();
             ClearCompositionMarkerEvents();
@@ -476,6 +481,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             }
 
             _compositionScrollPresentationPlan = null;
+            _pendingScrollPresentationRetainedFrameUpdate = default;
             _compositionScrollMarkerStates = [];
             ClearCompositionPresentationState();
             ClearCompositionMarkerEvents();
@@ -492,6 +498,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         _compositionAnimationPlan = null;
         _compositionAnimationPresentationPlan = null;
         _compositionScrollPresentationPlan = null;
+        _pendingScrollPresentationRetainedFrameUpdate = default;
         _compositionAnimationMarkerStates = [];
         ClearCompositionAnimationPresentationPlaybackState();
         _compositionScrollMarkerStates = [];
@@ -511,6 +518,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             _compositionAnimationPlan = null;
             _compositionAnimationPresentationPlan = null;
             _compositionScrollPresentationPlan = plan;
+            _pendingScrollPresentationRetainedFrameUpdate = default;
             _compositionAnimationMarkerStates = [];
             ClearCompositionAnimationPresentationPlaybackState();
             _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
@@ -543,6 +551,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             _compositionAnimationPlan = null;
             _compositionAnimationPresentationPlan = null;
             _compositionScrollPresentationPlan = plan;
+            _pendingScrollPresentationRetainedFrameUpdate = default;
             _compositionAnimationMarkerStates = [];
             ClearCompositionAnimationPresentationPlaybackState();
             _compositionScrollMarkerStates = CreateMarkerPlaybackStates(plan.LayerAnimation.Markers);
@@ -555,6 +564,33 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         RenderPipelineRetainedInputSnapshot snapshot)
     {
         SetCompositionScrollPresentationDeclaration(declaration, snapshot);
+    }
+
+    internal bool TryPrepareCompositionScrollPresentationRetainedFrameUpdate(
+        in CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        lock (_frameGate)
+        {
+            if (_compositionScrollPresentationPlan is null
+                || _retainedFrame.CommandCount <= 0
+                || !declaration.TryResolve(snapshot, snapshot.CommandCount, out var nextPlan))
+            {
+                _pendingScrollPresentationRetainedFrameUpdate = default;
+                return false;
+            }
+
+            _pendingScrollPresentationRetainedFrameUpdate = new PendingCompositionScrollPresentationRetainedFrameUpdate(nextPlan, snapshot.CommandCount);
+            return true;
+        }
+    }
+
+    bool ICompositionScrollPresentationCompositor.TryPrepareCompositionScrollPresentationRetainedFrameUpdate(
+        in CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        return TryPrepareCompositionScrollPresentationRetainedFrameUpdate(declaration, snapshot);
     }
 
     public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
@@ -599,7 +635,8 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             return ValueTask.CompletedTask;
         }
 
-        if (TryRenderActiveScrollPresentationAfterRetainedUpdate(out _))
+        if (HasActiveScrollPresentationPlan()
+            && TryRenderActiveScrollPresentationAfterRetainedUpdate(out _))
         {
             LastHandoffResult = stage.HandoffSelection.Selected
                 ? DrawingBackendCompositorHandoffResult.RetainedFrameStaged(stage.HandoffSelection.OwnerResult)
@@ -701,6 +738,10 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             ? DrawingBackendCompositorHandoffResult.RetainedFrameStaged(stage.HandoffSelection.OwnerResult)
             : stage.HandoffSelection.Result;
         LastPartialApplySucceeded = stage.RetainedPartialApplySucceeded;
+        if (HasActiveScrollPresentationPlan())
+        {
+            _ = TryRenderActiveScrollPresentationAfterRetainedUpdate(out _);
+        }
 
         PublishHitTargets([.. _retainedFrame.HitTargets]);
 
@@ -749,8 +790,34 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
 
         _lastAppliedFrameId = batchFrameId;
         LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
+        TryApplyPreparedScrollPresentationRetainedFrameUpdate();
         ClearCompositionPresentationState();
         return new RetainedFrameStageResult(true, retainedPartialApplySucceeded, ResolveHandoffSelection(renderFrameBatch, ownership));
+    }
+
+    private void TryApplyPreparedScrollPresentationRetainedFrameUpdate()
+    {
+        var pending = _pendingScrollPresentationRetainedFrameUpdate;
+        _pendingScrollPresentationRetainedFrameUpdate = default;
+        if (!pending.HasValue)
+        {
+            return;
+        }
+
+        if (pending.CommandCount == _retainedFrame.CommandCount)
+        {
+            _compositionAnimationPlan = null;
+            _compositionAnimationPresentationPlan = null;
+            _compositionScrollPresentationPlan = pending.Plan;
+            _compositionAnimationMarkerStates = [];
+            ClearCompositionAnimationPresentationPlaybackState();
+        }
+        else
+        {
+            _compositionScrollPresentationPlan = null;
+            _compositionScrollMarkerStates = [];
+            ClearCompositionMarkerEvents();
+        }
     }
 
     private void RecordRenderedApply(bool partialApplySucceeded)
@@ -1223,6 +1290,8 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             3).GetAwaiter().GetResult();
         return true;
     }
+
+    private bool HasActiveScrollPresentationPlan() => _compositionScrollPresentationPlan is not null;
 
     private ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationFrameAtAsync(
         ICompositionDrawingBackend compositionBackend,
@@ -1942,6 +2011,15 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     private delegate void CompositionMarkerEventPublisher(
         DrawingBackendCompositor compositor,
         in CompositionMarkerEventContext context);
+
+    private readonly struct PendingCompositionScrollPresentationRetainedFrameUpdate(
+        CompositionScrollPresentationPlan Plan,
+        int CommandCount)
+    {
+        public CompositionScrollPresentationPlan Plan { get; } = Plan;
+        public int CommandCount { get; } = CommandCount;
+        public bool HasValue => CommandCount > 0;
+    }
 
     private readonly struct CompositionMarkerEventContext(
         CompositionAnimationPlan? AnimationPlan,

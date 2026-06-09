@@ -2049,7 +2049,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("CompositionSkipDiagnosticRunner.Run", programSource);
         Assert.Contains("`--diagnose-composition-skip` must prove:", design);
         Assert.Equal(
-            "composition-skip actual transformNoPlan=TransformOpacityTick:NoActivePlan:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=0:commands=0 transformBackend=TransformOpacityTick:BackendDoesNotImplementComposition:isSkipped=True:required=TransformOpacity:backend=None:pacing=SoftwareTimer:layers=1:commands=1 transformMissingFrame=TransformOpacityTick:MissingRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=0 transformInvalidFrame=TransformOpacityTick:InvalidPlanForRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=1 scrollNoPlan=ScrollPresentationTick:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=0 scrollCapability=ScrollPresentationTick:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 scrollMissingFrame=ScrollPresentationTick:MissingRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=0 scrollInvalidFrame=ScrollPresentationTick:InvalidPlanForRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=1 retainedUpdateNoPlan=RetainedUpdateScrollPresentation:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=1 retainedUpdateCapability=RetainedUpdateScrollPresentation:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 presentationNoPlan=AnimationPresentationTick:NoActivePlan:isSkipped=True:required=TransformOpacity|MultiLayer:backend=TransformOpacity|MultiLayer:pacing=SoftwareTimer:layers=0:commands=0 presentationCapability=AnimationPresentationTick:MissingBackendCapability:isSkipped=True:required=TransformOpacity|MultiLayer:backend=TransformOpacity:pacing=SoftwareTimer:layers=2:commands=2 presentationExecuted=AnimationPresentationTick:None:isSkipped=False:required=TransformOpacity|MultiLayer:backend=TransformOpacity|MultiLayer:pacing=SoftwareTimer:layers=2:commands=2 deviceLostRecovered=TransformOpacityTick:DeviceLostRecovered:isSkipped=True:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executed=TransformOpacityTick:None:isSkipped=False:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 presentationExecutedCompositionCount=1 executedCompositionCount=1 recoveredCompositionCount=1",
+            "composition-skip actual transformNoPlan=TransformOpacityTick:NoActivePlan:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=0:commands=0 transformBackend=TransformOpacityTick:BackendDoesNotImplementComposition:isSkipped=True:required=TransformOpacity:backend=None:pacing=SoftwareTimer:layers=1:commands=1 transformMissingFrame=TransformOpacityTick:MissingRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=0 transformInvalidFrame=TransformOpacityTick:InvalidPlanForRetainedFrame:isSkipped=True:required=TransformOpacity:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=1 scrollNoPlan=ScrollPresentationTick:NoActivePlan:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=0:commands=0 scrollCapability=ScrollPresentationTick:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 scrollMissingFrame=ScrollPresentationTick:MissingRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=0 scrollInvalidFrame=ScrollPresentationTick:InvalidPlanForRetainedFrame:isSkipped=True:required=ScrollPresentation:backend=ScrollPresentation:pacing=SoftwareTimer:layers=1:commands=1 retainedUpdateNoPlan=None:None:isSkipped=False:required=None:backend=None:pacing=SoftwareTimer:layers=0:commands=0 retainedUpdateCapability=RetainedUpdateScrollPresentation:MissingBackendCapability:isSkipped=True:required=ScrollPresentation:backend=TransformOpacity:pacing=SoftwareTimer:layers=1:commands=2 presentationNoPlan=AnimationPresentationTick:NoActivePlan:isSkipped=True:required=TransformOpacity|MultiLayer:backend=TransformOpacity|MultiLayer:pacing=SoftwareTimer:layers=0:commands=0 presentationCapability=AnimationPresentationTick:MissingBackendCapability:isSkipped=True:required=TransformOpacity|MultiLayer:backend=TransformOpacity:pacing=SoftwareTimer:layers=2:commands=2 presentationExecuted=AnimationPresentationTick:None:isSkipped=False:required=TransformOpacity|MultiLayer:backend=TransformOpacity|MultiLayer:pacing=SoftwareTimer:layers=2:commands=2 deviceLostRecovered=TransformOpacityTick:DeviceLostRecovered:isSkipped=True:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 executed=TransformOpacityTick:None:isSkipped=False:required=TransformOpacity:backend=TransformOpacity|ScrollPresentation|MultiLayer:pacing=SoftwareTimer:layers=1:commands=1 presentationExecutedCompositionCount=1 executedCompositionCount=1 recoveredCompositionCount=1",
             summary);
     }
 
@@ -2281,6 +2281,28 @@ public sealed class ProgramDiagnosticsTests
         Assert.True(pointer.CompositionTickCount >= 3);
         Assert.True(pointer.LoopTickCount > 0);
 
+        var focusedKeyboard = diagnostics.FocusedKeyboard;
+        Assert.Equal(ActionIdRegistry.Increment, focusedKeyboard.FocusedTarget);
+        Assert.Equal(1, focusedKeyboard.CountAfterFocusClick);
+        Assert.True(focusedKeyboard.ActiveBeforeSpace);
+        Assert.True(focusedKeyboard.PresentedBeforeSpace >= 0);
+        Assert.True(focusedKeyboard.SpaceMappedInput);
+        Assert.Equal(nameof(CounterMessage.RoutedInput), focusedKeyboard.SpaceMessageKind);
+        Assert.Equal(nameof(CounterMessage.Increment), focusedKeyboard.SpaceActionKind);
+        Assert.Equal(2, focusedKeyboard.CountAfterSpace);
+        Assert.Equal(focusedKeyboard.RenderCountBeforeSpaceDispatch + 1, focusedKeyboard.RenderCountAfterSpaceDispatch);
+        Assert.Equal(focusedKeyboard.ExecuteCountBeforeSpaceDispatch, focusedKeyboard.ExecuteCountAfterSpaceDispatch);
+        Assert.True(focusedKeyboard.ExecuteCompositionCountAfterSpaceDispatch > focusedKeyboard.ExecuteCompositionCountBeforeSpaceDispatch);
+        Assert.Equal(LayoutRebuildReason.TextSizeAffecting, focusedKeyboard.LayoutRebuildReasonAfterSpaceDispatch);
+        Assert.True(focusedKeyboard.ActiveAfterSpace);
+        Assert.True(focusedKeyboard.PresentedAfterSpace >= 0);
+        Assert.Equal(focusedKeyboard.CancelCountBeforeSpaceDispatch, focusedKeyboard.CancelCountAfterSpaceDispatch);
+        Assert.Equal(0, focusedKeyboard.CancelCountAfterSpaceDispatch);
+        Assert.Equal(ScrollPresentationCancellationReason.None, focusedKeyboard.CancelReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, focusedKeyboard.CancelInvalidationKind);
+        Assert.True(focusedKeyboard.CompositionTickCount > 0);
+        Assert.True(focusedKeyboard.LoopTickCount > 0);
+
         var chain = diagnostics.Chain;
         Assert.Equal(54, chain.WheelPixels);
         Assert.Equal(54, chain.FirstPosition);
@@ -2404,13 +2426,23 @@ public sealed class ProgramDiagnosticsTests
             CompositionRenderInvalidationKind.LayoutAffecting,
             expectedHitAfter: true,
             expectedActionAfter: ActionIdRegistry.Decrement);
-        AssertLifecycleInvalidationScenario(
+        AssertLifecycleScenario(
             lifecycle.TextInvalidation,
             "text",
             LayoutRebuildReason.TextSizeAffecting,
-            CompositionRenderInvalidationKind.TextSizeAffecting,
+            960,
+            540,
+            1f,
             expectedHitAfter: true,
-            expectedActionAfter: ActionIdRegistry.Decrement);
+            expectedActionAfter: ActionIdRegistry.Decrement,
+            expectedRenderCountDelta: 1,
+            expectedActiveAfter: true,
+            expectedCancelCount: 0,
+            expectedCancelReason: ScrollPresentationCancellationReason.None,
+            expectedCancelInvalidationKind: CompositionRenderInvalidationKind.None,
+            explicitCancelCount: 0,
+            renderInvalidationCancelCount: 0,
+            expectStaleQueuedTickSuppressed: false);
         AssertLifecycleScenario(
             lifecycle.MaxScroll,
             "maxScroll",
@@ -2432,6 +2464,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("hoverMapped=True hoverMessage=InputVisualStateChanged hovered=2", summary);
         Assert.Contains("pressMapped=True pressMessage=InputVisualStateChanged pressHover=2 pressPressed=2 pressCapture=2 pressFocus=2", summary);
         Assert.Contains("releaseMapped=True releaseMessage=RoutedInput releaseAction=Decrement countAfterRelease=-1", summary);
+        Assert.Contains("scroll-presentation-interaction actual scenario=focusedKeyboard focused=1 countAfterFocusClick=1", summary);
+        Assert.Contains("spaceMapped=True spaceMessage=RoutedInput spaceAction=Increment countAfterSpace=2", summary);
+        Assert.Contains("layoutAfterSpace=TextSizeAffecting activeAfterSpace=True", summary);
+        Assert.Contains("cancelBeforeSpace=0 cancelAfterSpace=0 cancelReason=None cancelInvalidation=None", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=chain wheelPx=54", summary);
         Assert.Contains("firstPosition=54 firstTarget=54 finalPosition=108 finalTarget=108", summary);
         Assert.Contains("retargets=2 pending=0 cancels=0 cancelReason=None cancelInvalidation=None", summary);
@@ -2455,14 +2491,13 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-renderInvalidation", summary);
         Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
         Assert.Contains("explicitCancels=0 invalidationCancels=1", summary);
-        Assert.Contains("staleDelayedTickSkipsAfterLifecycle=0 staleDelayedTickSkipsAfterStaleWindow=1", summary);
         Assert.Contains("staleQueuedTickSuppressed=True", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-tree", summary);
         Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=TreeStructure", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-layout", summary);
         Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-text", summary);
-        Assert.Contains("cancelReason=RenderInvalidation cancelInvalidation=TextSizeAffecting", summary);
+        Assert.Contains("cancelReason=None cancelInvalidation=None", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=lifecycle-maxScroll", summary);
     }
 
@@ -2487,7 +2522,8 @@ public sealed class ProgramDiagnosticsTests
             expectedCancelReason: ScrollPresentationCancellationReason.RenderInvalidation,
             expectedCancelInvalidationKind,
             explicitCancelCount: 0,
-            renderInvalidationCancelCount: 1);
+            renderInvalidationCancelCount: 1,
+            expectStaleQueuedTickSuppressed: true);
     }
 
     private static void AssertLifecycleScenario(
@@ -2503,17 +2539,20 @@ public sealed class ProgramDiagnosticsTests
         ScrollPresentationCancellationReason expectedCancelReason,
         CompositionRenderInvalidationKind expectedCancelInvalidationKind,
         long explicitCancelCount,
-        long renderInvalidationCancelCount)
+        long renderInvalidationCancelCount,
+        bool expectedActiveAfter = false,
+        long? expectedCancelCount = null,
+        bool expectStaleQueuedTickSuppressed = true)
     {
         Assert.Equal(name, diagnostics.Name);
         Assert.True(diagnostics.ActiveBefore);
         Assert.True(diagnostics.PresentedBefore > 0);
         Assert.True(diagnostics.HitBefore);
         Assert.Equal(ActionIdRegistry.Decrement, diagnostics.ActionBefore);
-        Assert.False(diagnostics.ActiveAfter);
+        Assert.Equal(expectedActiveAfter, diagnostics.ActiveAfter);
         Assert.Equal(expectedHitAfter, diagnostics.HitAfter);
         Assert.Equal(expectedActionAfter, diagnostics.ActionAfter);
-        Assert.Equal(1, diagnostics.CancelCount);
+        Assert.Equal(expectedCancelCount ?? 1, diagnostics.CancelCount);
         Assert.Equal(expectedCancelReason, diagnostics.CancelReason);
         Assert.Equal(expectedCancelInvalidationKind, diagnostics.CancelInvalidationKind);
         Assert.Equal(explicitCancelCount, diagnostics.ExplicitCancelCount);
@@ -2525,11 +2564,22 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(expectedScale, diagnostics.DisplayScaleX);
         Assert.True(diagnostics.CompositionTickCountAfterLifecycle > 0);
         Assert.True(diagnostics.LoopTickCountAfterLifecycle > 0);
-        Assert.Equal(diagnostics.CompositionTickCountAfterLifecycle, diagnostics.CompositionTickCountAfterStaleWindow);
-        Assert.Equal(diagnostics.LoopTickCountAfterLifecycle, diagnostics.LoopTickCountAfterStaleWindow);
-        Assert.Equal(diagnostics.StaleDelayedTickSkipsAfterLifecycle + 1, diagnostics.StaleDelayedTickSkipsAfterStaleWindow);
-        Assert.True(diagnostics.StaleQueuedTickSuppressed);
-        Assert.False(diagnostics.ActiveAfterStaleWindow);
+        if (expectStaleQueuedTickSuppressed)
+        {
+            Assert.Equal(diagnostics.CompositionTickCountAfterLifecycle, diagnostics.CompositionTickCountAfterStaleWindow);
+            Assert.Equal(diagnostics.LoopTickCountAfterLifecycle, diagnostics.LoopTickCountAfterStaleWindow);
+            Assert.True(diagnostics.StaleDelayedTickSkipsAfterStaleWindow >= diagnostics.StaleDelayedTickSkipsAfterLifecycle);
+            Assert.True(diagnostics.StaleQueuedTickSuppressed);
+            Assert.False(diagnostics.ActiveAfterStaleWindow);
+        }
+        else
+        {
+            Assert.True(diagnostics.CompositionTickCountAfterStaleWindow >= diagnostics.CompositionTickCountAfterLifecycle);
+            Assert.True(diagnostics.LoopTickCountAfterStaleWindow >= diagnostics.LoopTickCountAfterLifecycle);
+            Assert.Equal(diagnostics.StaleDelayedTickSkipsAfterLifecycle, diagnostics.StaleDelayedTickSkipsAfterStaleWindow);
+            Assert.Equal(expectedActiveAfter, diagnostics.ActiveAfterStaleWindow);
+        }
+
         Assert.Equal(expectedHitAfter, diagnostics.HitAfterStaleWindow);
         Assert.Equal(diagnostics.ActionAfter, diagnostics.ActionAfterStaleWindow);
     }

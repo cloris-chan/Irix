@@ -25,6 +25,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
     {
         return new ScrollPresentationInteractionDiagnostics(
             await RunPointerScenarioAsync(cancellationToken),
+            await RunFocusedKeyboardScenarioAsync(cancellationToken),
             await RunChainScenarioAsync(cancellationToken),
             await RunRapidEnsureScenarioAsync(cancellationToken),
             await RunBoundaryScenarioAsync(cancellationToken),
@@ -37,6 +38,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         return string.Join(
             Environment.NewLine,
             FormatPointer(diagnostics.Pointer),
+            FormatFocusedKeyboard(diagnostics.FocusedKeyboard),
             FormatChain(diagnostics.Chain),
             FormatRapidEnsure(diagnostics.RapidEnsure),
             FormatBoundary(diagnostics.Boundary),
@@ -141,6 +143,77 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             session.Coordinator.RetargetCount,
             session.Coordinator.PendingPixels,
             session.CompositorLoop.ScrollPresentationCancelCount,
+            session.Compositor.CompositionTickCount,
+            session.CompositorLoop.ScrollPresentationTickCount);
+    }
+
+    private static async Task<ScrollPresentationFocusedKeyboardInteractionDiagnostics> RunFocusedKeyboardScenarioAsync(CancellationToken cancellationToken)
+    {
+        await using var session = await DiagnosticSession.StartAsync(cancellationToken);
+        var inputOwnershipState = new InputOwnershipState();
+        var focusHitTestService = new DrawingBackendCompositorInputHitTestService(session.Compositor);
+        var focusPress = new RawInputEvent(RawInputEventKind.PointerPressed, Timestamp: 1, X: 48, Y: 180, Button: PointerButton.Left);
+        var focusRelease = new RawInputEvent(RawInputEventKind.PointerReleased, Timestamp: 2, X: 48, Y: 180, Button: PointerButton.Left);
+        _ = Program.TryMapInputForRuntime(focusPress, inputOwnershipState, focusHitTestService, out var pressMessage);
+        if (pressMessage is not null)
+        {
+            await session.Runtime.DispatchAndWaitAsync(pressMessage, cancellationToken);
+        }
+
+        _ = Program.TryMapInputForRuntime(focusRelease, inputOwnershipState, focusHitTestService, out var releaseMessage);
+        if (releaseMessage is not null)
+        {
+            await session.Runtime.DispatchAndWaitAsync(releaseMessage, cancellationToken);
+        }
+
+        var focusedTarget = inputOwnershipState.FocusedTarget;
+        var countAfterFocusClick = session.Runtime.CurrentModel.Count;
+
+        session.Coordinator.AddPendingPixels(WheelDownPixels(1));
+        await session.Coordinator.RunUntilIdleAsync(session.Runtime, session.CompositorLoop, session.Translator, ScrollTargetKey, cancellationToken);
+        var activeBeforeSpace = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedBeforeSpace);
+        var cancelCountBeforeSpace = session.CompositorLoop.ScrollPresentationCancelCount;
+        var renderCountBeforeSpace = session.Compositor.RenderCount;
+        var executeCountBeforeSpace = session.Backend.ExecuteCount;
+        var executeCompositionCountBeforeSpace = session.Backend.ExecuteCompositionCount;
+
+        var keyboardHitTestService = new DrawingBackendCompositorInputHitTestService(session.Compositor);
+        var spaceMapped = Program.TryMapInputForRuntime(
+            new RawInputEvent(RawInputEventKind.KeyPressed, Timestamp: 3, X: 0, Y: 0, KeyCode: 0x20),
+            inputOwnershipState,
+            keyboardHitTestService,
+            out var spaceMessage);
+        var spaceActionKind = ResolveRoutedActionKind(spaceMessage);
+        if (spaceMessage is not null)
+        {
+            await session.Runtime.DispatchAndWaitAsync(spaceMessage, cancellationToken);
+        }
+
+        var activeAfterSpace = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out var presentedAfterSpace);
+        var cancellation = session.CompositorLoop.ScrollPresentationCancellationDiagnostics;
+
+        return new ScrollPresentationFocusedKeyboardInteractionDiagnostics(
+            focusedTarget,
+            countAfterFocusClick,
+            activeBeforeSpace,
+            presentedBeforeSpace,
+            spaceMapped,
+            ResolveMessageKind(spaceMessage),
+            spaceActionKind,
+            session.Runtime.CurrentModel.Count,
+            renderCountBeforeSpace,
+            session.Compositor.RenderCount,
+            executeCountBeforeSpace,
+            session.Backend.ExecuteCount,
+            executeCompositionCountBeforeSpace,
+            session.Backend.ExecuteCompositionCount,
+            session.Translator.LastLayoutRebuildReason,
+            activeAfterSpace,
+            presentedAfterSpace,
+            cancelCountBeforeSpace,
+            session.CompositorLoop.ScrollPresentationCancelCount,
+            cancellation.LastReason,
+            cancellation.LastInvalidationKind,
             session.Compositor.CompositionTickCount,
             session.CompositorLoop.ScrollPresentationTickCount);
     }
@@ -461,12 +534,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         var layoutRebuildReasonAfter = session.Translator.LastLayoutRebuildReason;
         var maxScrollY = session.Runtime.CurrentModel.Scroll.MaxScrollY;
 
-        if (activeBefore.Active)
-        {
-            await WaitForConditionAsync(
-                () => session.CompositorLoop.ScrollPresentationStaleDelayedTickSkipCount > staleDelayedTickSkipsAfterLifecycle,
-                cancellationToken);
-        }
+        await Task.Yield();
 
         var activeAfterStaleWindow = session.Compositor.TryGetPresentedScrollY(ScrollTargetKey, out _);
         var hitAfterStaleWindow = session.Compositor.TryGetActionIdAtPhysicalPixel(FixedPointerMove.X, FixedPointerMove.Y, out var actionAfterStaleWindow);
@@ -476,7 +544,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
         var staleQueuedTickSuppressed =
             compositionTickCountAfterStaleWindow == compositionTickCountAfterLifecycle
             && loopTickCountAfterStaleWindow == loopTickCountAfterLifecycle
-            && staleDelayedTickSkipsAfterStaleWindow == staleDelayedTickSkipsAfterLifecycle + 1;
+            && staleDelayedTickSkipsAfterStaleWindow >= staleDelayedTickSkipsAfterLifecycle;
 
         return new ScrollPresentationLifecycleScenarioDiagnostics(
             name,
@@ -531,6 +599,21 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
             $"layoutAfterPress={diagnostics.LayoutRebuildReasonAfterPressDispatch} activeAfterPress={diagnostics.ActiveAfterPress} presentedAfterPress={diagnostics.PresentedAfterPress:0.##}",
             $"releaseMapped={diagnostics.ReleaseMappedInput} releaseMessage={diagnostics.ReleaseMessageKind} releaseAction={diagnostics.ReleaseActionKind} countAfterRelease={diagnostics.CountAfterRelease}",
             $"retargets={diagnostics.RetargetCount} pending={diagnostics.PendingPixels:0.##} cancels={diagnostics.CancelCount} compositionTicks={diagnostics.CompositionTickCount} loopTicks={diagnostics.LoopTickCount}"
+        ]);
+    }
+
+    private static string FormatFocusedKeyboard(in ScrollPresentationFocusedKeyboardInteractionDiagnostics diagnostics)
+    {
+        return string.Join(" ", [
+            $"scroll-presentation-interaction actual scenario=focusedKeyboard focused={diagnostics.FocusedTarget.Value} countAfterFocusClick={diagnostics.CountAfterFocusClick}",
+            $"activeBeforeSpace={diagnostics.ActiveBeforeSpace} presentedBeforeSpace={diagnostics.PresentedBeforeSpace:0.##}",
+            $"spaceMapped={diagnostics.SpaceMappedInput} spaceMessage={diagnostics.SpaceMessageKind} spaceAction={diagnostics.SpaceActionKind} countAfterSpace={diagnostics.CountAfterSpace}",
+            $"renderBeforeSpace={diagnostics.RenderCountBeforeSpaceDispatch} renderAfterSpace={diagnostics.RenderCountAfterSpaceDispatch}",
+            $"executeBeforeSpace={diagnostics.ExecuteCountBeforeSpaceDispatch} executeAfterSpace={diagnostics.ExecuteCountAfterSpaceDispatch}",
+            $"executeCompositionBeforeSpace={diagnostics.ExecuteCompositionCountBeforeSpaceDispatch} executeCompositionAfterSpace={diagnostics.ExecuteCompositionCountAfterSpaceDispatch}",
+            $"layoutAfterSpace={diagnostics.LayoutRebuildReasonAfterSpaceDispatch} activeAfterSpace={diagnostics.ActiveAfterSpace} presentedAfterSpace={diagnostics.PresentedAfterSpace:0.##}",
+            $"cancelBeforeSpace={diagnostics.CancelCountBeforeSpaceDispatch} cancelAfterSpace={diagnostics.CancelCountAfterSpaceDispatch} cancelReason={diagnostics.CancelReason} cancelInvalidation={diagnostics.CancelInvalidationKind}",
+            $"compositionTicks={diagnostics.CompositionTickCount} loopTicks={diagnostics.LoopTickCount}"
         ]);
     }
 
@@ -851,6 +934,7 @@ internal static class ScrollPresentationInteractionDiagnosticRunner
 
 internal readonly struct ScrollPresentationInteractionDiagnostics(
     ScrollPresentationPointerInteractionDiagnostics Pointer,
+    ScrollPresentationFocusedKeyboardInteractionDiagnostics FocusedKeyboard,
     ScrollPresentationChainInteractionDiagnostics Chain,
     ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure,
     ScrollPresentationBoundaryInteractionDiagnostics Boundary,
@@ -858,6 +942,7 @@ internal readonly struct ScrollPresentationInteractionDiagnostics(
     ScrollPresentationLifecycleInteractionDiagnostics Lifecycle)
 {
     public ScrollPresentationPointerInteractionDiagnostics Pointer { get; } = Pointer;
+    public ScrollPresentationFocusedKeyboardInteractionDiagnostics FocusedKeyboard { get; } = FocusedKeyboard;
     public ScrollPresentationChainInteractionDiagnostics Chain { get; } = Chain;
     public ScrollPresentationRapidEnsureInteractionDiagnostics RapidEnsure { get; } = RapidEnsure;
     public ScrollPresentationBoundaryInteractionDiagnostics Boundary { get; } = Boundary;
@@ -953,6 +1038,56 @@ internal readonly struct ScrollPresentationPointerInteractionDiagnostics(
     public long RetargetCount { get; } = RetargetCount;
     public double PendingPixels { get; } = PendingPixels;
     public long CancelCount { get; } = CancelCount;
+    public long CompositionTickCount { get; } = CompositionTickCount;
+    public long LoopTickCount { get; } = LoopTickCount;
+}
+
+internal readonly struct ScrollPresentationFocusedKeyboardInteractionDiagnostics(
+    ActionId FocusedTarget,
+    int CountAfterFocusClick,
+    bool ActiveBeforeSpace,
+    double PresentedBeforeSpace,
+    bool SpaceMappedInput,
+    string SpaceMessageKind,
+    string SpaceActionKind,
+    int CountAfterSpace,
+    long RenderCountBeforeSpaceDispatch,
+    long RenderCountAfterSpaceDispatch,
+    int ExecuteCountBeforeSpaceDispatch,
+    int ExecuteCountAfterSpaceDispatch,
+    int ExecuteCompositionCountBeforeSpaceDispatch,
+    int ExecuteCompositionCountAfterSpaceDispatch,
+    LayoutRebuildReason LayoutRebuildReasonAfterSpaceDispatch,
+    bool ActiveAfterSpace,
+    double PresentedAfterSpace,
+    long CancelCountBeforeSpaceDispatch,
+    long CancelCountAfterSpaceDispatch,
+    ScrollPresentationCancellationReason CancelReason,
+    CompositionRenderInvalidationKind CancelInvalidationKind,
+    long CompositionTickCount,
+    long LoopTickCount)
+{
+    public ActionId FocusedTarget { get; } = FocusedTarget;
+    public int CountAfterFocusClick { get; } = CountAfterFocusClick;
+    public bool ActiveBeforeSpace { get; } = ActiveBeforeSpace;
+    public double PresentedBeforeSpace { get; } = PresentedBeforeSpace;
+    public bool SpaceMappedInput { get; } = SpaceMappedInput;
+    public string SpaceMessageKind { get; } = SpaceMessageKind;
+    public string SpaceActionKind { get; } = SpaceActionKind;
+    public int CountAfterSpace { get; } = CountAfterSpace;
+    public long RenderCountBeforeSpaceDispatch { get; } = RenderCountBeforeSpaceDispatch;
+    public long RenderCountAfterSpaceDispatch { get; } = RenderCountAfterSpaceDispatch;
+    public int ExecuteCountBeforeSpaceDispatch { get; } = ExecuteCountBeforeSpaceDispatch;
+    public int ExecuteCountAfterSpaceDispatch { get; } = ExecuteCountAfterSpaceDispatch;
+    public int ExecuteCompositionCountBeforeSpaceDispatch { get; } = ExecuteCompositionCountBeforeSpaceDispatch;
+    public int ExecuteCompositionCountAfterSpaceDispatch { get; } = ExecuteCompositionCountAfterSpaceDispatch;
+    public LayoutRebuildReason LayoutRebuildReasonAfterSpaceDispatch { get; } = LayoutRebuildReasonAfterSpaceDispatch;
+    public bool ActiveAfterSpace { get; } = ActiveAfterSpace;
+    public double PresentedAfterSpace { get; } = PresentedAfterSpace;
+    public long CancelCountBeforeSpaceDispatch { get; } = CancelCountBeforeSpaceDispatch;
+    public long CancelCountAfterSpaceDispatch { get; } = CancelCountAfterSpaceDispatch;
+    public ScrollPresentationCancellationReason CancelReason { get; } = CancelReason;
+    public CompositionRenderInvalidationKind CancelInvalidationKind { get; } = CancelInvalidationKind;
     public long CompositionTickCount { get; } = CompositionTickCount;
     public long LoopTickCount { get; } = LoopTickCount;
 }

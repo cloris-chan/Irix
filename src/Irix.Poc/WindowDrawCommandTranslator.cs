@@ -111,12 +111,22 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
     private CompositionRenderInvalidation ResolveCompositionInvalidation(LayoutRebuildReason reason, double maxScrollY)
     {
         var invalidation = CompositionRenderInvalidation.FromLayoutRebuildReason(reason);
-        if (invalidation.CancelsScrollPresentation || Math.Abs(maxScrollY - _feedbackSink.LastMaxScrollY) <= 0.5)
+        var maxScrollChanged = Math.Abs(maxScrollY - _feedbackSink.LastMaxScrollY) > 0.5;
+        if (maxScrollChanged
+            && (invalidation.Kind == CompositionRenderInvalidationKind.None
+                || invalidation.Kind == CompositionRenderInvalidationKind.TextSizeAffecting))
+        {
+            return CompositionRenderInvalidation.MaxScrollChanged;
+        }
+
+        if (invalidation.CancelsScrollPresentation)
         {
             return invalidation;
         }
 
-        return CompositionRenderInvalidation.MaxScrollChanged;
+        return maxScrollChanged
+            ? CompositionRenderInvalidation.MaxScrollChanged
+            : CompositionRenderInvalidation.None;
     }
 
     private static ScrollFeedback BuildScrollFeedback(LayoutTreeResult? layoutResult)

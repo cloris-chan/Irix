@@ -281,6 +281,13 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
             _active = true;
         }
 
+        public bool TryPrepareCompositionScrollPresentationRetainedFrameUpdate(
+            in CompositionScrollPresentationDeclaration declaration,
+            RenderPipelineRetainedInputSnapshot snapshot)
+        {
+            return false;
+        }
+
         public void ClearCompositionScrollPresentation()
         {
             _active = false;
