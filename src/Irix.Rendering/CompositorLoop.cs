@@ -12,20 +12,14 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     private readonly ICompositionClockSource _clockSource;
     private readonly Channel<CompositorWorkItem> _channel;
     private readonly Lock _renderRequestGate = new();
-    private readonly Lock _compositionScheduleGate = new();
+    private readonly ScrollPresentationLifecycle _scrollPresentationLifecycle = new();
     private readonly CancellationTokenSource _disposeCancellationTokenSource = new();
     private readonly Task _processingTask;
     private bool _renderRequestQueued;
     private RenderCompletionWaitGroup? _queuedRenderRequestWaitGroup;
-    private CompositionScrollPresentationSchedule _scrollPresentationSchedule;
-    private bool _scrollPresentationTickQueued;
-    private int _scrollPresentationGeneration;
-    private CompositionScrollPresentationDeclaration _activeScrollPresentationDeclaration;
-    private CompositionScrollPresentationDeclaration _heldScrollPresentationDeclaration;
     private long _scrollPresentationTickCount;
     private long _scrollPresentationCancelCount;
     private long _scrollPresentationStaleDelayedTickSkipCount;
-    private RenderCompletionWaitGroup? _scrollPresentationIdleWaitGroup;
 
     public CompositorLoop(IPatchBatchTranslator translator, ICompositor compositor)
         : this(translator, compositor, ownershipProvider: null)
@@ -146,11 +140,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             return false;
         }
 
-        lock (_compositionScheduleGate)
-        {
-            return _scrollPresentationSchedule.IsActive
-                && _scrollPresentationSchedule.TargetKey == targetKey;
-        }
+        return _scrollPresentationLifecycle.HasActive(targetKey);
     }
 
     internal bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
@@ -192,15 +182,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             return ValueTask.FromCanceled(cancellationToken);
         }
 
-        Task? waitTask = null;
-        lock (_compositionScheduleGate)
-        {
-            if (_scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued)
-            {
-                _scrollPresentationIdleWaitGroup ??= new RenderCompletionWaitGroup();
-                waitTask = _scrollPresentationIdleWaitGroup.AddWaiter();
-            }
-        }
+        var waitTask = _scrollPresentationLifecycle.AddIdleWaiterIfBusy();
 
         return waitTask is null
             ? ValueTask.CompletedTask
@@ -401,7 +383,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 await stagingCompositor.StageRetainedFrameAsync(
                     renderFrameBatch,
                     _ownershipProvider?.Invoke(),
-                    presentationMode: RetainedFrameStagePresentationMode.SuppressActiveScrollPresentationAfterStage);
+                    compositionMode: RetainedFrameStageCompositionMode.DeferActiveCompositionAfterStage);
                 if (_translator is not IRetainedInputSnapshotProvider snapshotProvider
                     || snapshotProvider.LastRetainedInputSnapshot is not { } snapshot)
                 {
@@ -630,171 +612,47 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         NodeKey targetKey,
         in CompositionScrollPresentationSample sample)
     {
-        if (targetKey == NodeKey.None)
-        {
-            return;
-        }
-
-        RenderCompletionWaitGroup? idleWaitGroup = null;
-        lock (_compositionScheduleGate)
-        {
-            if (!_scrollPresentationSchedule.IsActive
-                || _scrollPresentationSchedule.TargetKey != targetKey)
-            {
-                return;
-            }
-
-            _heldScrollPresentationDeclaration = sample.HasValue
-                ? CreateHeldScrollPresentationDeclaration(_activeScrollPresentationDeclaration, sample.PresentedScrollY)
-                : default;
-            _scrollPresentationSchedule = default;
-            _activeScrollPresentationDeclaration = default;
-            _scrollPresentationTickQueued = false;
-            unchecked
-            {
-                _scrollPresentationGeneration++;
-                if (_scrollPresentationGeneration == 0)
-                {
-                    _scrollPresentationGeneration++;
-                }
-            }
-
-            idleWaitGroup = _scrollPresentationIdleWaitGroup;
-            _scrollPresentationIdleWaitGroup = null;
-        }
-
-        idleWaitGroup?.Complete(null);
+        _scrollPresentationLifecycle.HoldForRetarget(targetKey, sample);
     }
 
     private int ActivateScrollPresentationSchedule(
         in CompositionScrollPresentationDeclaration declaration)
     {
-        RenderCompletionWaitGroup? supersededWaitGroup;
-        int generation;
-        lock (_compositionScheduleGate)
-        {
-            supersededWaitGroup = _scrollPresentationIdleWaitGroup;
-            _scrollPresentationIdleWaitGroup = null;
-            generation = unchecked(++_scrollPresentationGeneration);
-            if (generation == 0)
-            {
-                generation = ++_scrollPresentationGeneration;
-            }
-
-            _scrollPresentationSchedule = new CompositionScrollPresentationSchedule(
-                generation,
-                declaration.TargetKey,
-                declaration.Timeline.StartTimestamp,
-                declaration.Timeline.StartTimestamp + declaration.Timeline.Duration);
-            _activeScrollPresentationDeclaration = declaration;
-            _heldScrollPresentationDeclaration = default;
-            _scrollPresentationTickQueued = false;
-        }
-
-        supersededWaitGroup?.Complete(null);
-        return generation;
+        return _scrollPresentationLifecycle.Activate(declaration);
     }
 
     private bool TryGetActiveScrollPresentationSchedule(int generation, out CompositionScrollPresentationSchedule schedule)
     {
-        lock (_compositionScheduleGate)
-        {
-            if (_scrollPresentationSchedule.IsActive && _scrollPresentationSchedule.Generation == generation)
-            {
-                _scrollPresentationTickQueued = false;
-                schedule = _scrollPresentationSchedule;
-                return true;
-            }
-
-            schedule = default;
-            return false;
-        }
+        return _scrollPresentationLifecycle.TryBeginTick(generation, out schedule);
     }
 
     private void CompleteScrollPresentationSchedule(int generation)
     {
-        RenderCompletionWaitGroup? idleWaitGroup = null;
-        lock (_compositionScheduleGate)
-        {
-            if (_scrollPresentationSchedule.IsActive && _scrollPresentationSchedule.Generation == generation)
-            {
-                _scrollPresentationSchedule = default;
-                _activeScrollPresentationDeclaration = default;
-                _heldScrollPresentationDeclaration = default;
-                _scrollPresentationTickQueued = false;
-                idleWaitGroup = _scrollPresentationIdleWaitGroup;
-                _scrollPresentationIdleWaitGroup = null;
-            }
-        }
-
-        idleWaitGroup?.Complete(null);
+        _scrollPresentationLifecycle.Complete(generation);
     }
 
     private bool CancelScrollPresentationSchedule()
     {
-        RenderCompletionWaitGroup? idleWaitGroup;
-        var canceled = false;
-        lock (_compositionScheduleGate)
-        {
-            canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
-            _scrollPresentationSchedule = default;
-            _activeScrollPresentationDeclaration = default;
-            _heldScrollPresentationDeclaration = default;
-            _scrollPresentationTickQueued = false;
-            unchecked
-            {
-                _scrollPresentationGeneration++;
-                if (_scrollPresentationGeneration == 0)
-                {
-                    _scrollPresentationGeneration++;
-                }
-            }
-
-            idleWaitGroup = _scrollPresentationIdleWaitGroup;
-            _scrollPresentationIdleWaitGroup = null;
-        }
-
-        idleWaitGroup?.Complete(null);
-        return canceled;
+        return _scrollPresentationLifecycle.Cancel();
     }
 
     private void CompleteScrollPresentationSchedulerOnDispose()
     {
-        RenderCompletionWaitGroup? idleWaitGroup;
-        var canceled = false;
-        lock (_compositionScheduleGate)
-        {
-            canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
-            _scrollPresentationSchedule = default;
-            _activeScrollPresentationDeclaration = default;
-            _heldScrollPresentationDeclaration = default;
-            _scrollPresentationTickQueued = false;
-            idleWaitGroup = _scrollPresentationIdleWaitGroup;
-            _scrollPresentationIdleWaitGroup = null;
-        }
-
+        var canceled = _scrollPresentationLifecycle.CompleteForDispose();
         RecordScrollPresentationCancellation(3, CompositionRenderInvalidationKind.None, canceled);
-        idleWaitGroup?.Complete(null);
     }
 
     private void ScheduleNextScrollPresentationTick(CompositionTimestamp lastTickTimestamp, int generation)
     {
-        CompositionDuration delay;
-        lock (_compositionScheduleGate)
+        if (!_scrollPresentationLifecycle.TryQueueNextTick(
+            generation,
+            lastTickTimestamp,
+            _clockSource.TimestampNow(),
+            CompositionTargetFrameInterval,
+            ResolveScrollPresentationFramePacing(),
+            out var delay))
         {
-            if (!_scrollPresentationSchedule.IsActive
-                || _scrollPresentationSchedule.Generation != generation
-                || _scrollPresentationTickQueued)
-            {
-                return;
-            }
-
-            delay = ComputeNextTickDelay(
-                lastTickTimestamp,
-                _clockSource.TimestampNow(),
-                CompositionTargetFrameInterval,
-                ResolveScrollPresentationFramePacing());
-            _scrollPresentationTickQueued = true;
+            return;
         }
 
         if (delay.StopwatchTicks <= 0)
@@ -808,40 +666,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
 
     private bool TryGetPreservableScrollPresentationDeclaration(out CompositionScrollPresentationDeclaration declaration)
     {
-        lock (_compositionScheduleGate)
-        {
-            if (_scrollPresentationSchedule.IsActive)
-            {
-                declaration = _activeScrollPresentationDeclaration;
-                return declaration.TargetKey == _scrollPresentationSchedule.TargetKey;
-            }
-
-            if (_heldScrollPresentationDeclaration.TargetKey != NodeKey.None)
-            {
-                declaration = _heldScrollPresentationDeclaration;
-                return true;
-            }
-
-            declaration = default;
-            return false;
-        }
-    }
-
-    private static CompositionScrollPresentationDeclaration CreateHeldScrollPresentationDeclaration(
-        in CompositionScrollPresentationDeclaration declaration,
-        double presentedScrollY)
-    {
-        var heldScrollY = double.IsFinite(presentedScrollY) ? (float)presentedScrollY : 0f;
-        if (!float.IsFinite(heldScrollY))
-        {
-            heldScrollY = 0f;
-        }
-
-        return new CompositionScrollPresentationDeclaration(
-            declaration.TargetKey,
-            new CompositionAnimationTimeline(declaration.Timeline.StartTimestamp, CompositionDuration.Zero),
-            CompositionScalarAnimation.Constant(heldScrollY),
-            declaration.InstanceId);
+        return _scrollPresentationLifecycle.TryGetPreservableDeclaration(out declaration);
     }
 
     private async Task ScheduleDelayedScrollPresentationTickAsync(CompositionDuration delay, int generation)
@@ -867,17 +692,18 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
 
     private bool TryQueueScrollPresentationTick(int generation)
     {
-        lock (_compositionScheduleGate)
+        if (!_scrollPresentationLifecycle.TryTakeQueuedTickForDispatch(generation))
         {
-            if (!_scrollPresentationSchedule.IsActive
-                || _scrollPresentationSchedule.Generation != generation
-                || !_scrollPresentationTickQueued)
-            {
-                return false;
-            }
-
-            return _channel.Writer.TryWrite(CompositorWorkItem.TickScrollPresentation(generation));
+            return false;
         }
+
+        if (_channel.Writer.TryWrite(CompositorWorkItem.TickScrollPresentation(generation)))
+        {
+            return true;
+        }
+
+        _scrollPresentationLifecycle.CompleteAfterDispatchFailure(generation);
+        return false;
     }
 
     internal static int ComputeNextTickDelayMilliseconds(

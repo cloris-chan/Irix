@@ -176,7 +176,7 @@ public sealed class BatchOwnershipTests
         Assert.Equal(1, translator.TranslateCallCount);
         Assert.Equal(0, compositor.RenderCallCount);
         Assert.Equal(1, compositor.StageCallCount);
-        Assert.Equal(RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage, compositor.LastPresentationMode);
+        Assert.Equal(RetainedFrameStageCompositionMode.RefreshActiveCompositionAfterStage, compositor.LastCompositionMode);
         Assert.Equal(1, patchOwner.DisposeCallCount);
     }
 
@@ -1424,7 +1424,7 @@ public sealed class BatchOwnershipTests
     {
         public int RenderCallCount { get; private set; }
         public int StageCallCount { get; private set; }
-        public RetainedFrameStagePresentationMode LastPresentationMode { get; private set; }
+        public RetainedFrameStageCompositionMode LastCompositionMode { get; private set; }
 
         public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
         {
@@ -1436,10 +1436,10 @@ public sealed class BatchOwnershipTests
             RenderFrameBatch renderFrameBatch,
             RetainedRenderFrameSegmentOwnership? ownership,
             CancellationToken cancellationToken = default,
-            RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
+            RetainedFrameStageCompositionMode compositionMode = RetainedFrameStageCompositionMode.RefreshActiveCompositionAfterStage)
         {
             StageCallCount++;
-            LastPresentationMode = presentationMode;
+            LastCompositionMode = compositionMode;
             return ValueTask.CompletedTask;
         }
     }
@@ -1470,12 +1470,12 @@ public sealed class BatchOwnershipTests
             RenderFrameBatch renderFrameBatch,
             RetainedRenderFrameSegmentOwnership? ownership,
             CancellationToken cancellationToken = default,
-            RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
+            RetainedFrameStageCompositionMode compositionMode = RetainedFrameStageCompositionMode.RefreshActiveCompositionAfterStage)
         {
             Events.Add("Stage");
             StageCallCount++;
             if (_presentationActive
-                && presentationMode == RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
+                && compositionMode == RetainedFrameStageCompositionMode.RefreshActiveCompositionAfterStage)
             {
                 Events.Add("StageActivePresentationTick");
             }

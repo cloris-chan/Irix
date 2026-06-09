@@ -705,7 +705,7 @@ public sealed class DrawingBackendCompositorTests
             stagedFrame,
             null,
             cancellationToken,
-            RetainedFrameStagePresentationMode.SuppressActiveScrollPresentationAfterStage);
+            RetainedFrameStageCompositionMode.DeferActiveCompositionAfterStage);
 
         Assert.Equal(1, backend.ExecuteCount);
         Assert.Equal(0, backend.ExecuteCompositionCount);

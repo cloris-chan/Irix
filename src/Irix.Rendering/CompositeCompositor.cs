@@ -31,14 +31,14 @@ public sealed class CompositeCompositor(params ICompositor[] compositors) : ICom
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
         CancellationToken cancellationToken,
-        RetainedFrameStagePresentationMode presentationMode)
+        RetainedFrameStageCompositionMode compositionMode)
     {
         var staged = false;
         foreach (var compositor in compositors)
         {
             if (compositor is IRetainedFrameStagingCompositor stagingCompositor)
             {
-                await stagingCompositor.StageRetainedFrameAsync(renderFrameBatch, ownership, cancellationToken, presentationMode);
+                await stagingCompositor.StageRetainedFrameAsync(renderFrameBatch, ownership, cancellationToken, compositionMode);
                 staged = true;
             }
         }

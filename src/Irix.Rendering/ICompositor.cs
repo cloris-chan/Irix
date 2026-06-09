@@ -11,13 +11,13 @@ internal interface IRetainedFrameStagingCompositor
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
         CancellationToken cancellationToken = default,
-        RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage);
+        RetainedFrameStageCompositionMode compositionMode = RetainedFrameStageCompositionMode.RefreshActiveCompositionAfterStage);
 }
 
-internal enum RetainedFrameStagePresentationMode : byte
+internal enum RetainedFrameStageCompositionMode : byte
 {
-    RenderActiveScrollPresentationAfterStage = 0,
-    SuppressActiveScrollPresentationAfterStage = 1
+    RefreshActiveCompositionAfterStage = 0,
+    DeferActiveCompositionAfterStage = 1
 }
 
 internal interface ICompositionScrollPresentationCompositor

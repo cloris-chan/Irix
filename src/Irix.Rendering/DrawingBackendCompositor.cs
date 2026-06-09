@@ -635,8 +635,8 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             return ValueTask.CompletedTask;
         }
 
-        if (HasActiveScrollPresentationPlan()
-            && TryRenderActiveScrollPresentationAfterRetainedUpdate(out _))
+        if (HasActiveCompositionPresentationPlan()
+            && TryRefreshActiveCompositionAfterRetainedUpdate(out _))
         {
             LastHandoffResult = stage.HandoffSelection.Selected
                 ? DrawingBackendCompositorHandoffResult.RetainedFrameStaged(stage.HandoffSelection.OwnerResult)
@@ -703,16 +703,16 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
         CancellationToken cancellationToken,
-        RetainedFrameStagePresentationMode presentationMode)
+        RetainedFrameStageCompositionMode compositionMode)
     {
-        return StageRetainedFrameAsync(renderFrameBatch, ownership, cancellationToken, presentationMode);
+        return StageRetainedFrameAsync(renderFrameBatch, ownership, cancellationToken, compositionMode);
     }
 
     internal ValueTask StageRetainedFrameAsync(
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
         CancellationToken cancellationToken = default,
-        RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
+        RetainedFrameStageCompositionMode compositionMode = RetainedFrameStageCompositionMode.RefreshActiveCompositionAfterStage)
     {
         if (cancellationToken.IsCancellationRequested)
         {
@@ -721,14 +721,14 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
 
         lock (_frameGate)
         {
-            return StageRetainedFrameCore(renderFrameBatch, ownership, presentationMode);
+            return StageRetainedFrameCore(renderFrameBatch, ownership, compositionMode);
         }
     }
 
     private ValueTask StageRetainedFrameCore(
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
-        RetainedFrameStagePresentationMode presentationMode)
+        RetainedFrameStageCompositionMode compositionMode)
     {
         var stage = ApplyRetainedFrame(renderFrameBatch, ownership);
         Interlocked.Increment(ref _retainedStageCount);
@@ -741,10 +741,10 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             ? DrawingBackendCompositorHandoffResult.RetainedFrameStaged(stage.HandoffSelection.OwnerResult)
             : stage.HandoffSelection.Result;
         LastPartialApplySucceeded = stage.RetainedPartialApplySucceeded;
-        if (presentationMode == RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage
-            && HasActiveScrollPresentationPlan())
+        if (compositionMode == RetainedFrameStageCompositionMode.RefreshActiveCompositionAfterStage
+            && HasActiveCompositionPresentationPlan())
         {
-            _ = TryRenderActiveScrollPresentationAfterRetainedUpdate(out _);
+            _ = TryRefreshActiveCompositionAfterRetainedUpdate(out _);
         }
 
         PublishHitTargets([.. _retainedFrame.HitTargets]);
@@ -1211,7 +1211,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             2);
     }
 
-    private bool TryRenderActiveScrollPresentationAfterRetainedUpdate(out CompositionBackendExecutionResult result)
+    private bool TryRefreshActiveCompositionAfterRetainedUpdate(out CompositionBackendExecutionResult result)
     {
         result = default;
         if (_compositionScrollPresentationPlan is not { } plan)
@@ -1295,7 +1295,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         return true;
     }
 
-    private bool HasActiveScrollPresentationPlan() => _compositionScrollPresentationPlan is not null;
+    private bool HasActiveCompositionPresentationPlan() => _compositionScrollPresentationPlan is not null;
 
     private ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationFrameAtAsync(
         ICompositionDrawingBackend compositionBackend,
