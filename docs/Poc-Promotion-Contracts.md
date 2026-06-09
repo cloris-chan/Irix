@@ -197,7 +197,7 @@ platform input
   -> app input owner resolves hit target
   -> app/control runtime updates logical state
   -> translator projects layout feedback after render
-  -> compositor may sample/cancel presented scroll for continuity
+  -> compositor may sample and hold presented scroll for retarget continuity
   -> app/control runtime dispatches the next app message
 ```
 
@@ -207,7 +207,7 @@ Framework extraction may introduce these contracts, in this order:
 |----------|-------|----------|
 | Logical state owner | App/control runtime | Owns `ScrollState`, accumulator, target/current position, max-scroll clamp state, animation-active bit, input ownership snapshot, focus, capture, and pressed/hovered targets. Rendering can observe derived geometry only. |
 | Feedback owner | App/control feedback adapter | Receives layout-produced scroll metrics after translation and delivers them to runtime state. Feedback is mutable runtime correction, not renderer diagnostics. |
-| Compositor sampling owner | App/control scroll presentation coordinator | Calls compositor-loop sample/cancel APIs to preserve presented-origin continuity before dispatching a new logical layout frame. The compositor owns the presented value only while the presentation is active. |
+| Compositor sampling owner | App/control scroll presentation coordinator | Calls compositor-loop sample-for-retarget APIs to preserve presented-origin continuity and hold the current visual until the replacement retained frame plus declaration installs. The compositor owns the presented value only while the presentation is active. |
 | Hit-test service access | Input/control adapter | Reads a renderer-neutral hit-test service that accounts for active compositor presentation. The adapter resolves input coordinates to control/action identity without owning retained render frames. |
 | App message dispatch owner | App runtime dispatcher | Maps control actions, scroll interrupts, wheel deltas, marker events, and feedback corrections into app messages. `Irix.Rendering` and platform backends must not construct app messages. |
 | Native input scheduling | App/control runtime adapter | Queues platform input events and drains them through the app-owned input route without blocking the platform message thread. |

@@ -2497,7 +2497,7 @@ public sealed class CounterInputRouterTests
         await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, new NodeKey(1), cancellationToken);
 
         Assert.Empty(runtime.Decisions);
-        Assert.Equal(0, compositor.SampleAndCancelCount);
+        Assert.Equal(0, compositor.SampleForRetargetCount);
         Assert.Empty(compositor.Declarations);
         Assert.Equal(0, coordinator.RetargetCount);
         Assert.Equal(0, coordinator.PendingPixels);
@@ -2528,7 +2528,7 @@ public sealed class CounterInputRouterTests
         await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, new NodeKey(1), cancellationToken);
 
         Assert.Empty(runtime.Decisions);
-        Assert.Equal(0, compositor.SampleAndCancelCount);
+        Assert.Equal(0, compositor.SampleForRetargetCount);
         Assert.Empty(compositor.Declarations);
         Assert.Equal(0, coordinator.RetargetCount);
         Assert.Equal(0, coordinator.PendingPixels);
@@ -2557,7 +2557,7 @@ public sealed class CounterInputRouterTests
         await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, new NodeKey(1), cancellationToken);
 
         Assert.Empty(runtime.Decisions);
-        Assert.Equal(0, compositor.SampleAndCancelCount);
+        Assert.Equal(0, compositor.SampleForRetargetCount);
         Assert.Empty(compositor.Declarations);
         Assert.Equal(0, coordinator.RetargetCount);
         Assert.Equal(0, coordinator.PendingPixels);
@@ -2583,7 +2583,7 @@ public sealed class CounterInputRouterTests
         coordinator.AddPendingPixels(54);
         await coordinator.RunUntilIdleAsync(runtime, compositor, snapshotProvider, scrollTargetKey, cancellationToken);
 
-        Assert.Equal(2, compositor.SampleAndCancelCount);
+        Assert.Equal(2, compositor.SampleForRetargetCount);
         Assert.Equal(2, compositor.Declarations.Count);
         Assert.Equal(0, compositor.Declarations[0].PresentedScrollY.From);
         Assert.Equal(54, compositor.Declarations[0].PresentedScrollY.To);
@@ -2643,7 +2643,7 @@ public sealed class CounterInputRouterTests
         Assert.True(firstStarted);
         Assert.False(secondStarted);
         Assert.Equal(0, coordinator.PendingPixels);
-        Assert.Equal(2, compositor.SampleAndCancelCount);
+        Assert.Equal(2, compositor.SampleForRetargetCount);
         Assert.Equal(2, compositor.Declarations.Count);
         Assert.Equal(0, compositor.Declarations[0].PresentedScrollY.From);
         Assert.Equal(54, compositor.Declarations[0].PresentedScrollY.To);
@@ -2679,7 +2679,7 @@ public sealed class CounterInputRouterTests
         Assert.True(firstStarted);
         Assert.False(secondStarted);
         Assert.Equal(0, coordinator.PendingPixels);
-        Assert.Equal(2, compositor.SampleAndCancelCount);
+        Assert.Equal(2, compositor.SampleForRetargetCount);
         Assert.Equal(2, compositor.Declarations.Count);
         Assert.Equal(0, compositor.Declarations[0].PresentedScrollY.From);
         Assert.Equal(108, compositor.Declarations[0].PresentedScrollY.To);
@@ -2713,7 +2713,7 @@ public sealed class CounterInputRouterTests
         Assert.True(firstStarted);
         Assert.False(secondStarted);
         Assert.Equal(0, coordinator.PendingPixels);
-        Assert.Equal(1, compositor.SampleAndCancelCount);
+        Assert.Equal(1, compositor.SampleForRetargetCount);
         Assert.Single(compositor.Declarations);
         Assert.Equal(186, compositor.Declarations[0].PresentedScrollY.From);
         Assert.Equal(240, compositor.Declarations[0].PresentedScrollY.To);
@@ -3025,16 +3025,15 @@ public sealed class CounterInputRouterTests
             _samples = new Queue<ScrollPresentationSample>(samples);
         }
 
-        public int SampleAndCancelCount { get; private set; }
+        public int SampleForRetargetCount { get; private set; }
 
         public List<CompositionScrollPresentationDeclaration> Declarations { get; } = [];
 
-        public ValueTask<ScrollPresentationSample> SampleAndCancelAsync(
+        public ValueTask<ScrollPresentationSample> SampleForRetargetAsync(
             NodeKey targetKey,
             CancellationToken cancellationToken = default)
         {
-            SampleAndCancelCount++;
-            _hasPresentedScrollY = false;
+            SampleForRetargetCount++;
             return ValueTask.FromResult(_samples.Count > 0
                 ? _samples.Dequeue()
                 : new ScrollPresentationSample(false, 0));
@@ -3071,7 +3070,7 @@ public sealed class CounterInputRouterTests
             _samples = new Queue<ScrollPresentationSample>(samples);
         }
 
-        public int SampleAndCancelCount { get; private set; }
+        public int SampleForRetargetCount { get; private set; }
 
         public List<CompositionScrollPresentationDeclaration> Declarations { get; } = [];
 
@@ -3085,12 +3084,11 @@ public sealed class CounterInputRouterTests
             _allowFirstStart.TrySetResult();
         }
 
-        public ValueTask<ScrollPresentationSample> SampleAndCancelAsync(
+        public ValueTask<ScrollPresentationSample> SampleForRetargetAsync(
             NodeKey targetKey,
             CancellationToken cancellationToken = default)
         {
-            SampleAndCancelCount++;
-            _hasPresentedScrollY = false;
+            SampleForRetargetCount++;
             return ValueTask.FromResult(_samples.Count > 0
                 ? _samples.Dequeue()
                 : new ScrollPresentationSample(false, 0));

@@ -222,7 +222,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         return new ValueTask(waitTask.WaitAsync(cancellationToken));
     }
 
-    internal ValueTask<CompositionScrollPresentationSample> SampleAndCancelCompositionScrollPresentationAsync(
+    internal ValueTask<CompositionScrollPresentationSample> SampleAndHoldCompositionScrollPresentationAsync(
         NodeKey targetKey,
         CancellationToken cancellationToken = default)
     {
@@ -232,9 +232,9 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         }
 
         var completion = new TaskCompletionSource<CompositionScrollPresentationSample>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_channel.Writer.TryWrite(CompositorWorkItem.SampleAndCancelScrollPresentation(targetKey, completion)))
+        if (!_channel.Writer.TryWrite(CompositorWorkItem.SampleAndHoldScrollPresentation(targetKey, completion)))
         {
-            completion.TrySetException(new InvalidOperationException("Unable to enqueue composition scroll presentation sample cancellation."));
+            completion.TrySetException(new InvalidOperationException("Unable to enqueue composition scroll presentation sample-and-hold."));
         }
 
         return new ValueTask<CompositionScrollPresentationSample>(completion.Task.WaitAsync(cancellationToken));
@@ -316,9 +316,9 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 continue;
             }
 
-            if (workItem.Kind == CompositorWorkKind.SampleAndCancelScrollPresentation)
+            if (workItem.Kind == CompositorWorkKind.SampleAndHoldScrollPresentation)
             {
-                SampleAndCancelScrollPresentationWorkItem(workItem);
+                SampleAndHoldScrollPresentationWorkItem(workItem);
                 continue;
             }
 
@@ -389,7 +389,6 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             using (patchBatch)
             {
                 using var renderFrameBatch = _translator.Translate(patchBatch);
-                CancelScrollPresentationForInvalidation(ResolveCompositionInvalidation());
                 if (_compositor is not IRetainedFrameStagingCompositor stagingCompositor)
                 {
                     throw new InvalidOperationException("The current compositor does not support retained-frame staging.");
@@ -518,7 +517,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         }
     }
 
-    private void SampleAndCancelScrollPresentationWorkItem(CompositorWorkItem workItem)
+    private void SampleAndHoldScrollPresentationWorkItem(CompositorWorkItem workItem)
     {
         var completion = workItem.ScrollPresentationSampleCompletion
             ?? throw new InvalidOperationException("Scroll presentation sample work item must carry a completion source.");
@@ -531,10 +530,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 sample = new CompositionScrollPresentationSample(true, presentedScrollY);
             }
 
-            CancelScrollPresentationCore(
-                countCancellation: true,
-                2,
-                CompositionRenderInvalidationKind.LayoutAffecting);
+            HoldScrollPresentationScheduleForRetarget(workItem.ScrollPresentationTargetKey);
             completion.TrySetResult(sample);
         }
         catch (Exception ex)
@@ -578,6 +574,40 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         {
             Interlocked.Increment(ref _scrollPresentationCancelCount);
         }
+    }
+
+    private void HoldScrollPresentationScheduleForRetarget(NodeKey targetKey)
+    {
+        if (targetKey == NodeKey.None)
+        {
+            return;
+        }
+
+        RenderCompletionWaitGroup? idleWaitGroup = null;
+        lock (_compositionScheduleGate)
+        {
+            if (!_scrollPresentationSchedule.IsActive
+                || _scrollPresentationSchedule.TargetKey != targetKey)
+            {
+                return;
+            }
+
+            _scrollPresentationSchedule = default;
+            _scrollPresentationTickQueued = false;
+            unchecked
+            {
+                _scrollPresentationGeneration++;
+                if (_scrollPresentationGeneration == 0)
+                {
+                    _scrollPresentationGeneration++;
+                }
+            }
+
+            idleWaitGroup = _scrollPresentationIdleWaitGroup;
+            _scrollPresentationIdleWaitGroup = null;
+        }
+
+        idleWaitGroup?.Complete(null);
     }
 
     private int ActivateScrollPresentationSchedule(
@@ -842,7 +872,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         StageAndInstallScrollPresentation,
         TickScrollPresentation,
         CancelScrollPresentation,
-        SampleAndCancelScrollPresentation
+        SampleAndHoldScrollPresentation
     }
 
     internal readonly struct CompositionScrollPresentationSample(
@@ -983,12 +1013,12 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 0);
         }
 
-        public static CompositorWorkItem SampleAndCancelScrollPresentation(
+        public static CompositorWorkItem SampleAndHoldScrollPresentation(
             NodeKey targetKey,
             TaskCompletionSource<CompositionScrollPresentationSample> completion)
         {
             return new CompositorWorkItem(
-                CompositorWorkKind.SampleAndCancelScrollPresentation,
+                CompositorWorkKind.SampleAndHoldScrollPresentation,
                 null,
                 null,
                 CompositorWorkMode.Render,

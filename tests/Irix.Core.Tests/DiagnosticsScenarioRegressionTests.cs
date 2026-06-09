@@ -25,9 +25,9 @@ public sealed class DiagnosticsScenarioRegressionTests
             && line.Contains("position=108", StringComparison.Ordinal)
             && line.Contains("target=108", StringComparison.Ordinal)
             && line.Contains("retargets=2", StringComparison.Ordinal)
-            && line.Contains("cancels=1", StringComparison.Ordinal)
-            && line.Contains("cancelReason=RenderInvalidation", StringComparison.Ordinal)
-            && line.Contains("cancelInvalidation=LayoutAffecting", StringComparison.Ordinal)
+            && line.Contains("cancels=0", StringComparison.Ordinal)
+            && line.Contains("cancelReason=None", StringComparison.Ordinal)
+            && line.Contains("cancelInvalidation=None", StringComparison.Ordinal)
             && line.Contains("lastPresented=108", StringComparison.Ordinal));
         Assert.Contains(transcript, line => line.StartsWith("scenario scroll-continuity cancel-explicit ", StringComparison.Ordinal)
             && line.Contains("cancels=1", StringComparison.Ordinal)

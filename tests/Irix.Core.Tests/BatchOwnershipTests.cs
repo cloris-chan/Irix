@@ -220,6 +220,69 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_retained_frame_scroll_presentation_retarget_holds_previous_visual_through_layout_invalidation()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new InvalidatingSnapshotTranslator(
+            new CompositionRenderInvalidation(CompositionRenderInvalidationKind.LayoutAffecting));
+        var compositor = new StageScrollPresentationOrderingCompositor();
+        var clock = new ManualCompositionClockSource(CompositionTimestamp.FromStopwatchTicks(100));
+        await using var loop = new CompositorLoop(translator, compositor, ownershipProvider: null, clock);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var initialDeclaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(0, 54));
+        var retargetDeclaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(120),
+                CompositionDuration.Zero),
+            new CompositionScalarAnimation(18, 108));
+        var patchOwner = new TrackingMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(1)))
+        ]);
+        var patchBatch = new PatchBatch(patchOwner, 1);
+
+        await loop.StartCompositionScrollPresentationAsync(initialDeclaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        clock.Set(CompositionTimestamp.FromStopwatchTicks(120));
+        var sample = await loop.SampleAndHoldCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+        await loop.PublishRetainedFrameAndStartCompositionScrollPresentationAsync(
+            patchBatch,
+            retargetDeclaration,
+            cancellationToken);
+
+        Assert.True(sample.HasValue);
+        Assert.Equal(0, sample.PresentedScrollY);
+        Assert.Equal(["Install", "Tick", "Stage", "Install", "Tick"], compositor.Events);
+        Assert.Equal(1, translator.TranslateCallCount);
+        Assert.Equal(1, compositor.StageCallCount);
+        Assert.Equal(2, compositor.InstallCount);
+        Assert.Equal(2, compositor.TickCount);
+        Assert.Equal(0, compositor.ClearCount);
+        Assert.Equal(0, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.None, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(108, presentedScrollY);
+        Assert.Equal(1, patchOwner.DisposeCallCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_scroll_presentation_scheduler_installs_and_ticks_until_idle()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -445,7 +508,7 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
-    public async Task CompositorLoop_sample_and_cancel_scroll_presentation_returns_latest_presented_value()
+    public async Task CompositorLoop_sample_and_hold_scroll_presentation_returns_latest_presented_value()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var translator = new AllocatingTranslator();
@@ -468,34 +531,36 @@ public sealed class BatchOwnershipTests
         await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
         await WaitForConditionAsync(() => compositor.TickCount >= 2, cancellationToken);
 
-        var sample = await loop.SampleAndCancelCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+        var sample = await loop.SampleAndHoldCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
         await loop.WaitForScrollPresentationIdleAsync(cancellationToken);
         var tickCountAfterSample = compositor.TickCount;
         await Task.Delay(20, cancellationToken);
 
         Assert.True(sample.HasValue);
         Assert.True(sample.PresentedScrollY > 0);
-        Assert.Equal(1, compositor.ClearCount);
-        Assert.Equal(1, loop.ScrollPresentationCancelCount);
-        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, loop.ScrollPresentationCancellationDiagnostics.LastReason);
-        Assert.Equal(CompositionRenderInvalidationKind.LayoutAffecting, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
-        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+        Assert.Equal(0, compositor.ClearCount);
+        Assert.Equal(0, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.None, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(sample.PresentedScrollY, presentedScrollY);
         Assert.Equal(tickCountAfterSample, compositor.TickCount);
     }
 
     [Fact]
-    public async Task CompositorLoop_sample_and_cancel_without_active_presentation_returns_empty_sample_without_cancellation()
+    public async Task CompositorLoop_sample_and_hold_without_active_presentation_returns_empty_sample_without_cancellation()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var translator = new AllocatingTranslator();
         var compositor = new ScrollPresentationSchedulerCompositor();
         await using var loop = new CompositorLoop(translator, compositor);
 
-        var sample = await loop.SampleAndCancelCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+        var sample = await loop.SampleAndHoldCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
         await loop.WaitForScrollPresentationIdleAsync(cancellationToken);
 
         Assert.False(sample.HasValue);
         Assert.Equal(0, sample.PresentedScrollY);
+        Assert.Equal(0, compositor.ClearCount);
         Assert.Equal(0, loop.ScrollPresentationCancelCount);
         Assert.Equal(ScrollPresentationCancellationReason.None, loop.ScrollPresentationCancellationDiagnostics.LastReason);
         Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
@@ -505,7 +570,7 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
-    public async Task CompositorLoop_sample_and_cancel_scroll_presentation_completes_existing_idle_waiter()
+    public async Task CompositorLoop_sample_and_hold_scroll_presentation_completes_existing_idle_waiter()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var translator = new AllocatingTranslator();
@@ -532,20 +597,21 @@ public sealed class BatchOwnershipTests
         Assert.Equal(1, compositor.TickCount);
         Assert.False(idleWait.IsCompleted);
 
-        var sample = await loop.SampleAndCancelCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+        var sample = await loop.SampleAndHoldCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
 
         await idleWait.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
         Assert.True(sample.HasValue);
         Assert.Equal(0, sample.PresentedScrollY);
-        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
-        Assert.Equal(1, compositor.ClearCount);
-        Assert.Equal(1, loop.ScrollPresentationCancelCount);
-        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, loop.ScrollPresentationCancellationDiagnostics.LastReason);
-        Assert.Equal(CompositionRenderInvalidationKind.LayoutAffecting, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
+        Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(sample.PresentedScrollY, presentedScrollY);
+        Assert.Equal(0, compositor.ClearCount);
+        Assert.Equal(0, loop.ScrollPresentationCancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.None, loop.ScrollPresentationCancellationDiagnostics.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, loop.ScrollPresentationCancellationDiagnostics.LastInvalidationKind);
     }
 
     [Fact]
-    public async Task CompositorLoop_sample_and_cancel_skips_stale_delayed_tick_after_replacement_segment()
+    public async Task CompositorLoop_sample_and_hold_skips_stale_delayed_tick_after_replacement_segment()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var translator = new AllocatingTranslator();
@@ -569,8 +635,8 @@ public sealed class BatchOwnershipTests
         await loop.StartCompositionScrollPresentationAsync(oldDeclaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
         Assert.Equal(1, compositor.TickCount);
 
-        var staleSkipsBeforeCancel = loop.ScrollPresentationStaleDelayedTickSkipCount;
-        var sample = await loop.SampleAndCancelCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+        var staleSkipsBeforeHold = loop.ScrollPresentationStaleDelayedTickSkipCount;
+        var sample = await loop.SampleAndHoldCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
         var replacementDeclaration = new CompositionScrollPresentationDeclaration(
             new NodeKey(1),
             new CompositionAnimationTimeline(CompositionTimestamp.Now(), CompositionDuration.Zero),
@@ -579,13 +645,15 @@ public sealed class BatchOwnershipTests
         var tickCountAfterReplacement = compositor.TickCount;
 
         await WaitForConditionAsync(
-            () => loop.ScrollPresentationStaleDelayedTickSkipCount > staleSkipsBeforeCancel,
+            () => loop.ScrollPresentationStaleDelayedTickSkipCount > staleSkipsBeforeHold,
             cancellationToken);
 
         Assert.True(sample.HasValue);
         Assert.Equal(2, tickCountAfterReplacement);
         Assert.Equal(tickCountAfterReplacement, compositor.TickCount);
-        Assert.Equal(staleSkipsBeforeCancel + 1, loop.ScrollPresentationStaleDelayedTickSkipCount);
+        Assert.Equal(staleSkipsBeforeHold + 1, loop.ScrollPresentationStaleDelayedTickSkipCount);
+        Assert.Equal(0, compositor.ClearCount);
+        Assert.Equal(0, loop.ScrollPresentationCancelCount);
         Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
         Assert.Equal(12, presentedScrollY);
     }
@@ -1057,6 +1125,34 @@ public sealed class BatchOwnershipTests
         }
     }
 
+    private sealed class InvalidatingSnapshotTranslator(CompositionRenderInvalidation invalidation) :
+        IPatchBatchTranslator,
+        IRetainedInputSnapshotProvider,
+        ICompositionInvalidationProvider
+    {
+        public int TranslateCallCount { get; private set; }
+        public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; private set; }
+        public CompositionRenderInvalidation LastCompositionInvalidation { get; private set; }
+
+        public RenderFrameBatch Translate(PatchBatch patchBatch)
+        {
+            TranslateCallCount++;
+            LastCompositionInvalidation = invalidation;
+            var arena = new VirtualTextArena();
+            var pipeline = new RenderPipeline();
+            var frame = pipeline.Build(
+                new VirtualNode(
+                    VirtualNodeKind.ScrollContainer,
+                    key: 1,
+                    properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(108)],
+                    children: [VirtualNodeBuilder.Text(arena, "Item", new NodeKey(2))]),
+                new PixelRectangle(0, 0, 240, 120),
+                arena.GetOrCreateSnapshot());
+            LastRetainedInputSnapshot = pipeline.LastRetainedInputSnapshot;
+            return frame;
+        }
+    }
+
     private sealed class InvalidatingTranslator(CompositionRenderInvalidation invalidation) : IPatchBatchTranslator, ICompositionInvalidationProvider
     {
         public int TranslateCallCount { get; private set; }
@@ -1177,6 +1273,7 @@ public sealed class BatchOwnershipTests
         public int RenderCallCount { get; private set; }
         public int StageCallCount { get; private set; }
         public int InstallCount { get; private set; }
+        public int ClearCount { get; private set; }
         public int TickCount { get; private set; }
         public bool PresentationActiveDuringLastRender { get; private set; }
 
@@ -1212,6 +1309,7 @@ public sealed class BatchOwnershipTests
         {
             _presentationActive = false;
             _presentedScrollY = 0;
+            ClearCount++;
         }
 
         public ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(

@@ -13,7 +13,7 @@ internal interface IScrollPresentationRuntimeAdapter
 
 internal interface IScrollPresentationCompositorAdapter
 {
-    ValueTask<ScrollPresentationSample> SampleAndCancelAsync(
+    ValueTask<ScrollPresentationSample> SampleForRetargetAsync(
         NodeKey targetKey,
         CancellationToken cancellationToken = default);
 
@@ -126,11 +126,11 @@ internal readonly struct CounterScrollPresentationRuntimeAdapter(
 internal readonly struct CompositorLoopScrollPresentationAdapter(
     CompositorLoop CompositorLoop) : IScrollPresentationCompositorAdapter
 {
-    public async ValueTask<ScrollPresentationSample> SampleAndCancelAsync(
+    public async ValueTask<ScrollPresentationSample> SampleForRetargetAsync(
         NodeKey targetKey,
         CancellationToken cancellationToken = default)
     {
-        var sample = await CompositorLoop.SampleAndCancelCompositionScrollPresentationAsync(targetKey, cancellationToken);
+        var sample = await CompositorLoop.SampleAndHoldCompositionScrollPresentationAsync(targetKey, cancellationToken);
         return new ScrollPresentationSample(sample.HasValue, sample.PresentedScrollY);
     }
 

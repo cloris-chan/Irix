@@ -211,7 +211,7 @@ internal sealed class ScrollPresentationCoordinator
             return true;
         }
 
-        var activeSample = await compositor.SampleAndCancelAsync(
+        var activeSample = await compositor.SampleForRetargetAsync(
             scrollTargetKey,
             cancellationToken);
         var from = activeSample.HasValue ? activeSample.PresentedScrollY : state.Position;

@@ -2099,10 +2099,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.False(chain.IsAnimating);
         Assert.Equal(2, chain.RetargetCount);
         Assert.Equal(2, chain.RetainedStageCount);
-        Assert.Equal(1, chain.CancelCount);
-        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, chain.Cancellation.LastReason);
-        Assert.Equal(CompositionRenderInvalidationKind.LayoutAffecting, chain.Cancellation.LastInvalidationKind);
-        Assert.Equal(1, chain.Cancellation.RenderInvalidationCount);
+        Assert.Equal(0, chain.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.None, chain.Cancellation.LastReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, chain.Cancellation.LastInvalidationKind);
+        Assert.Equal(0, chain.Cancellation.RenderInvalidationCount);
 
         var explicitCancellation = diagnostics.ExplicitCancellation;
         Assert.Equal("explicit", explicitCancellation.Name);
@@ -2138,7 +2138,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("scroll-presentation-runtime actual position=54 target=54 animating=False scenario=initial", summary);
         Assert.Contains("cancels=0 cancelReason=None cancelInvalidation=None", summary);
         Assert.Contains("scroll-presentation-runtime actual position=108 target=108 animating=False scenario=chain", summary);
-        Assert.Contains("cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
+        Assert.Contains("retainedStages=2 compositorTicks=", summary);
         Assert.Contains("scroll-presentation-runtime.cancel scenario=explicit cancels=1 cancelReason=Explicit cancelInvalidation=None", summary);
         Assert.Contains("scroll-presentation-runtime.cancel scenario=viewport cancels=1 cancelReason=RenderInvalidation cancelInvalidation=ViewportChanged", summary);
         Assert.Contains("scroll-presentation-runtime.cancel scenario=tree cancels=1 cancelReason=RenderInvalidation cancelInvalidation=TreeStructure", summary);
@@ -2289,9 +2289,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Equal(108, chain.FinalTargetPosition);
         Assert.Equal(2, chain.RetargetCount);
         Assert.Equal(0, chain.PendingPixels);
-        Assert.Equal(1, chain.CancelCount);
-        Assert.Equal(ScrollPresentationCancellationReason.RenderInvalidation, chain.CancelReason);
-        Assert.Equal(CompositionRenderInvalidationKind.LayoutAffecting, chain.CancelInvalidationKind);
+        Assert.Equal(0, chain.CancelCount);
+        Assert.Equal(ScrollPresentationCancellationReason.None, chain.CancelReason);
+        Assert.Equal(CompositionRenderInvalidationKind.None, chain.CancelInvalidationKind);
         Assert.True(chain.ExecuteCompositionCount > 0);
         Assert.True(chain.CompositionTickCount > 0);
         Assert.True(chain.LoopTickCount > 0);
@@ -2434,7 +2434,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("releaseMapped=True releaseMessage=RoutedInput releaseAction=Decrement countAfterRelease=-1", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=chain wheelPx=54", summary);
         Assert.Contains("firstPosition=54 firstTarget=54 finalPosition=108 finalTarget=108", summary);
-        Assert.Contains("retargets=2 pending=0 cancels=1 cancelReason=RenderInvalidation cancelInvalidation=LayoutAffecting", summary);
+        Assert.Contains("retargets=2 pending=0 cancels=0 cancelReason=None cancelInvalidation=None", summary);
         Assert.Contains("scroll-presentation-interaction actual scenario=rapidEnsure notches=8 wheelPx=54 expectedTarget=432", summary);
         Assert.Contains("finalPosition=432 finalTarget=432", summary);
         Assert.Contains("overlappedRunning=True", summary);
@@ -3538,10 +3538,10 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("AppDispatchIntent<CounterMessage>.InputOwnershipChanged(in after)", programSource);
         Assert.Contains("dispatchMapper.TryMapIntent(in intent, out message)", programSource);
         Assert.Contains("DispatchScrollPresentationInterruptedAsync", coordinatorSource);
-        Assert.Contains("SampleAndCancelAsync", coordinatorSource);
+        Assert.Contains("SampleForRetargetAsync", coordinatorSource);
         Assert.Contains("snapshotProvider.LastRetainedInputSnapshot", coordinatorSource);
         Assert.DoesNotContain("new CounterMessage.ScrollPresentationInterrupted(decision)", adapterSource);
-        Assert.DoesNotContain("SampleAndCancelCompositionScrollPresentationAsync", coordinatorSource);
+        Assert.DoesNotContain("SampleAndHoldCompositionScrollPresentationAsync", coordinatorSource);
         Assert.DoesNotContain("StartCompositionScrollPresentationAsync", coordinatorSource);
         Assert.DoesNotContain("translator.LastRetainedInputSnapshot", coordinatorSource);
     }

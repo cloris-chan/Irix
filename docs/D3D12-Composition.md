@@ -198,8 +198,8 @@ Marker delivery is intentionally above the backend. `DrawingBackendCompositor` e
 - rapid top/bottom boundary wheel input clamps to the boundary without starting repeated same-target presentation segments
 - resize, DPI, and max-scroll lifecycle changes clear active presentation through the main-app cancellation path and leave no active presented-scroll state behind
 - lifecycle scenarios report `staleQueuedTickSuppressed=True` after the stale delayed tick window
-- compositor-thread sample-and-cancel without an active presentation returns an empty sample without recording cancellation
-- compositor-thread sample-and-cancel cancellation completes any existing scroll-presentation idle waiter
+- compositor-thread sample-and-hold without an active presentation returns an empty sample without recording cancellation
+- compositor-thread sample-and-hold retarget completes any existing scroll-presentation idle waiter while preserving the current presentation visual until replacement install
 
 ## Current Hardening Boundary
 
@@ -209,6 +209,6 @@ Active hit testing reads `CompositorHitTestSnapshot`, so pointer coordinates are
 
 Layer content caching remains source-content caching, not presentation-state caching. Cached payloads are reused only for stable disjoint layer sources, while current tick transform, opacity, fixed clip, empty intersections, text clips, and source paint order are resolved during each composition execution.
 
-Current narrow coverage pins skipped/failed tick marker non-publication, marker runtime mapping/unmapped accounting, scroll marker queue cleanup on cancellation, empty sample-and-cancel without cancellation, stale queued lifecycle tick suppression, superseded/sample-and-cancel/lifecycle scroll-presentation idle waiter completion, invalidation-after-explicit-cancel non-double-counting, completed scroll presentation active-schedule versus retained-sample separation, and active hit-test routing through sibling and nested layers.
+Current narrow coverage pins skipped/failed tick marker non-publication, marker runtime mapping/unmapped accounting, scroll marker queue cleanup on cancellation, empty sample-and-hold without cancellation, stale queued lifecycle tick suppression, superseded/sample-hold/lifecycle scroll-presentation idle waiter completion, invalidation-after-explicit-cancel non-double-counting, completed scroll presentation active-schedule versus retained-sample separation, and active hit-test routing through sibling and nested layers.
 
 The next gate is broader main-app integration hardening around the existing D3D12-first path: cancellation/retarget edge cases, marker publication edge cases, and active hit-test routing regressions as concrete bugs appear. It is not a generic fallback compositor or an internal offscreen/render-target cache.
