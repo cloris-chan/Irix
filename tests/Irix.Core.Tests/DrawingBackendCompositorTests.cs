@@ -684,6 +684,60 @@ public sealed class DrawingBackendCompositorTests
     }
 
     [Fact]
+    public async Task StageRetainedFrameAsync_can_suppress_active_scroll_presentation_recompose_for_atomic_retarget()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var backend = new CompositionTrackingBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(CreateScrollRoot(40), new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        await compositor.RenderAsync(frame, cancellationToken);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(40, 10)), pipeline.LastRetainedInputSnapshot!);
+        using var stagedFrame = pipeline.Build(CreateScrollRoot(54), new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
+        var stagedSnapshot = pipeline.LastRetainedInputSnapshot!;
+
+        await compositor.StageRetainedFrameAsync(
+            stagedFrame,
+            null,
+            cancellationToken,
+            RetainedFrameStagePresentationMode.SuppressActiveScrollPresentationAfterStage);
+
+        Assert.Equal(1, backend.ExecuteCount);
+        Assert.Equal(0, backend.ExecuteCompositionCount);
+        Assert.Equal(1, compositor.RetainedStageCount);
+
+        var retargetStart = CompositionTimestamp.FromStopwatchTicks(160);
+        compositor.SetCompositionScrollPresentationDeclaration(new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(retargetStart, CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(25, 54)), stagedSnapshot);
+        _ = await compositor.RenderCompositionScrollPresentationTickAtAsync(retargetStart, cancellationToken);
+
+        Assert.Equal(1, backend.ExecuteCompositionCount);
+        Assert.True(compositor.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(25, presentedScrollY);
+
+        VirtualNode CreateScrollRoot(double scrollY)
+        {
+            return new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(scrollY)],
+                children:
+                [
+                    VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                    VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                    VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                ]);
+        }
+    }
+
+    [Fact]
     public async Task Composition_scroll_tick_waits_for_in_flight_regular_render()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

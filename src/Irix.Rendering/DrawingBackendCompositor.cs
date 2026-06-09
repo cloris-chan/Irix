@@ -702,15 +702,17 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     ValueTask IRetainedFrameStagingCompositor.StageRetainedFrameAsync(
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        RetainedFrameStagePresentationMode presentationMode)
     {
-        return StageRetainedFrameAsync(renderFrameBatch, ownership, cancellationToken);
+        return StageRetainedFrameAsync(renderFrameBatch, ownership, cancellationToken, presentationMode);
     }
 
     internal ValueTask StageRetainedFrameAsync(
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
     {
         if (cancellationToken.IsCancellationRequested)
         {
@@ -719,13 +721,14 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
 
         lock (_frameGate)
         {
-            return StageRetainedFrameCore(renderFrameBatch, ownership);
+            return StageRetainedFrameCore(renderFrameBatch, ownership, presentationMode);
         }
     }
 
     private ValueTask StageRetainedFrameCore(
         RenderFrameBatch renderFrameBatch,
-        RetainedRenderFrameSegmentOwnership? ownership)
+        RetainedRenderFrameSegmentOwnership? ownership,
+        RetainedFrameStagePresentationMode presentationMode)
     {
         var stage = ApplyRetainedFrame(renderFrameBatch, ownership);
         Interlocked.Increment(ref _retainedStageCount);
@@ -738,7 +741,8 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             ? DrawingBackendCompositorHandoffResult.RetainedFrameStaged(stage.HandoffSelection.OwnerResult)
             : stage.HandoffSelection.Result;
         LastPartialApplySucceeded = stage.RetainedPartialApplySucceeded;
-        if (HasActiveScrollPresentationPlan())
+        if (presentationMode == RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage
+            && HasActiveScrollPresentationPlan())
         {
             _ = TryRenderActiveScrollPresentationAfterRetainedUpdate(out _);
         }

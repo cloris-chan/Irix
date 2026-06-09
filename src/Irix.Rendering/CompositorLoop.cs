@@ -397,7 +397,10 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                     throw new InvalidOperationException("The current compositor does not support retained-frame staging.");
                 }
 
-                await stagingCompositor.StageRetainedFrameAsync(renderFrameBatch, _ownershipProvider?.Invoke());
+                await stagingCompositor.StageRetainedFrameAsync(
+                    renderFrameBatch,
+                    _ownershipProvider?.Invoke(),
+                    presentationMode: RetainedFrameStagePresentationMode.SuppressActiveScrollPresentationAfterStage);
                 if (_translator is not IRetainedInputSnapshotProvider snapshotProvider
                     || snapshotProvider.LastRetainedInputSnapshot is not { } snapshot)
                 {

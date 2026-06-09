@@ -176,6 +176,7 @@ public sealed class BatchOwnershipTests
         Assert.Equal(1, translator.TranslateCallCount);
         Assert.Equal(0, compositor.RenderCallCount);
         Assert.Equal(1, compositor.StageCallCount);
+        Assert.Equal(RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage, compositor.LastPresentationMode);
         Assert.Equal(1, patchOwner.DisposeCallCount);
     }
 
@@ -210,6 +211,7 @@ public sealed class BatchOwnershipTests
         await Task.WhenAll(publishTask, renderTask).WaitAsync(cancellationToken);
 
         Assert.Equal(["Stage", "Install", "Tick", "Render"], compositor.Events);
+        Assert.DoesNotContain("StageActivePresentationTick", compositor.Events);
         Assert.Equal(2, translator.TranslateCallCount);
         Assert.Equal(1, compositor.StageCallCount);
         Assert.Equal(1, compositor.InstallCount);
@@ -269,6 +271,7 @@ public sealed class BatchOwnershipTests
         Assert.True(sample.HasValue);
         Assert.Equal(0, sample.PresentedScrollY);
         Assert.Equal(["Install", "Tick", "Stage", "Install", "Tick"], compositor.Events);
+        Assert.DoesNotContain("StageActivePresentationTick", compositor.Events);
         Assert.Equal(1, translator.TranslateCallCount);
         Assert.Equal(1, compositor.StageCallCount);
         Assert.Equal(2, compositor.InstallCount);
@@ -1368,6 +1371,7 @@ public sealed class BatchOwnershipTests
     {
         public int RenderCallCount { get; private set; }
         public int StageCallCount { get; private set; }
+        public RetainedFrameStagePresentationMode LastPresentationMode { get; private set; }
 
         public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
         {
@@ -1378,9 +1382,11 @@ public sealed class BatchOwnershipTests
         public ValueTask StageRetainedFrameAsync(
             RenderFrameBatch renderFrameBatch,
             RetainedRenderFrameSegmentOwnership? ownership,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
         {
             StageCallCount++;
+            LastPresentationMode = presentationMode;
             return ValueTask.CompletedTask;
         }
     }
@@ -1410,10 +1416,17 @@ public sealed class BatchOwnershipTests
         public ValueTask StageRetainedFrameAsync(
             RenderFrameBatch renderFrameBatch,
             RetainedRenderFrameSegmentOwnership? ownership,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
         {
             Events.Add("Stage");
             StageCallCount++;
+            if (_presentationActive
+                && presentationMode == RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage)
+            {
+                Events.Add("StageActivePresentationTick");
+            }
+
             return ValueTask.CompletedTask;
         }
 

@@ -10,7 +10,14 @@ internal interface IRetainedFrameStagingCompositor
     ValueTask StageRetainedFrameAsync(
         RenderFrameBatch renderFrameBatch,
         RetainedRenderFrameSegmentOwnership? ownership,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        RetainedFrameStagePresentationMode presentationMode = RetainedFrameStagePresentationMode.RenderActiveScrollPresentationAfterStage);
+}
+
+internal enum RetainedFrameStagePresentationMode : byte
+{
+    RenderActiveScrollPresentationAfterStage = 0,
+    SuppressActiveScrollPresentationAfterStage = 1
 }
 
 internal interface ICompositionScrollPresentationCompositor
