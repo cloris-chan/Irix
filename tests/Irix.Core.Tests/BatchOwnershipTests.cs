@@ -551,6 +551,59 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_text_update_between_sample_hold_and_retarget_install_uses_held_presented_value()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new PreservingScrollPresentationTranslator(
+            new CompositionRenderInvalidation(CompositionRenderInvalidationKind.TextSizeAffecting));
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        var clock = new ManualCompositionClockSource(CompositionTimestamp.FromStopwatchTicks(100));
+        await using var loop = new CompositorLoop(translator, compositor, ownershipProvider: null, clock);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.FromStopwatchTicks(100)),
+            new CompositionScalarAnimation(0, 54));
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        clock.Set(CompositionTimestamp.FromStopwatchTicks(150));
+        await WaitForConditionAsync(() => compositor.TickCount >= 2, cancellationToken);
+        _ = await loop.SampleAndHoldCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken);
+        var sample = compositor.PresentedScrollY;
+        var tickCountAfterHold = compositor.TickCount;
+        clock.Set(CompositionTimestamp.FromStopwatchTicks(250));
+        var patchBatch = new PatchBatch(new ArrayMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Count: held", new NodeKey(1)))
+        ]), 1);
+
+        await loop.PublishAndWaitRenderAsync(patchBatch, cancellationToken);
+
+        Assert.True(sample > 0);
+        Assert.Equal(27, sample);
+        Assert.Equal(sample, compositor.LastPreparedFrom);
+        Assert.Equal(sample, compositor.LastPreparedTo);
+        Assert.True(compositor.PresentationActiveDuringLastRender);
+        Assert.True(loop.TryGetPresentedScrollY(new NodeKey(1), out var presentedScrollY));
+        Assert.Equal(sample, presentedScrollY);
+        Assert.Equal(tickCountAfterHold, compositor.TickCount);
+        Assert.Equal(0, compositor.ClearCount);
+        Assert.Equal(0, loop.ScrollPresentationCancelCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_sample_and_hold_without_active_presentation_returns_empty_sample_without_cancellation()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1489,6 +1542,9 @@ public sealed class BatchOwnershipTests
         public long TickCount { get; private set; }
         public bool PresentationActiveDuringLastRender { get; private set; }
         public CompositionTimestamp LastTickTimestamp { get; private set; }
+        public double PresentedScrollY => _presentedScrollY;
+        public float LastPreparedFrom { get; private set; }
+        public float LastPreparedTo { get; private set; }
 
         public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
         {
@@ -1510,6 +1566,8 @@ public sealed class BatchOwnershipTests
             in CompositionScrollPresentationDeclaration declaration,
             RenderPipelineRetainedInputSnapshot snapshot)
         {
+            LastPreparedFrom = declaration.PresentedScrollY.From;
+            LastPreparedTo = declaration.PresentedScrollY.To;
             return declaration.TryResolve(snapshot, out _);
         }
 

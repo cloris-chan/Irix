@@ -21,6 +21,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     private bool _scrollPresentationTickQueued;
     private int _scrollPresentationGeneration;
     private CompositionScrollPresentationDeclaration _activeScrollPresentationDeclaration;
+    private CompositionScrollPresentationDeclaration _heldScrollPresentationDeclaration;
     private long _scrollPresentationTickCount;
     private long _scrollPresentationCancelCount;
     private long _scrollPresentationStaleDelayedTickSkipCount;
@@ -536,7 +537,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 sample = new CompositionScrollPresentationSample(true, presentedScrollY);
             }
 
-            HoldScrollPresentationScheduleForRetarget(workItem.ScrollPresentationTargetKey);
+            HoldScrollPresentationScheduleForRetarget(workItem.ScrollPresentationTargetKey, sample);
             completion.TrySetResult(sample);
         }
         catch (Exception ex)
@@ -592,7 +593,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         if (!CanPreserveScrollPresentationAcrossInvalidation(invalidation.Kind)
             || retainedSnapshot is null
             || _compositor is not ICompositionScrollPresentationCompositor scrollPresentationCompositor
-            || !TryGetActiveScrollPresentationDeclaration(out var declaration))
+            || !TryGetPreservableScrollPresentationDeclaration(out var declaration))
         {
             return false;
         }
@@ -625,7 +626,9 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         }
     }
 
-    private void HoldScrollPresentationScheduleForRetarget(NodeKey targetKey)
+    private void HoldScrollPresentationScheduleForRetarget(
+        NodeKey targetKey,
+        in CompositionScrollPresentationSample sample)
     {
         if (targetKey == NodeKey.None)
         {
@@ -641,6 +644,9 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 return;
             }
 
+            _heldScrollPresentationDeclaration = sample.HasValue
+                ? CreateHeldScrollPresentationDeclaration(_activeScrollPresentationDeclaration, sample.PresentedScrollY)
+                : default;
             _scrollPresentationSchedule = default;
             _activeScrollPresentationDeclaration = default;
             _scrollPresentationTickQueued = false;
@@ -681,6 +687,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 declaration.Timeline.StartTimestamp,
                 declaration.Timeline.StartTimestamp + declaration.Timeline.Duration);
             _activeScrollPresentationDeclaration = declaration;
+            _heldScrollPresentationDeclaration = default;
             _scrollPresentationTickQueued = false;
         }
 
@@ -713,6 +720,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             {
                 _scrollPresentationSchedule = default;
                 _activeScrollPresentationDeclaration = default;
+                _heldScrollPresentationDeclaration = default;
                 _scrollPresentationTickQueued = false;
                 idleWaitGroup = _scrollPresentationIdleWaitGroup;
                 _scrollPresentationIdleWaitGroup = null;
@@ -731,6 +739,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
             _scrollPresentationSchedule = default;
             _activeScrollPresentationDeclaration = default;
+            _heldScrollPresentationDeclaration = default;
             _scrollPresentationTickQueued = false;
             unchecked
             {
@@ -758,6 +767,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             canceled = _scrollPresentationSchedule.IsActive || _scrollPresentationTickQueued;
             _scrollPresentationSchedule = default;
             _activeScrollPresentationDeclaration = default;
+            _heldScrollPresentationDeclaration = default;
             _scrollPresentationTickQueued = false;
             idleWaitGroup = _scrollPresentationIdleWaitGroup;
             _scrollPresentationIdleWaitGroup = null;
@@ -796,7 +806,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         _ = ScheduleDelayedScrollPresentationTickAsync(delay, generation);
     }
 
-    private bool TryGetActiveScrollPresentationDeclaration(out CompositionScrollPresentationDeclaration declaration)
+    private bool TryGetPreservableScrollPresentationDeclaration(out CompositionScrollPresentationDeclaration declaration)
     {
         lock (_compositionScheduleGate)
         {
@@ -806,9 +816,32 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 return declaration.TargetKey == _scrollPresentationSchedule.TargetKey;
             }
 
+            if (_heldScrollPresentationDeclaration.TargetKey != NodeKey.None)
+            {
+                declaration = _heldScrollPresentationDeclaration;
+                return true;
+            }
+
             declaration = default;
             return false;
         }
+    }
+
+    private static CompositionScrollPresentationDeclaration CreateHeldScrollPresentationDeclaration(
+        in CompositionScrollPresentationDeclaration declaration,
+        double presentedScrollY)
+    {
+        var heldScrollY = double.IsFinite(presentedScrollY) ? (float)presentedScrollY : 0f;
+        if (!float.IsFinite(heldScrollY))
+        {
+            heldScrollY = 0f;
+        }
+
+        return new CompositionScrollPresentationDeclaration(
+            declaration.TargetKey,
+            new CompositionAnimationTimeline(declaration.Timeline.StartTimestamp, CompositionDuration.Zero),
+            CompositionScalarAnimation.Constant(heldScrollY),
+            declaration.InstanceId);
     }
 
     private async Task ScheduleDelayedScrollPresentationTickAsync(CompositionDuration delay, int generation)
