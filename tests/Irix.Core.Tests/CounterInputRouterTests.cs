@@ -1039,6 +1039,48 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public async Task Poc_input_event_pump_waits_for_async_dispatch_before_next_event()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var firstDispatchEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondDispatchEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirstDispatch = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dispatched = new List<RawInputEventKind>();
+        await using var pump = new PocInputEventPump(async inputEvent =>
+        {
+            dispatched.Add(inputEvent.Kind);
+            if (inputEvent.Kind == RawInputEventKind.PointerPressed)
+            {
+                firstDispatchEntered.TrySetResult();
+                await releaseFirstDispatch.Task.WaitAsync(cancellationToken);
+                return;
+            }
+
+            secondDispatchEntered.TrySetResult();
+        });
+
+        Assert.True(pump.TryEnqueue(new RawInputEvent(RawInputEventKind.PointerPressed, 1, 10, 10, Button: PointerButton.Left)));
+        await firstDispatchEntered.Task.WaitAsync(cancellationToken);
+        Assert.True(pump.TryEnqueue(new RawInputEvent(RawInputEventKind.PointerWheel, 2, 10, 10, Delta: -120)));
+
+        Assert.False(secondDispatchEntered.Task.IsCompleted);
+        Assert.Equal(2, pump.EnqueuedCount);
+        Assert.Equal(0, pump.DispatchedCount);
+
+        releaseFirstDispatch.TrySetResult();
+        await secondDispatchEntered.Task.WaitAsync(cancellationToken);
+        await WaitForConditionAsync(() => pump.DispatchedCount == 2, cancellationToken);
+
+        Assert.Equal(
+            [
+                RawInputEventKind.PointerPressed,
+                RawInputEventKind.PointerWheel
+            ],
+            dispatched);
+        Assert.Null(pump.LastError);
+    }
+
+    [Fact]
     public void Scroll_input_dispatch_adapter_dispatches_wheel_intent_pixels()
     {
         var recorder = new WheelDispatchRecorder();

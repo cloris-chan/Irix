@@ -5,7 +5,7 @@ namespace Irix.Poc;
 
 internal sealed class PocInputEventPump : IAsyncDisposable
 {
-    private readonly Action<RawInputEvent> _dispatch;
+    private readonly Func<RawInputEvent, ValueTask> _dispatch;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
     private readonly Channel<RawInputEvent> _channel = Channel.CreateUnbounded<RawInputEvent>(new UnboundedChannelOptions
     {
@@ -14,10 +14,15 @@ internal sealed class PocInputEventPump : IAsyncDisposable
     });
     private readonly Task _pumpTask;
 
-    public PocInputEventPump(Action<RawInputEvent> dispatch)
+    public PocInputEventPump(Func<RawInputEvent, ValueTask> dispatch)
     {
         _dispatch = dispatch ?? throw new ArgumentNullException(nameof(dispatch));
         _pumpTask = Task.Run(PumpAsync);
+    }
+
+    public PocInputEventPump(Action<RawInputEvent> dispatch)
+        : this(CreateDispatch(dispatch))
+    {
     }
 
     internal PocInputEventPump()
@@ -79,7 +84,7 @@ internal sealed class PocInputEventPump : IAsyncDisposable
         {
             try
             {
-                _dispatch(inputEvent);
+                await _dispatch(inputEvent);
                 Interlocked.Increment(ref _dispatchedCount);
             }
             catch (Exception ex)
@@ -87,5 +92,15 @@ internal sealed class PocInputEventPump : IAsyncDisposable
                 Volatile.Write(ref _lastError, ex);
             }
         }
+    }
+
+    private static Func<RawInputEvent, ValueTask> CreateDispatch(Action<RawInputEvent> dispatch)
+    {
+        ArgumentNullException.ThrowIfNull(dispatch);
+        return inputEvent =>
+        {
+            dispatch(inputEvent);
+            return ValueTask.CompletedTask;
+        };
     }
 }

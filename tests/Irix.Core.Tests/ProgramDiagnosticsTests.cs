@@ -3140,12 +3140,14 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("completionTracker.PublishRuntimeResult", counterTransitionSource);
         Assert.Contains("StyleTransitionCompletionTracker", programSource);
         Assert.Contains("StyleTransitionCompletionPump", programSource);
-        Assert.Contains("StyleTransitionCompletionPump)state!).EnsureRunning", programSource);
+        Assert.Contains("new PocInputEventPump(HandleInputAsync)", programSource);
+        Assert.Contains("async ValueTask HandleInputAsync(RawInputEvent inputEvent)", programSource);
         Assert.Contains("completionTracker: styleTransitionCompletionTracker", programSource);
         Assert.Contains("transitionLifecycle.HasTransitionBatch", programSource);
-        Assert.Contains("CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync", programSource);
+        Assert.Contains("var activationResult = await CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync", programSource);
         Assert.Contains("StyleTransitionBatchPresentationActivationKind.Activated", programSource);
-        Assert.Contains("AbortStyleTransitionPresentationForRuntime(\n                                    task.Result", programSource);
+        Assert.Contains("styleTransitionCompletionPump.EnsureRunning();", programSource);
+        Assert.Contains("AbortStyleTransitionPresentationForRuntime(\n                                activationResult", programSource);
         Assert.Contains("AbortStyleTransitionPresentationForRuntime", programSource);
         Assert.Contains("completionTracker.AbortActiveTransition", programSource);
         Assert.Contains("StyleTransitionRuntimeDecision.Cancel(aborted.TargetKey)", programSource);
@@ -3157,6 +3159,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync", programSource);
         Assert.Contains("CounterStyleTransitionBridge.EvaluateInputTransition", programSource);
         Assert.Contains("hasActiveScrollPresentation", programSource);
+        Assert.DoesNotContain("StyleTransitionBatchContinuationContext", programSource);
         Assert.DoesNotContain("compositor.SetCompositionAnimationDeclaration", demoSource);
         Assert.DoesNotContain("StyleTransitionScheduler", coordinatorSource);
         Assert.DoesNotContain("Theme", coordinatorSource);

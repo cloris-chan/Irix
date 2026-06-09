@@ -363,6 +363,48 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_lost_scroll_presentation_plan_skips_stale_delayed_tick()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var oldStart = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(30);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(oldStart, CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        Assert.Equal(1, compositor.TickCount);
+        Assert.True(loop.HasActiveScrollPresentation(new NodeKey(1)));
+
+        var staleSkipsBeforePlanLoss = loop.ScrollPresentationStaleDelayedTickSkipCount;
+        compositor.LosePresentationWithoutClear();
+        var tickCountAfterPlanLoss = compositor.TickCount;
+
+        await WaitForConditionAsync(
+            () => loop.ScrollPresentationStaleDelayedTickSkipCount > staleSkipsBeforePlanLoss,
+            cancellationToken);
+        await loop.WaitForScrollPresentationIdleAsync(cancellationToken);
+
+        Assert.Equal(0, compositor.ClearCount);
+        Assert.False(loop.HasActiveScrollPresentation(new NodeKey(1)));
+        Assert.False(loop.TryGetPresentedScrollY(new NodeKey(1), out _));
+        Assert.Equal(tickCountAfterPlanLoss, compositor.TickCount);
+        Assert.Equal(staleSkipsBeforePlanLoss + 1, loop.ScrollPresentationStaleDelayedTickSkipCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_sample_and_cancel_scroll_presentation_returns_latest_presented_value()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -1096,6 +1138,12 @@ public sealed class BatchOwnershipTests
             _presentationActive = false;
             _presentedScrollY = 0;
             ClearCount++;
+        }
+
+        public void LosePresentationWithoutClear()
+        {
+            _presentationActive = false;
+            _presentedScrollY = 0;
         }
 
         public ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(

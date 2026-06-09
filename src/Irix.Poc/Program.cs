@@ -132,7 +132,7 @@ internal static partial class Program
             Console.WriteLine($"DPI changed: scale={displayScale.ScaleX:0.##}x{displayScale.ScaleY:0.##}");
         };
 
-        await using var inputEventPump = new PocInputEventPump(HandleInput);
+        await using var inputEventPump = new PocInputEventPump(HandleInputAsync);
         using var inputSubscription = platformHost.RawInputEvents.Subscribe(new PlatformInputObserver(inputEvent => inputEventPump.TryEnqueue(inputEvent)));
 
         platformHost.TopologyChanged += OnTopologyChanged;
@@ -151,8 +151,9 @@ internal static partial class Program
 
         Console.WriteLine($"Final count: {runtime.CurrentModel.Count}");
 
-        void HandleInput(RawInputEvent inputEvent)
+        async ValueTask HandleInputAsync(RawInputEvent inputEvent)
         {
+            var scrollTargetKey = new NodeKey(1);
             var previousOwnership = inputOwnershipState.Snapshot;
             var hitTestService = new DrawingBackendCompositorInputHitTestService(d3d12Compositor);
             if (TryMapInputForRuntime(inputEvent, inputOwnershipState, hitTestService, out var message))
@@ -168,12 +169,13 @@ internal static partial class Program
                         runtime,
                         compositorLoop,
                         drawCommandTranslator,
-                        new NodeKey(1));
+                        scrollTargetKey);
                     _ = TryDispatchWheelInputForRuntime(wheel, wheelDispatchSink);
                 }
                 else if (message is not null)
                 {
-                    var hasActiveScrollPresentation = compositorLoop.HasActiveScrollPresentation(new NodeKey(1));
+                    var hasActiveScrollPresentation = scrollPresentationCoordinator.IsLoopRunning
+                        || compositorLoop.HasActiveScrollPresentation(scrollTargetKey);
                     var transitionLifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
                         previousOwnership,
                         nextOwnership,
@@ -181,75 +183,40 @@ internal static partial class Program
                         CompositionTimestamp.Now());
                     if (transitionLifecycle.HasTransitionBatch)
                     {
-                        var transitionTask = CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
+                        var activationResult = await CounterStyleTransitionRuntimeBridge.DispatchAndActivateInputTransitionBatchAsync(
                             runtime,
                             message,
                             transitionLifecycle.Batch,
                             new DrawingBackendStyleTransitionPresentationActivationCompositorAdapter(d3d12Compositor),
                             new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
                             styleTransitionCompletionTracker,
-                            retimestampAfterDispatch: true).AsTask();
-                        _ = transitionTask.ContinueWith(
-                            static (task, state) =>
-                            {
-                                if (task.Status != TaskStatus.RanToCompletion)
-                                {
-                                    return;
-                                }
-
-                                var context = ((StyleTransitionBatchContinuationContext)state!);
-                                if (task.Result.Kind == StyleTransitionBatchPresentationActivationKind.Activated)
-                                {
-                                    context.CompletionPump.EnsureRunning();
-                                    return;
-                                }
-
-                                AbortStyleTransitionPresentationForRuntime(
-                                    task.Result,
-                                    context.CompletionTracker,
-                                    new DrawingBackendStyleTransitionCompositorAdapter(context.Compositor));
-                            },
-                            new StyleTransitionBatchContinuationContext(
-                                styleTransitionCompletionPump,
+                            retimestampAfterDispatch: true);
+                        if (activationResult.Kind == StyleTransitionBatchPresentationActivationKind.Activated)
+                        {
+                            styleTransitionCompletionPump.EnsureRunning();
+                        }
+                        else
+                        {
+                            AbortStyleTransitionPresentationForRuntime(
+                                activationResult,
                                 styleTransitionCompletionTracker,
-                                d3d12Compositor),
-                            CancellationToken.None,
-                            TaskContinuationOptions.ExecuteSynchronously,
-                            TaskScheduler.Default);
-                        _ = transitionTask.ContinueWith(
-                            static task => _ = task.Exception,
-                            CancellationToken.None,
-                            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                            TaskScheduler.Default);
+                                new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor));
+                        }
                     }
                     else if (transitionLifecycle.HasTransitionDecision)
                     {
-                        var transitionTask = CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+                        var transitionResult = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
                             runtime,
                             message,
                             transitionLifecycle.Decision,
                             new DrawingBackendStyleTransitionCompositorAdapter(d3d12Compositor),
                             new WindowDrawCommandTranslatorRetainedSnapshotProvider(drawCommandTranslator),
                             completionTracker: styleTransitionCompletionTracker,
-                            retimestampAfterDispatch: true).AsTask();
-                        _ = transitionTask.ContinueWith(
-                            static (task, state) =>
-                            {
-                                if (task.Status == TaskStatus.RanToCompletion
-                                    && task.Result.Kind is StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted)
-                                {
-                                    ((StyleTransitionCompletionPump)state!).EnsureRunning();
-                                }
-                            },
-                            styleTransitionCompletionPump,
-                            CancellationToken.None,
-                            TaskContinuationOptions.ExecuteSynchronously,
-                            TaskScheduler.Default);
-                        _ = transitionTask.ContinueWith(
-                            static task => _ = task.Exception,
-                            CancellationToken.None,
-                            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                            TaskScheduler.Default);
+                            retimestampAfterDispatch: true);
+                        if (transitionResult.Kind is StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted)
+                        {
+                            styleTransitionCompletionPump.EnsureRunning();
+                        }
                     }
                     else
                     {
@@ -567,16 +534,6 @@ internal static partial class Program
         }
 
         return AbortStyleTransitionPresentationForRuntime(completionTracker, compositor, cancellationToken);
-    }
-
-    private sealed class StyleTransitionBatchContinuationContext(
-        StyleTransitionCompletionPump CompletionPump,
-        StyleTransitionCompletionTracker CompletionTracker,
-        DrawingBackendCompositor Compositor)
-    {
-        public StyleTransitionCompletionPump CompletionPump { get; } = CompletionPump;
-        public StyleTransitionCompletionTracker CompletionTracker { get; } = CompletionTracker;
-        public DrawingBackendCompositor Compositor { get; } = Compositor;
     }
 
 }

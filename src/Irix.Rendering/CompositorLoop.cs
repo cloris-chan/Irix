@@ -400,6 +400,13 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             throw new InvalidOperationException("The current compositor does not support composition scroll presentation scheduling.");
         }
 
+        if (!scrollPresentationCompositor.TryGetPresentedScrollY(schedule.TargetKey, out _))
+        {
+            Interlocked.Increment(ref _scrollPresentationStaleDelayedTickSkipCount);
+            CompleteScrollPresentationSchedule(workItem.CompositionGeneration);
+            return;
+        }
+
         var timestamp = _clockSource.TimestampNow();
         if (timestamp > schedule.EndTimestamp)
         {
