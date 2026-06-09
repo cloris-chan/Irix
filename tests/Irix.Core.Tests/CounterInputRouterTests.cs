@@ -218,7 +218,7 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void TryMapInput_captures_pointer_until_release()
+    public void TryMapInput_release_outside_captured_target_does_not_activate()
     {
         var ownershipState = new InputOwnershipState();
 
@@ -249,8 +249,8 @@ public sealed class CounterInputRouterTests
             HitIncrementAtButton,
             out var message);
 
-        Assert.True(mapped);
-        Assert.IsType<CounterMessage.Increment>(message);
+        Assert.False(mapped);
+        Assert.Null(message);
         Assert.True(ownershipState.HoveredTarget.IsNone);
         Assert.True(ownershipState.PressedTarget.IsNone);
         Assert.True(ownershipState.CapturedTarget.IsNone);
@@ -258,7 +258,7 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void TryMapInput_hover_can_change_during_capture_without_changing_capture()
+    public void TryMapInput_hover_move_outside_capture_clears_pressed_visual_without_changing_capture()
     {
         var ownershipState = new InputOwnershipState();
 
@@ -281,7 +281,7 @@ public sealed class CounterInputRouterTests
 
         var snapshot = ownershipState.Snapshot;
         Assert.Equal(new ActionId(2), snapshot.HoveredTarget);
-        Assert.Equal(new ActionId(1), snapshot.PressedTarget);
+        Assert.True(snapshot.PressedTarget.IsNone);
         Assert.Equal(new ActionId(1), snapshot.CapturedTarget);
         Assert.Equal(new ActionId(1), snapshot.FocusedTarget);
 
@@ -297,9 +297,65 @@ public sealed class CounterInputRouterTests
             out var message);
 
         snapshot = ownershipState.Snapshot;
+        Assert.False(mapped);
+        Assert.Null(message);
+        Assert.Equal(new ActionId(2), snapshot.HoveredTarget);
+        Assert.True(snapshot.PressedTarget.IsNone);
+        Assert.True(snapshot.CapturedTarget.IsNone);
+        Assert.Equal(new ActionId(1), snapshot.FocusedTarget);
+        Assert.False(snapshot.IsPointerPressed);
+    }
+
+    [Fact]
+    public void TryMapInput_hover_returns_to_captured_target_restores_pressed_visual_and_release_activates()
+    {
+        var ownershipState = new InputOwnershipState();
+
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerPressed,
+                Timestamp: 1,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out _);
+        CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 2, X: 32, Y: 200),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out _);
+
+        var mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(RawInputEventKind.PointerMoved, Timestamp: 3, X: 32, Y: 140),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out _);
+
+        var snapshot = ownershipState.Snapshot;
+        Assert.False(mapped);
+        Assert.Equal(new ActionId(1), snapshot.HoveredTarget);
+        Assert.Equal(new ActionId(1), snapshot.PressedTarget);
+        Assert.Equal(new ActionId(1), snapshot.CapturedTarget);
+        Assert.Equal(new ActionId(1), snapshot.FocusedTarget);
+        Assert.True(snapshot.IsPointerPressed);
+
+        mapped = CounterInputRouter.TryMapInput(
+            new RawInputEvent(
+                RawInputEventKind.PointerReleased,
+                Timestamp: 4,
+                X: 32,
+                Y: 140,
+                Button: PointerButton.Left),
+            ownershipState,
+            HitIncrementOrDecrement,
+            out var message);
+
+        snapshot = ownershipState.Snapshot;
         Assert.True(mapped);
         Assert.IsType<CounterMessage.Increment>(message);
-        Assert.Equal(new ActionId(2), snapshot.HoveredTarget);
+        Assert.Equal(new ActionId(1), snapshot.HoveredTarget);
         Assert.True(snapshot.PressedTarget.IsNone);
         Assert.True(snapshot.CapturedTarget.IsNone);
         Assert.Equal(new ActionId(1), snapshot.FocusedTarget);
@@ -519,6 +575,61 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void CounterStyleTransitionBridge_animates_press_release_when_pointer_leaves_and_returns_to_capture()
+    {
+        var pressed = new OwnershipSnapshot(
+            HoveredTarget: new ActionId(1),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: new ActionId(1),
+            CapturedTarget: new ActionId(1),
+            LastHoverEnteredTarget: new ActionId(1),
+            LastHoverLeftTarget: ActionId.None,
+            HoverChangeCount: 1,
+            IsPointerPressed: true);
+        var leftCapture = new OwnershipSnapshot(
+            HoveredTarget: new ActionId(2),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: ActionId.None,
+            CapturedTarget: new ActionId(1),
+            LastHoverEnteredTarget: new ActionId(2),
+            LastHoverLeftTarget: new ActionId(1),
+            HoverChangeCount: 2,
+            IsPointerPressed: true);
+        var returnedCapture = new OwnershipSnapshot(
+            HoveredTarget: new ActionId(1),
+            FocusedTarget: new ActionId(1),
+            PressedTarget: new ActionId(1),
+            CapturedTarget: new ActionId(1),
+            LastHoverEnteredTarget: new ActionId(1),
+            LastHoverLeftTarget: new ActionId(2),
+            HoverChangeCount: 3,
+            IsPointerPressed: true);
+
+        var leave = CounterStyleTransitionBridge.EvaluateInputTransition(
+            pressed,
+            leftCapture,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var enter = CounterStyleTransitionBridge.EvaluateInputTransition(
+            leftCapture,
+            returnedCapture,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(200));
+
+        Assert.True(leave.HasTransitionBatch);
+        var leaveIncrement = FindBatchDecision(leave.Batch, new NodeKey(6));
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Retarget, leaveIncrement.Kind);
+        Assert.Equal(2, GetNumberProperty(leaveIncrement.PreviousProperties.Span, VirtualPropertyKey.TranslateY));
+        Assert.Equal(0, GetNumberProperty(leaveIncrement.NextProperties.Span, VirtualPropertyKey.TranslateY));
+
+        Assert.True(enter.HasTransitionBatch);
+        var enterIncrement = FindBatchDecision(enter.Batch, new NodeKey(6));
+        Assert.Equal(StyleTransitionRuntimeDecisionKind.Retarget, enterIncrement.Kind);
+        Assert.Equal(0, GetNumberProperty(enterIncrement.PreviousProperties.Span, VirtualPropertyKey.TranslateY));
+        Assert.Equal(2, GetNumberProperty(enterIncrement.NextProperties.Span, VirtualPropertyKey.TranslateY));
+    }
+
+    [Fact]
     public void CounterApplication_button_properties_match_derived_visual_state_for_each_input_state()
     {
         var app = new CounterApplication();
@@ -685,7 +796,7 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void Program_input_mapping_wraps_action_with_latest_snapshot()
+    public void Program_input_mapping_returns_visual_refresh_when_release_outside_clears_capture()
     {
         var ownershipState = new InputOwnershipState();
         var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
@@ -712,15 +823,15 @@ public sealed class CounterInputRouterTests
             out var message);
 
         Assert.True(mapped);
-        var routed = Assert.IsType<CounterMessage.RoutedInput>(message);
-        Assert.IsType<CounterMessage.Increment>(routed.Action);
-        Assert.Equal(ownershipState.Snapshot, routed.Snapshot);
+        var refresh = Assert.IsType<CounterMessage.InputVisualStateChanged>(message);
+        Assert.Equal(ownershipState.Snapshot, refresh.Snapshot);
         Assert.True(ownershipState.PressedTarget.IsNone);
+        Assert.True(ownershipState.CapturedTarget.IsNone);
         Assert.Equal(new ActionId(1), ownershipState.FocusedTarget);
     }
 
     [Fact]
-    public void Program_input_mapping_uses_app_message_dispatch_mapper()
+    public void Program_input_mapping_uses_app_message_dispatch_mapper_for_release_ownership_change()
     {
         var ownershipState = new InputOwnershipState();
         var hitTestResolver = new DelegateActionHitTestResolver(HitIncrementAtButton);
@@ -749,9 +860,9 @@ public sealed class CounterInputRouterTests
             dispatchMapper,
             out var message);
 
-        var reset = Assert.IsType<CounterMessage.Reset>(message);
         Assert.True(mapped);
-        Assert.Equal(1, reset.Value);
+        var reset = Assert.IsType<CounterMessage.Reset>(message);
+        Assert.Equal(2, reset.Value);
     }
 
     [Fact]
@@ -1183,7 +1294,7 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
-    public void Release_outside_applies_action_and_clears_pressed_state_in_same_model_update()
+    public void Release_outside_clears_pressed_state_without_applying_action()
     {
         var app = new CounterApplication();
         var ownershipState = new InputOwnershipState();
@@ -1209,7 +1320,7 @@ public sealed class CounterInputRouterTests
                 Y: 500,
                 Button: PointerButton.Left));
 
-        Assert.Equal(1, model.Count);
+        Assert.Equal(0, model.Count);
         Assert.True(model.InputOwnership.PressedTarget.IsNone);
         Assert.True(model.InputOwnership.CapturedTarget.IsNone);
         Assert.Equal(new ActionId(1), model.InputOwnership.FocusedTarget);
@@ -1744,6 +1855,35 @@ public sealed class CounterInputRouterTests
         }
 
         return false;
+    }
+
+    private static double GetNumberProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key)
+    {
+        foreach (var property in properties)
+        {
+            if (property.Key == key)
+            {
+                return property.Value.GetRequiredNumber();
+            }
+        }
+
+        return 0;
+    }
+
+    private static StyleTransitionRuntimeDecision FindBatchDecision(
+        in StyleTransitionDecisionBatch batch,
+        NodeKey targetKey)
+    {
+        foreach (ref readonly var entry in batch.Entries)
+        {
+            if (entry.Decision.TargetKey == targetKey)
+            {
+                return entry.Decision;
+            }
+        }
+
+        Assert.Fail($"Style transition batch did not contain target key {targetKey.Value}.");
+        return default;
     }
 
     private static ActionId GetActionId(VirtualNodeProperty[] properties)

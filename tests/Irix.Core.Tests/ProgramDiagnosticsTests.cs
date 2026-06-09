@@ -4607,9 +4607,9 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("buttonState afterMove Increment hovered=True pressed=False focused=False priority=Hovered color=#FF4888FF", output);
         Assert.Contains("afterPress hover=Increment focus=Increment pressed=Increment capture=Increment", output);
         Assert.Contains("buttonState afterPress Increment hovered=True pressed=True focused=True priority=Pressed color=#FF245CD2", output);
-        Assert.Contains("duringCaptureMove hover=Decrement focus=Increment pressed=Increment capture=Increment", output);
-        Assert.Contains("buttonState duringCaptureMove Increment hovered=False pressed=True focused=True priority=Pressed color=#FF245CD2", output);
-        Assert.Contains("releaseOutside mapped=True message=Increment hover=- focus=Increment pressed=- capture=-", output);
+        Assert.Contains("duringCaptureMove hover=Decrement focus=Increment pressed=- capture=Increment", output);
+        Assert.Contains("buttonState duringCaptureMove Increment hovered=False pressed=False focused=True priority=Focused color=#FF54A0FF", output);
+        Assert.Contains("releaseOutside mapped=False hover=- focus=Increment pressed=- capture=-", output);
         Assert.Contains("buttonState releaseOutside Increment hovered=False pressed=False focused=True priority=Focused color=#FF54A0FF", output);
         Assert.Contains("keyboardEnter mapped=True message=Increment hover=- focus=Increment pressed=- capture=-", output);
         Assert.Contains("keyboardSpace mapped=True message=Increment hover=- focus=Increment pressed=- capture=-", output);
@@ -4626,7 +4626,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("dirtyReasons:", output);
         Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly/VisualOnly", output);
         Assert.Contains("dirtyReason press reason=StyleOnly classifications=4:StyleOnly/VisualOnly", output);
-        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting/TextMeasure,4:StyleOnly/VisualOnly", output);
+        Assert.Contains("dirtyReason release reason=StyleOnly classifications=4:StyleOnly/VisualOnly", output);
     }
 
     [Fact]
@@ -4647,7 +4647,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains(snapshot.Events, diagnosticEvent => diagnosticEvent.Kind == InputOwnershipEventKind.HoverChanged && diagnosticEvent.PreviousTarget.IsNone && diagnosticEvent.CurrentTarget == ActionIdRegistry.Increment);
         Assert.Contains(snapshot.Events, diagnosticEvent => diagnosticEvent.Kind == InputOwnershipEventKind.FocusChanged && diagnosticEvent.PreviousTarget == ActionIdRegistry.Increment && diagnosticEvent.CurrentTarget.IsNone);
         Assert.Contains(snapshot.DirtyReasons, dirtyReason => dirtyReason.Case == InputDirtyReasonCase.HoverOnly && dirtyReason.Reason == LayoutRebuildReason.StyleOnly);
-        Assert.Contains(snapshot.DirtyReasons, dirtyReason => dirtyReason.Case == InputDirtyReasonCase.Release && dirtyReason.Reason == LayoutRebuildReason.TextSizeAffecting && dirtyReason.Classifications.Count == 2);
+        Assert.Contains(snapshot.DirtyReasons, dirtyReason => dirtyReason.Case == InputDirtyReasonCase.Release && dirtyReason.Reason == LayoutRebuildReason.StyleOnly && dirtyReason.Classifications.Count == 1);
         var ownershipLines = DiagnosticsFormatter.BuildInputOwnershipDiagnosticLines(snapshot);
         var buttonStateLines = DiagnosticsFormatter.BuildInputButtonStateDiagnosticLines(snapshot);
         var eventLines = DiagnosticsFormatter.BuildInputEventDiagnosticLines(snapshot);
@@ -4659,7 +4659,7 @@ public sealed class ProgramDiagnosticsTests
         Assert.Contains("  HoverChanged previous=- current=Increment", eventLines);
         Assert.Contains("  FocusChanged previous=Increment current=-", eventLines);
         Assert.Contains("dirtyReason hoverOnly reason=StyleOnly classifications=4:StyleOnly/VisualOnly", dirtyReasonLines);
-        Assert.Contains("dirtyReason release reason=TextSizeAffecting classifications=1:TextSizeAffecting/TextMeasure,4:StyleOnly/VisualOnly", dirtyReasonLines);
+        Assert.Contains("dirtyReason release reason=StyleOnly classifications=4:StyleOnly/VisualOnly", dirtyReasonLines);
     }
 
     [Fact]

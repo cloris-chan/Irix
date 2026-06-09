@@ -85,7 +85,7 @@ internal sealed partial class InputOwnershipState
     /// <summary>The target that receives focused keyboard activation.</summary>
     public ActionId FocusedTarget { get; private set; }
 
-    /// <summary>The target that received the current left-button press, if any.</summary>
+    /// <summary>The target that is visually pressed for the current left-button capture, if any.</summary>
     public ActionId PressedTarget { get; private set; }
 
     /// <summary>The target that owns pointer release until the current press ends.</summary>
@@ -123,7 +123,9 @@ internal sealed partial class InputOwnershipState
     public void UpdateHover<THitTestService>(RawInputEvent inputEvent, ref THitTestService hitTestService)
         where THitTestService : struct, IInputHitTestService
     {
-        SetHoverTarget(HitTestActionId(inputEvent, ref hitTestService));
+        var target = HitTestActionId(inputEvent, ref hitTestService);
+        SetHoverTarget(target);
+        UpdatePressedTargetForHover(target);
     }
 
     /// <summary>
@@ -169,11 +171,12 @@ internal sealed partial class InputOwnershipState
     public ActionId ReleasePointer<THitTestService>(RawInputEvent inputEvent, ref THitTestService hitTestService)
         where THitTestService : struct, IInputHitTestService
     {
-        SetHoverTarget(HitTestActionId(inputEvent, ref hitTestService));
+        var releaseTarget = HitTestActionId(inputEvent, ref hitTestService);
+        SetHoverTarget(releaseTarget);
         var previousPressed = PressedTarget;
         var previousCaptured = CapturedTarget;
         var wasPointerPressed = _isPointerPressed;
-        var target = _isPointerPressed ? CapturedTarget : ActionId.None;
+        var target = _isPointerPressed && releaseTarget == CapturedTarget ? CapturedTarget : ActionId.None;
         _isPointerPressed = false;
         PressedTarget = ActionId.None;
         CapturedTarget = ActionId.None;
@@ -251,6 +254,29 @@ internal sealed partial class InputOwnershipState
         LastHoverEnteredTarget = nextTarget;
         HoverChangeCount++;
         RecordHoverChanged(previousTarget, nextTarget);
+    }
+
+    private void UpdatePressedTargetForHover(ActionId hoverTarget)
+    {
+        if (!_isPointerPressed || CapturedTarget.IsNone)
+        {
+            return;
+        }
+
+        var nextPressed = hoverTarget == CapturedTarget ? CapturedTarget : ActionId.None;
+        if (PressedTarget == nextPressed)
+        {
+            return;
+        }
+
+        var previousPressed = PressedTarget;
+        PressedTarget = nextPressed;
+        RecordPressedChanged(
+            previousPressed,
+            nextPressed,
+            CapturedTarget,
+            CapturedTarget,
+            isPointerPressed: true);
     }
 
     private static ActionId HitTestActionId<THitTestService>(RawInputEvent inputEvent, ref THitTestService hitTestService)
