@@ -3,7 +3,7 @@ using Irix.Platform;
 
 namespace Irix.Rendering;
 
-internal sealed partial class TranslatorCore
+internal sealed partial class TranslatorCore : IRetainedInputSnapshotProvider
 {
     private readonly RenderPipeline _renderPipeline;
     private readonly SegmentedRetainedFrameProductionOwnerFeed? _ownerFeed;

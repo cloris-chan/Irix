@@ -95,3 +95,8 @@ internal interface ICompositionInvalidationProvider
 {
     CompositionRenderInvalidation LastCompositionInvalidation { get; }
 }
+
+internal interface IRetainedInputSnapshotProvider
+{
+    RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; }
+}

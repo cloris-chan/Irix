@@ -4,7 +4,7 @@ using Irix.Rendering;
 
 namespace Irix.Poc;
 
-internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslator, ICompositionInvalidationProvider
+internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslator, ICompositionInvalidationProvider, IRetainedInputSnapshotProvider
 {
     private readonly TranslatorViewportProvider _translatorViewportProvider;
     private readonly IControlFeedbackSink _feedbackSink;
@@ -51,6 +51,8 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
     internal RetainedRenderFrameSegmentOwnership? SegmentOwnership => _translatorCore.SegmentOwnership;
 
     internal RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot => _translatorCore.LastRetainedInputSnapshot;
+
+    RenderPipelineRetainedInputSnapshot? IRetainedInputSnapshotProvider.LastRetainedInputSnapshot => LastRetainedInputSnapshot;
 
     public WindowDrawCommandTranslator(INativeWindow window)
         : this(window, prepareFrame: null, viewportProvider: null, postFrameCallback: null, renderPipelineFactory: null)

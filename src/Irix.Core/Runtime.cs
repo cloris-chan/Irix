@@ -67,7 +67,25 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
         return DispatchAndWaitCoreAsync(message, stageRetainedFrame: true, cancellationToken);
     }
 
-    private Task DispatchAndWaitCoreAsync(TMessage message, bool stageRetainedFrame, CancellationToken cancellationToken)
+    internal Task DispatchAndPublishAsync(
+        TMessage message,
+        Func<PatchBatch, CancellationToken, ValueTask> publish,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(publish);
+
+        return DispatchAndWaitCoreAsync(
+            message,
+            stageRetainedFrame: false,
+            cancellationToken,
+            publish);
+    }
+
+    private Task DispatchAndWaitCoreAsync(
+        TMessage message,
+        bool stageRetainedFrame,
+        CancellationToken cancellationToken,
+        Func<PatchBatch, CancellationToken, ValueTask>? publish = null)
     {
         ObjectDisposedException.ThrowIf(_cancellationTokenSource.IsCancellationRequested, this);
 
@@ -77,7 +95,7 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
         }
 
         var processed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_messageChannel.Writer.TryWrite(new QueuedMessage(message, processed, stageRetainedFrame)))
+        if (!_messageChannel.Writer.TryWrite(new QueuedMessage(message, processed, stageRetainedFrame, publish)))
         {
             throw new InvalidOperationException("Unable to enqueue message.");
         }
@@ -118,6 +136,10 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
                 {
                     await _patchSink.PublishAsync(patchBatch, _cancellationTokenSource.Token);
                 }
+                else if (queuedMessage.Publish is not null)
+                {
+                    await queuedMessage.Publish(patchBatch, _cancellationTokenSource.Token);
+                }
                 else if (queuedMessage.StageRetainedFrame)
                 {
                     if (_patchSink is not IRetainedFramePatchSink retainedFramePatchSink)
@@ -144,22 +166,28 @@ public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IA
         }
     }
 
-    private readonly struct QueuedMessage(TMessage Message, TaskCompletionSource? Processed, bool StageRetainedFrame = false) : IEquatable<QueuedMessage>
+    private readonly struct QueuedMessage(
+        TMessage Message,
+        TaskCompletionSource? Processed,
+        bool StageRetainedFrame = false,
+        Func<PatchBatch, CancellationToken, ValueTask>? Publish = null) : IEquatable<QueuedMessage>
     {
         public TMessage Message { get; } = Message;
         public TaskCompletionSource? Processed { get; } = Processed;
         public bool StageRetainedFrame { get; } = StageRetainedFrame;
+        public Func<PatchBatch, CancellationToken, ValueTask>? Publish { get; } = Publish;
 
         public bool Equals(QueuedMessage other)
         {
             return EqualityComparer<TMessage>.Default.Equals(Message, other.Message)
                 && EqualityComparer<TaskCompletionSource?>.Default.Equals(Processed, other.Processed)
-                && StageRetainedFrame == other.StageRetainedFrame;
+                && StageRetainedFrame == other.StageRetainedFrame
+                && EqualityComparer<Func<PatchBatch, CancellationToken, ValueTask>?>.Default.Equals(Publish, other.Publish);
         }
 
         public override bool Equals(object? obj) => obj is QueuedMessage other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(Message, Processed, StageRetainedFrame);
+        public override int GetHashCode() => HashCode.Combine(Message, Processed, StageRetainedFrame, Publish);
 
         public static bool operator ==(QueuedMessage left, QueuedMessage right) => left.Equals(right);
 

@@ -71,7 +71,7 @@ internal sealed class ScrollPresentationCoordinator
         ArgumentNullException.ThrowIfNull(compositorLoop);
         ArgumentNullException.ThrowIfNull(translator);
         return EnsureRunning(
-            new CounterScrollPresentationRuntimeAdapter(runtime),
+            new CounterScrollPresentationRuntimeAdapter(runtime, compositorLoop),
             new CompositorLoopScrollPresentationAdapter(compositorLoop),
             new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
             scrollTargetKey,
@@ -113,7 +113,7 @@ internal sealed class ScrollPresentationCoordinator
         ArgumentNullException.ThrowIfNull(compositorLoop);
         ArgumentNullException.ThrowIfNull(translator);
         return RunUntilIdleAsync(
-            new CounterScrollPresentationRuntimeAdapter(runtime),
+            new CounterScrollPresentationRuntimeAdapter(runtime, compositorLoop),
             new CompositorLoopScrollPresentationAdapter(compositorLoop),
             new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
             scrollTargetKey,
@@ -228,21 +228,31 @@ internal sealed class ScrollPresentationCoordinator
         }
 
         var layoutState = ScrollController.CommitPresented(decision.NextState, decision.NextState.TargetPosition);
-        await runtime.DispatchScrollPresentationInterruptedAsync(decision with { NextState = layoutState }, cancellationToken);
-        var snapshot = snapshotProvider.LastRetainedInputSnapshot;
-        if (snapshot is null)
-        {
-            return false;
-        }
-
-        var retainedScrollY = ScrollController.GetScrollY(runtime.CurrentScroll);
+        var retainedScrollY = ScrollController.GetScrollY(layoutState);
         var segmentStart = _clockSource.TimestampNow();
         var segmentDuration = CompositionDuration.FromMilliseconds(AnimationDurationMs);
         var declaration = new CompositionScrollPresentationDeclaration(
             scrollTargetKey,
             new CompositionAnimationTimeline(segmentStart, segmentDuration),
             new CompositionScalarAnimation((float)from, retainedScrollY, RetargetEasing));
-        await compositor.StartAsync(declaration, snapshot, cancellationToken);
+        var nextDecision = decision with { NextState = layoutState };
+        if (runtime is IAtomicScrollPresentationRetargetAdapter atomicRuntime
+            && atomicRuntime.SupportsAtomicScrollPresentationRetarget)
+        {
+            await atomicRuntime.DispatchScrollPresentationInterruptedAndStartAsync(nextDecision, declaration, cancellationToken);
+        }
+        else
+        {
+            await runtime.DispatchScrollPresentationInterruptedAsync(nextDecision, cancellationToken);
+            var snapshot = snapshotProvider.LastRetainedInputSnapshot;
+            if (snapshot is null)
+            {
+                return false;
+            }
+
+            await compositor.StartAsync(declaration, snapshot, cancellationToken);
+        }
+
         RecordPresented(compositor, scrollTargetKey);
         Interlocked.Increment(ref _retargetCount);
         return true;

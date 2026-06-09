@@ -62,6 +62,42 @@ public sealed class RuntimeTests
         await dispatchTask.WaitAsync(cancellationToken);
     }
 
+    [Fact]
+    public async Task DispatchAndPublishAsync_completes_after_custom_publish()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var patchSink = new RecordingPatchSink();
+        var publishStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var publishCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var runtime = new Runtime<TestModel, TestMessage>(new TestApplication(), patchSink);
+
+        await runtime.StartAsync(cancellationToken);
+
+        var dispatchTask = runtime.DispatchAndPublishAsync(
+            new TestMessage.Increment(),
+            async (patchBatch, ct) =>
+            {
+                try
+                {
+                    Assert.Single(patchBatch.Memory[..patchBatch.Count].ToArray());
+                    publishStarted.TrySetResult();
+                    await publishCompleted.Task.WaitAsync(ct);
+                }
+                finally
+                {
+                    patchBatch.Dispose();
+                }
+            },
+            cancellationToken);
+        await publishStarted.Task.WaitAsync(cancellationToken);
+
+        Assert.False(dispatchTask.IsCompleted);
+        Assert.Equal(1, runtime.CurrentModel.Count);
+
+        publishCompleted.TrySetResult();
+        await dispatchTask.WaitAsync(cancellationToken);
+    }
+
     private sealed record TestModel(int Count);
 
     private abstract record TestMessage

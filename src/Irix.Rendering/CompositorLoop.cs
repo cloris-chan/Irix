@@ -94,6 +94,28 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         return new ValueTask(waitTask.WaitAsync(cancellationToken));
     }
 
+    internal ValueTask PublishRetainedFrameAndStartCompositionScrollPresentationAsync(
+        PatchBatch patchBatch,
+        in CompositionScrollPresentationDeclaration declaration,
+        CancellationToken cancellationToken = default)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            patchBatch.Dispose();
+            return ValueTask.FromCanceled(cancellationToken);
+        }
+
+        var waitGroup = new RenderCompletionWaitGroup();
+        var waitTask = waitGroup.AddWaiter();
+        if (!_channel.Writer.TryWrite(CompositorWorkItem.StageAndInstallScrollPresentation(patchBatch, declaration, waitGroup)))
+        {
+            patchBatch.Dispose();
+            waitGroup.Complete(new InvalidOperationException("Unable to enqueue retained-frame scroll presentation."));
+        }
+
+        return new ValueTask(waitTask.WaitAsync(cancellationToken));
+    }
+
     public ValueTask RequestRenderAsync(CancellationToken cancellationToken = default)
     {
         return RequestRenderCoreAsync(waitForCompletion: false, cancellationToken);
@@ -272,7 +294,13 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         {
             if (workItem.Kind == CompositorWorkKind.InstallScrollPresentation)
             {
-                await InstallScrollPresentationAsync(workItem);
+                await InstallScrollPresentationWorkItemAsync(workItem);
+                continue;
+            }
+
+            if (workItem.Kind == CompositorWorkKind.StageAndInstallScrollPresentation)
+            {
+                await StageAndInstallScrollPresentationWorkItemAsync(workItem);
                 continue;
             }
 
@@ -352,29 +380,29 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         }
     }
 
-    private async Task InstallScrollPresentationAsync(CompositorWorkItem workItem)
+    private async Task StageAndInstallScrollPresentationWorkItemAsync(CompositorWorkItem workItem)
     {
+        var patchBatch = workItem.PatchBatch ?? throw new InvalidOperationException("Retained-frame scroll presentation work item must carry a patch batch.");
         Exception? error = null;
         try
         {
-            if (_compositor is not ICompositionScrollPresentationCompositor scrollPresentationCompositor)
+            using (patchBatch)
             {
-                throw new InvalidOperationException("The current compositor does not support composition scroll presentation scheduling.");
-            }
+                using var renderFrameBatch = _translator.Translate(patchBatch);
+                CancelScrollPresentationForInvalidation(ResolveCompositionInvalidation());
+                if (_compositor is not IRetainedFrameStagingCompositor stagingCompositor)
+                {
+                    throw new InvalidOperationException("The current compositor does not support retained-frame staging.");
+                }
 
-            var declaration = workItem.ScrollPresentationDeclaration;
-            scrollPresentationCompositor.SetCompositionScrollPresentationDeclaration(declaration, workItem.RetainedInputSnapshot!);
-            var timestamp = declaration.Timeline.StartTimestamp;
-            _ = await scrollPresentationCompositor.RenderCompositionScrollPresentationTickAtAsync(timestamp);
-            Interlocked.Increment(ref _scrollPresentationTickCount);
-            var generation = ActivateScrollPresentationSchedule(declaration);
-            if (timestamp >= declaration.Timeline.StartTimestamp + declaration.Timeline.Duration)
-            {
-                CompleteScrollPresentationSchedule(generation);
-            }
-            else
-            {
-                ScheduleNextScrollPresentationTick(timestamp, generation);
+                await stagingCompositor.StageRetainedFrameAsync(renderFrameBatch, _ownershipProvider?.Invoke());
+                if (_translator is not IRetainedInputSnapshotProvider snapshotProvider
+                    || snapshotProvider.LastRetainedInputSnapshot is not { } snapshot)
+                {
+                    throw new InvalidOperationException("The current translator did not provide a retained input snapshot for scroll presentation.");
+                }
+
+                await InstallScrollPresentationCoreAsync(workItem.ScrollPresentationDeclaration, snapshot);
             }
         }
         catch (Exception ex)
@@ -385,6 +413,50 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         finally
         {
             workItem.RenderCompletionWaitGroup?.Complete(error);
+        }
+    }
+
+    private async Task InstallScrollPresentationWorkItemAsync(CompositorWorkItem workItem)
+    {
+        Exception? error = null;
+        try
+        {
+            await InstallScrollPresentationCoreAsync(
+                workItem.ScrollPresentationDeclaration,
+                workItem.RetainedInputSnapshot!);
+        }
+        catch (Exception ex)
+        {
+            error = ex;
+            throw;
+        }
+        finally
+        {
+            workItem.RenderCompletionWaitGroup?.Complete(error);
+        }
+    }
+
+    private async Task InstallScrollPresentationCoreAsync(
+        CompositionScrollPresentationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        if (_compositor is not ICompositionScrollPresentationCompositor scrollPresentationCompositor)
+        {
+            throw new InvalidOperationException("The current compositor does not support composition scroll presentation scheduling.");
+        }
+
+        scrollPresentationCompositor.SetCompositionScrollPresentationDeclaration(declaration, snapshot);
+        var timestamp = declaration.Timeline.StartTimestamp;
+        _ = await scrollPresentationCompositor.RenderCompositionScrollPresentationTickAtAsync(timestamp);
+        Interlocked.Increment(ref _scrollPresentationTickCount);
+        var generation = ActivateScrollPresentationSchedule(declaration);
+        if (timestamp >= declaration.Timeline.StartTimestamp + declaration.Timeline.Duration)
+        {
+            CompleteScrollPresentationSchedule(generation);
+        }
+        else
+        {
+            ScheduleNextScrollPresentationTick(timestamp, generation);
         }
     }
 
@@ -767,6 +839,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     {
         Render,
         InstallScrollPresentation,
+        StageAndInstallScrollPresentation,
         TickScrollPresentation,
         CancelScrollPresentation,
         SampleAndCancelScrollPresentation
@@ -868,6 +941,21 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 CompositorWorkMode.Render,
                 declaration,
                 snapshot,
+                0);
+        }
+
+        public static CompositorWorkItem StageAndInstallScrollPresentation(
+            PatchBatch patchBatch,
+            in CompositionScrollPresentationDeclaration declaration,
+            RenderCompletionWaitGroup renderCompletionWaitGroup)
+        {
+            return new CompositorWorkItem(
+                CompositorWorkKind.StageAndInstallScrollPresentation,
+                patchBatch,
+                renderCompletionWaitGroup,
+                CompositorWorkMode.RetainedFrameStage,
+                declaration,
+                null,
                 0);
         }
 

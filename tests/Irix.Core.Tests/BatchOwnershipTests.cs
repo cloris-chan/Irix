@@ -180,6 +180,46 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_retained_frame_scroll_presentation_start_is_atomic_before_render_request()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new SnapshotTranslator();
+        var compositor = new StageScrollPresentationOrderingCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var patchOwner = new TrackingMemoryOwner<VirtualNodePatch>(
+        [
+            new VirtualNodePatch(
+                VirtualNodePatchOperation.ReplaceRoot,
+                0,
+                VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(1)))
+        ]);
+        var patchBatch = new PatchBatch(patchOwner, 1);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(
+                CompositionTimestamp.FromStopwatchTicks(100),
+                CompositionDuration.Zero),
+            new CompositionScalarAnimation(0, 54));
+
+        var publishTask = loop.PublishRetainedFrameAndStartCompositionScrollPresentationAsync(
+            patchBatch,
+            declaration,
+            cancellationToken).AsTask();
+        var renderTask = loop.RequestRenderAndWaitAsync(cancellationToken).AsTask();
+
+        await Task.WhenAll(publishTask, renderTask).WaitAsync(cancellationToken);
+
+        Assert.Equal(["Stage", "Install", "Tick", "Render"], compositor.Events);
+        Assert.Equal(2, translator.TranslateCallCount);
+        Assert.Equal(1, compositor.StageCallCount);
+        Assert.Equal(1, compositor.InstallCount);
+        Assert.Equal(1, compositor.TickCount);
+        Assert.Equal(1, compositor.RenderCallCount);
+        Assert.True(compositor.PresentationActiveDuringLastRender);
+        Assert.Equal(1, patchOwner.DisposeCallCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_scroll_presentation_scheduler_installs_and_ticks_until_idle()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -994,6 +1034,29 @@ public sealed class BatchOwnershipTests
         }
     }
 
+    private sealed class SnapshotTranslator : IPatchBatchTranslator, IRetainedInputSnapshotProvider
+    {
+        public int TranslateCallCount { get; private set; }
+        public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; private set; }
+
+        public RenderFrameBatch Translate(PatchBatch patchBatch)
+        {
+            TranslateCallCount++;
+            var arena = new VirtualTextArena();
+            var pipeline = new RenderPipeline();
+            var frame = pipeline.Build(
+                new VirtualNode(
+                    VirtualNodeKind.ScrollContainer,
+                    key: 1,
+                    properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                    children: [VirtualNodeBuilder.Text(arena, "Item", new NodeKey(2))]),
+                new PixelRectangle(0, 0, 240, 120),
+                arena.GetOrCreateSnapshot());
+            LastRetainedInputSnapshot = pipeline.LastRetainedInputSnapshot;
+            return frame;
+        }
+    }
+
     private sealed class InvalidatingTranslator(CompositionRenderInvalidation invalidation) : IPatchBatchTranslator, ICompositionInvalidationProvider
     {
         public int TranslateCallCount { get; private set; }
@@ -1101,6 +1164,76 @@ public sealed class BatchOwnershipTests
         {
             StageCallCount++;
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class StageScrollPresentationOrderingCompositor : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor
+    {
+        private CompositionScrollPresentationDeclaration _declaration;
+        private bool _presentationActive;
+        private double _presentedScrollY;
+
+        public List<string> Events { get; } = [];
+        public int RenderCallCount { get; private set; }
+        public int StageCallCount { get; private set; }
+        public int InstallCount { get; private set; }
+        public int TickCount { get; private set; }
+        public bool PresentationActiveDuringLastRender { get; private set; }
+
+        public ValueTask RenderAsync(RenderFrameBatch renderFrameBatch, CancellationToken cancellationToken = default)
+        {
+            Events.Add("Render");
+            RenderCallCount++;
+            PresentationActiveDuringLastRender = _presentationActive;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask StageRetainedFrameAsync(
+            RenderFrameBatch renderFrameBatch,
+            RetainedRenderFrameSegmentOwnership? ownership,
+            CancellationToken cancellationToken = default)
+        {
+            Events.Add("Stage");
+            StageCallCount++;
+            return ValueTask.CompletedTask;
+        }
+
+        public void SetCompositionScrollPresentationDeclaration(
+            in CompositionScrollPresentationDeclaration declaration,
+            RenderPipelineRetainedInputSnapshot snapshot)
+        {
+            Events.Add("Install");
+            _declaration = declaration;
+            _presentationActive = true;
+            InstallCount++;
+        }
+
+        public void ClearCompositionScrollPresentation()
+        {
+            _presentationActive = false;
+            _presentedScrollY = 0;
+        }
+
+        public ValueTask<CompositionBackendExecutionResult> RenderCompositionScrollPresentationTickAtAsync(
+            CompositionTimestamp timestamp,
+            CancellationToken cancellationToken = default)
+        {
+            Events.Add("Tick");
+            TickCount++;
+            _presentedScrollY = _declaration.PresentedScrollY.Evaluate(_declaration.Timeline.ProgressAt(timestamp));
+            return ValueTask.FromResult(default(CompositionBackendExecutionResult));
+        }
+
+        public bool TryGetPresentedScrollY(NodeKey targetKey, out double presentedScrollY)
+        {
+            if (_presentationActive && targetKey == _declaration.TargetKey)
+            {
+                presentedScrollY = _presentedScrollY;
+                return true;
+            }
+
+            presentedScrollY = 0;
+            return false;
         }
     }
 

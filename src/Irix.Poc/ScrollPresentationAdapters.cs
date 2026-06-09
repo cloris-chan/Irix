@@ -30,6 +30,16 @@ internal interface IScrollPresentationRetainedSnapshotProvider
     RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; }
 }
 
+internal interface IAtomicScrollPresentationRetargetAdapter
+{
+    bool SupportsAtomicScrollPresentationRetarget { get; }
+
+    Task DispatchScrollPresentationInterruptedAndStartAsync(
+        ScrollPresentationInterruptDecision decision,
+        in CompositionScrollPresentationDeclaration declaration,
+        CancellationToken cancellationToken = default);
+}
+
 internal readonly struct ScrollPresentationSample(
     bool HasValue,
     double PresentedScrollY) : IEquatable<ScrollPresentationSample>
@@ -54,14 +64,24 @@ internal readonly struct ScrollPresentationSample(
 
 internal readonly struct CounterScrollPresentationRuntimeAdapter(
     Runtime<CounterModel, CounterMessage> Runtime,
-    CounterAppMessageDispatchMapper DispatchMapper) : IScrollPresentationRuntimeAdapter
+    CounterAppMessageDispatchMapper DispatchMapper,
+    CompositorLoop? CompositorLoop = null) : IScrollPresentationRuntimeAdapter, IAtomicScrollPresentationRetargetAdapter
 {
     public CounterScrollPresentationRuntimeAdapter(Runtime<CounterModel, CounterMessage> runtime)
-        : this(runtime, new CounterAppMessageDispatchMapper())
+        : this(runtime, new CounterAppMessageDispatchMapper(), null)
+    {
+    }
+
+    public CounterScrollPresentationRuntimeAdapter(
+        Runtime<CounterModel, CounterMessage> runtime,
+        CompositorLoop compositorLoop)
+        : this(runtime, new CounterAppMessageDispatchMapper(), compositorLoop)
     {
     }
 
     public ScrollState CurrentScroll => Runtime.CurrentModel.Scroll;
+
+    public bool SupportsAtomicScrollPresentationRetarget => CompositorLoop is not null;
 
     public Task DispatchScrollPresentationInterruptedAsync(
         ScrollPresentationInterruptDecision decision,
@@ -75,6 +95,30 @@ internal readonly struct CounterScrollPresentationRuntimeAdapter(
 
         return Runtime.DispatchAndStageRetainedFrameAsync(
             message,
+            cancellationToken);
+    }
+
+    public Task DispatchScrollPresentationInterruptedAndStartAsync(
+        ScrollPresentationInterruptDecision decision,
+        in CompositionScrollPresentationDeclaration declaration,
+        CancellationToken cancellationToken = default)
+    {
+        var compositorLoop = CompositorLoop
+            ?? throw new InvalidOperationException("A compositor loop is required for atomic scroll presentation retargeting.");
+
+        var intent = AppDispatchIntent<CounterMessage>.ScrollPresentationInterrupted(in decision);
+        if (!DispatchMapper.TryMapIntent(in intent, out var message))
+        {
+            return Task.CompletedTask;
+        }
+
+        var capturedDeclaration = declaration;
+        return Runtime.DispatchAndPublishAsync(
+            message,
+            (patchBatch, ct) => compositorLoop.PublishRetainedFrameAndStartCompositionScrollPresentationAsync(
+                patchBatch,
+                capturedDeclaration,
+                ct),
             cancellationToken);
     }
 }
