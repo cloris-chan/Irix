@@ -64,10 +64,10 @@ public sealed partial class DrawingBackendCompositor
     {
         return kind switch
         {
-            1 => CompositionExecutionKind.TransformOpacityTick,
-            2 => CompositionExecutionKind.ScrollPresentationTick,
-            3 => CompositionExecutionKind.RetainedUpdateScrollPresentation,
-            4 => CompositionExecutionKind.AnimationPresentationTick,
+            CompositionExecutionKindTransformOpacityTick => CompositionExecutionKind.TransformOpacityTick,
+            CompositionExecutionKindScrollPresentationTick => CompositionExecutionKind.ScrollPresentationTick,
+            CompositionExecutionKindRetainedUpdateScrollPresentation => CompositionExecutionKind.RetainedUpdateScrollPresentation,
+            CompositionExecutionKindAnimationPresentationTick => CompositionExecutionKind.AnimationPresentationTick,
             _ => CompositionExecutionKind.None
         };
     }
@@ -76,12 +76,12 @@ public sealed partial class DrawingBackendCompositor
     {
         return reason switch
         {
-            1 => CompositionExecutionSkipReason.NoActivePlan,
-            2 => CompositionExecutionSkipReason.BackendDoesNotImplementComposition,
-            3 => CompositionExecutionSkipReason.MissingBackendCapability,
-            4 => CompositionExecutionSkipReason.MissingRetainedFrame,
-            5 => CompositionExecutionSkipReason.InvalidPlanForRetainedFrame,
-            6 => CompositionExecutionSkipReason.DeviceLostRecovered,
+            CompositionExecutionSkipReasonNoActivePlan => CompositionExecutionSkipReason.NoActivePlan,
+            CompositionExecutionSkipReasonBackendDoesNotImplementComposition => CompositionExecutionSkipReason.BackendDoesNotImplementComposition,
+            CompositionExecutionSkipReasonMissingBackendCapability => CompositionExecutionSkipReason.MissingBackendCapability,
+            CompositionExecutionSkipReasonMissingRetainedFrame => CompositionExecutionSkipReason.MissingRetainedFrame,
+            CompositionExecutionSkipReasonInvalidPlanForRetainedFrame => CompositionExecutionSkipReason.InvalidPlanForRetainedFrame,
+            CompositionExecutionSkipReasonDeviceLostRecovered => CompositionExecutionSkipReason.DeviceLostRecovered,
             _ => CompositionExecutionSkipReason.None
         };
     }
