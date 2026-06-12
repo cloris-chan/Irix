@@ -3,13 +3,13 @@
     Local validation entrypoint for Irix.
 
 .DESCRIPTION
-    Runs the local validation lanes that currently stand in for the constrained
-    GitHub Actions setup. Quick mirrors the lightweight CI lane and excludes
-    heavy/source/architecture guard suites. Focused runs high-signal architecture/source
-    guards but skips lower-frequency DocGuard wording and source-shape audits,
-    including in the partial-apply, composition, and scroll/input focused lanes.
-    GlyphSmoke delegates to the guarded glyph atlas smoke script. Full runs the
-    Release test suite and can optionally add GlyphSmoke.
+    Runs the local validation lanes for the current working tree. Quick mirrors
+    the lightweight CI lane and excludes heavy/source/architecture guard suites.
+    Focused runs high-signal architecture/source guards but skips lower-frequency
+    DocGuard wording and source-shape audits, including in the partial-apply,
+    composition, and scroll/input focused lanes. GlyphSmoke delegates to the
+    guarded glyph atlas smoke script. Full runs the Release test suite and can
+    optionally add GlyphSmoke.
 
 .EXAMPLE
     .\scripts\validate.ps1
@@ -91,6 +91,47 @@ function Invoke-Dotnet {
     }
 }
 
+function Invoke-ReleaseBuild {
+    param(
+        [switch]$Diagnostics
+    )
+
+    $arguments = @(
+        "build",
+        $solution,
+        "--configuration",
+        "Release",
+        "--maxcpucount:1")
+    if ($Diagnostics) {
+        $arguments += "-p:IrixDiagnostics=true"
+    }
+    if ($NoRestore) {
+        $arguments += "--no-restore"
+    }
+
+    & dotnet @arguments
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    Write-Warning "Release build failed; retrying one serialized rebuild to recover generated outputs."
+    $rebuildArguments = @(
+        "build",
+        $solution,
+        "--configuration",
+        "Release",
+        "--maxcpucount:1",
+        "-t:Rebuild")
+    if ($Diagnostics) {
+        $rebuildArguments += "-p:IrixDiagnostics=true"
+    }
+    if ($NoRestore) {
+        $rebuildArguments += "--no-restore"
+    }
+
+    Invoke-Dotnet $rebuildArguments
+}
+
 function Invoke-Quick {
     if (-not $NoRestore) {
         Invoke-ValidationLane "Restore runtime" {
@@ -102,11 +143,7 @@ function Invoke-Quick {
     }
 
     Invoke-ValidationLane "Release build" {
-        $args = @("build", $solution, "--configuration", "Release")
-        if ($NoRestore) {
-            $args += "--no-restore"
-        }
-        Invoke-Dotnet $args
+        Invoke-ReleaseBuild
     }
 
     Invoke-ValidationLane "Quick tests" {
@@ -115,6 +152,7 @@ function Invoke-Quick {
             $solution,
             "--configuration",
             "Release",
+            "--maxcpucount:1",
             "--no-build",
             "--filter",
             "Category!=D3D12&Category!=Performance&Category!=Guard",
@@ -130,12 +168,18 @@ function Invoke-Focused {
         }
     }
 
+    Invoke-ValidationLane "Diagnostics Release build" {
+        Invoke-ReleaseBuild -Diagnostics
+    }
+
     Invoke-ValidationLane "Focused Guard category" {
         Invoke-Dotnet @(
             "test",
             $solution,
             "--configuration",
             "Release",
+            "--maxcpucount:1",
+            "--no-build",
             "--no-restore",
             "--filter",
             "Category=Guard&Category!=DocGuard",
@@ -149,6 +193,8 @@ function Invoke-Focused {
             $solution,
             "--configuration",
             "Release",
+            "--maxcpucount:1",
+            "--no-build",
             "--no-restore",
             "--filter",
             "Category!=DocGuard&(FullyQualifiedName~PartialApply|FullyQualifiedName~DrawingBackendCompositor)",
@@ -162,6 +208,8 @@ function Invoke-Focused {
             $solution,
             "--configuration",
             "Release",
+            "--maxcpucount:1",
+            "--no-build",
             "--no-restore",
             "--filter",
             "Category!=DocGuard&(FullyQualifiedName~Composition|FullyQualifiedName~Scroll|FullyQualifiedName~CounterInputRouter|FullyQualifiedName~WindowLayoutPipeline)",
@@ -190,12 +238,18 @@ function Invoke-Full {
         }
     }
 
+    Invoke-ValidationLane "Diagnostics Release build" {
+        Invoke-ReleaseBuild -Diagnostics
+    }
+
     Invoke-ValidationLane "Full Release tests" {
         Invoke-Dotnet @(
             "test",
             $solution,
             "--configuration",
             "Release",
+            "--maxcpucount:1",
+            "--no-build",
             "--no-restore",
             "--verbosity",
             "normal")

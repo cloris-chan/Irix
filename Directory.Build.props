@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsAotCompatible>true</IsAotCompatible>
     <IrixDiagnostics Condition="'$(IrixDiagnostics)' == '' and '$(MSBuildProjectName)' == 'Irix.Core.Tests'">true</IrixDiagnostics>
     <IrixDiagnostics Condition="'$(IrixDiagnostics)' == ''">false</IrixDiagnostics>
