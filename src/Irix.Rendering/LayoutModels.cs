@@ -40,7 +40,7 @@ internal readonly struct LayoutElement(
     TextNodeContent Text = default,
     ActionId ActionId = default,
     ButtonVisualState ButtonState = default,
-    StyleColorSlot BackgroundColor = default,
+    PaintSlot Background = default,
     StyleColorSlot ForegroundColor = default) : IEquatable<LayoutElement>
 {
 
@@ -50,7 +50,7 @@ internal readonly struct LayoutElement(
     public TextNodeContent Text { get; } = Text;
     public ActionId ActionId { get; } = ActionId;
     public ButtonVisualState ButtonState { get; } = ButtonState;
-    public StyleColorSlot BackgroundColor { get; } = BackgroundColor;
+    public PaintSlot Background { get; } = Background;
     public StyleColorSlot ForegroundColor { get; } = ForegroundColor;
 
     public bool Equals(LayoutElement other)
@@ -61,7 +61,7 @@ internal readonly struct LayoutElement(
             && Text.Equals(other.Text)
             && ActionId.Equals(other.ActionId)
             && ButtonState == other.ButtonState
-            && BackgroundColor == other.BackgroundColor
+            && Background == other.Background
             && ForegroundColor == other.ForegroundColor;
     }
 
@@ -76,7 +76,7 @@ internal readonly struct LayoutElement(
         hash.Add(Text);
         hash.Add(ActionId);
         hash.Add(ButtonState);
-        hash.Add(BackgroundColor);
+        hash.Add(Background);
         hash.Add(ForegroundColor);
         return hash.ToHashCode();
     }

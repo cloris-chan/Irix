@@ -323,7 +323,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 LayoutElementKind.Rectangle,
                 rectangleBounds,
                 ClipBounds: _ctx.ClipBounds,
-                BackgroundColor: ReadColor(properties, VirtualPropertyKey.BackgroundColor)));
+                Background: ReadPaint(properties, VirtualPropertyKey.Background)));
             _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -361,7 +361,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 Text: label,
                 ActionId: actionId,
                 ButtonState: buttonState,
-                BackgroundColor: ReadColor(properties, VirtualPropertyKey.BackgroundColor),
+                Background: ReadPaint(properties, VirtualPropertyKey.Background),
                 ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
@@ -403,7 +403,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                     el.Text,
                     el.ActionId,
                     el.ButtonState,
-                    el.BackgroundColor,
+                    el.Background,
                     el.ForegroundColor);
             }
         }
@@ -546,6 +546,9 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
     private static StyleColorSlot ReadColor(PropertyReader reader, VirtualPropertyKey key) =>
         reader.TryGetColor(key, out var color) ? StyleColorSlot.Some(color) : StyleColorSlot.None;
+
+    private static PaintSlot ReadPaint(PropertyReader reader, VirtualPropertyKey key) =>
+        reader.TryGetPaint(key, out var paint) ? PaintSlot.Some(paint) : PaintSlot.None;
 
     private static TextNodeContent GetTextContent(VirtualNode node)
     {

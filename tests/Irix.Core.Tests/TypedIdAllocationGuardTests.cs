@@ -86,7 +86,7 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(VirtualPropertyKey.IsHovered, VirtualNodeProperty.Hovered(true).Key);
         Assert.Equal(VirtualPropertyKey.IsPressed, VirtualNodeProperty.Pressed(true).Key);
         Assert.Equal(VirtualPropertyKey.IsFocused, VirtualNodeProperty.Focused(true).Key);
-        Assert.Equal(VirtualPropertyKey.BackgroundColor, VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)).Key);
+        Assert.Equal(VirtualPropertyKey.Background, VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3)).Key);
         Assert.Equal(VirtualPropertyKey.ForegroundColor, VirtualNodeProperty.ForegroundColor(StyleColor.Opaque(4, 5, 6)).Key);
         Assert.Equal(VirtualPropertyKey.LayerOpacity, VirtualNodeProperty.LayerOpacity(0.5).Key);
         Assert.Equal(VirtualPropertyKey.TranslateX, VirtualNodeProperty.TranslateX(12).Key);
@@ -226,7 +226,7 @@ public class TypedIdAllocationGuardTests
     public void PropertyValue_has_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<PropertyValue>());
-        Assert.Equal(24, Unsafe.SizeOf<PropertyValue>());
+        Assert.Equal(40, Unsafe.SizeOf<PropertyValue>());
     }
 
     [Fact]
@@ -234,8 +234,10 @@ public class TypedIdAllocationGuardTests
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<Color>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<SrgbColor>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<Paint>());
         Assert.Equal(16, Unsafe.SizeOf<Color>());
         Assert.Equal(4, Unsafe.SizeOf<SrgbColor>());
+        Assert.Equal(36, Unsafe.SizeOf<Paint>());
     }
 
     [Fact]
@@ -271,6 +273,7 @@ public class TypedIdAllocationGuardTests
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleColor>());
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleColorSlot>());
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<PaintSlot>());
     }
 
     [Fact]
@@ -388,8 +391,8 @@ public class TypedIdAllocationGuardTests
         Assert.True((hovered.Effects & StyleEffect.Visual) != 0);
         Assert.Equal(AnimationChannel.Discrete, hovered.AnimationChannel);
 
-        var background = VirtualPropertyMetadata.Get(VirtualPropertyKey.BackgroundColor);
-        Assert.Equal(PropertyValueKind.Color, background.ValueKind);
+        var background = VirtualPropertyMetadata.Get(VirtualPropertyKey.Background);
+        Assert.Equal(PropertyValueKind.Paint, background.ValueKind);
         Assert.Equal(StyleEffect.Visual, background.Effects);
         Assert.Equal(AnimationChannel.CpuStyle, background.AnimationChannel);
 
@@ -416,12 +419,12 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(InvalidationKind.Layout, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ScrollY).ClassifySet());
         Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ActionId).ClassifySet());
         Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.IsHovered).ClassifySet());
-        Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.BackgroundColor).ClassifySet());
+        Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.Background).ClassifySet());
         Assert.Equal(InvalidationKind.VisualOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.ForegroundColor).ClassifySet());
         Assert.Equal(InvalidationKind.CompositeOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.LayerOpacity).ClassifySet());
         Assert.Equal(InvalidationKind.CompositeOnly, PropertyChangeSet.AddKey(default, VirtualPropertyKey.TranslateX).ClassifySet());
 
-        var visualAndComposite = PropertyChangeSet.AddKey(default, VirtualPropertyKey.BackgroundColor);
+        var visualAndComposite = PropertyChangeSet.AddKey(default, VirtualPropertyKey.Background);
         visualAndComposite = PropertyChangeSet.AddKey(visualAndComposite, VirtualPropertyKey.LayerOpacity);
         Assert.Equal(InvalidationKind.VisualOnly, visualAndComposite.ClassifySet());
     }
@@ -429,7 +432,7 @@ public class TypedIdAllocationGuardTests
     [Fact]
     public void Property_change_set_tracks_composition_separately_from_visual_draw_style()
     {
-        var background = PropertyChangeSet.AddKey(default, VirtualPropertyKey.BackgroundColor);
+        var background = PropertyChangeSet.AddKey(default, VirtualPropertyKey.Background);
         Assert.Equal(1ul, background.VisualMask);
         Assert.Equal(0ul, background.CompositionMask);
 
@@ -463,9 +466,9 @@ public class TypedIdAllocationGuardTests
 
         var mixedPlan = StyleDeltaPlanner.Plan(
             StyleDeltaPlanner.BuildChangeSet(
-                [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3))],
+                [VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3))],
                 [
-                    VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)),
+                    VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6)),
                     VirtualNodeProperty.LayerOpacity(0.75)
                 ]));
         Assert.True(mixedPlan.CanReuseLayout);
@@ -485,8 +488,9 @@ public class TypedIdAllocationGuardTests
         var translationY = StyleDeclaration.TranslationY(24).ToVirtualNodeProperty();
         var hovered = StyleDeclaration.Hovered(true).ToVirtualNodeProperty();
 
-        Assert.Equal(VirtualPropertyKey.BackgroundColor, background.Key);
-        Assert.Equal(StyleColor.Opaque(1, 2, 3), background.Value.GetRequiredColor());
+        Assert.Equal(VirtualPropertyKey.Background, background.Key);
+        Assert.True(background.Value.GetRequiredPaint().TryGetSolidColor(out var backgroundColor));
+        Assert.Equal(StyleColor.Opaque(1, 2, 3).Value, backgroundColor);
         Assert.Equal(VirtualPropertyKey.ForegroundColor, foreground.Key);
         Assert.Equal(StyleColor.Opaque(4, 5, 6), foreground.Value.GetRequiredColor());
         Assert.Equal(VirtualPropertyKey.LayerOpacity, opacity.Key);
@@ -513,7 +517,7 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(4, properties.Length);
         Assert.Equal(VirtualPropertyKey.Width, properties[0].Key);
         Assert.Equal(VirtualPropertyKey.Height, properties[1].Key);
-        Assert.Equal(VirtualPropertyKey.BackgroundColor, properties[2].Key);
+        Assert.Equal(VirtualPropertyKey.Background, properties[2].Key);
         Assert.Equal(VirtualPropertyKey.LayerOpacity, properties[3].Key);
 
         var node = VirtualNodeFactory.Rectangle(new NodeKey(7), properties);
@@ -537,10 +541,10 @@ public class TypedIdAllocationGuardTests
     {
         var declaration = StyleDeclaration.Background(StyleColor.Opaque(255, 0, 0));
 
-        Assert.Equal(PropertyValueKind.Color, declaration.Value.Kind);
-        var color = declaration.Value.GetRequiredColor();
-        Assert.InRange(color.Value.LinearBt2020R, 0.6273f, 0.6275f);
-        Assert.NotEqual(1, color.Value.LinearBt2020R);
+        Assert.Equal(PropertyValueKind.Paint, declaration.Value.Kind);
+        Assert.True(declaration.Value.GetRequiredPaint().TryGetSolidColor(out var color));
+        Assert.InRange(color.LinearBt2020R, 0.6273f, 0.6275f);
+        Assert.NotEqual(1, color.LinearBt2020R);
         Assert.Equal(SrgbColor.Opaque(255, 0, 0), color.ToSrgb());
     }
 
@@ -775,6 +779,26 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(PropertyValueKind.Color, opaque.Kind);
         Assert.True(opaque.TryGetColor(out var opaqueValue));
         Assert.Equal(StyleColor.Opaque(10, 20, 30), opaqueValue);
+    }
+
+    [Fact]
+    public void Public_paint_roundtrip_preserves_canonical_colors_and_direction()
+    {
+        var start = Color.FromSrgb(255, 0, 0);
+        var end = Color.FromSrgb(0, 255, 0);
+        var paint = Paint.LinearGradient(start, end, LinearGradientDirection.TopRightToBottomLeft);
+        var value = PropertyValue.FromPaint(paint);
+
+        Assert.Equal(PaintKind.LinearGradient, paint.Kind);
+        Assert.True(paint.TryGetLinearGradient(out var actualStart, out var actualEnd, out var direction));
+        Assert.Equal(start, actualStart);
+        Assert.Equal(end, actualEnd);
+        Assert.Equal(LinearGradientDirection.TopRightToBottomLeft, direction);
+        Assert.Equal(PropertyValueKind.Paint, value.Kind);
+        Assert.Equal(paint, value.GetRequiredPaint());
+        Assert.Throws<ArgumentOutOfRangeException>(() => Paint.LinearGradient(start, end, LinearGradientDirection.None));
+        Assert.Throws<ArgumentException>(() => PropertyValue.FromPaint(Paint.None));
+        Assert.Throws<ArgumentException>(() => VirtualNodeProperty.Background(Paint.None));
     }
 
     [Fact]
@@ -1581,7 +1605,7 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
-    public void Public_material_authoring_surface_remains_deferred()
+    public void Public_semantic_linear_gradient_authoring_stays_renderer_independent()
     {
         var root = FindRepoRoot();
         var coreDir = Path.Combine(root, "src", "Irix.Core");
@@ -1596,7 +1620,6 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("Brush", stylePropertyNames);
         Assert.DoesNotContain("Material", stylePropertyNames);
         Assert.DoesNotContain("Gradient", stylePropertyNames);
-        Assert.DoesNotContain("LinearGradient", stylePropertyNames);
         Assert.DoesNotContain("RadialGradient", stylePropertyNames);
         Assert.DoesNotContain("Image", stylePropertyNames);
 
@@ -1620,10 +1643,30 @@ public class TypedIdAllocationGuardTests
             "GetRequiredImage");
 
         var propertyValueKinds = Enum.GetNames<PropertyValueKind>();
+        Assert.Contains("Paint", propertyValueKinds);
         Assert.DoesNotContain("Brush", propertyValueKinds);
         Assert.DoesNotContain("Material", propertyValueKinds);
         Assert.DoesNotContain("Gradient", propertyValueKinds);
         Assert.DoesNotContain("Image", propertyValueKinds);
+
+        Assert.True(typeof(Color).IsPublic);
+        Assert.True(typeof(SrgbColor).IsPublic);
+        Assert.True(typeof(Paint).IsPublic);
+        Assert.True(typeof(PaintKind).IsPublic);
+        Assert.True(typeof(LinearGradientDirection).IsPublic);
+        Assert.Equal(["None", "SolidColor", "LinearGradient"], Enum.GetNames<PaintKind>());
+        Assert.Equal(
+            ["None", "LeftToRight", "TopToBottom", "TopLeftToBottomRight", "TopRightToBottomLeft"],
+            Enum.GetNames<LinearGradientDirection>());
+
+        var gradient = Paint.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            LinearGradientDirection.LeftToRight);
+        var background = VirtualNodeProperty.Background(gradient);
+        Assert.Equal(VirtualPropertyKey.Background, background.Key);
+        Assert.Equal(PropertyValueKind.Paint, background.Value.Kind);
+        Assert.Equal(gradient, background.Value.GetRequiredPaint());
 
         var virtualPropertyKeyBlock = ExtractSourceBetween(
             propertyKeySource,
@@ -1654,7 +1697,11 @@ public class TypedIdAllocationGuardTests
             .GetMethods(BindingFlags.Public | BindingFlags.Static)
             .Select(method => method.Name)
             .ToArray();
+        Assert.Contains("Background", virtualNodePropertyMethods);
         AssertDoesNotContainAny(virtualNodePropertyMethods, "Brush", "Material", "Gradient", "Image");
+        Assert.Contains(
+            nameof(VirtualPropertyKey.Background),
+            GetPublicVirtualPropertyKeyFields().Select(field => field.Name));
 
         var styleDeclarationBlock = ExtractSourceBetween(
             styleDeclarationSource,
@@ -1710,8 +1757,8 @@ public class TypedIdAllocationGuardTests
 
         Assert.Contains("## Public Material Authoring Policy Preflight", styleDesign);
         Assert.Contains("Semantic token boundary", styleDesign);
-        Assert.Contains("public UI code cannot construct or bind them", styleDesign);
-        Assert.Contains("semantic paint slots and material tokens", colorDesign);
+        Assert.Contains("Public UI code describes background paint through `Paint` and `VirtualNodeProperty.Background`", styleDesign);
+        Assert.Contains("public authoring exposes semantic `Paint` plus `VirtualNodeProperty.Background`", colorDesign);
 
         Assert.False(typeof(DrawMaterialKind).IsPublic);
         Assert.False(typeof(DrawMaterialBackendCapabilities).IsPublic);
@@ -1758,7 +1805,6 @@ public class TypedIdAllocationGuardTests
             "DrawMaterialBackendCapabilities",
             "Brush",
             "Material",
-            "Gradient",
             "Image");
 
         var publicPropertyValueMethods = typeof(PropertyValue)

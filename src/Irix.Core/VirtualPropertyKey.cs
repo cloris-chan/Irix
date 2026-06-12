@@ -72,7 +72,7 @@ public readonly struct VirtualPropertyKey : IEquatable<VirtualPropertyKey>
     public static readonly VirtualPropertyKey Height = new(PropertyDomain.Layout, 2);
     public static readonly VirtualPropertyKey ScrollY = new(PropertyDomain.Layout, 3);
 
-    internal static readonly VirtualPropertyKey BackgroundColor = new(PropertyDomain.Visual, 1);
+    public static readonly VirtualPropertyKey Background = new(PropertyDomain.Visual, 1);
     internal static readonly VirtualPropertyKey ForegroundColor = new(PropertyDomain.Visual, 2);
 
     public static readonly VirtualPropertyKey ActionId = new(PropertyDomain.Interaction, 1);
@@ -165,11 +165,11 @@ internal static class VirtualPropertyMetadata
             return true;
         }
 
-        if (key == VirtualPropertyKey.BackgroundColor)
+        if (key == VirtualPropertyKey.Background)
         {
             metadata = new StylePropertyMetadata(
                 key,
-                PropertyValueKind.Color,
+                PropertyValueKind.Paint,
                 StyleEffect.Visual,
                 AnimationChannel.CpuStyle,
                 StylePropertyScope.NodeLocal,
@@ -255,7 +255,7 @@ internal static class VirtualPropertyDiagnostics
         if (key == VirtualPropertyKey.Width) return nameof(VirtualPropertyKey.Width);
         if (key == VirtualPropertyKey.Height) return nameof(VirtualPropertyKey.Height);
         if (key == VirtualPropertyKey.ScrollY) return nameof(VirtualPropertyKey.ScrollY);
-        if (key == VirtualPropertyKey.BackgroundColor) return nameof(VirtualPropertyKey.BackgroundColor);
+        if (key == VirtualPropertyKey.Background) return nameof(VirtualPropertyKey.Background);
         if (key == VirtualPropertyKey.ForegroundColor) return nameof(VirtualPropertyKey.ForegroundColor);
         if (key == VirtualPropertyKey.ActionId) return nameof(VirtualPropertyKey.ActionId);
         if (key == VirtualPropertyKey.IsHovered) return nameof(VirtualPropertyKey.IsHovered);

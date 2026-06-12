@@ -61,4 +61,18 @@ internal readonly ref struct PropertyReader
         value = default;
         return false;
     }
+
+    public bool TryGetPaint(VirtualPropertyKey key, out Paint value)
+    {
+        foreach (var property in _properties)
+        {
+            if (property.Key == key && property.Value.TryGetPaint(out value))
+            {
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
 }

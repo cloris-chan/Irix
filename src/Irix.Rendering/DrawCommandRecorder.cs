@@ -176,19 +176,21 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                         Color: ResolveColor(element.ForegroundColor, style.TextColor));
                     break;
                 case LayoutElementKind.Rectangle:
-                    commands[commandCount++] = DrawCommand.FromCanonicalColor(
-                        DrawCommandKind.FillRect,
-                        Rect: ToDrawRect(element.Bounds),
-                        ClipBounds: clip,
-                        Color: ResolveColor(element.BackgroundColor, style.RectangleFillColor));
+                    commands[commandCount++] = CreateFillCommand(
+                        resources,
+                        ToDrawRect(element.Bounds),
+                        clip,
+                        element.Background,
+                        style.RectangleFillColor);
                     break;
                 case LayoutElementKind.Button:
                     var bounds = ToDrawRect(element.Bounds);
-                    commands[commandCount++] = DrawCommand.FromCanonicalColor(
-                        DrawCommandKind.FillRect,
-                        Rect: bounds,
-                        ClipBounds: clip,
-                        Color: ResolveColor(element.BackgroundColor, visualStateResolver.ResolveButtonFillColor(style, element.ButtonState)));
+                    commands[commandCount++] = CreateFillCommand(
+                        resources,
+                        bounds,
+                        clip,
+                        element.Background,
+                        visualStateResolver.ResolveButtonFillColor(style, element.ButtonState));
                     var buttonSpan = ResolveText(element.Text, textSnapshot);
                     if (!buttonSpan.IsEmpty)
                     {
@@ -228,5 +230,67 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         }
 
         return styleColor.Value.Value;
+    }
+
+    private static DrawCommand CreateFillCommand(
+        FrameDrawingResources resources,
+        DrawRect bounds,
+        DrawRect clip,
+        PaintSlot stylePaint,
+        DrawColor defaultColor)
+    {
+        if (!stylePaint.HasValue)
+        {
+            return DrawCommand.FromCanonicalColor(
+                DrawCommandKind.FillRect,
+                Rect: bounds,
+                ClipBounds: clip,
+                Color: Color.FromSrgb(defaultColor.A, defaultColor.R, defaultColor.G, defaultColor.B));
+        }
+
+        var paint = stylePaint.Value;
+        if (paint.TryGetSolidColor(out var color))
+        {
+            return DrawCommand.FromCanonicalColor(
+                DrawCommandKind.FillRect,
+                Rect: bounds,
+                ClipBounds: clip,
+                Color: color);
+        }
+
+        if (!paint.TryGetLinearGradient(out var startColor, out var endColor, out var direction))
+        {
+            throw new InvalidOperationException($"Unsupported paint kind {paint.Kind}.");
+        }
+
+        var material = CreateLinearGradientMaterial(startColor, endColor, direction, bounds);
+        return DrawCommand.FromMaterial(
+            DrawCommandKind.FillRect,
+            Rect: bounds,
+            Resource: resources.AddBrush(material),
+            ClipBounds: clip,
+            Material: material);
+    }
+
+    private static DrawMaterial CreateLinearGradientMaterial(
+        Color startColor,
+        Color endColor,
+        LinearGradientDirection direction,
+        DrawRect bounds)
+    {
+        var (startPoint, endPoint) = direction switch
+        {
+            LinearGradientDirection.LeftToRight =>
+                (new DrawPoint(0, 0), new DrawPoint(bounds.Width, 0)),
+            LinearGradientDirection.TopToBottom =>
+                (new DrawPoint(0, 0), new DrawPoint(0, bounds.Height)),
+            LinearGradientDirection.TopLeftToBottomRight =>
+                (new DrawPoint(0, 0), new DrawPoint(bounds.Width, bounds.Height)),
+            LinearGradientDirection.TopRightToBottomLeft =>
+                (new DrawPoint(bounds.Width, 0), new DrawPoint(0, bounds.Height)),
+            _ => throw new InvalidOperationException($"Unsupported linear-gradient direction {direction}.")
+        };
+
+        return DrawMaterial.LinearGradient(startColor, endColor, startPoint, endPoint);
     }
 }

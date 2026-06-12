@@ -27,7 +27,8 @@ public enum PropertyValueKind : byte
     Number,
     Boolean,
     ActionId,
-    Color
+    Color,
+    Paint
 }
 
 public enum NodeContentKind : byte
@@ -120,7 +121,7 @@ public readonly struct NodeContent : IEquatable<NodeContent>
 
 // ── PropertyValue: pure value union (R13-7) ─────────────────────
 
-[StructLayout(LayoutKind.Explicit, Size = 24)]
+[StructLayout(LayoutKind.Explicit, Size = 40)]
 public readonly struct PropertyValue : IEquatable<PropertyValue>
 {
     [FieldOffset(0)] private readonly PropertyValueKind _kind;
@@ -129,14 +130,16 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     [FieldOffset(4)] private readonly uint _uintValue;
     [FieldOffset(8)] private readonly ulong _data0;
     [FieldOffset(8)] private readonly Color _colorValue;
+    [FieldOffset(4)] private readonly Paint _paintValue;
 
     private PropertyValue(PropertyValueKind kind, uint uintValue, ulong data0)
     {
         _kind = kind;
         _padding0 = 0;
         _padding1 = 0;
-        _uintValue = uintValue;
+        _paintValue = default;
         _colorValue = default;
+        _uintValue = uintValue;
         _data0 = data0;
     }
 
@@ -145,9 +148,21 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         _kind = PropertyValueKind.Color;
         _padding0 = 0;
         _padding1 = 0;
+        _paintValue = default;
         _uintValue = 0;
         _data0 = 0;
         _colorValue = color;
+    }
+
+    private PropertyValue(Paint paint)
+    {
+        _kind = PropertyValueKind.Paint;
+        _padding0 = 0;
+        _padding1 = 0;
+        _uintValue = 0;
+        _data0 = 0;
+        _colorValue = default;
+        _paintValue = paint;
     }
 
     public PropertyValueKind Kind => _kind;
@@ -165,6 +180,16 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
 
     internal static PropertyValue FromColor(StyleColor value) =>
         new(value.Value);
+
+    internal static PropertyValue FromPaint(Paint value)
+    {
+        if (value.Kind == PaintKind.None)
+        {
+            throw new ArgumentException("Paint value must be explicit.", nameof(value));
+        }
+
+        return new PropertyValue(value);
+    }
 
     public bool TryGetNumber(out double value)
     {
@@ -191,6 +216,13 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     {
         if (_kind != PropertyValueKind.Color) { value = default; return false; }
         value = new StyleColor(_colorValue);
+        return true;
+    }
+
+    public bool TryGetPaint(out Paint value)
+    {
+        if (_kind != PropertyValueKind.Paint) { value = default; return false; }
+        value = _paintValue;
         return true;
     }
 
@@ -234,11 +266,38 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.Color}.");
     }
 
-    public bool Equals(PropertyValue other) => _kind == other._kind && _uintValue == other._uintValue && _data0 == other._data0 && _colorValue == other._colorValue;
+    public Paint GetRequiredPaint()
+    {
+        if (TryGetPaint(out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.Paint}.");
+    }
+
+    public bool Equals(PropertyValue other) =>
+        _kind == other._kind
+        && _kind switch
+        {
+            PropertyValueKind.Number => _data0 == other._data0,
+            PropertyValueKind.Boolean or PropertyValueKind.ActionId => _uintValue == other._uintValue,
+            PropertyValueKind.Color => _colorValue == other._colorValue,
+            PropertyValueKind.Paint => _paintValue == other._paintValue,
+            _ => true
+        };
 
     public override bool Equals(object? obj) => obj is PropertyValue other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine((byte)_kind, _uintValue, _data0, _colorValue);
+    public override int GetHashCode() =>
+        _kind switch
+        {
+            PropertyValueKind.Number => HashCode.Combine((byte)_kind, _data0),
+            PropertyValueKind.Boolean or PropertyValueKind.ActionId => HashCode.Combine((byte)_kind, _uintValue),
+            PropertyValueKind.Color => HashCode.Combine((byte)_kind, _colorValue),
+            PropertyValueKind.Paint => HashCode.Combine((byte)_kind, _paintValue),
+            _ => 0
+        };
 
     public static bool operator ==(PropertyValue left, PropertyValue right) => left.Equals(right);
 
@@ -297,6 +356,26 @@ internal readonly struct StyleColorSlot(StyleColor Value, bool HasValue) : IEqua
     public static bool operator ==(StyleColorSlot left, StyleColorSlot right) => left.Equals(right);
 
     public static bool operator !=(StyleColorSlot left, StyleColorSlot right) => !left.Equals(right);
+}
+
+internal readonly struct PaintSlot(Paint Value, bool HasValue) : IEquatable<PaintSlot>
+{
+    public Paint Value { get; } = Value;
+    public bool HasValue { get; } = HasValue;
+
+    public static PaintSlot None => default;
+
+    public static PaintSlot Some(Paint value) => new(value, true);
+
+    public bool Equals(PaintSlot other) => Value == other.Value && HasValue == other.HasValue;
+
+    public override bool Equals(object? obj) => obj is PaintSlot other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Value, HasValue);
+
+    public static bool operator ==(PaintSlot left, PaintSlot right) => left.Equals(right);
+
+    public static bool operator !=(PaintSlot left, PaintSlot right) => !left.Equals(right);
 }
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key -> NodeKey) ─
@@ -481,7 +560,9 @@ public ref struct VirtualNodePropertyListBuilder
 
     public void AddScrollY(double value) => Add(VirtualNodeProperty.ScrollY(value));
 
-    internal void AddBackgroundColor(StyleColor value) => Add(VirtualNodeProperty.BackgroundColor(value));
+    public void AddBackground(Color value) => Add(VirtualNodeProperty.Background(value));
+
+    public void AddBackground(Paint value) => Add(VirtualNodeProperty.Background(value));
 
     internal void AddForegroundColor(StyleColor value) => Add(VirtualNodeProperty.ForegroundColor(value));
 
@@ -657,8 +738,18 @@ public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
     public static VirtualNodeProperty Focused(bool value) =>
         new(VirtualPropertyKey.IsFocused, PropertyValue.FromBoolean(value));
 
-    internal static VirtualNodeProperty BackgroundColor(StyleColor value) =>
-        new(VirtualPropertyKey.BackgroundColor, PropertyValue.FromColor(value));
+    public static VirtualNodeProperty Background(Color value) =>
+        Background(Paint.Solid(value));
+
+    public static VirtualNodeProperty Background(Paint value)
+    {
+        if (value.Kind == PaintKind.None)
+        {
+            throw new ArgumentException("Background paint must be explicit.", nameof(value));
+        }
+
+        return new VirtualNodeProperty(VirtualPropertyKey.Background, PropertyValue.FromPaint(value));
+    }
 
     internal static VirtualNodeProperty ForegroundColor(StyleColor value) =>
         new(VirtualPropertyKey.ForegroundColor, PropertyValue.FromColor(value));

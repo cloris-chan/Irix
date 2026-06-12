@@ -22,19 +22,20 @@ This keeps color values as values. Runtime output policy belongs to the material
 
 The active implementation now has the first internal SDR/sRGB color slice:
 
-- `Color` is an internal 16-byte canonical value storing linear BT.2020 / Rec.2020 RGBA with straight alpha.
-- `SrgbColor` is an internal 4-byte SDR bridge value used for sRGB import/export.
+- `Color` is a public 16-byte canonical value storing linear BT.2020 / Rec.2020 RGBA with straight alpha.
+- `SrgbColor` is a public 4-byte SDR bridge value used for sRGB import/export.
 - `StyleColor` wraps canonical `Color` and treats `FromArgb` / `Opaque` as sRGB authoring adapters.
-- `PropertyValue.Color` stores the canonical `Color` value instead of only a `uint ARGB` payload.
+- `Paint` is a public 36-byte semantic value for solid color and two-stop linear-gradient background authoring. Linear gradients select one of four element-bounds-relative directions and contain canonical `Color` stops.
+- `PropertyValue.Color` stores canonical foreground color, while `PropertyValue.Paint` stores semantic background paint.
 - `DrawCommand` stores an internal canonical color/material payload while preserving `DrawColor` as an SDR authoring/output view.
 - `DrawMaterial` is an internal material value over canonical `Color`; it currently supports solid color plus a renderer-owned two-stop linear gradient payload. D3D12 FillRect can rasterize clamp-free linear gradients through per-corner SDR vertex-color interpolation and preserves start/end clamp behavior through a bounded segmented fallback, while text, legacy window output, and unsupported material paths still use deterministic SDR fallback. `FrameDrawingResources` has an internal brush resource table for those shapes.
-- `DrawMaterialOutputDiagnostics` is the internal diagnostics-only status for the active SDR/sRGB material mapper: it reports selected material kind, backend material capability, fallback reason, and fallback counts without adding public material authoring or changing backend execute contracts.
+- `DrawMaterialOutputDiagnostics` is the internal diagnostics-only status for the active SDR/sRGB material mapper: it reports selected material kind, backend material capability, fallback reason, and fallback counts without exposing renderer policy or changing backend execute contracts.
 - `DrawColor` and `WindowColor` remain SDR/sRGB bridge payloads, not the canonical color value.
 
 The active renderer output is still the SDR/sRGB pipeline:
 
 ```text
-StyleColor / PropertyValue.Color: canonical Irix Color
+Color / Paint / PropertyValue: canonical authoring values
   -> DrawCommand canonical color payload
   -> sRGB downgrade at backend/output boundary
   -> DrawColor / WindowColor / D3D12 R8G8B8A8 output payload
@@ -44,24 +45,24 @@ StyleColor / PropertyValue.Color: canonical Irix Color
 
 `DrawColor` and `WindowColor` currently use compact 8-bit ARGB-like storage on the active output path. That storage is not the long-term definition of Irix color. It is the current SDR output representation and compatibility boundary while the renderer remains sRGB-only.
 
-The draw/material migration decision is now partially selected: draw commands carry canonical `Color` internally, the current SDR/sRGB output stage is named by an internal `ColorOutputMapping.SdrSrgb` mapper, and the current material/resource path has internal `DrawMaterial` payloads plus a brush table. Solid color and D3D12 FillRect linear gradient are the active D3D12 material capabilities. The first non-solid internal payload is a two-stop linear gradient value that preserves material identity for retained/layer-cache payloads; D3D12 FillRect rasterizes clamp-free fills as one rect with per-corner SDR vertex colors and uses a bounded segmented vertex-color fallback when start/end clamp boundaries cross the fill, while D3D12 text, legacy window output, and unsupported material paths collapse through deterministic SDR fallback. That capability/fallback split and the selected linear-gradient rasterization shape are diagnostics-visible through `DrawMaterialOutputDiagnostics` and the `Material output status` line. Image materials, public material authoring, and HDR output mapping remain deferred. The current D3D12 output path still maps to sRGB until the HDR path is implemented.
+The draw/material migration decision is now selected for the first public vertical slice: public `Color`, `SrgbColor`, and semantic `Paint` values feed `VirtualNodeProperty.Background`, while draw commands carry internal canonical `DrawMaterial` payloads and the current SDR/sRGB output stage remains an internal `ColorOutputMapping.SdrSrgb` mapper. The public slice supports solid backgrounds and two-stop edge-to-edge linear gradients in four element-bounds-relative directions. Draw recording resolves that semantic direction against the actual layout bounds, stores the resulting command-local logical start/end points in an internal `DrawMaterial`, and retains the same material in the frame brush table. D3D12 FillRect rasterizes the gradient through per-corner SDR vertex colors, while legacy window output and unsupported paths collapse through the deterministic canonical-color midpoint fallback. Image materials, radial gradients, shared material tokens, arbitrary stops/transforms, and HDR output mapping remain deferred.
 
-A source guard now pins that deferral: `DrawMaterial`, `DrawPoint`, `DrawMaterialBackendCapabilities`, `ResourceHandle` brush handles, and `IFrameBrushResolver` remain internal; `DrawMaterialKind` is limited to `None`, `SolidColor`, and `LinearGradient`; and style/property authoring does not expose brush, material, gradient, or image value factories. The public material authoring policy preflight in [Style-System.md](Style-System.md) fixes the future UI boundary as semantic paint intent rather than renderer-owned material objects. This guard chooses only the first internal value shape, not the future public material model.
+A source guard pins the boundary: `DrawMaterial`, `DrawPoint`, `DrawMaterialBackendCapabilities`, `ResourceHandle` brush handles, and `IFrameBrushResolver` remain internal; `DrawMaterialKind` is limited to `None`, `SolidColor`, and `LinearGradient`; and public authoring exposes semantic `Paint` plus `VirtualNodeProperty.Background` without exposing renderer materials, brush handles, backend capabilities, radial gradients, or images.
 
 ## Non-Solid Material Policy Preflight
 
-Non-solid material authoring remains design-gated; the first internal non-solid payload is implemented only as a renderer-owned linear gradient shape. `DrawMaterialKind` must not grow beyond `None`, `SolidColor`, and `LinearGradient`, and public/style authoring must not expose brush, material, gradient, or image factories, until a dedicated material policy slice selects and guards all of these contracts:
+The first non-solid material policy slice is implemented for public two-stop linear-gradient background paint. `DrawMaterialKind` remains limited to `None`, `SolidColor`, and `LinearGradient`; radial gradients, images, shared material resources, arbitrary stop collections, and material transforms remain design-gated.
 
-- Material identity and lifetime: the current linear gradient payload is value-typed and frame/retained-frame scoped through `DrawMaterial` and `FrameDrawingResources`; future image/shared/backend-owned resources still need explicit lifetime and release rules.
-- Coordinate space: the current linear gradient stores command-space logical start/end points and composes with the command/layer transform by preserving payload identity; future image sampling rects, tiling, material transforms, and physical-pixel backend policies remain unselected.
+- Material identity and lifetime: public `Paint` and internal `DrawMaterial` are unmanaged values. Gradient recording adds the material to `FrameDrawingResources`; retained frames retain that resource snapshot, and layer-cache payloads retain the resolved material value. Future image/shared/backend-owned resources still need explicit lifetime and release rules.
+- Coordinate space: public directions are relative to the painted element bounds. Draw recording resolves them to fill-local logical points: left-to-right `(0,0)->(width,0)`, top-to-bottom `(0,0)->(0,height)`, and the two corner diagonals. Display scale and layer transforms remain backend/compositor operations over that command-local payload.
 - Color interpolation: the current linear gradient stores two canonical Irix `Color` stops. D3D12 FillRect samples those stops at rect corners in fill-local command-space and emits per-corner SDR vertex colors through `ColorOutputMapping.SdrSrgb`; the existing shader interpolates those vertex colors. The supported single-rect path reports its internal representative color from the fill-local center sample, keeping background/diagnostic color aligned with the rendered gradient rather than the unsupported-path fallback midpoint. Degenerate D3D12 FillRect gradients whose start and end points are equal rasterize as the start stop on the supported single-rect path. When the start or end clamp boundary crosses the fill rect, D3D12 keeps a bounded segmented vertex-color fallback so the active path does not flatten clamp plateaus into a single unconstrained ramp. The active SDR/sRGB backend path may collapse unsupported non-solid materials through a deterministic `DrawMaterial.FallbackColor` linear BT.2020 midpoint before sRGB output; broader gradient rasterization must later name interpolation, alpha handling, gamut clipping, and backend approximation policy.
-- Invalidation: material changes must classify whether they require layout, text shaping, draw command update, composition property update, layer-cache invalidation, or full fallback.
+- Invalidation: background paint is a visual property. Paint changes require draw-command update and naturally change command/resource identity for retained and layer-cache invalidation, without changing layout or text shaping.
 - Backend capability and fallback: the D3D12-first FillRect path currently exposes solid-color plus linear-gradient material backend capability using single-rect per-corner interpolation when clamp-free and bounded segmented fallback when clamp boundaries cross the fill. D3D12 text, legacy window output, image/radial/future materials, and unsupported non-solid paths must map through deterministic fallback before Vulkan/Metal, richer rasterization, or public authoring names are introduced.
 - Diagnostics and tests: selected material kind, backend material capability, fallback reason, fallback counts, linear-gradient single-rect versus segmented rasterization counters, layer-cache reuse/invalidations, and SDR output mapping must be observable enough to protect the active SDR/sRGB path.
 
-Until public material authoring lands, non-solid materials stay out of `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring. Image handles and `DrawingResourceKind.Image` may remain low-level drawing/resource placeholders, but they are not style materials.
+The implemented slice stores background paint in `StyleValue`, `PropertyValue.Paint`, and `VirtualPropertyKey.Background`. Foreground remains a canonical color property. Image handles and `DrawingResourceKind.Image` remain low-level drawing/resource placeholders, not public style materials.
 
-The public material authoring policy preflight is now selected at the style boundary: future UI authoring may describe semantic paint slots and material tokens, but it must not accept `DrawMaterial`, backend capabilities, output mapping kinds, brush `ResourceHandle` values, or resolver interfaces. Public material authoring still requires dedicated implementation after resource lifetime, coordinate/sampling, invalidation, backend fallback, diagnostics, and SDR/HDR output separation are guarded.
+The public material authoring policy is now implemented for the first background paint slice: UI authoring describes semantic `Paint`, never `DrawMaterial`, backend capabilities, output mapping kinds, brush `ResourceHandle` values, or resolver interfaces. Richer material resources still require dedicated slices.
 
 ## Canonical Color Contract
 
@@ -164,7 +165,7 @@ When a window spans multiple screens, the first implementation may choose a domi
 - No HDR swapchain implementation in the current stage.
 - No Rec.2100 HLG/PQ output implementation in the current stage.
 - No per-monitor color-profile mapper in the current stage.
-- No public color API migration in this document.
+- No public radial-gradient, image-paint, shared material-resource, or arbitrary-stop implementation in the current stage.
 - No tone-mapping policy stored inside `Color`.
 - No source color-space metadata stored inside `Color`.
 - No replacement of the D3D12 rectangle/GlyphAtlas passes as part of this design note.
@@ -178,14 +179,14 @@ The current SDR/sRGB code slice is acceptable when:
 - Conversion back to sRGB preserves current SDR behavior for existing UI colors within a narrow tolerance.
 - Draw commands retain canonical color payload internally while preserving existing SDR output behavior.
 - Current backend/window output converts canonical colors through the internal `ColorOutputMapping.SdrSrgb` stage.
-- Internal solid-color material/resource shape exists without exposing public material authoring.
+- Public canonical `Color`/`SrgbColor` values and semantic `Paint` authoring exist without exposing renderer-owned materials.
 - The first internal linear-gradient material payload preserves identity through draw commands, frame brush resources, and D3D12 layer-cache payloads; D3D12 FillRect now rasterizes clamp-free fills through per-corner SDR vertex-color interpolation with center-sample representative color, treats degenerate equal-point gradients as start-color single rects, uses bounded segmented fallback for clamp-crossing fills, and reports the selected rasterization shape while unsupported paths use deterministic fallback.
 - Material output diagnostics report selected material kind, backend capability, fallback reason, and fallback counts for direct and D3D12 layer-cache execution paths.
-- Source guards keep public style/property authoring free of brush/material/gradient/image factories while the internal material shape remains limited to solid color and linear gradient.
+- Source guards allow only semantic solid/two-stop linear-gradient background paint while keeping brush/material/radial-gradient/image factories and renderer-owned payloads out of the public API.
 - A non-solid material policy preflight documents the required lifetime, coordinate, interpolation, invalidation, backend fallback, and diagnostics contracts before broader gradient/image material implementation can start.
-- A public material authoring policy preflight documents that future UI authoring must describe semantic paint intent rather than expose renderer-owned `DrawMaterial`, brush resource handles, backend capability flags, or output mapping policy.
+- The public material authoring policy restricts UI authoring to semantic paint intent and excludes renderer-owned `DrawMaterial`, brush resource handles, backend capability flags, and output mapping policy.
 - An HDR output mapping preflight documents the required output mapping context, screen-region policy, SDR white/tone mapping, swapchain capability, backend payload format, diagnostics, and fallback contracts before HDR output implementation can start.
 - `DrawColor` and `WindowColor` are documented and guarded as SDR bridge/output payloads, not canonical Irix color.
 - HDR policy remains unimplemented but has a clear output mapping owner.
 
-Current status: implemented for internal style/property color, the draw-command payload bridge, the current SDR/sRGB output mapper, the internal solid-color material/resource path, the first internal linear-gradient material payload, D3D12 FillRect linear-gradient per-corner SDR rasterization with bounded clamp fallback and rasterization-shape diagnostics, material output diagnostics/backend capability visibility for the active D3D12 SDR path, the public material-authoring deferral guard and policy preflight, the non-solid material policy preflight, and the HDR output mapping preflight. Public material authoring implementation, richer gradient/image material implementation, and HDR backend output mapping remain future work.
+Current status: implemented for public canonical color values, public semantic solid/two-stop linear-gradient background paint, style/property storage, retained frame brush resources, the draw-command payload bridge, D3D12 FillRect rasterization, deterministic legacy fallback, the current SDR/sRGB output mapper, material diagnostics, and the HDR output mapping preflight. Richer gradient/image/shared material authoring and HDR backend output mapping remain future work.

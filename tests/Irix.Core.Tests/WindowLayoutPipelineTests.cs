@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Platform.Windows;
 using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
@@ -149,13 +150,13 @@ public sealed class WindowLayoutPipelineTests
             new LayoutElement(
                 LayoutElementKind.Rectangle,
                 new PixelRectangle(16, 60, 160, 48),
-                BackgroundColor: StyleColorSlot.Some(StyleColor.FromArgb(0, 4, 5, 6))),
+                Background: PaintSlot.Some(Paint.Solid(StyleColor.FromArgb(0, 4, 5, 6).Value))),
             new LayoutElement(
                 LayoutElementKind.Button,
                 new PixelRectangle(16, 120, 140, 40),
                 Text: buttonText,
                 ActionId: new ActionId(1),
-                BackgroundColor: StyleColorSlot.Some(StyleColor.Opaque(7, 8, 9)),
+                Background: PaintSlot.Some(Paint.Solid(StyleColor.Opaque(7, 8, 9).Value)),
                 ForegroundColor: StyleColorSlot.Some(StyleColor.Opaque(10, 11, 12)))
         };
 
@@ -314,6 +315,92 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal("Count: 0", frame.Resources.Resolve(frame.Commands.Memory.Span[0].Text).ToString());
         Assert.Equal("Increment", frame.Resources.Resolve(frame.Commands.Memory.Span[2].Text).ToString());
         Assert.Equal(TextStyle.Default, frame.Resources.ResolveTextStyle(frame.Commands.Memory.Span[0].Resource));
+    }
+
+    [Fact]
+    public void Public_linear_gradient_authoring_reaches_retained_material_d3d12_and_legacy_fallback()
+    {
+        var start = Color.FromSrgb(255, 0, 0);
+        var end = Color.FromSrgb(0, 255, 0);
+        var root = VirtualNodeFactory.Rectangle(
+            new NodeKey(1),
+            VirtualNodeProperty.Width(120),
+            VirtualNodeProperty.Height(48),
+            VirtualNodeProperty.Background(Paint.LinearGradient(
+                start,
+                end,
+                LinearGradientDirection.TopRightToBottomLeft)));
+        var pipeline = new RenderPipeline(RenderStylePreset.Default);
+
+        using var frame = pipeline.Build(
+            root,
+            new PixelRectangle(0, 0, 320, 200),
+            textSnapshot: _arena.GetOrCreateSnapshot());
+
+        var command = Assert.Single(frame.Commands.Memory.Span.ToArray());
+        Assert.Equal(DrawCommandKind.FillRect, command.Kind);
+        Assert.Equal(DrawMaterialKind.LinearGradient, command.Material.Kind);
+        Assert.Equal(start, command.Material.Color);
+        Assert.Equal(end, command.Material.EndColor);
+        Assert.Equal(new DrawPoint(120, 0), command.Material.StartPoint);
+        Assert.Equal(new DrawPoint(0, 48), command.Material.EndPoint);
+        Assert.Equal(DrawingResourceKind.Brush, command.Resource.Kind);
+        Assert.Equal(command.Material, ((IFrameBrushResolver)frame.Resources).ResolveBrush(command.Resource));
+
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        var d3d12 = D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 320, 200),
+            frame.Commands.Memory.Span,
+            frame.Resources,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.Equal(DrawMaterialKind.LinearGradient, d3d12.MaterialDiagnostics.SelectedMaterialKind);
+        Assert.False(d3d12.MaterialDiagnostics.FallbackApplied);
+        Assert.Equal(1, d3d12.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, d3d12.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(0, d3d12.MaterialDiagnostics.FallbackCommandCount);
+        Assert.Single(rects.Span.ToArray());
+
+        var legacy = new WindowBackend().Build(frame.Commands.Memory.Span, frame.HitTargets, frame.Resources);
+        var expected = ColorOutputMapping.SdrSrgb.MapToSdr(command.Material);
+        var legacyElement = Assert.Single(legacy.Elements);
+        Assert.Equal(new WindowColor(expected.A, expected.R, expected.G, expected.B), legacyElement.BackgroundColor);
+    }
+
+    [Theory]
+    [InlineData(LinearGradientDirection.LeftToRight, 0f, 0f, 120f, 0f)]
+    [InlineData(LinearGradientDirection.TopToBottom, 0f, 0f, 0f, 48f)]
+    [InlineData(LinearGradientDirection.TopLeftToBottomRight, 0f, 0f, 120f, 48f)]
+    [InlineData(LinearGradientDirection.TopRightToBottomLeft, 120f, 0f, 0f, 48f)]
+    public void Public_linear_gradient_direction_resolves_against_element_bounds(
+        LinearGradientDirection direction,
+        float startX,
+        float startY,
+        float endX,
+        float endY)
+    {
+        var root = VirtualNodeFactory.Rectangle(
+            new NodeKey(1),
+            VirtualNodeProperty.Width(120),
+            VirtualNodeProperty.Height(48),
+            VirtualNodeProperty.Background(Paint.LinearGradient(
+                Color.FromSrgb(255, 0, 0),
+                Color.FromSrgb(0, 255, 0),
+                direction)));
+        var pipeline = new RenderPipeline(RenderStylePreset.Default);
+
+        using var frame = pipeline.Build(
+            root,
+            new PixelRectangle(0, 0, 320, 200),
+            textSnapshot: _arena.GetOrCreateSnapshot());
+
+        var material = Assert.Single(frame.Commands.Memory.Span.ToArray()).Material;
+        Assert.Equal(new DrawPoint(startX, startY), material.StartPoint);
+        Assert.Equal(new DrawPoint(endX, endY), material.EndPoint);
     }
 
     [Fact]
@@ -870,8 +957,8 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(missingSnapshot, missingSnapshotRuntime.LastResult);
 
         var drawOwnedCompositor = new RecordingStyleTransitionCompositorAdapter();
-        VirtualNodeProperty[] drawOwnedPrevious = [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3))];
-        VirtualNodeProperty[] drawOwnedNext = [VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6))];
+        VirtualNodeProperty[] drawOwnedPrevious = [VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3))];
+        VirtualNodeProperty[] drawOwnedNext = [VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6))];
         var drawOwnedRuntime = new SingleStyleTransitionRuntimeAdapter(StyleTransitionRuntimeDecision.Start(
             new NodeKey(22),
             drawOwnedPrevious,
@@ -915,8 +1002,8 @@ public sealed class WindowLayoutPipelineTests
             StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23)),
             StyleTransitionRuntimeDecision.Start(
                 new NodeKey(23),
-                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)) },
-                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)) },
+                new[] { VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3)) },
+                new[] { VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6)) },
                 CompositionTimestamp.FromStopwatchTicks(100),
                 CompositionDuration.FromStopwatchTicks(50),
                 CompositionAnimationEasing.SineOut,
@@ -1241,8 +1328,8 @@ public sealed class WindowLayoutPipelineTests
             StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23)),
             StyleTransitionRuntimeDecision.Start(
                 new NodeKey(23),
-                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)) },
-                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)) },
+                new[] { VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3)) },
+                new[] { VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6)) },
                 CompositionTimestamp.FromStopwatchTicks(100),
                 CompositionDuration.FromStopwatchTicks(50),
                 CompositionAnimationEasing.SineOut,
@@ -1514,8 +1601,8 @@ public sealed class WindowLayoutPipelineTests
             StyleTransitionOwnerKey.ControlState(ActionIdRegistry.Decrement, new NodeKey(23)),
             StyleTransitionRuntimeDecision.Start(
                 new NodeKey(23),
-                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(1, 2, 3)) },
-                new[] { VirtualNodeProperty.BackgroundColor(StyleColor.Opaque(4, 5, 6)) },
+                new[] { VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3)) },
+                new[] { VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6)) },
                 CompositionTimestamp.FromStopwatchTicks(100),
                 CompositionDuration.FromStopwatchTicks(50),
                 CompositionAnimationEasing.SineOut,

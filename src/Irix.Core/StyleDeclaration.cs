@@ -34,17 +34,23 @@ internal readonly struct StyleValue : IEquatable<StyleValue>
 
     public static StyleValue FromColor(StyleColor value) => new(PropertyValue.FromColor(value));
 
+    public static StyleValue FromPaint(Paint value) => new(PropertyValue.FromPaint(value));
+
     public bool TryGetNumber(out double value) => _value.TryGetNumber(out value);
 
     public bool TryGetBoolean(out bool value) => _value.TryGetBoolean(out value);
 
     public bool TryGetColor(out StyleColor value) => _value.TryGetColor(out value);
 
+    public bool TryGetPaint(out Paint value) => _value.TryGetPaint(out value);
+
     public double GetRequiredNumber() => _value.GetRequiredNumber();
 
     public bool GetRequiredBoolean() => _value.GetRequiredBoolean();
 
     public StyleColor GetRequiredColor() => _value.GetRequiredColor();
+
+    public Paint GetRequiredPaint() => _value.GetRequiredPaint();
 
     internal PropertyValue ToPropertyValue() => _value;
 
@@ -92,7 +98,9 @@ internal readonly struct StyleDeclaration : IEquatable<StyleDeclaration>
 
     public static StyleDeclaration Height(double value) => Create(StylePropertyId.Height, StyleValue.FromNumber(value));
 
-    public static StyleDeclaration Background(StyleColor value) => Create(StylePropertyId.Background, StyleValue.FromColor(value));
+    public static StyleDeclaration Background(StyleColor value) => Background(Paint.Solid(value.Value));
+
+    public static StyleDeclaration Background(Paint value) => Create(StylePropertyId.Background, StyleValue.FromPaint(value));
 
     public static StyleDeclaration Foreground(StyleColor value) => Create(StylePropertyId.Foreground, StyleValue.FromColor(value));
 
@@ -113,7 +121,7 @@ internal readonly struct StyleDeclaration : IEquatable<StyleDeclaration>
         {
             StylePropertyId.Width => VirtualNodeProperty.Width(Value.GetRequiredNumber()),
             StylePropertyId.Height => VirtualNodeProperty.Height(Value.GetRequiredNumber()),
-            StylePropertyId.Background => VirtualNodeProperty.BackgroundColor(Value.GetRequiredColor()),
+            StylePropertyId.Background => VirtualNodeProperty.Background(Value.GetRequiredPaint()),
             StylePropertyId.Foreground => VirtualNodeProperty.ForegroundColor(Value.GetRequiredColor()),
             StylePropertyId.Opacity => VirtualNodeProperty.LayerOpacity(Value.GetRequiredNumber()),
             StylePropertyId.TranslationX => VirtualNodeProperty.TranslateX(Value.GetRequiredNumber()),
@@ -138,7 +146,8 @@ internal readonly struct StyleDeclaration : IEquatable<StyleDeclaration>
         propertyId switch
         {
             StylePropertyId.Width or StylePropertyId.Height or StylePropertyId.Opacity or StylePropertyId.TranslationX or StylePropertyId.TranslationY => PropertyValueKind.Number,
-            StylePropertyId.Background or StylePropertyId.Foreground => PropertyValueKind.Color,
+            StylePropertyId.Background => PropertyValueKind.Paint,
+            StylePropertyId.Foreground => PropertyValueKind.Color,
             StylePropertyId.Hovered or StylePropertyId.Pressed or StylePropertyId.Focused => PropertyValueKind.Boolean,
             _ => PropertyValueKind.None,
         };

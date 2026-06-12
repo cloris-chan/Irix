@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace Irix;
 
 [StructLayout(LayoutKind.Sequential, Size = 16)]
-internal readonly struct Color : IEquatable<Color>
+public readonly struct Color : IEquatable<Color>
 {
     private const double SrgbToBt2020Rr = 0.6274038959346994;
     private const double SrgbToBt2020Rg = 0.3292830383778849;
@@ -178,7 +178,7 @@ internal readonly struct Color : IEquatable<Color>
     }
 }
 
-internal readonly struct SrgbColor(uint Argb) : IEquatable<SrgbColor>
+public readonly struct SrgbColor(uint Argb) : IEquatable<SrgbColor>
 {
     public uint Argb { get; } = Argb;
 

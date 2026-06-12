@@ -2914,7 +2914,7 @@ public sealed partial class ProgramDiagnosticsTests
 
     [Fact]
     [Trait("Category", "DocGuard")]
-    public void Non_solid_material_policy_preflight_is_documented_and_source_guarded()
+    public void Public_semantic_linear_gradient_slice_is_documented_and_source_guarded()
     {
         var root = FindRepoRoot();
         var colorDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Color-Pipeline.md")));
@@ -2923,16 +2923,16 @@ public sealed partial class ProgramDiagnosticsTests
         var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
 
         Assert.Contains("## Non-Solid Material Policy Preflight", colorDesign);
-        Assert.Contains("Non-solid material authoring remains design-gated; the first internal non-solid payload is implemented only as a renderer-owned linear gradient shape.", colorDesign);
+        Assert.Contains("The first non-solid material policy slice is implemented for public two-stop linear-gradient background paint.", colorDesign);
         Assert.Contains("Material identity and lifetime", colorDesign);
         Assert.Contains("Coordinate space", colorDesign);
         Assert.Contains("Color interpolation", colorDesign);
         Assert.Contains("Invalidation", colorDesign);
         Assert.Contains("Backend capability and fallback", colorDesign);
         Assert.Contains("Diagnostics and tests", colorDesign);
-        Assert.Contains("Until public material authoring lands, non-solid materials stay out of `StyleValue`, `PropertyValue`, `VirtualPropertyKey`, and public UI style authoring.", colorDesign);
+        Assert.Contains("The implemented slice stores background paint in `StyleValue`, `PropertyValue.Paint`, and `VirtualPropertyKey.Background`.", colorDesign);
         Assert.Contains("The active SDR/sRGB backend path may collapse unsupported non-solid materials through a deterministic `DrawMaterial.FallbackColor`", colorDesign);
-        Assert.Contains("The public material authoring policy preflight is now selected at the style boundary", colorDesign);
+        Assert.Contains("The public material authoring policy is now implemented for the first background paint slice", colorDesign);
         Assert.Contains("linear-gradient single-rect versus segmented rasterization counters", colorDesign);
         Assert.Contains("linearGradientSingleRectCommands", colorDesign);
         Assert.Contains("linearGradientSegmentedCommands", colorDesign);
@@ -2943,24 +2943,28 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("treats degenerate equal-point gradients as start-color single rects", colorDesign);
 
         Assert.Contains("## Public Material Authoring Policy Preflight", styleDesign);
-        Assert.Contains("Non-solid visual material authoring is blocked on the policy preflight", styleDesign);
-        Assert.Contains("future public authoring layer may describe semantic paint intent", styleDesign);
+        Assert.Contains("The first material authoring slice is implemented at the public/style boundary.", styleDesign);
+        Assert.Contains("Public UI code describes background paint through `Paint` and `VirtualNodeProperty.Background`", styleDesign);
         Assert.Contains("Semantic token boundary", styleDesign);
         Assert.Contains("Resource lifetime", styleDesign);
         Assert.Contains("Coordinate and sampling policy", styleDesign);
         Assert.Contains("Invalidation policy", styleDesign);
         Assert.Contains("Backend fallback policy", styleDesign);
         Assert.Contains("Output mapping separation", styleDesign);
-        Assert.Contains("Until those gates are implemented and guarded, public/style authoring remains limited to semantic colors for background/foreground", styleDesign);
-        Assert.Contains("internal solid-color and first linear-gradient `DrawMaterial`/brush resource shapes exist", status);
-        Assert.Contains("center-sample representative color", status);
-        Assert.Contains("treats degenerate equal-point gradients as start-color single rects", status);
-        Assert.Contains("D3D12 material output diagnostics expose selected material kind/backend capability/fallback reason/fallback counts plus linear-gradient single-rect versus segmented rasterization counters", status);
-        Assert.Contains("public material authoring is guard-deferred from style/property APIs and now has a policy preflight", status);
-        Assert.Contains("Internal solid-color and linear-gradient material payloads exist", worklist);
-        Assert.Contains("material output diagnostics now distinguish single-rect versus segmented linear-gradient rasterization", worklist);
-        Assert.Contains("public material authoring remains guard-deferred but now has a policy preflight", worklist);
+        Assert.Contains("The accepted surface is intentionally narrow: solid and two-stop directional linear-gradient background paint.", styleDesign);
+        Assert.Contains("The first public semantic paint vertical slice is implemented.", status);
+        Assert.Contains("Draw recording resolves semantic directions against actual layout bounds", status);
+        Assert.Contains("D3D12 FillRect rasterizes the gradient through per-corner SDR vertex colors and material diagnostics", status);
+        Assert.Contains("legacy window output and unsupported paths use deterministic canonical midpoint fallback", status);
+        Assert.Contains("public canonical `Color`/`SrgbColor` values and semantic `Paint`", worklist);
+        Assert.Contains("frame brush retention", worklist);
+        Assert.Contains("deterministic legacy fallback", worklist);
 
+        Assert.True(typeof(Color).IsPublic);
+        Assert.True(typeof(SrgbColor).IsPublic);
+        Assert.True(typeof(Paint).IsPublic);
+        Assert.True(typeof(PaintKind).IsPublic);
+        Assert.True(typeof(LinearGradientDirection).IsPublic);
         Assert.False(typeof(DrawMaterialKind).IsPublic);
         Assert.False(typeof(DrawMaterial).IsPublic);
         Assert.False(typeof(DrawPoint).IsPublic);
@@ -3023,8 +3027,8 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("Until that slice lands, HDR output stays out of `ColorOutputMapping`, `DrawColor`, `WindowColor`, `DrawCommand`, D3D12 swapchain selection, D3D12 PSO render-target formats, and public style/color authoring.", colorDesign);
 
         Assert.Contains("The HDR output mapping preflight in [Color-Pipeline.md](Color-Pipeline.md) is the gate for changing this backend", d3d12Design);
-        Assert.Contains("HDR output mapping preflight is documented and guard-covered", status);
-        Assert.Contains("HDR output mapping preflight names the output context, screen-region, SDR white/tone mapping, swapchain capability, payload format, diagnostics, and fallback contracts", worklist);
+        Assert.Contains("HDR backend/compositor output mapping", status);
+        Assert.Contains("HDR output mapping behind dedicated contracts", worklist);
 
         Assert.Equal(["SdrSrgb"], Enum.GetNames<ColorOutputKind>());
         Assert.Contains("DXGI_FORMAT.DXGI_FORMAT_R8G8B8A8_UNORM", d3d12RendererSource);
