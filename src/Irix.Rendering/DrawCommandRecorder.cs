@@ -55,7 +55,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                 FrameDrawingResources.Empty);
         }
 
-        var maximumCommandCount = elements.Count * 2;
+        var maximumCommandCount = elements.Count * 3;
         OnRecordAllocationPhaseStarted();
         var resources = FrameDrawingResources.Rent();
         OnRecordResourcesAllocated();
@@ -176,12 +176,17 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                         Color: ResolveColor(element.ForegroundColor, style.TextColor));
                     break;
                 case LayoutElementKind.Rectangle:
+                    var rectangleBounds = ToDrawRect(element.Bounds);
                     commands[commandCount++] = CreateFillCommand(
                         resources,
-                        ToDrawRect(element.Bounds),
+                        rectangleBounds,
                         clip,
                         element.Background,
                         style.RectangleFillColor);
+                    if (element.Border.HasValue)
+                    {
+                        commands[commandCount++] = CreateBorderCommand(resources, rectangleBounds, clip, element.Border.Value);
+                    }
                     break;
                 case LayoutElementKind.Button:
                     var bounds = ToDrawRect(element.Bounds);
@@ -191,6 +196,10 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
                         clip,
                         element.Background,
                         visualStateResolver.ResolveButtonFillColor(style, element.ButtonState));
+                    if (element.Border.HasValue)
+                    {
+                        commands[commandCount++] = CreateBorderCommand(resources, bounds, clip, element.Border.Value);
+                    }
                     var buttonSpan = ResolveText(element.Text, textSnapshot);
                     if (!buttonSpan.IsEmpty)
                     {
@@ -269,6 +278,38 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
             Rect: bounds,
             Resource: resources.AddBrush(material),
             ClipBounds: clip,
+            Material: material);
+    }
+
+    private static DrawCommand CreateBorderCommand(
+        FrameDrawingResources resources,
+        DrawRect bounds,
+        DrawRect clip,
+        BorderStroke border)
+    {
+        var paint = border.Paint;
+        if (paint.TryGetSolidColor(out var color))
+        {
+            return DrawCommand.FromCanonicalColor(
+                DrawCommandKind.StrokeRect,
+                Rect: bounds,
+                ClipBounds: clip,
+                StrokeWidth: border.Thickness,
+                Color: color);
+        }
+
+        if (!paint.TryGetLinearGradient(out var startColor, out var endColor, out var direction))
+        {
+            throw new InvalidOperationException($"Unsupported border paint kind {paint.Kind}.");
+        }
+
+        var material = CreateLinearGradientMaterial(startColor, endColor, direction, bounds);
+        return DrawCommand.FromMaterial(
+            DrawCommandKind.StrokeRect,
+            Rect: bounds,
+            Resource: resources.AddBrush(material),
+            ClipBounds: clip,
+            StrokeWidth: border.Thickness,
             Material: material);
     }
 

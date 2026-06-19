@@ -302,7 +302,7 @@ internal sealed class D3D12CompositionLayerContent
         for (var i = 0; i < commands.Length; i++)
         {
             var command = commands[i];
-            if (command.Kind == DrawCommandKind.FillRect)
+            if (command.Kind is DrawCommandKind.FillRect or DrawCommandKind.StrokeRect)
             {
                 rectCount++;
             }
@@ -319,9 +319,14 @@ internal sealed class D3D12CompositionLayerContent
         for (var i = 0; i < commands.Length; i++)
         {
             var command = commands[i];
-            if (command.Kind == DrawCommandKind.FillRect)
+            if (command.Kind is DrawCommandKind.FillRect or DrawCommandKind.StrokeRect)
             {
-                rects[rectIndex++] = new D3D12CompositionLayerRectPayload(command.Rect, command.Material, command.ClipBounds);
+                rects[rectIndex++] = new D3D12CompositionLayerRectPayload(
+                    command.Kind,
+                    command.Rect,
+                    command.Material,
+                    command.ClipBounds,
+                    command.StrokeWidth);
             }
             else if (command.Kind == DrawCommandKind.DrawTextRun)
             {
@@ -341,19 +346,28 @@ internal sealed class D3D12CompositionLayerContent
 }
 
 internal readonly struct D3D12CompositionLayerRectPayload(
+    DrawCommandKind Kind,
     DrawRect Rect,
     DrawMaterial Material,
-    DrawRect ClipBounds) : IEquatable<D3D12CompositionLayerRectPayload>
+    DrawRect ClipBounds,
+    float StrokeWidth) : IEquatable<D3D12CompositionLayerRectPayload>
 {
+    public DrawCommandKind Kind { get; } = Kind;
     public DrawRect Rect { get; } = Rect;
     public DrawMaterial Material { get; } = Material;
     public DrawRect ClipBounds { get; } = ClipBounds;
+    public float StrokeWidth { get; } = StrokeWidth;
 
-    public bool Equals(D3D12CompositionLayerRectPayload other) => Rect == other.Rect && Material == other.Material && ClipBounds == other.ClipBounds;
+    public bool Equals(D3D12CompositionLayerRectPayload other) =>
+        Kind == other.Kind
+        && Rect == other.Rect
+        && Material == other.Material
+        && ClipBounds == other.ClipBounds
+        && StrokeWidth.Equals(other.StrokeWidth);
 
     public override bool Equals(object? obj) => obj is D3D12CompositionLayerRectPayload other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Rect, Material, ClipBounds);
+    public override int GetHashCode() => HashCode.Combine(Kind, Rect, Material, ClipBounds, StrokeWidth);
 
     public static bool operator ==(D3D12CompositionLayerRectPayload left, D3D12CompositionLayerRectPayload right) => left.Equals(right);
 
@@ -710,7 +724,7 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             var command = ScaleCommandToPhysicalPixels(logicalCommand, scale);
             diagnostics.AddCommandClip(command);
 
-            if (command.Kind != DrawCommandKind.FillRect)
+            if (command.Kind is not (DrawCommandKind.FillRect or DrawCommandKind.StrokeRect))
             {
                 continue;
             }
@@ -908,6 +922,23 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                     ref hasBackgroundColor,
                     ref backgroundColor);
                 break;
+            case DrawCommandKind.StrokeRect:
+                var strokeMaterial = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
+                var normalizedScale = scale.Normalize();
+                diagnostics.AddMaterialOutput(strokeMaterial);
+                AppendPhysicalStrokeMaterialRect(
+                    clipMode,
+                    viewport,
+                    command.Rect,
+                    command.Material,
+                    strokeMaterial,
+                    outputMapping,
+                    command.ClipBounds,
+                    command.StrokeWidth * normalizedScale.ScaleX,
+                    command.StrokeWidth * normalizedScale.ScaleY,
+                    rects,
+                    ref diagnostics);
+                break;
             case DrawCommandKind.DrawTextRun:
                 var textMaterial = outputMapping.MapToSdr(command.Material, D3D12TextMaterialCapabilities);
                 diagnostics.AddMaterialOutput(textMaterial);
@@ -967,6 +998,86 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             ref diagnostics,
             ref hasBackgroundColor,
             ref backgroundColor);
+    }
+
+    private static void AppendPhysicalStrokeMaterialRect(
+        DrawingBackendClipMode clipMode,
+        in DrawRect viewport,
+        in DrawRect rect,
+        in DrawMaterial material,
+        in DrawMaterialOutputMappingResult mappedMaterial,
+        ColorOutputMapping outputMapping,
+        in DrawRect clipBounds,
+        float strokeWidthX,
+        float strokeWidthY,
+        FrameRenderList<D3D12Renderer2D.RectData> rects,
+        ref ExecuteDiagnosticsAccumulator diagnostics)
+    {
+        if (rect.Width <= 0f
+            || rect.Height <= 0f
+            || !float.IsFinite(strokeWidthX)
+            || !float.IsFinite(strokeWidthY)
+            || strokeWidthX <= 0f
+            || strokeWidthY <= 0f)
+        {
+            return;
+        }
+
+        var scissorPlan = ResolveFillRectScissor(clipMode, viewport, clipBounds);
+        diagnostics.AddFillRectPlan(clipMode, scissorPlan);
+        if (scissorPlan.Skip)
+        {
+            return;
+        }
+
+        var thicknessX = MathF.Min(strokeWidthX, rect.Width * 0.5f);
+        var thicknessY = MathF.Min(strokeWidthY, rect.Height * 0.5f);
+        Span<DrawRect> edges = stackalloc DrawRect[4];
+        Span<DrawPoint> sampleOrigins = stackalloc DrawPoint[4];
+        var edgeCount = 0;
+
+        edges[edgeCount] = new DrawRect(rect.X, rect.Y, rect.Width, thicknessY);
+        sampleOrigins[edgeCount++] = new DrawPoint(0f, 0f);
+
+        edges[edgeCount] = new DrawRect(rect.X, rect.Y + rect.Height - thicknessY, rect.Width, thicknessY);
+        sampleOrigins[edgeCount++] = new DrawPoint(0f, rect.Height - thicknessY);
+
+        var verticalEdgeHeight = rect.Height - (thicknessY * 2f);
+        if (verticalEdgeHeight > 0f)
+        {
+            edges[edgeCount] = new DrawRect(rect.X, rect.Y + thicknessY, thicknessX, verticalEdgeHeight);
+            sampleOrigins[edgeCount++] = new DrawPoint(0f, thicknessY);
+
+            edges[edgeCount] = new DrawRect(rect.X + rect.Width - thicknessX, rect.Y + thicknessY, thicknessX, verticalEdgeHeight);
+            sampleOrigins[edgeCount++] = new DrawPoint(rect.Width - thicknessX, thicknessY);
+        }
+
+        if (material.Kind != DrawMaterialKind.LinearGradient || mappedMaterial.FallbackApplied)
+        {
+            for (var i = 0; i < edgeCount; i++)
+            {
+                AddPhysicalRectData(edges[i], mappedMaterial.Color, scissorPlan.RenderScissor, rects);
+            }
+
+            return;
+        }
+
+        var segmented = false;
+        var segmentRectCount = 0;
+        for (var i = 0; i < edgeCount; i++)
+        {
+            segmented |= AppendPhysicalLinearGradientSubRect(
+                edges[i],
+                material,
+                sampleOrigins[i],
+                outputMapping,
+                scissorPlan.RenderScissor,
+                rects,
+                out var edgeRectCount);
+            segmentRectCount += edgeRectCount;
+        }
+
+        diagnostics.AddLinearGradientRasterization(segmented, segmentRectCount);
     }
 
     private static void AppendPhysicalFillRect(
@@ -1053,6 +1164,44 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         diagnostics.AddLinearGradientRasterization(segmented: true, segmentRectCount: LinearGradientClampFallbackSegmentCount);
     }
 
+    private static bool AppendPhysicalLinearGradientSubRect(
+        in DrawRect rect,
+        in DrawMaterial material,
+        in DrawPoint sampleOrigin,
+        ColorOutputMapping outputMapping,
+        in IntegerScissorRect scissor,
+        FrameRenderList<D3D12Renderer2D.RectData> rects,
+        out int emittedRectCount)
+    {
+        var midpointX = sampleOrigin.X + (rect.Width * 0.5f);
+        var midpointY = sampleOrigin.Y + (rect.Height * 0.5f);
+        var representativeColor = outputMapping.MapToSdr(SampleLinearGradient(material, midpointX, midpointY));
+        if (CanRepresentLinearGradientSubRect(material, sampleOrigin.X, sampleOrigin.Y, rect.Width, rect.Height))
+        {
+            AddPhysicalGradientRectData(
+                rect,
+                representativeColor,
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleOrigin.X, sampleOrigin.Y)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleOrigin.X + rect.Width, sampleOrigin.Y)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleOrigin.X + rect.Width, sampleOrigin.Y + rect.Height)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleOrigin.X, sampleOrigin.Y + rect.Height)),
+                scissor,
+                rects);
+            emittedRectCount = 1;
+            return false;
+        }
+
+        AppendPhysicalSegmentedLinearGradientSubRect(
+            rect,
+            material,
+            sampleOrigin,
+            outputMapping,
+            scissor,
+            rects);
+        emittedRectCount = LinearGradientClampFallbackSegmentCount;
+        return true;
+    }
+
     private static DrawColor ResolveLinearGradientRepresentativeColor(
         in DrawMaterial material,
         in DrawRect rect,
@@ -1086,6 +1235,16 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
 
     private static bool CanRepresentLinearGradientAsSingleVertexRect(in DrawMaterial material, float width, float height)
     {
+        return CanRepresentLinearGradientSubRect(material, 0f, 0f, width, height);
+    }
+
+    private static bool CanRepresentLinearGradientSubRect(
+        in DrawMaterial material,
+        float x,
+        float y,
+        float width,
+        float height)
+    {
         var dx = material.EndPoint.X - material.StartPoint.X;
         var dy = material.EndPoint.Y - material.StartPoint.Y;
         var lengthSquared = dx * dx + dy * dy;
@@ -1094,10 +1253,10 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
             return true;
         }
 
-        var topLeft = ProjectLinearGradient(material, 0f, 0f, dx, dy, lengthSquared);
-        var topRight = ProjectLinearGradient(material, width, 0f, dx, dy, lengthSquared);
-        var bottomRight = ProjectLinearGradient(material, width, height, dx, dy, lengthSquared);
-        var bottomLeft = ProjectLinearGradient(material, 0f, height, dx, dy, lengthSquared);
+        var topLeft = ProjectLinearGradient(material, x, y, dx, dy, lengthSquared);
+        var topRight = ProjectLinearGradient(material, x + width, y, dx, dy, lengthSquared);
+        var bottomRight = ProjectLinearGradient(material, x + width, y + height, dx, dy, lengthSquared);
+        var bottomLeft = ProjectLinearGradient(material, x, y + height, dx, dy, lengthSquared);
         var min = MathF.Min(MathF.Min(topLeft, topRight), MathF.Min(bottomRight, bottomLeft));
         var max = MathF.Max(MathF.Max(topLeft, topRight), MathF.Max(bottomRight, bottomLeft));
 
@@ -1169,6 +1328,63 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
                 outputMapping.MapToSdr(SampleLinearGradient(material, x1, y0)),
                 outputMapping.MapToSdr(SampleLinearGradient(material, x1, y1)),
                 outputMapping.MapToSdr(SampleLinearGradient(material, x0, y1)),
+                scissor,
+            rects);
+        }
+    }
+
+    private static void AppendPhysicalSegmentedLinearGradientSubRect(
+        in DrawRect rect,
+        in DrawMaterial material,
+        in DrawPoint sampleOrigin,
+        ColorOutputMapping outputMapping,
+        in IntegerScissorRect scissor,
+        FrameRenderList<D3D12Renderer2D.RectData> rects)
+    {
+        var dx = material.EndPoint.X - material.StartPoint.X;
+        var dy = material.EndPoint.Y - material.StartPoint.Y;
+        var splitHorizontally = MathF.Abs(dx) >= MathF.Abs(dy);
+        for (var segment = 0; segment < LinearGradientClampFallbackSegmentCount; segment++)
+        {
+            var start = segment / (float)LinearGradientClampFallbackSegmentCount;
+            var end = (segment + 1) / (float)LinearGradientClampFallbackSegmentCount;
+            float x0;
+            float y0;
+            float x1;
+            float y1;
+            DrawRect segmentRect;
+            if (splitHorizontally)
+            {
+                x0 = rect.Width * start;
+                y0 = 0f;
+                x1 = rect.Width * end;
+                y1 = rect.Height;
+                segmentRect = new DrawRect(rect.X + x0, rect.Y, x1 - x0, rect.Height);
+            }
+            else
+            {
+                x0 = 0f;
+                y0 = rect.Height * start;
+                x1 = rect.Width;
+                y1 = rect.Height * end;
+                segmentRect = new DrawRect(rect.X, rect.Y + y0, rect.Width, y1 - y0);
+            }
+
+            var sampleX0 = sampleOrigin.X + x0;
+            var sampleY0 = sampleOrigin.Y + y0;
+            var sampleX1 = sampleOrigin.X + x1;
+            var sampleY1 = sampleOrigin.Y + y1;
+            var representativeColor = outputMapping.MapToSdr(SampleLinearGradient(
+                material,
+                (sampleX0 + sampleX1) * 0.5f,
+                (sampleY0 + sampleY1) * 0.5f));
+            AddPhysicalGradientRectData(
+                segmentRect,
+                representativeColor,
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleX0, sampleY0)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleX1, sampleY0)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleX1, sampleY1)),
+                outputMapping.MapToSdr(SampleLinearGradient(material, sampleX0, sampleY1)),
                 scissor,
                 rects);
         }
@@ -1506,25 +1722,45 @@ internal sealed class D3D12DrawingBackend(D3D12Renderer renderer, DrawingBackend
         {
             var payload = rectPayloads[i];
             var command = ScaleCommandToPhysicalPixels(DrawCommand.FromMaterial(
-                DrawCommandKind.FillRect,
+                payload.Kind,
                 Rect: Translate(payload.Rect, layer.Transform),
                 Material: ApplyOpacity(payload.Material, layer.Opacity),
-                ClipBounds: ResolveComposedClip(payload.ClipBounds, layer)), scale);
+                ClipBounds: ResolveComposedClip(payload.ClipBounds, layer),
+                StrokeWidth: payload.StrokeWidth), scale);
             diagnostics.AddCommandClip(command);
             var material = outputMapping.MapToSdr(command.Material, D3D12MaterialCapabilities);
             diagnostics.AddMaterialOutput(material);
-            AppendPhysicalFillMaterialRect(
-                clipMode,
-                viewport,
-                command.Rect,
-                command.Material,
-                material,
-                outputMapping,
-                command.ClipBounds,
-                rects,
-                ref diagnostics,
-                ref hasBackgroundColor,
-                ref backgroundColor);
+            if (command.Kind == DrawCommandKind.FillRect)
+            {
+                AppendPhysicalFillMaterialRect(
+                    clipMode,
+                    viewport,
+                    command.Rect,
+                    command.Material,
+                    material,
+                    outputMapping,
+                    command.ClipBounds,
+                    rects,
+                    ref diagnostics,
+                    ref hasBackgroundColor,
+                    ref backgroundColor);
+            }
+            else
+            {
+                var normalizedScale = scale.Normalize();
+                AppendPhysicalStrokeMaterialRect(
+                    clipMode,
+                    viewport,
+                    command.Rect,
+                    command.Material,
+                    material,
+                    outputMapping,
+                    command.ClipBounds,
+                    command.StrokeWidth * normalizedScale.ScaleX,
+                    command.StrokeWidth * normalizedScale.ScaleY,
+                    rects,
+                    ref diagnostics);
+            }
         }
 
         var textPayloads = content.Texts;

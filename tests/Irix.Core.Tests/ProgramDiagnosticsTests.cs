@@ -2914,7 +2914,7 @@ public sealed partial class ProgramDiagnosticsTests
 
     [Fact]
     [Trait("Category", "DocGuard")]
-    public void Public_semantic_linear_gradient_slice_is_documented_and_source_guarded()
+    public void Public_semantic_paint_and_border_slices_are_documented_and_source_guarded()
     {
         var root = FindRepoRoot();
         var colorDesign = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Color-Pipeline.md")));
@@ -2923,16 +2923,18 @@ public sealed partial class ProgramDiagnosticsTests
         var worklist = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Active-Worklist.md")));
 
         Assert.Contains("## Non-Solid Material Policy Preflight", colorDesign);
-        Assert.Contains("The first non-solid material policy slice is implemented for public two-stop linear-gradient background paint.", colorDesign);
+        Assert.Contains("The first non-solid material policy slices are implemented for public two-stop linear-gradient background and border paint.", colorDesign);
         Assert.Contains("Material identity and lifetime", colorDesign);
         Assert.Contains("Coordinate space", colorDesign);
         Assert.Contains("Color interpolation", colorDesign);
         Assert.Contains("Invalidation", colorDesign);
         Assert.Contains("Backend capability and fallback", colorDesign);
         Assert.Contains("Diagnostics and tests", colorDesign);
-        Assert.Contains("The implemented slice stores background paint in `StyleValue`, `PropertyValue.Paint`, and `VirtualPropertyKey.Background`.", colorDesign);
+        Assert.Contains("The implemented slices store background paint in `StyleValue`, `PropertyValue.Paint`, and `VirtualPropertyKey.Background`, and border intent in `StyleValue`, `PropertyValue.BorderStroke`, and `VirtualPropertyKey.Border`.", colorDesign);
         Assert.Contains("The active SDR/sRGB backend path may collapse unsupported non-solid materials through a deterministic `DrawMaterial.FallbackColor`", colorDesign);
-        Assert.Contains("The public material authoring policy is now implemented for the first background paint slice", colorDesign);
+        Assert.Contains("The public material authoring policy is now implemented for background paint and typed border stroke", colorDesign);
+        Assert.Contains("StrokeRect is expanded into four inward rectangles while retaining continuous outer-bounds sampling.", colorDesign);
+        Assert.Contains("Stroke thickness is inward and scales independently on each axis.", colorDesign);
         Assert.Contains("linear-gradient single-rect versus segmented rasterization counters", colorDesign);
         Assert.Contains("linearGradientSingleRectCommands", colorDesign);
         Assert.Contains("linearGradientSegmentedCommands", colorDesign);
@@ -2943,26 +2945,27 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("treats degenerate equal-point gradients as start-color single rects", colorDesign);
 
         Assert.Contains("## Public Material Authoring Policy Preflight", styleDesign);
-        Assert.Contains("The first material authoring slice is implemented at the public/style boundary.", styleDesign);
-        Assert.Contains("Public UI code describes background paint through `Paint` and `VirtualNodeProperty.Background`", styleDesign);
+        Assert.Contains("The first material authoring slices are implemented at the public/style boundary.", styleDesign);
+        Assert.Contains("Public UI code describes background paint through `Paint` and `VirtualNodeProperty.Background`, or inward border intent through `BorderStroke` and `VirtualNodeProperty.Border`", styleDesign);
         Assert.Contains("Semantic token boundary", styleDesign);
         Assert.Contains("Resource lifetime", styleDesign);
         Assert.Contains("Coordinate and sampling policy", styleDesign);
         Assert.Contains("Invalidation policy", styleDesign);
         Assert.Contains("Backend fallback policy", styleDesign);
         Assert.Contains("Output mapping separation", styleDesign);
-        Assert.Contains("The accepted surface is intentionally narrow: solid and two-stop directional linear-gradient background paint.", styleDesign);
-        Assert.Contains("The first public semantic paint vertical slice is implemented.", status);
-        Assert.Contains("Draw recording resolves semantic directions against actual layout bounds", status);
-        Assert.Contains("D3D12 FillRect rasterizes the gradient through per-corner SDR vertex colors and material diagnostics", status);
-        Assert.Contains("legacy window output and unsupported paths use deterministic canonical midpoint fallback", status);
-        Assert.Contains("public canonical `Color`/`SrgbColor` values and semantic `Paint`", worklist);
+        Assert.Contains("The accepted surface is intentionally narrow: solid and two-stop directional linear-gradient background paint plus typed inward border stroke.", styleDesign);
+        Assert.Contains("The public semantic background and border paint vertical slices are implemented.", status);
+        Assert.Contains("records one logical inward `StrokeRect` for a border", status);
+        Assert.Contains("D3D12 FillRect/StrokeRect rasterize gradients through per-corner SDR vertex colors", status);
+        Assert.Contains("Legacy window output preserves thickness and uses deterministic canonical midpoint fallback", status);
+        Assert.Contains("public canonical `Color`/`SrgbColor` values, semantic `Paint`, and typed `BorderStroke`", worklist);
         Assert.Contains("frame brush retention", worklist);
-        Assert.Contains("deterministic legacy fallback", worklist);
+        Assert.Contains("deterministic legacy fallback with preserved thickness", worklist);
 
         Assert.True(typeof(Color).IsPublic);
         Assert.True(typeof(SrgbColor).IsPublic);
         Assert.True(typeof(Paint).IsPublic);
+        Assert.True(typeof(BorderStroke).IsPublic);
         Assert.True(typeof(PaintKind).IsPublic);
         Assert.True(typeof(LinearGradientDirection).IsPublic);
         Assert.False(typeof(DrawMaterialKind).IsPublic);

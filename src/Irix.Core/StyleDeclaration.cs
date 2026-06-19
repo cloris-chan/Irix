@@ -6,6 +6,7 @@ internal enum StylePropertyId : byte
     Width,
     Height,
     Background,
+    Border,
     Foreground,
     Opacity,
     TranslationX,
@@ -36,6 +37,8 @@ internal readonly struct StyleValue : IEquatable<StyleValue>
 
     public static StyleValue FromPaint(Paint value) => new(PropertyValue.FromPaint(value));
 
+    public static StyleValue FromBorderStroke(BorderStroke value) => new(PropertyValue.FromBorderStroke(value));
+
     public bool TryGetNumber(out double value) => _value.TryGetNumber(out value);
 
     public bool TryGetBoolean(out bool value) => _value.TryGetBoolean(out value);
@@ -44,6 +47,8 @@ internal readonly struct StyleValue : IEquatable<StyleValue>
 
     public bool TryGetPaint(out Paint value) => _value.TryGetPaint(out value);
 
+    public bool TryGetBorderStroke(out BorderStroke value) => _value.TryGetBorderStroke(out value);
+
     public double GetRequiredNumber() => _value.GetRequiredNumber();
 
     public bool GetRequiredBoolean() => _value.GetRequiredBoolean();
@@ -51,6 +56,8 @@ internal readonly struct StyleValue : IEquatable<StyleValue>
     public StyleColor GetRequiredColor() => _value.GetRequiredColor();
 
     public Paint GetRequiredPaint() => _value.GetRequiredPaint();
+
+    public BorderStroke GetRequiredBorderStroke() => _value.GetRequiredBorderStroke();
 
     internal PropertyValue ToPropertyValue() => _value;
 
@@ -102,6 +109,8 @@ internal readonly struct StyleDeclaration : IEquatable<StyleDeclaration>
 
     public static StyleDeclaration Background(Paint value) => Create(StylePropertyId.Background, StyleValue.FromPaint(value));
 
+    public static StyleDeclaration Border(BorderStroke value) => Create(StylePropertyId.Border, StyleValue.FromBorderStroke(value));
+
     public static StyleDeclaration Foreground(StyleColor value) => Create(StylePropertyId.Foreground, StyleValue.FromColor(value));
 
     public static StyleDeclaration Opacity(double value) => Create(StylePropertyId.Opacity, StyleValue.FromNumber(value));
@@ -122,6 +131,7 @@ internal readonly struct StyleDeclaration : IEquatable<StyleDeclaration>
             StylePropertyId.Width => VirtualNodeProperty.Width(Value.GetRequiredNumber()),
             StylePropertyId.Height => VirtualNodeProperty.Height(Value.GetRequiredNumber()),
             StylePropertyId.Background => VirtualNodeProperty.Background(Value.GetRequiredPaint()),
+            StylePropertyId.Border => VirtualNodeProperty.Border(Value.GetRequiredBorderStroke()),
             StylePropertyId.Foreground => VirtualNodeProperty.ForegroundColor(Value.GetRequiredColor()),
             StylePropertyId.Opacity => VirtualNodeProperty.LayerOpacity(Value.GetRequiredNumber()),
             StylePropertyId.TranslationX => VirtualNodeProperty.TranslateX(Value.GetRequiredNumber()),
@@ -147,6 +157,7 @@ internal readonly struct StyleDeclaration : IEquatable<StyleDeclaration>
         {
             StylePropertyId.Width or StylePropertyId.Height or StylePropertyId.Opacity or StylePropertyId.TranslationX or StylePropertyId.TranslationY => PropertyValueKind.Number,
             StylePropertyId.Background => PropertyValueKind.Paint,
+            StylePropertyId.Border => PropertyValueKind.BorderStroke,
             StylePropertyId.Foreground => PropertyValueKind.Color,
             StylePropertyId.Hovered or StylePropertyId.Pressed or StylePropertyId.Focused => PropertyValueKind.Boolean,
             _ => PropertyValueKind.None,

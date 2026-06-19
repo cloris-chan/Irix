@@ -41,6 +41,7 @@ internal readonly struct LayoutElement(
     ActionId ActionId = default,
     ButtonVisualState ButtonState = default,
     PaintSlot Background = default,
+    BorderStrokeSlot Border = default,
     StyleColorSlot ForegroundColor = default) : IEquatable<LayoutElement>
 {
 
@@ -51,6 +52,7 @@ internal readonly struct LayoutElement(
     public ActionId ActionId { get; } = ActionId;
     public ButtonVisualState ButtonState { get; } = ButtonState;
     public PaintSlot Background { get; } = Background;
+    public BorderStrokeSlot Border { get; } = Border;
     public StyleColorSlot ForegroundColor { get; } = ForegroundColor;
 
     public bool Equals(LayoutElement other)
@@ -62,6 +64,7 @@ internal readonly struct LayoutElement(
             && ActionId.Equals(other.ActionId)
             && ButtonState == other.ButtonState
             && Background == other.Background
+            && Border == other.Border
             && ForegroundColor == other.ForegroundColor;
     }
 
@@ -77,6 +80,7 @@ internal readonly struct LayoutElement(
         hash.Add(ActionId);
         hash.Add(ButtonState);
         hash.Add(Background);
+        hash.Add(Border);
         hash.Add(ForegroundColor);
         return hash.ToHashCode();
     }
@@ -202,8 +206,8 @@ internal readonly struct LayoutElementRange(int ElementStart, int ElementCount) 
 
 /// <summary>
 /// Maps a single <see cref="LayoutElement"/> index to the range of
-/// <see cref="DrawCommand"/>s it produces. Text/Rectangle → 1 command,
-/// Button → 2 commands (FillRect + DrawTextRun).
+/// <see cref="DrawCommand"/>s it produces. Text produces one command,
+/// Rectangle produces one or two commands, and Button produces one to three.
 /// </summary>
 internal readonly struct ElementCommandRange(int CommandStart, int CommandCount) : IEquatable<ElementCommandRange>
 {

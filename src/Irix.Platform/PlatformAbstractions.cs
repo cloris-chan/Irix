@@ -156,7 +156,8 @@ public readonly struct WindowContentElement(
     TextSlice Text = default,
     WindowColor ForegroundColor = default,
     WindowColor BackgroundColor = default,
-    WindowColor BorderColor = default) : IEquatable<WindowContentElement>
+    WindowColor BorderColor = default,
+    int BorderThickness = 0) : IEquatable<WindowContentElement>
 {
 
     public WindowContentElementKind Kind { get; } = Kind;
@@ -165,6 +166,7 @@ public readonly struct WindowContentElement(
     public WindowColor ForegroundColor { get; } = ForegroundColor;
     public WindowColor BackgroundColor { get; } = BackgroundColor;
     public WindowColor BorderColor { get; } = BorderColor;
+    public int BorderThickness { get; } = BorderThickness;
 
     public bool Equals(WindowContentElement other)
     {
@@ -173,12 +175,13 @@ public readonly struct WindowContentElement(
             && Text == other.Text
             && ForegroundColor == other.ForegroundColor
             && BackgroundColor == other.BackgroundColor
-            && BorderColor == other.BorderColor;
+            && BorderColor == other.BorderColor
+            && BorderThickness == other.BorderThickness;
     }
 
     public override bool Equals(object? obj) => obj is WindowContentElement other && Equals(other);
 
-    public override int GetHashCode() => HashCode.Combine(Kind, Bounds, Text, ForegroundColor, BackgroundColor, BorderColor);
+    public override int GetHashCode() => HashCode.Combine(Kind, Bounds, Text, ForegroundColor, BackgroundColor, BorderColor, BorderThickness);
 
     public static bool operator ==(WindowContentElement left, WindowContentElement right) => left.Equals(right);
 

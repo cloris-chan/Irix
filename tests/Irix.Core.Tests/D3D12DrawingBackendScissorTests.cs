@@ -485,6 +485,110 @@ public sealed class D3D12DrawingBackendScissorTests
     }
 
     [Fact]
+    public void ExecuteCompositionDiagnosticCore_preserves_gradient_stroke_through_layer_cache()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var gradient = DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            new DrawPoint(0, 0),
+            new DrawPoint(80, 0));
+        var command = DrawCommand.FromMaterial(
+            DrawCommandKind.StrokeRect,
+            Rect: new DrawRect(16, 20, 80, 40),
+            Material: gradient,
+            StrokeWidth: 2f);
+        var cache = new D3D12CompositionLayerContentCache();
+        var firstFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(10),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionTransform(10, 5),
+            new CompositionOpacity(0.5f)));
+
+        var first = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            [command],
+            resources,
+            firstFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(0, first.LayerCacheHits);
+        Assert.Equal(1, first.LayerCacheMisses);
+        Assert.Equal(4, rects.Count);
+        Assert.Equal(new DrawRect(26, 25, 80, 2), ToDrawRect(rects.Span[0]));
+        Assert.Equal(new DrawRect(26, 63, 80, 2), ToDrawRect(rects.Span[1]));
+        Assert.Equal(new DrawRect(26, 27, 2, 36), ToDrawRect(rects.Span[2]));
+        Assert.Equal(new DrawRect(104, 27, 2, 36), ToDrawRect(rects.Span[3]));
+        Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, first.ExecuteResult.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+
+        rects.Reset();
+        texts.Reset();
+        var secondFrame = new CompositionFrame(new CompositionLayer(
+            new CompositionLayerId(10),
+            CommandStart: 0,
+            CommandCount: 1,
+            new CompositionTransform(20, 10),
+            new CompositionOpacity(0.25f)));
+
+        var second = D3D12DrawingBackend.ExecuteCompositionDiagnosticCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 240, 160),
+            [command],
+            resources,
+            secondFrame,
+            DisplayScale.Identity,
+            rects,
+            texts,
+            cache);
+
+        Assert.Equal(1, second.LayerCacheHits);
+        Assert.Equal(0, second.LayerCacheMisses);
+        Assert.Equal(4, rects.Count);
+        Assert.Equal(new DrawRect(36, 30, 80, 2), ToDrawRect(rects.Span[0]));
+        Assert.Equal(1, second.ExecuteResult.MaterialDiagnostics.LinearGradientCommandCount);
+    }
+
+    [Fact]
+    public void ExecuteCore_scales_inward_stroke_thickness_per_axis()
+    {
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        using var resources = FrameDrawingResources.Rent();
+        resources.Seal();
+        var command = new DrawCommand(
+            DrawCommandKind.StrokeRect,
+            Rect: new DrawRect(10, 20, 100, 50),
+            Color: DrawColor.Opaque(10, 20, 30),
+            StrokeWidth: 2f);
+
+        var result = D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 480, 320),
+            [command],
+            resources,
+            new DisplayScale(2f, 3f),
+            rects,
+            texts);
+
+        Assert.Equal(4, rects.Count);
+        Assert.Equal(new DrawRect(20, 60, 200, 6), ToDrawRect(rects.Span[0]));
+        Assert.Equal(new DrawRect(20, 204, 200, 6), ToDrawRect(rects.Span[1]));
+        Assert.Equal(new DrawRect(20, 66, 4, 138), ToDrawRect(rects.Span[2]));
+        Assert.Equal(new DrawRect(216, 66, 4, 138), ToDrawRect(rects.Span[3]));
+        Assert.Equal(1, result.MaterialDiagnostics.SolidColorCommandCount);
+        Assert.Equal(0, result.MaterialDiagnostics.FallbackCommandCount);
+    }
+
+    [Fact]
     public void ExecuteCore_reports_material_output_diagnostics_for_solid_and_linear_gradient_rasterization()
     {
         using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
@@ -1655,6 +1759,9 @@ public sealed class D3D12DrawingBackendScissorTests
         Assert.Equal(new IntegerScissorRect(0, 0, 200, 60), rects.Span[0].Scissor);
         Assert.Equal(new DrawRect(0, 0, 200, 60), diagnostics.ExecuteResult.TextClipDiagnostics.LastEffectiveTextClip.Bounds);
     }
+
+    private static DrawRect ToDrawRect(in D3D12Renderer2D.RectData rect) =>
+        new(rect.X, rect.Y, rect.Width, rect.Height);
 
     private static DrawCommand Fill(DrawRect clipBounds)
     {

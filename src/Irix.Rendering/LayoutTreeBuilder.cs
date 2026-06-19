@@ -323,7 +323,8 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 LayoutElementKind.Rectangle,
                 rectangleBounds,
                 ClipBounds: _ctx.ClipBounds,
-                Background: ReadPaint(properties, VirtualPropertyKey.Background)));
+                Background: ReadPaint(properties, VirtualPropertyKey.Background),
+                Border: ReadBorderStroke(properties, VirtualPropertyKey.Border)));
             _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -362,6 +363,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 ActionId: actionId,
                 ButtonState: buttonState,
                 Background: ReadPaint(properties, VirtualPropertyKey.Background),
+                Border: ReadBorderStroke(properties, VirtualPropertyKey.Border),
                 ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
@@ -404,6 +406,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                     el.ActionId,
                     el.ButtonState,
                     el.Background,
+                    el.Border,
                     el.ForegroundColor);
             }
         }
@@ -549,6 +552,9 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
     private static PaintSlot ReadPaint(PropertyReader reader, VirtualPropertyKey key) =>
         reader.TryGetPaint(key, out var paint) ? PaintSlot.Some(paint) : PaintSlot.None;
+
+    private static BorderStrokeSlot ReadBorderStroke(PropertyReader reader, VirtualPropertyKey key) =>
+        reader.TryGetBorderStroke(key, out var border) ? BorderStrokeSlot.Some(border) : BorderStrokeSlot.None;
 
     private static TextNodeContent GetTextContent(VirtualNode node)
     {

@@ -58,6 +58,7 @@ public sealed class WindowBackendTests
         Assert.Equal(WindowColor.Opaque(255, 255, 255), button.ForegroundColor);
         Assert.Equal(WindowColor.Opaque(52, 120, 246), button.BackgroundColor);
         Assert.Equal(WindowColor.Opaque(24, 48, 96), button.BorderColor);
+        Assert.Equal(1, button.BorderThickness);
 
         var text = result.Elements[2];
         Assert.Equal(WindowContentElementKind.Text, text.Kind);
@@ -94,5 +95,33 @@ public sealed class WindowBackendTests
             WindowContentElementKind.Rectangle,
             new PixelRectangle(16, 60, 220, 48),
             BackgroundColor: new WindowColor(expected.A, expected.R, expected.G, expected.B)), result.Elements[0]);
+    }
+
+    [Fact]
+    public void WindowBackend_maps_semantic_gradient_stroke_to_border_fallback()
+    {
+        var backend = new Irix.Poc.WindowBackend();
+        var resources = new FrameDrawingResources();
+        resources.Seal();
+        var material = DrawMaterial.LinearGradient(
+            Color.FromSrgb(255, 0, 0),
+            Color.FromSrgb(0, 255, 0),
+            new DrawPoint(0, 0),
+            new DrawPoint(120, 0));
+        var command = DrawCommand.FromMaterial(
+            DrawCommandKind.StrokeRect,
+            Rect: new DrawRect(16, 60, 220, 48),
+            Material: material,
+            StrokeWidth: 3);
+        var expected = ColorOutputMapping.SdrSrgb.MapToSdr(material);
+
+        var result = backend.Build([command], [], resources);
+
+        Assert.Single(result.Elements);
+        Assert.Equal(new WindowContentElement(
+            WindowContentElementKind.Rectangle,
+            new PixelRectangle(16, 60, 220, 48),
+            BorderColor: new WindowColor(expected.A, expected.R, expected.G, expected.B),
+            BorderThickness: 3), result.Elements[0]);
     }
 }

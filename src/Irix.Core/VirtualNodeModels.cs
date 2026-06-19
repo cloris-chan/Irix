@@ -28,7 +28,8 @@ public enum PropertyValueKind : byte
     Boolean,
     ActionId,
     Color,
-    Paint
+    Paint,
+    BorderStroke
 }
 
 public enum NodeContentKind : byte
@@ -121,7 +122,7 @@ public readonly struct NodeContent : IEquatable<NodeContent>
 
 // ── PropertyValue: pure value union (R13-7) ─────────────────────
 
-[StructLayout(LayoutKind.Explicit, Size = 40)]
+[StructLayout(LayoutKind.Explicit, Size = 44)]
 public readonly struct PropertyValue : IEquatable<PropertyValue>
 {
     [FieldOffset(0)] private readonly PropertyValueKind _kind;
@@ -131,12 +132,14 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     [FieldOffset(8)] private readonly ulong _data0;
     [FieldOffset(8)] private readonly Color _colorValue;
     [FieldOffset(4)] private readonly Paint _paintValue;
+    [FieldOffset(4)] private readonly BorderStroke _borderStrokeValue;
 
     private PropertyValue(PropertyValueKind kind, uint uintValue, ulong data0)
     {
         _kind = kind;
         _padding0 = 0;
         _padding1 = 0;
+        _borderStrokeValue = default;
         _paintValue = default;
         _colorValue = default;
         _uintValue = uintValue;
@@ -148,6 +151,7 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         _kind = PropertyValueKind.Color;
         _padding0 = 0;
         _padding1 = 0;
+        _borderStrokeValue = default;
         _paintValue = default;
         _uintValue = 0;
         _data0 = 0;
@@ -159,10 +163,23 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         _kind = PropertyValueKind.Paint;
         _padding0 = 0;
         _padding1 = 0;
+        _borderStrokeValue = default;
         _uintValue = 0;
         _data0 = 0;
         _colorValue = default;
         _paintValue = paint;
+    }
+
+    private PropertyValue(BorderStroke borderStroke)
+    {
+        _kind = PropertyValueKind.BorderStroke;
+        _padding0 = 0;
+        _padding1 = 0;
+        _uintValue = 0;
+        _data0 = 0;
+        _colorValue = default;
+        _paintValue = default;
+        _borderStrokeValue = borderStroke;
     }
 
     public PropertyValueKind Kind => _kind;
@@ -186,6 +203,16 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         if (value.Kind == PaintKind.None)
         {
             throw new ArgumentException("Paint value must be explicit.", nameof(value));
+        }
+
+        return new PropertyValue(value);
+    }
+
+    internal static PropertyValue FromBorderStroke(BorderStroke value)
+    {
+        if (value.IsNone)
+        {
+            throw new ArgumentException("Border stroke must be explicit.", nameof(value));
         }
 
         return new PropertyValue(value);
@@ -223,6 +250,13 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
     {
         if (_kind != PropertyValueKind.Paint) { value = default; return false; }
         value = _paintValue;
+        return true;
+    }
+
+    public bool TryGetBorderStroke(out BorderStroke value)
+    {
+        if (_kind != PropertyValueKind.BorderStroke) { value = default; return false; }
+        value = _borderStrokeValue;
         return true;
     }
 
@@ -276,6 +310,16 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
         throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.Paint}.");
     }
 
+    public BorderStroke GetRequiredBorderStroke()
+    {
+        if (TryGetBorderStroke(out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Property value is {_kind}, not {PropertyValueKind.BorderStroke}.");
+    }
+
     public bool Equals(PropertyValue other) =>
         _kind == other._kind
         && _kind switch
@@ -284,6 +328,7 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
             PropertyValueKind.Boolean or PropertyValueKind.ActionId => _uintValue == other._uintValue,
             PropertyValueKind.Color => _colorValue == other._colorValue,
             PropertyValueKind.Paint => _paintValue == other._paintValue,
+            PropertyValueKind.BorderStroke => _borderStrokeValue == other._borderStrokeValue,
             _ => true
         };
 
@@ -296,6 +341,7 @@ public readonly struct PropertyValue : IEquatable<PropertyValue>
             PropertyValueKind.Boolean or PropertyValueKind.ActionId => HashCode.Combine((byte)_kind, _uintValue),
             PropertyValueKind.Color => HashCode.Combine((byte)_kind, _colorValue),
             PropertyValueKind.Paint => HashCode.Combine((byte)_kind, _paintValue),
+            PropertyValueKind.BorderStroke => HashCode.Combine((byte)_kind, _borderStrokeValue),
             _ => 0
         };
 
@@ -376,6 +422,26 @@ internal readonly struct PaintSlot(Paint Value, bool HasValue) : IEquatable<Pain
     public static bool operator ==(PaintSlot left, PaintSlot right) => left.Equals(right);
 
     public static bool operator !=(PaintSlot left, PaintSlot right) => !left.Equals(right);
+}
+
+internal readonly struct BorderStrokeSlot(BorderStroke Value, bool HasValue) : IEquatable<BorderStrokeSlot>
+{
+    public BorderStroke Value { get; } = Value;
+    public bool HasValue { get; } = HasValue;
+
+    public static BorderStrokeSlot None => default;
+
+    public static BorderStrokeSlot Some(BorderStroke value) => new(value, true);
+
+    public bool Equals(BorderStrokeSlot other) => Value == other.Value && HasValue == other.HasValue;
+
+    public override bool Equals(object? obj) => obj is BorderStrokeSlot other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Value, HasValue);
+
+    public static bool operator ==(BorderStrokeSlot left, BorderStrokeSlot right) => left.Equals(right);
+
+    public static bool operator !=(BorderStrokeSlot left, BorderStrokeSlot right) => !left.Equals(right);
 }
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key -> NodeKey) ─
@@ -564,6 +630,12 @@ public ref struct VirtualNodePropertyListBuilder
 
     public void AddBackground(Paint value) => Add(VirtualNodeProperty.Background(value));
 
+    public void AddBorder(BorderStroke value) => Add(VirtualNodeProperty.Border(value));
+
+    public void AddBorder(Color color, float thickness = 1f) => AddBorder(BorderStroke.Solid(color, thickness));
+
+    public void AddBorder(Paint paint, float thickness = 1f) => AddBorder(new BorderStroke(paint, thickness));
+
     internal void AddForegroundColor(StyleColor value) => Add(VirtualNodeProperty.ForegroundColor(value));
 
     public void Add(VirtualNodeProperty property)
@@ -750,6 +822,22 @@ public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 
         return new VirtualNodeProperty(VirtualPropertyKey.Background, PropertyValue.FromPaint(value));
     }
+
+    public static VirtualNodeProperty Border(BorderStroke value)
+    {
+        if (value.IsNone)
+        {
+            throw new ArgumentException("Border stroke must be explicit.", nameof(value));
+        }
+
+        return new VirtualNodeProperty(VirtualPropertyKey.Border, PropertyValue.FromBorderStroke(value));
+    }
+
+    public static VirtualNodeProperty Border(Color color, float thickness = 1f) =>
+        Border(BorderStroke.Solid(color, thickness));
+
+    public static VirtualNodeProperty Border(Paint paint, float thickness = 1f) =>
+        Border(new BorderStroke(paint, thickness));
 
     internal static VirtualNodeProperty ForegroundColor(StyleColor value) =>
         new(VirtualPropertyKey.ForegroundColor, PropertyValue.FromColor(value));

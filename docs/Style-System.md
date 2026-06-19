@@ -17,7 +17,7 @@
 - No public animation API.
 - No cross-platform backend implementation.
 - No `RenderPipeline.Build` StyleOnly layout-skip implementation yet. Retained partial apply and selected render-source handoff exist after normal publication; they are not layout skip.
-- No general public theme, cascade, or processing-layer style API. The narrow public `VirtualNodeProperty.Background(Paint)` surface remains semantic and does not expose internal classification categories.
+- No general public theme, cascade, or processing-layer style API. The narrow public `VirtualNodeProperty.Background(Paint)` and `VirtualNodeProperty.Border(BorderStroke)` surfaces remain semantic and do not expose internal classification categories.
 - No HDR color output or tone-mapping implementation in the current style slice. Color output policy belongs to the compositor/backend output mapping context.
 
 ## Style Layers
@@ -33,11 +33,11 @@
 
 ## Authoring Boundary
 
-The current low-level `VirtualNodeProperty` entries are the public semantic authoring edge and the internal renderer-classification input, not a theme or cascade system. `VirtualNodeProperty.Background` accepts canonical solid color or semantic `Paint`; callers do not label it `StyleOnly`, `LayoutAffecting`, `VisualOnly`, or `CompositeOnly`.
+The current low-level `VirtualNodeProperty` entries are the public semantic authoring edge and the internal renderer-classification input, not a theme or cascade system. `VirtualNodeProperty.Background` accepts canonical solid color or semantic `Paint`, while `VirtualNodeProperty.Border` accepts one typed `BorderStroke` containing paint and finite positive logical thickness; callers do not label either property `StyleOnly`, `LayoutAffecting`, `VisualOnly`, or `CompositeOnly`.
 
-Internally, style values stay compact and typed. The current pre-public-API slice adds an internal semantic declaration layer: `StylePropertyId`, `StyleValue`, `StyleDeclaration`, and `StyleDeclarationMapper`. It lets app/control adapters express width, height, background, foreground, opacity, translation, and control-state style terms, then maps one-way into the existing `VirtualNodeProperty` IR for classification. This layer does not store or expose `StyleEffect`, `AnimationChannel`, `StyleDeltaWork`, invalidation kinds, or layout rebuild reasons. Visual color values use canonical `Color` through `StyleColor`; the color value direction is defined in [Color-Pipeline.md](Color-Pipeline.md): standard Irix `Color` canonicalizes authoring input into an ideal linear BT.2020 / Rec.2020 straight-alpha value and does not retain source color-space metadata. `StyleDeltaPlanner` turns changed internal properties into explicit work flags for layout, text measure, draw, composition, and control-state projection, so future optimizers do not need to infer execution policy from public API names.
+Internally, style values stay compact and typed. The current pre-public-API slice adds an internal semantic declaration layer: `StylePropertyId`, `StyleValue`, `StyleDeclaration`, and `StyleDeclarationMapper`. It lets app/control adapters express width, height, background, border, foreground, opacity, translation, and control-state style terms, then maps one-way into the existing `VirtualNodeProperty` IR for classification. This layer does not store or expose `StyleEffect`, `AnimationChannel`, `StyleDeltaWork`, invalidation kinds, or layout rebuild reasons. Visual color values use canonical `Color` through `StyleColor`; the color value direction is defined in [Color-Pipeline.md](Color-Pipeline.md): standard Irix `Color` canonicalizes authoring input into an ideal linear BT.2020 / Rec.2020 straight-alpha value and does not retain source color-space metadata. `StyleDeltaPlanner` turns changed internal properties into explicit work flags for layout, text measure, draw, composition, and control-state projection, so future optimizers do not need to infer execution policy from public API names.
 
-The first material authoring slice is implemented at the public/style boundary. Public `Paint` describes solid or two-stop linear-gradient background intent; internal style declarations map it to `PropertyValue.Paint`, and draw recording resolves it to renderer-owned `DrawMaterial` plus frame brush resources. Brush handles, renderer materials, radial gradients, images, and shared resource ownership remain internal or deferred.
+The first material authoring slices are implemented at the public/style boundary. Public `Paint` describes solid or two-stop linear-gradient intent, and public `BorderStroke` binds one paint to one inward logical border thickness. Internal style declarations map them to `PropertyValue.Paint` or `PropertyValue.BorderStroke`; draw recording resolves both to renderer-owned `DrawMaterial` plus frame brush resources. Brush handles, renderer materials, radial gradients, images, and shared resource ownership remain internal or deferred.
 
 Style owns the semantic property value. It does not own SDR/HDR mode, tone mapping, system SDR brightness, Rec.2100 HLG/PQ selection, swapchain format, or per-screen color-profile mapping. Those belong to material/compositor/backend output mapping after the draw or composition payload has been produced.
 
@@ -49,14 +49,14 @@ Forbidden public authoring names: `LayoutAffecting`, `VisualOnly`, `CompositeOnl
 
 Deferred public authoring names in the current color/material stage: `Brush`, `Material`, `RadialGradient`, and `Image`. The accepted linear-gradient entry is `Paint.LinearGradient`; it is semantic value authoring, not a renderer brush or material handle.
 
-Non-solid visual authoring is implemented for two canonical color stops and four element-bounds-relative directions. Public UI code can bind that value only through semantic background paint; it still cannot bind image/material resources or renderer-owned objects.
+Non-solid visual authoring is implemented for two canonical color stops and four element-bounds-relative directions. Public UI code can bind that value through semantic background paint or a typed border stroke; it still cannot bind image/material resources or renderer-owned objects.
 
 Semantic-to-internal mapping remains one-way. The implemented internal `StyleDeclaration` layer is the current pre-public bridge for this mapping; it is not a public authoring API.
 
 | Future semantic authoring term | Internal target |
 |--------------------------------|-----------------|
 | Size and spacing requests | Layout metadata, then normal layout publication. |
-| Background paint and foreground color | Internal visual paint/color properties and draw payload updates. |
+| Background paint, border stroke, and foreground color | Internal visual paint/stroke/color properties and draw payload updates. |
 | Opacity and translation | Internal composition properties and transform/opacity declaration precompile when eligible. |
 | Hover, pressed, focused, disabled, selected | Runtime/control-state projection before renderer classification. |
 | Transition timing/easing over compositor-eligible values | Internal `StyleTransitionCompiler` preflight only after runtime ownership policy is supplied. |
@@ -67,18 +67,18 @@ No theme, resource dictionary, CSS-like cascade, or scheduler is introduced by t
 
 ## Public Material Authoring Policy Preflight
 
-This policy now governs the implemented first public material surface. Public UI code describes background paint through `Paint` and `VirtualNodeProperty.Background`, while `DrawMaterial`, `DrawMaterialKind`, `DrawMaterialBackendCapabilities`, `ResourceHandle`, `IFrameBrushResolver`, backend fallback reasons, and layer-cache resource handles remain internal implementation details.
+This policy now governs the implemented public material surface. Public UI code describes background paint through `Paint` and `VirtualNodeProperty.Background`, or inward border intent through `BorderStroke` and `VirtualNodeProperty.Border`, while `DrawMaterial`, `DrawMaterialKind`, `DrawMaterialBackendCapabilities`, `ResourceHandle`, `IFrameBrushResolver`, backend fallback reasons, and layer-cache resource handles remain internal implementation details.
 
 The first accepted public material surface must satisfy these gates before code is promoted:
 
-- Semantic token boundary: implemented. Public UI code names `Paint`, not `DrawMaterial`, brush handles, backend capability flags, or output formats.
+- Semantic token boundary: implemented. Public UI code names `Paint` or `BorderStroke`, not `DrawMaterial`, brush handles, backend capability flags, or output formats.
 - Resource lifetime: implemented for unmanaged paint/material values and frame/retained-frame brush snapshots. Shared material/image resources still need explicit ownership and disposal rules.
-- Coordinate and sampling policy: implemented for four element-bounds-relative directions resolved to fill-local logical points. Images, tiling, arbitrary transforms, and stop collections remain deferred.
-- Invalidation policy: implemented as visual-only background paint; changes rebuild draw payload/resource identity without layout or text shaping.
+- Coordinate and sampling policy: implemented for four element-bounds-relative directions resolved to command-local logical points. Border gradients retain one continuous outer-bounds coordinate domain across four inward D3D12 edge rectangles, and asymmetric display scale applies independent horizontal/vertical stroke thickness. Images, tiling, arbitrary transforms, and stop collections remain deferred.
+- Invalidation policy: implemented as visual-only background paint and border stroke; changes rebuild draw payload/resource identity without layout, hit-test, or text-shaping changes.
 - Backend fallback policy: unsupported material kinds must have deterministic fallback color, diagnostics, and capability reporting without changing backend execute contracts.
 - Output mapping separation: SDR/HDR mode, tone mapping, color-space conversion, system SDR brightness, and per-screen mapping remain compositor/backend output concerns, not public style value metadata.
 
-The accepted surface is intentionally narrow: solid and two-stop directional linear-gradient background paint. Foreground remains color-only. Public UI code cannot construct or bind internal `DrawMaterial`, brush resources, images, radial gradients, or backend policy.
+The accepted surface is intentionally narrow: solid and two-stop directional linear-gradient background paint plus typed inward border stroke. Foreground remains color-only. Public UI code cannot construct or bind internal `DrawMaterial`, brush resources, images, radial gradients, or backend policy.
 
 ## Invalidation Rules
 
@@ -113,7 +113,7 @@ Visual style changes pixels but not layout. Examples:
 
 Visual style can be either draw-recorded or promoted to composition style if the backend can update it without re-recording the content. The current rule is conservative: keep draw-command ownership unless the composition contract explicitly says the property is layer-owned.
 
-Current implementation: semantic background declarations map to background paint, while foreground declarations remain color properties. Background paint can override rectangle/button fills with solid or directional linear-gradient values; both paths classify as visual-only and keep layout geometry, clips, and hit targets stable. `RenderPipeline.Build` still performs the normal full layout publication when a dirty patch asks it to rebuild.
+Current implementation: semantic background declarations map to background paint, border declarations map to typed border stroke, and foreground declarations remain color properties. Background paint can override rectangle/button fills with solid or directional linear-gradient values. Border stroke emits one logical inward `StrokeRect`; D3D12 expands it to four edge rectangles with continuous gradient coordinates, while legacy output keeps thickness and uses deterministic midpoint color fallback for gradients. Both properties classify as visual-only and keep layout geometry, clips, and hit targets stable. `RenderPipeline.Build` still performs the normal full layout publication when a dirty patch asks it to rebuild.
 
 Current color implementation stage: style/property color values use canonical linear BT.2020 `Color` internally, and draw commands now retain that canonical payload while preserving `DrawColor` as an SDR authoring/output view. The active D3D12 and legacy window paths still downgrade to SDR/sRGB at explicit backend/output boundaries. This preserves the current renderer while leaving material/layer payload shape and HDR output mapping as future work.
 

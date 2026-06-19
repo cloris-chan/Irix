@@ -13,8 +13,6 @@ namespace Irix.Platform.Windows;
 internal sealed class WindowsNativeWindow : INativeWindow
 {
     private const int ContentPadding = 16;
-    private const int ButtonBorderThickness = 1;
-
     private readonly HINSTANCE _instanceHandle;
     private readonly Action? _closedSink;
     private readonly Action? _displayChangedSink;
@@ -294,16 +292,22 @@ internal sealed class WindowsNativeWindow : INativeWindow
         switch (element.Kind)
         {
             case WindowContentElementKind.Rectangle:
-                FillRectangle(deviceContext, bounds, element.BackgroundColor);
+                if (element.BackgroundColor.A > 0)
+                {
+                    FillRectangle(deviceContext, bounds, element.BackgroundColor);
+                }
+
+                DrawBorderRectangle(deviceContext, bounds, element.BorderColor, element.BorderThickness);
                 return;
             case WindowContentElementKind.Button:
+                FillRectangle(deviceContext, bounds, element.BackgroundColor);
+                var borderThickness = ResolveBorderThickness(bounds, element.BorderThickness);
+                DrawBorderRectangle(deviceContext, bounds, element.BorderColor, borderThickness);
                 var inner = bounds;
-                inner.left += ButtonBorderThickness;
-                inner.top += ButtonBorderThickness;
-                inner.right -= ButtonBorderThickness;
-                inner.bottom -= ButtonBorderThickness;
-                FrameRectangle(deviceContext, bounds, element.BorderColor);
-                FillRectangle(deviceContext, inner, element.BackgroundColor);
+                inner.left += borderThickness;
+                inner.top += borderThickness;
+                inner.right -= borderThickness;
+                inner.bottom -= borderThickness;
                 DrawText(
                     deviceContext,
                     inner,
@@ -356,7 +360,8 @@ internal sealed class WindowsNativeWindow : INativeWindow
                 default,
                 element.ForegroundColor,
                 element.BackgroundColor,
-                element.BorderColor);
+                element.BorderColor,
+                element.BorderThickness);
         }
 
         return new WindowContentElement(
@@ -365,7 +370,8 @@ internal sealed class WindowsNativeWindow : INativeWindow
             _contentTextArena.Add(text),
             element.ForegroundColor,
             element.BackgroundColor,
-            element.BorderColor);
+            element.BorderColor,
+            element.BorderThickness);
     }
 
     private static unsafe void FillRectangle(HDC deviceContext, RECT bounds, WindowColor color)
@@ -374,10 +380,40 @@ internal sealed class WindowsNativeWindow : INativeWindow
         _ = PInvoke.FillRect(deviceContext, &bounds, brush.Handle);
     }
 
-    private static unsafe void FrameRectangle(HDC deviceContext, RECT bounds, WindowColor color)
+    private static unsafe void DrawBorderRectangle(
+        HDC deviceContext,
+        RECT bounds,
+        WindowColor color,
+        int requestedThickness)
     {
-        using var brush = new ScopedBrush(color);
-        _ = PInvoke.FrameRect(deviceContext, &bounds, brush.Handle);
+        var thickness = ResolveBorderThickness(bounds, requestedThickness);
+        if (thickness == 0 || color.A == 0)
+        {
+            return;
+        }
+
+        FillRectangle(deviceContext, new RECT { left = bounds.left, top = bounds.top, right = bounds.right, bottom = bounds.top + thickness }, color);
+        FillRectangle(deviceContext, new RECT { left = bounds.left, top = bounds.bottom - thickness, right = bounds.right, bottom = bounds.bottom }, color);
+
+        var innerTop = bounds.top + thickness;
+        var innerBottom = bounds.bottom - thickness;
+        if (innerBottom > innerTop)
+        {
+            FillRectangle(deviceContext, new RECT { left = bounds.left, top = innerTop, right = bounds.left + thickness, bottom = innerBottom }, color);
+            FillRectangle(deviceContext, new RECT { left = bounds.right - thickness, top = innerTop, right = bounds.right, bottom = innerBottom }, color);
+        }
+    }
+
+    private static int ResolveBorderThickness(RECT bounds, int requestedThickness)
+    {
+        if (requestedThickness <= 0)
+        {
+            return 0;
+        }
+
+        var width = Math.Max(bounds.right - bounds.left, 0);
+        var height = Math.Max(bounds.bottom - bounds.top, 0);
+        return Math.Min(requestedThickness, Math.Min(width / 2, height / 2));
     }
 
     private static RECT ToRect(PixelRectangle rectangle)

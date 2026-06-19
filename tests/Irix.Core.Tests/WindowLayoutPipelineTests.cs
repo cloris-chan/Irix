@@ -404,6 +404,68 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void Public_semantic_border_authoring_reaches_retained_material_d3d12_and_legacy_fallback()
+    {
+        var start = Color.FromSrgb(255, 0, 0);
+        var end = Color.FromSrgb(0, 255, 0);
+        var borderPaint = Paint.LinearGradient(start, end, LinearGradientDirection.LeftToRight);
+        var root = VirtualNodeFactory.Rectangle(
+            new NodeKey(1),
+            VirtualNodeProperty.Width(120),
+            VirtualNodeProperty.Height(48),
+            VirtualNodeProperty.Background(Color.FromSrgb(20, 30, 40)),
+            VirtualNodeProperty.Border(borderPaint, 3f));
+        var pipeline = new RenderPipeline(RenderStylePreset.Default);
+
+        using var frame = pipeline.Build(
+            root,
+            new PixelRectangle(0, 0, 320, 200),
+            textSnapshot: _arena.GetOrCreateSnapshot());
+
+        Assert.Equal(2, frame.Commands.Count);
+        var fill = frame.Commands.Memory.Span[0];
+        var border = frame.Commands.Memory.Span[1];
+        Assert.Equal(DrawCommandKind.FillRect, fill.Kind);
+        Assert.Equal(DrawCommandKind.StrokeRect, border.Kind);
+        Assert.Equal(fill.Rect, border.Rect);
+        Assert.Equal(3f, border.StrokeWidth);
+        Assert.Equal(DrawMaterialKind.LinearGradient, border.Material.Kind);
+        Assert.Equal(start, border.Material.Color);
+        Assert.Equal(end, border.Material.EndColor);
+        Assert.Equal(new DrawPoint(0, 0), border.Material.StartPoint);
+        Assert.Equal(new DrawPoint(120, 0), border.Material.EndPoint);
+        Assert.Equal(DrawingResourceKind.Brush, border.Resource.Kind);
+        Assert.Equal(border.Material, ((IFrameBrushResolver)frame.Resources).ResolveBrush(border.Resource));
+
+        using var rects = new FrameRenderList<D3D12Renderer2D.RectData>();
+        using var texts = new FrameRenderList<D3D12TextRun>();
+        var d3d12 = D3D12DrawingBackend.ExecuteCore(
+            DrawingBackendClipMode.Scissor,
+            new DrawRect(0, 0, 320, 200),
+            frame.Commands.Memory.Span,
+            frame.Resources,
+            DisplayScale.Identity,
+            rects,
+            texts);
+
+        Assert.Equal(5, rects.Count);
+        Assert.Equal(new DrawRect(16, 16, 120, 3), ToDrawRect(rects.Span[1]));
+        Assert.Equal(new DrawRect(16, 61, 120, 3), ToDrawRect(rects.Span[2]));
+        Assert.Equal(new DrawRect(16, 19, 3, 42), ToDrawRect(rects.Span[3]));
+        Assert.Equal(new DrawRect(133, 19, 3, 42), ToDrawRect(rects.Span[4]));
+        Assert.Equal(2, d3d12.MaterialDiagnostics.CommandCount);
+        Assert.Equal(1, d3d12.MaterialDiagnostics.LinearGradientCommandCount);
+        Assert.Equal(1, d3d12.MaterialDiagnostics.LinearGradientSingleRectCommandCount);
+        Assert.Equal(0, d3d12.MaterialDiagnostics.FallbackCommandCount);
+
+        var legacy = new WindowBackend().Build(frame.Commands.Memory.Span, frame.HitTargets, frame.Resources);
+        var expectedBorder = ColorOutputMapping.SdrSrgb.MapToSdr(border.Material);
+        var legacyElement = Assert.Single(legacy.Elements);
+        Assert.Equal(new WindowColor(expectedBorder.A, expectedBorder.R, expectedBorder.G, expectedBorder.B), legacyElement.BorderColor);
+        Assert.Equal(3, legacyElement.BorderThickness);
+    }
+
+    [Fact]
     public void WindowDrawCommandTranslator_uses_non_zero_default_layout_style()
     {
         var translator = new WindowDrawCommandTranslator(new FakeWindow(
@@ -7209,6 +7271,9 @@ public sealed class WindowLayoutPipelineTests
         layer = default;
         return false;
     }
+
+    private static DrawRect ToDrawRect(in D3D12Renderer2D.RectData rect) =>
+        new(rect.X, rect.Y, rect.Width, rect.Height);
 
     private sealed class RecordingStyleTransitionCompositorAdapter : IStyleTransitionCompositorAdapter
     {

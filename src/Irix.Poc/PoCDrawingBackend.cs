@@ -33,6 +33,13 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
                         ToPixelRectangle(command.Rect),
                         BackgroundColor: ToWindowColor(outputMapping.MapToSdr(command))));
                     break;
+                case DrawCommandKind.StrokeRect:
+                    _pendingElements.Add(new WindowContentElement(
+                        WindowContentElementKind.Rectangle,
+                        ToPixelRectangle(command.Rect),
+                        BorderColor: ToWindowColor(outputMapping.MapToSdr(command)),
+                        BorderThickness: ToBorderThickness(command.StrokeWidth)));
+                    break;
                 case DrawCommandKind.DrawTextRun:
                     _pendingElements.Add(new WindowContentElement(
                         WindowContentElementKind.Text,
@@ -66,4 +73,7 @@ internal sealed class PoCDrawingBackend(INativeWindow window) : IDrawingBackend
         new((int)MathF.Round(rect.X), (int)MathF.Round(rect.Y), (int)MathF.Round(rect.Width), (int)MathF.Round(rect.Height));
 
     private static WindowColor ToWindowColor(DrawColor color) => new(color.A, color.R, color.G, color.B);
+
+    private static int ToBorderThickness(float thickness) =>
+        float.IsFinite(thickness) && thickness > 0f ? Math.Max((int)MathF.Round(thickness), 1) : 0;
 }

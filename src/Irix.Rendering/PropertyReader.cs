@@ -75,4 +75,18 @@ internal readonly ref struct PropertyReader
         value = default;
         return false;
     }
+
+    public bool TryGetBorderStroke(VirtualPropertyKey key, out BorderStroke value)
+    {
+        foreach (var property in _properties)
+        {
+            if (property.Key == key && property.Value.TryGetBorderStroke(out value))
+            {
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
 }

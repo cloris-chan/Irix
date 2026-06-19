@@ -74,6 +74,7 @@ public readonly struct VirtualPropertyKey : IEquatable<VirtualPropertyKey>
 
     public static readonly VirtualPropertyKey Background = new(PropertyDomain.Visual, 1);
     internal static readonly VirtualPropertyKey ForegroundColor = new(PropertyDomain.Visual, 2);
+    public static readonly VirtualPropertyKey Border = new(PropertyDomain.Visual, 3);
 
     public static readonly VirtualPropertyKey ActionId = new(PropertyDomain.Interaction, 1);
 
@@ -189,6 +190,18 @@ internal static class VirtualPropertyMetadata
             return true;
         }
 
+        if (key == VirtualPropertyKey.Border)
+        {
+            metadata = new StylePropertyMetadata(
+                key,
+                PropertyValueKind.BorderStroke,
+                StyleEffect.Visual,
+                AnimationChannel.CpuStyle,
+                StylePropertyScope.NodeLocal,
+                VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button);
+            return true;
+        }
+
         if (key == VirtualPropertyKey.ActionId)
         {
             metadata = new StylePropertyMetadata(
@@ -257,6 +270,7 @@ internal static class VirtualPropertyDiagnostics
         if (key == VirtualPropertyKey.ScrollY) return nameof(VirtualPropertyKey.ScrollY);
         if (key == VirtualPropertyKey.Background) return nameof(VirtualPropertyKey.Background);
         if (key == VirtualPropertyKey.ForegroundColor) return nameof(VirtualPropertyKey.ForegroundColor);
+        if (key == VirtualPropertyKey.Border) return nameof(VirtualPropertyKey.Border);
         if (key == VirtualPropertyKey.ActionId) return nameof(VirtualPropertyKey.ActionId);
         if (key == VirtualPropertyKey.IsHovered) return nameof(VirtualPropertyKey.IsHovered);
         if (key == VirtualPropertyKey.IsPressed) return nameof(VirtualPropertyKey.IsPressed);
