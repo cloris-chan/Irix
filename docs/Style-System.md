@@ -16,7 +16,7 @@
 - No theme/resource dictionary implementation.
 - No public animation API.
 - No cross-platform backend implementation.
-- No `RenderPipeline.Build` StyleOnly layout-skip implementation yet. Retained partial apply and selected render-source handoff exist after normal publication; they are not layout skip.
+- No public StyleOnly layout-skip API or public processing-layer authoring. The internal `RenderPipeline.Build` fast path is an implementation detail behind semantic style metadata.
 - No general public theme, cascade, or processing-layer style API. The narrow public `VirtualNodeProperty.Background(Paint)` and `VirtualNodeProperty.Border(BorderStroke)` surfaces remain semantic and do not expose internal classification categories.
 - No HDR color output or tone-mapping implementation in the current style slice. Color output policy belongs to the compositor/backend output mapping context.
 
@@ -84,7 +84,7 @@ The accepted surface is intentionally narrow: solid and two-stop directional lin
 
 | Change | Required work | Notes |
 |--------|---------------|-------|
-| Layout style changed | Layout dirty classification and layout rebuild. | StyleOnly skip remains design-only until retained layout ownership is proven. |
+| Layout style changed | Layout dirty classification and layout rebuild. | StyleOnly skip is only for proven non-layout metadata changes; layout style still rebuilds. |
 | Visual style changed | Re-record affected draw commands or update visual command payload. | Does not require layout when geometry and text metrics are unchanged. |
 | Composition style changed | Update composition layer properties. | Preferred path for transform/opacity/scroll presentation animation. |
 | Text shaping style changed | Re-shape text and update glyph/cache dependencies. | May require layout if metrics, line height, or run segmentation change. |
@@ -113,7 +113,7 @@ Visual style changes pixels but not layout. Examples:
 
 Visual style can be either draw-recorded or promoted to composition style if the backend can update it without re-recording the content. The current rule is conservative: keep draw-command ownership unless the composition contract explicitly says the property is layer-owned.
 
-Current implementation: semantic background declarations map to background paint, border declarations map to typed border stroke, and foreground declarations remain color properties. Background paint can override rectangle/button fills with solid or directional linear-gradient values. Border stroke emits one logical inward `StrokeRect`; D3D12 expands it to four edge rectangles with continuous gradient coordinates, while legacy output keeps thickness and uses deterministic midpoint color fallback for gradients. Both properties classify as visual-only and keep layout geometry, clips, and hit targets stable. `RenderPipeline.Build` still performs the normal full layout publication when a dirty patch asks it to rebuild.
+Current implementation: semantic background declarations map to background paint, border declarations map to typed border stroke, and foreground declarations remain color properties. Background paint can override rectangle/button fills with solid or directional linear-gradient values. Border stroke emits one logical inward `StrokeRect`; D3D12 expands it to four edge rectangles with continuous gradient coordinates, while legacy output keeps thickness and uses deterministic midpoint color fallback for gradients. Both properties classify as visual-only and keep layout geometry, clips, and hit targets stable. `RenderPipeline.Build` can reuse retained layout for proven StyleOnly dirty sets while re-recording current-frame draw commands/resources.
 
 Current color implementation stage: style/property color values use canonical linear BT.2020 `Color` internally, and draw commands now retain that canonical payload while preserving `DrawColor` as an SDR authoring/output view. The active D3D12 and legacy window paths still downgrade to SDR/sRGB at explicit backend/output boundaries. This preserves the current renderer while leaving material/layer payload shape and HDR output mapping as future work.
 
@@ -177,16 +177,11 @@ Animation eligibility is determined by the target property category:
 
 ## StyleOnly Dirty Classification
 
-`StyleOnly` remains a planning boundary. Before implementing layout skip, the framework needs:
+`StyleOnly` is now both a classification and a guarded internal fast-path boundary. When every dirty classification is StyleOnly, viewport and retained layout context are stable, retained root metadata projection succeeds, and dirty element ranges can be mapped safely, `RenderPipeline.Build` reuses retained layout geometry/tree/scroll diagnostics instead of calling `LayoutTreeBuilder`.
 
-1. A stable classification of layout vs visual vs composition style.
-2. Proof that retained layout/result publication is safe to reuse.
-3. A way to update draw commands or composition properties without invalidating layout.
-4. Tests proving hit targets, clips, and diagnostics remain consistent.
+The fast path refreshes current text handles across snapshots, patches dirty visual/action metadata, re-records current-frame draw commands/resources, rebuilds hit targets, and leaves partial apply/segmented handoff to the normal post-publication guards. Any text-size, layout, tree, viewport, incomplete dirty projection, or unsafe retained metadata condition falls back to full layout.
 
-Until then, style changes may still rebuild layout even if a future system could skip it. Poc partial apply may still reduce retained-frame execution after the rebuild when the guarded selected render-source path accepts the current publication.
-
-The immediate contract is therefore: internal semantic style declarations map into renderer IR, deltas are classified cheaply through metadata, visual color deltas can update draw payloads, and pure composition deltas can be precompiled to existing transform/opacity declarations. None of those facts imply a layout-skip branch, public style API, public transition API, or runtime transition scheduler.
+The immediate contract is therefore: internal semantic style declarations map into renderer IR, deltas are classified cheaply through metadata, visual color deltas can update draw payloads without layout, and pure composition deltas can be precompiled to existing transform/opacity declarations. None of those facts imply a public style API, public transition API, public processing-layer authoring surface, or runtime transition scheduler.
 
 ## Cross-Platform Notes
 

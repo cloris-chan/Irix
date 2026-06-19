@@ -94,11 +94,14 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             OnLayoutTreeNodeArrayAllocated();
 
             OnLayoutAllocationPhaseStarted();
+            var elementRanges = state.ElementRangesToArray();
+
+            OnLayoutAllocationPhaseStarted();
             var scrollDiagnostics = state.ScrollDiagnosticsToArray();
             OnLayoutScrollObservationsArrayAllocated();
 
             OnLayoutAllocationPhaseStarted();
-            var result = new LayoutTreeResult(elements, treeNodes, dirtyRanges, scrollDiagnostics);
+            var result = new LayoutTreeResult(elements, treeNodes, elementRanges, dirtyRanges, scrollDiagnostics);
             OnLayoutResultAllocated();
             return result;
         }
@@ -146,6 +149,8 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
         public LayoutElement[] ElementsToArray() => _elements.ToArray();
 
         public LayoutTreeNode[] TreeNodesToArray() => _treeNodes.ToArray();
+
+        public LayoutElementRange[] ElementRangesToArray() => _elementRanges.ToArray();
 
         public ScrollContainerDiag[] ScrollDiagnosticsToArray() =>
             _scrollDiags.Count == 0 ? EmptyScrollDiagnostics : _scrollDiags.ToArray();

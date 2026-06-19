@@ -470,6 +470,7 @@ internal readonly struct ScrollCompositionLayerTarget(
 internal sealed class LayoutTreeResult(
     IReadOnlyList<LayoutElement> elements,
     LayoutTreeNode[] treeNodes,
+    LayoutElementRange[] elementRanges,
     IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
     IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
 {
@@ -477,7 +478,16 @@ internal sealed class LayoutTreeResult(
         IReadOnlyList<LayoutElement> elements,
         LayoutTreeNode[] treeNodes,
         IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
-        : this(elements, treeNodes, dirtyElementRanges, [])
+        : this(elements, treeNodes, [], dirtyElementRanges, [])
+    {
+    }
+
+    public LayoutTreeResult(
+        IReadOnlyList<LayoutElement> elements,
+        LayoutTreeNode[] treeNodes,
+        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
+        IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
+        : this(elements, treeNodes, [], dirtyElementRanges, scrollDiagnostics)
     {
     }
 
@@ -492,6 +502,12 @@ internal sealed class LayoutTreeResult(
     public LayoutTreeNode[] TreeNodes { get; } = treeNodes;
 
     /// <summary>
+    /// DFS-indexed map from VirtualNodes to their layout element range. Entries
+    /// with zero count have no directly rendered element.
+    /// </summary>
+    public LayoutElementRange[] ElementRanges { get; } = elementRanges;
+
+    /// <summary>
     /// Merged, sorted ranges of layout elements that correspond to dirty VirtualNodes.
     /// Each tuple is (startIndex, count) into <see cref="Elements"/>.
     /// Overlapping/adjacent ranges are merged to produce the minimal set.
@@ -501,6 +517,18 @@ internal sealed class LayoutTreeResult(
 
     /// <summary>Diagnostic info for each ScrollContainer encountered during layout.</summary>
     public IReadOnlyList<ScrollContainerDiag> ScrollDiagnostics { get; } = scrollDiagnostics;
+
+    public LayoutTreeResult WithElementsAndDirtyRanges(
+        IReadOnlyList<LayoutElement> nextElements,
+        IReadOnlyList<(int Start, int Count)> nextDirtyElementRanges)
+    {
+        return new LayoutTreeResult(
+            nextElements,
+            TreeNodes,
+            ElementRanges,
+            nextDirtyElementRanges,
+            ScrollDiagnostics);
+    }
 }
 
 /// <summary>

@@ -1,10 +1,10 @@
 # Layout Dirty Classification
 
-> Diagnostic and planning boundary for layout invalidation. The current implementation still rebuilds the full `LayoutTreeBuilder` result whenever layout is invalidated. Retained partial apply can reuse command/resource/hit-target metadata after that publication; it is not a layout-skip path.
+> Diagnostic and planning boundary for layout invalidation. The current implementation skips `LayoutTreeBuilder` only for proven `StyleOnly` dirty sets; all text/layout/tree/viewport or unsafe projections still rebuild the full layout. Retained partial apply can reuse command/resource/hit-target metadata after current-frame publication; it is separate from the layout-skip decision.
 
 ## Goal
 
-Layout dirty classification records why layout is dirty and keeps enough diagnostics to make future partial layout auditable before behavior changes. It does not skip layout today.
+Layout dirty classification records why layout is dirty and keeps enough diagnostics to make retained layout reuse auditable. It implements a narrow `StyleOnly` layout skip, but not partial layout or local subtree layout.
 
 ## Dirty Categories
 
@@ -22,11 +22,11 @@ Layout dirty classification records why layout is dirty and keeps enough diagnos
 - `--debug-ui` displays layout rebuild count/reason/classifications for observation.
 - `--diagnose-input` prints dirty reasons for hover-only, press, and release.
 - Tests cover hover-only `StyleOnly`, press `StyleOnly`, scroll `LayoutAffecting`, resize `ViewportChanged`, release `TextSizeAffecting`, and mixed priority.
-- `LayoutTreeBuilder` still performs a full layout rebuild for dirty nodes, tree changes, and viewport changes.
-- `dirtyElementRanges` and dirty command ranges are diagnostics and retained partial-apply inputs for command replacement; they are not partial layout.
+- `LayoutTreeBuilder` performs a full layout rebuild for tree, viewport, text-size, layout-affecting, or unsafe dirty projections.
+- Proven `StyleOnly` dirty sets reuse retained layout geometry/tree/scroll diagnostics, refresh current text handles, patch dirty visual/action metadata, and re-record current-frame commands/resources.
 - Segmented retained-frame ownership can select a segment-local render source after normal layout/draw publication when ownership, freshness, command range, resource, and hit-target guards pass. The Poc runtime enables this by default and `--no-partial-apply` disables it.
 - The selected render-source path does not change `LayoutRebuildCount`, `LastLayoutRebuildReason`, `LastLayoutResult`, or `RenderPipelineRetainedInputSnapshot` semantics.
-- Focused preflight tests pin this boundary: `StyleOnly` hover/action-id changes still increase the full layout rebuild count today, while retained partial apply may accept post-publication command/resource/hit-target reuse; mixed text/layout/viewport reasons still fall back.
+- Focused tests pin this boundary: `StyleOnly` hover/action-id/visual changes keep `LayoutRebuildCount` stable when reuse is proven, current-frame resources and hit-target metadata update, and mixed text/layout/viewport or incomplete dirty projections still fall back to full layout.
 
 ## `LayoutTreeResult` Publication Contract
 
@@ -78,13 +78,13 @@ Current implementation: empty `DirtyElementRanges` and absent `ScrollDiagnostics
 
 - Layout dirty diagnostics are complete as the current baseline.
 - Expand dirty diagnostics only when a target implementation needs the additional signal or an existing output regresses.
-- `StyleOnly` layout skip, partial layout, local subtree layout, and `LayoutTreeBuilder` rewrites should be reopened as explicit target-architecture work, not as incidental cleanup.
+- Partial layout, local subtree layout, and `LayoutTreeBuilder` rewrites should be reopened as explicit target-architecture work, not as incidental cleanup.
 
 ## StyleOnly Patch Boundary
 
-The planning and retained-frame ownership pieces for style-only partial apply are implemented: style-only eligibility, dirty element to command-range planning, retained root metadata projection, hit-target metadata projection, segmented retained-frame ownership, and guarded compositor handoff all exist as internal/runtime paths.
+The planning, retained-frame ownership, and pipeline layout-skip pieces for style-only reuse are implemented: style-only eligibility, retained layout patching, current text-handle refresh, dirty element to command-range planning, retained root metadata projection, hit-target metadata projection, segmented retained-frame ownership, and guarded compositor handoff all exist as internal/runtime paths.
 
-The not-yet-implemented part is a true `RenderPipeline.Build` layout-skip branch. A future style-only layout-skip patch may reuse retained layout only when every dirty classification is `StyleOnly` and retained layout context is otherwise identical:
+The active `RenderPipeline.Build` branch reuses retained layout only when every dirty classification is `StyleOnly` and retained layout context is otherwise identical:
 
 - Viewport bounds and root clip semantics.
 - Flat layout element count and order.
@@ -96,15 +96,15 @@ The not-yet-implemented part is a true `RenderPipeline.Build` layout-skip branch
 
 Any `TextSizeAffecting`, `LayoutAffecting`, `TreeStructure`, `ViewportChanged`, or unknown property reason must fall back to the existing full layout path.
 
-## Future Fast Path Contract
+## Fast Path Contract
 
-A true style-only fast path would live inside `RenderPipeline.Build` after dirty classification and before the current full layout rebuild branch. It must:
+The style-only fast path lives inside `RenderPipeline.Build` after dirty classification and before the full layout rebuild branch. It must:
 
 - Reuse retained layout only from retained data plus next-node metadata.
-- Rerecord only dirty command ranges mapped from retained element-to-command ranges.
+- Re-record current-frame commands/resources and publish dirty command ranges mapped from current element-to-command ranges.
 - Patch hit target metadata while preserving retained geometry.
 - Bind replacement commands to current-frame `FrameDrawingResources`.
 - Preserve retained frame/resource ownership and avoid stale `TextSlice` / `ResourceHandle` references.
-- Return an explicit result such as `AppliedPartial`, `FallbackFull`, or `Rejected`.
+- Fall back to the existing full layout path when retained projection is incomplete or unsafe.
 
-Before implementation, tests must prove layout rebuild count does not increase only for the intended fast path, retained bounds/clips/ranges remain stable, button visual commands update, `ActionId` metadata updates, current-frame resources are used, and mixed or uncertain dirty reasons fall back.
+Tests prove layout rebuild count does not increase only for the intended fast path, retained bounds/clips/ranges remain stable, visual commands update, `ActionId` metadata updates, current-frame resources are used, current text handles resolve across snapshots, and mixed or uncertain dirty reasons fall back.

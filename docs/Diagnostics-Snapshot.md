@@ -19,7 +19,7 @@ The model answers:
 - No diagnostics runner migration.
 - No scroll/input/clip/backend ownership move.
 - No intentional CLI text change.
-- No StyleOnly fast path in `RenderPipeline.Build`.
+- No new public StyleOnly diagnostics surface beyond the existing internal patch-plan smoke and pipeline counters.
 
 ## Snapshot Surface
 

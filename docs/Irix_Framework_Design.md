@@ -145,7 +145,7 @@ Do not implement Vulkan/Metal or advanced GPU paths until the platform-neutral c
 
 ## Layout, Clip, And Diagnostics
 
-Layout dirty classification records why layout is dirty but `RenderPipeline.Build` does not skip layout yet. Retained partial apply and segmented selected render-source handoff can reuse command/resource/hit-target metadata after normal publication when guards pass; a true `StyleOnly` layout-skip branch remains future work. See [LayoutDirty-Design.md](LayoutDirty-Design.md).
+Layout dirty classification records why layout is dirty. `RenderPipeline.Build` now skips `LayoutTreeBuilder` for proven `StyleOnly` dirty sets by reusing retained geometry/tree/scroll diagnostics, refreshing current text handles and dirty visual/action metadata, and falling back to full layout when projection is unsafe. Retained partial apply and segmented selected render-source handoff can still reuse command/resource/hit-target metadata after the current frame is published when guards pass. See [LayoutDirty-Design.md](LayoutDirty-Design.md).
 
 Clip/scissor is default-on:
 

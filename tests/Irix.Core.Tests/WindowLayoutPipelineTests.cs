@@ -605,7 +605,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void RenderPipeline_classifies_style_only_dirty_rebuild()
+    public void RenderPipeline_classifies_style_only_dirty_reuses_layout()
     {
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -621,7 +621,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
 
-        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(1, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)], pipeline.LastDirtyClassifications);
         Assert.Equal(frame1.HitTargets[0].Bounds, frame2.HitTargets[0].Bounds);
@@ -656,7 +656,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
         var nextGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
 
-        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(1, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly, InvalidationKind.VisualOnly)], pipeline.LastDirtyClassifications);
         Assert.Equal(initialGeometry, nextGeometry);
@@ -693,7 +693,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
 
-        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(1, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly, InvalidationKind.CompositeOnly)], pipeline.LastDirtyClassifications);
         Assert.Equal(frame1.Commands.Memory.Span[0].Rect, frame2.Commands.Memory.Span[0].Rect);
@@ -729,7 +729,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
 
-        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(1, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly, InvalidationKind.VisualOnly)], pipeline.LastDirtyClassifications);
         Assert.Equal(DrawColor.Opaque(20, 30, 40), frame1.Commands.Memory.Span[0].Color);
@@ -4043,7 +4043,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [2]);
         var nextSnapshot = pipeline.LastRetainedInputSnapshot!;
 
-        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, nextSnapshot.LayoutRebuildReason);
         Assert.Equal([new LayoutDirtyClassification(2, LayoutRebuildReason.StyleOnly)], nextSnapshot.DirtyClassifications);
         Assert.Equal(pipeline.LastDirtyClassifications, nextSnapshot.DirtyClassifications);
@@ -4086,7 +4086,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(frame2.DirtyCommandRanges, snapshot.DirtyCommandRanges);
         Assert.Equal(new ActionId(4), Assert.Single(snapshot.HitTargets).ActionId);
         Assert.Equal(frame1.Commands.Count, frame2.Commands.Count);
-        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(1, pipeline.LayoutRebuildCount);
     }
 
     [Fact]
@@ -4115,7 +4115,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(snapshot.DirtyElementRanges, plan.DirtyElementRanges);
         Assert.Equal(snapshot.DirtyCommandRanges, plan.DirtyCommandRanges);
         Assert.Equal(snapshot.HitTargets, plan.PatchedHitTargets);
-        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(2, frame2.Commands.Count);
         Assert.Equal(frame2.HitTargets, snapshot.HitTargets);
         Assert.Equal(frame2.DirtyCommandRanges, plan.DirtyCommandRanges);
@@ -4383,7 +4383,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [2]);
         var nextLayout = pipeline.LastLayoutResult!;
 
-        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
         Assert.Equal(initialElementSnapshot, SnapshotLayoutElementInvariants(nextLayout.Elements));
@@ -4417,7 +4417,7 @@ public sealed class WindowLayoutPipelineTests
         var nextLayout = pipeline.LastLayoutResult!;
         var nextHitTarget = Assert.Single(frame2.HitTargets);
 
-        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
         Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(nextLayout.Elements));
@@ -4468,6 +4468,72 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleOnly_rectangle_background_change_skips_layout_and_updates_command()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3))));
+        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6))));
+
+        using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
+        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+
+        using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
+
+        Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([(0, 1)], pipeline.LastDirtyElementRanges);
+        Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements));
+        Assert.Equal(DrawCommandKind.FillRect, frame2.Commands.Memory.Span[0].Kind);
+        Assert.Equal(DrawColor.Opaque(4, 5, 6), frame2.Commands.Memory.Span[0].Color);
+    }
+
+    [Fact]
+    public void StyleOnly_layout_skip_falls_back_when_dirty_nodes_miss_changed_style()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3))),
+            VirtualNodeFactory.Rectangle(new NodeKey(3),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6))));
+        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Color.FromSrgb(1, 2, 3))),
+            VirtualNodeFactory.Rectangle(new NodeKey(3),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Color.FromSrgb(8, 9, 10))));
+
+        using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+
+        using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
+
+        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)], pipeline.LastDirtyClassifications);
+        Assert.Equal(DrawCommandKind.FillRect, frame2.Commands.Memory.Span[1].Kind);
+        Assert.Equal(DrawColor.Opaque(8, 9, 10), frame2.Commands.Memory.Span[1].Color);
+    }
+
+    [Fact]
     public void StyleOnly_layout_skip_preflight_keeps_full_layout_rebuild_and_post_publication_partial_apply_separate()
     {
         var pipeline = new RenderPipeline();
@@ -4504,7 +4570,7 @@ public sealed class WindowLayoutPipelineTests
             pipeline.LastLayoutResult!.Elements,
             pipeline.LastDirtyElementRanges);
 
-        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
+        Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
         Assert.Equal(initialLayoutSnapshot, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements));
@@ -4515,7 +4581,7 @@ public sealed class WindowLayoutPipelineTests
         var mixedPlan = RetainedPartialApplyPlanner.Plan(pipeline.LastRetainedInputSnapshot, viewport, mixedFrame.Resources, mixedFrame.Resources);
         var viewportPlan = RetainedPartialApplyPlanner.Plan(styleOnlySnapshot, new PixelRectangle(0, 0, 800, 540), styleOnlyFrame.Resources, styleOnlyFrame.Resources);
 
-        Assert.Equal(initialRebuildCount + 2, pipeline.LayoutRebuildCount);
+        Assert.Equal(initialRebuildCount + 1, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.TextSizeAffecting, pipeline.LastLayoutRebuildReason);
         Assert.Contains(pipeline.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.TextSizeAffecting);
         Assert.Contains(pipeline.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.StyleOnly);
@@ -4562,7 +4628,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(new ActionId(1), patchedHitTarget.ActionId);
         Assert.Equal(retainedHitTargets[0].Bounds, patchedHitTarget.Bounds);
         Assert.Equal(retainedHitTargets[0].ClipBounds, patchedHitTarget.ClipBounds);
-        Assert.Equal(2, pipeline.LayoutRebuildCount);
+        Assert.Equal(1, pipeline.LayoutRebuildCount);
     }
 
     [Fact]
@@ -4992,7 +5058,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.True(mapped);
         await runtime.DispatchAndWaitAsync(message!, cancellationToken);
 
-        Assert.Equal(initialRebuildCount + 1, translator.LayoutRebuildCount);
+        Assert.Equal(initialRebuildCount, translator.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, translator.LastLayoutRebuildReason);
         Assert.Contains(translator.LastDirtyClassifications, classification => classification.Reason == LayoutRebuildReason.StyleOnly);
         AssertCompositionInvalidation(translator, CompositionRenderInvalidationKind.None, cancelsScrollPresentation: false);

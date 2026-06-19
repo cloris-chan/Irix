@@ -114,7 +114,7 @@ internal static class RetainedRootMetadataPatcher
 
         if (isDirty)
         {
-            if (retainedNode.Kind != VirtualNodeKind.Button || !TryValidateDirtyProperties(retainedNode.Properties, nextNode.Properties, out reason))
+            if (!TryValidateDirtyProperties(retainedNode.Properties, nextNode.Properties, out reason))
             {
                 return false;
             }
