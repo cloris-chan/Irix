@@ -37,6 +37,11 @@ internal static class RangeUtils
         }
     }
 
+    public static IReadOnlyList<(int Start, int Count)> Merge(scoped ref ScratchList<(int Start, int Count)> ranges)
+    {
+        return MergeScratch(ref ranges, rejectOverlap: false, out _);
+    }
+
     private static IReadOnlyList<(int Start, int Count)> MergeScratch(
         ref ScratchList<(int Start, int Count)> ranges,
         bool rejectOverlap,

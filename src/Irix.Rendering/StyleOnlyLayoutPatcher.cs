@@ -57,7 +57,7 @@ internal static class StyleOnlyLayoutPatcher
             ranges.Add((range.ElementStart, range.ElementCount));
         }
 
-        var dirtyElementRanges = MergeDirtyRanges(ranges);
+        var dirtyElementRanges = RangeUtils.Merge(ranges);
         if (dirtyElementRanges.Count == 0)
         {
             return false;
@@ -114,7 +114,7 @@ internal static class StyleOnlyLayoutPatcher
                     return false;
                 }
 
-                var label = GetButtonLabel(nextNode);
+                var label = LayoutNodeReader.GetButtonLabel(nextNode);
                 if (label.IsNone)
                 {
                     return false;
@@ -169,7 +169,7 @@ internal static class StyleOnlyLayoutPatcher
             retainedElement.Bounds,
             retainedElement.ClipBounds,
             Text: content,
-            ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor));
+            ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor));
         return true;
     }
 
@@ -203,8 +203,8 @@ internal static class StyleOnlyLayoutPatcher
             LayoutElementKind.Rectangle,
             retainedElement.Bounds,
             retainedElement.ClipBounds,
-            Background: ReadPaint(properties, VirtualPropertyKey.Background),
-            Border: ReadBorderStroke(properties, VirtualPropertyKey.Border));
+            Background: LayoutNodeReader.ReadPaint(properties, VirtualPropertyKey.Background),
+            Border: LayoutNodeReader.ReadBorderStroke(properties, VirtualPropertyKey.Border));
         return true;
     }
 
@@ -219,7 +219,7 @@ internal static class StyleOnlyLayoutPatcher
             return false;
         }
 
-        var label = GetButtonLabel(nextNode);
+        var label = LayoutNodeReader.GetButtonLabel(nextNode);
         if (label.IsNone)
         {
             return false;
@@ -236,60 +236,10 @@ internal static class StyleOnlyLayoutPatcher
                 IsHovered: properties.GetBool(VirtualPropertyKey.IsHovered),
                 IsPressed: properties.GetBool(VirtualPropertyKey.IsPressed),
                 IsFocused: properties.GetBool(VirtualPropertyKey.IsFocused)),
-            Background: ReadPaint(properties, VirtualPropertyKey.Background),
-            Border: ReadBorderStroke(properties, VirtualPropertyKey.Border),
-            ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor));
+            Background: LayoutNodeReader.ReadPaint(properties, VirtualPropertyKey.Background),
+            Border: LayoutNodeReader.ReadBorderStroke(properties, VirtualPropertyKey.Border),
+            ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor));
         return true;
-    }
-
-    private static IReadOnlyList<(int Start, int Count)> MergeDirtyRanges(List<(int Start, int Count)> ranges)
-    {
-        if (ranges.Count == 0)
-        {
-            return [];
-        }
-
-        ranges.Sort(RangeStartComparer.Instance);
-        var write = 0;
-        for (var read = 0; read < ranges.Count; read++)
-        {
-            var current = ranges[read];
-            if (current.Count <= 0)
-            {
-                continue;
-            }
-
-            if (write == 0)
-            {
-                ranges[write++] = current;
-                continue;
-            }
-
-            var last = ranges[write - 1];
-            var lastEnd = last.Start + last.Count;
-            if (current.Start <= lastEnd)
-            {
-                var currentEnd = current.Start + current.Count;
-                ranges[write - 1] = (last.Start, Math.Max(lastEnd, currentEnd) - last.Start);
-            }
-            else
-            {
-                ranges[write++] = current;
-            }
-        }
-
-        if (write == 0)
-        {
-            return [];
-        }
-
-        var merged = new (int Start, int Count)[write];
-        for (var i = 0; i < write; i++)
-        {
-            merged[i] = ranges[i];
-        }
-
-        return merged;
     }
 
     private static bool TryFindNode(VirtualNode root, int targetIndex, out VirtualNode node)
@@ -319,32 +269,4 @@ internal static class StyleOnlyLayoutPatcher
         return false;
     }
 
-    private static TextNodeContent GetButtonLabel(VirtualNode node)
-    {
-        foreach (var child in node.Children)
-        {
-            if (child.Kind == VirtualNodeKind.Text && child.Content.TryGetText(out var content) && !content.IsNone)
-            {
-                return content;
-            }
-        }
-
-        return default;
-    }
-
-    private static StyleColorSlot ReadColor(PropertyReader reader, VirtualPropertyKey key) =>
-        reader.TryGetColor(key, out var color) ? StyleColorSlot.Some(color) : StyleColorSlot.None;
-
-    private static PaintSlot ReadPaint(PropertyReader reader, VirtualPropertyKey key) =>
-        reader.TryGetPaint(key, out var paint) ? PaintSlot.Some(paint) : PaintSlot.None;
-
-    private static BorderStrokeSlot ReadBorderStroke(PropertyReader reader, VirtualPropertyKey key) =>
-        reader.TryGetBorderStroke(key, out var border) ? BorderStrokeSlot.Some(border) : BorderStrokeSlot.None;
-
-    private sealed class RangeStartComparer : IComparer<(int Start, int Count)>
-    {
-        public static readonly RangeStartComparer Instance = new();
-
-        public int Compare((int Start, int Count) x, (int Start, int Count) y) => x.Start.CompareTo(y.Start);
-    }
 }

@@ -294,7 +294,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
         private int LayoutText(VirtualNode node, int dfsIndex)
         {
-            var content = GetTextContent(node);
+            var content = LayoutNodeReader.GetTextContent(node);
             if (content.IsNone)
             {
                 RegisterElementRange(dfsIndex, 0, 0);
@@ -308,7 +308,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 new PixelRectangle(_ctx.Style.HorizontalPadding, _cursorY, _ctx.AvailableWidth, _ctx.Style.TextHeight),
                 ClipBounds: _ctx.ClipBounds,
                 Text: content,
-                ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
+                ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += _ctx.Style.TextHeight + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Text, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -328,8 +328,8 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 LayoutElementKind.Rectangle,
                 rectangleBounds,
                 ClipBounds: _ctx.ClipBounds,
-                Background: ReadPaint(properties, VirtualPropertyKey.Background),
-                Border: ReadBorderStroke(properties, VirtualPropertyKey.Border)));
+                Background: LayoutNodeReader.ReadPaint(properties, VirtualPropertyKey.Background),
+                Border: LayoutNodeReader.ReadBorderStroke(properties, VirtualPropertyKey.Border)));
             _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -338,7 +338,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
         private int LayoutButton(VirtualNode node, int dfsIndex)
         {
-            var label = GetButtonLabel(node);
+            var label = LayoutNodeReader.GetButtonLabel(node);
             if (label.IsNone)
             {
                 throw new InvalidOperationException("Button nodes require an explicit text label child.");
@@ -367,9 +367,9 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 Text: label,
                 ActionId: actionId,
                 ButtonState: buttonState,
-                Background: ReadPaint(properties, VirtualPropertyKey.Background),
-                Border: ReadBorderStroke(properties, VirtualPropertyKey.Border),
-                ForegroundColor: ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
+                Background: LayoutNodeReader.ReadPaint(properties, VirtualPropertyKey.Background),
+                Border: LayoutNodeReader.ReadBorderStroke(properties, VirtualPropertyKey.Border),
+                ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
             _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
@@ -439,7 +439,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             try
             {
                 CollectDirtyRangesFromElementRanges(elementRanges, sortedDirty.Written, ref dirtyCursor, ref ranges);
-                return MergeDirtyRanges(ref ranges);
+                return RangeUtils.Merge(ref ranges);
             }
             finally
             {
@@ -488,83 +488,8 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
         return true;
     }
 
-    private static IReadOnlyList<(int Start, int Count)> MergeDirtyRanges(scoped ref ScratchList<(int Start, int Count)> ranges)
-    {
-        if (ranges.Count == 0)
-        {
-            return EmptyDirtyElementRanges;
-        }
-
-        if (ranges.Count == 1)
-        {
-            return ranges.ToArray();
-        }
-
-        ranges.Sort(RangeStartComparer.Instance);
-        var span = ranges.WrittenMutable;
-        var write = 1;
-        for (var read = 1; read < span.Length; read++)
-        {
-            var last = span[write - 1];
-            var current = span[read];
-            var lastEnd = last.Start + last.Count;
-
-            if (current.Start <= lastEnd)
-            {
-                var newEnd = Math.Max(lastEnd, current.Start + current.Count);
-                span[write - 1] = (last.Start, newEnd - last.Start);
-            }
-            else
-            {
-                span[write++] = current;
-            }
-        }
-
-        var result = new (int Start, int Count)[write];
-        span[..write].CopyTo(result);
-        return result;
-    }
-
-    private sealed class RangeStartComparer : IComparer<(int Start, int Count)>
-    {
-        public static readonly RangeStartComparer Instance = new();
-
-        public int Compare((int Start, int Count) x, (int Start, int Count) y) => x.Start.CompareTo(y.Start);
-    }
-
-    private static TextNodeContent GetButtonLabel(VirtualNode node)
-    {
-        foreach (var child in node.Children)
-        {
-            if (child.Kind == VirtualNodeKind.Text)
-            {
-                var content = GetTextContent(child);
-                if (!content.IsNone)
-                {
-                    return content;
-                }
-            }
-        }
-
-        return default;
-    }
-
     private static int ReadInt(PropertyReader reader, VirtualPropertyKey key, int defaultValue) =>
         (int)reader.GetNumber(key, defaultValue);
-
-    private static StyleColorSlot ReadColor(PropertyReader reader, VirtualPropertyKey key) =>
-        reader.TryGetColor(key, out var color) ? StyleColorSlot.Some(color) : StyleColorSlot.None;
-
-    private static PaintSlot ReadPaint(PropertyReader reader, VirtualPropertyKey key) =>
-        reader.TryGetPaint(key, out var paint) ? PaintSlot.Some(paint) : PaintSlot.None;
-
-    private static BorderStrokeSlot ReadBorderStroke(PropertyReader reader, VirtualPropertyKey key) =>
-        reader.TryGetBorderStroke(key, out var border) ? BorderStrokeSlot.Some(border) : BorderStrokeSlot.None;
-
-    private static TextNodeContent GetTextContent(VirtualNode node)
-    {
-        return node.Content.TryGetText(out var textContent) ? textContent : default;
-    }
 
     private static PixelRectangle IntersectRect(PixelRectangle a, PixelRectangle b)
     {
