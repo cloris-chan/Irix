@@ -3,6 +3,7 @@ namespace Irix.Rendering;
 internal static class StyleOnlyLayoutPatcher
 {
     private const int InlineDirtyIndexCapacity = 32;
+    private const int InlineRangeCapacity = 16;
 
     public static bool TryBuildPatchedLayout(
         LayoutTreeResult retainedLayout,
@@ -17,54 +18,59 @@ internal static class StyleOnlyLayoutPatcher
         }
 
         var nextElements = CopyElements(retainedLayout.Elements);
-        if (!TryRefreshTextContent(nextElements, retainedLayout, nextRoot))
+        var scratch = new RenderScratchBuffer();
+        Span<int> dirtyIndexStorage = stackalloc int[InlineDirtyIndexCapacity];
+        scoped var sortedDirty = scratch.CreateDirtyIndexList(dirtyIndexStorage);
+        try
         {
-            return false;
-        }
-
-        Span<int> inlineDirty = stackalloc int[InlineDirtyIndexCapacity];
-        Span<int> sortedDirty = dirtyNodes.Count <= inlineDirty.Length
-            ? inlineDirty[..dirtyNodes.Count]
-            : new int[dirtyNodes.Count];
-        for (var i = 0; i < dirtyNodes.Count; i++)
-        {
-            sortedDirty[i] = dirtyNodes[i];
-        }
-
-        sortedDirty.Sort();
-        var ranges = new List<(int Start, int Count)>(dirtyNodes.Count);
-        var previousDirty = -1;
-        for (var i = 0; i < sortedDirty.Length; i++)
-        {
-            var dfsIndex = sortedDirty[i];
-            if (dfsIndex == previousDirty)
+            for (var i = 0; i < dirtyNodes.Count; i++)
             {
-                continue;
+                sortedDirty.Add(dirtyNodes[i]);
             }
 
-            previousDirty = dfsIndex;
-            if ((uint)dfsIndex >= (uint)retainedLayout.ElementRanges.Length)
-            {
-                return false;
-            }
+            sortedDirty.Sort();
 
-            var range = retainedLayout.ElementRanges[dfsIndex];
-            if (!TryPatchElementRange(nextElements, nextRoot, dfsIndex, range))
+            Span<(int Start, int Count)> rangeStorage = stackalloc (int Start, int Count)[InlineRangeCapacity];
+            scoped var ranges = scratch.CreateRangeList(rangeStorage);
+            try
             {
-                return false;
-            }
+                var dfsIndex = 0;
+                var dirtyCursor = 0;
+                var treeCursor = 0;
+                if (!TryPatchTree(
+                    nextRoot,
+                    retainedLayout,
+                    nextElements,
+                    sortedDirty.Written,
+                    ref dfsIndex,
+                    ref dirtyCursor,
+                    ref treeCursor,
+                    ref ranges)
+                    || dirtyCursor != sortedDirty.Count
+                    || treeCursor != retainedLayout.TreeNodes.Length
+                    || dfsIndex != retainedLayout.ElementRanges.Length)
+                {
+                    return false;
+                }
 
-            ranges.Add((range.ElementStart, range.ElementCount));
+                var dirtyElementRanges = RangeUtils.Merge(ref ranges);
+                if (dirtyElementRanges.Count == 0)
+                {
+                    return false;
+                }
+
+                patchedLayout = retainedLayout.WithElementsAndDirtyRanges(nextElements, dirtyElementRanges);
+                return true;
+            }
+            finally
+            {
+                ranges.Dispose();
+            }
         }
-
-        var dirtyElementRanges = RangeUtils.Merge(ranges);
-        if (dirtyElementRanges.Count == 0)
+        finally
         {
-            return false;
+            sortedDirty.Dispose();
         }
-
-        patchedLayout = retainedLayout.WithElementsAndDirtyRanges(nextElements, dirtyElementRanges);
-        return true;
     }
 
     private static LayoutElement[] CopyElements(IReadOnlyList<LayoutElement> elements)
@@ -78,50 +84,162 @@ internal static class StyleOnlyLayoutPatcher
         return result;
     }
 
-    private static bool TryRefreshTextContent(
-        LayoutElement[] elements,
+    private static bool TryPatchTree(
+        VirtualNode nextNode,
         LayoutTreeResult retainedLayout,
-        VirtualNode nextRoot)
+        LayoutElement[] elements,
+        ReadOnlySpan<int> sortedDirty,
+        ref int dfsIndex,
+        ref int dirtyCursor,
+        ref int treeCursor,
+        scoped ref ScratchList<(int Start, int Count)> ranges)
     {
-        foreach (ref readonly var treeNode in retainedLayout.TreeNodes.AsSpan())
+        var currentIndex = dfsIndex++;
+        if (!TryReadTreeNode(retainedLayout.TreeNodes, ref treeCursor, currentIndex, out var retainedTreeNode)
+            || !TryRefreshTextContent(elements, retainedTreeNode, nextNode)
+            || !TryReadDirtyState(sortedDirty, ref dirtyCursor, currentIndex, out var isDirty))
         {
-            if (treeNode.ElementCount != 1
-                || (treeNode.Kind != VirtualNodeKind.Text && treeNode.Kind != VirtualNodeKind.Button))
-            {
-                continue;
-            }
+            return false;
+        }
 
-            var elementIndex = treeNode.ElementStart;
-            if ((uint)elementIndex >= (uint)elements.Length || !TryFindNode(nextRoot, treeNode.DfsIndex, out var nextNode))
+        if (isDirty)
+        {
+            if ((uint)currentIndex >= (uint)retainedLayout.ElementRanges.Length)
             {
                 return false;
             }
 
-            var retainedElement = elements[elementIndex];
-            if (retainedElement.Kind == LayoutElementKind.Text)
+            var range = retainedLayout.ElementRanges[currentIndex];
+            if (!TryPatchElementRange(elements, nextNode, range))
             {
-                if (nextNode.Kind != VirtualNodeKind.Text || !nextNode.Content.TryGetText(out var content))
-                {
-                    return false;
-                }
-
-                elements[elementIndex] = WithText(retainedElement, content);
+                return false;
             }
-            else if (retainedElement.Kind == LayoutElementKind.Button)
+
+            ranges.Add((range.ElementStart, range.ElementCount));
+        }
+
+        foreach (var child in nextNode.Children)
+        {
+            if (!TryPatchTree(child, retainedLayout, elements, sortedDirty, ref dfsIndex, ref dirtyCursor, ref treeCursor, ref ranges))
             {
-                if (nextNode.Kind != VirtualNodeKind.Button)
-                {
-                    return false;
-                }
-
-                var label = LayoutNodeReader.GetButtonLabel(nextNode);
-                if (label.IsNone)
-                {
-                    return false;
-                }
-
-                elements[elementIndex] = WithText(retainedElement, label);
+                return false;
             }
+        }
+
+        return true;
+    }
+
+    private static bool TryReadTreeNode(
+        ReadOnlySpan<LayoutTreeNode> treeNodes,
+        ref int treeCursor,
+        int dfsIndex,
+        out LayoutTreeNode treeNode)
+    {
+        treeNode = default;
+        if (treeCursor >= treeNodes.Length)
+        {
+            return true;
+        }
+
+        var candidate = treeNodes[treeCursor];
+        if (candidate.DfsIndex < dfsIndex)
+        {
+            return false;
+        }
+
+        if (candidate.DfsIndex != dfsIndex)
+        {
+            return true;
+        }
+
+        treeNode = candidate;
+        treeCursor++;
+        return true;
+    }
+
+    private static bool TryReadDirtyState(
+        ReadOnlySpan<int> sortedDirty,
+        ref int dirtyCursor,
+        int dfsIndex,
+        out bool isDirty)
+    {
+        isDirty = false;
+        if (dirtyCursor >= sortedDirty.Length)
+        {
+            return true;
+        }
+
+        var dirtyIndex = sortedDirty[dirtyCursor];
+        if (dirtyIndex < dfsIndex)
+        {
+            return false;
+        }
+
+        if (dirtyIndex != dfsIndex)
+        {
+            return true;
+        }
+
+        isDirty = true;
+        do
+        {
+            dirtyCursor++;
+        }
+        while (dirtyCursor < sortedDirty.Length && sortedDirty[dirtyCursor] == dfsIndex);
+
+        return true;
+    }
+
+    private static bool TryRefreshTextContent(
+        LayoutElement[] elements,
+        LayoutTreeNode retainedTreeNode,
+        VirtualNode nextNode)
+    {
+        if (retainedTreeNode.Kind == VirtualNodeKind.None)
+        {
+            return true;
+        }
+
+        if (retainedTreeNode.Kind != nextNode.Kind)
+        {
+            return false;
+        }
+
+        if (retainedTreeNode.Kind != VirtualNodeKind.Text && retainedTreeNode.Kind != VirtualNodeKind.Button)
+        {
+            return true;
+        }
+
+        if (retainedTreeNode.ElementCount != 1 || (uint)retainedTreeNode.ElementStart >= (uint)elements.Length)
+        {
+            return false;
+        }
+
+        var elementIndex = retainedTreeNode.ElementStart;
+        var retainedElement = elements[elementIndex];
+        if (retainedElement.Kind == LayoutElementKind.Text)
+        {
+            if (nextNode.Kind != VirtualNodeKind.Text || !nextNode.Content.TryGetText(out var content))
+            {
+                return false;
+            }
+
+            elements[elementIndex] = WithText(retainedElement, content);
+        }
+        else if (retainedElement.Kind == LayoutElementKind.Button)
+        {
+            if (nextNode.Kind != VirtualNodeKind.Button)
+            {
+                return false;
+            }
+
+            var label = LayoutNodeReader.GetButtonLabel(nextNode);
+            if (label.IsNone)
+            {
+                return false;
+            }
+
+            elements[elementIndex] = WithText(retainedElement, label);
         }
 
         return true;
@@ -129,14 +247,12 @@ internal static class StyleOnlyLayoutPatcher
 
     private static bool TryPatchElementRange(
         LayoutElement[] elements,
-        VirtualNode nextRoot,
-        int dfsIndex,
+        VirtualNode nextNode,
         LayoutElementRange range)
     {
         if (range.ElementCount != 1
             || (uint)range.ElementStart >= (uint)elements.Length
-            || range.ElementStart + range.ElementCount > elements.Length
-            || !TryFindNode(nextRoot, dfsIndex, out var nextNode))
+            || range.ElementStart + range.ElementCount > elements.Length)
         {
             return false;
         }
@@ -241,32 +357,4 @@ internal static class StyleOnlyLayoutPatcher
             ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor));
         return true;
     }
-
-    private static bool TryFindNode(VirtualNode root, int targetIndex, out VirtualNode node)
-    {
-        var currentIndex = 0;
-        return TryFindNodeRecursive(root, targetIndex, ref currentIndex, out node);
-    }
-
-    private static bool TryFindNodeRecursive(VirtualNode candidate, int targetIndex, ref int currentIndex, out VirtualNode node)
-    {
-        if (currentIndex == targetIndex)
-        {
-            node = candidate;
-            return true;
-        }
-
-        currentIndex++;
-        foreach (var child in candidate.Children)
-        {
-            if (TryFindNodeRecursive(child, targetIndex, ref currentIndex, out node))
-            {
-                return true;
-            }
-        }
-
-        node = default;
-        return false;
-    }
-
 }

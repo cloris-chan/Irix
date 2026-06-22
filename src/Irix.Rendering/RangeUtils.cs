@@ -131,6 +131,47 @@ internal static class RangeUtils
         }
     }
 
+    public static bool TryMapContiguousElementRangesToCommandRanges(
+        ElementCommandRange[] elementRanges,
+        IReadOnlyList<(int Start, int Count)> elementDirtyRanges,
+        out IReadOnlyList<(int Start, int Count)> commandDirtyRanges)
+    {
+        commandDirtyRanges = [];
+        if (elementDirtyRanges.Count == 0)
+        {
+            return false;
+        }
+
+        var scratch = new RenderScratchBuffer();
+        Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[InlineRangeCapacity];
+        var ranges = scratch.CreateRangeList(storage);
+        try
+        {
+            foreach (var (elementStart, elementCount) in elementDirtyRanges)
+            {
+                if (!TryMapContiguousElementRangeToCommandRange(
+                    elementRanges,
+                    elementStart,
+                    elementCount,
+                    out var commandStart,
+                    out var commandCount))
+                {
+                    commandDirtyRanges = [];
+                    return false;
+                }
+
+                ranges.Add((commandStart, commandCount));
+            }
+
+            commandDirtyRanges = MergeScratch(ref ranges, rejectOverlap: false, out _);
+            return commandDirtyRanges.Count > 0;
+        }
+        finally
+        {
+            ranges.Dispose();
+        }
+    }
+
     /// <summary>
     /// Map element ranges to command ranges using an element→command mapping, then merge.
     /// </summary>
@@ -164,6 +205,47 @@ internal static class RangeUtils
         {
             ranges.Dispose();
         }
+    }
+
+    private static bool TryMapContiguousElementRangeToCommandRange(
+        ElementCommandRange[] elementRanges,
+        int elementStart,
+        int elementCount,
+        out int commandStart,
+        out int commandCount)
+    {
+        commandStart = 0;
+        commandCount = 0;
+        if (elementStart < 0 || elementCount <= 0 || elementStart > elementRanges.Length - elementCount)
+        {
+            return false;
+        }
+
+        commandStart = elementRanges[elementStart].CommandStart;
+        if (commandStart < 0)
+        {
+            commandStart = 0;
+            return false;
+        }
+
+        var commandEnd = commandStart;
+        var elementEnd = elementStart + elementCount;
+        for (var elementIndex = elementStart; elementIndex < elementEnd; elementIndex++)
+        {
+            var elementCommandRange = elementRanges[elementIndex];
+            if (elementCommandRange.CommandStart != commandEnd
+                || elementCommandRange.CommandCount <= 0
+                || elementCommandRange.CommandCount > int.MaxValue - commandEnd)
+            {
+                commandStart = 0;
+                return false;
+            }
+
+            commandEnd += elementCommandRange.CommandCount;
+        }
+
+        commandCount = commandEnd - commandStart;
+        return commandCount > 0;
     }
 
     /// <summary>

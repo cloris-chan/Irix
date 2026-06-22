@@ -120,7 +120,7 @@ internal static class StyleOnlyPatchPlanBuilder
             return StyleOnlyPatchPlan.CreateFallback(StyleOnlyPatchFallbackReason.NotStyleOnly, dirtyElementRanges);
         }
 
-        if (!StyleOnlyPatchEligibility.TryMapStableCommandRanges(retainedElementCommandRanges, dirtyElementRanges, out var dirtyCommandRanges))
+        if (!RangeUtils.TryMapContiguousElementRangesToCommandRanges(retainedElementCommandRanges, dirtyElementRanges, out var dirtyCommandRanges))
         {
             return StyleOnlyPatchPlan.CreateFallback(StyleOnlyPatchFallbackReason.UnstableCommandRange, dirtyElementRanges);
         }

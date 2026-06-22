@@ -4498,6 +4498,59 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void StyleOnly_semantic_paint_and_border_change_skips_layout_and_updates_commands()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var start1 = Color.FromSrgb(10, 20, 30);
+        var end1 = Color.FromSrgb(40, 50, 60);
+        var start2 = Color.FromSrgb(70, 80, 90);
+        var end2 = Color.FromSrgb(100, 110, 120);
+        var border1 = Color.FromSrgb(130, 140, 150);
+        var border2 = Color.FromSrgb(160, 170, 180);
+        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Paint.LinearGradient(start1, end1, LinearGradientDirection.LeftToRight)),
+                VirtualNodeProperty.Border(border1, 3f)));
+        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeFactory.Rectangle(new NodeKey(2),
+                VirtualNodeProperty.Width(220),
+                VirtualNodeProperty.Height(48),
+                VirtualNodeProperty.Background(Paint.LinearGradient(start2, end2, LinearGradientDirection.TopToBottom)),
+                VirtualNodeProperty.Border(border2, 3f)));
+
+        using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
+        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+        var initialRebuildCount = pipeline.LayoutRebuildCount;
+
+        using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
+
+        Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
+        Assert.Equal([(0, 1)], pipeline.LastDirtyElementRanges);
+        Assert.Equal([(0, 2)], pipeline.LastDirtyCommandRanges);
+        Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements));
+
+        Assert.Equal(2, frame1.Commands.Count);
+        Assert.Equal(2, frame2.Commands.Count);
+        var fill = frame2.Commands.Memory.Span[0];
+        var stroke = frame2.Commands.Memory.Span[1];
+        Assert.Equal(DrawCommandKind.FillRect, fill.Kind);
+        Assert.Equal(DrawMaterialKind.LinearGradient, fill.Material.Kind);
+        Assert.Equal(start2, fill.Material.Color);
+        Assert.Equal(end2, fill.Material.EndColor);
+        Assert.Equal(new DrawPoint(0, 0), fill.Material.StartPoint);
+        Assert.Equal(new DrawPoint(0, 48), fill.Material.EndPoint);
+        Assert.Equal(DrawingResourceKind.Brush, fill.Resource.Kind);
+        Assert.Equal(fill.Material, ((IFrameBrushResolver)frame2.Resources).ResolveBrush(fill.Resource));
+        Assert.Equal(DrawCommandKind.StrokeRect, stroke.Kind);
+        Assert.Equal(DrawColor.Opaque(160, 170, 180), stroke.Color);
+        Assert.Equal(3f, stroke.StrokeWidth);
+    }
+
+    [Fact]
     public void StyleOnly_layout_skip_falls_back_when_dirty_nodes_miss_changed_style()
     {
         var pipeline = new RenderPipeline();
@@ -6263,7 +6316,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void StyleOnlyPatchEligibility_maps_stable_dirty_element_range_to_command_range()
+    public void RangeUtils_try_map_contiguous_element_ranges_to_command_ranges_maps_stable_ranges()
     {
         var elementCommandRanges = new ElementCommandRange[]
         {
@@ -6272,7 +6325,7 @@ public sealed class WindowLayoutPipelineTests
             new(3, 1)
         };
 
-        var stable = StyleOnlyPatchEligibility.TryMapStableCommandRanges(
+        var stable = RangeUtils.TryMapContiguousElementRangesToCommandRanges(
             elementCommandRanges,
             [(1, 1)],
             out var dirtyCommandRanges);
@@ -6282,7 +6335,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void StyleOnlyPatchEligibility_refuses_unstable_dirty_element_command_mapping()
+    public void RangeUtils_try_map_contiguous_element_ranges_to_command_ranges_refuses_unstable_mapping()
     {
         var elementCommandRanges = new ElementCommandRange[]
         {
@@ -6290,7 +6343,7 @@ public sealed class WindowLayoutPipelineTests
             new(3, 1)
         };
 
-        var stable = StyleOnlyPatchEligibility.TryMapStableCommandRanges(
+        var stable = RangeUtils.TryMapContiguousElementRangesToCommandRanges(
             elementCommandRanges,
             [(0, 2)],
             out var dirtyCommandRanges);
@@ -6300,14 +6353,14 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void StyleOnlyPatchEligibility_refuses_out_of_range_dirty_element_mapping()
+    public void RangeUtils_try_map_contiguous_element_ranges_to_command_ranges_refuses_out_of_range_mapping()
     {
         var elementCommandRanges = new ElementCommandRange[]
         {
             new(0, 1)
         };
 
-        var stable = StyleOnlyPatchEligibility.TryMapStableCommandRanges(
+        var stable = RangeUtils.TryMapContiguousElementRangesToCommandRanges(
             elementCommandRanges,
             [(1, 1)],
             out var dirtyCommandRanges);

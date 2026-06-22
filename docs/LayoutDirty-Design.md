@@ -23,10 +23,10 @@ Layout dirty classification records why layout is dirty and keeps enough diagnos
 - `--diagnose-input` prints dirty reasons for hover-only, press, and release.
 - Tests cover hover-only `StyleOnly`, press `StyleOnly`, scroll `LayoutAffecting`, resize `ViewportChanged`, release `TextSizeAffecting`, and mixed priority.
 - `LayoutTreeBuilder` performs a full layout rebuild for tree, viewport, text-size, layout-affecting, or unsafe dirty projections.
-- Proven `StyleOnly` dirty sets reuse retained layout geometry/tree/scroll diagnostics, refresh current text handles, patch dirty visual/action metadata, and re-record current-frame commands/resources.
+- Proven `StyleOnly` dirty sets reuse retained layout geometry/tree/scroll diagnostics, refresh current text handles, patch dirty visual/action metadata in one retained-DFS pass, and re-record current-frame commands/resources.
 - Segmented retained-frame ownership can select a segment-local render source after normal layout/draw publication when ownership, freshness, command range, resource, and hit-target guards pass. The Poc runtime enables this by default and `--no-partial-apply` disables it.
 - The selected render-source path does not change `LayoutRebuildCount`, `LastLayoutRebuildReason`, `LastLayoutResult`, or `RenderPipelineRetainedInputSnapshot` semantics.
-- Focused tests pin this boundary: `StyleOnly` hover/action-id/visual changes keep `LayoutRebuildCount` stable when reuse is proven, current-frame resources and hit-target metadata update, and mixed text/layout/viewport or incomplete dirty projections still fall back to full layout.
+- Focused tests pin this boundary: `StyleOnly` hover/action-id/visual changes keep `LayoutRebuildCount` stable when reuse is proven, semantic background paint and border stroke update through the fast path, current-frame resources and hit-target metadata update, and mixed text/layout/viewport or incomplete dirty projections still fall back to full layout.
 
 ## `LayoutTreeResult` Publication Contract
 
@@ -82,7 +82,7 @@ Current implementation: empty `DirtyElementRanges` and absent `ScrollDiagnostics
 
 ## StyleOnly Patch Boundary
 
-The planning, retained-frame ownership, and pipeline layout-skip pieces for style-only reuse are implemented: style-only eligibility, retained layout patching, current text-handle refresh, dirty element to command-range planning, retained root metadata projection, hit-target metadata projection, segmented retained-frame ownership, and guarded compositor handoff all exist as internal/runtime paths.
+The planning, retained-frame ownership, and pipeline layout-skip pieces for style-only reuse are implemented: style-only eligibility, retained layout patching, current text-handle refresh, dirty element to command-range planning, retained root metadata projection, hit-target metadata projection, segmented retained-frame ownership, and guarded compositor handoff all exist as internal/runtime paths. Dirty element to command-range validation is shared through `RangeUtils`; retained layout patching walks the next tree once against retained DFS metadata instead of re-finding nodes per dirty item.
 
 The active `RenderPipeline.Build` branch reuses retained layout only when every dirty classification is `StyleOnly` and retained layout context is otherwise identical:
 
@@ -101,6 +101,7 @@ Any `TextSizeAffecting`, `LayoutAffecting`, `TreeStructure`, `ViewportChanged`, 
 The style-only fast path lives inside `RenderPipeline.Build` after dirty classification and before the full layout rebuild branch. It must:
 
 - Reuse retained layout only from retained data plus next-node metadata.
+- Patch the retained layout in one DFS pass that refreshes current text/button handles and updates only dirty visual/action metadata.
 - Re-record current-frame commands/resources and publish dirty command ranges mapped from current element-to-command ranges.
 - Patch hit target metadata while preserving retained geometry.
 - Bind replacement commands to current-frame `FrameDrawingResources`.

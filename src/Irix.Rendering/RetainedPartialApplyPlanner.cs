@@ -90,7 +90,7 @@ internal static class RetainedPartialApplyPlanner
             return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.NotStyleOnly, snapshot.DirtyElementRanges);
         }
 
-        if (!StyleOnlyPatchEligibility.TryMapStableCommandRanges(snapshot.ElementCommandRanges, snapshot.DirtyElementRanges, out var dirtyCommandRanges))
+        if (!RangeUtils.TryMapContiguousElementRangesToCommandRanges(snapshot.ElementCommandRanges, snapshot.DirtyElementRanges, out var dirtyCommandRanges))
         {
             return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.UnstableCommandRange, snapshot.DirtyElementRanges);
         }
