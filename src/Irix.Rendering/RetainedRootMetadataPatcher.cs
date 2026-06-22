@@ -41,6 +41,8 @@ internal readonly struct RetainedRootMetadataPatch : IEquatable<RetainedRootMeta
 
 internal static class RetainedRootMetadataPatcher
 {
+    private const int InlineDirtyIndexCapacity = 32;
+
     public static RetainedRootMetadataPatch ProjectControlMetadata(
         VirtualNode retainedRoot,
         VirtualNode nextRoot,
@@ -51,53 +53,58 @@ internal static class RetainedRootMetadataPatcher
         retainedSnapshot ??= nextSnapshot;
         nextSnapshot ??= retainedSnapshot;
 
-        Span<int> inlineDirty = stackalloc int[8];
-        var dirtyArray = dirtyClassifications.Count > inlineDirty.Length
-            ? new int[dirtyClassifications.Count]
-            : null;
-        var dirtySet = dirtyArray is null ? inlineDirty : dirtyArray.AsSpan();
-        var dirtyCount = 0;
-        foreach (var classification in dirtyClassifications)
+        var scratch = new RenderScratchBuffer();
+        Span<int> dirtyStorage = stackalloc int[InlineDirtyIndexCapacity];
+        scoped var sortedDirty = scratch.CreateDirtyIndexList(dirtyStorage);
+        try
         {
-            if (classification.Reason != LayoutRebuildReason.StyleOnly)
+            foreach (var classification in dirtyClassifications)
             {
-                return RetainedRootMetadataPatch.CreateFallback(RetainedPartialApplyFallbackReason.NotStyleOnly);
+                if (classification.Reason != LayoutRebuildReason.StyleOnly)
+                {
+                    return RetainedRootMetadataPatch.CreateFallback(RetainedPartialApplyFallbackReason.NotStyleOnly);
+                }
+
+                sortedDirty.Add(classification.DfsIndex);
             }
 
-            if (!Contains(dirtySet[..dirtyCount], classification.DfsIndex))
+            if (sortedDirty.Count == 0)
             {
-                dirtySet[dirtyCount++] = classification.DfsIndex;
+                return RetainedRootMetadataPatch.CreateFallback(RetainedPartialApplyFallbackReason.HitTargetPatchFailed);
             }
-        }
 
-        if (dirtyCount == 0)
+            sortedDirty.Sort();
+            var dfsIndex = 0;
+            var dirtyCursor = 0;
+            return TryProject(retainedRoot, nextRoot, sortedDirty.Written, ref dirtyCursor, ref dfsIndex, out var root, out var reason, retainedSnapshot, nextSnapshot)
+                && DirtyDfsIndexCursor.IsComplete(sortedDirty.Written, dirtyCursor)
+                ? RetainedRootMetadataPatch.CreateSucceeded(root)
+                : RetainedRootMetadataPatch.CreateFallback(reason);
+        }
+        finally
         {
-            return RetainedRootMetadataPatch.CreateFallback(RetainedPartialApplyFallbackReason.HitTargetPatchFailed);
+            sortedDirty.Dispose();
         }
-
-        var dfsIndex = 0;
-        var patchedDirtyCount = 0;
-        return TryProject(retainedRoot, nextRoot, dirtySet[..dirtyCount], ref dfsIndex, ref patchedDirtyCount, out var root, out var reason, retainedSnapshot, nextSnapshot)
-            && patchedDirtyCount == dirtyCount
-            ? RetainedRootMetadataPatch.CreateSucceeded(root)
-            : RetainedRootMetadataPatch.CreateFallback(reason);
     }
 
     private static bool TryProject(
         VirtualNode retainedNode,
         VirtualNode nextNode,
-        ReadOnlySpan<int> dirtySet,
+        ReadOnlySpan<int> sortedDirty,
+        ref int dirtyCursor,
         ref int dfsIndex,
-        ref int patchedDirtyCount,
         out VirtualNode patchedNode,
         out RetainedPartialApplyFallbackReason reason,
         TextBufferSnapshot? retainedSnapshot,
         TextBufferSnapshot? nextSnapshot)
     {
         var currentIndex = dfsIndex;
-        var isDirty = Contains(dirtySet, currentIndex);
         patchedNode = default;
         reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
+        if (!DirtyDfsIndexCursor.TryRead(sortedDirty, ref dirtyCursor, currentIndex, out var isDirty))
+        {
+            return false;
+        }
 
         var retainedChildren = retainedNode.Children;
         var nextChildren = nextNode.Children;
@@ -129,7 +136,7 @@ internal static class RetainedRootMetadataPatcher
         VirtualNode[]? patchedChildrenArray = null;
         for (var i = 0; i < retainedChildren.Length; i++)
         {
-            if (!TryProject(retainedChildren[i], nextChildren[i], dirtySet, ref dfsIndex, ref patchedDirtyCount, out var patchedChild, out reason, retainedSnapshot, nextSnapshot))
+            if (!TryProject(retainedChildren[i], nextChildren[i], sortedDirty, ref dirtyCursor, ref dfsIndex, out var patchedChild, out reason, retainedSnapshot, nextSnapshot))
             {
                 return false;
             }
@@ -147,7 +154,6 @@ internal static class RetainedRootMetadataPatcher
 
         if (isDirty)
         {
-            patchedDirtyCount++;
             patchedNode = new VirtualNode(retainedNode.Kind, retainedNode.Key, retainedNode.Content, nextNode.Properties, patchedChildrenArray ?? patchedChildren);
             return true;
         }
@@ -308,19 +314,6 @@ internal static class RetainedRootMetadataPatcher
         || left.Content != right.Content
         || !PropertiesEqual(left.Properties, right.Properties)
         || left.Children.Length != right.Children.Length;
-
-    private static bool Contains(ReadOnlySpan<int> values, int value)
-    {
-        for (var i = 0; i < values.Length; i++)
-        {
-            if (values[i] == value)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 
     private static bool Contains(ReadOnlySpan<VirtualPropertyKey> values, VirtualPropertyKey value)
     {

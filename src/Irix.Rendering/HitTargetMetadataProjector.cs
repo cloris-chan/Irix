@@ -30,69 +30,78 @@ internal readonly struct HitTargetMetadataProjection
 
 internal static class HitTargetMetadataProjector
 {
+    private const int InlineDirtyIndexCapacity = 32;
+
     public static HitTargetMetadataProjection ProjectActionIds(
         VirtualNode retainedRoot,
         VirtualNode nextRoot,
         IReadOnlyList<int> dirtyDfsIndices,
         IReadOnlyList<HitTestTarget> retainedHitTargets)
     {
-        Span<int> inlineDirty = stackalloc int[8];
-        var dirtyArray = dirtyDfsIndices.Count > inlineDirty.Length
-            ? new int[dirtyDfsIndices.Count]
-            : null;
-        var dirtySet = dirtyArray is null ? inlineDirty : dirtyArray.AsSpan();
-        var dirtyCount = 0;
-        foreach (var dirtyDfsIndex in dirtyDfsIndices)
+        var scratch = new RenderScratchBuffer();
+        Span<int> dirtyStorage = stackalloc int[InlineDirtyIndexCapacity];
+        scoped var sortedDirty = scratch.CreateDirtyIndexList(dirtyStorage);
+        try
         {
-            if (!Contains(dirtySet[..dirtyCount], dirtyDfsIndex))
+            for (var i = 0; i < dirtyDfsIndices.Count; i++)
             {
-                dirtySet[dirtyCount++] = dirtyDfsIndex;
-            }
-        }
-
-        var actionNodes = retainedHitTargets.Count == 0 ? [] : new ActionNodeMetadata[retainedHitTargets.Count];
-        var actionNodeCount = 0;
-        var dfsIndex = 0;
-        if (dirtyCount == 0 || !TryCollectActionNodes(retainedRoot, nextRoot, ref dfsIndex, actionNodes, ref actionNodeCount))
-        {
-            return HitTargetMetadataProjection.CreateFallback();
-        }
-
-        if (actionNodeCount != retainedHitTargets.Count)
-        {
-            return HitTargetMetadataProjection.CreateFallback();
-        }
-
-        var projectedDirtyCount = 0;
-        var patched = retainedHitTargets.Count == 0 ? [] : retainedHitTargets.ToArray();
-        for (var i = 0; i < actionNodeCount; i++)
-        {
-            var actionNode = actionNodes[i];
-            var retainedHitTarget = retainedHitTargets[i];
-            if (Contains(dirtySet[..dirtyCount], actionNode.DfsIndex))
-            {
-                projectedDirtyCount++;
-                patched[i] = new HitTestTarget(
-                    retainedHitTarget.Bounds,
-                    actionNode.ActionId,
-                    retainedHitTarget.ClipBounds,
-                    retainedHitTarget.CommandStart,
-                    retainedHitTarget.CommandCount);
-                continue;
+                sortedDirty.Add(dirtyDfsIndices[i]);
             }
 
-            if (retainedHitTarget.ActionId != actionNode.ActionId)
+            if (sortedDirty.Count == 0)
             {
                 return HitTargetMetadataProjection.CreateFallback();
             }
-        }
 
-        if (projectedDirtyCount != dirtyCount)
+            sortedDirty.Sort();
+            var actionNodes = retainedHitTargets.Count == 0 ? [] : new ActionNodeMetadata[retainedHitTargets.Count];
+            var actionNodeCount = 0;
+            var dfsIndex = 0;
+            if (!TryCollectActionNodes(retainedRoot, nextRoot, ref dfsIndex, actionNodes, ref actionNodeCount)
+                || actionNodeCount != retainedHitTargets.Count)
+            {
+                return HitTargetMetadataProjection.CreateFallback();
+            }
+
+            var dirtyCursor = 0;
+            var patched = retainedHitTargets.Count == 0 ? [] : retainedHitTargets.ToArray();
+            for (var i = 0; i < actionNodeCount; i++)
+            {
+                var actionNode = actionNodes[i];
+                var retainedHitTarget = retainedHitTargets[i];
+                if (!DirtyDfsIndexCursor.TryRead(sortedDirty.Written, ref dirtyCursor, actionNode.DfsIndex, out var isDirty))
+                {
+                    return HitTargetMetadataProjection.CreateFallback();
+                }
+
+                if (isDirty)
+                {
+                    patched[i] = new HitTestTarget(
+                        retainedHitTarget.Bounds,
+                        actionNode.ActionId,
+                        retainedHitTarget.ClipBounds,
+                        retainedHitTarget.CommandStart,
+                        retainedHitTarget.CommandCount);
+                    continue;
+                }
+
+                if (retainedHitTarget.ActionId != actionNode.ActionId)
+                {
+                    return HitTargetMetadataProjection.CreateFallback();
+                }
+            }
+
+            if (!DirtyDfsIndexCursor.IsComplete(sortedDirty.Written, dirtyCursor))
+            {
+                return HitTargetMetadataProjection.CreateFallback();
+            }
+
+            return HitTargetMetadataProjection.CreateSucceeded(patched);
+        }
+        finally
         {
-            return HitTargetMetadataProjection.CreateFallback();
+            sortedDirty.Dispose();
         }
-
-        return HitTargetMetadataProjection.CreateSucceeded(patched);
     }
 
     private static bool TryCollectActionNodes(
@@ -148,18 +157,5 @@ internal static class HitTargetMetadataProjector
         public static bool operator ==(ActionNodeMetadata left, ActionNodeMetadata right) => left.Equals(right);
 
         public static bool operator !=(ActionNodeMetadata left, ActionNodeMetadata right) => !left.Equals(right);
-    }
-
-    private static bool Contains(ReadOnlySpan<int> values, int value)
-    {
-        for (var i = 0; i < values.Length; i++)
-        {
-            if (values[i] == value)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

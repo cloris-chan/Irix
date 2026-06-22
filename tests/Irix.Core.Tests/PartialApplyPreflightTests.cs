@@ -3384,6 +3384,38 @@ public sealed class PartialApplyPreflightTests
     }
 
     [Fact]
+    public void HitTargetMetadataProjector_uses_sorted_dirty_projection_and_rejects_missing_indices()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(1))),
+            VirtualNodeBuilder.Button(_arena, "Decrement", new NodeKey(4),
+                VirtualNodeProperty.Action(new ActionId(2))));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(4))),
+            VirtualNodeBuilder.Button(_arena, "Decrement", new NodeKey(4),
+                VirtualNodeProperty.Action(new ActionId(206))));
+        var retainedHitTargets = new[]
+        {
+            new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1)),
+            new HitTestTarget(new PixelRectangle(16, 172, 140, 40), new ActionId(2))
+        };
+
+        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [3, 1, 1], retainedHitTargets);
+
+        Assert.True(projection.Succeeded);
+        Assert.Equal(new ActionId(4), projection.HitTargets[0].ActionId);
+        Assert.Equal(new ActionId(206), projection.HitTargets[1].ActionId);
+
+        var missing = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1, 99], retainedHitTargets);
+
+        Assert.False(missing.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, missing.FallbackReason);
+        Assert.Empty(missing.HitTargets);
+    }
+
+    [Fact]
     public void HitTargetMetadataProjector_reprojects_nested_button()
     {
         var retainedRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
@@ -3435,6 +3467,53 @@ public sealed class PartialApplyPreflightTests
         AssertBooleanProperty(patchedButton, VirtualPropertyKey.IsFocused, true);
         Assert.Equal(retainedRoot.Children[0].Children[0], patchedButton.Children[0]);
         Assert.Equal(new ActionId(1), GetSingleProperty(retainedRoot.Children[0], VirtualPropertyKey.ActionId).Value.GetRequiredActionId());
+    }
+
+    [Fact]
+    public void RetainedRootMetadataPatcher_uses_sorted_dirty_projection_and_rejects_missing_indices()
+    {
+        var retainedRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(1)),
+                VirtualNodeProperty.Hovered(false)),
+            VirtualNodeBuilder.Button(_arena, "Decrement", new NodeKey(3),
+                VirtualNodeProperty.Action(new ActionId(2)),
+                VirtualNodeProperty.Hovered(false)));
+        var nextRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(4)),
+                VirtualNodeProperty.Hovered(true)),
+            VirtualNodeBuilder.Button(_arena, "Decrement", new NodeKey(3),
+                VirtualNodeProperty.Action(new ActionId(5)),
+                VirtualNodeProperty.Hovered(true)));
+
+        var patch = RetainedRootMetadataPatcher.ProjectControlMetadata(
+            retainedRoot,
+            nextRoot,
+            [
+                new LayoutDirtyClassification(3, LayoutRebuildReason.StyleOnly),
+                new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly),
+                new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)
+            ],
+            _arena.GetOrCreateSnapshot());
+
+        Assert.True(patch.Succeeded);
+        Assert.Equal(new ActionId(4), GetSingleProperty(patch.Root.Children[0], VirtualPropertyKey.ActionId).Value.GetRequiredActionId());
+        AssertBooleanProperty(patch.Root.Children[0], VirtualPropertyKey.IsHovered, true);
+        Assert.Equal(new ActionId(5), GetSingleProperty(patch.Root.Children[1], VirtualPropertyKey.ActionId).Value.GetRequiredActionId());
+        AssertBooleanProperty(patch.Root.Children[1], VirtualPropertyKey.IsHovered, true);
+
+        var missing = RetainedRootMetadataPatcher.ProjectControlMetadata(
+            retainedRoot,
+            nextRoot,
+            [
+                new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly),
+                new LayoutDirtyClassification(99, LayoutRebuildReason.StyleOnly)
+            ],
+            _arena.GetOrCreateSnapshot());
+
+        Assert.False(missing.Succeeded);
+        Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, missing.FallbackReason);
     }
 
     [Fact]

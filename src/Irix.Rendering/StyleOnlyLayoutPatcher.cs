@@ -35,8 +35,8 @@ internal static class StyleOnlyLayoutPatcher
             try
             {
                 var dfsIndex = 0;
-                var dirtyCursor = 0;
                 var treeCursor = 0;
+                var dirtyCursor = 0;
                 if (!TryPatchTree(
                     nextRoot,
                     retainedLayout,
@@ -46,7 +46,7 @@ internal static class StyleOnlyLayoutPatcher
                     ref dirtyCursor,
                     ref treeCursor,
                     ref ranges)
-                    || dirtyCursor != sortedDirty.Count
+                    || !DirtyDfsIndexCursor.IsComplete(sortedDirty.Written, dirtyCursor)
                     || treeCursor != retainedLayout.TreeNodes.Length
                     || dfsIndex != retainedLayout.ElementRanges.Length)
                 {
@@ -97,7 +97,7 @@ internal static class StyleOnlyLayoutPatcher
         var currentIndex = dfsIndex++;
         if (!TryReadTreeNode(retainedLayout.TreeNodes, ref treeCursor, currentIndex, out var retainedTreeNode)
             || !TryRefreshTextContent(elements, retainedTreeNode, nextNode)
-            || !TryReadDirtyState(sortedDirty, ref dirtyCursor, currentIndex, out var isDirty))
+            || !DirtyDfsIndexCursor.TryRead(sortedDirty, ref dirtyCursor, currentIndex, out var isDirty))
         {
             return false;
         }
@@ -154,39 +154,6 @@ internal static class StyleOnlyLayoutPatcher
 
         treeNode = candidate;
         treeCursor++;
-        return true;
-    }
-
-    private static bool TryReadDirtyState(
-        ReadOnlySpan<int> sortedDirty,
-        ref int dirtyCursor,
-        int dfsIndex,
-        out bool isDirty)
-    {
-        isDirty = false;
-        if (dirtyCursor >= sortedDirty.Length)
-        {
-            return true;
-        }
-
-        var dirtyIndex = sortedDirty[dirtyCursor];
-        if (dirtyIndex < dfsIndex)
-        {
-            return false;
-        }
-
-        if (dirtyIndex != dfsIndex)
-        {
-            return true;
-        }
-
-        isDirty = true;
-        do
-        {
-            dirtyCursor++;
-        }
-        while (dirtyCursor < sortedDirty.Length && sortedDirty[dirtyCursor] == dfsIndex);
-
         return true;
     }
 
