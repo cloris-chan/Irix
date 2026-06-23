@@ -667,6 +667,47 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public async Task CompositorLoop_sample_and_hold_request_suppresses_old_tick_before_sample_work_item_runs()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var translator = new AllocatingTranslator();
+        var compositor = new ScrollPresentationSchedulerCompositor();
+        await using var loop = new CompositorLoop(translator, compositor);
+        var pipeline = new RenderPipeline();
+        using var frame = pipeline.Build(
+            new VirtualNode(
+                VirtualNodeKind.ScrollContainer,
+                key: 1,
+                properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
+                children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
+            new PixelRectangle(0, 0, 240, 120),
+            _arena.GetOrCreateSnapshot());
+        var start = CompositionTimestamp.Now() + CompositionDuration.FromMilliseconds(30);
+        var declaration = new CompositionScrollPresentationDeclaration(
+            new NodeKey(1),
+            new CompositionAnimationTimeline(start, CompositionDuration.FromMilliseconds(160)),
+            new CompositionScalarAnimation(0, 54));
+
+        await loop.StartCompositionScrollPresentationAsync(declaration, pipeline.LastRetainedInputSnapshot!, cancellationToken);
+        var staleSkipsBeforeHold = loop.ScrollPresentationStaleDelayedTickSkipCount;
+        var sampleTask = loop.SampleAndHoldCompositionScrollPresentationAsync(new NodeKey(1), cancellationToken).AsTask();
+        var sample = await sampleTask.WaitAsync(cancellationToken);
+        var tickCountAfterSample = compositor.TickCount;
+
+        await WaitForConditionAsync(
+            () => loop.ScrollPresentationStaleDelayedTickSkipCount > staleSkipsBeforeHold,
+            cancellationToken);
+
+        Assert.True(sample.HasValue);
+        Assert.Equal(0, sample.PresentedScrollY);
+        Assert.Equal(1, tickCountAfterSample);
+        Assert.Equal(tickCountAfterSample, compositor.TickCount);
+        Assert.Equal(staleSkipsBeforeHold + 1, loop.ScrollPresentationStaleDelayedTickSkipCount);
+        Assert.Equal(0, compositor.ClearCount);
+        Assert.Equal(0, loop.ScrollPresentationCancelCount);
+    }
+
+    [Fact]
     public async Task CompositorLoop_sample_and_hold_skips_stale_delayed_tick_after_replacement_segment()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

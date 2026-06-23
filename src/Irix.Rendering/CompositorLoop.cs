@@ -216,8 +216,10 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         }
 
         var completion = new TaskCompletionSource<CompositionScrollPresentationSample>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_channel.Writer.TryWrite(CompositorWorkItem.SampleAndHoldScrollPresentation(targetKey, completion)))
+        var hold = BeginScrollPresentationRetargetHold(targetKey);
+        if (!_channel.Writer.TryWrite(CompositorWorkItem.SampleAndHoldScrollPresentation(targetKey, hold, completion)))
         {
+            CancelScrollPresentationRetargetHold(hold);
             completion.TrySetException(new InvalidOperationException("Unable to enqueue composition scroll presentation sample-and-hold."));
         }
 
@@ -452,6 +454,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
     {
         if (!TryGetActiveScrollPresentationSchedule(workItem.CompositionGeneration, out var schedule))
         {
+            Interlocked.Increment(ref _scrollPresentationStaleDelayedTickSkipCount);
             return;
         }
 
@@ -513,13 +516,20 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         try
         {
             var sample = default(CompositionScrollPresentationSample);
-            if (_compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor
+            var hold = workItem.ScrollPresentationRetargetHold;
+            if (!hold.HasValue)
+            {
+                hold = BeginScrollPresentationRetargetHold(workItem.ScrollPresentationTargetKey);
+            }
+
+            if (hold.HasValue
+                && _compositor is ICompositionScrollPresentationCompositor scrollPresentationCompositor
                 && scrollPresentationCompositor.TryGetPresentedScrollY(workItem.ScrollPresentationTargetKey, out var presentedScrollY))
             {
                 sample = new CompositionScrollPresentationSample(true, presentedScrollY);
             }
 
-            HoldScrollPresentationScheduleForRetarget(workItem.ScrollPresentationTargetKey, sample);
+            CompleteScrollPresentationRetargetHold(hold, sample);
             completion.TrySetResult(sample);
         }
         catch (Exception ex)
@@ -608,11 +618,21 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         }
     }
 
-    private void HoldScrollPresentationScheduleForRetarget(
-        NodeKey targetKey,
+    private ScrollPresentationRetargetHold BeginScrollPresentationRetargetHold(NodeKey targetKey)
+    {
+        return _scrollPresentationLifecycle.BeginHoldForRetarget(targetKey);
+    }
+
+    private void CompleteScrollPresentationRetargetHold(
+        in ScrollPresentationRetargetHold hold,
         in CompositionScrollPresentationSample sample)
     {
-        _scrollPresentationLifecycle.HoldForRetarget(targetKey, sample);
+        _scrollPresentationLifecycle.CompleteHoldForRetarget(hold, sample);
+    }
+
+    private void CancelScrollPresentationRetargetHold(in ScrollPresentationRetargetHold hold)
+    {
+        _scrollPresentationLifecycle.CancelHoldForRetarget(hold);
     }
 
     private int ActivateScrollPresentationSchedule(
@@ -838,6 +858,17 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         public bool IsActive => Generation != 0 && TargetKey != NodeKey.None && EndTimestamp >= StartTimestamp;
     }
 
+    private readonly struct ScrollPresentationRetargetHold(
+        int generation,
+        NodeKey targetKey,
+        CompositionScrollPresentationDeclaration declaration)
+    {
+        public int Generation { get; } = generation;
+        public NodeKey TargetKey { get; } = targetKey;
+        public CompositionScrollPresentationDeclaration Declaration { get; } = declaration;
+        public bool HasValue => Generation != 0 && TargetKey != NodeKey.None;
+    }
+
     private readonly struct CompositorWorkItem
     {
         private CompositorWorkItem(
@@ -849,6 +880,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             RenderPipelineRetainedInputSnapshot? retainedInputSnapshot,
             int compositionGeneration,
             NodeKey scrollPresentationTargetKey = default,
+            ScrollPresentationRetargetHold scrollPresentationRetargetHold = default,
             TaskCompletionSource<CompositionScrollPresentationSample>? scrollPresentationSampleCompletion = null)
         {
             Kind = kind;
@@ -859,6 +891,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
             RetainedInputSnapshot = retainedInputSnapshot;
             CompositionGeneration = compositionGeneration;
             ScrollPresentationTargetKey = scrollPresentationTargetKey;
+            ScrollPresentationRetargetHold = scrollPresentationRetargetHold;
             ScrollPresentationSampleCompletion = scrollPresentationSampleCompletion;
         }
 
@@ -870,6 +903,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
         public RenderPipelineRetainedInputSnapshot? RetainedInputSnapshot { get; }
         public int CompositionGeneration { get; }
         public NodeKey ScrollPresentationTargetKey { get; }
+        public ScrollPresentationRetargetHold ScrollPresentationRetargetHold { get; }
         public TaskCompletionSource<CompositionScrollPresentationSample>? ScrollPresentationSampleCompletion { get; }
 
         public static CompositorWorkItem Render(
@@ -943,6 +977,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
 
         public static CompositorWorkItem SampleAndHoldScrollPresentation(
             NodeKey targetKey,
+            in ScrollPresentationRetargetHold hold,
             TaskCompletionSource<CompositionScrollPresentationSample> completion)
         {
             return new CompositorWorkItem(
@@ -954,6 +989,7 @@ public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFra
                 null,
                 0,
                 targetKey,
+                hold,
                 completion);
         }
     }

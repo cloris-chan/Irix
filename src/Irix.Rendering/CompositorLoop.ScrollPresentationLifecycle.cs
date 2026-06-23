@@ -8,6 +8,7 @@ public sealed partial class CompositorLoop
         private CompositionScrollPresentationSchedule _schedule;
         private CompositionScrollPresentationDeclaration _activeDeclaration;
         private CompositionScrollPresentationDeclaration _heldDeclaration;
+        private ScrollPresentationRetargetHold _pendingRetargetHold;
         private bool _tickQueued;
         private int _generation;
         private RenderCompletionWaitGroup? _idleWaitGroup;
@@ -50,6 +51,7 @@ public sealed partial class CompositorLoop
                     declaration.Timeline.StartTimestamp + declaration.Timeline.Duration);
                 _activeDeclaration = declaration;
                 _heldDeclaration = default;
+                _pendingRetargetHold = default;
                 _tickQueued = false;
             }
 
@@ -61,7 +63,7 @@ public sealed partial class CompositorLoop
         {
             lock (_gate)
             {
-                if (_schedule.IsActive && _schedule.Generation == generation)
+                if (_schedule.IsActive && _schedule.Generation == generation && !IsTickSuppressed(generation))
                 {
                     _tickQueued = false;
                     schedule = _schedule;
@@ -118,9 +120,30 @@ public sealed partial class CompositorLoop
             return canceled;
         }
 
-        public void HoldForRetarget(NodeKey targetKey, in CompositionScrollPresentationSample sample)
+        public ScrollPresentationRetargetHold BeginHoldForRetarget(NodeKey targetKey)
         {
             if (targetKey == NodeKey.None)
+            {
+                return default;
+            }
+
+            lock (_gate)
+            {
+                if (!_schedule.IsActive || _schedule.TargetKey != targetKey)
+                {
+                    return default;
+                }
+
+                _pendingRetargetHold = new ScrollPresentationRetargetHold(_schedule.Generation, targetKey, _activeDeclaration);
+                return _pendingRetargetHold;
+            }
+        }
+
+        public void CompleteHoldForRetarget(
+            in ScrollPresentationRetargetHold hold,
+            in CompositionScrollPresentationSample sample)
+        {
+            if (!hold.HasValue)
             {
                 return;
             }
@@ -128,22 +151,41 @@ public sealed partial class CompositorLoop
             RenderCompletionWaitGroup? idleWaitGroup = null;
             lock (_gate)
             {
-                if (!_schedule.IsActive || _schedule.TargetKey != targetKey)
+                if (_pendingRetargetHold.Generation != hold.Generation
+                    || _pendingRetargetHold.TargetKey != hold.TargetKey)
                 {
                     return;
                 }
 
                 _heldDeclaration = sample.HasValue
-                    ? CreateHeldDeclaration(_activeDeclaration, sample.PresentedScrollY)
+                    ? CreateHeldDeclaration(hold.Declaration, sample.PresentedScrollY)
                     : default;
                 _schedule = default;
                 _activeDeclaration = default;
+                _pendingRetargetHold = default;
                 _tickQueued = false;
                 NextGeneration();
                 idleWaitGroup = TakeIdleWaitGroup();
             }
 
             idleWaitGroup?.Complete(null);
+        }
+
+        public void CancelHoldForRetarget(in ScrollPresentationRetargetHold hold)
+        {
+            if (!hold.HasValue)
+            {
+                return;
+            }
+
+            lock (_gate)
+            {
+                if (_pendingRetargetHold.Generation == hold.Generation
+                    && _pendingRetargetHold.TargetKey == hold.TargetKey)
+                {
+                    _pendingRetargetHold = default;
+                }
+            }
         }
 
         public bool TryQueueNextTick(
@@ -156,7 +198,7 @@ public sealed partial class CompositorLoop
         {
             lock (_gate)
             {
-                if (!_schedule.IsActive || _schedule.Generation != generation || _tickQueued)
+                if (!_schedule.IsActive || _schedule.Generation != generation || _tickQueued || IsTickSuppressed(generation))
                 {
                     delay = default;
                     return false;
@@ -178,6 +220,12 @@ public sealed partial class CompositorLoop
             {
                 if (!_schedule.IsActive || _schedule.Generation != generation || !_tickQueued)
                 {
+                    return false;
+                }
+
+                if (IsTickSuppressed(generation))
+                {
+                    _tickQueued = false;
                     return false;
                 }
 
@@ -224,6 +272,11 @@ public sealed partial class CompositorLoop
 
         private bool IsBusy => _schedule.IsActive || _tickQueued;
 
+        private bool IsTickSuppressed(int generation)
+        {
+            return _pendingRetargetHold.Generation == generation;
+        }
+
         private RenderCompletionWaitGroup? TakeIdleWaitGroup()
         {
             var idleWaitGroup = _idleWaitGroup;
@@ -235,6 +288,7 @@ public sealed partial class CompositorLoop
         {
             _schedule = default;
             _activeDeclaration = default;
+            _pendingRetargetHold = default;
             if (clearHeld)
             {
                 _heldDeclaration = default;
