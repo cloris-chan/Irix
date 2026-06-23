@@ -59,7 +59,10 @@ jobs:
           dotnet --info
 
       - name: Restore
-        run: dotnet restore Irix.slnx
+        shell: pwsh
+        run: |
+          dotnet restore Irix.slnx
+          dotnet restore Irix.slnx -p:IrixDiagnostics=true
 
       - name: Build
         run: dotnet build Irix.slnx -c Release --no-restore
