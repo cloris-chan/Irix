@@ -24,15 +24,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/cloris-chan/Irix</PackageProjectUrl>
     <PackageTags>irix;ui;rendering;d3d12;preview</PackageTags>
-    <PackageReadmeFile Condition="'$(IsPackable)' != 'false'">package-readme.md</PackageReadmeFile>
   </PropertyGroup>
-
-  <ItemGroup Condition="'$(IsPackable)' != 'false' and '$(PackageReadmeFile)' != ''">
-    <None Include="$(MSBuildThisFileDirectory)docs\package-readme.md"
-          Pack="true"
-          PackagePath="package-readme.md"
-          Visible="false" />
-  </ItemGroup>
 
   <ItemGroup>
     <IrixInternalScope Include="Irix.Core" />

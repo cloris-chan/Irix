@@ -77,8 +77,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 foreach ($package in $packages) {
     $zip = [System.IO.Compression.ZipFile]::OpenRead($package.FullName)
     try {
-        if (-not ($zip.Entries | Where-Object { $_.FullName -eq 'package-readme.md' })) {
-            throw "Package '$($package.Name)' does not contain package-readme.md at the package root."
+        if ($zip.Entries | Where-Object { $_.FullName -eq 'package-readme.md' }) {
+            throw "Package '$($package.Name)' contains package-readme.md."
         }
 
         $nuspec = $zip.Entries | Where-Object { $_.FullName -like '*.nuspec' } | Select-Object -First 1
@@ -99,8 +99,8 @@ foreach ($package in $packages) {
             throw "Package '$($package.Name)' has an invalid description."
         }
 
-        if ($metadata.readme -ne 'package-readme.md') {
-            throw "Package '$($package.Name)' has readme '$($metadata.readme)' instead of package-readme.md."
+        if (-not [string]::IsNullOrWhiteSpace($metadata.readme)) {
+            throw "Package '$($package.Name)' has unexpected readme metadata '$($metadata.readme)'."
         }
     }
     finally {
