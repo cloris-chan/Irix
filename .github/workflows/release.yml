@@ -94,7 +94,27 @@ jobs:
         shell: pwsh
         env:
           NUGET_TRUSTED_PUBLISHING_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
-        run: dotnet nuget push "artifacts/nuget-preview/*.nupkg" --api-key "$env:NUGET_TRUSTED_PUBLISHING_API_KEY" --source "$env:NUGET_SOURCE" --skip-duplicate
+        run: |
+          $packageIds = @(
+            'Irix.Core',
+            'Irix.Drawing',
+            'Irix.Platform',
+            'Irix.Rendering',
+            'Irix.Platform.Windows',
+            'Irix'
+          )
+
+          foreach ($packageId in $packageIds) {
+            $packagePath = Join-Path 'artifacts/nuget-preview' "$packageId.${{ inputs.version }}.nupkg"
+            if (-not (Test-Path $packagePath)) {
+              throw "Package file was not found: $packagePath"
+            }
+
+            dotnet nuget push $packagePath --api-key "$env:NUGET_TRUSTED_PUBLISHING_API_KEY" --source "$env:NUGET_SOURCE" --skip-duplicate
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to publish $packageId ${{ inputs.version }}."
+            }
+          }
 
       - name: Unlist NuGet packages
         if: ${{ inputs.unlist_after_publish }}
@@ -113,4 +133,7 @@ jobs:
 
           foreach ($packageId in $packageIds) {
             dotnet nuget delete $packageId '${{ inputs.version }}' --api-key "$env:NUGET_TRUSTED_PUBLISHING_API_KEY" --source "$env:NUGET_SOURCE" --non-interactive
+            if ($LASTEXITCODE -ne 0) {
+              throw "Failed to unlist $packageId ${{ inputs.version }}."
+            }
           }
