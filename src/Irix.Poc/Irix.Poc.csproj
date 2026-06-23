@@ -6,6 +6,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <PublishAot>true</PublishAot>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>

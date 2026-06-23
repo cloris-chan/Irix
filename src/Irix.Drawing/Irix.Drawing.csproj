@@ -2,6 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Irix.Drawing</RootNamespace>
+    <Description>Preview drawing value types, color bridges, paint values, and draw command primitives for Irix.</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Irix.Core\Irix.Core.csproj" />

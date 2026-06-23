@@ -9,6 +9,12 @@ internal static partial class Program
 {
     public static async Task Main(string[] args)
     {
+        if (args.Contains("--package-smoke"))
+        {
+            PackageSmokeRunner.Run(Console.Out);
+            return;
+        }
+
         var diagnosticTask = TryCreateDiagnosticCliTask(args);
         if (diagnosticTask is not null)
         {

@@ -2,5 +2,6 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Irix</RootNamespace>
+    <Description>Preview core UI model, runtime, patch, input, and retained text primitives for Irix.</Description>
   </PropertyGroup>
 </Project>

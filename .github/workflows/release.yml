@@ -1,0 +1,113 @@
+name: release
+
+run-name: release ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Preview package version to publish and reserve.
+        required: true
+        default: 0.1.0-preview.1
+        type: string
+      unlist_after_publish:
+        description: Unlist packages after successful publish.
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  DOTNET_VERSION: 10.0.x
+  NUGET_SOURCE: https://api.nuget.org/v3/index.json
+  CI_WINDOWS_SDK_MIN_VERSION: 10.0.26100.0
+  NUGET_USER: clorischan
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Verify .NET 10 and Windows SDK 26100+
+        shell: pwsh
+        run: |
+          $dotnetSdks = dotnet --list-sdks
+          if (-not ($dotnetSdks | Where-Object { $_ -match '^10\.' })) {
+            throw "Required .NET 10 SDK was not found. Installed SDKs: $($dotnetSdks -join ', ')"
+          }
+
+          $requiredWindowsSdkVersion = [version]$env:CI_WINDOWS_SDK_MIN_VERSION
+          $windowsSdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
+          $installedWindowsSdks = if (Test-Path $windowsSdkRoot) { Get-ChildItem $windowsSdkRoot -Directory | Select-Object -ExpandProperty Name } else { @() }
+          $compatibleWindowsSdk = $installedWindowsSdks | Where-Object {
+            try { [version]$_ -ge $requiredWindowsSdkVersion } catch { $false }
+          } | Select-Object -First 1
+          if (-not $compatibleWindowsSdk) {
+            throw "Windows SDK $requiredWindowsSdkVersion or newer was not found. Installed SDKs: $($installedWindowsSdks -join ', ')"
+          }
+
+          dotnet --info
+
+      - name: Restore
+        run: dotnet restore Irix.slnx
+
+      - name: Build
+        run: dotnet build Irix.slnx -c Release --no-restore
+
+      - name: Test quick lane
+        run: dotnet test Irix.slnx -c Release --no-build --filter "Category!=D3D12&Category!=Performance&Category!=Guard" --verbosity normal
+
+      - name: Pack preview packages
+        shell: pwsh
+        run: .\scripts\pack-nuget-preview.ps1 -PackageVersion '${{ inputs.version }}' -NoRestore
+
+      - name: Package consumer smoke
+        shell: pwsh
+        run: .\scripts\package-consumer-smoke.ps1 -PackageVersion '${{ inputs.version }}'
+
+      - name: Upload preview packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: irix-preview-packages-${{ inputs.version }}
+          path: artifacts/nuget-preview
+
+      - name: Login to NuGet.org
+        id: nuget_login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ env.NUGET_USER }}
+
+      - name: Publish NuGet packages
+        shell: pwsh
+        env:
+          NUGET_TRUSTED_PUBLISHING_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "artifacts/nuget-preview/*.nupkg" --api-key "$env:NUGET_TRUSTED_PUBLISHING_API_KEY" --source "$env:NUGET_SOURCE" --skip-duplicate
+
+      - name: Unlist NuGet packages
+        if: ${{ inputs.unlist_after_publish }}
+        shell: pwsh
+        env:
+          NUGET_TRUSTED_PUBLISHING_API_KEY: ${{ steps.nuget_login.outputs.NUGET_API_KEY }}
+        run: |
+          $packageIds = @(
+            'Irix',
+            'Irix.Core',
+            'Irix.Drawing',
+            'Irix.Platform',
+            'Irix.Rendering',
+            'Irix.Platform.Windows'
+          )
+
+          foreach ($packageId in $packageIds) {
+            dotnet nuget delete $packageId '${{ inputs.version }}' --api-key "$env:NUGET_TRUSTED_PUBLISHING_API_KEY" --source "$env:NUGET_SOURCE" --non-interactive
+          }

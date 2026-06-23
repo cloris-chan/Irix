@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Description>Preview retained layout, rendering pipeline, composition, and compositor integration for Irix.</Description>
   </PropertyGroup>
 
   <ItemGroup>

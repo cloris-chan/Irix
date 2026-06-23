@@ -10,6 +10,7 @@
     <File Path="Directory.Build.targets" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Irix/Irix.csproj" />
     <Project Path="src/Irix.Core/Irix.Core.csproj" />
     <Project Path="src/Irix.Drawing/Irix.Drawing.csproj" />
     <Project Path="src/Irix.Platform.Windows/Irix.Platform.Windows.csproj" />

@@ -3,7 +3,6 @@
     <IrixDefaultTargetFramework>net10.0</IrixDefaultTargetFramework>
     <IrixWindowsTargetFramework>net10.0-windows10.0.26100.0</IrixWindowsTargetFramework>
     <IrixWindowsSupportedOSPlatformVersion>10.0.15063.0</IrixWindowsSupportedOSPlatformVersion>
-    <TargetFramework>$(IrixDefaultTargetFramework)</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -15,7 +14,25 @@
     <IrixBuildFlavor Condition="'$(IrixDiagnostics)' != 'true'">runtime</IrixBuildFlavor>
     <BaseOutputPath Condition="'$(BaseOutputPath)' == ''">bin\$(IrixBuildFlavor)\</BaseOutputPath>
     <BaseIntermediateOutputPath Condition="'$(BaseIntermediateOutputPath)' == ''">obj\$(IrixBuildFlavor)\</BaseIntermediateOutputPath>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix Condition="'$(VersionSuffix)' == '' and '$(PackageVersion)' == ''">preview.1</VersionSuffix>
+    <Authors>clorischan</Authors>
+    <Company>clorischan</Company>
+    <Product>Irix</Product>
+    <RepositoryUrl>https://github.com/cloris-chan/Irix</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/cloris-chan/Irix</PackageProjectUrl>
+    <PackageTags>irix;ui;rendering;d3d12;preview</PackageTags>
+    <PackageReadmeFile Condition="'$(IsPackable)' != 'false'">package-readme.md</PackageReadmeFile>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsPackable)' != 'false' and '$(PackageReadmeFile)' != ''">
+    <None Include="$(MSBuildThisFileDirectory)docs\package-readme.md"
+          Pack="true"
+          PackagePath="package-readme.md"
+          Visible="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <IrixInternalScope Include="Irix.Core" />

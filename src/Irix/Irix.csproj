@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>$(IrixDefaultTargetFramework);$(IrixWindowsTargetFramework)</TargetFrameworks>
+    <PackageId>Irix</PackageId>
+    <Description>Unlisted preview metapackage for the Irix UI/rendering framework work-in-progress.</Description>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)' == '$(IrixWindowsTargetFramework)'">$(IrixWindowsSupportedOSPlatformVersion)</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="_._"
+          Pack="true"
+          PackagePath="lib\$(IrixDefaultTargetFramework)\_._"
+          Visible="false" />
+    <None Include="_._"
+          Pack="true"
+          PackagePath="lib\net10.0-windows10.0.26100\_._"
+          Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Irix.Core\Irix.Core.csproj" />
+    <ProjectReference Include="..\Irix.Drawing\Irix.Drawing.csproj" />
+    <ProjectReference Include="..\Irix.Platform\Irix.Platform.csproj" />
+    <ProjectReference Include="..\Irix.Rendering\Irix.Rendering.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == '$(IrixWindowsTargetFramework)'">
+    <ProjectReference Include="..\Irix.Platform.Windows\Irix.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>
