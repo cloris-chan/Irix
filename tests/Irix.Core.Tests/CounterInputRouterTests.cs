@@ -1441,6 +1441,25 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void Counter_default_view_preserves_root_child_order_with_owned_publication_array()
+    {
+        var app = new CounterApplication();
+        var tree = app.BuildView(app.Initialize());
+        var children = tree.Root.Children;
+
+        Assert.Equal(56, children.Length);
+        Assert.Equal("Count: 0", ResolveNodeText(app._arena, children[0].Content));
+        Assert.Equal("Click a button or use Up/Down, mouse wheel, and R.", ResolveNodeText(app._arena, children[1].Content));
+        Assert.Equal(new NodeKey(5), children[2].Key);
+        Assert.Equal(VirtualNodeKind.Content, children[2].Kind);
+        Assert.Equal("Increment", ResolveNodeText(app._arena, children[3].Children[1].Content));
+        Assert.Equal("Decrement", ResolveNodeText(app._arena, children[4].Children[1].Content));
+        Assert.Equal("Reset", ResolveNodeText(app._arena, children[5].Children[1].Content));
+        Assert.Equal("Scroll row 01", ResolveNodeText(app._arena, children[6].Content));
+        Assert.Equal("Scroll row 50", ResolveNodeText(app._arena, children[children.Length - 1].Content));
+    }
+
+    [Fact]
     public void Counter_debug_view_shows_scroll_and_input_diagnostics()
     {
         var app = new CounterApplication(showDiagnostics: true);

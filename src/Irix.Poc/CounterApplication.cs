@@ -32,6 +32,9 @@ internal abstract partial record CounterMessage
 
 internal sealed partial class CounterApplication : IApplication<CounterModel, CounterMessage>
 {
+    private const int ScrollProbeRowCount = 50;
+    private const int RootFixedChildCount = 4;
+
     internal readonly VirtualTextArena _arena = new();
 
     internal CounterApplication()
@@ -95,19 +98,10 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
                 VirtualNodeBuilder.Text(_arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4))
             ];
 
-        var root = new VirtualNode(
-            VirtualNodeKind.Container,
-            key: new NodeKey(1),
-            properties: [VirtualNodeProperty.ScrollY(scrollY)],
-            children:
-            [
-                .. headerRows,
-                VirtualNodeFactory.Rectangle(new NodeKey(5), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48)),
-                BuildButton(_arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership),
-                BuildButton(_arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership),
-                BuildButton(_arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership),
-                .. BuildScrollProbeRows(_arena)
-            ]);
+        var rootProperties = new[] { VirtualNodeProperty.ScrollY(scrollY) };
+        VirtualNodePropertySet.Validate(VirtualNodeKind.Container, rootProperties);
+        var rootChildren = CreateRootChildren(_arena, headerRows, inputOwnership);
+        var root = VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, rootProperties, rootChildren);
 
         return new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
     }
@@ -133,15 +127,35 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
             visualState);
     }
 
-    private static VirtualNode[] BuildScrollProbeRows(VirtualTextArena arena)
+    private static VirtualNode[] CreateRootChildren(VirtualTextArena arena, ReadOnlySpan<VirtualNode> headerRows, OwnershipSnapshot inputOwnership)
     {
-        var rows = new VirtualNode[50];
-        for (var index = 0; index < rows.Length; index++)
+        var children = new VirtualNode[headerRows.Length + RootFixedChildCount + ScrollProbeRowCount];
+        headerRows.CopyTo(children);
+        var next = headerRows.Length;
+
+        children[next++] = VirtualNodeFactory.Rectangle(new NodeKey(5), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48));
+        children[next++] = BuildButton(arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership);
+        children[next++] = BuildButton(arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership);
+        children[next++] = BuildButton(arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership);
+        next = WriteScrollProbeRows(arena, children, next);
+
+        if (next != children.Length)
         {
-            rows[index] = VirtualNodeBuilder.Text(arena, $"Scroll row {index + 1:00}", new NodeKey((uint)(100 + index)));
+            throw new InvalidOperationException("Counter root child publication count changed unexpectedly.");
         }
 
-        return rows;
+        return children;
+    }
+
+    private static int WriteScrollProbeRows(VirtualTextArena arena, VirtualNode[] children, int startIndex)
+    {
+        var next = startIndex;
+        for (var index = 0; index < ScrollProbeRowCount; index++)
+        {
+            children[next++] = VirtualNodeBuilder.Text(arena, $"Scroll row {index + 1:00}", new NodeKey((uint)(100 + index)));
+        }
+
+        return next;
     }
 
     private static UpdateResult<CounterModel, CounterMessage> ApplyRoutedInput(CounterModel model, CounterMessage.RoutedInput input)

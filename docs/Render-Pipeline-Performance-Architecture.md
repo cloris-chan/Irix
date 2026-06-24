@@ -161,8 +161,9 @@ the simple lifetime cases; guards cover the project-specific ones.
 
 ## Evidence Snapshot
 
-Baseline collected on 2026-06-25 after the `VirtualNode` IR was normalized to
-`Container` and `Content` nodes.
+Baseline refreshed on 2026-06-25 after the `VirtualNode` IR was normalized to
+`Container`/`Content` nodes and the first production control/root publication
+slices were applied.
 
 Primary command:
 
@@ -174,7 +175,7 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2272008 bytes | 12622 B/frame | render 11060 B/frame, tree 728 B/frame, translate 745 B/frame |
+| Static | 2265880 bytes | 12588 B/frame | render 11013 B/frame, tree 836 B/frame, translate 637 B/frame |
 | Warm scroll | 551688 bytes | 3064 B/frame | translate 1742 B/frame, tree 728 B/frame, render 364 B/frame |
 | Scale change | 346048 bytes | 1922 B/frame | tree 911 B/frame, translate 637 B/frame, render 364 B/frame |
 
@@ -182,12 +183,12 @@ Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `tree.buildRoot.button.childrenArray` | 364 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
 | `layout.elementsArray` | 364 | Retained `LayoutTreeResult` publication array. |
+| `tree.buildRoot.button.propertyArray` | 273 | Control/state/style property publication. |
+| `tree.buildRoot.button.childrenArray` | 227 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
 | `layout.treeNodesArray` | 182 | Retained `LayoutTreeResult` publication array. |
 | `layout.result` | 182 | Retained result object. |
 | `drawRecord` | 147 | Command recording is visible but not the largest bucket. |
-| `tree.buildRoot.button.propertyArray` | 136 | Control/state/style property publication. |
 | `layout.nodeWalk` | 0 | The layout bucket is publication cost, not node-walk allocation. |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
@@ -292,16 +293,19 @@ Acceptance:
 
 ### P1 - Control Composition Scratch Lowering
 
-Status: first slice implemented. Button/control lowering now writes action and
-control-state style properties through a stack-backed bundle path, partitions
+Status: production slices implemented. Button/control lowering now writes action
+and control-state style properties through a stack-backed bundle path, partitions
 button template properties without three full-size temporary arrays, and freezes
 only the final container/content property arrays plus the two-child publication
-array. The semantic style bridge remains in use through `StyleDeclarationMapper`.
+array. `CounterApplication` root construction now fills the final owned child
+array directly instead of staging scroll rows in a temporary array before root
+publication. The semantic style bridge remains in use through
+`StyleDeclarationMapper`.
 
-Current hot signal: button lowering allocates child/property publication arrays
+Remaining hot signal: button lowering allocates child/property publication arrays
 after the control is split into a container plus rectangle/text content nodes.
-The first implementation slice should reduce temporary arrays and repeated
-partitioning without changing the IR semantics.
+Follow-up slices should reduce retained publication arrays structurally without
+changing the IR semantics.
 
 Direction:
 
@@ -458,7 +462,8 @@ For unmanaged-payload work, add focused guard coverage for:
 Measurement note: `--diagnose-text-cache 180` uses a narrow synthetic measured
 button builder to isolate retained-publication buckets. It remains the comparison
 for layout/tree publication cost, but it does not fully capture production
-control call-site savings from stack-backed `ButtonPropertyBundle` lowering.
+control call-site savings from stack-backed `ButtonPropertyBundle` lowering or
+the exact-array `CounterApplication` root publication path.
 
 ## Non-Goals
 

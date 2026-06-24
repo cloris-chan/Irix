@@ -1471,6 +1471,19 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Counter_root_view_freezes_owned_children_without_scroll_row_temp_array()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
+
+        Assert.Contains("CreateRootChildren", source);
+        Assert.Contains("VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container", source);
+        Assert.Contains("headerRows.CopyTo(children)", source);
+        Assert.Contains("WriteScrollProbeRows", source);
+        Assert.DoesNotContain("BuildScrollProbeRows", source);
+        Assert.DoesNotContain(".. BuildScrollProbeRows", source);
+    }
+
+    [Fact]
     public void VirtualNode_does_not_expose_deep_value_equality()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
