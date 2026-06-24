@@ -23,6 +23,142 @@ single-owner, keep borrowed data inside the frame/build lifetime, and freeze or
 copy before anything becomes retained state. The goal is not to make the code
 look like Rust; the goal is to make invalid lifetimes hard to represent.
 
+## C# Systems Techniques To Reuse
+
+The Irix renderer can borrow several ideas from systems-style C# work such as
+Nockawa's database-engine notes without turning the codebase into unsafe-first
+code. The useful pattern is to spend C#'s type system where it can make hot-path
+data shape explicit, then reserve unsafe or byte-level access for narrow,
+guarded bridges.
+
+### `where T : unmanaged`
+
+`where T : unmanaged` is important because it lets a generic API state that `T`
+contains no managed references. That unlocks a different class of render-pipeline
+helpers:
+
+- `sizeof(T)` / `Unsafe.SizeOf<T>()` can be used behind one strongly typed helper
+  instead of scattered per-type constants.
+- `Span<T>` / `ReadOnlySpan<T>` payloads can be copied, hashed, compared, or
+  uploaded as bytes through a single constrained path.
+- The JIT can specialize the generic method for the concrete value type used by
+  a hot path.
+- APIs can reject accidental managed-reference fields at compile time instead of
+  discovering them through runtime allocation regressions.
+
+For Irix, this is a good fit for compact render payloads and keys, not for every
+domain object. Strong candidates are value-only records such as `NodeKey`,
+`ActionId`, layout records, command-range records, material records, composition
+layer records, and future slab records. Poor candidates are values that own text,
+managed arrays, delegates, resources with disposal semantics, or backend COM
+objects.
+
+The rule should be: use `where T : unmanaged` on internal helpers that operate on
+contiguous value payloads, not as a public API promise and not as a reason to
+erase domain names into raw bytes.
+
+### Byte Views With Typed Owners
+
+Database engines care about reading and writing structured pages without
+per-record allocation. The render pipeline has a similar shape when publishing
+layout, draw, hit-test, and composition payloads. The reusable idea is:
+
+```csharp
+internal static ReadOnlySpan<byte> AsBytes<T>(ReadOnlySpan<T> values)
+    where T : unmanaged
+{
+    return MemoryMarshal.AsBytes(values);
+}
+```
+
+The helper should live behind an internal boundary and be covered by size/layout
+guards. Callers should still speak in terms of `LayoutElement`,
+`LayoutTreeNode`, `DrawCommand`, `DrawMaterial`, or future slab records. The byte
+view is an implementation detail for hashing, equality, serialization-like
+diagnostics, upload staging, or cache keys.
+
+### Explicit Layout And Size Guards
+
+Irix already uses explicit/sequential layout and size guards for compact values
+such as color, paint, content resource, and property values. Keep expanding that
+style only for payloads that cross hot boundaries:
+
+- records stored in large contiguous arrays;
+- values copied into frame resources;
+- payloads hashed for layer/material/cache identity;
+- values uploaded to backend buffers;
+- future virtual-node/layout publication slab records.
+
+Every such value needs tests for size, layout intent, and semantic round-trip
+behavior. A small layout is not useful if it makes invalid states easier to
+construct.
+
+### Data-Oriented Slabs Before Object Graphs
+
+The database-engine lesson maps especially well to `VirtualNode`: when a
+published structure is traversed often and mutated only through rebuild/diff
+phases, a contiguous owner can be better than many small objects or per-node
+arrays. That is the rationale behind the future `VirtualNodeTree` slab in P2.
+
+The slab should stay typed:
+
+- node records are not raw bytes;
+- child/property/content ranges are explicit ranges, not unstructured offsets;
+- readers expose domain operations, not arbitrary pointer arithmetic;
+- publication owns the arrays and readers cannot outlive that publication.
+
+### Ref Structs And Stack-Scoped Builders
+
+The repo already uses `ref struct` scratch helpers such as property readers,
+layout contexts, and scratch lists. Continue that direction for build-only APIs:
+
+- property partitioning;
+- child staging;
+- dirty classification;
+- temporary layout vectors;
+- command-range projection.
+
+Do not store those builders in retained snapshots, async state machines, fields,
+or backend-owned objects. If something must cross the frame boundary, freeze it
+into an owned publication first.
+
+### Pinning And Native Upload Boundaries
+
+Pinning and fixed pointers are useful at the backend edge, but they are expensive
+architecture tools if they leak upward. Keep pinning rules narrow:
+
+- pin only for the duration of a backend/source-data call;
+- prefer unmanaged contiguous payloads for upload staging;
+- never let a pinned managed object become the lifetime owner of a retained
+  render resource;
+- prefer backend-owned upload rings or native resources once data is handed to
+  D3D12.
+
+### Intrinsics And SIMD
+
+Intrinsics belong after layout and ownership are stable. Potential future uses:
+
+- compare/hash unmanaged payload spans for cache identity;
+- transform batches of rectangles or layer values;
+- compact/cull large retained command ranges.
+
+They should sit behind scalar fallbacks or guarded helper methods. Do not use
+SIMD to compensate for a structure that is still allocating the wrong shape.
+
+### Analyzer Guards For Domain Lifetimes
+
+C# cannot express every Rust-like lifetime rule. Irix can compensate with source
+guards and analyzers around its own invariants:
+
+- no managed-reference fields in unmanaged hot payload records;
+- no `Span<T>`, `ReadOnlySpan<T>`, or `ref struct` leakage into retained state;
+- no pooled mutable arrays inside retained publications;
+- no public `VirtualNode` authoring surface;
+- no backend resource ownership above platform backends.
+
+This is often better than forcing every API into unsafe code. The language covers
+the simple lifetime cases; guards cover the project-specific ones.
+
 ## Evidence Snapshot
 
 Baseline collected on 2026-06-25 after the `VirtualNode` IR was normalized to
@@ -192,6 +328,9 @@ Possible shape:
   or tree owner.
 - Node records store kind, key, content range/index, property range, and child
   range.
+- Hot node/property/content-resource records that contain no managed references
+  should be eligible for `where T : unmanaged` helpers and byte-span hashing or
+  upload staging.
 - Builders can use scratch vectors and freeze once into contiguous publication
   arrays.
 - Diff/layout APIs consume readers/spans instead of per-node arrays.
@@ -207,6 +346,8 @@ Acceptance:
   drop materially.
 - Diff, layout, and retained tree tests prove stable DFS/index/key behavior.
 - No published reader can outlive its owning tree publication.
+- `where T : unmanaged` helpers stay internal and guarded; they do not erase
+  domain-specific value types into public byte-oriented APIs.
 
 ### P3 - Layout Publication Builder
 
@@ -262,6 +403,8 @@ Future slices:
 
 - Persistent upload rings for repeated rect/text/material payloads.
 - Descriptor/resource-table reuse under explicit frame ownership.
+- Unmanaged payload upload helpers for compact value arrays such as materials,
+  rectangles, layer transforms, and command metadata.
 - GPU-side culling or compaction for large retained scenes.
 - Content-space offscreen surfaces only after bounds, origin, clip, invalidation,
   and hit-test semantics are written.
@@ -271,6 +414,8 @@ Acceptance:
 - D3D12 diagnostics report no device removal, no unexpected sync waits, and no
   hidden fallback path.
 - Secondary paths remain diagnostic-visible and written-blocker-driven.
+- Upload helpers keep pinning/native access inside the backend handoff and do not
+  move resource ownership above `Irix.Platform.Windows`.
 
 ## Measurement Gates
 
@@ -294,6 +439,16 @@ Use `.\scripts\validate.ps1 -Mode Quick` for routine doc/source validation and
 architecture guards, diagnostics, partial-apply, composition, or scroll/input
 behavior.
 
+For unmanaged-payload work, add focused guard coverage for:
+
+- `Unsafe.SizeOf<T>()` / layout expectations of every new hot payload value.
+- Compile-time `where T : unmanaged` constraints on generic byte/hash/upload
+  helpers.
+- Negative source-shape checks that retained publications do not store spans,
+  ref structs, or pooled mutable buffers.
+- Semantic tests proving byte-level helpers do not replace domain equality where
+  padding, normalization, or resource identity matters.
+
 ## Non-Goals
 
 - No public `VirtualNode` authoring API.
@@ -304,4 +459,7 @@ behavior.
 - No pooled mutable arrays inside retained layout/render publications.
 - No generic CPU compositor as the first performance answer.
 - No optimization that weakens text/resource lifetime boundaries.
-
+- No public byte-oriented render APIs just because an internal value is
+  unmanaged.
+- No intrinsics or unsafe pointer paths before the data layout and ownership
+  boundary are stable and measured.
