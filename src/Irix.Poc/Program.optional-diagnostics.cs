@@ -131,6 +131,12 @@ internal static partial class Program
             return;
         }
 
+        if (args.Contains("--diagnose-render-steady-state-allocation"))
+        {
+            task = RunRenderSteadyStateAllocationDiagnosticsAsync(args);
+            return;
+        }
+
         if (args.Contains("--diagnose-composition-transform"))
         {
             task = RunCompositionTransformDiagnosticsAsync(args);
@@ -509,6 +515,16 @@ internal static partial class Program
             frameCount,
             ParseTextCompositionMode(args),
             ParseDiagnosticScale(args));
+        return Task.CompletedTask;
+    }
+
+    private static Task RunRenderSteadyStateAllocationDiagnosticsAsync(string[] args)
+    {
+        var frameCount = RenderSteadyStateAllocationDiagnosticRunner.DefaultFrameCount;
+        var frameArg = args.SkipWhile(a => a != "--diagnose-render-steady-state-allocation").Skip(1).FirstOrDefault();
+        if (int.TryParse(frameArg, out var n) && n > 0) frameCount = n;
+        using var diagnosticOutput = TryCreateDiagnosticOutput(args);
+        RenderSteadyStateAllocationDiagnosticRunner.Run(diagnosticOutput ?? Console.Out, frameCount);
         return Task.CompletedTask;
     }
 

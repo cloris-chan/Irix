@@ -713,7 +713,8 @@ public sealed partial class ProgramDiagnosticsTests
         var diagnosticBaseline = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "diagnostic-baseline.ps1")));
         Assert.Contains("--diagnose-sync", diagnosticBaseline);
         Assert.Contains("--diagnose-text-cache", diagnosticBaseline);
-        Assert.Contains("[ValidateSet(\"Sync\", \"TextCache\", \"Smoke\", \"All\")]", diagnosticBaseline);
+        Assert.Contains("--diagnose-render-steady-state-allocation", diagnosticBaseline);
+        Assert.Contains("[ValidateSet(\"Sync\", \"TextCache\", \"RenderAllocation\", \"Smoke\", \"All\")]", diagnosticBaseline);
         Assert.DoesNotContain("SyncStrategy", diagnosticBaseline);
     }
 
@@ -4140,6 +4141,111 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));", source);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
+    }
+
+    [Fact]
+    public void Render_steady_state_allocation_formatter_outputs_stable_core_pipeline_fields()
+    {
+        var scenario = new RenderSteadyStateAllocationScenario(
+            "style-only",
+            FrameCount: 3,
+            ThreadAllocatedBytes: 150,
+            PipelineAttribution: new RenderPipelineBuildAllocationAttribution(
+                ClassificationBytes: 12,
+                LayoutBytes: 24,
+                RecordBytes: 36,
+                HitTargetsBytes: 48,
+                SnapshotBytes: 60,
+                RetainedFrameBytes: 72),
+            LastLayoutRebuildReason: LayoutRebuildReason.StyleOnly,
+            LayoutRebuildCountDelta: 0);
+        var snapshot = new RenderSteadyStateAllocationSnapshot(
+            FrameCount: 3,
+            PrebuiltTrees: true,
+            KnownResources: true,
+            CapacityReserved: false,
+            WarmReuse: new RenderSteadyStateAllocationScenario(
+                "warm-reuse",
+                FrameCount: 3,
+                ThreadAllocatedBytes: 30,
+                PipelineAttribution: default,
+                LastLayoutRebuildReason: LayoutRebuildReason.None,
+                LayoutRebuildCountDelta: 0),
+            StyleOnly: scenario,
+            LayoutChange: new RenderSteadyStateAllocationScenario(
+                "layout-change",
+                FrameCount: 3,
+                ThreadAllocatedBytes: 90,
+                PipelineAttribution: default,
+                LastLayoutRebuildReason: LayoutRebuildReason.LayoutAffecting,
+                LayoutRebuildCountDelta: 3));
+
+        var header = RenderSteadyStateAllocationDiagnosticRunner.FormatHeader(snapshot);
+        var scenarioSummary = RenderSteadyStateAllocationDiagnosticRunner.FormatScenario(scenario);
+        var focus = RenderSteadyStateAllocationDiagnosticRunner.FormatFocus(snapshot);
+
+        Assert.Equal(
+            "render-steady-state scope=core-render-pipeline prebuiltTrees=true knownResources=true capacityReserved=false frames=3 targetMet=false totalBytes=270",
+            header);
+        Assert.Equal(
+            "render-steady-state scenario=style-only frames=3 threadBytes=150 threadPerFrame=50 targetMet=false layoutReason=StyleOnly layoutRebuilds=0 pipelineBytes=252 classify=12 layout=24 record=36 hitTargets=48 snapshot=60 retainedFrame=72",
+            scenarioSummary);
+        Assert.Equal(
+            "render-steady-state focus largestScenario=style-only largestBytes=150 largestPerFrame=50 totalBytes=270 targetMet=false",
+            focus);
+    }
+
+    [Fact]
+    public void Render_steady_state_allocation_diagnostic_runs_prebuilt_known_resource_scenarios()
+    {
+        var snapshot = RenderSteadyStateAllocationDiagnosticRunner.Capture(frameCount: 2);
+
+        Assert.Equal(2, snapshot.FrameCount);
+        Assert.True(snapshot.PrebuiltTrees);
+        Assert.True(snapshot.KnownResources);
+        Assert.False(snapshot.CapacityReserved);
+        Assert.Equal("warm-reuse", snapshot.WarmReuse.Name);
+        Assert.Equal("style-only", snapshot.StyleOnly.Name);
+        Assert.Equal("layout-change", snapshot.LayoutChange.Name);
+        Assert.Equal(2, snapshot.WarmReuse.FrameCount);
+        Assert.Equal(2, snapshot.StyleOnly.FrameCount);
+        Assert.Equal(2, snapshot.LayoutChange.FrameCount);
+        Assert.Equal(LayoutRebuildReason.StyleOnly, snapshot.StyleOnly.LastLayoutRebuildReason);
+        Assert.Equal(LayoutRebuildReason.LayoutAffecting, snapshot.LayoutChange.LastLayoutRebuildReason);
+        Assert.True(snapshot.WarmReuse.ThreadAllocatedBytes >= 0);
+        Assert.True(snapshot.StyleOnly.ThreadAllocatedBytes >= 0);
+        Assert.True(snapshot.LayoutChange.ThreadAllocatedBytes >= 0);
+    }
+
+    [Fact]
+    public void Render_steady_state_allocation_diagnostic_has_cli_docs_and_optional_boundary()
+    {
+        var root = FindRepoRoot();
+        var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "RenderSteadyStateAllocationDiagnosticRunner.optional-diagnostics.cs")));
+        var diagnosticProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
+        var mainProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
+        var baselineScript = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "diagnostic-baseline.ps1")));
+        var performanceDoc = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Render-Pipeline-Performance-Architecture.md")));
+        var statusDoc = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "docs", "Project_Status_and_Todo.md")));
+
+        Assert.Contains("--diagnose-render-steady-state-allocation", diagnosticProgramSource);
+        Assert.Contains("RunRenderSteadyStateAllocationDiagnosticsAsync", diagnosticProgramSource);
+        Assert.DoesNotContain("--diagnose-render-steady-state-allocation", mainProgramSource);
+        Assert.Contains("[ValidateSet(\"Sync\", \"TextCache\", \"RenderAllocation\", \"Smoke\", \"All\")]", baselineScript);
+        Assert.Contains("--diagnose-render-steady-state-allocation", baselineScript);
+        Assert.Contains("--diagnose-render-steady-state-allocation", performanceDoc);
+        Assert.Contains("core-render-pipeline", performanceDoc);
+        Assert.Contains("prebuilt tree", performanceDoc);
+        Assert.Contains("--diagnose-render-steady-state-allocation", statusDoc);
+        Assert.StartsWith("#if IRIX_DIAGNOSTICS", runnerSource, StringComparison.Ordinal);
+        Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", runnerSource);
+        Assert.Contains("PrebuildScenarioTrees", runnerSource);
+        Assert.Contains("KnownResources: true", runnerSource);
+        Assert.Contains("CapacityReserved: false", runnerSource);
+        Assert.Contains("BuildWithAllocationAttribution", runnerSource);
+        Assert.Contains("RectangleDirtyNodes", runnerSource);
+        Assert.Contains("\"style-only\"", runnerSource);
+        Assert.Contains("\"layout-change\"", runnerSource);
     }
 
     [Fact]

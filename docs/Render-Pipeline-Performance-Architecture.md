@@ -352,11 +352,15 @@ numbers only when a measured change lands.
 Acceptance:
 
 - `--diagnose-text-cache 180` remains the main allocation comparison.
+- `--diagnose-render-steady-state-allocation 30` remains the core render
+  pipeline allocation baseline for warm reused trees, style-only patches, and
+  layout-affecting changes over prebuilt trees and known content resources.
 - Composition and scroll presentation diagnostics above stay green for broad
   render-pipeline changes.
 - `LayoutTreeResult` and retained snapshots remain immutable publications.
-- A dedicated no-allocation steady-state diagnostic must exist before any slice
-  is claimed to satisfy the zero-allocation contract.
+- No slice may claim the full zero-allocation contract until a later reserved
+  capacity guard covers control/tree publication, backend resources, and cache
+  page growth boundaries in addition to this core baseline.
 
 ### P1 - Control Composition Scratch Lowering
 
@@ -519,6 +523,7 @@ Run for every substantial render-pipeline performance implementation:
 
 ```powershell
 dotnet run --project src\Irix.Poc\Irix.Poc.csproj -c Release -p:IrixDiagnostics=true -- --diagnose-text-cache 180
+dotnet run --project src\Irix.Poc\Irix.Poc.csproj -c Release -p:IrixDiagnostics=true -- --diagnose-render-steady-state-allocation 30
 dotnet run --project src\Irix.Poc\Irix.Poc.csproj -c Release -p:IrixDiagnostics=true -- --diagnose-composition-transform
 dotnet run --project src\Irix.Poc\Irix.Poc.csproj -c Release -p:IrixDiagnostics=true -- --diagnose-composition-scroll
 dotnet run --project src\Irix.Poc\Irix.Poc.csproj -c Release -p:IrixDiagnostics=true -- --diagnose-composition-multilayer
@@ -545,14 +550,23 @@ For unmanaged-payload work, add focused guard coverage for:
 - Semantic tests proving byte-level helpers do not replace domain equality where
   padding, normalization, or resource identity matters.
 
-Before declaring the core render pipeline no-allocation complete, add and keep a
-dedicated steady-state allocation guard. The guard should warm up the pipeline,
-reserve capacity for the scenario, reuse existing `ContentResourceRef` and
-backend resources, then measure routine tree changes, full layout rebuilds,
-style-only layout patches, retained-frame handoff, and composition refresh with
-`GC.GetAllocatedBytesForCurrentThread()` deltas of zero. Separate diagnostics
-should report capacity growth and resource introduction so a legitimate page grow
-does not masquerade as a hot-path regression.
+The current `--diagnose-render-steady-state-allocation 30` command is the first
+inner-loop guard. It warms the renderer, measures with
+`GC.GetAllocatedBytesForCurrentThread()`, uses prebuilt `VirtualNodeTree`
+instances, reuses known text content resources, and reports warm reuse,
+style-only, and layout-affecting scenarios under the `core-render-pipeline`
+scope. Its `capacityReserved=false` header is intentional: the command is a
+baseline for the current pipeline, not proof of the final contract.
+
+Before declaring the full render pipeline no-allocation complete, keep this core
+baseline and add the reserved-capacity guard. That later guard should reserve
+capacity for the scenario, reuse existing content and backend resources, then
+measure routine control/tree publication, diff/retained tree patching, full
+layout rebuilds, style-only layout patches, retained-frame handoff, and
+composition refresh with zero `GC.GetAllocatedBytesForCurrentThread()` deltas.
+Separate diagnostics should report capacity growth, new resource identity, and
+backend cache page expansion so legitimate growth does not masquerade as a
+hot-path regression.
 
 Measurement note: `--diagnose-text-cache 180` uses a narrow synthetic measured
 button builder to isolate retained-publication buckets. It remains the comparison

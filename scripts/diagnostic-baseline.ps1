@@ -13,7 +13,7 @@
 #>
 
 param(
-    [ValidateSet("Sync", "TextCache", "Smoke", "All")]
+    [ValidateSet("Sync", "TextCache", "RenderAllocation", "Smoke", "All")]
     [string]$Mode = "All",
 
     [int]$Frames = 300,
@@ -21,6 +21,8 @@ param(
     [int]$Samples = 3,
 
     [int]$TextCacheFrames = 180,
+
+    [int]$RenderAllocationFrames = 30,
 
     [string]$RefreshLabel = "current",
 
@@ -198,6 +200,13 @@ if ($Mode -eq "TextCache" -or $Mode -eq "All") {
         "diagnose-text-cache-$refresh-$scale-$runtime.txt" `
         @("--diagnose-text-cache", "$TextCacheFrames") `
         @("Display refresh", "Display scale", "--- Scenario", "Format cache", "Layout cache", "Allocation:", "FrameDrawingResources", "complete") | Out-Null
+}
+
+if ($Mode -eq "RenderAllocation" -or $Mode -eq "All") {
+    Invoke-CapturedDiagnostic `
+        "diagnose-render-steady-state-allocation-$refresh-$scale-$runtime.txt" `
+        @("--diagnose-render-steady-state-allocation", "$RenderAllocationFrames") `
+        @("Render Steady-State Allocation", "render-steady-state", "complete") | Out-Null
 }
 
 if ($Mode -eq "Smoke") {
