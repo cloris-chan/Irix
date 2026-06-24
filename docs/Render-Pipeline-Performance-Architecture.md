@@ -9,12 +9,16 @@
 Irix already has the most important performance boundary in place: rendering is
 driven by an internal `VirtualNode` IR, retained layout/render publications, and a
 D3D12-first compositor path. The next optimization work should not be random
-pooling or per-call micro-tuning. It should make the hot path explicit about
-ownership:
+pooling or per-call micro-tuning. The target is stricter: after initialization,
+warmup, and explicit capacity reservation, the core render pipeline should be
+able to process routine UI tree, layout, draw, hit-test, and composition updates
+with zero managed allocations as long as no new resource or capacity expansion is
+required. That target only works if the hot path is explicit about ownership:
 
 - Build-time scratch is temporary and can use stack storage, pooled storage, and
   borrowed spans.
-- Published render state is immutable, owned, and safe to retain across frames.
+- Published render state is immutable to readers, owned by the pipeline, and
+  safe to retain across frames through generation-fenced views.
 - Platform resources are owned by the backend and referenced through stable
   handles or frame resources.
 
@@ -217,6 +221,58 @@ and scroll presentation lifecycle behavior are healthy. The next performance
 work should therefore reduce UI/control lowering and render publication cost
 before inventing a new compositor fallback.
 
+## Steady-State No-Allocation Target
+
+The long-term performance contract is a warm steady state with zero managed
+allocation inside the core render pipeline. "Steady state" means the renderer has
+completed initialization and warmup, the app has reserved enough capacity for its
+current scene scale, backend caches have the needed pages/resources, and a frame
+does not introduce new resource identities.
+
+The no-allocation hot path includes:
+
+- control composition lowering into the internal render IR;
+- `VirtualNode` publication and retained diff/projection;
+- layout rebuilds and style-only layout patches;
+- draw command recording, command-range projection, and hit-target publication;
+- retained frame handoff and composition-plan refresh;
+- compositor ticks that consume already-published retained state.
+
+Allowed allocation remains explicit and outside the steady-state budget:
+
+| Event | Allocation rule |
+|-------|-----------------|
+| Process/app initialization | Allowed. |
+| First-use warmup and explicit capacity reservation | Allowed. |
+| Capacity page/slab/ring expansion | Allowed, recorded as capacity growth. |
+| New `ContentResourceRef`, text buffer, image, glyph, material, or backend resource identity | Allowed, recorded as resource introduction or cache growth. |
+| Glyph atlas/image cache page growth and device recovery | Allowed, backend-owned and diagnostic-visible. |
+| Diagnostics formatting, logging, exceptions, tests, and CLI output | Outside the core hot-path budget. |
+| Routine UI tree/layout/style/content updates that fit existing capacity and reuse known resources | No managed allocation. |
+
+The required model is capacity-owned publication, not ad hoc object pooling:
+
+- Each hot publication owns reusable pages, slabs, or ring-buffer segments with
+  explicit capacity and generation.
+- Writers mutate only the current build generation.
+- Commit publishes read-only typed views: indices, spans, ranges, or handles
+  that cannot outlive the owning publication.
+- Readers never observe mutable pooled storage; they observe a frozen generation.
+- Reuse is legal only after all retained readers for the older generation are
+  gone or after a double/triple-buffered owner proves the old generation is not
+  visible.
+- Empty publications use static empty views; non-empty publications use reserved
+  owner capacity.
+- If capacity is insufficient, the operation may grow once, record the growth,
+  and is not counted as a zero-allocation steady-state frame.
+
+The current implementation is not there yet. The measured buckets show the gap:
+layout arrays, control child/property arrays, draw-record publication, dirty
+classification, hit targets, and retained snapshot shells still allocate when
+they publish new arrays or objects. The recent `LayoutTreeResult` value-shell
+slice removes one result-object allocation, but the remaining work is to replace
+new-array publication with capacity-owned pages and generation-fenced views.
+
 ## Architecture Rules
 
 ### Render IR Boundary
@@ -239,18 +295,22 @@ The current semantic shape remains:
 | Zone | Owner | Allowed storage | Forbidden storage |
 |------|-------|-----------------|-------------------|
 | Build scratch | The current frame/build call | `stackalloc`, `ref struct` builders, pooled buffers, mutable lists, borrowed spans | Retained references, async storage, backend ownership |
-| Publication | Render/core retained state | Owned immutable arrays, value records, stable handles, frozen slabs | Stack memory, rented mutable arrays, borrowed spans |
+| Publication | Render/core retained state | Owned immutable arrays, capacity-owned pages/slabs/ring segments, value records, stable handles, frozen generation views | Stack memory, rented mutable arrays visible to readers, borrowed spans |
 | Backend resources | Platform backend | Device resources, descriptor/upload rings, glyph/image/material caches with handles | App/runtime state ownership, public renderer API leakage |
 
-Copying is expected at zone boundaries. The optimization target is to stop
-copying several times inside one zone.
+Copying is acceptable during initialization, growth, and final publication. The
+steady-state optimization target is to stop allocating and repeatedly copying
+inside one zone when capacity already exists.
 
 ### Retained Publication Safety
 
 `LayoutTreeResult`, retained snapshots, draw resources, hit targets, and any
 future published virtual-node slab must be safe to retain after the build call
 returns. They must not expose mutable pooled arrays. Empty/static arrays are fine;
-non-empty published buffers must have one clear owner.
+non-empty published buffers must have one clear owner. Future no-allocation
+publications may reuse storage only behind generation fences or equivalent
+ownership rules that keep readers on immutable views while writers advance a new
+generation.
 
 ### D3D12-First Constraint
 
@@ -260,24 +320,27 @@ create a generic CPU compositor, public scheduler, or public `VirtualNode` API.
 
 ## Target Shape
 
-The long-term target is a pipeline with explicit build and publish phases:
+The long-term target is a pipeline with explicit build, reserve, and publish
+phases:
 
 ```text
 App/control runtime
   -> Control composition builder
   -> VirtualNode build scratch
-  -> immutable VirtualNode publication
+  -> capacity-owned VirtualNode publication view
   -> diff / retained tree patch
   -> layout build scratch
-  -> immutable LayoutTreeResult publication
-  -> draw/hit/resource publication
+  -> capacity-owned layout publication view
+  -> draw/hit/resource publication views
   -> D3D12 compositor/backend resources
 ```
 
 Each arrow either borrows from the current owner for the duration of one build
-phase or freezes into the next retained publication. That is the C# version of
-the useful Rust-style idea: ownership is explicit, borrowing is scoped, and
-retained values cannot point back into scratch memory.
+phase, writes into already-reserved owner capacity, or grows capacity outside the
+steady-state budget before committing the next retained publication view. That is
+the C# version of the useful Rust-style idea: ownership is explicit, borrowing is
+scoped, retained values cannot point back into scratch memory, and reuse is gated
+by owner generation rather than convention.
 
 ## Staged Plan
 
@@ -292,6 +355,8 @@ Acceptance:
 - Composition and scroll presentation diagnostics above stay green for broad
   render-pipeline changes.
 - `LayoutTreeResult` and retained snapshots remain immutable publications.
+- A dedicated no-allocation steady-state diagnostic must exist before any slice
+  is claimed to satisfy the zero-allocation contract.
 
 ### P1 - Control Composition Scratch Lowering
 
@@ -313,8 +378,8 @@ Direction:
 
 - Introduce a frame-owned control/virtual-node build context for small child and
   property staging.
-- Partition control properties through stack or scratch spans, then publish only
-  the arrays that actually become retained node data.
+- Partition control properties through stack or scratch spans, then publish into
+  capacity-owned node/property storage instead of per-node arrays.
 - Keep button semantics outside `VirtualNode`. A button remains a control-level
   composition that emits a container plus content nodes.
 - Avoid adding button nodes, z-index properties, or CSS processing names to the
@@ -323,7 +388,8 @@ Direction:
 Acceptance:
 
 - Warm-scroll diagnostics show a reduction in `tree.buildRoot.button.*` buckets.
-- Any retained `VirtualNode` data is owned after publication.
+- Any retained `VirtualNode` data is owned after publication and is reader-immutable
+  through a generation view.
 - Source guards still block public `VirtualNode` authoring leakage.
 
 ### P2 - VirtualNode Publication Slab
@@ -335,7 +401,7 @@ contiguous node, child-range, property, and content-resource slabs".
 
 Possible shape:
 
-- `VirtualNodeTree` owns published arrays/slabs.
+- `VirtualNodeTree` owns published arrays/slabs and their retained capacity.
 - `VirtualNodeRef` or a reader struct identifies nodes by index plus generation
   or tree owner.
 - Node records store kind, key, content range/index, property range, and child
@@ -344,7 +410,7 @@ Possible shape:
   should be eligible for `where T : unmanaged` helpers and byte-span hashing or
   upload staging.
 - Builders can use scratch vectors and freeze once into contiguous publication
-  arrays.
+  ranges, reusing reserved slabs when capacity is sufficient.
 - Diff/layout APIs consume readers/spans instead of per-node arrays.
 
 This keeps ADR-010's important part: no retained all-`ref struct` tree and no
@@ -356,6 +422,8 @@ Acceptance:
 
 - Warm-scroll `button.childrenArray` and broad tree-build publication allocation
   drop materially.
+- Under reserved capacity and known resources, tree shape changes do not allocate
+  new child/property arrays.
 - Diff, layout, and retained tree tests prove stable DFS/index/key behavior.
 - No published reader can outlive its owning tree publication.
 - `where T : unmanaged` helpers stay internal and guarded; they do not erase
@@ -373,7 +441,8 @@ the remaining layout buckets are retained publication arrays.
 
 `LayoutTreeBuilder` already uses stack-backed scratch lists before publishing
 owned arrays. The next slice is not "pool the arrays"; it is to make the
-publication freeze boundary first-class.
+publication freeze boundary first-class and then give it retained capacity that
+can publish a new read-only generation without allocating.
 
 Direction:
 
@@ -381,7 +450,8 @@ Direction:
   boundary around `elements`, `treeNodes`, `elementRanges`, dirty ranges, and
   scroll diagnostics.
 - Keep stack/pool usage fully inside the build phase.
-- Freeze once into `LayoutTreeResult` or a future `PublishedLayoutFrame`.
+- Freeze once into `LayoutTreeResult` or a future `PublishedLayoutFrame`, then
+  migrate the frozen storage to reserved publication pages.
 - Preserve current `StyleOnly` layout skip and retained geometry reuse rules.
 
 Acceptance:
@@ -389,6 +459,8 @@ Acceptance:
 - Warm-scroll `layout.result` remains zero, and `layout.elementsArray`,
   `layout.treeNodesArray`, plus `layout.scrollDiagnosticsArray` are reduced only
   by a design that preserves retained publication ownership.
+- Under reserved capacity, full layout rebuilds and style-only layout patches do
+  not allocate layout publication arrays.
 - `layout.nodeWalk` allocation remains zero.
 - Style-only and partial-apply guards stay green.
 
@@ -405,13 +477,15 @@ publication costs:
 Direction:
 
 - Use inline/scratch buffers while classifying.
-- Publish compact immutable arrays only when consumers need retained data.
-- Avoid reusing snapshot objects unless generation and text/resource ownership
-  make stale reads impossible.
+- Publish compact immutable views only when consumers need retained data.
+- Replace snapshot shells with reusable generation-backed snapshot slots only
+  when generation and text/resource ownership make stale reads impossible.
 
 Acceptance:
 
 - Small-bucket reductions do not add aliasing or stale retained-snapshot risks.
+- Under reserved capacity, dirty classification, hit-target, snapshot, and
+  command-range projection publication does not allocate.
 - Active hit-test remapping and scroll presentation diagnostics stay green.
 
 ### P5 - Backend-Side Batching And Persistent Upload Rings
@@ -433,6 +507,8 @@ Acceptance:
 
 - D3D12 diagnostics report no device removal, no unexpected sync waits, and no
   hidden fallback path.
+- Backend cache/page expansion is recorded separately from core steady-state
+  allocation.
 - Secondary paths remain diagnostic-visible and written-blocker-driven.
 - Upload helpers keep pinning/native access inside the backend handoff and do not
   move resource ownership above `Irix.Platform.Windows`.
@@ -469,6 +545,15 @@ For unmanaged-payload work, add focused guard coverage for:
 - Semantic tests proving byte-level helpers do not replace domain equality where
   padding, normalization, or resource identity matters.
 
+Before declaring the core render pipeline no-allocation complete, add and keep a
+dedicated steady-state allocation guard. The guard should warm up the pipeline,
+reserve capacity for the scenario, reuse existing `ContentResourceRef` and
+backend resources, then measure routine tree changes, full layout rebuilds,
+style-only layout patches, retained-frame handoff, and composition refresh with
+`GC.GetAllocatedBytesForCurrentThread()` deltas of zero. Separate diagnostics
+should report capacity growth and resource introduction so a legitimate page grow
+does not masquerade as a hot-path regression.
+
 Measurement note: `--diagnose-text-cache 180` uses a narrow synthetic measured
 button builder to isolate retained-publication buckets. It remains the comparison
 for layout/tree publication cost, but it does not fully capture production
@@ -483,8 +568,12 @@ the exact-array `CounterApplication` root publication path.
 - No CSS/cascade processing in `VirtualNode`; builders may interpret those ideas
   before emitting ordered render nodes.
 - No pooled mutable arrays inside retained layout/render publications.
+- No generic array pooling as a substitute for typed capacity-owned publication
+  pages with generation fences.
 - No generic CPU compositor as the first performance answer.
 - No optimization that weakens text/resource lifetime boundaries.
+- No claim of zero-allocation steady state until a dedicated allocation guard
+  proves warm updates under reserved capacity allocate zero managed bytes.
 - No public byte-oriented render APIs just because an internal value is
   unmanaged.
 - No intrinsics or unsafe pointer paths before the data layout and ownership
