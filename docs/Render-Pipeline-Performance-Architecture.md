@@ -292,6 +292,12 @@ Acceptance:
 
 ### P1 - Control Composition Scratch Lowering
 
+Status: first slice implemented. Button/control lowering now writes action and
+control-state style properties through a stack-backed bundle path, partitions
+button template properties without three full-size temporary arrays, and freezes
+only the final container/content property arrays plus the two-child publication
+array. The semantic style bridge remains in use through `StyleDeclarationMapper`.
+
 Current hot signal: button lowering allocates child/property publication arrays
 after the control is split into a container plus rectangle/text content nodes.
 The first implementation slice should reduce temporary arrays and repeated
@@ -448,6 +454,11 @@ For unmanaged-payload work, add focused guard coverage for:
   ref structs, or pooled mutable buffers.
 - Semantic tests proving byte-level helpers do not replace domain equality where
   padding, normalization, or resource identity matters.
+
+Measurement note: `--diagnose-text-cache 180` uses a narrow synthetic measured
+button builder to isolate retained-publication buckets. It remains the comparison
+for layout/tree publication cost, but it does not fully capture production
+control call-site savings from stack-backed `ButtonPropertyBundle` lowering.
 
 ## Non-Goals
 

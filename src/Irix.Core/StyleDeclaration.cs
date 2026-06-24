@@ -174,6 +174,17 @@ internal static class StyleDeclarationMapper
         }
 
         var properties = new VirtualNodeProperty[declarations.Length];
+        WriteVirtualNodeProperties(declarations, properties);
+        return properties;
+    }
+
+    internal static void WriteVirtualNodeProperties(scoped ReadOnlySpan<StyleDeclaration> declarations, Span<VirtualNodeProperty> destination)
+    {
+        if (destination.Length < declarations.Length)
+        {
+            throw new ArgumentException("Destination is too small for the style declarations.", nameof(destination));
+        }
+
         for (var i = 0; i < declarations.Length; i++)
         {
             for (var j = i + 1; j < declarations.Length; j++)
@@ -186,9 +197,7 @@ internal static class StyleDeclarationMapper
                 }
             }
 
-            properties[i] = declarations[i].ToVirtualNodeProperty();
+            destination[i] = declarations[i].ToVirtualNodeProperty();
         }
-
-        return properties;
     }
 }

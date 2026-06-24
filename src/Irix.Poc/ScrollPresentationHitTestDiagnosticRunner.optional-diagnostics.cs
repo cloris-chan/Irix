@@ -237,7 +237,8 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
                 _arena,
                 label,
                 key,
-                ButtonPropertyBundle.Create(actionId, ControlVisualStateProjection.Project(ownership, actionId)));
+                actionId,
+                ControlVisualStateProjection.Project(ownership, actionId));
         }
 
         private static UpdateResult<CounterModel, CounterMessage> ApplyRoutedInput(CounterModel model, CounterMessage.RoutedInput input)

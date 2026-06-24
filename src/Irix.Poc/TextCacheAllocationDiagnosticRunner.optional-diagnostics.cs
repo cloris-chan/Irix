@@ -418,20 +418,18 @@ internal static class TextCacheAllocationDiagnosticRunner
         var labelContent = arena.AddText(label);
         attribution = attribution.WithLabelText(AllocatedDelta(measureAllocation, beforeLabelText));
 
-        var children = new VirtualNodeChildrenBuilder();
-        children.Add(VirtualNodeFactory.Rectangle());
-        var beforeLabelNode = GetAllocatedBytes(measureAllocation);
-        children.Add(VirtualNodeFactory.Text(labelContent));
-        attribution = attribution.WithLabelNode(AllocatedDelta(measureAllocation, beforeLabelNode));
-
-        var beforeChildrenArray = GetAllocatedBytes(measureAllocation);
-        var childArray = children.ToArray();
-        attribution = attribution.WithChildrenArray(AllocatedDelta(measureAllocation, beforeChildrenArray));
+        ReadOnlySpan<VirtualNodeProperty> properties = [actionProperty];
+        ControlNodeBuilder.CountButtonProperties(properties, out var containerCount, out var rectangleCount, out var textCount);
 
         var beforePropertyArray = GetAllocatedBytes(measureAllocation);
-        ReadOnlySpan<VirtualNodeProperty> properties = [actionProperty];
-        var propertyArray = VirtualNodePropertySet.Create(VirtualNodeKind.Container, properties);
+        var propertyArray = ControlNodeBuilder.CreateButtonPropertyArray(properties, containerCount, ControlNodeBuilder.ButtonPropertyTarget.Container);
+        var rectanglePropertyArray = ControlNodeBuilder.CreateButtonPropertyArray(properties, rectangleCount, ControlNodeBuilder.ButtonPropertyTarget.Rectangle);
+        var textPropertyArray = ControlNodeBuilder.CreateButtonPropertyArray(properties, textCount, ControlNodeBuilder.ButtonPropertyTarget.Text);
         attribution = attribution.WithPropertyArray(AllocatedDelta(measureAllocation, beforePropertyArray));
+
+        var beforeChildrenArray = GetAllocatedBytes(measureAllocation);
+        var childArray = ControlNodeBuilder.CreateButtonChildrenFromOwnedPropertyArraysUnsafe(labelContent, rectanglePropertyArray, textPropertyArray);
+        attribution = attribution.WithChildrenArray(AllocatedDelta(measureAllocation, beforeChildrenArray));
 
         var beforeButtonNode = GetAllocatedBytes(measureAllocation);
         var button = VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container, key, default, propertyArray, childArray);

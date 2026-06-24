@@ -129,7 +129,8 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
             arena,
             label,
             new NodeKey(key),
-            ButtonPropertyBundle.Create(actionId, visualState));
+            actionId,
+            visualState);
     }
 
     private static VirtualNode[] BuildScrollProbeRows(VirtualTextArena arena)

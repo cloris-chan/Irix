@@ -483,6 +483,9 @@ internal readonly struct VirtualNode
         VirtualNode[] children) =>
         new(kind, key, content, properties, children);
 
+    internal static VirtualNode[] CreateOwnedChildren(scoped ReadOnlySpan<VirtualNode> children) =>
+        CreateChildren(children);
+
     private static VirtualNode[] CreateChildren(scoped ReadOnlySpan<VirtualNode> children) =>
         children.IsEmpty ? [] : children.ToArray();
 
@@ -694,7 +697,7 @@ internal static class VirtualNodePropertySet
         return copy;
     }
 
-    private static void Validate(VirtualNodeKind kind, VirtualNodeProperty[] properties)
+    internal static void Validate(VirtualNodeKind kind, VirtualNodeProperty[] properties)
     {
         for (var i = 0; i < properties.Length; i++)
         {

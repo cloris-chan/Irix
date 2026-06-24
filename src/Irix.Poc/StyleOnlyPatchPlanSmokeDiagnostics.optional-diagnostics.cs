@@ -25,10 +25,12 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = VirtualNodeFactory.Container(new NodeKey(1),
             ControlNodeBuilder.Button(arena, "Increment", new NodeKey(2),
-                ButtonPropertyBundle.Create(ActionIdRegistry.Increment, new ControlVisualState(IsHovered: false, IsPressed: false, IsFocused: false))));
+                ActionIdRegistry.Increment,
+                new ControlVisualState(IsHovered: false, IsPressed: false, IsFocused: false)));
         var root2 = VirtualNodeFactory.Container(new NodeKey(1),
             ControlNodeBuilder.Button(arena, "Increment", new NodeKey(2),
-                ButtonPropertyBundle.Create(ActionIdRegistry.Increment, new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false))));
+                ActionIdRegistry.Increment,
+                new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false)));
 
         var snapshot = arena.GetOrCreateSnapshot();
         using var frame1 = pipeline.Build(root1, viewport, snapshot);

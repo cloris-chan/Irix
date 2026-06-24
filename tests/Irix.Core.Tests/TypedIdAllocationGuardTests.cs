@@ -1453,6 +1453,24 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Control_button_lowering_freezes_only_final_publication_arrays()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "ControlVisualState.cs"));
+
+        Assert.Contains("CountButtonProperties", source);
+        Assert.Contains("CreateButtonPropertyArray", source);
+        Assert.Contains("CreateButtonChildrenFromOwnedPropertyArraysUnsafe", source);
+        Assert.Contains("VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container", source);
+        Assert.Contains("StyleDeclarationMapper.WriteVirtualNodeProperties", source);
+        Assert.DoesNotContain("SplitButtonProperties", source);
+        Assert.DoesNotContain("private static VirtualNodeProperty[] Trim", source);
+        Assert.DoesNotContain("var container = new VirtualNodeProperty[properties.Length]", source);
+        Assert.DoesNotContain("var rectangle = new VirtualNodeProperty[properties.Length]", source);
+        Assert.DoesNotContain("var text = new VirtualNodeProperty[properties.Length]", source);
+        Assert.DoesNotContain("new VirtualNodeChildrenBuilder()", source);
+    }
+
+    [Fact]
     public void VirtualNode_does_not_expose_deep_value_equality()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
@@ -1637,6 +1655,7 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("LayoutRebuildReason", styleDeclarationSource);
         Assert.DoesNotContain("AnimationChannel", styleDeclarationSource);
         Assert.Contains("StyleDeclarationMapper.ToVirtualNodeProperties", controlVisualStateSource);
+        Assert.Contains("StyleDeclarationMapper.WriteVirtualNodeProperties", controlVisualStateSource);
         Assert.DoesNotContain("VirtualNodeProperty.Hovered", controlVisualStateSource);
         Assert.DoesNotContain("VirtualNodeProperty.Pressed", controlVisualStateSource);
         Assert.DoesNotContain("VirtualNodeProperty.Focused", controlVisualStateSource);

@@ -16,6 +16,8 @@ internal static class ControlVisualStateProjection
 
 internal static class ControlVisualStatePropertyAdapter
 {
+    private const int PropertyCount = 3;
+
     internal static VirtualNodeProperty[] ToProperties(ControlVisualState state) =>
         StyleDeclarationMapper.ToVirtualNodeProperties(
         [
@@ -23,6 +25,21 @@ internal static class ControlVisualStatePropertyAdapter
             StyleDeclaration.Pressed(state.IsPressed),
             StyleDeclaration.Focused(state.IsFocused)
         ]);
+
+    internal static void WriteProperties(ControlVisualState state, Span<VirtualNodeProperty> destination)
+    {
+        if (destination.Length < PropertyCount)
+        {
+            throw new ArgumentException("Destination is too small for control visual state properties.", nameof(destination));
+        }
+
+        StyleDeclarationMapper.WriteVirtualNodeProperties(
+        [
+            StyleDeclaration.Hovered(state.IsHovered),
+            StyleDeclaration.Pressed(state.IsPressed),
+            StyleDeclaration.Focused(state.IsFocused)
+        ], destination[..PropertyCount]);
+    }
 }
 
 internal static class ControlActionPropertyAdapter
@@ -33,11 +50,25 @@ internal static class ControlActionPropertyAdapter
 
 internal static class ButtonPropertyBundle
 {
-    internal static VirtualNodeProperty[] Create(ActionId actionId, ControlVisualState visualState) =>
-        [
-            ControlActionPropertyAdapter.ToProperty(actionId),
-            .. ControlVisualStatePropertyAdapter.ToProperties(visualState)
-        ];
+    private const int PropertyCount = 4;
+
+    internal static VirtualNodeProperty[] Create(ActionId actionId, ControlVisualState visualState)
+    {
+        var properties = new VirtualNodeProperty[PropertyCount];
+        Write(actionId, visualState, properties);
+        return properties;
+    }
+
+    internal static void Write(ActionId actionId, ControlVisualState visualState, Span<VirtualNodeProperty> destination)
+    {
+        if (destination.Length < PropertyCount)
+        {
+            throw new ArgumentException("Destination is too small for a button property bundle.", nameof(destination));
+        }
+
+        destination[0] = ControlActionPropertyAdapter.ToProperty(actionId);
+        ControlVisualStatePropertyAdapter.WriteProperties(visualState, destination[1..PropertyCount]);
+    }
 }
 
 internal static class ControlNodeBuilder
@@ -48,6 +79,14 @@ internal static class ControlNodeBuilder
         return Button(arena.AddText(label.AsSpan()), key, properties);
     }
 
+    internal static VirtualNode Button(VirtualTextArena arena, string label, NodeKey key, ActionId actionId, ControlVisualState visualState)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        Span<VirtualNodeProperty> properties = stackalloc VirtualNodeProperty[4];
+        ButtonPropertyBundle.Write(actionId, visualState, properties);
+        return Button(arena.AddText(label.AsSpan()), key, properties);
+    }
+
     internal static VirtualNode Button(TextContentResource label, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         if (label.IsNone)
@@ -55,79 +94,120 @@ internal static class ControlNodeBuilder
             throw new ArgumentException("Button label must be explicit.", nameof(label));
         }
 
-        SplitButtonProperties(
-            properties,
-            out var containerProperties,
-            out var rectangleProperties,
-            out var textProperties);
-        var children = new VirtualNodeChildrenBuilder();
-        children.Add(VirtualNodeFactory.Rectangle(rectangleProperties));
-        children.Add(VirtualNodeFactory.Text(label, properties: textProperties));
-        return VirtualNodeFactory.Container(key, containerProperties, ref children);
+        CountButtonProperties(properties, out var containerCount, out var rectangleCount, out var textCount);
+        var containerProperties = CreateButtonPropertyArray(properties, containerCount, ButtonPropertyTarget.Container);
+        var rectangleProperties = CreateButtonPropertyArray(properties, rectangleCount, ButtonPropertyTarget.Rectangle);
+        var textProperties = CreateButtonPropertyArray(properties, textCount, ButtonPropertyTarget.Text);
+        var children = CreateButtonChildrenFromOwnedPropertyArraysUnsafe(label, rectangleProperties, textProperties);
+        return VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container, key, default, containerProperties, children);
     }
 
-    private static void SplitButtonProperties(
-        ReadOnlySpan<VirtualNodeProperty> properties,
-        out VirtualNodeProperty[] containerProperties,
-        out VirtualNodeProperty[] rectangleProperties,
-        out VirtualNodeProperty[] textProperties)
+    /// <summary>
+    /// Takes ownership of validated/frozen content-node property arrays.
+    /// </summary>
+    internal static VirtualNode[] CreateButtonChildrenFromOwnedPropertyArraysUnsafe(
+        TextContentResource label,
+        VirtualNodeProperty[] rectangleProperties,
+        VirtualNodeProperty[] textProperties)
     {
-        if (properties.IsEmpty)
+        if (label.IsNone)
         {
-            containerProperties = [];
-            rectangleProperties = [];
-            textProperties = [];
-            return;
+            throw new ArgumentException("Button label must be explicit.", nameof(label));
         }
 
-        var container = new VirtualNodeProperty[properties.Length];
-        var rectangle = new VirtualNodeProperty[properties.Length];
-        var text = new VirtualNodeProperty[properties.Length];
-        var containerCount = 0;
-        var rectangleCount = 0;
-        var textCount = 0;
+        return VirtualNode.CreateOwnedChildren(
+        [
+            VirtualNode.CreateFromOwnedArraysUnsafe(
+                VirtualNodeKind.Content,
+                NodeKey.None,
+                ContentResource.Rectangle,
+                rectangleProperties,
+                []),
+            VirtualNode.CreateFromOwnedArraysUnsafe(
+                VirtualNodeKind.Content,
+                NodeKey.None,
+                ContentResource.FromText(label),
+                textProperties,
+                [])
+        ]);
+    }
+
+    internal static void CountButtonProperties(
+        ReadOnlySpan<VirtualNodeProperty> properties,
+        out int containerCount,
+        out int rectangleCount,
+        out int textCount)
+    {
+        containerCount = 0;
+        rectangleCount = 0;
+        textCount = 0;
         for (var i = 0; i < properties.Length; i++)
         {
-            var property = properties[i];
-            if (VirtualNodePropertySupport.Supports(VirtualNodeKind.Container, property.Key))
+            var target = GetButtonPropertyTarget(properties[i].Key);
+            switch (target)
             {
-                container[containerCount++] = property;
-            }
-            else if (property.Key == VirtualPropertyKey.Background || property.Key == VirtualPropertyKey.Border)
-            {
-                rectangle[rectangleCount++] = property;
-            }
-            else if (property.Key == VirtualPropertyKey.ForegroundColor)
-            {
-                text[textCount++] = property;
-            }
-            else
-            {
-                throw new ArgumentException(
-                    $"Property {VirtualPropertyDiagnostics.Format(property.Key)} cannot be applied to a button control template.",
-                    nameof(properties));
+                case ButtonPropertyTarget.Container:
+                    containerCount++;
+                    break;
+                case ButtonPropertyTarget.Rectangle:
+                    rectangleCount++;
+                    break;
+                case ButtonPropertyTarget.Text:
+                    textCount++;
+                    break;
             }
         }
-
-        containerProperties = Trim(container, containerCount);
-        rectangleProperties = Trim(rectangle, rectangleCount);
-        textProperties = Trim(text, textCount);
     }
 
-    private static VirtualNodeProperty[] Trim(VirtualNodeProperty[] properties, int count)
+    internal static VirtualNodeProperty[] CreateButtonPropertyArray(
+        ReadOnlySpan<VirtualNodeProperty> properties,
+        int count,
+        ButtonPropertyTarget target)
     {
         if (count == 0)
         {
             return [];
         }
 
-        if (count == properties.Length)
+        var result = new VirtualNodeProperty[count];
+        var writeIndex = 0;
+        for (var i = 0; i < properties.Length; i++)
         {
-            return properties;
+            var property = properties[i];
+            if (GetButtonPropertyTarget(property.Key) == target)
+            {
+                result[writeIndex++] = property;
+            }
         }
 
-        var result = new VirtualNodeProperty[count];
-        Array.Copy(properties, result, count);
+        VirtualNodePropertySet.Validate(target == ButtonPropertyTarget.Container ? VirtualNodeKind.Container : VirtualNodeKind.Content, result);
         return result;
+    }
+
+    private static ButtonPropertyTarget GetButtonPropertyTarget(VirtualPropertyKey key)
+    {
+        if (VirtualNodePropertySupport.Supports(VirtualNodeKind.Container, key))
+        {
+            return ButtonPropertyTarget.Container;
+        }
+
+        if (key == VirtualPropertyKey.Background || key == VirtualPropertyKey.Border)
+        {
+            return ButtonPropertyTarget.Rectangle;
+        }
+
+        if (key == VirtualPropertyKey.ForegroundColor)
+        {
+            return ButtonPropertyTarget.Text;
+        }
+
+        throw new ArgumentException($"Property {VirtualPropertyDiagnostics.Format(key)} cannot be applied to a button control template.");
+    }
+
+    internal enum ButtonPropertyTarget
+    {
+        Container,
+        Rectangle,
+        Text
     }
 }

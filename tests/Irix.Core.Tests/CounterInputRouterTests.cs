@@ -575,6 +575,36 @@ public sealed class CounterInputRouterTests
     }
 
     [Fact]
+    public void ControlNodeBuilder_button_partitions_properties_into_template_content_nodes()
+    {
+        var actionId = new ActionId(1);
+        var button = ControlNodeBuilder.Button(
+            _arena,
+            "Styled",
+            new NodeKey(10),
+            VirtualNodeProperty.Action(actionId),
+            VirtualNodeProperty.Background(Color.FromSrgb(10, 20, 30)),
+            VirtualNodeProperty.Border(Color.FromSrgb(40, 50, 60), 2f),
+            VirtualNodeProperty.ForegroundColor(StyleColor.Opaque(70, 80, 90)));
+
+        Assert.Equal(VirtualNodeKind.Container, button.Kind);
+        Assert.Equal(actionId, GetActionId(button));
+        Assert.DoesNotContain(button.Properties.ToArray(), property => property.Key == VirtualPropertyKey.Background);
+        Assert.DoesNotContain(button.Properties.ToArray(), property => property.Key == VirtualPropertyKey.ForegroundColor);
+
+        Assert.Equal(2, button.Children.Length);
+        var rectangle = button.Children[0];
+        var text = button.Children[1];
+        Assert.Equal(VirtualNodeKind.Content, rectangle.Kind);
+        Assert.Equal(ContentResource.Rectangle, rectangle.Content);
+        Assert.Contains(rectangle.Properties.ToArray(), property => property.Key == VirtualPropertyKey.Background);
+        Assert.Contains(rectangle.Properties.ToArray(), property => property.Key == VirtualPropertyKey.Border);
+        Assert.Equal(VirtualNodeKind.Content, text.Kind);
+        Assert.True(text.Content.TryGetText(out _));
+        Assert.Contains(text.Properties.ToArray(), property => property.Key == VirtualPropertyKey.ForegroundColor);
+    }
+
+    [Fact]
     public void CounterStyleTransitionBridge_animates_press_release_when_pointer_leaves_and_returns_to_capture()
     {
         var pressed = new OwnershipSnapshot(
