@@ -28,7 +28,6 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     private VirtualNode _retainedRoot;
     private TextBufferSnapshot _retainedTextSnapshot;
     private LayoutTreeResult? _retainedLayoutResult;
-    private IReadOnlyList<LayoutElement>? _retainedLayout;
     private PixelRectangle _retainedViewport;
     private readonly RetainedRenderFrame _retainedFrame = new();
 
@@ -99,10 +98,10 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     {
         OnPipelineAllocationStarted();
         LastViewport = viewportBounds;
-        var hadRetainedLayout = _retainedLayout is not null;
+        var hadRetainedLayout = _retainedLayoutResult.HasValue;
         var classifyOldRoot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? previousRoot : _retainedRoot;
         var classifyOldSnapshot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? prevTextSnapshot : _retainedTextSnapshot;
-        var treeChanged = _retainedLayout is null || !VirtualNodeStructuralComparer.Equals(classifyOldRoot, root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
+        var treeChanged = !hadRetainedLayout || !VirtualNodeStructuralComparer.Equals(classifyOldRoot, root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
         OnPipelineAllocationPhaseStarted();
@@ -118,31 +117,31 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             if (TryApplyStyleOnlyLayoutSkip(root, textSnapshot, dirtyNodes, dirtyClassifications, viewportChanged, previousRoot, classifyOldSnapshot, out var patchedLayoutResult))
             {
                 _retainedLayoutResult = patchedLayoutResult;
-                _retainedLayout = patchedLayoutResult.Elements;
                 _retainedRoot = root;
                 _retainedTextSnapshot = textSnapshot;
                 _retainedViewport = viewportBounds;
 
-                LastMaxScrollY = ResolveRootMaxScrollY(_retainedLayoutResult.ScrollDiagnostics);
+                LastMaxScrollY = ResolveRootMaxScrollY(patchedLayoutResult.ScrollDiagnostics);
             }
             else
             {
                 OnPipelineAllocationPhaseStarted();
                 LayoutRebuildCount++;
-                _retainedLayoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
-                _retainedLayout = _retainedLayoutResult.Elements;
+                var layoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
+                _retainedLayoutResult = layoutResult;
                 _retainedRoot = root;
                 _retainedTextSnapshot = textSnapshot;
                 _retainedViewport = viewportBounds;
 
-                LastMaxScrollY = ResolveRootMaxScrollY(_retainedLayoutResult.ScrollDiagnostics);
+                LastMaxScrollY = ResolveRootMaxScrollY(layoutResult.ScrollDiagnostics);
                 OnPipelineLayoutAllocated(_layoutTreeBuilder);
             }
         }
 
-        var layout = _retainedLayout!;
-        var dirtyElementRanges = hasDirty && _retainedLayoutResult is not null
-            ? _retainedLayoutResult.DirtyElementRanges
+        var retainedLayoutResult = _retainedLayoutResult!.Value;
+        var layout = retainedLayoutResult.Elements;
+        var dirtyElementRanges = hasDirty
+            ? retainedLayoutResult.DirtyElementRanges
             : null;
 
         LastDirtyElementRanges = dirtyElementRanges ?? [];
@@ -164,7 +163,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
         OnPipelineSnapshotPhaseStarted();
         LastRetainedInputSnapshot = CreateRetainedInputSnapshot(
-            _retainedLayoutResult!,
+            retainedLayoutResult,
             result.ElementCommandRanges,
             hitTargets,
             _retainedRoot,
@@ -203,11 +202,10 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         TextBufferSnapshot? classifyOldSnapshot,
         out LayoutTreeResult patchedLayout)
     {
-        patchedLayout = null!;
+        patchedLayout = default;
         if (viewportChanged
             || dirtyNodes is not { Count: > 0 }
             || _retainedLayoutResult is null
-            || _retainedLayout is null
             || !StyleOnlyPatchEligibility.IsLayoutReuseEligible(dirtyClassifications, viewportChanged))
         {
             return false;
@@ -231,7 +229,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         }
 
         return StyleOnlyLayoutPatcher.TryBuildPatchedLayout(
-            _retainedLayoutResult,
+            _retainedLayoutResult.Value,
             root,
             dirtyNodes,
             out patchedLayout);

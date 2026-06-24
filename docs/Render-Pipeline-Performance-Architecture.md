@@ -162,8 +162,9 @@ the simple lifetime cases; guards cover the project-specific ones.
 ## Evidence Snapshot
 
 Baseline refreshed on 2026-06-25 after the `VirtualNode` IR was normalized to
-`Container`/`Content` nodes and the first production control/root publication
-slices were applied.
+`Container`/`Content` nodes, the first production control/root publication
+slices were applied, and `LayoutTreeResult` became a readonly value publication
+shell.
 
 Primary command:
 
@@ -175,26 +176,27 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2265880 bytes | 12588 B/frame | render 11013 B/frame, tree 836 B/frame, translate 637 B/frame |
-| Warm scroll | 551688 bytes | 3064 B/frame | translate 1742 B/frame, tree 728 B/frame, render 364 B/frame |
-| Scale change | 346048 bytes | 1922 B/frame | tree 911 B/frame, translate 637 B/frame, render 364 B/frame |
+| Static | 2271552 bytes | 12619 B/frame | render 11014 B/frame, translate 770 B/frame, tree 702 B/frame |
+| Warm scroll | 547368 bytes | 3040 B/frame | translate 1867 B/frame, tree 876 B/frame, diff 182 B/frame, render 182 B/frame |
+| Scale change | 351696 bytes | 1953 B/frame | tree 911 B/frame, translate 592 B/frame, render 364 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `layout.elementsArray` | 364 | Retained `LayoutTreeResult` publication array. |
-| `tree.buildRoot.button.propertyArray` | 273 | Control/state/style property publication. |
-| `tree.buildRoot.button.childrenArray` | 227 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
-| `layout.treeNodesArray` | 182 | Retained `LayoutTreeResult` publication array. |
-| `layout.result` | 182 | Retained result object. |
-| `drawRecord` | 147 | Command recording is visible but not the largest bucket. |
+| `layout.elementsArray` | 501 | Retained layout publication array. |
+| `layout.treeNodesArray` | 318 | Retained layout tree publication array. |
+| `tree.buildRoot.button.childrenArray` | 284 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
+| `tree.buildRoot.button.propertyArray` | 227 | Control/state/style property publication. |
+| `drawRecord` | 227 | Command recording is visible but not the largest bucket. |
+| `layout.scrollDiagnosticsArray` | 91 | Retained scroll observation publication array. |
+| `layout.result` | 0 | The retained result shell is now a readonly value, not a heap object. |
 | `layout.nodeWalk` | 0 | The layout bucket is publication cost, not node-walk allocation. |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
-Container/Content split. The new shape is expected: button-like controls now
-lower into a container plus content nodes, which makes ownership clearer but
-exposes child-array publication as a measured hotspot.
+Container/Content split. The current shape is expected: button-like controls now
+lower into a container plus content nodes, and layout publication exposes owned
+arrays rather than a retained result-object allocation.
 
 Composition and scroll diagnostics were also checked:
 
@@ -361,6 +363,14 @@ Acceptance:
 
 ### P3 - Layout Publication Builder
 
+Status: first slice implemented. `LayoutTreeResult` is now a readonly value
+publication shell around owned retained arrays/lists, and `RenderPipeline`
+tracks retained layout through a single nullable result state instead of a
+separate layout-list cache. This removes the result object's identity from the
+contract while preserving retained publication array ownership. The 2026-06-25
+`--diagnose-text-cache 180` warm-scroll run reports `layout.result=0 B/frame`;
+the remaining layout buckets are retained publication arrays.
+
 `LayoutTreeBuilder` already uses stack-backed scratch lists before publishing
 owned arrays. The next slice is not "pool the arrays"; it is to make the
 publication freeze boundary first-class.
@@ -376,9 +386,9 @@ Direction:
 
 Acceptance:
 
-- Warm-scroll `layout.elementsArray`, `layout.treeNodesArray`, and `layout.result`
-  buckets are reduced only by a design that preserves retained publication
-  ownership.
+- Warm-scroll `layout.result` remains zero, and `layout.elementsArray`,
+  `layout.treeNodesArray`, plus `layout.scrollDiagnosticsArray` are reduced only
+  by a design that preserves retained publication ownership.
 - `layout.nodeWalk` allocation remains zero.
 - Style-only and partial-apply guards stay green.
 

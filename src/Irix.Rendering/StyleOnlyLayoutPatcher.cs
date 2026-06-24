@@ -11,7 +11,7 @@ internal static class StyleOnlyLayoutPatcher
         IReadOnlyList<int> dirtyNodes,
         out LayoutTreeResult patchedLayout)
     {
-        patchedLayout = null!;
+        patchedLayout = default;
         if (dirtyNodes.Count == 0 || retainedLayout.ElementRanges.Length == 0)
         {
             return false;

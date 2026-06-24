@@ -45,7 +45,7 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
     }
 
@@ -78,7 +78,7 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
     }
 }

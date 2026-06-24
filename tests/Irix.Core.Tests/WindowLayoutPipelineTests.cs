@@ -652,9 +652,9 @@ public sealed class WindowLayoutPipelineTests
                 ])));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
-        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Value.Elements);
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
-        var nextGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+        var nextGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Value.Elements);
 
         Assert.Equal(1, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
@@ -3986,7 +3986,13 @@ public sealed class WindowLayoutPipelineTests
         var snapshot = pipeline.LastRetainedInputSnapshot!;
 
         Assert.NotNull(snapshot);
-        Assert.Same(pipeline.LastLayoutResult, snapshot.LayoutResult);
+        Assert.True(pipeline.LastLayoutResult.HasValue);
+        var lastLayoutResult = pipeline.LastLayoutResult.Value;
+        Assert.Same(lastLayoutResult.Elements, snapshot.LayoutResult.Elements);
+        Assert.Same(lastLayoutResult.TreeNodes, snapshot.LayoutResult.TreeNodes);
+        Assert.Same(lastLayoutResult.ElementRanges, snapshot.LayoutResult.ElementRanges);
+        Assert.Same(lastLayoutResult.DirtyElementRanges, snapshot.LayoutResult.DirtyElementRanges);
+        Assert.Same(lastLayoutResult.ScrollDiagnostics, snapshot.LayoutResult.ScrollDiagnostics);
         Assert.Equal(pipeline.LastElementCommandRanges, snapshot.ElementCommandRanges);
         Assert.Equal(frame.HitTargets, snapshot.HitTargets);
         Assert.Equal(root.Kind, snapshot.RetainedRoot.Kind);
@@ -4373,7 +4379,7 @@ public sealed class WindowLayoutPipelineTests
             ]);
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
-        var initialLayout = pipeline.LastLayoutResult!;
+        var initialLayout = pipeline.LastLayoutResult!.Value;
         var initialElementSnapshot = SnapshotLayoutElementInvariants(initialLayout.Elements);
         var initialRangeSnapshot = SnapshotLayoutTreeRanges(initialLayout.TreeNodes);
         ScrollContainerDiag[] initialScrollDiagnostics = [.. initialLayout.ScrollDiagnostics];
@@ -4381,7 +4387,7 @@ public sealed class WindowLayoutPipelineTests
         var initialRebuildCount = pipeline.LayoutRebuildCount;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [2]);
-        var nextLayout = pipeline.LastLayoutResult!;
+        var nextLayout = pipeline.LastLayoutResult!.Value;
 
         Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
@@ -4408,13 +4414,13 @@ public sealed class WindowLayoutPipelineTests
                 VirtualNodeProperty.Action(new ActionId(4))));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
-        var initialLayout = pipeline.LastLayoutResult!;
+        var initialLayout = pipeline.LastLayoutResult!.Value;
         var initialGeometry = SnapshotLayoutGeometryInvariants(initialLayout.Elements);
         var initialHitTarget = Assert.Single(frame1.HitTargets);
         var initialRebuildCount = pipeline.LayoutRebuildCount;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
-        var nextLayout = pipeline.LastLayoutResult!;
+        var nextLayout = pipeline.LastLayoutResult!.Value;
         var nextHitTarget = Assert.Single(frame2.HitTargets);
 
         Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
@@ -4484,7 +4490,7 @@ public sealed class WindowLayoutPipelineTests
                 VirtualNodeProperty.Background(Color.FromSrgb(4, 5, 6))));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
-        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Value.Elements);
         var initialRebuildCount = pipeline.LayoutRebuildCount;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -4492,7 +4498,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.Equal([(0, 1)], pipeline.LastDirtyElementRanges);
-        Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements));
+        Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Value.Elements));
         Assert.Equal(DrawCommandKind.FillRect, frame2.Commands.Memory.Span[0].Kind);
         Assert.Equal(DrawColor.Opaque(4, 5, 6), frame2.Commands.Memory.Span[0].Color);
     }
@@ -4522,7 +4528,7 @@ public sealed class WindowLayoutPipelineTests
                 VirtualNodeProperty.Border(border2, 3f)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
-        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements);
+        var initialGeometry = SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Value.Elements);
         var initialRebuildCount = pipeline.LayoutRebuildCount;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -4531,7 +4537,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.Equal([(0, 1)], pipeline.LastDirtyElementRanges);
         Assert.Equal([(0, 2)], pipeline.LastDirtyCommandRanges);
-        Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements));
+        Assert.Equal(initialGeometry, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Value.Elements));
 
         Assert.Equal(2, frame1.Commands.Count);
         Assert.Equal(2, frame2.Commands.Count);
@@ -4608,7 +4614,7 @@ public sealed class WindowLayoutPipelineTests
                 VirtualNodeProperty.Hovered(false)));
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
-        var initialLayout = pipeline.LastLayoutResult!;
+        var initialLayout = pipeline.LastLayoutResult!.Value;
         var initialLayoutSnapshot = SnapshotLayoutGeometryInvariants(initialLayout.Elements);
         var initialRebuildCount = pipeline.LayoutRebuildCount;
         using var styleOnlyFrame = pipeline.Build(styleOnlyRoot, viewport, _arena.GetOrCreateSnapshot(), [2]);
@@ -4620,13 +4626,13 @@ public sealed class WindowLayoutPipelineTests
             initialLayout,
             [.. pipeline.LastElementCommandRanges],
             frame1.HitTargets,
-            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, pipeline.LastLayoutRebuildReason);
         Assert.True(StyleOnlyPatchEligibility.IsLayoutReuseEligible(pipeline.LastDirtyClassifications, viewportChanged: false));
-        Assert.Equal(initialLayoutSnapshot, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Elements));
+        Assert.Equal(initialLayoutSnapshot, SnapshotLayoutGeometryInvariants(pipeline.LastLayoutResult!.Value.Elements));
         Assert.Equal(RetainedPartialApplyResultKind.AppliedPartial, styleOnlyPlan.Kind);
         Assert.True(styleOnlyPatchPlan.Eligible);
 
@@ -4670,7 +4676,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.True(plan.Eligible);
@@ -4708,7 +4714,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.True(plan.Eligible);
@@ -4747,7 +4753,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Elements,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.False(plan.Eligible);
@@ -6009,7 +6015,7 @@ public sealed class WindowLayoutPipelineTests
 
         using var frame = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
 
-        var diagnostics = pipeline.LastLayoutResult!.ScrollDiagnostics;
+        var diagnostics = pipeline.LastLayoutResult!.Value.ScrollDiagnostics;
         Assert.Equal(2, diagnostics.Count);
         Assert.Equal(1, diagnostics[0].DfsIndex);
         Assert.Equal(0, diagnostics[1].DfsIndex);

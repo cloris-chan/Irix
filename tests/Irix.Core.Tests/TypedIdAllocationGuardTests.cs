@@ -1271,6 +1271,10 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("FirstChildIndex", layoutModelSource);
         Assert.DoesNotContain("ChildCount", layoutModelSource);
         Assert.DoesNotContain("LayoutTreeNode[] Children", layoutModelSource);
+        Assert.Contains("internal readonly struct LayoutTreeResult", layoutModelSource);
+        Assert.DoesNotContain("internal sealed class LayoutTreeResult", layoutModelSource);
+        Assert.Contains("private LayoutTreeResult? _retainedLayoutResult", renderPipelineSource);
+        Assert.DoesNotContain("_retainedLayout;", renderPipelineSource);
 
         Assert.DoesNotContain("new List<", rangeUtilsSource);
 

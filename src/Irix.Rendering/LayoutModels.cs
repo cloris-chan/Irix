@@ -467,15 +467,35 @@ internal readonly struct ScrollCompositionLayerTarget(
 /// Result of building a layout tree: the flat element array, the flat tree structure
 /// for DFS-index lookups, and the dirty element ranges for incremental re-recording.
 /// </summary>
-internal sealed class LayoutTreeResult(
-    IReadOnlyList<LayoutElement> elements,
-    LayoutTreeNode[] treeNodes,
-    LayoutElementRange[] elementRanges,
-    IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
-    IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
+internal readonly struct LayoutTreeResult
 {
+    private static readonly LayoutElement[] EmptyElements = Array.Empty<LayoutElement>();
+    private static readonly LayoutTreeNode[] EmptyTreeNodes = Array.Empty<LayoutTreeNode>();
+    private static readonly LayoutElementRange[] EmptyElementRanges = Array.Empty<LayoutElementRange>();
+    private static readonly (int Start, int Count)[] EmptyDirtyElementRanges = Array.Empty<(int Start, int Count)>();
+    private static readonly ScrollContainerDiag[] EmptyScrollDiagnostics = Array.Empty<ScrollContainerDiag>();
+    private readonly LayoutElement[]? _elements;
+    private readonly LayoutTreeNode[]? _treeNodes;
+    private readonly LayoutElementRange[]? _elementRanges;
+    private readonly IReadOnlyList<(int Start, int Count)>? _dirtyElementRanges;
+    private readonly IReadOnlyList<ScrollContainerDiag>? _scrollDiagnostics;
+
     public LayoutTreeResult(
-        IReadOnlyList<LayoutElement> elements,
+        LayoutElement[] elements,
+        LayoutTreeNode[] treeNodes,
+        LayoutElementRange[] elementRanges,
+        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
+        IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
+    {
+        _elements = NormalizeElements(elements);
+        _treeNodes = NormalizeTreeNodes(treeNodes);
+        _elementRanges = NormalizeElementRanges(elementRanges);
+        _dirtyElementRanges = NormalizeDirtyElementRanges(dirtyElementRanges);
+        _scrollDiagnostics = NormalizeScrollDiagnostics(scrollDiagnostics);
+    }
+
+    public LayoutTreeResult(
+        LayoutElement[] elements,
         LayoutTreeNode[] treeNodes,
         IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
         : this(elements, treeNodes, [], dirtyElementRanges, [])
@@ -483,7 +503,7 @@ internal sealed class LayoutTreeResult(
     }
 
     public LayoutTreeResult(
-        IReadOnlyList<LayoutElement> elements,
+        LayoutElement[] elements,
         LayoutTreeNode[] treeNodes,
         IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
         IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
@@ -492,20 +512,20 @@ internal sealed class LayoutTreeResult(
     }
 
     /// <summary>The flat layout element array (full frame).</summary>
-    public IReadOnlyList<LayoutElement> Elements { get; } = elements;
+    public IReadOnlyList<LayoutElement> Elements => _elements ?? EmptyElements;
 
     /// <summary>
     /// Flat preorder layout tree nodes. The root is usually <c>TreeNodes[0]</c>;
     /// subtree relationships use <see cref="LayoutTreeNode.SubtreeStart"/> and
     /// <see cref="LayoutTreeNode.SubtreeCount"/>.
     /// </summary>
-    public LayoutTreeNode[] TreeNodes { get; } = treeNodes;
+    public LayoutTreeNode[] TreeNodes => _treeNodes ?? EmptyTreeNodes;
 
     /// <summary>
     /// DFS-indexed map from VirtualNodes to their layout element range. Entries
     /// with zero count have no directly rendered element.
     /// </summary>
-    public LayoutElementRange[] ElementRanges { get; } = elementRanges;
+    public LayoutElementRange[] ElementRanges => _elementRanges ?? EmptyElementRanges;
 
     /// <summary>
     /// Merged, sorted ranges of layout elements that correspond to dirty VirtualNodes.
@@ -513,13 +533,13 @@ internal sealed class LayoutTreeResult(
     /// Overlapping/adjacent ranges are merged to produce the minimal set.
     /// Empty when no dirty nodes are specified.
     /// </summary>
-    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = dirtyElementRanges;
+    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges => _dirtyElementRanges ?? EmptyDirtyElementRanges;
 
     /// <summary>Diagnostic info for each scrollable container encountered during layout.</summary>
-    public IReadOnlyList<ScrollContainerDiag> ScrollDiagnostics { get; } = scrollDiagnostics;
+    public IReadOnlyList<ScrollContainerDiag> ScrollDiagnostics => _scrollDiagnostics ?? EmptyScrollDiagnostics;
 
     public LayoutTreeResult WithElementsAndDirtyRanges(
-        IReadOnlyList<LayoutElement> nextElements,
+        LayoutElement[] nextElements,
         IReadOnlyList<(int Start, int Count)> nextDirtyElementRanges)
     {
         return new LayoutTreeResult(
@@ -529,6 +549,21 @@ internal sealed class LayoutTreeResult(
             nextDirtyElementRanges,
             ScrollDiagnostics);
     }
+
+    private static LayoutElement[] NormalizeElements(LayoutElement[] elements) =>
+        elements.Length == 0 ? EmptyElements : elements;
+
+    private static LayoutTreeNode[] NormalizeTreeNodes(LayoutTreeNode[] treeNodes) =>
+        treeNodes.Length == 0 ? EmptyTreeNodes : treeNodes;
+
+    private static LayoutElementRange[] NormalizeElementRanges(LayoutElementRange[] elementRanges) =>
+        elementRanges.Length == 0 ? EmptyElementRanges : elementRanges;
+
+    private static IReadOnlyList<(int Start, int Count)> NormalizeDirtyElementRanges(IReadOnlyList<(int Start, int Count)> dirtyElementRanges) =>
+        dirtyElementRanges.Count == 0 ? EmptyDirtyElementRanges : dirtyElementRanges;
+
+    private static IReadOnlyList<ScrollContainerDiag> NormalizeScrollDiagnostics(IReadOnlyList<ScrollContainerDiag> scrollDiagnostics) =>
+        scrollDiagnostics.Count == 0 ? EmptyScrollDiagnostics : scrollDiagnostics;
 }
 
 /// <summary>

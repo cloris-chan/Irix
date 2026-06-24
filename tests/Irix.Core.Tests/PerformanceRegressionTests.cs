@@ -371,7 +371,7 @@ public sealed class PerformanceRegressionTests
         {
         }
 
-        var layoutResult = pipeline.LastLayoutResult!;
+        var layoutResult = pipeline.LastLayoutResult!.Value;
         var layout = layoutResult.Elements;
         var recorder = new DrawCommandRecorder();
         var emptyClassifications = Array.Empty<LayoutDirtyClassification>();

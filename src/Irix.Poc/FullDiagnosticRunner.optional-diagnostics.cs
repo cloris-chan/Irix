@@ -122,7 +122,7 @@ internal static class FullDiagnosticRunner
             ResolveInvalidationKind(layoutPipeline.LastDirtyClassifications, layoutPipeline.LastLayoutRebuildReason),
             layoutPipeline.LastDirtyClassifications,
             layoutBatch.HitTargets,
-            layoutPipeline.LastLayoutResult?.ScrollDiagnostics ?? []);
+            layoutPipeline.LastLayoutResult.HasValue ? layoutPipeline.LastLayoutResult.Value.ScrollDiagnostics : []);
         foreach (var line in DiagnosticsFormatter.BuildRenderingPipelineCompositorDiagnosticLines(renderingSnapshot))
         {
             output.WriteLine(line);

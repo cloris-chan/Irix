@@ -131,15 +131,21 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
 
     private static ScrollFeedback BuildScrollFeedback(LayoutTreeResult? layoutResult)
     {
-        if (layoutResult is null || layoutResult.ScrollDiagnostics.Count == 0)
+        if (!layoutResult.HasValue)
         {
             return ScrollFeedback.Empty;
         }
 
-        var containers = new ScrollContainerMetrics[layoutResult.ScrollDiagnostics.Count];
+        var result = layoutResult.Value;
+        if (result.ScrollDiagnostics.Count == 0)
+        {
+            return ScrollFeedback.Empty;
+        }
+
+        var containers = new ScrollContainerMetrics[result.ScrollDiagnostics.Count];
         for (var index = 0; index < containers.Length; index++)
         {
-            var diagnostics = layoutResult.ScrollDiagnostics[index];
+            var diagnostics = result.ScrollDiagnostics[index];
             containers[index] = new ScrollContainerMetrics(
                 ContainerId: new ScrollContainerId(diagnostics.DfsIndex),
                 ViewportExtent: diagnostics.VisibleHeight,
