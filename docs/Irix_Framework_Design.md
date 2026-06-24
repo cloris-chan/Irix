@@ -84,6 +84,7 @@ Architecture work is design-first, but implementation should be GPU-first once a
 | [GPU-Composition-Architecture.md](GPU-Composition-Architecture.md) | Defines platform-neutral composition IR, backend capabilities, and GPU offload phases. |
 | [D3D12-Composition.md](D3D12-Composition.md) | Tracks active D3D12 transform/opacity and fixed-clip scroll composition implementation details. |
 | [Color-Pipeline.md](Color-Pipeline.md) | Defines canonical Irix color as linear BT.2020 and keeps current HDR work deferred behind the output mapping boundary. |
+| [Render-Pipeline-Performance-Architecture.md](Render-Pipeline-Performance-Architecture.md) | Defines render-pipeline performance ownership: frame-local build scratch, immutable retained publications, backend resource ownership, and staged allocation targets. |
 
 High-level rules:
 
@@ -187,6 +188,8 @@ Not currently selected unless an explicit target-architecture task pulls them fo
 - Public typed property/value surfaces must not regress to string-keyed domain models.
 - Retained state must not hold stack memory or rented arrays.
 - Allocation work must not pool or reuse retained publication arrays/snapshots without an ownership design.
+- Render-pipeline performance work must keep borrowed/scratch data inside one build phase, then freeze or copy before retained publication.
+- `VirtualNode` remains internal render IR; control-specific semantics, z-index, cascade, and CSS-like ordering stay in control/composition builders before ordered nodes are emitted.
 - Renderer failures must be explicit diagnostics or explicit D3D12-only degradation.
 - Device/resource ownership stays in the platform renderer.
 - App/control runtime state does not move into `Irix.Rendering` just because layout exposes observation data.
@@ -202,7 +205,7 @@ The active worklist is intentionally narrow:
 
 - Keep local Smoke gate authoritative for broad changes.
 - Treat style, animation, and GPU composition as design-first tracks with a D3D12/GPU-first implementation bias.
-- Treat allocation measurement/hardening as on hold; reopen only with an ownership design and one measured target bucket.
+- Treat allocation measurement/hardening through [Render-Pipeline-Performance-Architecture.md](Render-Pipeline-Performance-Architecture.md): start with control composition scratch lowering, then consider a published `VirtualNode` slab, layout publication freeze cost, and smaller dirty/hit/snapshot buckets.
 - Use the scroll and input/control ownership contracts before extracting runtime state from Poc.
 - Maintain and expand GlyphAtlas only through guarded oracle/regression-backed changes.
 - Keep entry eviction and pixel/layout oracle as future work.
