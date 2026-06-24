@@ -87,9 +87,9 @@ internal static class FullDiagnosticRunner
         // Layout-driven frame: render through VirtualNode \u2192 Layout \u2192 Pipeline \u2192 Compositor
         // to verify the clip chain produces clipped commands
         var layoutPipeline = new RenderPipeline();
-        var layoutRoot = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var layoutRoot = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(arena, "Layout Pipeline Test", new NodeKey(2)),
-            VirtualNodeBuilder.Button(arena, "LayoutBtn", new NodeKey(3),
+            ControlNodeBuilder.Button(arena, "LayoutBtn", new NodeKey(3),
                 VirtualNodeProperty.Action(new ActionId(100))));
         var layoutViewport = new PixelRectangle(0, 0, d3d12Renderer.Width, d3d12Renderer.Height);
         using var layoutBatch = layoutPipeline.Build(layoutRoot, layoutViewport, arena.GetOrCreateSnapshot());

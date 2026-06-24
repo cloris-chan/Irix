@@ -80,7 +80,7 @@ public sealed class PerformanceRegressionTests
             VirtualNode node = default;
             for (var i = 0; i < iterations; i++)
             {
-                node = VirtualNodeFactory.ScrollContainer(
+                node = VirtualNodeFactory.Container(
                     new NodeKey((uint)i),
                     VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(120), VirtualNodeProperty.Height(48)),
                     childA,
@@ -110,7 +110,7 @@ public sealed class PerformanceRegressionTests
                 children.Add(childB);
                 children.Add(childC);
 
-                node = VirtualNodeFactory.ScrollContainer(
+                node = VirtualNodeFactory.Container(
                     new NodeKey((uint)i),
                     ReadOnlySpan<VirtualNodeProperty>.Empty,
                     ref children);
@@ -525,21 +525,21 @@ public sealed class PerformanceRegressionTests
 
     private static VirtualNode BuildInlineHelperPipelineRoot(
         int iteration,
-        TextNodeContent title,
-        TextNodeContent button,
-        TextNodeContent row) =>
-        VirtualNodeFactory.ScrollContainer(
+        TextContentResource title,
+        TextContentResource button,
+        TextContentResource row) =>
+        VirtualNodeFactory.Container(
             new NodeKey(1),
             VirtualNodeFactory.Text(title, new NodeKey(2)),
             VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(120 + (iteration & 7)), VirtualNodeProperty.Height(48)),
-            VirtualNodeFactory.Button(button, new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))),
+            VirtualNodeTestBuilder.Button(button, new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))),
             VirtualNodeFactory.Text(row, new NodeKey(5)));
 
     private static VirtualNode BuildBuilderPipelineRoot(
         int iteration,
-        TextNodeContent title,
-        TextNodeContent button,
-        TextNodeContent row)
+        TextContentResource title,
+        TextContentResource button,
+        TextContentResource row)
     {
         Span<VirtualNodeProperty> rectangleStorage = stackalloc VirtualNodeProperty[2];
         var rectangleProperties = new VirtualNodePropertyListBuilder(rectangleStorage);
@@ -553,22 +553,22 @@ public sealed class PerformanceRegressionTests
         var children = new VirtualNodeChildrenBuilder();
         children.Add(VirtualNodeFactory.Text(title, new NodeKey(2), ReadOnlySpan<VirtualNodeProperty>.Empty));
         children.Add(VirtualNodeFactory.Rectangle(new NodeKey(3), rectangleProperties.Written));
-        children.Add(VirtualNodeFactory.Button(button, new NodeKey(4), buttonProperties.Written));
+        children.Add(VirtualNodeTestBuilder.Button(button, new NodeKey(4), buttonProperties.Written));
         children.Add(VirtualNodeFactory.Text(row, new NodeKey(5), ReadOnlySpan<VirtualNodeProperty>.Empty));
 
-        return VirtualNodeFactory.ScrollContainer(new NodeKey(1), ReadOnlySpan<VirtualNodeProperty>.Empty, ref children);
+        return VirtualNodeFactory.Container(new NodeKey(1), ReadOnlySpan<VirtualNodeProperty>.Empty, ref children);
     }
 
     private static VirtualNode BuildMeasuredRoot(
-        TextNodeContent title,
-        TextNodeContent button,
-        TextNodeContent row,
+        TextContentResource title,
+        TextContentResource button,
+        TextContentResource row,
         double rectangleWidth) =>
-        VirtualNodeFactory.ScrollContainer(
+        VirtualNodeFactory.Container(
             new NodeKey(1),
             VirtualNodeFactory.Text(title, new NodeKey(2)),
             VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(rectangleWidth), VirtualNodeProperty.Height(48)),
-            VirtualNodeFactory.Button(button, new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))),
+            VirtualNodeTestBuilder.Button(button, new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))),
             VirtualNodeFactory.Text(row, new NodeKey(5)));
 
     private static void ReleaseRecordResult(DrawCommandRecordResult result)

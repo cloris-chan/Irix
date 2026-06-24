@@ -3,16 +3,14 @@ using System.Runtime.InteropServices;
 
 namespace Irix;
 
-public enum VirtualNodeKind
+internal enum VirtualNodeKind
 {
     None,
-    Text,
-    Rectangle,
-    Button,
-    ScrollContainer
+    Container,
+    Content
 }
 
-public enum VirtualNodePatchOperation
+internal enum VirtualNodePatchOperation
 {
     ReplaceRoot,
     Add,
@@ -21,7 +19,7 @@ public enum VirtualNodePatchOperation
     Move
 }
 
-public enum PropertyValueKind : byte
+internal enum PropertyValueKind : byte
 {
     None,
     Number,
@@ -32,17 +30,16 @@ public enum PropertyValueKind : byte
     BorderStroke
 }
 
-public enum NodeContentKind : byte
+internal enum ContentResourceKind : byte
 {
     None,
     Text,
-    Number,
-    Boolean
+    Rectangle
 }
 
 // ── InvalidationKind (R13-17) ────────────────────────────────────
 
-public enum InvalidationKind : byte
+internal enum InvalidationKind : byte
 {
     None,
     CompositeOnly,
@@ -53,19 +50,19 @@ public enum InvalidationKind : byte
     ViewportChanged,
 }
 
-// ── NodeContent: 24-byte pure value union (R13-3) ────────────────
+// ── ContentResource: 24-byte pure value union ───────────────────
 
 [StructLayout(LayoutKind.Explicit, Size = 24)]
-public readonly struct NodeContent : IEquatable<NodeContent>
+internal readonly struct ContentResource : IEquatable<ContentResource>
 {
-    [FieldOffset(0)] private readonly NodeContentKind _kind;
+    [FieldOffset(0)] private readonly ContentResourceKind _kind;
     [FieldOffset(1)] private readonly byte _padding0;
     [FieldOffset(2)] private readonly ushort _padding1;
     [FieldOffset(4)] private readonly uint _padding2;
     [FieldOffset(8)] private readonly ulong _data0;
     [FieldOffset(16)] private readonly ulong _data1;
 
-    private NodeContent(NodeContentKind kind, ulong data0, ulong data1)
+    private ContentResource(ContentResourceKind kind, ulong data0, ulong data1)
     {
         _kind = kind;
         _padding0 = 0;
@@ -75,55 +72,37 @@ public readonly struct NodeContent : IEquatable<NodeContent>
         _data1 = data1;
     }
 
-    public NodeContentKind Kind => _kind;
+    public ContentResourceKind Kind => _kind;
 
-    public static NodeContent None => default;
+    public static ContentResource None => default;
 
-    public static NodeContent FromText(TextNodeContent textContent) =>
-        new(NodeContentKind.Text, textContent.BufferId.Value, (ulong)(uint)textContent.Range.Start | ((ulong)(uint)textContent.Range.Length << 32));
+    public static ContentResource FromText(TextContentResource textContent) =>
+        new(ContentResourceKind.Text, textContent.BufferId.Value, (ulong)(uint)textContent.Range.Start | ((ulong)(uint)textContent.Range.Length << 32));
 
-    public static NodeContent FromNumber(double value) =>
-        new(NodeContentKind.Number, BitConverter.DoubleToUInt64Bits(value), 0);
+    public static ContentResource Rectangle => new(ContentResourceKind.Rectangle, 0, 0);
 
-    public static NodeContent FromBoolean(bool value) =>
-        new(NodeContentKind.Boolean, value ? 1ul : 0ul, 0);
-
-    public bool TryGetText(out TextNodeContent textContent)
+    public bool TryGetText(out TextContentResource textContent)
     {
-        if (_kind != NodeContentKind.Text) { textContent = default; return false; }
-        textContent = new TextNodeContent(new TextBufferId((uint)_data0), new TextRange((int)(_data1 & 0xFFFFFFFF), (int)(_data1 >> 32)));
+        if (_kind != ContentResourceKind.Text) { textContent = default; return false; }
+        textContent = new TextContentResource(new TextBufferId((uint)_data0), new TextRange((int)(_data1 & 0xFFFFFFFF), (int)(_data1 >> 32)));
         return true;
     }
 
-    public bool TryGetNumber(out double value)
-    {
-        if (_kind != NodeContentKind.Number) { value = 0; return false; }
-        value = BitConverter.UInt64BitsToDouble(_data0);
-        return true;
-    }
+    public bool Equals(ContentResource other) => _kind == other._kind && _data0 == other._data0 && _data1 == other._data1;
 
-    public bool TryGetBoolean(out bool value)
-    {
-        if (_kind != NodeContentKind.Boolean) { value = false; return false; }
-        value = _data0 != 0;
-        return true;
-    }
-
-    public bool Equals(NodeContent other) => _kind == other._kind && _data0 == other._data0 && _data1 == other._data1;
-
-    public override bool Equals(object? obj) => obj is NodeContent other && Equals(other);
+    public override bool Equals(object? obj) => obj is ContentResource other && Equals(other);
 
     public override int GetHashCode() => HashCode.Combine((byte)_kind, _data0, _data1);
 
-    public static bool operator ==(NodeContent left, NodeContent right) => left.Equals(right);
+    public static bool operator ==(ContentResource left, ContentResource right) => left.Equals(right);
 
-    public static bool operator !=(NodeContent left, NodeContent right) => !left.Equals(right);
+    public static bool operator !=(ContentResource left, ContentResource right) => !left.Equals(right);
 }
 
 // ── PropertyValue: pure value union (R13-7) ─────────────────────
 
 [StructLayout(LayoutKind.Explicit, Size = 44)]
-public readonly struct PropertyValue : IEquatable<PropertyValue>
+internal readonly struct PropertyValue : IEquatable<PropertyValue>
 {
     [FieldOffset(0)] private readonly PropertyValueKind _kind;
     [FieldOffset(1)] private readonly byte _padding0;
@@ -446,14 +425,14 @@ internal readonly struct BorderStrokeSlot(BorderStroke Value, bool HasValue) : I
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key -> NodeKey) ─
 
-public readonly struct VirtualNodeTree(VirtualNode root, TextBufferSnapshot textSnapshot = default)
+internal readonly struct VirtualNodeTree(VirtualNode root, TextBufferSnapshot textSnapshot = default)
 {
     public VirtualNode Root { get; } = root;
     public TextBufferSnapshot TextSnapshot { get; } = textSnapshot;
 
 }
 
-public readonly struct VirtualNode
+internal readonly struct VirtualNode
 {
     private readonly VirtualNodeProperty[]? _properties;
     private readonly VirtualNode[]? _children;
@@ -461,7 +440,7 @@ public readonly struct VirtualNode
     public VirtualNode(
         VirtualNodeKind kind,
         NodeKey key = default,
-        NodeContent content = default,
+        ContentResource content = default,
         scoped ReadOnlySpan<VirtualNodeProperty> properties = default,
         scoped ReadOnlySpan<VirtualNode> children = default)
         : this(kind, key, content, VirtualNodePropertySet.Create(kind, properties), CreateChildren(children))
@@ -471,7 +450,7 @@ public readonly struct VirtualNode
     private VirtualNode(
         VirtualNodeKind kind,
         NodeKey key,
-        NodeContent content,
+        ContentResource content,
         VirtualNodeProperty[] properties,
         VirtualNode[] children)
     {
@@ -488,7 +467,7 @@ public readonly struct VirtualNode
 
     public VirtualNodeKind Kind { get; }
     public NodeKey Key { get; }
-    public NodeContent Content { get; }
+    public ContentResource Content { get; }
     public ReadOnlySpan<VirtualNodeProperty> Properties => _properties is null ? ReadOnlySpan<VirtualNodeProperty>.Empty : _properties;
     public ReadOnlySpan<VirtualNode> Children => _children is null ? ReadOnlySpan<VirtualNode>.Empty : _children;
 
@@ -499,7 +478,7 @@ public readonly struct VirtualNode
     internal static VirtualNode CreateFromOwnedArraysUnsafe(
         VirtualNodeKind kind,
         NodeKey key,
-        NodeContent content,
+        ContentResource content,
         VirtualNodeProperty[] properties,
         VirtualNode[] children) =>
         new(kind, key, content, properties, children);
@@ -510,7 +489,7 @@ public readonly struct VirtualNode
     private static void ValidateNodeShape(
         VirtualNodeKind kind,
         NodeKey key,
-        NodeContent content,
+        ContentResource content,
         VirtualNodeProperty[] properties,
         VirtualNode[] children)
     {
@@ -518,7 +497,7 @@ public readonly struct VirtualNode
         {
             case VirtualNodeKind.None:
                 if (key != NodeKey.None
-                    || content != NodeContent.None
+                    || content != ContentResource.None
                     || properties.Length != 0
                     || children.Length != 0)
                 {
@@ -527,58 +506,23 @@ public readonly struct VirtualNode
 
                 return;
 
-            case VirtualNodeKind.Text:
-                if (children.Length != 0)
+            case VirtualNodeKind.Container:
+                if (content != ContentResource.None)
                 {
-                    throw new ArgumentException($"{kind} nodes cannot have children.", nameof(children));
-                }
-
-                if (content.Kind != NodeContentKind.Text)
-                {
-                    throw new ArgumentException("Text nodes require text content.", nameof(content));
+                    throw new ArgumentException("Container nodes cannot have content.", nameof(content));
                 }
 
                 return;
 
-            case VirtualNodeKind.Rectangle:
+            case VirtualNodeKind.Content:
                 if (children.Length != 0)
                 {
-                    throw new ArgumentException($"{kind} nodes cannot have children.", nameof(children));
+                    throw new ArgumentException("Content nodes cannot have children.", nameof(children));
                 }
 
-                if (content != NodeContent.None)
+                if (content.Kind == ContentResourceKind.None)
                 {
-                    throw new ArgumentException("Rectangle nodes cannot have content.", nameof(content));
-                }
-
-                return;
-
-            case VirtualNodeKind.Button:
-                if (content != NodeContent.None)
-                {
-                    throw new ArgumentException("Button nodes cannot have content.", nameof(content));
-                }
-
-                if (children.Length != 1)
-                {
-                    throw new ArgumentException("Button nodes require exactly one leaf text label child.", nameof(children));
-                }
-
-                var child = children[0];
-                if (child.Kind == VirtualNodeKind.Text
-                    && child.Children.IsEmpty
-                    && child.Content.TryGetText(out var label)
-                    && !label.IsNone)
-                {
-                    return;
-                }
-
-                throw new ArgumentException("Button nodes require exactly one leaf text label child.", nameof(children));
-
-            case VirtualNodeKind.ScrollContainer:
-                if (content != NodeContent.None)
-                {
-                    throw new ArgumentException("ScrollContainer nodes cannot have content.", nameof(content));
+                    throw new ArgumentException("Content nodes require one content resource.", nameof(content));
                 }
 
                 return;
@@ -590,7 +534,7 @@ public readonly struct VirtualNode
 
 }
 
-public ref struct VirtualNodePropertyListBuilder
+internal ref struct VirtualNodePropertyListBuilder
 {
     private Span<VirtualNodeProperty> _properties;
     private int _count;
@@ -659,7 +603,7 @@ public ref struct VirtualNodePropertyListBuilder
     }
 }
 
-public ref struct VirtualNodeChildrenBuilder
+internal ref struct VirtualNodeChildrenBuilder
 {
     private const int InlineCapacity = 4;
 
@@ -777,7 +721,7 @@ internal static class VirtualNodePropertySet
 
 // ── VirtualNodeProperty (R13-9: domain-scoped key, R13-18: helpers) ─
 
-public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
+internal readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 {
     private VirtualNodeProperty(VirtualPropertyKey key, PropertyValue value)
     {
@@ -875,7 +819,7 @@ public readonly struct VirtualNodeProperty : IEquatable<VirtualNodeProperty>
 
 // ── VirtualNodePatch ─────────────────────────────────────────────
 
-public readonly struct VirtualNodePatch(VirtualNodePatchOperation operation, int nodeIndex, VirtualNode node, int screenId = 0)
+internal readonly struct VirtualNodePatch(VirtualNodePatchOperation operation, int nodeIndex, VirtualNode node, int screenId = 0)
 {
     public VirtualNodePatchOperation Operation { get; } = operation;
     public int NodeIndex { get; } = nodeIndex;
@@ -886,14 +830,14 @@ public readonly struct VirtualNodePatch(VirtualNodePatchOperation operation, int
 
 }
 
-// ── VirtualNodeFactory (R13-6: Text accepts TextNodeContent, R13-19: NodeKey) ──
+// ── VirtualNodeFactory (R13-6: Text accepts TextContentResource, R13-19: NodeKey) ──
 
-public static class VirtualNodeFactory
+internal static class VirtualNodeFactory
 {
     public static VirtualNode Create(
         VirtualNodeKind kind,
         NodeKey key,
-        NodeContent content,
+        ContentResource content,
         scoped ReadOnlySpan<VirtualNodeProperty> properties,
         scoped ReadOnlySpan<VirtualNode> children) =>
         new(kind, key, content, properties, children);
@@ -901,7 +845,7 @@ public static class VirtualNodeFactory
     public static VirtualNode Create(
         VirtualNodeKind kind,
         NodeKey key,
-        NodeContent content,
+        ContentResource content,
         scoped ReadOnlySpan<VirtualNodeProperty> properties,
         scoped ref VirtualNodeChildrenBuilder children)
     {
@@ -910,57 +854,42 @@ public static class VirtualNodeFactory
         return VirtualNode.CreateFromOwnedArraysUnsafe(kind, key, content, propertyArray, childArray);
     }
 
-    public static VirtualNode Text(TextNodeContent content, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
-        Create(VirtualNodeKind.Text, key, NodeContent.FromText(content), properties, ReadOnlySpan<VirtualNode>.Empty);
+    public static VirtualNode Container(NodeKey key = default, params scoped ReadOnlySpan<VirtualNode> children) =>
+        Create(VirtualNodeKind.Container, key, default, ReadOnlySpan<VirtualNodeProperty>.Empty, children);
 
-    public static VirtualNode Rectangle(params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
-        Create(VirtualNodeKind.Rectangle, default, default, properties, ReadOnlySpan<VirtualNode>.Empty);
-
-    public static VirtualNode Rectangle(NodeKey key, params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
-        Create(VirtualNodeKind.Rectangle, key, default, properties, ReadOnlySpan<VirtualNode>.Empty);
-
-    public static VirtualNode Button(TextNodeContent label, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
-    {
-        if (label.IsNone)
-        {
-            throw new ArgumentException("Button label must be explicit.", nameof(label));
-        }
-
-        var children = new VirtualNodeChildrenBuilder();
-        children.Add(Text(label));
-        return Create(VirtualNodeKind.Button, key, default, properties, ref children);
-    }
-
-    public static VirtualNode ScrollContainer(NodeKey key = default, params scoped ReadOnlySpan<VirtualNode> children) =>
-        Create(VirtualNodeKind.ScrollContainer, key, default, ReadOnlySpan<VirtualNodeProperty>.Empty, children);
-
-    public static VirtualNode ScrollContainer(
+    public static VirtualNode Container(
         NodeKey key,
         scoped ReadOnlySpan<VirtualNodeProperty> properties,
         scoped ReadOnlySpan<VirtualNode> children) =>
-        Create(VirtualNodeKind.ScrollContainer, key, default, properties, children);
+        Create(VirtualNodeKind.Container, key, default, properties, children);
 
-    public static VirtualNode ScrollContainer(
+    public static VirtualNode Container(
         NodeKey key,
         scoped ReadOnlySpan<VirtualNodeProperty> properties,
         scoped ref VirtualNodeChildrenBuilder children) =>
-        Create(VirtualNodeKind.ScrollContainer, key, default, properties, ref children);
+        Create(VirtualNodeKind.Container, key, default, properties, ref children);
+
+    public static VirtualNode Content(
+        ContentResource content,
+        NodeKey key = default,
+        params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        Create(VirtualNodeKind.Content, key, content, properties, ReadOnlySpan<VirtualNode>.Empty);
+
+    public static VirtualNode Text(TextContentResource content, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        Content(ContentResource.FromText(content), key, properties);
+
+    public static VirtualNode Rectangle(params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        Content(ContentResource.Rectangle, default, properties);
+
+    public static VirtualNode Rectangle(NodeKey key, params scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        Content(ContentResource.Rectangle, key, properties);
 }
 
-// ── PoC authoring helper (R13-6: edge accepts string, writes to arena) ──
-
-public static class VirtualNodeBuilder
+internal static class VirtualNodeBuilder
 {
     public static VirtualNode Text(VirtualTextArena arena, string content, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         var textContent = arena.AddText(content.AsSpan());
         return VirtualNodeFactory.Text(textContent, key, properties);
-    }
-
-    public static VirtualNode Button(VirtualTextArena arena, string label, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
-    {
-        ArgumentNullException.ThrowIfNull(label);
-        var labelContent = arena.AddText(label.AsSpan());
-        return VirtualNodeFactory.Button(labelContent, key, properties);
     }
 }

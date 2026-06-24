@@ -2,7 +2,7 @@ using System.Runtime.InteropServices;
 
 namespace Irix;
 
-public sealed partial class VirtualTextArena
+internal sealed partial class VirtualTextArena
 {
     private readonly List<char> _buffer = [];
     private uint _nextBufferId = 1;
@@ -16,7 +16,7 @@ public sealed partial class VirtualTextArena
     /// </summary>
     public TextBufferSnapshot? PreviousSnapshot { get; private set; }
 
-    public TextNodeContent AddText(ReadOnlySpan<char> text)
+    public TextContentResource AddText(ReadOnlySpan<char> text)
     {
         if (text.IsEmpty)
             return default;
@@ -27,10 +27,10 @@ public sealed partial class VirtualTextArena
         var start = _buffer.Count;
         _buffer.AddRange(text);
         _cachedSnapshot = null;
-        return new TextNodeContent(CurrentBufferId, new TextRange(start, text.Length));
+        return new TextContentResource(CurrentBufferId, new TextRange(start, text.Length));
     }
 
-    public ReadOnlySpan<char> ResolveRequired(TextNodeContent content)
+    public ReadOnlySpan<char> ResolveRequired(TextContentResource content)
     {
         if (content.IsNone)
             return [];
@@ -52,7 +52,7 @@ public sealed partial class VirtualTextArena
         return CollectionsMarshal.AsSpan(_buffer).Slice(start, length);
     }
 
-    internal bool TryResolve(TextNodeContent content, out ReadOnlySpan<char> span)
+    internal bool TryResolve(TextContentResource content, out ReadOnlySpan<char> span)
     {
         if (content.IsNone)
         {
@@ -110,12 +110,12 @@ public sealed partial class VirtualTextArena
 
 }
 
-public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) : IEquatable<TextBufferSnapshot>
+internal readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) : IEquatable<TextBufferSnapshot>
 {
     public TextBufferId BufferId { get; } = bufferId;
     public char[] Buffer { get; } = buffer;
 
-    public ReadOnlySpan<char> ResolveRequired(TextNodeContent content)
+    public ReadOnlySpan<char> ResolveRequired(TextContentResource content)
     {
         if (content.IsNone)
             return [];
@@ -147,7 +147,7 @@ public readonly struct TextBufferSnapshot(TextBufferId bufferId, char[] buffer) 
         return Buffer.AsSpan(start, length);
     }
 
-    internal bool TryResolve(TextNodeContent content, out ReadOnlySpan<char> span)
+    internal bool TryResolve(TextContentResource content, out ReadOnlySpan<char> span)
     {
         if (content.IsNone)
         {

@@ -233,7 +233,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -295,7 +295,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -329,7 +329,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -367,7 +367,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -396,7 +396,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -433,7 +433,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -478,7 +478,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -520,7 +520,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -562,7 +562,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -635,7 +635,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -676,7 +676,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -717,7 +717,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -765,7 +765,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -816,7 +816,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -860,7 +860,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -913,7 +913,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -962,7 +962,7 @@ public sealed class BatchOwnershipTests
             var pipeline = new RenderPipeline();
             using var frame = pipeline.Build(
                 new VirtualNode(
-                    VirtualNodeKind.ScrollContainer,
+                    VirtualNodeKind.Container,
                     key: 1,
                     properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                     children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -1017,7 +1017,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -1059,7 +1059,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -1103,7 +1103,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -1144,7 +1144,7 @@ public sealed class BatchOwnershipTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -1295,7 +1295,7 @@ public sealed class BatchOwnershipTests
             var pipeline = new RenderPipeline();
             var frame = pipeline.Build(
                 new VirtualNode(
-                    VirtualNodeKind.ScrollContainer,
+                    VirtualNodeKind.Container,
                     key: 1,
                     properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                     children: [VirtualNodeBuilder.Text(arena, "Item", new NodeKey(2))]),
@@ -1323,7 +1323,7 @@ public sealed class BatchOwnershipTests
             var pipeline = new RenderPipeline();
             var frame = pipeline.Build(
                 new VirtualNode(
-                    VirtualNodeKind.ScrollContainer,
+                    VirtualNodeKind.Container,
                     key: 1,
                     properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(108)],
                     children: [VirtualNodeBuilder.Text(arena, "Item", new NodeKey(2))]),
@@ -1374,7 +1374,7 @@ public sealed class BatchOwnershipTests
             var label = _frame++ == 0 ? "Count: 0" : "Count: 1";
             var frame = _pipeline.Build(
                 new VirtualNode(
-                    VirtualNodeKind.ScrollContainer,
+                    VirtualNodeKind.Container,
                     key: 1,
                     properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                     children:

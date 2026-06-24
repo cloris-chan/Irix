@@ -1,6 +1,6 @@
 namespace Irix;
 
-public interface IVirtualNodePatchSink
+internal interface IVirtualNodePatchSink
 {
     ValueTask PublishAsync(PatchBatch patchBatch, CancellationToken cancellationToken = default);
 

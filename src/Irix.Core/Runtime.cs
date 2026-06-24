@@ -2,7 +2,7 @@ using System.Threading.Channels;
 
 namespace Irix;
 
-public sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IAsyncDisposable
+internal sealed class Runtime<TModel, TMessage> : IMessageDispatcher<TMessage>, IAsyncDisposable
     where TModel : notnull
     where TMessage : notnull
 {

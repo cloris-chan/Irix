@@ -95,15 +95,15 @@ internal static class SyncDiagnosticRunner
         {
             var scrollY = i * 2;
             var root = new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
-                    VirtualNodeBuilder.Button(arena, "SyncTest", new NodeKey(2),
+                    ControlNodeBuilder.Button(arena, "SyncTest", new NodeKey(2),
                         VirtualNodeProperty.Action(new ActionId(300))),
                     VirtualNodeBuilder.Text(arena, includeNonAsciiText ? $"Frame {i} sync 測試" : $"Frame {i} sync overhead measurement", new NodeKey(3)),
-                    VirtualNodeBuilder.Button(arena, "Another", new NodeKey(4),
+                    ControlNodeBuilder.Button(arena, "Another", new NodeKey(4),
                         VirtualNodeProperty.Action(new ActionId(301))),
                 ]);
 

@@ -171,7 +171,7 @@ internal static class ScrollPresentationRuntimeDiagnosticRunner
         var pipeline = new RenderPipeline();
         var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(54)],
                 children: [VirtualNodeBuilder.Text(arena, "Item", new NodeKey(2))]),

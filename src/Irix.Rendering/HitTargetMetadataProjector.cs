@@ -121,7 +121,7 @@ internal static class HitTargetMetadataProjector
 
         var reader = new PropertyReader(nextNode.Properties);
         var actionId = reader.GetActionId(VirtualPropertyKey.ActionId);
-        if (nextNode.Kind == VirtualNodeKind.Button && !actionId.IsNone)
+        if (nextNode.Kind == VirtualNodeKind.Container && !actionId.IsNone)
         {
             if (actionNodeCount >= actionNodes.Length)
             {

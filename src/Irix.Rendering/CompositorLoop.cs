@@ -2,7 +2,7 @@ using System.Threading.Channels;
 
 namespace Irix.Rendering;
 
-public sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchSink, IAsyncDisposable
+internal sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedFramePatchSink, IAsyncDisposable
 {
     private const int CompositionTargetFrameRate = 240;
     private static readonly CompositionDuration CompositionTargetFrameInterval = CompositionDuration.FromStopwatchTicks(Math.Max(1, CompositionClock.Frequency / CompositionTargetFrameRate));

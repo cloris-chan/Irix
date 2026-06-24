@@ -2,16 +2,16 @@ namespace Irix.Rendering;
 
 internal static class LayoutNodeReader
 {
-    public static TextNodeContent GetTextContent(VirtualNode node)
+    public static TextContentResource GetTextContent(VirtualNode node)
     {
         return node.Content.TryGetText(out var textContent) ? textContent : default;
     }
 
-    public static TextNodeContent GetButtonLabel(VirtualNode node)
+    public static TextContentResource GetButtonLabel(VirtualNode node)
     {
         foreach (var child in node.Children)
         {
-            if (child.Kind != VirtualNodeKind.Text)
+            if (!IsTextContent(child))
             {
                 continue;
             }
@@ -24,6 +24,46 @@ internal static class LayoutNodeReader
         }
 
         return default;
+    }
+
+    public static bool IsTextContent(VirtualNode node) =>
+        node.Kind == VirtualNodeKind.Content && node.Content.Kind == ContentResourceKind.Text;
+
+    public static bool IsRectangleContent(VirtualNode node) =>
+        node.Kind == VirtualNodeKind.Content && node.Content.Kind == ContentResourceKind.Rectangle;
+
+    public static bool IsInteractiveContainer(VirtualNode node) =>
+        node.Kind == VirtualNodeKind.Container
+        && !new PropertyReader(node.Properties).GetActionId(VirtualPropertyKey.ActionId).IsNone;
+
+    public static bool TryGetFirstRectangleContent(VirtualNode node, out VirtualNode rectangle)
+    {
+        foreach (var child in node.Children)
+        {
+            if (IsRectangleContent(child))
+            {
+                rectangle = child;
+                return true;
+            }
+        }
+
+        rectangle = default;
+        return false;
+    }
+
+    public static bool TryGetFirstTextContent(VirtualNode node, out VirtualNode text)
+    {
+        foreach (var child in node.Children)
+        {
+            if (IsTextContent(child))
+            {
+                text = child;
+                return true;
+            }
+        }
+
+        text = default;
+        return false;
     }
 
     public static StyleColorSlot ReadColor(PropertyReader reader, VirtualPropertyKey key) =>

@@ -214,7 +214,7 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
             _arena.BeginFrame();
             var ownership = model.InputOwnership;
             var root = new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: ScrollTargetKey,
                 properties:
                 [
@@ -233,7 +233,7 @@ internal static class ScrollPresentationHitTestDiagnosticRunner
 
         private VirtualNode BuildButton(string label, NodeKey key, ActionId actionId, OwnershipSnapshot ownership)
         {
-            return VirtualNodeBuilder.Button(
+            return ControlNodeBuilder.Button(
                 _arena,
                 label,
                 key,

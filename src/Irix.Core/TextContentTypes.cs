@@ -1,6 +1,6 @@
 namespace Irix;
 
-public readonly struct TextBufferId(uint value) : IEquatable<TextBufferId>
+internal readonly struct TextBufferId(uint value) : IEquatable<TextBufferId>
 {
     public static readonly TextBufferId None = default;
 
@@ -19,7 +19,7 @@ public readonly struct TextBufferId(uint value) : IEquatable<TextBufferId>
     public static bool operator !=(TextBufferId left, TextBufferId right) => left.Value != right.Value;
 }
 
-public readonly struct TextRange : IEquatable<TextRange>
+internal readonly struct TextRange : IEquatable<TextRange>
 {
     public TextRange(int start, int length)
     {
@@ -48,20 +48,20 @@ public readonly struct TextRange : IEquatable<TextRange>
     public static bool operator !=(TextRange left, TextRange right) => !left.Equals(right);
 }
 
-public readonly struct TextNodeContent(TextBufferId bufferId, TextRange range) : IEquatable<TextNodeContent>
+internal readonly struct TextContentResource(TextBufferId bufferId, TextRange range) : IEquatable<TextContentResource>
 {
     public TextBufferId BufferId { get; } = bufferId;
     public TextRange Range { get; } = range;
 
     public bool IsNone => BufferId.IsNone;
 
-    public bool Equals(TextNodeContent other) => BufferId == other.BufferId && Range == other.Range;
+    public bool Equals(TextContentResource other) => BufferId == other.BufferId && Range == other.Range;
 
-    public override bool Equals(object? obj) => obj is TextNodeContent other && Equals(other);
+    public override bool Equals(object? obj) => obj is TextContentResource other && Equals(other);
 
     public override int GetHashCode() => HashCode.Combine(BufferId, Range);
 
-    public static bool operator ==(TextNodeContent left, TextNodeContent right) => left.Equals(right);
+    public static bool operator ==(TextContentResource left, TextContentResource right) => left.Equals(right);
 
-    public static bool operator !=(TextNodeContent left, TextNodeContent right) => !left.Equals(right);
+    public static bool operator !=(TextContentResource left, TextContentResource right) => !left.Equals(right);
 }

@@ -1788,7 +1788,7 @@ public sealed class CounterInputRouterTests
 
     private static VirtualNode FindButton(VirtualNode node, ActionId actionId)
     {
-        if (node.Kind == VirtualNodeKind.Button && GetActionId(node) == actionId)
+        if (node.Kind == VirtualNodeKind.Container && GetActionId(node) == actionId)
         {
             return node;
         }
@@ -1796,7 +1796,7 @@ public sealed class CounterInputRouterTests
         foreach (var child in node.Children)
         {
             var found = FindButton(child, actionId);
-            if (found.Kind == VirtualNodeKind.Button)
+            if (found.Kind == VirtualNodeKind.Container)
             {
                 return found;
             }
@@ -1901,7 +1901,7 @@ public sealed class CounterInputRouterTests
 
     private static bool ContainsTextStartingWith(VirtualTextArena arena, VirtualNode node, string prefix)
     {
-        if (node.Kind == VirtualNodeKind.Text && ResolveNodeText(arena, node.Content)?.StartsWith(prefix, StringComparison.Ordinal) == true)
+        if (node.Kind == VirtualNodeKind.Content && ResolveNodeText(arena, node.Content)?.StartsWith(prefix, StringComparison.Ordinal) == true)
         {
             return true;
         }
@@ -1995,8 +1995,8 @@ public sealed class CounterInputRouterTests
         var model = app.Initialize() with { Scroll = new ScrollState { TargetPosition = 80, Position = 80 } };
         var tree = app.BuildView(model);
 
-        // The root ScrollContainer should have ScrollY=80 property
-        Assert.Equal(VirtualNodeKind.ScrollContainer, tree.Root.Kind);
+        // The root container should have ScrollY=80 property.
+        Assert.Equal(VirtualNodeKind.Container, tree.Root.Kind);
         var scrollYProperty = default(VirtualNodeProperty);
         foreach (var property in tree.Root.Properties)
         {
@@ -3126,7 +3126,7 @@ public sealed class CounterInputRouterTests
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(
             new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(0)],
                 children: [VirtualNodeBuilder.Text(_arena, "Item", new NodeKey(2))]),
@@ -3290,6 +3290,6 @@ public sealed class CounterInputRouterTests
         Assert.True(double.IsFinite(state.MaxScrollY));
     }
 
-    private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
+    private static string ResolveNodeText(VirtualTextArena arena, ContentResource content) =>
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
 }

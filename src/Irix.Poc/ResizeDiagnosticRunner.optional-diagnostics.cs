@@ -48,13 +48,13 @@ internal static class ResizeDiagnosticRunner
 
         var arena = new VirtualTextArena();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1200,
             children:
             [
                 VirtualNodeBuilder.Text(arena, "Resize Diagnostic: renderer/layout viewport", new NodeKey(1201)),
                 VirtualNodeFactory.Rectangle(new NodeKey(1202), VirtualNodeProperty.Width(300), VirtualNodeProperty.Height(44)),
-                VirtualNodeBuilder.Button(arena, "ResizeBtn", new NodeKey(1203), VirtualNodeProperty.Action(new ActionId(400)))
+                ControlNodeBuilder.Button(arena, "ResizeBtn", new NodeKey(1203), VirtualNodeProperty.Action(new ActionId(400)))
             ]);
 
         GC.Collect();

@@ -40,7 +40,7 @@ internal readonly struct ScrollPresentationCancellationSnapshot(
     public static bool operator !=(ScrollPresentationCancellationSnapshot left, ScrollPresentationCancellationSnapshot right) => !left.Equals(right);
 }
 
-public sealed partial class CompositorLoop
+internal sealed partial class CompositorLoop
 {
     private ScrollPresentationCancellationReason _lastScrollPresentationCancellationReason;
     private CompositionRenderInvalidationKind _lastScrollPresentationCancellationInvalidationKind;

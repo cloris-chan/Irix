@@ -172,12 +172,17 @@ internal static class StyleOnlyLayoutPatcher
             return false;
         }
 
-        if (retainedTreeNode.Kind != VirtualNodeKind.Text && retainedTreeNode.Kind != VirtualNodeKind.Button)
+        if (retainedTreeNode.Kind != VirtualNodeKind.Content && retainedTreeNode.Kind != VirtualNodeKind.Container)
         {
             return true;
         }
 
-        if (retainedTreeNode.ElementCount != 1 || (uint)retainedTreeNode.ElementStart >= (uint)elements.Length)
+        if (retainedTreeNode.ElementCount != 1)
+        {
+            return true;
+        }
+
+        if ((uint)retainedTreeNode.ElementStart >= (uint)elements.Length)
         {
             return false;
         }
@@ -186,7 +191,12 @@ internal static class StyleOnlyLayoutPatcher
         var retainedElement = elements[elementIndex];
         if (retainedElement.Kind == LayoutElementKind.Text)
         {
-            if (nextNode.Kind != VirtualNodeKind.Text || !nextNode.Content.TryGetText(out var content))
+            if (retainedTreeNode.Kind != VirtualNodeKind.Content)
+            {
+                return true;
+            }
+
+            if (!LayoutNodeReader.IsTextContent(nextNode) || !nextNode.Content.TryGetText(out var content))
             {
                 return false;
             }
@@ -195,7 +205,12 @@ internal static class StyleOnlyLayoutPatcher
         }
         else if (retainedElement.Kind == LayoutElementKind.Button)
         {
-            if (nextNode.Kind != VirtualNodeKind.Button)
+            if (retainedTreeNode.Kind != VirtualNodeKind.Container || !LayoutNodeReader.IsInteractiveContainer(nextNode))
+            {
+                return true;
+            }
+
+            if (nextNode.Kind != VirtualNodeKind.Container)
             {
                 return false;
             }
@@ -228,20 +243,20 @@ internal static class StyleOnlyLayoutPatcher
         var retainedElement = elements[elementIndex];
         return retainedElement.Kind switch
         {
-            LayoutElementKind.Text => TryPatchText(elements, elementIndex, retainedElement, nextNode),
-            LayoutElementKind.Rectangle => TryPatchRectangle(elements, elementIndex, retainedElement, nextNode),
-            LayoutElementKind.Button => TryPatchButton(elements, elementIndex, retainedElement, nextNode),
+            LayoutElementKind.Text => TryPatchTextContent(elements, elementIndex, retainedElement, nextNode),
+            LayoutElementKind.Rectangle => TryPatchRectangleContent(elements, elementIndex, retainedElement, nextNode),
+            LayoutElementKind.Button => TryPatchInteractiveContainer(elements, elementIndex, retainedElement, nextNode),
             _ => false,
         };
     }
 
-    private static bool TryPatchText(
+    private static bool TryPatchTextContent(
         LayoutElement[] elements,
         int elementIndex,
         LayoutElement retainedElement,
         VirtualNode nextNode)
     {
-        if (nextNode.Kind != VirtualNodeKind.Text || !nextNode.Content.TryGetText(out var content))
+        if (!LayoutNodeReader.IsTextContent(nextNode) || !nextNode.Content.TryGetText(out var content))
         {
             return false;
         }
@@ -256,7 +271,7 @@ internal static class StyleOnlyLayoutPatcher
         return true;
     }
 
-    private static LayoutElement WithText(LayoutElement retainedElement, TextNodeContent text)
+    private static LayoutElement WithText(LayoutElement retainedElement, TextContentResource text)
     {
         return new LayoutElement(
             retainedElement.Kind,
@@ -270,13 +285,13 @@ internal static class StyleOnlyLayoutPatcher
             ForegroundColor: retainedElement.ForegroundColor);
     }
 
-    private static bool TryPatchRectangle(
+    private static bool TryPatchRectangleContent(
         LayoutElement[] elements,
         int elementIndex,
         LayoutElement retainedElement,
         VirtualNode nextNode)
     {
-        if (nextNode.Kind != VirtualNodeKind.Rectangle)
+        if (!LayoutNodeReader.IsRectangleContent(nextNode))
         {
             return false;
         }
@@ -291,13 +306,13 @@ internal static class StyleOnlyLayoutPatcher
         return true;
     }
 
-    private static bool TryPatchButton(
+    private static bool TryPatchInteractiveContainer(
         LayoutElement[] elements,
         int elementIndex,
         LayoutElement retainedElement,
         VirtualNode nextNode)
     {
-        if (nextNode.Kind != VirtualNodeKind.Button)
+        if (nextNode.Kind != VirtualNodeKind.Container)
         {
             return false;
         }
@@ -309,6 +324,10 @@ internal static class StyleOnlyLayoutPatcher
         }
 
         var properties = new PropertyReader(nextNode.Properties);
+        _ = LayoutNodeReader.TryGetFirstRectangleContent(nextNode, out var rectangleContent);
+        _ = LayoutNodeReader.TryGetFirstTextContent(nextNode, out var textContent);
+        var rectangleProperties = new PropertyReader(rectangleContent.Properties);
+        var textProperties = new PropertyReader(textContent.Properties);
         elements[elementIndex] = new LayoutElement(
             LayoutElementKind.Button,
             retainedElement.Bounds,
@@ -319,9 +338,9 @@ internal static class StyleOnlyLayoutPatcher
                 IsHovered: properties.GetBool(VirtualPropertyKey.IsHovered),
                 IsPressed: properties.GetBool(VirtualPropertyKey.IsPressed),
                 IsFocused: properties.GetBool(VirtualPropertyKey.IsFocused)),
-            Background: LayoutNodeReader.ReadPaint(properties, VirtualPropertyKey.Background),
-            Border: LayoutNodeReader.ReadBorderStroke(properties, VirtualPropertyKey.Border),
-            ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor));
+            Background: LayoutNodeReader.ReadPaint(rectangleProperties, VirtualPropertyKey.Background),
+            Border: LayoutNodeReader.ReadBorderStroke(rectangleProperties, VirtualPropertyKey.Border),
+            ForegroundColor: LayoutNodeReader.ReadColor(textProperties, VirtualPropertyKey.ForegroundColor));
         return true;
     }
 }

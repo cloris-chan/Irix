@@ -1,6 +1,6 @@
 namespace Irix.Rendering;
 
-public interface IPatchBatchTranslator
+internal interface IPatchBatchTranslator
 {
     RenderFrameBatch Translate(PatchBatch patchBatch);
 }

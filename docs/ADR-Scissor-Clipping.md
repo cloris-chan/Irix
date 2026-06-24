@@ -6,7 +6,7 @@ Date: 2026-05-10
 
 ## Context
 
-The layout pipeline already carries clip information from `ScrollContainer` into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor and D3D12 GlyphAtlas text clipping are default-on in the renderer-foundation branch.
+The layout pipeline already carries clip information from scrollable container nodes into `LayoutElement.ClipBounds`, `DrawCommand.ClipBounds`, and `HitTestTarget.ClipBounds`. Hit testing rejects clipped-out targets, and the D3D12 PoC backend counts clipped commands for diagnostics. FillRect GPU scissor and D3D12 GlyphAtlas text clipping are default-on in the renderer-foundation branch.
 
 Current default behavior: clipped FillRect content is clipped by the D3D12 rasterizer scissor; accepted DrawTextRun content is clipped in the D3D12 GlyphAtlas text pass, and unsupported text degrades explicitly. `--disable-scissor` and `--clip-mode diagnostic` remain rollback/diagnostic paths. The old `--enable-scissor` switch is a temporary no-op alias because scissor is already the default; it is not a compatibility promise.
 

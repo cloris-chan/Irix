@@ -457,9 +457,9 @@ public sealed class DrawingBackendCompositorTests
         var backend = new CompositionTrackingBackend();
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-            VirtualNodeBuilder.Button(_arena, "Still", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))));
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+            VirtualNodeTestBuilder.Button(_arena, "Still", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))));
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
         Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(2), out var animatedTarget));
@@ -497,8 +497,8 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         compositor.SetViewport(new PixelRectangle(0, 0, 1920, 1080), new DisplayScale(2f, 2f));
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))));
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))));
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
         Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(2), out var target));
@@ -528,8 +528,8 @@ public sealed class DrawingBackendCompositorTests
         var backend = new CompositionTrackingBackend();
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))));
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "Move", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))));
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
         Assert.True(snapshot.TryGetCompositionTarget(new NodeKey(2), out var target));
@@ -565,14 +565,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
@@ -633,14 +633,14 @@ public sealed class DrawingBackendCompositorTests
         VirtualNode CreateScrollRoot(double scrollY)
         {
             return new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
-                    VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                    VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                    VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                    VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                    VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                    VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
                 ]);
         }
     }
@@ -654,14 +654,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend, new FixedCompositionClockSource(tickTimestamp));
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -725,14 +725,14 @@ public sealed class DrawingBackendCompositorTests
         VirtualNode CreateScrollRoot(double scrollY)
         {
             return new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
-                    VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                    VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                    VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                    VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                    VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                    VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
                 ]);
         }
     }
@@ -745,14 +745,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -788,14 +788,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -820,22 +820,22 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(120), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "Outer", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Outer", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
                 new VirtualNode(
-                    VirtualNodeKind.ScrollContainer,
+                    VirtualNodeKind.Container,
                     key: 3,
                     properties: [VirtualNodeProperty.Height(48)],
                     children:
                     [
-                        VirtualNodeBuilder.Button(_arena, "Inner A", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(200))),
-                        VirtualNodeBuilder.Button(_arena, "Inner B", new NodeKey(5), VirtualNodeProperty.Action(new ActionId(300)))
+                        VirtualNodeTestBuilder.Button(_arena, "Inner A", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(200))),
+                        VirtualNodeTestBuilder.Button(_arena, "Inner B", new NodeKey(5), VirtualNodeProperty.Action(new ActionId(300)))
                     ]),
-                VirtualNodeBuilder.Button(_arena, "Outer tail", new NodeKey(6), VirtualNodeProperty.Action(new ActionId(400)))
+                VirtualNodeTestBuilder.Button(_arena, "Outer tail", new NodeKey(6), VirtualNodeProperty.Action(new ActionId(400)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 260, 180), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
@@ -876,14 +876,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
@@ -911,14 +911,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -1558,14 +1558,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -1598,14 +1598,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -1640,14 +1640,14 @@ public sealed class DrawingBackendCompositorTests
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
@@ -1726,9 +1726,9 @@ public sealed class DrawingBackendCompositorTests
     public void CompositionAnimationDeclaration_resolves_normal_ui_node_key()
     {
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Static", new NodeKey(2)),
-            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(3)));
+            VirtualNodeTestBuilder.Button(_arena, "Move", new NodeKey(3)));
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
 
@@ -1756,7 +1756,7 @@ public sealed class DrawingBackendCompositorTests
     public void CompositionAnimationDeclaration_rejects_missing_target()
     {
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Static", new NodeKey(2)));
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
         var declaration = new CompositionAnimationDeclaration(
@@ -1775,14 +1775,14 @@ public sealed class DrawingBackendCompositorTests
     {
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
@@ -1815,14 +1815,14 @@ public sealed class DrawingBackendCompositorTests
     {
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(60), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
-                VirtualNodeBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(200))),
+                VirtualNodeTestBuilder.Button(_arena, "Third", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(300)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 240, 120), _arena.GetOrCreateSnapshot());
         var declaration = new CompositionScrollPresentationDeclaration(
@@ -1840,22 +1840,22 @@ public sealed class DrawingBackendCompositorTests
     {
         var pipeline = new RenderPipeline();
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.Height(120), VirtualNodeProperty.ScrollY(40)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "Outer", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
+                VirtualNodeTestBuilder.Button(_arena, "Outer", new NodeKey(2), VirtualNodeProperty.Action(new ActionId(100))),
                 new VirtualNode(
-                    VirtualNodeKind.ScrollContainer,
+                    VirtualNodeKind.Container,
                     key: 3,
                     properties: [VirtualNodeProperty.Height(48)],
                     children:
                     [
-                        VirtualNodeBuilder.Button(_arena, "Inner A", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(200))),
-                        VirtualNodeBuilder.Button(_arena, "Inner B", new NodeKey(5), VirtualNodeProperty.Action(new ActionId(300)))
+                        VirtualNodeTestBuilder.Button(_arena, "Inner A", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(200))),
+                        VirtualNodeTestBuilder.Button(_arena, "Inner B", new NodeKey(5), VirtualNodeProperty.Action(new ActionId(300)))
                     ]),
-                VirtualNodeBuilder.Button(_arena, "Outer tail", new NodeKey(6), VirtualNodeProperty.Action(new ActionId(400)))
+                VirtualNodeTestBuilder.Button(_arena, "Outer tail", new NodeKey(6), VirtualNodeProperty.Action(new ActionId(400)))
             ]);
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 260, 180), _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
@@ -1882,8 +1882,8 @@ public sealed class DrawingBackendCompositorTests
         var backend = new CompositionTrackingBackend();
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(_arena, "Move", new NodeKey(3)));
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "Move", new NodeKey(3)));
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), _arena.GetOrCreateSnapshot());
         await compositor.RenderAsync(frame, cancellationToken);
         var declaration = new CompositionAnimationDeclaration(
@@ -1911,7 +1911,7 @@ public sealed class DrawingBackendCompositorTests
         var backend = new CompositionTrackingBackend();
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(22),
                 VirtualNodeProperty.Width(100),
@@ -1974,7 +1974,7 @@ public sealed class DrawingBackendCompositorTests
         var backend = new CompositionTrackingBackend();
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(22),
                 VirtualNodeProperty.Width(100),
@@ -2039,7 +2039,7 @@ public sealed class DrawingBackendCompositorTests
         var backend = new CompositionTrackingBackend();
         using var compositor = new DrawingBackendCompositor(backend);
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(22),
                 VirtualNodeProperty.Width(100),
@@ -2328,7 +2328,7 @@ public sealed class DrawingBackendCompositorTests
     {
         using var compositor = new DrawingBackendCompositor(new CompositionTrackingBackend());
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(22),
                 VirtualNodeProperty.Width(100),
@@ -2741,8 +2741,8 @@ public sealed class DrawingBackendCompositorTests
         // Clip: (0, 0, 120, 50), clip bottom = 50.
         // Button bottom = 16+40 = 56, which extends beyond clip bottom (50)
         // Point at (20, 52) is inside button (16..104, 16..56) but outside clip (0..120, 0..50)
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(_arena, "ClickMe", new NodeKey(2),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "ClickMe", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(100))));
         var viewport = new PixelRectangle(0, 0, 120, 50);
         var pipeline = new RenderPipeline();
@@ -2779,9 +2779,9 @@ public sealed class DrawingBackendCompositorTests
 
         // Root uses viewport clip; nested containers keep the padded container clip.
         // Inner: [16, 16, 268, 184] intersected with root [0, 0, 300, 200].
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeFactory.ScrollContainer(new NodeKey(2),
-                VirtualNodeBuilder.Button(_arena, "Inner", new NodeKey(3),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeFactory.Container(new NodeKey(2),
+                VirtualNodeTestBuilder.Button(_arena, "Inner", new NodeKey(3),
                     VirtualNodeProperty.Action(new ActionId(100)))));
         var viewport = new PixelRectangle(0, 0, 300, 200);
         var pipeline = new RenderPipeline();
@@ -2813,13 +2813,13 @@ public sealed class DrawingBackendCompositorTests
         // With ScrollY=30: Button 1: y = 16-30 = -14 (partially above viewport top)
         //                   Button 2: y = 68-30 = 38 (inside clip, bottom at 78 > clip bottom 60)
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.ScrollY(30)],
             children: [
-                VirtualNodeBuilder.Button(_arena, "First", new NodeKey(2),
+                VirtualNodeTestBuilder.Button(_arena, "First", new NodeKey(2),
                     VirtualNodeProperty.Action(new ActionId(100))),
-                VirtualNodeBuilder.Button(_arena, "Second", new NodeKey(3),
+                VirtualNodeTestBuilder.Button(_arena, "Second", new NodeKey(3),
                     VirtualNodeProperty.Action(new ActionId(101)))
             ]);
         var viewport = new PixelRectangle(0, 0, 200, 60);
@@ -2953,7 +2953,7 @@ public sealed class DrawingBackendCompositorTests
 
     private static VirtualNode CreatePresentationSetRoot()
     {
-        return VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        return VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeFactory.Rectangle(
                 new NodeKey(22),
                 VirtualNodeProperty.Width(100),

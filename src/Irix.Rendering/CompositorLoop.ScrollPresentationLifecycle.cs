@@ -1,6 +1,6 @@
 namespace Irix.Rendering;
 
-public sealed partial class CompositorLoop
+internal sealed partial class CompositorLoop
 {
     private sealed class ScrollPresentationLifecycle
     {

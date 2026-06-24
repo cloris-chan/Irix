@@ -182,17 +182,11 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
         {
             switch (node.Kind)
             {
-                case VirtualNodeKind.ScrollContainer:
-                    return LayoutScrollContainer(node, dfsIndex);
+                case VirtualNodeKind.Container:
+                    return LayoutContainer(node, dfsIndex);
 
-                case VirtualNodeKind.Text:
-                    return LayoutText(node, dfsIndex);
-
-                case VirtualNodeKind.Rectangle:
-                    return LayoutRectangle(node, dfsIndex);
-
-                case VirtualNodeKind.Button:
-                    return LayoutButton(node, dfsIndex);
+                case VirtualNodeKind.Content:
+                    return LayoutContent(node, dfsIndex);
 
                 default:
                     RegisterElementRange(dfsIndex, 0, 0);
@@ -200,7 +194,16 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             }
         }
 
-        private int LayoutScrollContainer(VirtualNode node, int dfsIndex)
+        private int LayoutContainer(VirtualNode node, int dfsIndex)
+        {
+            var properties = new PropertyReader(node.Properties);
+            var actionId = properties.GetActionId(VirtualPropertyKey.ActionId);
+            return actionId.IsNone
+                ? LayoutFlowContainer(node, dfsIndex, properties)
+                : LayoutInteractiveContainer(node, dfsIndex, properties, actionId);
+        }
+
+        private int LayoutFlowContainer(VirtualNode node, int dfsIndex, PropertyReader properties)
         {
             var treeNodeIndex = _treeNodes.Count;
             _treeNodes.Add(default);
@@ -212,7 +215,6 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             var containerClipWidth = isRootContainer ? _ctx.AvailableWidth + (_ctx.Style.HorizontalPadding * 2) : _ctx.AvailableWidth;
 
             var implicitVisibleHeight = _ctx.ResolveImplicitVisibleHeight(contentTop);
-            var properties = new PropertyReader(node.Properties);
             var explicitHeight = ReadInt(properties, VirtualPropertyKey.Height, 0);
             var containerVisibleHeight = explicitHeight > 0
                 ? Math.Min(explicitHeight, implicitVisibleHeight)
@@ -282,17 +284,33 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
             if (subtreeCount == 0)
             {
-                _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.ScrollContainer, 0, 0, subtreeStart, 0);
+                _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Container, 0, 0, subtreeStart, 0);
                 RegisterElementRange(dfsIndex, 0, 0);
                 return consumedCount;
             }
 
-            _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.ScrollContainer, elementStart, elementCount, subtreeStart, subtreeCount);
+            _treeNodes.WrittenMutable[treeNodeIndex] = new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Container, elementStart, elementCount, subtreeStart, subtreeCount);
             RegisterElementRange(dfsIndex, elementStart, elementCount);
             return consumedCount;
         }
 
-        private int LayoutText(VirtualNode node, int dfsIndex)
+        private int LayoutContent(VirtualNode node, int dfsIndex)
+        {
+            return node.Content.Kind switch
+            {
+                ContentResourceKind.Text => LayoutTextContent(node, dfsIndex),
+                ContentResourceKind.Rectangle => LayoutRectangleContent(node, dfsIndex),
+                _ => RegisterEmptyContent(dfsIndex),
+            };
+        }
+
+        private int RegisterEmptyContent(int dfsIndex)
+        {
+            RegisterElementRange(dfsIndex, 0, 0);
+            return 1;
+        }
+
+        private int LayoutTextContent(VirtualNode node, int dfsIndex)
         {
             var content = LayoutNodeReader.GetTextContent(node);
             if (content.IsNone)
@@ -310,12 +328,12 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 Text: content,
                 ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += _ctx.Style.TextHeight + _ctx.Style.ItemSpacing;
-            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Text, elementIndex, 1, 0, 0));
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Content, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
             return 1;
         }
 
-        private int LayoutRectangle(VirtualNode node, int dfsIndex)
+        private int LayoutRectangleContent(VirtualNode node, int dfsIndex)
         {
             var properties = new PropertyReader(node.Properties);
             var rectangleBounds = new PixelRectangle(
@@ -331,35 +349,37 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 Background: LayoutNodeReader.ReadPaint(properties, VirtualPropertyKey.Background),
                 Border: LayoutNodeReader.ReadBorderStroke(properties, VirtualPropertyKey.Border)));
             _cursorY += rectangleBounds.Height + _ctx.Style.ItemSpacing;
-            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Rectangle, elementIndex, 1, 0, 0));
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Content, elementIndex, 1, 0, 0));
             RegisterElementRange(dfsIndex, elementIndex, 1);
             return 1;
         }
 
-        private int LayoutButton(VirtualNode node, int dfsIndex)
+        private int LayoutInteractiveContainer(VirtualNode node, int dfsIndex, PropertyReader properties, ActionId actionId)
         {
             var label = LayoutNodeReader.GetButtonLabel(node);
             if (label.IsNone)
             {
-                throw new InvalidOperationException("Button nodes require an explicit text label child.");
+                throw new InvalidOperationException("Interactive container nodes require an explicit text content child.");
             }
 
+            _ = LayoutNodeReader.TryGetFirstRectangleContent(node, out var rectangleContent);
+            _ = LayoutNodeReader.TryGetFirstTextContent(node, out var textContent);
             var labelLength = label.Range.Length;
             var width = Math.Min(_ctx.AvailableWidth, Math.Max(
                 _ctx.Style.MinimumButtonWidth,
                 labelLength * _ctx.Style.ButtonTextWidthFactor + _ctx.Style.ButtonHorizontalPadding));
-            var properties = new PropertyReader(node.Properties);
             var bounds = new PixelRectangle(
                 _ctx.Style.HorizontalPadding,
                 _cursorY,
                 ReadInt(properties, VirtualPropertyKey.Width, width),
                 ReadInt(properties, VirtualPropertyKey.Height, _ctx.Style.ButtonHeight));
-            var actionId = properties.GetActionId(VirtualPropertyKey.ActionId);
             var buttonState = new ButtonVisualState(
                 IsHovered: properties.GetBool(VirtualPropertyKey.IsHovered),
                 IsPressed: properties.GetBool(VirtualPropertyKey.IsPressed),
                 IsFocused: properties.GetBool(VirtualPropertyKey.IsFocused));
             var elementIndex = _elements.Count;
+            var rectangleProperties = new PropertyReader(rectangleContent.Properties);
+            var textProperties = new PropertyReader(textContent.Properties);
             _elements.Add(new LayoutElement(
                 LayoutElementKind.Button,
                 bounds,
@@ -367,16 +387,18 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 Text: label,
                 ActionId: actionId,
                 ButtonState: buttonState,
-                Background: LayoutNodeReader.ReadPaint(properties, VirtualPropertyKey.Background),
-                Border: LayoutNodeReader.ReadBorderStroke(properties, VirtualPropertyKey.Border),
-                ForegroundColor: LayoutNodeReader.ReadColor(properties, VirtualPropertyKey.ForegroundColor)));
+                Background: LayoutNodeReader.ReadPaint(rectangleProperties, VirtualPropertyKey.Background),
+                Border: LayoutNodeReader.ReadBorderStroke(rectangleProperties, VirtualPropertyKey.Border),
+                ForegroundColor: LayoutNodeReader.ReadColor(textProperties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
-            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Button, elementIndex, 1, 0, 0));
+            var subtreeStart = _treeNodes.Count + 1;
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Container, elementIndex, 1, subtreeStart, node.Children.Length));
             RegisterElementRange(dfsIndex, elementIndex, 1);
 
             var childCount = node.Children.Length;
             for (var i = 0; i < childCount; i++)
             {
+                _treeNodes.Add(new LayoutTreeNode(dfsIndex + 1 + i, node.Children[i].Key, VirtualNodeKind.Content, elementIndex, 1, 0, 0));
                 RegisterElementRange(dfsIndex + 1 + i, elementIndex, 1);
             }
 

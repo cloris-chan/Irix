@@ -23,11 +23,11 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         var arena = new VirtualTextArena();
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
-        var root1 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2),
+        var root1 = VirtualNodeFactory.Container(new NodeKey(1),
+            ControlNodeBuilder.Button(arena, "Increment", new NodeKey(2),
                 ButtonPropertyBundle.Create(ActionIdRegistry.Increment, new ControlVisualState(IsHovered: false, IsPressed: false, IsFocused: false))));
-        var root2 = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2),
+        var root2 = VirtualNodeFactory.Container(new NodeKey(1),
+            ControlNodeBuilder.Button(arena, "Increment", new NodeKey(2),
                 ButtonPropertyBundle.Create(ActionIdRegistry.Increment, new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: false))));
 
         var snapshot = arena.GetOrCreateSnapshot();
@@ -53,15 +53,15 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
         var root1 = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.ScrollY(0)],
-            children: [VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionPropertyAdapter.ToProperty(ActionIdRegistry.Increment))]);
+            children: [ControlNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionPropertyAdapter.ToProperty(ActionIdRegistry.Increment))]);
         var root2 = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.ScrollY(24)],
-            children: [VirtualNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionPropertyAdapter.ToProperty(ActionIdRegistry.Increment))]);
+            children: [ControlNodeBuilder.Button(arena, "Increment", new NodeKey(2), ControlActionPropertyAdapter.ToProperty(ActionIdRegistry.Increment))]);
 
         var snapshot = arena.GetOrCreateSnapshot();
         using var frame1 = pipeline.Build(root1, viewport, snapshot);

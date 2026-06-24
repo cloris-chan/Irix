@@ -31,7 +31,7 @@ public sealed class ResizeStressTests
             compositor.SetViewport(new PixelRectangle(0, 0, w, h), scale);
 
             var pipeline = new RenderPipeline();
-            var root = VirtualNodeBuilder.Button(_arena, $"Btn{i}", new NodeKey(1),
+            var root = VirtualNodeTestBuilder.Button(_arena, $"Btn{i}", new NodeKey(1),
                 VirtualNodeProperty.Action(new ActionId(100)));
             var logicalW = (int)(w / scale.ScaleX);
             var logicalH = (int)(h / scale.ScaleY);
@@ -73,7 +73,7 @@ public sealed class ResizeStressTests
             compositor.SetViewport(new PixelRectangle(0, 0, w, h), DisplayScale.Identity);
 
             var pipeline = new RenderPipeline();
-            var root = VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(1),
+            var root = VirtualNodeTestBuilder.Button(_arena, "Btn", new NodeKey(1),
                 VirtualNodeProperty.Action(new ActionId(100)));
             var viewport = new PixelRectangle(0, 0, w, h);
             using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());
@@ -96,7 +96,7 @@ public sealed class ResizeStressTests
         compositor.SetViewport(new PixelRectangle(0, 0, 1000, 800), scale);
 
         var pipeline = new RenderPipeline();
-        var root = VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(1),
+        var root = VirtualNodeTestBuilder.Button(_arena, "Click", new NodeKey(1),
             VirtualNodeProperty.Action(new ActionId(100)));
         var viewport = new PixelRectangle(0, 0, 1000, 800);
         using var batch = pipeline.Build(root, viewport, textSnapshot: _arena.GetOrCreateSnapshot());

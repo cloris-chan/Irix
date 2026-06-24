@@ -5016,7 +5016,7 @@ public sealed partial class ProgramDiagnosticsTests
             "Layout dirty classifications: 4:StyleOnly/VisualOnly",
             "Layout hit targets: 1",
             "  Hit target: 100 bounds=(16,60,140,40) clip=(0,0,960,540)",
-            "  ScrollContainer[0]: visible=540 content=96 scrollY=0 maxScrollY=0 elements=2/2 visible"
+            "  ScrollContainerDiag[0]: visible=540 content=96 scrollY=0 maxScrollY=0 elements=2/2 visible"
         ]), output);
     }
 
@@ -5303,19 +5303,19 @@ public sealed partial class ProgramDiagnosticsTests
         var tree = app.BuildView(model);
 
         Assert.True(ContainsNode(tree.Root.Children, node =>
-            node.Kind == VirtualNodeKind.Text
+            node.Kind == VirtualNodeKind.Content
             && ResolveNodeText(app._arena, node.Content) == "Viewport: renderer=929x454 layout=929x454 scaleMode=PhysicalPixelsV0"));
         Assert.True(ContainsNode(tree.Root.Children, node =>
-            node.Kind == VirtualNodeKind.Text
+            node.Kind == VirtualNodeKind.Content
             && ResolveNodeText(app._arena, node.Content) == "ScrollY: applied=0 target=0.0 pos=0.00 max=unknown acc=0.000 anim=False pendingPx=0 drained=0 frames=0 waitMs=0.0 dt=0.000 frameQueued=False tickLoop=False"));
         Assert.True(ContainsNode(tree.Root.Children, node =>
-            node.Kind == VirtualNodeKind.Text
+            node.Kind == VirtualNodeKind.Content
             && ResolveNodeText(app._arena, node.Content) == "ClipMode: Scissor"));
         Assert.True(ContainsNode(tree.Root.Children, node =>
-            node.Kind == VirtualNodeKind.Text
+            node.Kind == VirtualNodeKind.Content
             && ResolveNodeText(app._arena, node.Content) == "LayoutDirty: layoutRebuildCount=12 LastLayoutRebuildReason=LayoutAffecting LastDirtyClassifications=0:LayoutAffecting,3:StyleOnly"));
         Assert.True(ContainsNode(tree.Root.Children, node =>
-            node.Kind == VirtualNodeKind.Text
+            node.Kind == VirtualNodeKind.Content
             && ResolveNodeText(app._arena, node.Content) == "Input: hover=Increment focus=Increment pressed=- capture=- hoverChanges=5"));
     }
 
@@ -5409,7 +5409,7 @@ public sealed partial class ProgramDiagnosticsTests
             ResolvedStyle: TextStyle.Default);
     }
 
-    private static string ResolveNodeText(VirtualTextArena arena, NodeContent content) =>
+    private static string ResolveNodeText(VirtualTextArena arena, ContentResource content) =>
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");

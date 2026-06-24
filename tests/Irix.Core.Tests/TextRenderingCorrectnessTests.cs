@@ -15,7 +15,7 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void English_text_roundtrips_through_pipeline()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Hello, World!", new NodeKey(2)));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
@@ -27,7 +27,7 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void Chinese_text_roundtrips_through_pipeline()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "你好世界", new NodeKey(2)));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
@@ -39,7 +39,7 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void Emoji_text_roundtrips_through_pipeline()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "🎯🔥🚀", new NodeKey(2)));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
@@ -51,7 +51,7 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void Mixed_unicode_text_roundtrips()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Hello你好🎯", new NodeKey(2)));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
@@ -63,7 +63,7 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void Empty_text_produces_no_draw_command()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "", new NodeKey(2)));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
@@ -81,7 +81,7 @@ public sealed class TextRenderingCorrectnessTests
     public void Long_text_roundtrips()
     {
         var longText = new string('X', 5000);
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, longText, new NodeKey(2)));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
@@ -93,8 +93,8 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void Button_text_is_centered_in_bounds()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(_arena, "Click Me", new NodeKey(2),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "Click Me", new NodeKey(2),
                 VirtualNodeProperty.Action(new ActionId(100))));
         var pipeline = new RenderPipeline();
         using var frame = pipeline.Build(root, new PixelRectangle(0, 0, 960, 540), textSnapshot: _arena.GetOrCreateSnapshot());
@@ -153,7 +153,7 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void Layout_scales_with_viewport_width()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Scale Test", new NodeKey(2)));
         var pipeline = new RenderPipeline();
 
@@ -170,7 +170,7 @@ public sealed class TextRenderingCorrectnessTests
     [Fact]
     public void Text_style_resource_deduplicates_across_elements()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "First", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "Second", new NodeKey(3)));
         var pipeline = new RenderPipeline();

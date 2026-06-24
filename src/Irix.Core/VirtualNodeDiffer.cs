@@ -1,6 +1,6 @@
 namespace Irix;
 
-public static class VirtualNodeDiffer
+internal static class VirtualNodeDiffer
 {
     private const int StackKeyMapEntryCapacity = 64;
 
@@ -320,7 +320,7 @@ public static class VirtualNodeDiffer
         return true;
     }
 
-    internal static bool ContentEqual(NodeContent a, NodeContent b, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    internal static bool ContentEqual(ContentResource a, ContentResource b, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         if (a == b) return true;
         if (a.TryGetText(out var aText) && b.TryGetText(out var bText))

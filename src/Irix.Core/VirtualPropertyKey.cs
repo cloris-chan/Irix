@@ -32,11 +32,9 @@ internal enum AnimationChannel : byte
 internal enum VirtualNodeKindFlags : byte
 {
     None = 0,
-    Text = 1,
-    Rectangle = 2,
-    Button = 4,
-    ScrollContainer = 8,
-    All = Text | Rectangle | Button | ScrollContainer,
+    Container = 1,
+    Content = 2,
+    All = Container | Content,
 }
 
 internal enum StylePropertyScope : byte
@@ -45,7 +43,7 @@ internal enum StylePropertyScope : byte
     RuntimeState,
 }
 
-public readonly struct VirtualPropertyKey : IEquatable<VirtualPropertyKey>
+internal readonly struct VirtualPropertyKey : IEquatable<VirtualPropertyKey>
 {
     private readonly ushort _id;
 
@@ -122,14 +120,17 @@ internal readonly struct StylePropertyMetadata(
 
 internal static class VirtualPropertyMetadata
 {
-    private const VirtualNodeKindFlags WidthNodes =
-        VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button;
+    private const VirtualNodeKindFlags ContainerNodes =
+        VirtualNodeKindFlags.Container;
 
-    private const VirtualNodeKindFlags HeightNodes =
-        VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button | VirtualNodeKindFlags.ScrollContainer;
+    private const VirtualNodeKindFlags ContentNodes =
+        VirtualNodeKindFlags.Content;
+
+    private const VirtualNodeKindFlags LayoutSizedNodes =
+        VirtualNodeKindFlags.Container | VirtualNodeKindFlags.Content;
 
     private const VirtualNodeKindFlags CompositionNodes =
-        VirtualNodeKindFlags.Text | VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button | VirtualNodeKindFlags.ScrollContainer;
+        VirtualNodeKindFlags.Container | VirtualNodeKindFlags.Content;
 
     public static StylePropertyMetadata Get(VirtualPropertyKey key)
     {
@@ -145,13 +146,13 @@ internal static class VirtualPropertyMetadata
     {
         if (key == VirtualPropertyKey.Width)
         {
-            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, WidthNodes);
+            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, LayoutSizedNodes);
             return true;
         }
 
         if (key == VirtualPropertyKey.Height)
         {
-            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, HeightNodes);
+            metadata = Number(key, StyleEffect.Layout, AnimationChannel.CpuStyle, StylePropertyScope.NodeLocal, LayoutSizedNodes);
             return true;
         }
 
@@ -162,7 +163,7 @@ internal static class VirtualPropertyMetadata
                 StyleEffect.Layout,
                 AnimationChannel.CpuStyle,
                 StylePropertyScope.NodeLocal,
-                VirtualNodeKindFlags.ScrollContainer);
+                ContainerNodes);
             return true;
         }
 
@@ -174,7 +175,7 @@ internal static class VirtualPropertyMetadata
                 StyleEffect.Visual,
                 AnimationChannel.CpuStyle,
                 StylePropertyScope.NodeLocal,
-                VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button);
+                ContentNodes);
             return true;
         }
 
@@ -186,7 +187,7 @@ internal static class VirtualPropertyMetadata
                 StyleEffect.Visual,
                 AnimationChannel.CpuStyle,
                 StylePropertyScope.NodeLocal,
-                VirtualNodeKindFlags.Text | VirtualNodeKindFlags.Button);
+                ContentNodes);
             return true;
         }
 
@@ -198,7 +199,7 @@ internal static class VirtualPropertyMetadata
                 StyleEffect.Visual,
                 AnimationChannel.CpuStyle,
                 StylePropertyScope.NodeLocal,
-                VirtualNodeKindFlags.Rectangle | VirtualNodeKindFlags.Button);
+                ContentNodes);
             return true;
         }
 
@@ -210,7 +211,7 @@ internal static class VirtualPropertyMetadata
                 StyleEffect.Interaction,
                 AnimationChannel.None,
                 StylePropertyScope.NodeLocal,
-                VirtualNodeKindFlags.Button);
+                ContainerNodes);
             return true;
         }
 
@@ -222,7 +223,7 @@ internal static class VirtualPropertyMetadata
                 StyleEffect.Interaction | StyleEffect.Visual,
                 AnimationChannel.Discrete,
                 StylePropertyScope.RuntimeState,
-                VirtualNodeKindFlags.Button);
+                ContainerNodes);
             return true;
         }
 
@@ -299,10 +300,8 @@ internal static class VirtualNodePropertySupport
     {
         return kind switch
         {
-            VirtualNodeKind.Text => VirtualNodeKindFlags.Text,
-            VirtualNodeKind.Rectangle => VirtualNodeKindFlags.Rectangle,
-            VirtualNodeKind.Button => VirtualNodeKindFlags.Button,
-            VirtualNodeKind.ScrollContainer => VirtualNodeKindFlags.ScrollContainer,
+            VirtualNodeKind.Container => VirtualNodeKindFlags.Container,
+            VirtualNodeKind.Content => VirtualNodeKindFlags.Content,
             _ => VirtualNodeKindFlags.None,
         };
     }

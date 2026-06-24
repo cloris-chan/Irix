@@ -1,6 +1,6 @@
 namespace Irix;
 
-public interface IApplication<TModel, TMessage>
+internal interface IApplication<TModel, TMessage>
     where TModel : notnull
     where TMessage : notnull
 {

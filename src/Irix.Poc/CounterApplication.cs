@@ -96,7 +96,7 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
             ];
 
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: new NodeKey(1),
             properties: [VirtualNodeProperty.ScrollY(scrollY)],
             children:
@@ -125,7 +125,7 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
     private static VirtualNode BuildButton(VirtualTextArena arena, string label, uint key, ActionId actionId, OwnershipSnapshot ownership)
     {
         var visualState = ControlVisualStateProjection.Project(ownership, actionId);
-        return VirtualNodeBuilder.Button(
+        return ControlNodeBuilder.Button(
             arena,
             label,
             new NodeKey(key),

@@ -2,7 +2,7 @@ using System.Buffers;
 
 namespace Irix;
 
-public enum PatchBatchKind
+internal enum PatchBatchKind
 {
     /// <summary>Normal diff batch: contains VirtualNode patches from the runtime.</summary>
     Diff,
@@ -12,7 +12,7 @@ public enum PatchBatchKind
     RenderRequest
 }
 
-public sealed class PatchBatch : IDisposable
+internal sealed class PatchBatch : IDisposable
 {
     private readonly IMemoryOwner<VirtualNodePatch> _owner;
 

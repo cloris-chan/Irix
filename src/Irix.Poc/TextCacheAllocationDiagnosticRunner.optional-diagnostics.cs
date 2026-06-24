@@ -392,7 +392,7 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var beforeContainer = GetAllocatedBytes(measureAllocation);
         var root = new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: properties,
             children: children);
@@ -419,6 +419,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithLabelText(AllocatedDelta(measureAllocation, beforeLabelText));
 
         var children = new VirtualNodeChildrenBuilder();
+        children.Add(VirtualNodeFactory.Rectangle());
         var beforeLabelNode = GetAllocatedBytes(measureAllocation);
         children.Add(VirtualNodeFactory.Text(labelContent));
         attribution = attribution.WithLabelNode(AllocatedDelta(measureAllocation, beforeLabelNode));
@@ -429,11 +430,11 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var beforePropertyArray = GetAllocatedBytes(measureAllocation);
         ReadOnlySpan<VirtualNodeProperty> properties = [actionProperty];
-        var propertyArray = VirtualNodePropertySet.Create(VirtualNodeKind.Button, properties);
+        var propertyArray = VirtualNodePropertySet.Create(VirtualNodeKind.Container, properties);
         attribution = attribution.WithPropertyArray(AllocatedDelta(measureAllocation, beforePropertyArray));
 
         var beforeButtonNode = GetAllocatedBytes(measureAllocation);
-        var button = VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Button, key, default, propertyArray, childArray);
+        var button = VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container, key, default, propertyArray, childArray);
         attribution = attribution.WithButtonNode(AllocatedDelta(measureAllocation, beforeButtonNode));
         return button;
     }

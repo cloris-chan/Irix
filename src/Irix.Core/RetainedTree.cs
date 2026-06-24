@@ -4,7 +4,7 @@ namespace Irix;
 /// Result of <see cref="RetainedTree.Apply"/>, containing the dirty node set
 /// and the previous tree state for dirty classification.
 /// </summary>
-public readonly struct ApplyResult(
+internal readonly struct ApplyResult(
     IReadOnlyList<int> Dirty,
     VirtualNode PreviousRoot,
     TextBufferSnapshot PreviousTextSnapshot)
@@ -28,7 +28,7 @@ public readonly struct ApplyResult(
 /// <b>sorted ascending and deduplicated</b>.
 /// </para>
 /// </summary>
-public sealed class RetainedTree(VirtualNodeTree tree)
+internal sealed class RetainedTree(VirtualNodeTree tree)
 {
     private const int StackDirtyCapacity = 32;
     private const int StackParentIndexCapacity = 64;

@@ -1,7 +1,7 @@
 #if IRIX_DIAGNOSTICS
 namespace Irix;
 
-public sealed partial class VirtualTextArena
+internal sealed partial class VirtualTextArena
 {
     internal TextBufferSnapshot GetOrCreateSnapshotWithAllocationAttribution(out TextBufferSnapshotAllocationAttribution attribution)
     {

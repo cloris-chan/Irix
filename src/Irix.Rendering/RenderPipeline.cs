@@ -68,13 +68,13 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     /// <summary>
     /// The layout tree result from the last Build call, if available.
-    /// Exposes scroll container diagnostics and tree structure.
+    /// Exposes scrollable container diagnostics and tree structure.
     /// </summary>
     public LayoutTreeResult? LastLayoutResult => _retainedLayoutResult;
 
     /// <summary>
-    /// The MaxScrollY from the first ScrollContainer in the last Build call.
-    /// 0 if no ScrollContainer or no scroll needed.
+    /// The MaxScrollY from the first scrollable container in the last Build call.
+    /// 0 if no scrollable container or no scroll needed.
     /// </summary>
     public double LastMaxScrollY { get; private set; }
 
@@ -341,9 +341,9 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             : classification;
     }
 
-    private static DirtyNodeClassification ClassifyContentChange(NodeContent previousContent, NodeContent nextContent)
+    private static DirtyNodeClassification ClassifyContentChange(ContentResource previousContent, ContentResource nextContent)
     {
-        return previousContent.Kind == NodeContentKind.Text || nextContent.Kind == NodeContentKind.Text
+        return previousContent.Kind == ContentResourceKind.Text || nextContent.Kind == ContentResourceKind.Text
             ? new DirtyNodeClassification(LayoutRebuildReason.TextSizeAffecting, InvalidationKind.TextMeasure)
             : new DirtyNodeClassification(LayoutRebuildReason.LayoutAffecting, InvalidationKind.Layout);
     }
@@ -587,7 +587,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         foreach (ref readonly var node in layoutResult.TreeNodes.AsSpan())
         {
             if (node.Key != key
-                || node.Kind != VirtualNodeKind.ScrollContainer
+                || node.Kind != VirtualNodeKind.Container
                 || !TryFindScrollDiagnostic(layoutResult.ScrollDiagnostics, node.DfsIndex, out var diagnostic)
                 || !TryResolveScrollCompositionLayers(
                     layoutResult.Elements,

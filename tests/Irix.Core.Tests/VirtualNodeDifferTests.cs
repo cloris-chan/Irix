@@ -19,10 +19,10 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_returns_empty_patches_for_deeply_identical_trees()
     {
-        var root = VirtualNodeFactory.ScrollContainer(
+        var root = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
-            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(100))));
+            VirtualNodeTestBuilder.Button(_arena, "Click", new NodeKey(3), VirtualNodeProperty.Action(new ActionId(100))));
         var tree = new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(tree, tree);
@@ -47,7 +47,7 @@ public sealed class VirtualNodeDifferTests
     public void CreatePatchBatch_returns_replace_root_when_kind_differs()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.GetOrCreateSnapshot());
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(100), VirtualNodeProperty.Height(50)));
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.Container(new NodeKey(1)));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -58,10 +58,10 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_returns_add_when_new_child_added()
     {
-        var oldTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(
+        var oldTree = new VirtualNodeTree(VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2))), _arena.GetOrCreateSnapshot());
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.ScrollContainer(
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(3))), _arena.GetOrCreateSnapshot());
@@ -134,16 +134,16 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void NodesEqual_returns_true_for_identical_complex_trees()
     {
-        var a = VirtualNodeFactory.ScrollContainer(
+        var a = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
             VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(48)),
-            VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
-        var b = VirtualNodeFactory.ScrollContainer(
+            VirtualNodeTestBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
+        var b = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
             VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(48)),
-            VirtualNodeBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
+            VirtualNodeTestBuilder.Button(_arena, "Reset", new NodeKey(4), VirtualNodeProperty.Action(new ActionId(100))));
 
         Assert.True(VirtualNodeStructuralComparer.Equals(a, b, _arena.GetOrCreateSnapshot(), _arena.GetOrCreateSnapshot()));
     }
@@ -151,10 +151,10 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void NodesEqual_returns_false_for_different_nested_child()
     {
-        var a = VirtualNodeFactory.ScrollContainer(
+        var a = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)));
-        var b = VirtualNodeFactory.ScrollContainer(
+        var b = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)));
 
@@ -189,14 +189,14 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_emits_update_for_nested_content_change()
     {
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
-            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+            VirtualNodeTestBuilder.Button(_arena, "Click", new NodeKey(3)));
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)),
-            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(3)));
+            VirtualNodeTestBuilder.Button(_arena, "Click", new NodeKey(3)));
         var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
         var newTree = new VirtualNodeTree(newRoot, _arena.GetOrCreateSnapshot());
 
@@ -212,11 +212,11 @@ public sealed class VirtualNodeDifferTests
     public void CreatePatchBatch_emits_no_patches_when_only_unkeyed_child_reordered()
     {
         // Unkeyed children compared by index �?reordering means different content at same index
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(3)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(3)));
@@ -234,11 +234,11 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_emits_remove_when_child_removed()
     {
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)),
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(3)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(2)));
         var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
@@ -255,11 +255,11 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_matches_keyed_children_across_reorder()
     {
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "First", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "Second", new NodeKey(20)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Second", new NodeKey(20)),
             VirtualNodeBuilder.Text(_arena, "First", new NodeKey(10)));
@@ -275,11 +275,11 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_emits_update_for_keyed_child_content_change()
     {
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Old", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "Stable", new NodeKey(20)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "New", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "Stable", new NodeKey(20)));
@@ -295,10 +295,10 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_emits_add_for_new_keyed_child()
     {
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(20)));
@@ -314,11 +314,11 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_emits_remove_for_removed_keyed_child()
     {
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "B", new NodeKey(20)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "A", new NodeKey(10)));
         var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());
@@ -334,7 +334,7 @@ public sealed class VirtualNodeDifferTests
     public void CreatePatchBatch_emits_replace_root_when_kind_changes()
     {
         var oldTree = new VirtualNodeTree(VirtualNodeBuilder.Text(_arena, "Label", new NodeKey(1)), _arena.GetOrCreateSnapshot());
-        var newTree = new VirtualNodeTree(VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(100), VirtualNodeProperty.Height(50)));
+        var newTree = new VirtualNodeTree(VirtualNodeFactory.Container(new NodeKey(1)));
 
         using var batch = VirtualNodeDiffer.CreatePatchBatch(oldTree, newTree);
 
@@ -345,15 +345,15 @@ public sealed class VirtualNodeDifferTests
     [Fact]
     public void CreatePatchBatch_emits_multiple_patches_for_complex_tree()
     {
-        var oldRoot = VirtualNodeFactory.ScrollContainer(
+        var oldRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "Title", new NodeKey(10)),
-            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(20)),
+            VirtualNodeTestBuilder.Button(_arena, "Click", new NodeKey(20)),
             VirtualNodeFactory.Rectangle(new NodeKey(30), VirtualNodeProperty.Width(100), VirtualNodeProperty.Height(50)));
-        var newRoot = VirtualNodeFactory.ScrollContainer(
+        var newRoot = VirtualNodeFactory.Container(
             1,
             VirtualNodeBuilder.Text(_arena, "New Title", new NodeKey(10)),
-            VirtualNodeBuilder.Button(_arena, "Click", new NodeKey(20)),
+            VirtualNodeTestBuilder.Button(_arena, "Click", new NodeKey(20)),
             VirtualNodeFactory.Rectangle(new NodeKey(30), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(50)),
             VirtualNodeBuilder.Text(_arena, "Added", new NodeKey(40)));
         var oldTree = new VirtualNodeTree(oldRoot, _arena.GetOrCreateSnapshot());

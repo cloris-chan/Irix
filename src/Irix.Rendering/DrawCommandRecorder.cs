@@ -221,7 +221,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         return commandCount;
     }
 
-    private static ReadOnlySpan<char> ResolveText(TextNodeContent content, TextBufferSnapshot snapshot)
+    private static ReadOnlySpan<char> ResolveText(TextContentResource content, TextBufferSnapshot snapshot)
     {
         return snapshot.ResolveRequired(content);
     }

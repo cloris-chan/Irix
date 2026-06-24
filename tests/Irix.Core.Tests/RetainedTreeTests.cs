@@ -9,7 +9,7 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_rejects_non_canonical_non_empty_batch()
     {
-        var root = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "before", new NodeKey(2)));
         var updated = VirtualNodeBuilder.Text(_arena, "after", new NodeKey(2));
         var batch = new PatchBatch(updated, new PatchMemoryOwner<VirtualNodePatch>(
@@ -67,13 +67,13 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_diff_batch_then_retained_tree_matches_next_tree()
     {
-        var prev = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var prev = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Count: 0", new NodeKey(2)),
-            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
+            VirtualNodeTestBuilder.Button(_arena, "Increment", new NodeKey(3),
                 VirtualNodeProperty.Action(new ActionId(1))));
-        var next = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var next = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "Count: 1", new NodeKey(2)),
-            VirtualNodeBuilder.Button(_arena, "Increment", new NodeKey(3),
+            VirtualNodeTestBuilder.Button(_arena, "Increment", new NodeKey(3),
                 VirtualNodeProperty.Action(new ActionId(1))));
 
         var snapshot = _arena.GetOrCreateSnapshot();
@@ -89,8 +89,8 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_diff_batch_uses_canonical_root_for_style_only_update()
     {
-        var prev = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(
+        var prev = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(
                 _arena,
                 "Increment",
                 new NodeKey(2),
@@ -99,8 +99,8 @@ public sealed class RetainedTreeTests
         var prevSnapshot = _arena.GetOrCreateSnapshot();
 
         _arena.BeginFrame();
-        var next = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
-            VirtualNodeBuilder.Button(
+        var next = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(
                 _arena,
                 "Increment",
                 new NodeKey(2),
@@ -123,11 +123,11 @@ public sealed class RetainedTreeTests
     [Fact]
     public void Apply_keyed_add_and_remove_matches_next_tree_and_marks_parent_dirty()
     {
-        var prev = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var prev = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "a", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "b", new NodeKey(20)),
             VirtualNodeBuilder.Text(_arena, "c", new NodeKey(30)));
-        var next = VirtualNodeFactory.ScrollContainer(new NodeKey(1),
+        var next = VirtualNodeFactory.Container(new NodeKey(1),
             VirtualNodeBuilder.Text(_arena, "a", new NodeKey(10)),
             VirtualNodeBuilder.Text(_arena, "c", new NodeKey(30)),
             VirtualNodeBuilder.Text(_arena, "d", new NodeKey(40)));

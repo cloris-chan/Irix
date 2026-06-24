@@ -59,11 +59,11 @@ public sealed class VirtualTextArenaTests
     public void ContentEqual_returns_true_for_two_valid_empty_text_spans()
     {
         var snapshot = new TextBufferSnapshot(new TextBufferId(1), []);
-        var emptyText = new TextNodeContent(new TextBufferId(1), new TextRange(0, 0));
+        var emptyText = new TextContentResource(new TextBufferId(1), new TextRange(0, 0));
 
         Assert.True(VirtualNodeDiffer.ContentEqual(
-            NodeContent.FromText(emptyText),
-            NodeContent.FromText(emptyText),
+            ContentResource.FromText(emptyText),
+            ContentResource.FromText(emptyText),
             snapshot,
             snapshot));
     }

@@ -107,9 +107,9 @@ internal static class CompositionTransformDemoRunner
 
     internal static VirtualNode BuildDemoRoot(VirtualTextArena arena)
     {
-        return VirtualNodeFactory.ScrollContainer(DemoRootKey,
+        return VirtualNodeFactory.Container(DemoRootKey,
             VirtualNodeFactory.Rectangle(DemoBackdropKey, VirtualNodeProperty.Width(280), VirtualNodeProperty.Height(84)),
-            VirtualNodeBuilder.Button(arena, "composition d3d12", DemoAnimatedTargetKey, VirtualNodeProperty.Width(220)));
+            ControlNodeBuilder.Button(arena, "composition d3d12", DemoAnimatedTargetKey, VirtualNodeProperty.Width(220)));
     }
 
     internal static CompositionAnimationDeclaration BuildAnimationDeclaration(CompositionTimestamp startTimestamp)

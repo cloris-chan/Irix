@@ -25,16 +25,16 @@ public sealed class ScrollTextSyncTests
         for (var scrollY = 0; scrollY < 600; scrollY += 10)
         {
             var root = new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
-                    VirtualNodeBuilder.Button(_arena, "Button A", new NodeKey(2),
+                    VirtualNodeTestBuilder.Button(_arena, "Button A", new NodeKey(2),
                         VirtualNodeProperty.Action(new ActionId(100))),
-                    VirtualNodeBuilder.Button(_arena, "Button B", new NodeKey(3),
+                    VirtualNodeTestBuilder.Button(_arena, "Button B", new NodeKey(3),
                         VirtualNodeProperty.Action(new ActionId(101))),
-                    VirtualNodeBuilder.Button(_arena, "Button C", new NodeKey(4),
+                    VirtualNodeTestBuilder.Button(_arena, "Button C", new NodeKey(4),
                         VirtualNodeProperty.Action(new ActionId(102))),
                 ]);
 
@@ -72,12 +72,12 @@ public sealed class ScrollTextSyncTests
         for (var scrollY = 0; scrollY < 300; scrollY += 20)
         {
             var root = new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
-                    VirtualNodeBuilder.Button(_arena, "ScrollBtn", new NodeKey(2),
+                    VirtualNodeTestBuilder.Button(_arena, "ScrollBtn", new NodeKey(2),
                         VirtualNodeProperty.Action(new ActionId(100))),
                 ]);
 
@@ -115,14 +115,14 @@ public sealed class ScrollTextSyncTests
             var scrollY = i * 3; // 3px per frame = fast scroll
 
             var root = new VirtualNode(
-                VirtualNodeKind.ScrollContainer,
+                VirtualNodeKind.Container,
                 key: 1,
                 properties: [VirtualNodeProperty.ScrollY(scrollY)],
                 children:
                 [
-                    VirtualNodeBuilder.Button(_arena, "Fast", new NodeKey(2),
+                    VirtualNodeTestBuilder.Button(_arena, "Fast", new NodeKey(2),
                         VirtualNodeProperty.Action(new ActionId(100))),
-                    VirtualNodeBuilder.Button(_arena, "Scroll", new NodeKey(3),
+                    VirtualNodeTestBuilder.Button(_arena, "Scroll", new NodeKey(3),
                         VirtualNodeProperty.Action(new ActionId(101))),
                 ]);
 
@@ -209,12 +209,12 @@ public sealed class ScrollTextSyncTests
     private VirtualNode CreateScrollFrame(double scrollY)
     {
         return new VirtualNode(
-            VirtualNodeKind.ScrollContainer,
+            VirtualNodeKind.Container,
             key: 1,
             properties: [VirtualNodeProperty.ScrollY(scrollY)],
             children:
             [
-                VirtualNodeBuilder.Button(_arena, "Btn", new NodeKey(2),
+                VirtualNodeTestBuilder.Button(_arena, "Btn", new NodeKey(2),
                     VirtualNodeProperty.Action(new ActionId(100))),
             ]);
     }

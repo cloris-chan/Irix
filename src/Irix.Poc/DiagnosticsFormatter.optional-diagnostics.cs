@@ -94,7 +94,7 @@ internal static class DiagnosticsFormatter
         }
         foreach (var scrollDiagnostics in snapshot.ScrollContainerDiagnostics)
         {
-            lines.Add($"  ScrollContainer[{scrollDiagnostics.DfsIndex}]: visible={scrollDiagnostics.VisibleHeight} content={scrollDiagnostics.ContentHeight} scrollY={scrollDiagnostics.ScrollY} maxScrollY={scrollDiagnostics.MaxScrollY} elements={scrollDiagnostics.VisibleElementCount}/{scrollDiagnostics.VisibleElementCount + scrollDiagnostics.ClippedElementCount} visible");
+            lines.Add($"  ScrollContainerDiag[{scrollDiagnostics.DfsIndex}]: visible={scrollDiagnostics.VisibleHeight} content={scrollDiagnostics.ContentHeight} scrollY={scrollDiagnostics.ScrollY} maxScrollY={scrollDiagnostics.MaxScrollY} elements={scrollDiagnostics.VisibleElementCount}/{scrollDiagnostics.VisibleElementCount + scrollDiagnostics.ClippedElementCount} visible");
         }
         return [.. lines];
     }

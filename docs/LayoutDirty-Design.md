@@ -11,7 +11,7 @@ Layout dirty classification records why layout is dirty and keeps enough diagnos
 | Category | Examples | Future partial-layout boundary |
 |----------|----------|--------------------------------|
 | `StyleOnly` | `IsHovered`, `IsPressed`, `IsFocused`, non-geometric interaction metadata such as `ActionId` | May stay at element/draw-command level only when bounds, clip, hit target geometry, scroll metrics, child ranges, and text measurement are unchanged. |
-| `TextSizeAffecting` | `TextNodeContent`, future typed text measurement properties such as font size, font weight, wrapping, font-resource handles | May relayout the text leaf first; if measured size changes, it must bubble to the containing layout flow. No string `FontFamily` property or `PropertyValue.Text` path is implied. |
+| `TextSizeAffecting` | `TextContentResource`, future typed text measurement properties such as font size, font weight, wrapping, font-resource handles | May relayout the text leaf first; if measured size changes, it must bubble to the containing layout flow. No string `FontFamily` property or `PropertyValue.Text` path is implied. |
 | `LayoutAffecting` | `ScrollY`, `Width`, `Height`, future typed layout metrics | Must relayout affected container/subtree and bubble when child bounds, visible height, max scroll, or sibling offsets change. |
 | `TreeStructure` | add/remove/move, key/kind changes, child order changes | Must bubble to parent because DFS ranges, element ranges, command ranges, and hit target ranges can change. |
 | `ViewportChanged` | renderer/layout viewport size changes after resize | Root rebuild. Viewport affects available width, root clip, scroll visible height, and descendant clip intersections. |

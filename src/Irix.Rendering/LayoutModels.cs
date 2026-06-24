@@ -37,7 +37,7 @@ internal readonly struct LayoutElement(
     LayoutElementKind Kind,
     PixelRectangle Bounds,
     PixelRectangle ClipBounds = default,
-    TextNodeContent Text = default,
+    TextContentResource Text = default,
     ActionId ActionId = default,
     ButtonVisualState ButtonState = default,
     PaintSlot Background = default,
@@ -48,7 +48,7 @@ internal readonly struct LayoutElement(
     public LayoutElementKind Kind { get; } = Kind;
     public PixelRectangle Bounds { get; } = Bounds;
     public PixelRectangle ClipBounds { get; } = ClipBounds;
-    public TextNodeContent Text { get; } = Text;
+    public TextContentResource Text { get; } = Text;
     public ActionId ActionId { get; } = ActionId;
     public ButtonVisualState ButtonState { get; } = ButtonState;
     public PaintSlot Background { get; } = Background;
@@ -515,7 +515,7 @@ internal sealed class LayoutTreeResult(
     /// </summary>
     public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = dirtyElementRanges;
 
-    /// <summary>Diagnostic info for each ScrollContainer encountered during layout.</summary>
+    /// <summary>Diagnostic info for each scrollable container encountered during layout.</summary>
     public IReadOnlyList<ScrollContainerDiag> ScrollDiagnostics { get; } = scrollDiagnostics;
 
     public LayoutTreeResult WithElementsAndDirtyRanges(
@@ -532,9 +532,9 @@ internal sealed class LayoutTreeResult(
 }
 
 /// <summary>
-/// Diagnostic information for a single ScrollContainer's scroll state.
+/// Diagnostic information for a single scrollable container's scroll state.
 /// </summary>
-/// <param name="DfsIndex">DFS index of this ScrollContainer in the VirtualNode tree.</param>
+/// <param name="DfsIndex">DFS index of this container in the VirtualNode tree.</param>
 /// <param name="VisibleHeight">The container's visible area height (after explicit Height or viewport default).</param>
 /// <param name="ContentHeight">Total height of all children before scrolling.</param>
 /// <param name="ScrollY">The clamped scroll offset applied to children (always in [0, MaxScrollY]).</param>
