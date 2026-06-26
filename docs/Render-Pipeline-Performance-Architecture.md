@@ -357,7 +357,10 @@ Acceptance:
   layout-affecting changes over prebuilt trees and known content resources.
 - Composition and scroll presentation diagnostics above stay green for broad
   render-pipeline changes.
-- `LayoutTreeResult` and retained snapshots remain immutable publications.
+- `LayoutTreeResult` and `DrawCommandRecordResult` remain value publications
+  instead of heap identities, and retained snapshots remain immutable
+  publications until generation-backed snapshot slots replace their shell
+  allocation.
 - No slice may claim the full zero-allocation contract until a later reserved
   capacity guard covers control/tree publication, backend resources, and cache
   page growth boundaries in addition to this core baseline.
@@ -468,11 +471,17 @@ Acceptance:
 - `layout.nodeWalk` allocation remains zero.
 - Style-only and partial-apply guards stay green.
 
-### P4 - Dirty Classification, Hit Targets, And Snapshot Shells
+### P4 - Draw Ranges, Dirty Classification, Hit Targets, And Snapshot Shells
+
+Status: first draw-record slice implemented. `DrawCommandRecordResult` is now a
+readonly value result, so command recording no longer allocates a per-frame
+result shell. The command batch, frame resources, dirty command ranges, and
+element-command range publication remain explicit outputs.
 
 After the larger tree/layout publication buckets are addressed, review smaller
 publication costs:
 
+- Element-command range arrays created by `DrawCommandRecorder`.
 - Dirty classification arrays created by `RenderPipeline`.
 - Hit-target arrays for retained input snapshots.
 - `RenderPipelineRetainedInputSnapshot` shell allocation.
@@ -482,6 +491,8 @@ Direction:
 
 - Use inline/scratch buffers while classifying.
 - Publish compact immutable views only when consumers need retained data.
+- Move element-command range publication toward capacity-owned render-frame
+  publication pages; do not replace it with mutable pooled arrays.
 - Replace snapshot shells with reusable generation-backed snapshot slots only
   when generation and text/resource ownership make stale reads impossible.
 

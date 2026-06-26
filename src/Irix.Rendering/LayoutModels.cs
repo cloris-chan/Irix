@@ -629,7 +629,7 @@ internal readonly struct ScrollContainerDiag(
 /// Result of recording draw commands: the command batch, resource resolver,
 /// element→command range mapping, and dirty command ranges for incremental redraw.
 /// </summary>
-internal sealed class DrawCommandRecordResult(
+internal readonly struct DrawCommandRecordResult(
     DrawCommandBatch commands,
     IFrameResourceResolver resources,
     ElementCommandRange[] elementCommandRanges,

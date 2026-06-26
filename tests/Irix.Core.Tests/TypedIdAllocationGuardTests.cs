@@ -57,6 +57,17 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Draw_command_record_result_is_value_publication_not_heap_identity()
+    {
+        var root = FindRepoRoot();
+        var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
+
+        Assert.True(typeof(DrawCommandRecordResult).IsValueType);
+        Assert.Contains("internal readonly struct DrawCommandRecordResult", layoutModelSource);
+        Assert.DoesNotContain("internal sealed class DrawCommandRecordResult", layoutModelSource);
+    }
+
+    [Fact]
     public void ActionId_None_is_default_value()
     {
         var defaultId = default(ActionId);
