@@ -51,7 +51,7 @@ internal sealed partial class RenderPipeline
     {
         if (_captureAllocationAttribution)
         {
-            _allocationPhaseStart = GC.GetTotalAllocatedBytes(false);
+            _allocationPhaseStart = GC.GetAllocatedBytesForCurrentThread();
         }
     }
 
@@ -98,7 +98,7 @@ internal sealed partial class RenderPipeline
             return;
         }
 
-        _snapshotAllocationStart = GC.GetTotalAllocatedBytes(false);
+        _snapshotAllocationStart = GC.GetAllocatedBytesForCurrentThread();
         _snapshotAttribution = default;
     }
 
@@ -106,7 +106,7 @@ internal sealed partial class RenderPipeline
     {
         if (_captureAllocationAttribution)
         {
-            _snapshotPhaseStart = GC.GetTotalAllocatedBytes(false);
+            _snapshotPhaseStart = GC.GetAllocatedBytesForCurrentThread();
         }
     }
 
@@ -130,7 +130,7 @@ internal sealed partial class RenderPipeline
     {
         if (_captureAllocationAttribution)
         {
-            var measured = GC.GetTotalAllocatedBytes(false) - _snapshotAllocationStart;
+            var measured = GC.GetAllocatedBytesForCurrentThread() - _snapshotAllocationStart;
             LastAllocationAttribution = LastAllocationAttribution.WithSnapshot(measured, _snapshotAttribution);
         }
     }
@@ -143,9 +143,9 @@ internal sealed partial class RenderPipeline
         }
     }
 
-    private long AllocationPhaseDelta() => GC.GetTotalAllocatedBytes(false) - _allocationPhaseStart;
+    private long AllocationPhaseDelta() => GC.GetAllocatedBytesForCurrentThread() - _allocationPhaseStart;
 
-    private long SnapshotPhaseDelta() => GC.GetTotalAllocatedBytes(false) - _snapshotPhaseStart;
+    private long SnapshotPhaseDelta() => GC.GetAllocatedBytesForCurrentThread() - _snapshotPhaseStart;
 }
 
 internal readonly struct RenderPipelineBuildAllocationAttribution(

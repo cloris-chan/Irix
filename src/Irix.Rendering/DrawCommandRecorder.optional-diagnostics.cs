@@ -14,7 +14,7 @@ internal sealed partial class DrawCommandRecorder
 
     partial void OnRecordAllocationPhaseStarted()
     {
-        _allocationPhaseStart = GC.GetTotalAllocatedBytes(false);
+        _allocationPhaseStart = GC.GetAllocatedBytesForCurrentThread();
     }
 
     partial void OnRecordResourcesAllocated()
@@ -37,7 +37,7 @@ internal sealed partial class DrawCommandRecorder
         LastAllocationAttribution = LastAllocationAttribution.WithDirtyRanges(Delta());
     }
 
-    private long Delta() => GC.GetTotalAllocatedBytes(false) - _allocationPhaseStart;
+    private long Delta() => GC.GetAllocatedBytesForCurrentThread() - _allocationPhaseStart;
 }
 
 internal readonly struct DrawCommandRecordAllocationAttribution(

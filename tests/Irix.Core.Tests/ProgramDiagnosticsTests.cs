@@ -3893,7 +3893,7 @@ public sealed partial class ProgramDiagnosticsTests
         var summary = TextCacheAllocationDiagnosticRunner.FormatTranslateAllocationAttribution(attribution, frameCount: 3);
 
         Assert.Equal(
-            "Translate allocation: retainedApply=120 bytes (40/frame), viewport=0 bytes (0/frame), pipeline=600 bytes (200/frame), feedback=180 bytes (60/frame), measuredTotal=900 bytes (300/frame)",
+            "Translate allocation currentThread: retainedApply=120 bytes (40/frame), viewport=0 bytes (0/frame), pipeline=600 bytes (200/frame), feedback=180 bytes (60/frame), measuredTotal=900 bytes (300/frame)",
             summary);
     }
 
@@ -3968,10 +3968,10 @@ public sealed partial class ProgramDiagnosticsTests
         var snapshotSummary = TextCacheAllocationDiagnosticRunner.FormatPipelineSnapshotAllocationAttribution(attribution.SnapshotAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Pipeline allocation: classify=12 bytes (4/frame), layout=24 bytes (8/frame), record=36 bytes (12/frame), hitTargets=48 bytes (16/frame), snapshot=60 bytes (20/frame), retainedFrame=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
+            "Pipeline allocation currentThread: classify=12 bytes (4/frame), layout=24 bytes (8/frame), record=36 bytes (12/frame), hitTargets=48 bytes (16/frame), snapshot=60 bytes (20/frame), retainedFrame=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
             summary);
         Assert.Equal(
-            "Pipeline snapshot allocation: frameBatch=12 bytes (4/frame), retainedInput=48 bytes (16/frame), detailGap=0 bytes (0/frame), measuredTotal=60 bytes (20/frame)",
+            "Pipeline snapshot allocation currentThread: frameBatch=12 bytes (4/frame), retainedInput=48 bytes (16/frame), detailGap=0 bytes (0/frame), measuredTotal=60 bytes (20/frame)",
             snapshotSummary);
     }
 
@@ -3989,7 +3989,7 @@ public sealed partial class ProgramDiagnosticsTests
         var summary = TextCacheAllocationDiagnosticRunner.FormatLayoutAllocationAttribution(attribution, frameCount: 3);
 
         Assert.Equal(
-            "Layout allocation: nodeWalk=12 bytes (4/frame), dirtyRanges=24 bytes (8/frame), elementsArray=36 bytes (12/frame), treeNodesArray=48 bytes (16/frame), scrollDiagnosticsArray=60 bytes (20/frame), result=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
+            "Layout allocation currentThread: nodeWalk=12 bytes (4/frame), dirtyRanges=24 bytes (8/frame), elementsArray=36 bytes (12/frame), treeNodesArray=48 bytes (16/frame), scrollDiagnosticsArray=60 bytes (20/frame), result=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
             summary);
     }
 
@@ -4005,7 +4005,7 @@ public sealed partial class ProgramDiagnosticsTests
         var summary = TextCacheAllocationDiagnosticRunner.FormatRecordAllocationAttribution(attribution, frameCount: 3);
 
         Assert.Equal(
-            "Record allocation: resources=12 bytes (4/frame), styles=24 bytes (8/frame), commandBuild=144 bytes (48/frame), dirtyRanges=0 bytes (0/frame), measuredTotal=180 bytes (60/frame)",
+            "Record allocation currentThread: resources=12 bytes (4/frame), styles=24 bytes (8/frame), commandBuild=144 bytes (48/frame), dirtyRanges=0 bytes (0/frame), measuredTotal=180 bytes (60/frame)",
             summary);
     }
 
@@ -4113,6 +4113,7 @@ public sealed partial class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "TextCacheAllocationDiagnosticRunner.optional-diagnostics.cs")));
+        var translatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "WindowDrawCommandTranslator.optional-diagnostics.cs")));
 
         Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
         Assert.Contains("arena.BeginFrame();", source);
@@ -4140,6 +4141,8 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("output.WriteLine(FormatLayoutAllocationAttribution(translateAttribution.PipelineAttribution.LayoutAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));", source);
+        Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", translatorSource);
+        Assert.DoesNotContain("GC.GetTotalAllocatedBytes(false)", translatorSource);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
     }
 
@@ -4222,6 +4225,9 @@ public sealed partial class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "RenderSteadyStateAllocationDiagnosticRunner.optional-diagnostics.cs")));
+        var pipelineSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.optional-diagnostics.cs")));
+        var layoutSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.optional-diagnostics.cs")));
+        var recordSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawCommandRecorder.optional-diagnostics.cs")));
         var diagnosticProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
         var mainProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.cs")));
         var baselineScript = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "scripts", "diagnostic-baseline.ps1")));
@@ -4239,6 +4245,12 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("--diagnose-render-steady-state-allocation", statusDoc);
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", runnerSource, StringComparison.Ordinal);
         Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", runnerSource);
+        Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", pipelineSource);
+        Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", layoutSource);
+        Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", recordSource);
+        Assert.DoesNotContain("GC.GetTotalAllocatedBytes(false)", pipelineSource);
+        Assert.DoesNotContain("GC.GetTotalAllocatedBytes(false)", layoutSource);
+        Assert.DoesNotContain("GC.GetTotalAllocatedBytes(false)", recordSource);
         Assert.Contains("PrebuildScenarioTrees", runnerSource);
         Assert.Contains("KnownResources: true", runnerSource);
         Assert.Contains("CapacityReserved: false", runnerSource);
@@ -4246,6 +4258,17 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("RectangleDirtyNodes", runnerSource);
         Assert.Contains("\"style-only\"", runnerSource);
         Assert.Contains("\"layout-change\"", runnerSource);
+    }
+
+    [Fact]
+    public void Button_property_bundle_exposes_write_only_hot_path_contract()
+    {
+        var root = FindRepoRoot();
+        var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "ControlVisualState.cs")));
+
+        Assert.Contains("internal static void Write(ActionId actionId, ControlVisualState visualState, Span<VirtualNodeProperty> destination)", source);
+        Assert.DoesNotContain("ButtonPropertyBundle.Create", source);
+        Assert.DoesNotContain("internal static VirtualNodeProperty[] Create(ActionId actionId, ControlVisualState visualState)", source);
     }
 
     [Fact]

@@ -52,13 +52,6 @@ internal static class ButtonPropertyBundle
 {
     private const int PropertyCount = 4;
 
-    internal static VirtualNodeProperty[] Create(ActionId actionId, ControlVisualState visualState)
-    {
-        var properties = new VirtualNodeProperty[PropertyCount];
-        Write(actionId, visualState, properties);
-        return properties;
-    }
-
     internal static void Write(ActionId actionId, ControlVisualState visualState, Span<VirtualNodeProperty> destination)
     {
         if (destination.Length < PropertyCount)

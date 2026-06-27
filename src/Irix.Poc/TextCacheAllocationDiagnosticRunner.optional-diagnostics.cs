@@ -211,19 +211,19 @@ internal static class TextCacheAllocationDiagnosticRunner
     internal static string FormatTranslateAllocationAttribution(WindowTranslateAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return $"Translate allocation: retainedApply={attribution.RetainedApplyBytes} bytes ({PerFrame(attribution.RetainedApplyBytes, divisor)}/frame), viewport={attribution.ViewportBytes} bytes ({PerFrame(attribution.ViewportBytes, divisor)}/frame), pipeline={attribution.PipelineBuildBytes} bytes ({PerFrame(attribution.PipelineBuildBytes, divisor)}/frame), feedback={attribution.FeedbackBytes} bytes ({PerFrame(attribution.FeedbackBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+        return $"Translate allocation currentThread: retainedApply={attribution.RetainedApplyBytes} bytes ({PerFrame(attribution.RetainedApplyBytes, divisor)}/frame), viewport={attribution.ViewportBytes} bytes ({PerFrame(attribution.ViewportBytes, divisor)}/frame), pipeline={attribution.PipelineBuildBytes} bytes ({PerFrame(attribution.PipelineBuildBytes, divisor)}/frame), feedback={attribution.FeedbackBytes} bytes ({PerFrame(attribution.FeedbackBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     internal static string FormatPipelineAllocationAttribution(RenderPipelineBuildAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return $"Pipeline allocation: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+        return $"Pipeline allocation currentThread: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     internal static string FormatPipelineSnapshotAllocationAttribution(RenderPipelineSnapshotAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return "Pipeline snapshot allocation: "
+        return "Pipeline snapshot allocation currentThread: "
             + $"frameBatch={attribution.FrameBatchBytes} bytes ({PerFrame(attribution.FrameBatchBytes, divisor)}/frame), "
             + $"retainedInput={attribution.RetainedInputBytes} bytes ({PerFrame(attribution.RetainedInputBytes, divisor)}/frame), "
             + $"detailGap={attribution.DetailGapBytes} bytes ({PerFrame(attribution.DetailGapBytes, divisor)}/frame), "
@@ -233,13 +233,13 @@ internal static class TextCacheAllocationDiagnosticRunner
     internal static string FormatLayoutAllocationAttribution(LayoutBuildAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return $"Layout allocation: nodeWalk={attribution.NodeWalkBytes} bytes ({PerFrame(attribution.NodeWalkBytes, divisor)}/frame), dirtyRanges={attribution.DirtyRangeBytes} bytes ({PerFrame(attribution.DirtyRangeBytes, divisor)}/frame), elementsArray={attribution.ElementArrayBytes} bytes ({PerFrame(attribution.ElementArrayBytes, divisor)}/frame), treeNodesArray={attribution.TreeNodeArrayBytes} bytes ({PerFrame(attribution.TreeNodeArrayBytes, divisor)}/frame), scrollDiagnosticsArray={attribution.ScrollDiagnosticsArrayBytes} bytes ({PerFrame(attribution.ScrollDiagnosticsArrayBytes, divisor)}/frame), result={attribution.ResultBytes} bytes ({PerFrame(attribution.ResultBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+        return $"Layout allocation currentThread: nodeWalk={attribution.NodeWalkBytes} bytes ({PerFrame(attribution.NodeWalkBytes, divisor)}/frame), dirtyRanges={attribution.DirtyRangeBytes} bytes ({PerFrame(attribution.DirtyRangeBytes, divisor)}/frame), elementsArray={attribution.ElementArrayBytes} bytes ({PerFrame(attribution.ElementArrayBytes, divisor)}/frame), treeNodesArray={attribution.TreeNodeArrayBytes} bytes ({PerFrame(attribution.TreeNodeArrayBytes, divisor)}/frame), scrollDiagnosticsArray={attribution.ScrollDiagnosticsArrayBytes} bytes ({PerFrame(attribution.ScrollDiagnosticsArrayBytes, divisor)}/frame), result={attribution.ResultBytes} bytes ({PerFrame(attribution.ResultBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     internal static string FormatRecordAllocationAttribution(DrawCommandRecordAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return $"Record allocation: resources={attribution.ResourcesBytes} bytes ({PerFrame(attribution.ResourcesBytes, divisor)}/frame), styles={attribution.StylesBytes} bytes ({PerFrame(attribution.StylesBytes, divisor)}/frame), commandBuild={attribution.CommandBuildBytes} bytes ({PerFrame(attribution.CommandBuildBytes, divisor)}/frame), dirtyRanges={attribution.DirtyRangesBytes} bytes ({PerFrame(attribution.DirtyRangesBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+        return $"Record allocation currentThread: resources={attribution.ResourcesBytes} bytes ({PerFrame(attribution.ResourcesBytes, divisor)}/frame), styles={attribution.StylesBytes} bytes ({PerFrame(attribution.StylesBytes, divisor)}/frame), commandBuild={attribution.CommandBuildBytes} bytes ({PerFrame(attribution.CommandBuildBytes, divisor)}/frame), dirtyRanges={attribution.DirtyRangesBytes} bytes ({PerFrame(attribution.DirtyRangesBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     internal static string FormatAllocationFocus(AllocationAttribution attribution, TreeAllocationAttribution treeAttribution, WindowTranslateAllocationAttribution translateAttribution, int frameCount)

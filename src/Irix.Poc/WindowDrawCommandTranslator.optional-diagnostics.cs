@@ -61,7 +61,7 @@ internal sealed partial class WindowDrawCommandTranslator
     {
         if (_captureAllocationAttribution)
         {
-            _allocationPhaseStart = GC.GetTotalAllocatedBytes(false);
+            _allocationPhaseStart = GC.GetAllocatedBytesForCurrentThread();
         }
     }
 
@@ -99,7 +99,7 @@ internal sealed partial class WindowDrawCommandTranslator
         }
     }
 
-    private long Delta() => GC.GetTotalAllocatedBytes(false) - _allocationPhaseStart;
+    private long Delta() => GC.GetAllocatedBytesForCurrentThread() - _allocationPhaseStart;
 }
 
 internal readonly struct WindowTranslateAllocationAttribution(

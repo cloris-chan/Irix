@@ -562,16 +562,19 @@ public sealed class CounterInputRouterTests
     public void ButtonPropertyBundle_preserves_action_and_visual_state_wire_contract()
     {
         var actionId = new ActionId(1);
-        var properties = ButtonPropertyBundle.Create(
+        Span<VirtualNodeProperty> properties = stackalloc VirtualNodeProperty[4];
+
+        ButtonPropertyBundle.Write(
             actionId,
-            new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: true));
+            new ControlVisualState(IsHovered: true, IsPressed: false, IsFocused: true),
+            properties);
 
         Assert.Equal(4, properties.Length);
         Assert.Equal(actionId, GetActionId(properties));
         Assert.True(GetBooleanProperty(properties, VirtualPropertyKey.IsHovered));
         Assert.False(GetBooleanProperty(properties, VirtualPropertyKey.IsPressed));
         Assert.True(GetBooleanProperty(properties, VirtualPropertyKey.IsFocused));
-        Assert.DoesNotContain(properties, property => VirtualPropertyDiagnostics.Format(property.Key) == "IsEnabled");
+        Assert.False(ContainsProperty(properties, property => VirtualPropertyDiagnostics.Format(property.Key) == "IsEnabled"));
     }
 
     [Fact]
@@ -1893,7 +1896,7 @@ public sealed class CounterInputRouterTests
         return false;
     }
 
-    private static bool GetBooleanProperty(VirtualNodeProperty[] properties, VirtualPropertyKey key)
+    private static bool GetBooleanProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key)
     {
         foreach (var property in properties)
         {
@@ -1935,7 +1938,7 @@ public sealed class CounterInputRouterTests
         return default;
     }
 
-    private static ActionId GetActionId(VirtualNodeProperty[] properties)
+    private static ActionId GetActionId(ReadOnlySpan<VirtualNodeProperty> properties)
     {
         foreach (var property in properties)
         {

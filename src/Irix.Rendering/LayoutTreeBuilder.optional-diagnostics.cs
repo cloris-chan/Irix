@@ -14,7 +14,7 @@ internal sealed partial class LayoutTreeBuilder
 
     partial void OnLayoutAllocationPhaseStarted()
     {
-        _allocationPhaseStart = GC.GetTotalAllocatedBytes(false);
+        _allocationPhaseStart = GC.GetAllocatedBytesForCurrentThread();
     }
 
     partial void OnLayoutNodeWalkAllocated()
@@ -47,7 +47,7 @@ internal sealed partial class LayoutTreeBuilder
         LastAllocationAttribution = LastAllocationAttribution.WithResult(Delta());
     }
 
-    private long Delta() => GC.GetTotalAllocatedBytes(false) - _allocationPhaseStart;
+    private long Delta() => GC.GetAllocatedBytesForCurrentThread() - _allocationPhaseStart;
 }
 
 internal readonly struct LayoutBuildAllocationAttribution(

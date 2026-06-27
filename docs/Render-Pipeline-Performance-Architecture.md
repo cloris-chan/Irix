@@ -165,10 +165,11 @@ the simple lifetime cases; guards cover the project-specific ones.
 
 ## Evidence Snapshot
 
-Baseline refreshed on 2026-06-25 after the `VirtualNode` IR was normalized to
+Baseline refreshed on 2026-06-27 after the `VirtualNode` IR was normalized to
 `Container`/`Content` nodes, the first production control/root publication
-slices were applied, and `LayoutTreeResult` became a readonly value publication
-shell.
+slices were applied, `LayoutTreeResult` and `DrawCommandRecordResult` became
+readonly value publication shells, and pipeline attribution counters were
+aligned to the current-thread steady-state measurement scope.
 
 Primary command:
 
@@ -180,20 +181,20 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2271552 bytes | 12619 B/frame | render 11014 B/frame, translate 770 B/frame, tree 702 B/frame |
-| Warm scroll | 547368 bytes | 3040 B/frame | translate 1867 B/frame, tree 876 B/frame, diff 182 B/frame, render 182 B/frame |
-| Scale change | 351696 bytes | 1953 B/frame | tree 911 B/frame, translate 592 B/frame, render 364 B/frame |
+| Static | 2261536 bytes | 12564 B/frame | render 11013 B/frame, tree 883 B/frame, translate 636 B/frame, diff 45 B/frame |
+| Warm scroll | 537288 bytes | 2984 B/frame | translate 1822 B/frame, tree 774 B/frame, render 240 B/frame, diff 226 B/frame |
+| Scale change | 341616 bytes | 1897 B/frame | tree 820 B/frame, render 501 B/frame, translate 410 B/frame, diff 227 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `layout.elementsArray` | 501 | Retained layout publication array. |
-| `layout.treeNodesArray` | 318 | Retained layout tree publication array. |
-| `tree.buildRoot.button.childrenArray` | 284 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
-| `tree.buildRoot.button.propertyArray` | 227 | Control/state/style property publication. |
-| `drawRecord` | 227 | Command recording is visible but not the largest bucket. |
-| `layout.scrollDiagnosticsArray` | 91 | Retained scroll observation publication array. |
+| `layout.elementsArray` | 504 | Retained layout publication array. |
+| `tree.buildRoot.button.propertyArray` | 273 | Control/state/style property publication. |
+| `layout.treeNodesArray` | 248 | Retained layout tree publication array. |
+| `drawRecord` | 144 | Command recording is visible but not the largest bucket. |
+| `tree.buildRoot.button.childrenArray` | 136 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
+| `layout.scrollDiagnosticsArray` | 72 | Retained scroll observation publication array. |
 | `layout.result` | 0 | The retained result shell is now a readonly value, not a heap object. |
 | `layout.nodeWalk` | 0 | The layout bucket is publication cost, not node-walk allocation. |
 
@@ -584,6 +585,14 @@ button builder to isolate retained-publication buckets. It remains the compariso
 for layout/tree publication cost, but it does not fully capture production
 control call-site savings from stack-backed `ButtonPropertyBundle` lowering or
 the exact-array `CounterApplication` root publication path.
+
+Attribution note: the text-cache scenario total and top-level
+tree/diff/translate/render row remain broad diagnostic counters, while the
+dedicated translate, pipeline, layout, and record detail lines are explicitly
+reported as current-thread counters. The inner
+`--diagnose-render-steady-state-allocation` command uses the same
+`GC.GetAllocatedBytesForCurrentThread()` scope for both scenario totals and
+pipeline phase buckets, so phase buckets are comparable to `threadBytes`.
 
 ## Non-Goals
 
