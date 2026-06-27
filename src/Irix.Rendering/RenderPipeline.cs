@@ -112,6 +112,13 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             : [];
         LastDirtyClassifications = dirtyClassifications;
         LastLayoutRebuildReason = ResolveLayoutRebuildReason(hadRetainedLayout, treeChanged, viewportChanged, hasDirty, dirtyClassifications);
+        var retainedHitTargetPublication = _retainedFrame.HitTargets as HitTestTarget[];
+        var canReuseHitTargetPublication = hadRetainedLayout
+            && !treeChanged
+            && !viewportChanged
+            && !hasDirty
+            && _retainedFrame.CommandCount > 0
+            && retainedHitTargetPublication is not null;
         OnPipelineClassificationAllocated();
 
         if (treeChanged || viewportChanged || hasDirty)
@@ -155,12 +162,14 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         OnPipelineRecordAllocated(_drawCommandRecorder);
 
         OnPipelineAllocationPhaseStarted();
-        var hitTargets = BuildHitTargetArray(layout, result.ElementCommandRanges);
+        var hitTargets = canReuseHitTargetPublication
+            ? retainedHitTargetPublication!
+            : BuildHitTargetArray(layout, result.ElementCommandRanges);
         OnPipelineHitTargetsAllocated();
 
         OnPipelineSnapshotAllocationStarted();
         OnPipelineSnapshotPhaseStarted();
-        var batch = RenderFrameBatch.WithOwnedHitTargets(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
+        var batch = RenderFrameBatch.WithHitTargetPublication(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
         OnPipelineFrameBatchAllocated();
 
         OnPipelineSnapshotPhaseStarted();

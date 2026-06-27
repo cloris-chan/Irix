@@ -51,7 +51,7 @@ internal sealed class RetainedRenderFrame : IDisposable
         _commandBuffer.ApplyFull(batch.Commands);
         _resources = batch.Resources;
         _resourceFrameId = batch.ResourceFrameId;
-        _hitTargets = batch.OwnedHitTargets ?? [.. batch.HitTargets];
+        _hitTargets = batch.HitTargetPublication ?? [.. batch.HitTargets];
         _dirtyCommandRanges = batch.DirtyCommandRanges;
     }
 

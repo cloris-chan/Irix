@@ -6930,7 +6930,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void RetainedRenderFrame_apply_full_adopts_pipeline_owned_hit_targets()
+    public void RetainedRenderFrame_apply_full_adopts_pipeline_hit_target_publication()
     {
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -6940,8 +6940,30 @@ public sealed class WindowLayoutPipelineTests
 
         using var batch = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
 
-        Assert.NotNull(batch.OwnedHitTargets);
-        Assert.Same(batch.OwnedHitTargets, pipeline.RetainedFrame.HitTargets);
+        Assert.NotNull(batch.HitTargetPublication);
+        Assert.Same(batch.HitTargetPublication, pipeline.RetainedFrame.HitTargets);
+    }
+
+    [Fact]
+    public void RenderPipeline_render_request_reuses_retained_hit_target_publication()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "Increment", new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(1))));
+        var snapshot = _arena.GetOrCreateSnapshot();
+
+        using (pipeline.Build(root, viewport, snapshot))
+        {
+        }
+
+        var retainedHitTargets = Assert.IsType<HitTestTarget[]>(pipeline.RetainedFrame.HitTargets);
+
+        using var batch = pipeline.Build(root, viewport, snapshot);
+
+        Assert.Same(retainedHitTargets, batch.HitTargetPublication);
+        Assert.Same(retainedHitTargets, pipeline.RetainedFrame.HitTargets);
     }
 
     [Fact]
