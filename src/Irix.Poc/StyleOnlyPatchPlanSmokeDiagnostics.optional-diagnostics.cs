@@ -35,7 +35,7 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         var snapshot = arena.GetOrCreateSnapshot();
         using var frame1 = pipeline.Build(root1, viewport, snapshot);
         var retainedLayout = pipeline.LastLayoutResult;
-        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        var retainedCommandRanges = pipeline.LastElementCommandRanges;
         HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
 
         using var frame2 = pipeline.Build(root2, viewport, snapshot, [1]);
@@ -68,7 +68,7 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         var snapshot = arena.GetOrCreateSnapshot();
         using var frame1 = pipeline.Build(root1, viewport, snapshot);
         var retainedLayout = pipeline.LastLayoutResult;
-        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        var retainedCommandRanges = pipeline.LastElementCommandRanges;
         HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
 
         using var frame2 = pipeline.Build(root2, viewport, snapshot, [0]);

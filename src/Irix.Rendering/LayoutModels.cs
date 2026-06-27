@@ -184,6 +184,198 @@ internal static class IndexRangeListBuilder
         IndexRangeList.CopyFrom(ranges);
 }
 
+[CollectionBuilder(typeof(ElementCommandRangeListBuilder), nameof(ElementCommandRangeListBuilder.Create))]
+internal readonly struct ElementCommandRangeList : IReadOnlyList<ElementCommandRange>, IEquatable<ElementCommandRangeList>
+{
+    private const int InlineCapacity = 4;
+
+    private readonly ElementCommandRange[]? _items;
+    private readonly ElementCommandRange _range0;
+    private readonly ElementCommandRange _range1;
+    private readonly ElementCommandRange _range2;
+    private readonly ElementCommandRange _range3;
+    private readonly int _count;
+
+    private ElementCommandRangeList(
+        ElementCommandRange[]? items,
+        ElementCommandRange range0,
+        ElementCommandRange range1,
+        ElementCommandRange range2,
+        ElementCommandRange range3,
+        int count)
+    {
+        _items = items;
+        _range0 = range0;
+        _range1 = range1;
+        _range2 = range2;
+        _range3 = range3;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public int Length => _count;
+
+    public ElementCommandRange this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            if (_items is not null)
+            {
+                return _items[index];
+            }
+
+            return index switch
+            {
+                0 => _range0,
+                1 => _range1,
+                2 => _range2,
+                _ => _range3
+            };
+        }
+    }
+
+    public static ElementCommandRangeList Empty => default;
+
+    public static ElementCommandRangeList FromOwnedArray(ElementCommandRange[] ranges)
+    {
+        ArgumentNullException.ThrowIfNull(ranges);
+        return ranges.Length <= InlineCapacity
+            ? CopyFrom(ranges.AsSpan())
+            : new ElementCommandRangeList(ranges, default, default, default, default, ranges.Length);
+    }
+
+    public static ElementCommandRangeList CopyFrom(ReadOnlySpan<ElementCommandRange> ranges)
+    {
+        return ranges.Length switch
+        {
+            0 => Empty,
+            1 => new ElementCommandRangeList(null, ranges[0], default, default, default, 1),
+            2 => new ElementCommandRangeList(null, ranges[0], ranges[1], default, default, 2),
+            3 => new ElementCommandRangeList(null, ranges[0], ranges[1], ranges[2], default, 3),
+            4 => new ElementCommandRangeList(null, ranges[0], ranges[1], ranges[2], ranges[3], 4),
+            _ => FromOwnedArray(ranges.ToArray())
+        };
+    }
+
+    public ElementCommandRange[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        var copy = new ElementCommandRange[_count];
+        CopyTo(copy);
+        return copy;
+    }
+
+    public void CopyTo(Span<ElementCommandRange> destination)
+    {
+        if (destination.Length < _count)
+        {
+            throw new ArgumentException("Destination span is too small.", nameof(destination));
+        }
+
+        if (_items is not null)
+        {
+            _items.AsSpan(0, _count).CopyTo(destination);
+            return;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            destination[i] = this[i];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<ElementCommandRange> IEnumerable<ElementCommandRange>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(ElementCommandRangeList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is ElementCommandRangeList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(ElementCommandRangeList left, ElementCommandRangeList right) => left.Equals(right);
+
+    public static bool operator !=(ElementCommandRangeList left, ElementCommandRangeList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<ElementCommandRange>
+    {
+        private readonly ElementCommandRangeList _ranges;
+        private int _index;
+
+        internal Enumerator(ElementCommandRangeList ranges)
+        {
+            _ranges = ranges;
+            _index = -1;
+        }
+
+        public readonly ElementCommandRange Current => _ranges[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_ranges.Count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+}
+
+internal static class ElementCommandRangeListBuilder
+{
+    public static ElementCommandRangeList Create(ReadOnlySpan<ElementCommandRange> ranges) =>
+        ElementCommandRangeList.CopyFrom(ranges);
+}
+
 internal enum LayoutElementKind : byte
 {
     Text,
@@ -969,7 +1161,7 @@ internal readonly struct ScrollContainerDiag(
 internal readonly struct DrawCommandRecordResult(
     DrawCommandBatch commands,
     IFrameResourceResolver resources,
-    ElementCommandRange[] elementCommandRanges,
+    ElementCommandRangeList elementCommandRanges,
     IndexRangeList dirtyCommandRanges)
 {
     public DrawCommandRecordResult(DrawCommandBatch commands, IFrameResourceResolver resources)
@@ -984,7 +1176,7 @@ internal readonly struct DrawCommandRecordResult(
     /// Maps each <see cref="LayoutElement"/> index to its <see cref="DrawCommand"/> range.
     /// <c>ElementCommandRanges[elementIndex]</c> gives (commandStart, commandCount).
     /// </summary>
-    public ElementCommandRange[] ElementCommandRanges { get; } = elementCommandRanges;
+    public ElementCommandRangeList ElementCommandRanges { get; } = elementCommandRanges;
 
     /// <summary>
     /// Merged, sorted ranges of draw commands that correspond to dirty layout elements.

@@ -100,7 +100,7 @@ internal static class StyleOnlyPatchPlanBuilder
         LayoutDirtyClassificationList dirtyClassifications,
         bool viewportChanged,
         LayoutTreeResult? retainedLayout,
-        ElementCommandRange[] retainedElementCommandRanges,
+        ElementCommandRangeList retainedElementCommandRanges,
         IReadOnlyList<HitTestTarget> retainedHitTargets,
         ReadOnlySpan<LayoutElement> nextLayoutElements,
         IndexRangeList dirtyElementRanges)

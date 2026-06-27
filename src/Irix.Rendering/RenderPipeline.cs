@@ -47,7 +47,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     /// The element→command range mapping from the last Build call.
     /// <c>LastElementCommandRanges[elementIndex]</c> gives (commandStart, commandCount).
     /// </summary>
-    public ElementCommandRange[] LastElementCommandRanges { get; private set; } = [];
+    public ElementCommandRangeList LastElementCommandRanges { get; private set; }
 
     /// <summary>
     /// The retained render frame from the last Build call.
@@ -487,7 +487,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     internal static IReadOnlyList<HitTestTarget> BuildHitTargets(
         IReadOnlyList<LayoutElement> layoutElements,
-        ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+        ElementCommandRangeList elementCommandRanges)
     {
         return layoutElements is LayoutElement[] elementArray
             ? BuildHitTargetArray(elementArray.AsSpan(), elementCommandRanges)
@@ -496,7 +496,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     private static HitTestTarget[] BuildHitTargetArray(
         ReadOnlySpan<LayoutElement> layoutElements,
-        ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+        ElementCommandRangeList elementCommandRanges)
     {
         if (layoutElements.IsEmpty)
         {
@@ -540,7 +540,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     private static HitTestTarget[] BuildHitTargetArrayFromList(
         IReadOnlyList<LayoutElement> layoutElements,
-        ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+        ElementCommandRangeList elementCommandRanges)
     {
         if (layoutElements.Count == 0)
         {
@@ -584,7 +584,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     internal static RenderPipelineRetainedInputSnapshot CreateRetainedInputSnapshot(
         LayoutTreeResult layoutResult,
-        ElementCommandRange[] elementCommandRanges,
+        ElementCommandRangeList elementCommandRanges,
         IReadOnlyList<HitTestTarget> hitTargets,
         VirtualNode retainedRoot,
         PixelRectangle viewport,
@@ -609,12 +609,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     internal static bool TryResolveCompositionTarget(
         ReadOnlySpan<LayoutTreeNode> treeNodes,
-        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        ElementCommandRangeList elementCommandRanges,
         int commandCount,
         NodeKey key,
         out CompositionTarget target)
     {
-        if (key == NodeKey.None || treeNodes.IsEmpty || elementCommandRanges.IsEmpty || commandCount <= 0)
+        if (key == NodeKey.None || treeNodes.IsEmpty || elementCommandRanges.Count == 0 || commandCount <= 0)
         {
             target = default;
             return false;
@@ -643,12 +643,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     internal static bool TryResolveScrollCompositionTarget(
         LayoutTreeResult layoutResult,
-        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        ElementCommandRangeList elementCommandRanges,
         int commandCount,
         NodeKey key,
         out ScrollCompositionTarget target)
     {
-        if (key == NodeKey.None || layoutResult.TreeNodes.Length == 0 || elementCommandRanges.IsEmpty || commandCount <= 0)
+        if (key == NodeKey.None || layoutResult.TreeNodes.Length == 0 || elementCommandRanges.Count == 0 || commandCount <= 0)
         {
             target = default;
             return false;
@@ -688,7 +688,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     private static bool TryResolveScrollCompositionLayers(
         ReadOnlySpan<LayoutElement> elements,
-        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        ElementCommandRangeList elementCommandRanges,
         int commandCount,
         int elementStart,
         int elementCount,
@@ -823,7 +823,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     private static bool TryResolveCommandRange(
         in LayoutTreeNode node,
-        ReadOnlySpan<ElementCommandRange> elementCommandRanges,
+        ElementCommandRangeList elementCommandRanges,
         int commandCount,
         out int commandStart,
         out int resolvedCommandCount)
@@ -858,7 +858,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 }
 internal readonly struct RenderPipelineRetainedInputSnapshot(
     LayoutTreeResult LayoutResult,
-    ElementCommandRange[] ElementCommandRanges,
+    ElementCommandRangeList ElementCommandRanges,
     IReadOnlyList<HitTestTarget> HitTargets,
     VirtualNode RetainedRoot,
     PixelRectangle Viewport,
@@ -870,7 +870,7 @@ internal readonly struct RenderPipelineRetainedInputSnapshot(
     TextBufferSnapshot? TextSnapshot = null)
 {
     public LayoutTreeResult LayoutResult { get; } = LayoutResult;
-    public ElementCommandRange[] ElementCommandRanges { get; } = ElementCommandRanges;
+    public ElementCommandRangeList ElementCommandRanges { get; } = ElementCommandRanges;
     public IReadOnlyList<HitTestTarget> HitTargets { get; } = HitTargets;
     public VirtualNode RetainedRoot { get; } = RetainedRoot;
     public PixelRectangle Viewport { get; } = Viewport;
@@ -912,11 +912,12 @@ internal readonly struct RenderPipelineRetainedInputSnapshot(
             out target);
     }
 
-    private static int ResolveCommandCount(ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+    private static int ResolveCommandCount(ElementCommandRangeList elementCommandRanges)
     {
         var commandCount = 0;
-        foreach (ref readonly var range in elementCommandRanges)
+        for (var i = 0; i < elementCommandRanges.Count; i++)
         {
+            var range = elementCommandRanges[i];
             commandCount = Math.Max(commandCount, range.CommandStart + Math.Max(range.CommandCount, 0));
         }
 

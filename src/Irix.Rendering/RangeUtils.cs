@@ -130,7 +130,7 @@ internal static class RangeUtils
     }
 
     public static bool TryMapContiguousElementRangesToCommandRanges(
-        ElementCommandRange[] elementRanges,
+        ElementCommandRangeList elementRanges,
         IndexRangeList elementDirtyRanges,
         out IndexRangeList commandDirtyRanges)
     {
@@ -174,7 +174,7 @@ internal static class RangeUtils
     /// Map element ranges to command ranges using an element→command mapping, then merge.
     /// </summary>
     public static IndexRangeList MapAndMerge(
-        ElementCommandRange[] elementRanges,
+        ElementCommandRangeList elementRanges,
         IndexRangeList elementDirtyRanges)
     {
         var scratch = new RenderScratchBuffer();
@@ -206,7 +206,7 @@ internal static class RangeUtils
     }
 
     private static bool TryMapContiguousElementRangeToCommandRange(
-        ElementCommandRange[] elementRanges,
+        ElementCommandRangeList elementRanges,
         int elementStart,
         int elementCount,
         out int commandStart,

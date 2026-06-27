@@ -4385,7 +4385,7 @@ public sealed class WindowLayoutPipelineTests
         var initialElementSnapshot = SnapshotLayoutElementInvariants(initialLayout.Elements);
         var initialRangeSnapshot = SnapshotLayoutTreeRanges(initialLayout.TreeNodes);
         ScrollContainerDiag[] initialScrollDiagnostics = [.. initialLayout.ScrollDiagnostics];
-        ElementCommandRange[] initialCommandRanges = [.. pipeline.LastElementCommandRanges];
+        var initialCommandRanges = pipeline.LastElementCommandRanges;
         var initialRebuildCount = pipeline.LayoutRebuildCount;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [2]);
@@ -4626,7 +4626,7 @@ public sealed class WindowLayoutPipelineTests
             pipeline.LastDirtyClassifications,
             viewportChanged: false,
             initialLayout,
-            [.. pipeline.LastElementCommandRanges],
+            pipeline.LastElementCommandRanges,
             frame1.HitTargets,
             pipeline.LastLayoutResult!.Value.ElementSpan,
             pipeline.LastDirtyElementRanges);
@@ -4668,7 +4668,7 @@ public sealed class WindowLayoutPipelineTests
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var retainedLayout = pipeline.LastLayoutResult;
-        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        var retainedCommandRanges = pipeline.LastElementCommandRanges;
         HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -4706,7 +4706,7 @@ public sealed class WindowLayoutPipelineTests
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var retainedLayout = pipeline.LastLayoutResult;
-        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        var retainedCommandRanges = pipeline.LastElementCommandRanges;
         HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
@@ -4745,7 +4745,7 @@ public sealed class WindowLayoutPipelineTests
 
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var retainedLayout = pipeline.LastLayoutResult;
-        ElementCommandRange[] retainedCommandRanges = [.. pipeline.LastElementCommandRanges];
+        var retainedCommandRanges = pipeline.LastElementCommandRanges;
         HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [0]);
@@ -4776,11 +4776,11 @@ public sealed class WindowLayoutPipelineTests
             new LayoutElement(LayoutElementKind.Rectangle, new PixelRectangle(0, 44, 100, 48))
         };
         var retainedLayout = new LayoutTreeResult(nextElements, [], [(0, 2)]);
-        var unstableCommandRanges = new ElementCommandRange[]
-        {
+        ElementCommandRangeList unstableCommandRanges =
+        [
             new(0, 1),
             new(3, 1)
-        };
+        ];
 
         var plan = StyleOnlyPatchPlanBuilder.Build(
             [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
@@ -6321,12 +6321,12 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void RangeUtils_map_and_merge_converts_element_to_command_ranges()
     {
-        var elementRanges = new ElementCommandRange[]
-        {
+        ElementCommandRangeList elementRanges =
+        [
             new(0, 1),  // element 0 �?command 0
             new(1, 2),  // element 1 �?commands 1-2
             new(3, 1),  // element 2 �?command 3
-        };
+        ];
         IndexRangeList dirtyElements = [(0, 2)]; // elements 0-1
 
         var result = RangeUtils.MapAndMerge(elementRanges, dirtyElements);
@@ -6338,12 +6338,12 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void RangeUtils_try_map_contiguous_element_ranges_to_command_ranges_maps_stable_ranges()
     {
-        var elementCommandRanges = new ElementCommandRange[]
-        {
+        ElementCommandRangeList elementCommandRanges =
+        [
             new(0, 1),
             new(1, 2),
             new(3, 1)
-        };
+        ];
 
         var stable = RangeUtils.TryMapContiguousElementRangesToCommandRanges(
             elementCommandRanges,
@@ -6357,11 +6357,11 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void RangeUtils_try_map_contiguous_element_ranges_to_command_ranges_refuses_unstable_mapping()
     {
-        var elementCommandRanges = new ElementCommandRange[]
-        {
+        ElementCommandRangeList elementCommandRanges =
+        [
             new(0, 1),
             new(3, 1)
-        };
+        ];
 
         var stable = RangeUtils.TryMapContiguousElementRangesToCommandRanges(
             elementCommandRanges,
@@ -6375,10 +6375,10 @@ public sealed class WindowLayoutPipelineTests
     [Fact]
     public void RangeUtils_try_map_contiguous_element_ranges_to_command_ranges_refuses_out_of_range_mapping()
     {
-        var elementCommandRanges = new ElementCommandRange[]
-        {
+        ElementCommandRangeList elementCommandRanges =
+        [
             new(0, 1)
-        };
+        ];
 
         var stable = RangeUtils.TryMapContiguousElementRangesToCommandRanges(
             elementCommandRanges,

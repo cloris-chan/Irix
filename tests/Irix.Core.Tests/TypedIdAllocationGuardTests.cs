@@ -87,6 +87,32 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void ElementCommandRangeList_is_value_publication_for_element_command_ranges()
+    {
+        var root = FindRepoRoot();
+        var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
+        var recorderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawCommandRecorder.cs"));
+
+        Assert.True(typeof(ElementCommandRangeList).IsValueType);
+        Assert.Contains("internal readonly struct ElementCommandRangeList", layoutModelSource);
+        Assert.Contains("private const int InlineCapacity = 4", layoutModelSource);
+        Assert.DoesNotContain("ElementCommandRange[] ElementCommandRanges { get; }", layoutModelSource);
+        Assert.Contains("ElementCommandRangeList.CopyFrom(stackRanges)", recorderSource);
+        Assert.DoesNotContain("stackRanges.ToArray()", recorderSource);
+
+        ElementCommandRangeList ranges =
+        [
+            new(0, 1),
+            new(1, 2),
+            new(3, 1),
+            new(4, 1)
+        ];
+
+        Assert.Equal(4, ranges.Count);
+        Assert.Equal(new ElementCommandRange(1, 2), ranges[1]);
+    }
+
+    [Fact]
     public void Render_pipeline_retained_input_snapshot_is_value_publication_not_heap_identity()
     {
         var root = FindRepoRoot();

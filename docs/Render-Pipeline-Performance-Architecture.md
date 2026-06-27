@@ -186,9 +186,9 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2174736 bytes | 12081 B/frame | render 10897 B/frame, tree 816 B/frame, translate 398 B/frame, diff 0 B/frame |
-| Warm scroll | 434536 bytes | 2414 B/frame | translate 1243 B/frame, tree 911 B/frame, diff 182 B/frame, render 136 B/frame |
-| Scale change | 249392 bytes | 1385 B/frame | tree 1002 B/frame, render 227 B/frame, translate 136 B/frame, diff 91 B/frame |
+| Static | 2164736 bytes | 12026 B/frame | render 10786 B/frame, tree 961 B/frame, diff 227 B/frame, translate 91 B/frame |
+| Warm scroll | 425896 bytes | 2366 B/frame | translate 1138 B/frame, tree 833 B/frame, render 273 B/frame, diff 182 B/frame |
+| Scale change | 240752 bytes | 1337 B/frame | tree 911 B/frame, translate 227 B/frame, render 182 B/frame, diff 91 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
@@ -196,7 +196,7 @@ Warm-scroll details are the key CPU render-pipeline comparison point:
 |--------|-------------|-------|
 | `layout.elementsArray` | 504 | Retained layout publication array. |
 | `layout.treeNodesArray` | 248 | Retained layout tree publication array. |
-| `drawRecord` | 80 | Command recording is visible but not the largest bucket; dirty range mapping now publishes through `IndexRangeList`, so `record.dirtyRanges=0`. |
+| `drawRecord` | 32 | Command recording is visible but not the largest bucket; dirty range mapping now publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 112 | Dirty scroll still rebuilds retained input hit-test publication; clean render requests reuse the retained hit-target publication, and hit-target scanning uses the retained layout span view instead of an `IReadOnlyList<T>` enumeration path. |
 | `layout.scrollDiagnosticsArray` | 72 | Retained scroll observation publication array. |
 | `layout.dirtyRanges` | 0 | Empty and single dirty ranges are retained through `IndexRangeList` without publishing an array. |
@@ -211,9 +211,9 @@ now agree with the value-publication slice:
 
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
-| Warm reuse | 123 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0` |
-| Style only | 1185 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
-| Layout change | 921 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
+| Warm reuse | 75 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0` |
+| Style only | 1137 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
+| Layout change | 873 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
@@ -493,7 +493,8 @@ Acceptance:
 
 Status: first draw-record, retained-input snapshot shell, pipeline-owned
 hit-target handoff, clean hit-target publication reuse, layout span
-hit-target scanning, dirty range value-publication, and
+hit-target scanning, dirty range value-publication, element-command range
+value-publication, and
 dirty-classification value-publication slices
 implemented. `DrawCommandRecordResult` and
 `RenderPipelineRetainedInputSnapshot` are now readonly value publications, so
@@ -512,14 +513,16 @@ layer, so style-only and layout-change scenarios with no action targets no
 longer pay an interface-enumeration allocation just to prove the hit-target
 publication is empty. `IndexRangeList` now keeps empty and single dirty element
 and dirty command ranges inline, while preserving owned arrays only for
-multi-range publication. The command batch, frame resources,
+multi-range publication. `ElementCommandRangeList` now keeps up to four
+element-command range records inline, preserving an owned array only for larger
+draw publications. The command batch, frame resources,
 multi-classification publication, dirty hit-target publication, and
-element-command range publication remain explicit outputs.
+large element-command range publication remain explicit outputs.
 
 After the larger tree/layout publication buckets are addressed, review smaller
 publication costs:
 
-- Element-command range arrays created by `DrawCommandRecorder`.
+- Larger element-command range arrays created by `DrawCommandRecorder`.
 - Multi-classification dirty publication when more than one retained
   classification is present.
 - Hit-target arrays for dirty retained input snapshots that publish real action
@@ -533,7 +536,8 @@ Direction:
   ranges through `IndexRangeList`.
 - Publish compact immutable views only when consumers need retained data.
 - Move element-command range publication toward capacity-owned render-frame
-  publication pages; do not replace it with mutable pooled arrays.
+  publication pages after the inline value-publication fast path; do not replace
+  it with mutable pooled arrays.
 - Keep `RenderPipelineRetainedInputSnapshot` as a value publication and move the
   referenced retained arrays/lists toward generation-backed publication pages
   when generation and text/resource ownership make stale reads impossible.
