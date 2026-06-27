@@ -95,7 +95,7 @@ internal static class RetainedPartialApplyPlanner
             return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.UnstableCommandRange, retainedSnapshot.DirtyElementRanges);
         }
 
-        if (!StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(retainedSnapshot.HitTargets, retainedSnapshot.LayoutResult.Elements, retainedSnapshot.DirtyElementRanges, out var patchedHitTargets))
+        if (!StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(retainedSnapshot.HitTargets, retainedSnapshot.LayoutResult.ElementSpan, retainedSnapshot.DirtyElementRanges, out var patchedHitTargets))
         {
             return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, retainedSnapshot.DirtyElementRanges);
         }

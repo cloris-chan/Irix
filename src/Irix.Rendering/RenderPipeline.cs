@@ -148,7 +148,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         }
 
         var retainedLayoutResult = _retainedLayoutResult!.Value;
-        var layout = retainedLayoutResult.Elements;
+        var layout = retainedLayoutResult.ElementSpan;
         var dirtyElementRanges = hasDirty
             ? retainedLayoutResult.DirtyElementRanges
             : null;
@@ -480,17 +480,65 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     internal static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
     {
-        return BuildHitTargetArray(layoutElements, []);
+        return layoutElements is LayoutElement[] elementArray
+            ? BuildHitTargetArray(elementArray.AsSpan(), [])
+            : BuildHitTargetArrayFromList(layoutElements, []);
     }
 
     internal static IReadOnlyList<HitTestTarget> BuildHitTargets(
         IReadOnlyList<LayoutElement> layoutElements,
         ReadOnlySpan<ElementCommandRange> elementCommandRanges)
     {
-        return BuildHitTargetArray(layoutElements, elementCommandRanges);
+        return layoutElements is LayoutElement[] elementArray
+            ? BuildHitTargetArray(elementArray.AsSpan(), elementCommandRanges)
+            : BuildHitTargetArrayFromList(layoutElements, elementCommandRanges);
     }
 
     private static HitTestTarget[] BuildHitTargetArray(
+        ReadOnlySpan<LayoutElement> layoutElements,
+        ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+    {
+        if (layoutElements.IsEmpty)
+        {
+            return [];
+        }
+
+        var hitTargetCount = 0;
+        foreach (ref readonly var element in layoutElements)
+        {
+            if (!element.ActionId.IsNone)
+            {
+                hitTargetCount++;
+            }
+        }
+
+        if (hitTargetCount == 0)
+        {
+            return [];
+        }
+
+        var hitTargets = new HitTestTarget[hitTargetCount];
+        var index = 0;
+        for (var i = 0; i < layoutElements.Length; i++)
+        {
+            var element = layoutElements[i];
+            if (!element.ActionId.IsNone)
+            {
+                var commandRange = (uint)i < (uint)elementCommandRanges.Length ? elementCommandRanges[i] : default;
+                var commandStart = commandRange.CommandCount > 0 ? commandRange.CommandStart : -1;
+                hitTargets[index++] = new HitTestTarget(
+                    element.Bounds,
+                    element.ActionId,
+                    element.ClipBounds,
+                    commandStart,
+                    commandRange.CommandCount);
+            }
+        }
+
+        return hitTargets;
+    }
+
+    private static HitTestTarget[] BuildHitTargetArrayFromList(
         IReadOnlyList<LayoutElement> layoutElements,
         ReadOnlySpan<ElementCommandRange> elementCommandRanges)
     {
@@ -500,9 +548,9 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         }
 
         var hitTargetCount = 0;
-        foreach (var element in layoutElements)
+        for (var i = 0; i < layoutElements.Count; i++)
         {
-            if (!element.ActionId.IsNone)
+            if (!layoutElements[i].ActionId.IsNone)
             {
                 hitTargetCount++;
             }
@@ -612,7 +660,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
                 || node.Kind != VirtualNodeKind.Container
                 || !TryFindScrollDiagnostic(layoutResult.ScrollDiagnostics, node.DfsIndex, out var diagnostic)
                 || !TryResolveScrollCompositionLayers(
-                    layoutResult.Elements,
+                    layoutResult.ElementSpan,
                     elementCommandRanges,
                     commandCount,
                     node.ElementStart,
@@ -639,7 +687,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     }
 
     private static bool TryResolveScrollCompositionLayers(
-        IReadOnlyList<LayoutElement> elements,
+        ReadOnlySpan<LayoutElement> elements,
         ReadOnlySpan<ElementCommandRange> elementCommandRanges,
         int commandCount,
         int elementStart,
@@ -653,8 +701,8 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         if (baseLayerId <= 0
             || elementStart < 0
             || elementCount <= 0
-            || elementStart >= elements.Count
-            || elementStart + elementCount > elements.Count
+            || elementStart >= elements.Length
+            || elementStart + elementCount > elements.Length
             || elementStart + elementCount > elementCommandRanges.Length)
         {
             return false;

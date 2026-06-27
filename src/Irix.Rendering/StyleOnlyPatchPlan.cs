@@ -102,7 +102,7 @@ internal static class StyleOnlyPatchPlanBuilder
         LayoutTreeResult? retainedLayout,
         ElementCommandRange[] retainedElementCommandRanges,
         IReadOnlyList<HitTestTarget> retainedHitTargets,
-        IReadOnlyList<LayoutElement> nextLayoutElements,
+        ReadOnlySpan<LayoutElement> nextLayoutElements,
         IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
     {
         if (retainedLayout is null)

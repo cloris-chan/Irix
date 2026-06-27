@@ -4437,7 +4437,7 @@ public sealed class WindowLayoutPipelineTests
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
             frame1.HitTargets,
-            nextLayout.Elements,
+            nextLayout.ElementSpan,
             pipeline.LastDirtyElementRanges,
             out var patchedHitTargets);
 
@@ -4628,7 +4628,7 @@ public sealed class WindowLayoutPipelineTests
             initialLayout,
             [.. pipeline.LastElementCommandRanges],
             frame1.HitTargets,
-            pipeline.LastLayoutResult!.Value.Elements,
+            pipeline.LastLayoutResult!.Value.ElementSpan,
             pipeline.LastDirtyElementRanges);
 
         Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
@@ -4678,7 +4678,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Value.Elements,
+            pipeline.LastLayoutResult!.Value.ElementSpan,
             pipeline.LastDirtyElementRanges);
 
         Assert.True(plan.Eligible);
@@ -4716,7 +4716,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Value.Elements,
+            pipeline.LastLayoutResult!.Value.ElementSpan,
             pipeline.LastDirtyElementRanges);
 
         Assert.True(plan.Eligible);
@@ -4755,7 +4755,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Value.Elements,
+            pipeline.LastLayoutResult!.Value.ElementSpan,
             pipeline.LastDirtyElementRanges);
 
         Assert.False(plan.Eligible);

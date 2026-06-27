@@ -4,7 +4,7 @@ internal static class StyleOnlyHitTargetPatch
 {
     public static bool TryBuildPatchedHitTargets(
         IReadOnlyList<HitTestTarget> retainedHitTargets,
-        IReadOnlyList<LayoutElement> nextLayoutElements,
+        ReadOnlySpan<LayoutElement> nextLayoutElements,
         IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
         out HitTestTarget[] patchedHitTargets)
     {
@@ -18,7 +18,7 @@ internal static class StyleOnlyHitTargetPatch
         var patched = retainedHitTargets.Count == 0 ? [] : retainedHitTargets.ToArray();
         var hitTargetIndex = 0;
 
-        for (var elementIndex = 0; elementIndex < nextLayoutElements.Count; elementIndex++)
+        for (var elementIndex = 0; elementIndex < nextLayoutElements.Length; elementIndex++)
         {
             var element = nextLayoutElements[elementIndex];
             if (element.ActionId.IsNone)

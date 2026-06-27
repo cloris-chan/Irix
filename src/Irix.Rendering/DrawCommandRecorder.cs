@@ -20,13 +20,33 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     {
     }
 
+    public DrawCommandRecordResult Record(LayoutElement[] elements, TextBufferSnapshot textSnapshot)
+    {
+        return Record(elements.AsSpan(), textSnapshot);
+    }
+
     /// <summary>
     /// Record draw commands for all layout elements.
     /// Returns the full command batch plus element→command range mapping.
     /// </summary>
     public DrawCommandRecordResult Record(IReadOnlyList<LayoutElement> elements, TextBufferSnapshot textSnapshot)
     {
+        return elements is LayoutElement[] elementArray
+            ? Record(elementArray.AsSpan(), textSnapshot)
+            : RecordCore(new LayoutElementSource(elements), dirtyElementRanges: null, textSnapshot: textSnapshot);
+    }
+
+    public DrawCommandRecordResult Record(ReadOnlySpan<LayoutElement> elements, TextBufferSnapshot textSnapshot)
+    {
         return Record(elements, dirtyElementRanges: null, textSnapshot: textSnapshot);
+    }
+
+    public DrawCommandRecordResult Record(
+        LayoutElement[] elements,
+        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        TextBufferSnapshot textSnapshot)
+    {
+        return Record(elements.AsSpan(), dirtyElementRanges, textSnapshot);
     }
 
     /// <summary>
@@ -39,11 +59,21 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
         TextBufferSnapshot textSnapshot)
     {
-        return RecordCore(elements, dirtyElementRanges, textSnapshot);
+        return elements is LayoutElement[] elementArray
+            ? Record(elementArray.AsSpan(), dirtyElementRanges, textSnapshot)
+            : RecordCore(new LayoutElementSource(elements), dirtyElementRanges, textSnapshot);
+    }
+
+    public DrawCommandRecordResult Record(
+        ReadOnlySpan<LayoutElement> elements,
+        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        TextBufferSnapshot textSnapshot)
+    {
+        return RecordCore(new LayoutElementSource(elements), dirtyElementRanges, textSnapshot);
     }
 
     private DrawCommandRecordResult RecordCore(
-        IReadOnlyList<LayoutElement> elements,
+        LayoutElementSource elements,
         IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
         TextBufferSnapshot textSnapshot)
     {
@@ -98,8 +128,32 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     partial void OnRecordCommandBuildAllocated();
     partial void OnRecordDirtyRangesAllocated();
 
+    private readonly ref struct LayoutElementSource
+    {
+        private readonly ReadOnlySpan<LayoutElement> _span;
+        private readonly IReadOnlyList<LayoutElement>? _list;
+
+        public LayoutElementSource(ReadOnlySpan<LayoutElement> span)
+        {
+            _span = span;
+            _list = null;
+            Count = span.Length;
+        }
+
+        public LayoutElementSource(IReadOnlyList<LayoutElement> list)
+        {
+            _span = default;
+            _list = list;
+            Count = list.Count;
+        }
+
+        public int Count { get; }
+
+        public LayoutElement this[int index] => _list is null ? _span[index] : _list[index];
+    }
+
     private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRange[]) RecordSmallBatch(
-        IReadOnlyList<LayoutElement> elements,
+        LayoutElementSource elements,
         FrameDrawingResources resources,
         ResourceHandle textStyle,
         ResourceHandle buttonTextStyle,
@@ -118,7 +172,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     }
 
     private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRange[]) RecordLargeBatch(
-        IReadOnlyList<LayoutElement> elements,
+        LayoutElementSource elements,
         FrameDrawingResources resources,
         ResourceHandle textStyle,
         ResourceHandle buttonTextStyle,
@@ -145,7 +199,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     }
 
     private static int RecordInto(
-        IReadOnlyList<LayoutElement> elements,
+        LayoutElementSource elements,
         FrameDrawingResources resources,
         DrawingStyle style,
         ControlVisualStateResolver visualStateResolver,

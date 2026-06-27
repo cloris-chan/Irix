@@ -673,6 +673,8 @@ internal readonly struct LayoutTreeResult
     /// <summary>The flat layout element array (full frame).</summary>
     public IReadOnlyList<LayoutElement> Elements => _elements ?? EmptyElements;
 
+    internal ReadOnlySpan<LayoutElement> ElementSpan => _elements ?? EmptyElements;
+
     /// <summary>
     /// Flat preorder layout tree nodes. The root is usually <c>TreeNodes[0]</c>;
     /// subtree relationships use <see cref="LayoutTreeNode.SubtreeStart"/> and
