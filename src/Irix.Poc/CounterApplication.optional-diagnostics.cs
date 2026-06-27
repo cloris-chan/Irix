@@ -17,18 +17,18 @@ internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiag
     public CounterLayoutDiagnostics(
         long layoutRebuildCount,
         LayoutRebuildReason lastLayoutRebuildReason,
-        IReadOnlyList<LayoutDirtyClassification> lastDirtyClassifications)
+        LayoutDirtyClassificationList lastDirtyClassifications)
     {
         LayoutRebuildCount = layoutRebuildCount;
         LastLayoutRebuildReason = lastLayoutRebuildReason;
-        LastDirtyClassifications = lastDirtyClassifications.Count == 0 ? [] : lastDirtyClassifications.ToArray();
+        LastDirtyClassifications = lastDirtyClassifications;
     }
 
     public long LayoutRebuildCount { get; }
     public LayoutRebuildReason LastLayoutRebuildReason { get; }
-    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; }
+    public LayoutDirtyClassificationList LastDirtyClassifications { get; }
 
-    public static CounterLayoutDiagnostics Empty => new(0, LayoutRebuildReason.None, []);
+    public static CounterLayoutDiagnostics Empty => new(0, LayoutRebuildReason.None, LayoutDirtyClassificationList.Empty);
 
     public bool Equals(CounterLayoutDiagnostics other)
     {
@@ -53,14 +53,9 @@ internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiag
     public static bool operator !=(CounterLayoutDiagnostics left, CounterLayoutDiagnostics right) => !left.Equals(right);
 
     private static bool LayoutDirtyClassificationsEqual(
-        IReadOnlyList<LayoutDirtyClassification> left,
-        IReadOnlyList<LayoutDirtyClassification> right)
+        LayoutDirtyClassificationList left,
+        LayoutDirtyClassificationList right)
     {
-        if (ReferenceEquals(left, right))
-        {
-            return true;
-        }
-
         if (left.Count != right.Count)
         {
             return false;
@@ -77,7 +72,7 @@ internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiag
         return true;
     }
 
-    private static void AddLayoutDirtyClassificationsHash(ref HashCode hash, IReadOnlyList<LayoutDirtyClassification> classifications)
+    private static void AddLayoutDirtyClassificationsHash(ref HashCode hash, LayoutDirtyClassificationList classifications)
     {
         for (var i = 0; i < classifications.Count; i++)
         {
@@ -165,7 +160,7 @@ internal sealed partial class CounterApplication
 
     private static CounterLayoutDiagnostics NormalizeLayoutDiagnostics(CounterLayoutDiagnostics diagnostics)
     {
-        return diagnostics.LastDirtyClassifications is null ? CounterLayoutDiagnostics.Empty : diagnostics;
+        return diagnostics;
     }
 }
 #endif

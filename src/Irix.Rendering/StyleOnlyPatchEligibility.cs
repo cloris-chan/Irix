@@ -5,7 +5,7 @@ namespace Irix.Rendering;
 internal static class StyleOnlyPatchEligibility
 {
     public static bool IsLayoutReuseEligible(
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        LayoutDirtyClassificationList dirtyClassifications,
         PixelRectangle retainedViewport,
         PixelRectangle nextViewport)
     {
@@ -13,7 +13,7 @@ internal static class StyleOnlyPatchEligibility
     }
 
     public static bool IsLayoutReuseEligible(
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        LayoutDirtyClassificationList dirtyClassifications,
         bool viewportChanged)
     {
         if (viewportChanged || dirtyClassifications.Count == 0)

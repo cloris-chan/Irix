@@ -170,8 +170,9 @@ Baseline refreshed on 2026-06-27 after the `VirtualNode` IR was normalized to
 slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
 `RenderPipelineRetainedInputSnapshot` became readonly value publication shells,
 pipeline attribution counters were aligned to the current-thread steady-state
-measurement scope, and pipeline-owned hit-target publication can be handed to
-the retained frame without a defensive copy.
+measurement scope, pipeline-owned hit-target publication can be handed to the
+retained frame without a defensive copy, and empty/single dirty classifications
+publish through an inline value list instead of a retained array.
 
 Primary command:
 
@@ -184,8 +185,8 @@ Allocation summary:
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
 | Static | 2182304 bytes | 12123 B/frame | render 10922 B/frame, tree 792 B/frame, translate 227 B/frame, diff 182 B/frame |
-| Warm scroll | 458088 bytes | 2544 B/frame | translate 1457 B/frame, tree 968 B/frame, render 91 B/frame, diff 91 B/frame |
-| Scale change | 268608 bytes | 1492 B/frame | tree 636 B/frame, translate 410 B/frame, render 273 B/frame, diff 227 B/frame |
+| Warm scroll | 444616 bytes | 2470 B/frame | translate 1093 B/frame, tree 742 B/frame, diff 455 B/frame, render 227 B/frame |
+| Scale change | 262320 bytes | 1457 B/frame | tree 820 B/frame, translate 455 B/frame, render 227 B/frame, diff 0 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
@@ -195,9 +196,8 @@ Warm-scroll details are the key CPU render-pipeline comparison point:
 | `layout.treeNodesArray` | 248 | Retained layout tree publication array. |
 | `drawRecord` | 144 | Command recording is visible but not the largest bucket. |
 | `hitTargets` | 112 | Retained input hit-test publication. |
-| `tree.buildRoot.button.childrenArray` | 91 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
-| `tree.buildRoot.button.propertyArray` | 91 | Control/state/style property publication. |
 | `layout.scrollDiagnosticsArray` | 72 | Retained scroll observation publication array. |
+| `pipeline.classify` | 0 | Empty and single dirty classifications are retained through `LayoutDirtyClassificationList` without publishing an array. |
 | `retainedFrame` | 0 | Pipeline-owned hit-target publication is handed to the retained frame without an additional copy. |
 | `pipeline.snapshot.retainedInput` | 0 | The retained input snapshot shell is now a readonly value, not a heap object. |
 | `layout.result` | 0 | The retained result shell is now a readonly value, not a heap object. |
@@ -208,9 +208,9 @@ now agree with the value-publication slice:
 
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
-| Warm reuse | 155 | `snapshot=0`, `retainedInput=0` |
-| Style only | 1441 | `snapshot=0`, `retainedInput=0` |
-| Layout change | 1145 | `snapshot=0`, `retainedInput=0` |
+| Warm reuse | 155 | `snapshot=0`, `retainedInput=0`, `classify=0` |
+| Style only | 1313 | `snapshot=0`, `retainedInput=0`, `classify=0` |
+| Layout change | 1049 | `snapshot=0`, `retainedInput=0`, `classify=0` |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
@@ -373,9 +373,9 @@ Acceptance:
 - Composition and scroll presentation diagnostics above stay green for broad
   render-pipeline changes.
 - `LayoutTreeResult` and `DrawCommandRecordResult` remain value publications
-  instead of heap identities, and retained snapshots remain immutable
-  publications until generation-backed snapshot slots replace their shell
-  allocation.
+  instead of heap identities, empty/single dirty classification publication
+  remains inline, and retained snapshots remain immutable publications until
+  generation-backed snapshot slots replace their shell allocation.
 - No slice may claim the full zero-allocation contract until a later reserved
   capacity guard covers control/tree publication, backend resources, and cache
   page growth boundaries in addition to this core baseline.
@@ -488,29 +488,34 @@ Acceptance:
 
 ### P4 - Draw Ranges, Dirty Classification, Hit Targets, And Retained Frame Handoff
 
-Status: first draw-record, retained-input snapshot shell, and pipeline-owned
-hit-target handoff slices implemented. `DrawCommandRecordResult` and
+Status: first draw-record, retained-input snapshot shell, pipeline-owned
+hit-target handoff, and dirty-classification value-publication slices
+implemented. `DrawCommandRecordResult` and
 `RenderPipelineRetainedInputSnapshot` are now readonly value publications, so
 command recording and retained input publication no longer allocate per-frame
 result/snapshot shell objects. `RenderPipeline` now marks its freshly built
 hit-target array as an owned immutable publication when constructing
 `RenderFrameBatch`, allowing `RetainedRenderFrame.ApplyFull` to adopt it without
 copying; public `RenderFrameBatch` construction still keeps the defensive copy
-contract. The command batch, frame resources, dirty command ranges, hit-target
-publication itself, and element-command range publication remain explicit
-outputs.
+contract. `LayoutDirtyClassificationList` keeps empty and single dirty
+classifications inline and uses an owned array only when multiple retained
+classifications must be published. The command batch, frame resources, dirty
+command ranges, multi-classification publication, hit-target publication itself,
+and element-command range publication remain explicit outputs.
 
 After the larger tree/layout publication buckets are addressed, review smaller
 publication costs:
 
 - Element-command range arrays created by `DrawCommandRecorder`.
-- Dirty classification arrays created by `RenderPipeline`.
+- Multi-classification dirty publication when more than one retained
+  classification is present.
 - Hit-target arrays for retained input snapshots.
 - Scroll composition target lists and command-range projection helpers.
 
 Direction:
 
-- Use inline/scratch buffers while classifying.
+- Keep inline/scratch buffers while classifying and publish empty/single
+  classifications through `LayoutDirtyClassificationList`.
 - Publish compact immutable views only when consumers need retained data.
 - Move element-command range publication toward capacity-owned render-frame
   publication pages; do not replace it with mutable pooled arrays.

@@ -1,5 +1,6 @@
 using Irix.Drawing;
 using Irix.Platform;
+using System.Runtime.CompilerServices;
 
 namespace Irix.Rendering;
 
@@ -139,6 +140,164 @@ internal readonly struct LayoutDirtyClassification(int DfsIndex, LayoutRebuildRe
     public static bool operator ==(LayoutDirtyClassification left, LayoutDirtyClassification right) => left.Equals(right);
 
     public static bool operator !=(LayoutDirtyClassification left, LayoutDirtyClassification right) => !left.Equals(right);
+}
+
+[CollectionBuilder(typeof(LayoutDirtyClassificationListBuilder), nameof(LayoutDirtyClassificationListBuilder.Create))]
+internal readonly struct LayoutDirtyClassificationList : IReadOnlyList<LayoutDirtyClassification>, IEquatable<LayoutDirtyClassificationList>
+{
+    private readonly LayoutDirtyClassification[]? _items;
+    private readonly LayoutDirtyClassification _single;
+    private readonly int _count;
+
+    private LayoutDirtyClassificationList(LayoutDirtyClassification[]? items, LayoutDirtyClassification single, int count)
+    {
+        _items = items;
+        _single = single;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public LayoutDirtyClassification this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return _items is null ? _single : _items[index];
+        }
+    }
+
+    public static LayoutDirtyClassificationList Empty => default;
+
+    public static LayoutDirtyClassificationList Single(LayoutDirtyClassification classification) =>
+        new(null, classification, 1);
+
+    public static LayoutDirtyClassificationList FromOwnedArray(LayoutDirtyClassification[] classifications)
+    {
+        ArgumentNullException.ThrowIfNull(classifications);
+        return classifications.Length switch
+        {
+            0 => Empty,
+            1 => Single(classifications[0]),
+            _ => new LayoutDirtyClassificationList(classifications, default, classifications.Length)
+        };
+    }
+
+    public static LayoutDirtyClassificationList CopyFrom(ReadOnlySpan<LayoutDirtyClassification> classifications)
+    {
+        return classifications.Length switch
+        {
+            0 => Empty,
+            1 => Single(classifications[0]),
+            _ => FromOwnedArray(classifications.ToArray())
+        };
+    }
+
+    public LayoutDirtyClassification[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        if (_count == 1)
+        {
+            return [_single];
+        }
+
+        var copy = new LayoutDirtyClassification[_count];
+        Array.Copy(_items!, copy, _count);
+        return copy;
+    }
+
+    public Enumerator GetEnumerator() => new(_items, _single, _count);
+
+    IEnumerator<LayoutDirtyClassification> IEnumerable<LayoutDirtyClassification>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(LayoutDirtyClassificationList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutDirtyClassificationList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(LayoutDirtyClassificationList left, LayoutDirtyClassificationList right) => left.Equals(right);
+
+    public static bool operator !=(LayoutDirtyClassificationList left, LayoutDirtyClassificationList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<LayoutDirtyClassification>
+    {
+        private readonly LayoutDirtyClassification[]? _items;
+        private readonly LayoutDirtyClassification _single;
+        private readonly int _count;
+        private int _index;
+
+        internal Enumerator(LayoutDirtyClassification[]? items, LayoutDirtyClassification single, int count)
+        {
+            _items = items;
+            _single = single;
+            _count = count;
+            _index = -1;
+        }
+
+        public readonly LayoutDirtyClassification Current => _items is null ? _single : _items[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+}
+
+internal static class LayoutDirtyClassificationListBuilder
+{
+    public static LayoutDirtyClassificationList Create(ReadOnlySpan<LayoutDirtyClassification> classifications) =>
+        LayoutDirtyClassificationList.CopyFrom(classifications);
 }
 
 /// <summary>

@@ -13,7 +13,7 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
     private PixelRectangle _lastLayoutViewport;
     private long _layoutRebuildCount;
     private LayoutRebuildReason _lastLayoutRebuildReason;
-    private IReadOnlyList<LayoutDirtyClassification> _lastDirtyClassifications = [];
+    private LayoutDirtyClassificationList _lastDirtyClassifications;
 
     public WindowDrawCommandTranslator(
         INativeWindow window,
@@ -44,7 +44,7 @@ internal sealed partial class WindowDrawCommandTranslator : IPatchBatchTranslato
 
     public LayoutRebuildReason LastLayoutRebuildReason => _lastLayoutRebuildReason;
 
-    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications => _lastDirtyClassifications;
+    public LayoutDirtyClassificationList LastDirtyClassifications => _lastDirtyClassifications;
 
     public CompositionRenderInvalidation LastCompositionInvalidation { get; private set; }
 

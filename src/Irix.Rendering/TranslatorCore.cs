@@ -95,7 +95,7 @@ internal readonly struct TranslatorOutput(
     PixelRectangle LayoutViewport,
     long LayoutRebuildCount,
     LayoutRebuildReason LastLayoutRebuildReason,
-    IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications,
+    LayoutDirtyClassificationList LastDirtyClassifications,
     LayoutTreeResult? LayoutResult,
     double MaxScrollY)
 {
@@ -104,7 +104,7 @@ internal readonly struct TranslatorOutput(
     public PixelRectangle LayoutViewport { get; } = LayoutViewport;
     public long LayoutRebuildCount { get; } = LayoutRebuildCount;
     public LayoutRebuildReason LastLayoutRebuildReason { get; } = LastLayoutRebuildReason;
-    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; } = LastDirtyClassifications;
+    public LayoutDirtyClassificationList LastDirtyClassifications { get; } = LastDirtyClassifications;
     public LayoutTreeResult? LayoutResult { get; } = LayoutResult;
     public double MaxScrollY { get; } = MaxScrollY;
 }

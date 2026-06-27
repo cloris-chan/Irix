@@ -46,7 +46,7 @@ internal static class RetainedRootMetadataPatcher
     public static RetainedRootMetadataPatch ProjectControlMetadata(
         VirtualNode retainedRoot,
         VirtualNode nextRoot,
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        LayoutDirtyClassificationList dirtyClassifications,
         TextBufferSnapshot? retainedSnapshot = null,
         TextBufferSnapshot? nextSnapshot = null)
     {

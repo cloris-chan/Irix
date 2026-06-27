@@ -61,7 +61,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     public LayoutRebuildReason LastLayoutRebuildReason { get; private set; }
 
-    public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; private set; } = [];
+    public LayoutDirtyClassificationList LastDirtyClassifications { get; private set; }
 
     public bool HasLastRetainedInputSnapshot { get; private set; }
 
@@ -199,7 +199,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         VirtualNode root,
         TextBufferSnapshot textSnapshot,
         IReadOnlyList<int>? dirtyNodes,
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        LayoutDirtyClassificationList dirtyClassifications,
         bool viewportChanged,
         VirtualNode previousRoot,
         TextBufferSnapshot? classifyOldSnapshot,
@@ -256,7 +256,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         bool treeChanged,
         bool viewportChanged,
         bool hasDirty,
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications)
+        LayoutDirtyClassificationList dirtyClassifications)
     {
         if (!hadRetainedLayout)
         {
@@ -295,7 +295,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return 0;
     }
 
-    private static IReadOnlyList<LayoutDirtyClassification> ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static LayoutDirtyClassificationList ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         var scratch = new RenderScratchBuffer();
         Span<int> dirtySetStorage = stackalloc int[InlineDirtyClassificationCapacity];
@@ -316,7 +316,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             classifications.Add(new LayoutDirtyClassification(dirtyNode, reason.Reason, reason.InvalidationKind));
         }
 
-        return classifications.ToArray();
+        return classifications.Count switch
+        {
+            0 => LayoutDirtyClassificationList.Empty,
+            1 => LayoutDirtyClassificationList.Single(classifications[0]),
+            _ => LayoutDirtyClassificationList.FromOwnedArray(classifications.ToArray())
+        };
     }
 
     private static DirtyNodeClassification ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
@@ -526,7 +531,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         IReadOnlyList<HitTestTarget> hitTargets,
         VirtualNode retainedRoot,
         PixelRectangle viewport,
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        LayoutDirtyClassificationList dirtyClassifications,
         IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
         IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
         LayoutRebuildReason layoutRebuildReason,
@@ -800,7 +805,7 @@ internal readonly struct RenderPipelineRetainedInputSnapshot(
     IReadOnlyList<HitTestTarget> HitTargets,
     VirtualNode RetainedRoot,
     PixelRectangle Viewport,
-    IReadOnlyList<LayoutDirtyClassification> DirtyClassifications,
+    LayoutDirtyClassificationList DirtyClassifications,
     IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
     IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
     LayoutRebuildReason LayoutRebuildReason,
@@ -812,7 +817,7 @@ internal readonly struct RenderPipelineRetainedInputSnapshot(
     public IReadOnlyList<HitTestTarget> HitTargets { get; } = HitTargets;
     public VirtualNode RetainedRoot { get; } = RetainedRoot;
     public PixelRectangle Viewport { get; } = Viewport;
-    public IReadOnlyList<LayoutDirtyClassification> DirtyClassifications { get; } = DirtyClassifications;
+    public LayoutDirtyClassificationList DirtyClassifications { get; } = DirtyClassifications;
     public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = DirtyElementRanges;
     public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; } = DirtyCommandRanges;
     public LayoutRebuildReason LayoutRebuildReason { get; } = LayoutRebuildReason;

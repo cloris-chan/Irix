@@ -97,7 +97,7 @@ internal readonly struct StyleOnlyPatchPlanDiagnosticSnapshot(
 internal static class StyleOnlyPatchPlanBuilder
 {
     public static StyleOnlyPatchPlan Build(
-        IReadOnlyList<LayoutDirtyClassification> dirtyClassifications,
+        LayoutDirtyClassificationList dirtyClassifications,
         bool viewportChanged,
         LayoutTreeResult? retainedLayout,
         ElementCommandRange[] retainedElementCommandRanges,

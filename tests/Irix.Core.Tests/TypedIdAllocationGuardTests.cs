@@ -2086,7 +2086,7 @@ public class TypedIdAllocationGuardTests
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.optional-diagnostics.cs"));
 
         Assert.Contains("internal readonly struct CounterLayoutDiagnostics : IEquatable<CounterLayoutDiagnostics>", source);
-        Assert.Contains("IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications", source);
+        Assert.Contains("LayoutDirtyClassificationList LastDirtyClassifications", source);
         Assert.DoesNotContain("string LastDirtyClassifications", source);
         Assert.DoesNotContain("new CounterLayoutDiagnostics(long LayoutRebuildCount, LayoutRebuildReason LastLayoutRebuildReason, string LastDirtyClassifications)", source);
     }
