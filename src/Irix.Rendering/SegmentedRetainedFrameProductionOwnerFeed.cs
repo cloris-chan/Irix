@@ -111,7 +111,8 @@ internal sealed partial class SegmentedRetainedFrameProductionOwnerFeed(RenderPi
 
     private SegmentedRetainedFrameProductionOwnerFeedResult UpdateRuntimeOwner(VirtualNode root, PixelRectangle viewportBounds, RenderFrameBatch batch)
     {
-        return _segmentOwnership?.Update(_pipeline.LastRetainedInputSnapshot, root, viewportBounds, batch)
+        var snapshot = _pipeline.HasLastRetainedInputSnapshot ? _pipeline.LastRetainedInputSnapshot : (RenderPipelineRetainedInputSnapshot?)null;
+        return _segmentOwnership?.Update(snapshot, root, viewportBounds, batch)
             ?? SegmentedRetainedFrameProductionOwnerFeedResult.Disabled;
     }
 

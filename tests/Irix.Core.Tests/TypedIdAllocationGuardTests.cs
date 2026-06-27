@@ -68,6 +68,18 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void Render_pipeline_retained_input_snapshot_is_value_publication_not_heap_identity()
+    {
+        var root = FindRepoRoot();
+        var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
+
+        Assert.True(typeof(RenderPipelineRetainedInputSnapshot).IsValueType);
+        Assert.Contains("internal readonly struct RenderPipelineRetainedInputSnapshot", renderPipelineSource);
+        Assert.Contains("public bool HasLastRetainedInputSnapshot", renderPipelineSource);
+        Assert.DoesNotContain("internal sealed record RenderPipelineRetainedInputSnapshot", renderPipelineSource);
+    }
+
+    [Fact]
     public void ActionId_None_is_default_value()
     {
         var defaultId = default(ActionId);

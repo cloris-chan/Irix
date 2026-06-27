@@ -962,13 +962,11 @@ internal readonly struct CompositionAnimationDeclaration(
 
     public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, out CompositionAnimationPlan plan)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         return TryResolve(snapshot, snapshot.CommandCount, out plan);
     }
 
     public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, int commandCount, out CompositionAnimationPlan plan)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         if (TargetKey == NodeKey.None
             || !snapshot.TryGetCompositionTarget(TargetKey, commandCount, out var target)
             || !target.IsValidForCommandCount(commandCount))
@@ -1036,13 +1034,11 @@ internal readonly struct CompositionScrollPresentationDeclaration(
 
     public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, out CompositionScrollPresentationPlan plan)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         return TryResolve(snapshot, snapshot.CommandCount, out plan);
     }
 
     public bool TryResolve(RenderPipelineRetainedInputSnapshot snapshot, int commandCount, out CompositionScrollPresentationPlan plan)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         if (TargetKey == NodeKey.None
             || !snapshot.TryGetScrollCompositionTarget(TargetKey, commandCount, out var target)
             || !target.IsValidForCommandCount(commandCount))

@@ -922,7 +922,9 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(start, startRuntime.LastResult);
         Assert.Equal(1, compositor.StartCount);
         Assert.Equal(0, compositor.CancelCount);
-        Assert.Same(snapshot, compositor.LastSnapshot);
+        Assert.True(compositor.LastSnapshot.HasValue);
+        Assert.Equal(snapshot.CommandCount, compositor.LastSnapshot.Value.CommandCount);
+        Assert.Equal(snapshot.Viewport, compositor.LastSnapshot.Value.Viewport);
         Assert.Equal(new NodeKey(22), compositor.LastDeclaration.TargetKey);
         Assert.Equal(CompositionAnimationRepeatMode.Alternate, compositor.LastDeclaration.Timeline.RepeatMode);
         Assert.Equal(new CompositionAnimationInstanceId(9), compositor.LastDeclaration.InstanceId);
@@ -3985,7 +3987,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
         var snapshot = pipeline.LastRetainedInputSnapshot!;
 
-        Assert.NotNull(snapshot);
+        Assert.True(pipeline.HasLastRetainedInputSnapshot);
         Assert.True(pipeline.LastLayoutResult.HasValue);
         var lastLayoutResult = pipeline.LastLayoutResult.Value;
         Assert.Same(lastLayoutResult.Elements, snapshot.LayoutResult.Elements);

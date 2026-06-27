@@ -205,7 +205,7 @@ The active worklist is intentionally narrow:
 
 - Keep local Smoke gate authoritative for broad changes.
 - Treat style, animation, and GPU composition as design-first tracks with a D3D12/GPU-first implementation bias.
-- Treat allocation measurement/hardening through [Render-Pipeline-Performance-Architecture.md](Render-Pipeline-Performance-Architecture.md): start with control composition scratch lowering, then consider a published `VirtualNode` slab, layout publication freeze cost, and smaller dirty/hit/snapshot buckets.
+- Treat allocation measurement/hardening through [Render-Pipeline-Performance-Architecture.md](Render-Pipeline-Performance-Architecture.md): start with control composition scratch lowering, then consider a published `VirtualNode` slab, layout publication freeze cost, and smaller dirty/hit/retained-frame handoff buckets.
 - Use the scroll and input/control ownership contracts before extracting runtime state from Poc.
 - Maintain and expand GlyphAtlas only through guarded oracle/regression-backed changes.
 - Keep entry eviction and pixel/layout oracle as future work.

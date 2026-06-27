@@ -159,7 +159,6 @@ internal sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedF
         RenderPipelineRetainedInputSnapshot snapshot,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         if (cancellationToken.IsCancellationRequested)
         {
             return ValueTask.FromCanceled(cancellationToken);
@@ -411,9 +410,14 @@ internal sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedF
         Exception? error = null;
         try
         {
+            if (workItem.RetainedInputSnapshot is not { } snapshot)
+            {
+                throw new InvalidOperationException("Scroll presentation install work item did not carry a retained input snapshot.");
+            }
+
             await InstallScrollPresentationCoreAsync(
                 workItem.ScrollPresentationDeclaration,
-                workItem.RetainedInputSnapshot!);
+                snapshot);
         }
         catch (Exception ex)
         {
@@ -583,7 +587,7 @@ internal sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedF
         RenderPipelineRetainedInputSnapshot? retainedSnapshot)
     {
         if (!CanPreserveScrollPresentationAcrossInvalidation(invalidation.Kind)
-            || retainedSnapshot is null
+            || retainedSnapshot is not { } snapshot
             || _compositor is not ICompositionScrollPresentationCompositor scrollPresentationCompositor
             || !TryGetPreservableScrollPresentationDeclaration(out var declaration))
         {
@@ -592,7 +596,7 @@ internal sealed partial class CompositorLoop : IVirtualNodePatchSink, IRetainedF
 
         return scrollPresentationCompositor.TryPrepareCompositionScrollPresentationRetainedFrameUpdate(
             declaration,
-            retainedSnapshot);
+            snapshot);
     }
 
     private static bool CanPreserveScrollPresentationAcrossInvalidation(CompositionRenderInvalidationKind kind)

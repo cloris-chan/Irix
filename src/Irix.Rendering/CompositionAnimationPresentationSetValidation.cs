@@ -298,7 +298,7 @@ internal static class CompositionAnimationPresentationSetActivationPreflight
         int commandCount)
     {
         var validation = CompositionAnimationPresentationSetValidator.Validate(declarations, snapshot, commandCount);
-        if (declarations.IsEmpty || snapshot is null || commandCount <= 0 || snapshot.CommandCount != commandCount)
+        if (declarations.IsEmpty || snapshot is not { } retainedSnapshot || commandCount <= 0 || retainedSnapshot.CommandCount != commandCount)
         {
             return new CompositionAnimationPresentationSetActivationPreflightResult(
                 validation,
@@ -308,7 +308,7 @@ internal static class CompositionAnimationPresentationSetActivationPreflight
                 PresentationStateChanged: false);
         }
 
-        var entries = CreateEntries(validation, declarations, snapshot, commandCount);
+        var entries = CreateEntries(validation, declarations, retainedSnapshot, commandCount);
         var plan = validation.Kind == CompositionAnimationPresentationSetResultKind.Accepted
             ? CreatePlan(entries)
             : default;
@@ -337,10 +337,10 @@ internal static class CompositionAnimationPresentationSetActivationPreflight
         {
             var validationEntry = validationEntries[i];
             if (validationEntry.IsAccepted
-                && snapshot is not null
+                && snapshot is { } retainedSnapshot
                 && commandCount > 0
                 && i < declarations.Length
-                && declarations[i].TryResolve(snapshot, commandCount, out var plan)
+                && declarations[i].TryResolve(retainedSnapshot, commandCount, out var plan)
                 && plan.IsValidForCommandCount(commandCount))
             {
                 entries[i] = new CompositionAnimationPresentationSetActivationEntry(validationEntry, plan);
@@ -391,7 +391,7 @@ internal static class CompositionAnimationPresentationSetValidator
                 PresentationStateChanged: false);
         }
 
-        if (snapshot is null)
+        if (snapshot is not { } retainedSnapshot)
         {
             return RejectAll(declarations, CompositionAnimationPresentationSetRejectionReason.MissingRetainedSnapshot);
         }
@@ -401,7 +401,7 @@ internal static class CompositionAnimationPresentationSetValidator
             return RejectAll(declarations, CompositionAnimationPresentationSetRejectionReason.MissingRetainedFrame);
         }
 
-        if (snapshot.CommandCount != commandCount)
+        if (retainedSnapshot.CommandCount != commandCount)
         {
             return RejectAll(declarations, CompositionAnimationPresentationSetRejectionReason.CommandFrameMismatch);
         }
@@ -410,7 +410,7 @@ internal static class CompositionAnimationPresentationSetValidator
         for (var i = 0; i < declarations.Length; i++)
         {
             var declaration = declarations[i];
-            if (!declaration.TryResolve(snapshot, commandCount, out var plan))
+            if (!declaration.TryResolve(retainedSnapshot, commandCount, out var plan))
             {
                 results[i] = CompositionAnimationPresentationSetEntryValidationResult.Rejected(
                     i,

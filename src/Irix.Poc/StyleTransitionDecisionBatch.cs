@@ -1026,7 +1026,7 @@ internal static class StyleTransitionDecisionBatchPreflight
                 StyleTransitionOwnerRejectionReason.MissingOwner);
         }
 
-        if (snapshot is null)
+        if (snapshot is not { } retainedSnapshot)
         {
             return StyleTransitionOwnerValidationResult.Rejected(
                 entry.OwnerKey,
@@ -1034,7 +1034,7 @@ internal static class StyleTransitionDecisionBatchPreflight
                 StyleTransitionOwnerRejectionReason.MissingRetainedSnapshot);
         }
 
-        if (!snapshot.TryGetCompositionTarget(entry.Decision.TargetKey, out _))
+        if (!retainedSnapshot.TryGetCompositionTarget(entry.Decision.TargetKey, out _))
         {
             return StyleTransitionOwnerValidationResult.Rejected(
                 entry.OwnerKey,

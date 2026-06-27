@@ -63,7 +63,9 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     public IReadOnlyList<LayoutDirtyClassification> LastDirtyClassifications { get; private set; } = [];
 
-    public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot { get; private set; }
+    public bool HasLastRetainedInputSnapshot { get; private set; }
+
+    public RenderPipelineRetainedInputSnapshot LastRetainedInputSnapshot { get; private set; }
 
     /// <summary>
     /// The layout tree result from the last Build call, if available.
@@ -174,6 +176,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             LastLayoutRebuildReason,
             classifyOldSnapshot,
             _retainedTextSnapshot);
+        HasLastRetainedInputSnapshot = true;
         OnPipelineRetainedInputAllocated();
         OnPipelineSnapshotAllocated();
 
@@ -784,7 +787,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return true;
     }
 }
-internal sealed record RenderPipelineRetainedInputSnapshot(
+internal readonly struct RenderPipelineRetainedInputSnapshot(
     LayoutTreeResult LayoutResult,
     ElementCommandRange[] ElementCommandRanges,
     IReadOnlyList<HitTestTarget> HitTargets,
@@ -797,7 +800,18 @@ internal sealed record RenderPipelineRetainedInputSnapshot(
     TextBufferSnapshot? PreviousTextSnapshot = null,
     TextBufferSnapshot? TextSnapshot = null)
 {
-    public int CommandCount => ResolveCommandCount(ElementCommandRanges);
+    public LayoutTreeResult LayoutResult { get; } = LayoutResult;
+    public ElementCommandRange[] ElementCommandRanges { get; } = ElementCommandRanges;
+    public IReadOnlyList<HitTestTarget> HitTargets { get; } = HitTargets;
+    public VirtualNode RetainedRoot { get; } = RetainedRoot;
+    public PixelRectangle Viewport { get; } = Viewport;
+    public IReadOnlyList<LayoutDirtyClassification> DirtyClassifications { get; } = DirtyClassifications;
+    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = DirtyElementRanges;
+    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; } = DirtyCommandRanges;
+    public LayoutRebuildReason LayoutRebuildReason { get; } = LayoutRebuildReason;
+    public TextBufferSnapshot? PreviousTextSnapshot { get; } = PreviousTextSnapshot;
+    public TextBufferSnapshot? TextSnapshot { get; } = TextSnapshot;
+    public int CommandCount { get; } = ResolveCommandCount(ElementCommandRanges);
 
     public bool TryGetCompositionTarget(NodeKey key, out CompositionTarget target)
     {

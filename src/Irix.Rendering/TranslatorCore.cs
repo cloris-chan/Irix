@@ -19,7 +19,8 @@ internal sealed partial class TranslatorCore : IRetainedInputSnapshotProvider
 
     public RetainedRenderFrameSegmentOwnership? SegmentOwnership => _ownerFeed?.SegmentOwnership;
 
-    public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot => _renderPipeline.LastRetainedInputSnapshot;
+    public RenderPipelineRetainedInputSnapshot? LastRetainedInputSnapshot =>
+        _renderPipeline.HasLastRetainedInputSnapshot ? _renderPipeline.LastRetainedInputSnapshot : null;
 
     public TranslatorRetainedState Apply(in PatchBatch patchBatch)
     {

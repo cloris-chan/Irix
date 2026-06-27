@@ -403,8 +403,7 @@ internal sealed class StyleTransitionRuntimeCoordinator
             return StyleTransitionRuntimeResult.NoOp();
         }
 
-        var snapshot = snapshotProvider.LastRetainedInputSnapshot;
-        if (snapshot is null)
+        if (snapshotProvider.LastRetainedInputSnapshot is not { } snapshot)
         {
             return StyleTransitionRuntimeResult.Fallback(
                 decision.TargetKey,

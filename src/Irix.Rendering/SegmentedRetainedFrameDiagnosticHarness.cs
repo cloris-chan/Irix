@@ -49,7 +49,7 @@ internal sealed class SegmentedRetainedFrameDiagnosticHarness(RenderPipeline pip
         }
 
         var shadow = _segmentedRetainedFrame ??= new SegmentedRetainedFrameShadowHarness();
-        if (shadow.Owner.CommandCount == 0 || batch.DirtyCommandRanges.Count == 0 || pipeline.LastRetainedInputSnapshot is null)
+        if (shadow.Owner.CommandCount == 0 || batch.DirtyCommandRanges.Count == 0 || !pipeline.HasLastRetainedInputSnapshot)
         {
             return shadow.ApplyFull(batch, root);
         }

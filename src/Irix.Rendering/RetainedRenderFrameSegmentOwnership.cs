@@ -82,21 +82,21 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             return new SegmentedRetainedFrameProductionOwnerFeedResult(owner.ApplyFull(batch, root), true, false, true);
         }
 
-        if (batch.DirtyCommandRanges.Count == 0 || snapshot is null)
+        if (batch.DirtyCommandRanges.Count == 0 || snapshot is not { } retainedSnapshot)
         {
             return new SegmentedRetainedFrameProductionOwnerFeedResult(owner.Rebuild(batch, root), true, false, true);
         }
 
-        var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewportBounds, batch.Resources, batch.Resources);
+        var plan = RetainedPartialApplyPlanner.Plan(retainedSnapshot, viewportBounds, batch.Resources, batch.Resources);
         if (plan.Kind != RetainedPartialApplyResultKind.AppliedPartial)
         {
             return ApplyFallback(owner, batch, root, plan.Reason, plan.Kind);
         }
 
-        var dirtyDfsIndices = new int[snapshot.DirtyClassifications.Count];
-        for (var i = 0; i < snapshot.DirtyClassifications.Count; i++)
+        var dirtyDfsIndices = new int[retainedSnapshot.DirtyClassifications.Count];
+        for (var i = 0; i < retainedSnapshot.DirtyClassifications.Count; i++)
         {
-            dirtyDfsIndices[i] = snapshot.DirtyClassifications[i].DfsIndex;
+            dirtyDfsIndices[i] = retainedSnapshot.DirtyClassifications[i].DfsIndex;
         }
 
         var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(owner.RetainedRoot, root, dirtyDfsIndices, owner.HitTargets);
@@ -105,7 +105,7 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             return ApplyFallback(owner, batch, root, hitTargetProjection.FallbackReason, plan.Kind);
         }
 
-        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(owner.RetainedRoot, root, snapshot.DirtyClassifications, snapshot.PreviousTextSnapshot, snapshot.TextSnapshot);
+        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(owner.RetainedRoot, root, retainedSnapshot.DirtyClassifications, retainedSnapshot.PreviousTextSnapshot, retainedSnapshot.TextSnapshot);
         if (!rootPatch.Succeeded)
         {
             return ApplyFallback(owner, batch, root, rootPatch.FallbackReason, plan.Kind);

@@ -75,40 +75,40 @@ internal static class RetainedPartialApplyPlanner
         IFrameResourceResolver retainedResources,
         IFrameResourceResolver replacementResources)
     {
-        if (snapshot is null)
+        if (snapshot is not { } retainedSnapshot)
         {
             return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.MissingRetainedSnapshot);
         }
 
-        if (snapshot.Viewport != currentViewport)
+        if (retainedSnapshot.Viewport != currentViewport)
         {
-            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.ViewportChanged, snapshot.DirtyElementRanges);
+            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.ViewportChanged, retainedSnapshot.DirtyElementRanges);
         }
 
-        if (!StyleOnlyPatchEligibility.IsLayoutReuseEligible(snapshot.DirtyClassifications, viewportChanged: false))
+        if (!StyleOnlyPatchEligibility.IsLayoutReuseEligible(retainedSnapshot.DirtyClassifications, viewportChanged: false))
         {
-            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.NotStyleOnly, snapshot.DirtyElementRanges);
+            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.NotStyleOnly, retainedSnapshot.DirtyElementRanges);
         }
 
-        if (!RangeUtils.TryMapContiguousElementRangesToCommandRanges(snapshot.ElementCommandRanges, snapshot.DirtyElementRanges, out var dirtyCommandRanges))
+        if (!RangeUtils.TryMapContiguousElementRangesToCommandRanges(retainedSnapshot.ElementCommandRanges, retainedSnapshot.DirtyElementRanges, out var dirtyCommandRanges))
         {
-            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.UnstableCommandRange, snapshot.DirtyElementRanges);
+            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.UnstableCommandRange, retainedSnapshot.DirtyElementRanges);
         }
 
-        if (!StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(snapshot.HitTargets, snapshot.LayoutResult.Elements, snapshot.DirtyElementRanges, out var patchedHitTargets))
+        if (!StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(retainedSnapshot.HitTargets, retainedSnapshot.LayoutResult.Elements, retainedSnapshot.DirtyElementRanges, out var patchedHitTargets))
         {
-            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, snapshot.DirtyElementRanges);
+            return RetainedPartialApplyPlan.FallbackFull(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, retainedSnapshot.DirtyElementRanges);
         }
 
         if (!ResourcesMatch(retainedResources, replacementResources))
         {
             return RetainedPartialApplyPlan.Rejected(
                 RetainedPartialApplyFallbackReason.ResourceOwnershipMismatch,
-                snapshot.DirtyElementRanges,
+                retainedSnapshot.DirtyElementRanges,
                 dirtyCommandRanges);
         }
 
-        return RetainedPartialApplyPlan.AppliedPartial(snapshot.DirtyElementRanges, dirtyCommandRanges, patchedHitTargets);
+        return RetainedPartialApplyPlan.AppliedPartial(retainedSnapshot.DirtyElementRanges, dirtyCommandRanges, patchedHitTargets);
     }
 
     private static bool ResourcesMatch(IFrameResourceResolver retainedResources, IFrameResourceResolver replacementResources)

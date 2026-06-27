@@ -167,9 +167,10 @@ the simple lifetime cases; guards cover the project-specific ones.
 
 Baseline refreshed on 2026-06-27 after the `VirtualNode` IR was normalized to
 `Container`/`Content` nodes, the first production control/root publication
-slices were applied, `LayoutTreeResult` and `DrawCommandRecordResult` became
-readonly value publication shells, and pipeline attribution counters were
-aligned to the current-thread steady-state measurement scope.
+slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
+`RenderPipelineRetainedInputSnapshot` became readonly value publication shells,
+and pipeline attribution counters were aligned to the current-thread
+steady-state measurement scope.
 
 Primary command:
 
@@ -181,22 +182,34 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2261536 bytes | 12564 B/frame | render 11013 B/frame, tree 883 B/frame, translate 636 B/frame, diff 45 B/frame |
-| Warm scroll | 537288 bytes | 2984 B/frame | translate 1822 B/frame, tree 774 B/frame, render 240 B/frame, diff 226 B/frame |
-| Scale change | 341616 bytes | 1897 B/frame | tree 820 B/frame, render 501 B/frame, translate 410 B/frame, diff 227 B/frame |
+| Static | 2228784 bytes | 12382 B/frame | render 11014 B/frame, tree 881 B/frame, translate 454 B/frame, diff 45 B/frame |
+| Warm scroll | 498408 bytes | 2768 B/frame | translate 2277 B/frame, tree 318 B/frame, render 194 B/frame, diff 45 B/frame |
+| Scale change | 302736 bytes | 1681 B/frame | tree 865 B/frame, render 364 B/frame, translate 364 B/frame, diff 136 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
 | `layout.elementsArray` | 504 | Retained layout publication array. |
-| `tree.buildRoot.button.propertyArray` | 273 | Control/state/style property publication. |
 | `layout.treeNodesArray` | 248 | Retained layout tree publication array. |
 | `drawRecord` | 144 | Command recording is visible but not the largest bucket. |
-| `tree.buildRoot.button.childrenArray` | 136 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
+| `hitTargets` | 112 | Retained input hit-test publication. |
+| `retainedFrame` | 112 | Retained-frame handoff publication cost. |
+| `tree.buildRoot.button.childrenArray` | 91 | Cost of publishing per-button child arrays after the button becomes a container with rectangle/text content children. |
+| `tree.buildRoot.button.propertyArray` | 91 | Control/state/style property publication. |
 | `layout.scrollDiagnosticsArray` | 72 | Retained scroll observation publication array. |
+| `pipeline.snapshot.retainedInput` | 0 | The retained input snapshot shell is now a readonly value, not a heap object. |
 | `layout.result` | 0 | The retained result shell is now a readonly value, not a heap object. |
 | `layout.nodeWalk` | 0 | The layout bucket is publication cost, not node-walk allocation. |
+
+Core-pipeline steady-state diagnostics over prebuilt trees and known resources
+now agree with the value-publication slice:
+
+| Scenario | Thread bytes/frame | Pipeline snapshot |
+|----------|--------------------|-------------------|
+| Warm reuse | 155 | `snapshot=0`, `retainedInput=0` |
+| Style only | 1441 | `snapshot=0`, `retainedInput=0` |
+| Layout change | 1145 | `snapshot=0`, `retainedInput=0` |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
@@ -269,10 +282,10 @@ The required model is capacity-owned publication, not ad hoc object pooling:
 
 The current implementation is not there yet. The measured buckets show the gap:
 layout arrays, control child/property arrays, draw-record publication, dirty
-classification, hit targets, and retained snapshot shells still allocate when
-they publish new arrays or objects. The recent `LayoutTreeResult` value-shell
-slice removes one result-object allocation, but the remaining work is to replace
-new-array publication with capacity-owned pages and generation-fenced views.
+classification, hit targets, and retained-frame handoff still allocate when
+they publish new arrays or objects. The recent value-publication slices remove
+result/snapshot object identity, but the remaining work is to replace new-array
+publication with capacity-owned pages and generation-fenced views.
 
 ## Architecture Rules
 
@@ -472,11 +485,13 @@ Acceptance:
 - `layout.nodeWalk` allocation remains zero.
 - Style-only and partial-apply guards stay green.
 
-### P4 - Draw Ranges, Dirty Classification, Hit Targets, And Snapshot Shells
+### P4 - Draw Ranges, Dirty Classification, Hit Targets, And Retained Frame Handoff
 
-Status: first draw-record slice implemented. `DrawCommandRecordResult` is now a
-readonly value result, so command recording no longer allocates a per-frame
-result shell. The command batch, frame resources, dirty command ranges, and
+Status: first draw-record and retained-input snapshot shell slices implemented.
+`DrawCommandRecordResult` and `RenderPipelineRetainedInputSnapshot` are now
+readonly value publications, so command recording and retained input publication
+no longer allocate per-frame result/snapshot shell objects. The command batch,
+frame resources, dirty command ranges, hit targets, retained-frame handoff, and
 element-command range publication remain explicit outputs.
 
 After the larger tree/layout publication buckets are addressed, review smaller
@@ -485,7 +500,8 @@ publication costs:
 - Element-command range arrays created by `DrawCommandRecorder`.
 - Dirty classification arrays created by `RenderPipeline`.
 - Hit-target arrays for retained input snapshots.
-- `RenderPipelineRetainedInputSnapshot` shell allocation.
+- Retained-frame handoff publication cost after retained input snapshot shell
+  allocation is gone.
 - Scroll composition target lists and command-range projection helpers.
 
 Direction:
@@ -494,14 +510,15 @@ Direction:
 - Publish compact immutable views only when consumers need retained data.
 - Move element-command range publication toward capacity-owned render-frame
   publication pages; do not replace it with mutable pooled arrays.
-- Replace snapshot shells with reusable generation-backed snapshot slots only
+- Keep `RenderPipelineRetainedInputSnapshot` as a value publication and move the
+  referenced retained arrays/lists toward generation-backed publication pages
   when generation and text/resource ownership make stale reads impossible.
 
 Acceptance:
 
 - Small-bucket reductions do not add aliasing or stale retained-snapshot risks.
-- Under reserved capacity, dirty classification, hit-target, snapshot, and
-  command-range projection publication does not allocate.
+- Under reserved capacity, dirty classification, hit-target, retained-frame
+  handoff, and command-range projection publication does not allocate.
 - Active hit-test remapping and scroll presentation diagnostics stay green.
 
 ### P5 - Backend-Side Batching And Persistent Upload Rings

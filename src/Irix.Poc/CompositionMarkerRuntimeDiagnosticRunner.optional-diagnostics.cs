@@ -45,7 +45,9 @@ internal static class CompositionMarkerRuntimeDiagnosticRunner
                     new CompositionRuntimeEventId(404),
                     CompositionAnimationMarkerTrigger.AtProgress(0.5f))
             ]);
-        drawingCompositor.SetCompositionAnimationDeclaration(declaration, translator.LastRetainedInputSnapshot!);
+        var snapshot = translator.LastRetainedInputSnapshot
+            ?? throw new InvalidOperationException("Retained input snapshot was not produced.");
+        drawingCompositor.SetCompositionAnimationDeclaration(declaration, snapshot);
 
         _ = await drawingCompositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(20), cancellationToken);
         _ = await drawingCompositor.RenderCompositionAnimationTickAtAsync(CompositionTimestamp.FromStopwatchTicks(80), cancellationToken);

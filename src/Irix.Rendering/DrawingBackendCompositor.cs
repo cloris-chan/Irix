@@ -306,7 +306,6 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         in CompositionAnimationDeclaration declaration,
         RenderPipelineRetainedInputSnapshot snapshot)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         lock (_frameGate)
         {
             if (_retainedFrame.CommandCount <= 0)
@@ -490,7 +489,6 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         in CompositionScrollPresentationDeclaration declaration,
         RenderPipelineRetainedInputSnapshot snapshot)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         lock (_frameGate)
         {
             if (_retainedFrame.CommandCount <= 0)
@@ -524,7 +522,6 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         in CompositionScrollPresentationDeclaration declaration,
         RenderPipelineRetainedInputSnapshot snapshot)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
         lock (_frameGate)
         {
             if (_compositionPresentationState.ScrollPresentationPlan is null

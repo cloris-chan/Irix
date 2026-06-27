@@ -244,8 +244,7 @@ internal sealed class ScrollPresentationCoordinator
         else
         {
             await runtime.DispatchScrollPresentationInterruptedAsync(nextDecision, cancellationToken);
-            var snapshot = snapshotProvider.LastRetainedInputSnapshot;
-            if (snapshot is null)
+            if (snapshotProvider.LastRetainedInputSnapshot is not { } snapshot)
             {
                 return false;
             }
