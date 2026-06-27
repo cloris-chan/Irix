@@ -35,13 +35,13 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     /// The dirty element ranges from the last Build call, if any.
     /// Each tuple is (startIndex, count) into the flat LayoutElement array.
     /// </summary>
-    public IReadOnlyList<(int Start, int Count)> LastDirtyElementRanges { get; private set; } = [];
+    public IndexRangeList LastDirtyElementRanges { get; private set; }
 
     /// <summary>
     /// The dirty draw command ranges from the last Build call, if any.
     /// Each tuple is (startIndex, count) into the DrawCommand batch.
     /// </summary>
-    public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges { get; private set; } = [];
+    public IndexRangeList LastDirtyCommandRanges { get; private set; }
 
     /// <summary>
     /// The element→command range mapping from the last Build call.
@@ -151,9 +151,9 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         var layout = retainedLayoutResult.ElementSpan;
         var dirtyElementRanges = hasDirty
             ? retainedLayoutResult.DirtyElementRanges
-            : null;
+            : IndexRangeList.Empty;
 
-        LastDirtyElementRanges = dirtyElementRanges ?? [];
+        LastDirtyElementRanges = dirtyElementRanges;
 
         OnPipelineAllocationPhaseStarted();
         var result = _drawCommandRecorder.Record(layout, dirtyElementRanges, _retainedTextSnapshot);
@@ -589,8 +589,8 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         VirtualNode retainedRoot,
         PixelRectangle viewport,
         LayoutDirtyClassificationList dirtyClassifications,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
-        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
+        IndexRangeList dirtyElementRanges,
+        IndexRangeList dirtyCommandRanges,
         LayoutRebuildReason layoutRebuildReason,
         TextBufferSnapshot? previousTextSnapshot,
         TextBufferSnapshot? textSnapshot) =>
@@ -863,8 +863,8 @@ internal readonly struct RenderPipelineRetainedInputSnapshot(
     VirtualNode RetainedRoot,
     PixelRectangle Viewport,
     LayoutDirtyClassificationList DirtyClassifications,
-    IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
-    IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
+    IndexRangeList DirtyElementRanges,
+    IndexRangeList DirtyCommandRanges,
     LayoutRebuildReason LayoutRebuildReason,
     TextBufferSnapshot? PreviousTextSnapshot = null,
     TextBufferSnapshot? TextSnapshot = null)
@@ -875,8 +875,8 @@ internal readonly struct RenderPipelineRetainedInputSnapshot(
     public VirtualNode RetainedRoot { get; } = RetainedRoot;
     public PixelRectangle Viewport { get; } = Viewport;
     public LayoutDirtyClassificationList DirtyClassifications { get; } = DirtyClassifications;
-    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges { get; } = DirtyElementRanges;
-    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; } = DirtyCommandRanges;
+    public IndexRangeList DirtyElementRanges { get; } = DirtyElementRanges;
+    public IndexRangeList DirtyCommandRanges { get; } = DirtyCommandRanges;
     public LayoutRebuildReason LayoutRebuildReason { get; } = LayoutRebuildReason;
     public TextBufferSnapshot? PreviousTextSnapshot { get; } = PreviousTextSnapshot;
     public TextBufferSnapshot? TextSnapshot { get; } = TextSnapshot;

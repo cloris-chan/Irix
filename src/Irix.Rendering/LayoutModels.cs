@@ -4,6 +4,186 @@ using System.Runtime.CompilerServices;
 
 namespace Irix.Rendering;
 
+[CollectionBuilder(typeof(IndexRangeListBuilder), nameof(IndexRangeListBuilder.Create))]
+internal readonly struct IndexRangeList : IReadOnlyList<(int Start, int Count)>, IEquatable<IndexRangeList>
+{
+    private readonly (int Start, int Count)[]? _items;
+    private readonly (int Start, int Count) _single;
+    private readonly int _count;
+
+    private IndexRangeList((int Start, int Count)[]? items, (int Start, int Count) single, int count)
+    {
+        _items = items;
+        _single = single;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public (int Start, int Count) this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return _items is null ? _single : _items[index];
+        }
+    }
+
+    public static IndexRangeList Empty => default;
+
+    public static IndexRangeList Single((int Start, int Count) range) =>
+        new(null, range, 1);
+
+    public static IndexRangeList FromOwnedArray((int Start, int Count)[] ranges)
+    {
+        ArgumentNullException.ThrowIfNull(ranges);
+        return ranges.Length switch
+        {
+            0 => Empty,
+            1 => Single(ranges[0]),
+            _ => new IndexRangeList(ranges, default, ranges.Length)
+        };
+    }
+
+    public static IndexRangeList CopyFrom(ReadOnlySpan<(int Start, int Count)> ranges)
+    {
+        return ranges.Length switch
+        {
+            0 => Empty,
+            1 => Single(ranges[0]),
+            _ => FromOwnedArray(ranges.ToArray())
+        };
+    }
+
+    public static IndexRangeList CopyFrom(IReadOnlyList<(int Start, int Count)> ranges)
+    {
+        ArgumentNullException.ThrowIfNull(ranges);
+        return ranges.Count switch
+        {
+            0 => Empty,
+            1 => Single(ranges[0]),
+            _ => CopyRangeList(ranges)
+        };
+    }
+
+    public (int Start, int Count)[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        if (_count == 1)
+        {
+            return [_single];
+        }
+
+        var copy = new (int Start, int Count)[_count];
+        Array.Copy(_items!, copy, _count);
+        return copy;
+    }
+
+    private static IndexRangeList CopyRangeList(IReadOnlyList<(int Start, int Count)> ranges)
+    {
+        var copy = new (int Start, int Count)[ranges.Count];
+        for (var i = 0; i < copy.Length; i++)
+        {
+            copy[i] = ranges[i];
+        }
+
+        return FromOwnedArray(copy);
+    }
+
+    public Enumerator GetEnumerator() => new(_items, _single, _count);
+
+    IEnumerator<(int Start, int Count)> IEnumerable<(int Start, int Count)>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(IndexRangeList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is IndexRangeList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(IndexRangeList left, IndexRangeList right) => left.Equals(right);
+
+    public static bool operator !=(IndexRangeList left, IndexRangeList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<(int Start, int Count)>
+    {
+        private readonly (int Start, int Count)[]? _items;
+        private readonly (int Start, int Count) _single;
+        private readonly int _count;
+        private int _index;
+
+        internal Enumerator((int Start, int Count)[]? items, (int Start, int Count) single, int count)
+        {
+            _items = items;
+            _single = single;
+            _count = count;
+            _index = -1;
+        }
+
+        public readonly (int Start, int Count) Current => _items is null ? _single : _items[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+}
+
+internal static class IndexRangeListBuilder
+{
+    public static IndexRangeList Create(ReadOnlySpan<(int Start, int Count)> ranges) =>
+        IndexRangeList.CopyFrom(ranges);
+}
+
 internal enum LayoutElementKind : byte
 {
     Text,
@@ -631,32 +811,31 @@ internal readonly struct LayoutTreeResult
     private static readonly LayoutElement[] EmptyElements = Array.Empty<LayoutElement>();
     private static readonly LayoutTreeNode[] EmptyTreeNodes = Array.Empty<LayoutTreeNode>();
     private static readonly LayoutElementRange[] EmptyElementRanges = Array.Empty<LayoutElementRange>();
-    private static readonly (int Start, int Count)[] EmptyDirtyElementRanges = Array.Empty<(int Start, int Count)>();
     private static readonly ScrollContainerDiag[] EmptyScrollDiagnostics = Array.Empty<ScrollContainerDiag>();
     private readonly LayoutElement[]? _elements;
     private readonly LayoutTreeNode[]? _treeNodes;
     private readonly LayoutElementRange[]? _elementRanges;
-    private readonly IReadOnlyList<(int Start, int Count)>? _dirtyElementRanges;
+    private readonly IndexRangeList _dirtyElementRanges;
     private readonly IReadOnlyList<ScrollContainerDiag>? _scrollDiagnostics;
 
     public LayoutTreeResult(
         LayoutElement[] elements,
         LayoutTreeNode[] treeNodes,
         LayoutElementRange[] elementRanges,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
+        IndexRangeList dirtyElementRanges,
         IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
     {
         _elements = NormalizeElements(elements);
         _treeNodes = NormalizeTreeNodes(treeNodes);
         _elementRanges = NormalizeElementRanges(elementRanges);
-        _dirtyElementRanges = NormalizeDirtyElementRanges(dirtyElementRanges);
+        _dirtyElementRanges = dirtyElementRanges;
         _scrollDiagnostics = NormalizeScrollDiagnostics(scrollDiagnostics);
     }
 
     public LayoutTreeResult(
         LayoutElement[] elements,
         LayoutTreeNode[] treeNodes,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
+        IndexRangeList dirtyElementRanges)
         : this(elements, treeNodes, [], dirtyElementRanges, [])
     {
     }
@@ -664,7 +843,7 @@ internal readonly struct LayoutTreeResult
     public LayoutTreeResult(
         LayoutElement[] elements,
         LayoutTreeNode[] treeNodes,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
+        IndexRangeList dirtyElementRanges,
         IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
         : this(elements, treeNodes, [], dirtyElementRanges, scrollDiagnostics)
     {
@@ -694,14 +873,14 @@ internal readonly struct LayoutTreeResult
     /// Overlapping/adjacent ranges are merged to produce the minimal set.
     /// Empty when no dirty nodes are specified.
     /// </summary>
-    public IReadOnlyList<(int Start, int Count)> DirtyElementRanges => _dirtyElementRanges ?? EmptyDirtyElementRanges;
+    public IndexRangeList DirtyElementRanges => _dirtyElementRanges;
 
     /// <summary>Diagnostic info for each scrollable container encountered during layout.</summary>
     public IReadOnlyList<ScrollContainerDiag> ScrollDiagnostics => _scrollDiagnostics ?? EmptyScrollDiagnostics;
 
     public LayoutTreeResult WithElementsAndDirtyRanges(
         LayoutElement[] nextElements,
-        IReadOnlyList<(int Start, int Count)> nextDirtyElementRanges)
+        IndexRangeList nextDirtyElementRanges)
     {
         return new LayoutTreeResult(
             nextElements,
@@ -719,9 +898,6 @@ internal readonly struct LayoutTreeResult
 
     private static LayoutElementRange[] NormalizeElementRanges(LayoutElementRange[] elementRanges) =>
         elementRanges.Length == 0 ? EmptyElementRanges : elementRanges;
-
-    private static IReadOnlyList<(int Start, int Count)> NormalizeDirtyElementRanges(IReadOnlyList<(int Start, int Count)> dirtyElementRanges) =>
-        dirtyElementRanges.Count == 0 ? EmptyDirtyElementRanges : dirtyElementRanges;
 
     private static IReadOnlyList<ScrollContainerDiag> NormalizeScrollDiagnostics(IReadOnlyList<ScrollContainerDiag> scrollDiagnostics) =>
         scrollDiagnostics.Count == 0 ? EmptyScrollDiagnostics : scrollDiagnostics;
@@ -794,7 +970,7 @@ internal readonly struct DrawCommandRecordResult(
     DrawCommandBatch commands,
     IFrameResourceResolver resources,
     ElementCommandRange[] elementCommandRanges,
-    IReadOnlyList<(int Start, int Count)> dirtyCommandRanges)
+    IndexRangeList dirtyCommandRanges)
 {
     public DrawCommandRecordResult(DrawCommandBatch commands, IFrameResourceResolver resources)
         : this(commands, resources, [], [])
@@ -814,5 +990,5 @@ internal readonly struct DrawCommandRecordResult(
     /// Merged, sorted ranges of draw commands that correspond to dirty layout elements.
     /// Each tuple is (startIndex, count) into the command batch.
     /// </summary>
-    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; } = dirtyCommandRanges;
+    public IndexRangeList DirtyCommandRanges { get; } = dirtyCommandRanges;
 }

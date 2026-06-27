@@ -33,17 +33,17 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     {
         return elements is LayoutElement[] elementArray
             ? Record(elementArray.AsSpan(), textSnapshot)
-            : RecordCore(new LayoutElementSource(elements), dirtyElementRanges: null, textSnapshot: textSnapshot);
+            : RecordCore(new LayoutElementSource(elements), IndexRangeList.Empty, textSnapshot);
     }
 
     public DrawCommandRecordResult Record(ReadOnlySpan<LayoutElement> elements, TextBufferSnapshot textSnapshot)
     {
-        return Record(elements, dirtyElementRanges: null, textSnapshot: textSnapshot);
+        return Record(elements, IndexRangeList.Empty, textSnapshot);
     }
 
     public DrawCommandRecordResult Record(
         LayoutElement[] elements,
-        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        IndexRangeList dirtyElementRanges,
         TextBufferSnapshot textSnapshot)
     {
         return Record(elements.AsSpan(), dirtyElementRanges, textSnapshot);
@@ -56,7 +56,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     /// </summary>
     public DrawCommandRecordResult Record(
         IReadOnlyList<LayoutElement> elements,
-        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        IndexRangeList dirtyElementRanges,
         TextBufferSnapshot textSnapshot)
     {
         return elements is LayoutElement[] elementArray
@@ -66,7 +66,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
 
     public DrawCommandRecordResult Record(
         ReadOnlySpan<LayoutElement> elements,
-        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        IndexRangeList dirtyElementRanges,
         TextBufferSnapshot textSnapshot)
     {
         return RecordCore(new LayoutElementSource(elements), dirtyElementRanges, textSnapshot);
@@ -74,7 +74,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
 
     private DrawCommandRecordResult RecordCore(
         LayoutElementSource elements,
-        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges,
+        IndexRangeList dirtyElementRanges,
         TextBufferSnapshot textSnapshot)
     {
         OnRecordAllocationStarted();
@@ -104,9 +104,9 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
             OnRecordCommandBuildAllocated();
 
             OnRecordAllocationPhaseStarted();
-            var dirtyCommandRanges = dirtyElementRanges is { Count: > 0 }
+            var dirtyCommandRanges = dirtyElementRanges.Count > 0
                 ? RangeUtils.MapAndMerge(elementRanges, dirtyElementRanges)
-                : (IReadOnlyList<(int Start, int Count)>)[];
+                : IndexRangeList.Empty;
             OnRecordDirtyRangesAllocated();
 
             success = true;

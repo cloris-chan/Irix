@@ -12,11 +12,11 @@ internal static class RangeUtils
     /// Sort and merge overlapping/adjacent ranges into the minimal non-overlapping set.
     /// Input ranges are (startIndex, count). Adjacent ranges (where current.Start == lastEnd) are merged.
     /// </summary>
-    public static IReadOnlyList<(int Start, int Count)> Merge(IReadOnlyList<(int Start, int Count)> ranges)
+    public static IndexRangeList Merge(IReadOnlyList<(int Start, int Count)> ranges)
     {
         if (ranges.Count == 0)
         {
-            return [];
+            return IndexRangeList.Empty;
         }
 
         var scratch = new RenderScratchBuffer();
@@ -37,12 +37,12 @@ internal static class RangeUtils
         }
     }
 
-    public static IReadOnlyList<(int Start, int Count)> Merge(scoped ref ScratchList<(int Start, int Count)> ranges)
+    public static IndexRangeList Merge(scoped ref ScratchList<(int Start, int Count)> ranges)
     {
         return MergeScratch(ref ranges, rejectOverlap: false, out _);
     }
 
-    private static IReadOnlyList<(int Start, int Count)> MergeScratch(
+    private static IndexRangeList MergeScratch(
         ref ScratchList<(int Start, int Count)> ranges,
         bool rejectOverlap,
         out bool valid)
@@ -50,12 +50,12 @@ internal static class RangeUtils
         valid = true;
         if (ranges.Count == 0)
         {
-            return [];
+            return IndexRangeList.Empty;
         }
 
         if (ranges.Count == 1)
         {
-            return ranges.ToArray();
+            return IndexRangeList.Single(ranges[0]);
         }
 
         ranges.Sort(RangeStartComparer.Instance);
@@ -70,7 +70,7 @@ internal static class RangeUtils
             if (rejectOverlap && current.Start < lastEnd)
             {
                 valid = false;
-                return [];
+                return IndexRangeList.Empty;
             }
 
             if (current.Start <= lastEnd)
@@ -84,17 +84,15 @@ internal static class RangeUtils
             }
         }
 
-        var result = new (int Start, int Count)[write];
-        span[..write].CopyTo(result);
-        return result;
+        return IndexRangeList.CopyFrom(span[..write]);
     }
 
     public static bool TryNormalizeStrict(
-        IReadOnlyList<(int Start, int Count)> ranges,
+        IndexRangeList ranges,
         int maxCount,
-        out IReadOnlyList<(int Start, int Count)> normalized)
+        out IndexRangeList normalized)
     {
-        normalized = [];
+        normalized = IndexRangeList.Empty;
         if (maxCount < 0 || ranges.Count == 0)
         {
             return false;
@@ -119,7 +117,7 @@ internal static class RangeUtils
             normalized = MergeScratch(ref sorted, rejectOverlap: true, out var valid);
             if (!valid)
             {
-                normalized = [];
+                normalized = IndexRangeList.Empty;
                 return false;
             }
 
@@ -133,10 +131,10 @@ internal static class RangeUtils
 
     public static bool TryMapContiguousElementRangesToCommandRanges(
         ElementCommandRange[] elementRanges,
-        IReadOnlyList<(int Start, int Count)> elementDirtyRanges,
-        out IReadOnlyList<(int Start, int Count)> commandDirtyRanges)
+        IndexRangeList elementDirtyRanges,
+        out IndexRangeList commandDirtyRanges)
     {
-        commandDirtyRanges = [];
+        commandDirtyRanges = IndexRangeList.Empty;
         if (elementDirtyRanges.Count == 0)
         {
             return false;
@@ -156,7 +154,7 @@ internal static class RangeUtils
                     out var commandStart,
                     out var commandCount))
                 {
-                    commandDirtyRanges = [];
+                    commandDirtyRanges = IndexRangeList.Empty;
                     return false;
                 }
 
@@ -175,9 +173,9 @@ internal static class RangeUtils
     /// <summary>
     /// Map element ranges to command ranges using an element→command mapping, then merge.
     /// </summary>
-    public static IReadOnlyList<(int Start, int Count)> MapAndMerge(
+    public static IndexRangeList MapAndMerge(
         ElementCommandRange[] elementRanges,
-        IReadOnlyList<(int Start, int Count)> elementDirtyRanges)
+        IndexRangeList elementDirtyRanges)
     {
         var scratch = new RenderScratchBuffer();
         Span<(int Start, int Count)> storage = stackalloc (int Start, int Count)[InlineRangeCapacity];
@@ -251,6 +249,25 @@ internal static class RangeUtils
     /// <summary>
     /// Check whether a given index falls within any of the sorted, merged ranges.
     /// </summary>
+    public static bool Contains(IndexRangeList ranges, int index)
+    {
+        for (var i = 0; i < ranges.Count; i++)
+        {
+            var (start, count) = ranges[i];
+            if (index >= start && index < start + count)
+            {
+                return true;
+            }
+
+            if (start > index)
+            {
+                break;
+            }
+        }
+
+        return false;
+    }
+
     public static bool Contains(IReadOnlyList<(int Start, int Count)> ranges, int index)
     {
         foreach (var (start, count) in ranges)

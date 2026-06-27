@@ -189,7 +189,7 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
         ReplaceSegments([.. segments], retainBeforeRelease: false);
     }
 
-    public bool TryAcceptPartial(IReadOnlyList<(int Start, int Count)> dirtyCommandRanges, RetainedResourceSnapshot replacementSnapshot)
+    public bool TryAcceptPartial(IndexRangeList dirtyCommandRanges, RetainedResourceSnapshot replacementSnapshot)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var commandCount = _segments.Length == 0 ? 0 : _segments[^1].CommandEnd;
@@ -247,7 +247,7 @@ internal sealed class RetainedResourceSegmentTable : IDisposable
         _disposed = true;
     }
 
-    private static void AddSurvivingPieces(RetainedResourceSegment segment, IReadOnlyList<(int Start, int Count)> ranges, List<RetainedResourceSegment> output)
+    private static void AddSurvivingPieces(RetainedResourceSegment segment, IndexRangeList ranges, List<RetainedResourceSegment> output)
     {
         var cursor = segment.CommandStart;
         foreach (var (rangeStart, rangeCount) in ranges)

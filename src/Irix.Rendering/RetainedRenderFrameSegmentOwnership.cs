@@ -82,7 +82,7 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             return new SegmentedRetainedFrameProductionOwnerFeedResult(owner.ApplyFull(batch, root), true, false, true);
         }
 
-        if (batch.DirtyCommandRanges.Count == 0 || snapshot is not { } retainedSnapshot)
+        if (batch.DirtyCommandRangeList.Count == 0 || snapshot is not { } retainedSnapshot)
         {
             return new SegmentedRetainedFrameProductionOwnerFeedResult(owner.Rebuild(batch, root), true, false, true);
         }

@@ -24,7 +24,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     private IFrameResourceResolver _resources = FrameDrawingResources.Empty;
     private ulong _resourceFrameId;
     private HitTestTarget[] _hitTargets = [];
-    private IReadOnlyList<(int Start, int Count)> _dirtyCommandRanges = [];
+    private IndexRangeList _dirtyCommandRanges;
 
     /// <summary>The draw commands.</summary>
     public ReadOnlySpan<DrawCommand> Commands => _commandBuffer.Commands;
@@ -39,7 +39,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     public IReadOnlyList<HitTestTarget> HitTargets => _hitTargets;
 
     /// <summary>Dirty command ranges from the last apply, if any.</summary>
-    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges => _dirtyCommandRanges;
+    public IndexRangeList DirtyCommandRanges => _dirtyCommandRanges;
 
     /// <summary>
     /// Apply a full render frame batch. Replaces all retained state.
@@ -52,7 +52,7 @@ internal sealed class RetainedRenderFrame : IDisposable
         _resources = batch.Resources;
         _resourceFrameId = batch.ResourceFrameId;
         _hitTargets = batch.HitTargetPublication ?? [.. batch.HitTargets];
-        _dirtyCommandRanges = batch.DirtyCommandRanges;
+        _dirtyCommandRanges = batch.DirtyCommandRangeList;
     }
 
     /// <summary>
@@ -96,7 +96,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     /// </summary>
     public bool TryApplyPartial(RenderFrameBatch batch)
     {
-        if (_commandBuffer.Count == 0 || batch.DirtyCommandRanges.Count == 0)
+        if (_commandBuffer.Count == 0 || batch.DirtyCommandRangeList.Count == 0)
         {
             return false;
         }
@@ -120,7 +120,7 @@ internal sealed class RetainedRenderFrame : IDisposable
             return false;
         }
 
-        if (!RangeUtils.TryNormalizeStrict(batch.DirtyCommandRanges, _commandBuffer.Count, out var dirtyCommandRanges))
+        if (!RangeUtils.TryNormalizeStrict(batch.DirtyCommandRangeList, _commandBuffer.Count, out var dirtyCommandRanges))
         {
             return false;
         }
@@ -177,7 +177,7 @@ internal sealed class RetainedRenderFrame : IDisposable
         _resources = FrameDrawingResources.Empty;
         _resourceFrameId = 0;
         _hitTargets = [];
-        _dirtyCommandRanges = [];
+        _dirtyCommandRanges = IndexRangeList.Empty;
     }
 
     public void Dispose()
@@ -187,6 +187,6 @@ internal sealed class RetainedRenderFrame : IDisposable
         _resources = FrameDrawingResources.Empty;
         _resourceFrameId = 0;
         _hitTargets = [];
-        _dirtyCommandRanges = [];
+        _dirtyCommandRanges = IndexRangeList.Empty;
     }
 }

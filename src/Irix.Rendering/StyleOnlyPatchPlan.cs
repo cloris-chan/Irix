@@ -19,32 +19,32 @@ internal enum StyleOnlyPatchPlanCase : byte
 internal sealed record StyleOnlyPatchPlan(
     bool Eligible,
     StyleOnlyPatchFallbackReason FallbackReason,
-    IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
-    IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
+    IndexRangeList DirtyElementRanges,
+    IndexRangeList DirtyCommandRanges,
     IReadOnlyList<HitTestTarget> PatchedHitTargets)
 {
     public static StyleOnlyPatchPlan CreateEligible(
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
-        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
+        IndexRangeList dirtyElementRanges,
+        IndexRangeList dirtyCommandRanges,
         IReadOnlyList<HitTestTarget> patchedHitTargets)
     {
         return new StyleOnlyPatchPlan(
             true,
             StyleOnlyPatchFallbackReason.None,
-            dirtyElementRanges.ToArray(),
-            dirtyCommandRanges.ToArray(),
+            dirtyElementRanges,
+            dirtyCommandRanges,
             patchedHitTargets.ToArray());
     }
 
     public static StyleOnlyPatchPlan CreateFallback(
         StyleOnlyPatchFallbackReason fallbackReason,
-        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges = null)
+        IndexRangeList dirtyElementRanges = default)
     {
         return new StyleOnlyPatchPlan(
             false,
             fallbackReason,
-            dirtyElementRanges?.ToArray() ?? [],
-            [],
+            dirtyElementRanges,
+            IndexRangeList.Empty,
             []);
     }
 }
@@ -103,7 +103,7 @@ internal static class StyleOnlyPatchPlanBuilder
         ElementCommandRange[] retainedElementCommandRanges,
         IReadOnlyList<HitTestTarget> retainedHitTargets,
         ReadOnlySpan<LayoutElement> nextLayoutElements,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges)
+        IndexRangeList dirtyElementRanges)
     {
         if (retainedLayout is null)
         {

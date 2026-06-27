@@ -125,7 +125,7 @@ internal sealed class RetainedRenderFrameHandoffHarness(IDrawingBackend backend,
     public RetainedRenderFrameHandoffHarnessResult ExecuteCandidateFrame(
         RetainedRenderFrameSegmentOwnership ownership,
         in FrameContext frameContext,
-        IReadOnlyList<(int Start, int Count)> retainedFrameDirtyRanges)
+        IndexRangeList retainedFrameDirtyRanges)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (!options.EnableSegmentedRenderSourceCandidate)

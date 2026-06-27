@@ -40,6 +40,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     private CompositionFrame _lastCompositionFrame;
     private CompositionBackendExecutionResult _lastCompositionExecutionResult;
     private readonly List<CompositionAnimationMarkerEvent> _compositionMarkerEvents = [];
+    private IndexRangeList _lastDirtyCommandRangeList;
     private long _compositionTickCount;
     private long _lastCompositionTickTimeTicks;
     private long _totalCompositionTickTimeTicks;
@@ -51,7 +52,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
     /// Reflects the actual ranges that were applied to the retained frame
     /// (may differ from the batch's dirty ranges if partial apply was refused).
     /// </summary>
-    public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges { get; private set; } = [];
+    public IReadOnlyList<(int Start, int Count)> LastDirtyCommandRanges => _lastDirtyCommandRangeList;
 
     /// <summary>
     /// Whether the last render used partial apply on the retained frame.
@@ -716,7 +717,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             _retainedFrame.Invalidate();
             _lastAppliedFrameId = 0;
             ClearCompositionPlanCore();
-            LastDirtyCommandRanges = renderFrameBatch.DirtyCommandRanges;
+            _lastDirtyCommandRangeList = renderFrameBatch.DirtyCommandRangeList;
             LastPartialApplySucceeded = false;
             LastHandoffResult = ResolveHandoffSelection(renderFrameBatch, ownership).Result;
             return default;
@@ -730,7 +731,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         var isSameFrameScope = batchFrameId != 0 && batchFrameId == _lastAppliedFrameId;
 
         var retainedPartialApplySucceeded = false;
-        if (isSameFrameScope && renderFrameBatch.DirtyCommandRanges.Count > 0)
+        if (isSameFrameScope && renderFrameBatch.DirtyCommandRangeList.Count > 0)
         {
             retainedPartialApplySucceeded = _retainedFrame.TryApplyPartial(renderFrameBatch);
         }
@@ -744,7 +745,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         }
 
         _lastAppliedFrameId = batchFrameId;
-        LastDirtyCommandRanges = _retainedFrame.DirtyCommandRanges;
+        _lastDirtyCommandRangeList = _retainedFrame.DirtyCommandRanges;
         TryApplyPreparedScrollPresentationRetainedFrameUpdate();
         ClearCompositionPresentationState();
         return new RetainedFrameStageResult(true, retainedPartialApplySucceeded, ResolveHandoffSelection(renderFrameBatch, ownership));
@@ -1390,7 +1391,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
             return HandoffSelection.Fallback(ownerResult, DrawingBackendCompositorHandoffResult.Rejected(ownerResult));
         }
 
-        if (!RangeUtils.TryNormalizeStrict(LastDirtyCommandRanges, renderFrameBatch.Commands.Count, out _))
+        if (!RangeUtils.TryNormalizeStrict(_lastDirtyCommandRangeList, renderFrameBatch.Commands.Count, out _))
         {
             return HandoffSelection.Fallback(
                 ownerResult,
@@ -1415,7 +1416,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         var harness = _handoffCandidateHarness ??= new RetainedRenderFrameHandoffHarness(new NonDisposingBackend(_backend), RetainedRenderFrameHandoffHarnessOptions.Enabled);
         try
         {
-            return MapCandidateResult(ownerResult, harness.ExecuteCandidateFrame(ownership, frameContext, LastDirtyCommandRanges));
+            return MapCandidateResult(ownerResult, harness.ExecuteCandidateFrame(ownership, frameContext, _lastDirtyCommandRangeList));
         }
         catch (Exception ex) when (TryHandleDeviceLost(ex))
         {

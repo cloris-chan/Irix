@@ -5,7 +5,7 @@ internal static class StyleOnlyHitTargetPatch
     public static bool TryBuildPatchedHitTargets(
         IReadOnlyList<HitTestTarget> retainedHitTargets,
         ReadOnlySpan<LayoutElement> nextLayoutElements,
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
+        IndexRangeList dirtyElementRanges,
         out HitTestTarget[] patchedHitTargets)
     {
         patchedHitTargets = [];

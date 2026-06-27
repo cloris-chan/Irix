@@ -24,45 +24,45 @@ internal enum RetainedPartialApplyFallbackReason : byte
 internal sealed record RetainedPartialApplyPlan(
     RetainedPartialApplyResultKind Kind,
     RetainedPartialApplyFallbackReason Reason,
-    IReadOnlyList<(int Start, int Count)> DirtyElementRanges,
-    IReadOnlyList<(int Start, int Count)> DirtyCommandRanges,
+    IndexRangeList DirtyElementRanges,
+    IndexRangeList DirtyCommandRanges,
     IReadOnlyList<HitTestTarget> PatchedHitTargets)
 {
     public static RetainedPartialApplyPlan AppliedPartial(
-        IReadOnlyList<(int Start, int Count)> dirtyElementRanges,
-        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
+        IndexRangeList dirtyElementRanges,
+        IndexRangeList dirtyCommandRanges,
         IReadOnlyList<HitTestTarget> patchedHitTargets)
     {
         return new RetainedPartialApplyPlan(
             RetainedPartialApplyResultKind.AppliedPartial,
             RetainedPartialApplyFallbackReason.None,
-            dirtyElementRanges.ToArray(),
-            dirtyCommandRanges.ToArray(),
+            dirtyElementRanges,
+            dirtyCommandRanges,
             patchedHitTargets.ToArray());
     }
 
     public static RetainedPartialApplyPlan FallbackFull(
         RetainedPartialApplyFallbackReason reason,
-        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges = null)
+        IndexRangeList dirtyElementRanges = default)
     {
         return new RetainedPartialApplyPlan(
             RetainedPartialApplyResultKind.FallbackFull,
             reason,
-            dirtyElementRanges?.ToArray() ?? [],
-            [],
+            dirtyElementRanges,
+            IndexRangeList.Empty,
             []);
     }
 
     public static RetainedPartialApplyPlan Rejected(
         RetainedPartialApplyFallbackReason reason,
-        IReadOnlyList<(int Start, int Count)>? dirtyElementRanges = null,
-        IReadOnlyList<(int Start, int Count)>? dirtyCommandRanges = null)
+        IndexRangeList dirtyElementRanges = default,
+        IndexRangeList dirtyCommandRanges = default)
     {
         return new RetainedPartialApplyPlan(
             RetainedPartialApplyResultKind.Rejected,
             reason,
-            dirtyElementRanges?.ToArray() ?? [],
-            dirtyCommandRanges?.ToArray() ?? [],
+            dirtyElementRanges,
+            dirtyCommandRanges,
             []);
     }
 }

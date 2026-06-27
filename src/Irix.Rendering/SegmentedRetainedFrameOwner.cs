@@ -48,12 +48,12 @@ internal sealed class SegmentedRetainedFrameOwner : IDisposable
     public bool TryAcceptPartial(RenderFrameBatch batch, RetainedResourceSnapshot replacementSnapshot, RetainedRootMetadataPatch rootPatch, IReadOnlyList<HitTestTarget> hitTargets)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!rootPatch.Succeeded || _commandBuffer.Count == 0 || batch.Commands.Count != _commandBuffer.Count || batch.DirtyCommandRanges.Count == 0)
+        if (!rootPatch.Succeeded || _commandBuffer.Count == 0 || batch.Commands.Count != _commandBuffer.Count || batch.DirtyCommandRangeList.Count == 0)
         {
             return false;
         }
 
-        if (!RangeUtils.TryNormalizeStrict(batch.DirtyCommandRanges, _commandBuffer.Count, out var dirtyCommandRanges)
+        if (!RangeUtils.TryNormalizeStrict(batch.DirtyCommandRangeList, _commandBuffer.Count, out var dirtyCommandRanges)
             || !_resourceSegments.TryAcceptPartial(dirtyCommandRanges, replacementSnapshot))
         {
             return false;

@@ -3993,7 +3993,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Same(lastLayoutResult.Elements, snapshot.LayoutResult.Elements);
         Assert.Same(lastLayoutResult.TreeNodes, snapshot.LayoutResult.TreeNodes);
         Assert.Same(lastLayoutResult.ElementRanges, snapshot.LayoutResult.ElementRanges);
-        Assert.Same(lastLayoutResult.DirtyElementRanges, snapshot.LayoutResult.DirtyElementRanges);
+        Assert.Equal(lastLayoutResult.DirtyElementRanges, snapshot.LayoutResult.DirtyElementRanges);
         Assert.Same(lastLayoutResult.ScrollDiagnostics, snapshot.LayoutResult.ScrollDiagnostics);
         Assert.Equal(pipeline.LastElementCommandRanges, snapshot.ElementCommandRanges);
         Assert.Equal(frame.HitTargets, snapshot.HitTargets);
@@ -5736,7 +5736,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void LayoutTree_empty_publications_reuse_static_empty_arrays()
+    public void LayoutTree_empty_publications_use_static_empty_arrays_and_value_ranges()
     {
         var builder = new LayoutTreeBuilder();
         var textRoot = VirtualNodeBuilder.Text(_arena, "hello", new NodeKey(1));
@@ -5748,9 +5748,9 @@ public sealed class WindowLayoutPipelineTests
         var cleanResult = builder.BuildLayoutTree(textRoot, viewport);
         var dirtyEmptyResult = builder.BuildLayoutTree(containerRoot, viewport, [1]);
 
-        Assert.Same(Array.Empty<(int Start, int Count)>(), cleanResult.DirtyElementRanges);
+        Assert.Equal(IndexRangeList.Empty, cleanResult.DirtyElementRanges);
         Assert.Same(Array.Empty<ScrollContainerDiag>(), cleanResult.ScrollDiagnostics);
-        Assert.Same(Array.Empty<(int Start, int Count)>(), dirtyEmptyResult.DirtyElementRanges);
+        Assert.Equal(IndexRangeList.Empty, dirtyEmptyResult.DirtyElementRanges);
     }
 
     [Fact]
@@ -6327,7 +6327,7 @@ public sealed class WindowLayoutPipelineTests
             new(1, 2),  // element 1 �?commands 1-2
             new(3, 1),  // element 2 �?command 3
         };
-        var dirtyElements = new List<(int, int)> { (0, 2) }; // elements 0-1
+        IndexRangeList dirtyElements = [(0, 2)]; // elements 0-1
 
         var result = RangeUtils.MapAndMerge(elementRanges, dirtyElements);
 
@@ -6544,7 +6544,7 @@ public sealed class WindowLayoutPipelineTests
             new DrawCommand(DrawCommandKind.DrawTextRun, Rect: new DrawRect(10, 10, 80, 32), Text: default),
             new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 50, 100, 40)),
         ]);
-        var dirtyRanges = new List<(int, int)> { (1, 1) }; // only command 1 is dirty
+        IndexRangeList dirtyRanges = [(1, 1)]; // only command 1 is dirty
 
         buffer.ApplyPartial(new DrawCommandBatch(newOwner, 3), dirtyRanges);
 

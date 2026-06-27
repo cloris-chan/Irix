@@ -60,6 +60,7 @@ public readonly struct HitTestTarget(
 public struct RenderFrameBatch : IDisposable
 {
     private readonly ulong _resourceFrameId;
+    private readonly IndexRangeList _dirtyCommandRanges;
     private bool _disposed;
 
     public RenderFrameBatch(
@@ -67,7 +68,7 @@ public struct RenderFrameBatch : IDisposable
         IReadOnlyList<HitTestTarget> hitTargets,
         IFrameResourceResolver resources,
         IReadOnlyList<(int Start, int Count)> dirtyCommandRanges)
-        : this(commands, hitTargets, resources, dirtyCommandRanges, hitTargetPublication: null)
+        : this(commands, hitTargets, resources, IndexRangeList.CopyFrom(dirtyCommandRanges), hitTargetPublication: null)
     {
     }
 
@@ -75,13 +76,13 @@ public struct RenderFrameBatch : IDisposable
         DrawCommandBatch commands,
         IReadOnlyList<HitTestTarget> hitTargets,
         IFrameResourceResolver resources,
-        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
+        IndexRangeList dirtyCommandRanges,
         HitTestTarget[]? hitTargetPublication)
     {
         Commands = commands;
         HitTargets = hitTargets;
         Resources = resources;
-        DirtyCommandRanges = dirtyCommandRanges;
+        _dirtyCommandRanges = dirtyCommandRanges;
         _resourceFrameId = resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0;
         HitTargetPublication = hitTargetPublication;
 
@@ -104,15 +105,16 @@ public struct RenderFrameBatch : IDisposable
     public DrawCommandBatch Commands { get; }
     public IReadOnlyList<HitTestTarget> HitTargets { get; }
     public IFrameResourceResolver Resources { get; }
-    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; }
+    public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges => _dirtyCommandRanges;
     internal HitTestTarget[]? HitTargetPublication { get; }
+    internal readonly IndexRangeList DirtyCommandRangeList => _dirtyCommandRanges;
     internal readonly ulong ResourceFrameId => _resourceFrameId;
 
     internal static RenderFrameBatch WithHitTargetPublication(
         DrawCommandBatch commands,
         HitTestTarget[] hitTargets,
         IFrameResourceResolver resources,
-        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges) =>
+        IndexRangeList dirtyCommandRanges) =>
         new(commands, hitTargets, resources, dirtyCommandRanges, hitTargetPublication: hitTargets);
 
     public void Dispose()

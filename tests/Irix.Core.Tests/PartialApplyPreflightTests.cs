@@ -1657,10 +1657,11 @@ public sealed class PartialApplyPreflightTests
         var productionDirtyRanges = compositor.LastDirtyCommandRanges.ToArray();
         var productionBackendDirtyRanges = productionBackend.DirtyRanges.ToArray();
         var mismatchedDirtyRanges = new[] { (-10, 2), (100, 4), (1, 0) };
+        var mismatchedDirtyRangeList = IndexRangeList.CopyFrom(mismatchedDirtyRanges);
         var harnessBackend = new DirtyRangeAwareCapturingBackend();
         using var harness = new RetainedRenderFrameHandoffHarness(harnessBackend, RetainedRenderFrameHandoffHarnessOptions.Enabled);
 
-        var result = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), mismatchedDirtyRanges);
+        var result = harness.ExecuteCandidateFrame(feed.SegmentOwnership!, new FrameContext(960, 540), mismatchedDirtyRangeList);
 
         Assert.Equal(RetainedRenderFrameHandoffHarnessResultKind.Executed, result.Kind);
         Assert.Equal(2, result.Reads.Count);

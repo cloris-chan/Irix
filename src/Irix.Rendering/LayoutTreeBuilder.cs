@@ -34,7 +34,6 @@ internal ref struct LayoutContext
 
 internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 {
-    private static readonly (int Start, int Count)[] EmptyDirtyElementRanges = Array.Empty<(int Start, int Count)>();
     private static readonly ScrollContainerDiag[] EmptyScrollDiagnostics = Array.Empty<ScrollContainerDiag>();
 
     private const int InlineLayoutElementCapacity = 32;
@@ -82,7 +81,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             OnLayoutAllocationPhaseStarted();
             var dirtyRanges = dirtyNodes is { Count: > 0 }
                 ? CollectDirtyRanges(state.ElementRanges, dirtyNodes, scratch)
-                : EmptyDirtyElementRanges;
+                : IndexRangeList.Empty;
             OnLayoutDirtyRangesAllocated();
 
             OnLayoutAllocationPhaseStarted();
@@ -439,7 +438,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
         }
     }
 
-    private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges(
+    private static IndexRangeList CollectDirtyRanges(
         ReadOnlySpan<LayoutElementRange> elementRanges,
         IReadOnlyList<int> dirtyIndices,
         RenderScratchBuffer scratch)

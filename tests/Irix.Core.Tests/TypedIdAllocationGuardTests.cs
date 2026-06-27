@@ -68,6 +68,25 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void IndexRangeList_is_value_publication_for_dirty_ranges()
+    {
+        var root = FindRepoRoot();
+        var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
+
+        Assert.True(typeof(IndexRangeList).IsValueType);
+        Assert.Contains("internal readonly struct IndexRangeList", layoutModelSource);
+        Assert.Contains("public static IndexRangeList Empty => default", layoutModelSource);
+        Assert.DoesNotContain("internal sealed class IndexRangeList", layoutModelSource);
+
+        IndexRangeList empty = [];
+        IndexRangeList single = [(4, 2)];
+
+        Assert.Empty(empty);
+        Assert.Single(single);
+        Assert.Equal((4, 2), single[0]);
+    }
+
+    [Fact]
     public void Render_pipeline_retained_input_snapshot_is_value_publication_not_heap_identity()
     {
         var root = FindRepoRoot();
@@ -1310,7 +1329,7 @@ public class TypedIdAllocationGuardTests
         var layoutRecursiveSource = ExtractSourceBetween(
             layoutBuilderSource,
             "private int LayoutNode",
-            "private static IReadOnlyList<(int Start, int Count)> CollectDirtyRanges");
+            "private static IndexRangeList CollectDirtyRanges");
         Assert.DoesNotContain("elements.ToArray()", layoutRecursiveSource);
         Assert.DoesNotContain("scrollDiags.ToArray()", layoutRecursiveSource);
 

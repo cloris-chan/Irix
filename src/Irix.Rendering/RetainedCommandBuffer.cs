@@ -49,7 +49,7 @@ internal sealed class RetainedCommandBuffer : IDisposable
     /// Commands outside the dirty ranges are preserved from the current buffer.
     /// If the buffer is empty or the new batch has a different total count, falls back to full replacement.
     /// </summary>
-    public void ApplyPartial(DrawCommandBatch newBatch, IReadOnlyList<(int Start, int Count)> dirtyRanges)
+    public void ApplyPartial(DrawCommandBatch newBatch, IndexRangeList dirtyRanges)
     {
         var newSpan = newBatch.Memory.Span;
 
