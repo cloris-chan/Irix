@@ -6904,6 +6904,47 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void RetainedRenderFrame_apply_full_defensively_copies_external_hit_targets()
+    {
+        var owner = new ArrayMemoryOwner<DrawCommand>(
+        [
+            new DrawCommand(DrawCommandKind.FillRect, Rect: new DrawRect(0, 0, 100, 32)),
+        ]);
+        var hitTargets = new[]
+        {
+            new HitTestTarget(new PixelRectangle(0, 0, 100, 32), new ActionId(100))
+        };
+        var batch = new RenderFrameBatch(
+            new DrawCommandBatch(owner, 1),
+            hitTargets,
+            FrameDrawingResources.Empty,
+            []);
+
+        var frame = new RetainedRenderFrame();
+        frame.ApplyFull(batch);
+        hitTargets[0] = new HitTestTarget(new PixelRectangle(0, 0, 10, 10), new ActionId(200));
+
+        var retainedTarget = Assert.Single(frame.HitTargets);
+        Assert.Equal(new ActionId(100), retainedTarget.ActionId);
+        frame.Dispose();
+    }
+
+    [Fact]
+    public void RetainedRenderFrame_apply_full_adopts_pipeline_owned_hit_targets()
+    {
+        var pipeline = new RenderPipeline();
+        var viewport = new PixelRectangle(0, 0, 960, 540);
+        var root = VirtualNodeFactory.Container(new NodeKey(1),
+            VirtualNodeTestBuilder.Button(_arena, "Increment", new NodeKey(2),
+                VirtualNodeProperty.Action(new ActionId(1))));
+
+        using var batch = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
+
+        Assert.NotNull(batch.OwnedHitTargets);
+        Assert.Same(batch.OwnedHitTargets, pipeline.RetainedFrame.HitTargets);
+    }
+
+    [Fact]
     public void RetainedRenderFrame_to_batch_creates_independent_snapshot()
     {
         var resources = FrameDrawingResources.Rent();

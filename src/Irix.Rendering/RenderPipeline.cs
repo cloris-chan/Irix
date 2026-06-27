@@ -155,12 +155,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         OnPipelineRecordAllocated(_drawCommandRecorder);
 
         OnPipelineAllocationPhaseStarted();
-        var hitTargets = BuildHitTargets(layout, result.ElementCommandRanges);
+        var hitTargets = BuildHitTargetArray(layout, result.ElementCommandRanges);
         OnPipelineHitTargetsAllocated();
 
         OnPipelineSnapshotAllocationStarted();
         OnPipelineSnapshotPhaseStarted();
-        var batch = new RenderFrameBatch(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
+        var batch = RenderFrameBatch.WithOwnedHitTargets(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
         OnPipelineFrameBatchAllocated();
 
         OnPipelineSnapshotPhaseStarted();
@@ -466,10 +466,17 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     internal static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
     {
-        return BuildHitTargets(layoutElements, []);
+        return BuildHitTargetArray(layoutElements, []);
     }
 
     internal static IReadOnlyList<HitTestTarget> BuildHitTargets(
+        IReadOnlyList<LayoutElement> layoutElements,
+        ReadOnlySpan<ElementCommandRange> elementCommandRanges)
+    {
+        return BuildHitTargetArray(layoutElements, elementCommandRanges);
+    }
+
+    private static HitTestTarget[] BuildHitTargetArray(
         IReadOnlyList<LayoutElement> layoutElements,
         ReadOnlySpan<ElementCommandRange> elementCommandRanges)
     {

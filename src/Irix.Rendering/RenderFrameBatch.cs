@@ -67,12 +67,23 @@ public struct RenderFrameBatch : IDisposable
         IReadOnlyList<HitTestTarget> hitTargets,
         IFrameResourceResolver resources,
         IReadOnlyList<(int Start, int Count)> dirtyCommandRanges)
+        : this(commands, hitTargets, resources, dirtyCommandRanges, ownedHitTargets: null)
+    {
+    }
+
+    private RenderFrameBatch(
+        DrawCommandBatch commands,
+        IReadOnlyList<HitTestTarget> hitTargets,
+        IFrameResourceResolver resources,
+        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges,
+        HitTestTarget[]? ownedHitTargets)
     {
         Commands = commands;
         HitTargets = hitTargets;
         Resources = resources;
         DirtyCommandRanges = dirtyCommandRanges;
         _resourceFrameId = resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0;
+        OwnedHitTargets = ownedHitTargets;
 
         if (resources is FrameDrawingResources retainedResources)
         {
@@ -94,7 +105,15 @@ public struct RenderFrameBatch : IDisposable
     public IReadOnlyList<HitTestTarget> HitTargets { get; }
     public IFrameResourceResolver Resources { get; }
     public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges { get; }
+    internal HitTestTarget[]? OwnedHitTargets { get; }
     internal readonly ulong ResourceFrameId => _resourceFrameId;
+
+    internal static RenderFrameBatch WithOwnedHitTargets(
+        DrawCommandBatch commands,
+        HitTestTarget[] hitTargets,
+        IFrameResourceResolver resources,
+        IReadOnlyList<(int Start, int Count)> dirtyCommandRanges) =>
+        new(commands, hitTargets, resources, dirtyCommandRanges, ownedHitTargets: hitTargets);
 
     public void Dispose()
     {
