@@ -59,6 +59,8 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
     private LayoutTreeResult BuildLayoutTreeCore(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes)
     {
         OnLayoutAllocationStarted();
+        var rootTree = new VirtualNodeTree(root);
+        var rootReader = rootTree.CreateReader().Root;
         var scratch = new RenderScratchBuffer();
         Span<LayoutElement> elementStorage = stackalloc LayoutElement[InlineLayoutElementCapacity];
         Span<LayoutTreeNode> treeNodeStorage = stackalloc LayoutTreeNode[InlineLayoutTreeNodeCapacity];
@@ -73,7 +75,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
         try
         {
             OnLayoutAllocationPhaseStarted();
-            state.LayoutRoot(root, viewportBounds);
+            state.LayoutRoot(rootReader, viewportBounds);
             OnLayoutNodeWalkAllocated();
 
             OnLayoutAllocationPhaseStarted();
@@ -152,7 +154,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
         public ScrollContainerDiagList ScrollDiagnosticsToList() =>
             ScrollContainerDiagList.CopyFrom(_scrollDiags.Written);
 
-        public void LayoutRoot(VirtualNode root, PixelRectangle viewportBounds)
+        public void LayoutRoot(VirtualNodeReader root, PixelRectangle viewportBounds)
         {
             _ctx = new LayoutContext
             {
@@ -175,7 +177,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             _scrollDiags.Dispose();
         }
 
-        private int LayoutNode(VirtualNode node, int dfsIndex)
+        private int LayoutNode(VirtualNodeReader node, int dfsIndex)
         {
             switch (node.Kind)
             {
@@ -191,7 +193,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             }
         }
 
-        private int LayoutContainer(VirtualNode node, int dfsIndex)
+        private int LayoutContainer(VirtualNodeReader node, int dfsIndex)
         {
             var properties = new PropertyReader(node.Properties);
             var actionId = properties.GetActionId(VirtualPropertyKey.ActionId);
@@ -200,7 +202,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 : LayoutInteractiveContainer(node, dfsIndex, properties, actionId);
         }
 
-        private int LayoutFlowContainer(VirtualNode node, int dfsIndex, PropertyReader properties)
+        private int LayoutFlowContainer(VirtualNodeReader node, int dfsIndex, PropertyReader properties)
         {
             var treeNodeIndex = _treeNodes.Count;
             _treeNodes.Add(default);
@@ -233,9 +235,11 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             _cursorY = contentTop;
             var elementStart = _elements.Count;
             var subtreeStart = treeNodeIndex + 1;
-            foreach (var child in node.Children)
+            for (var i = 0; i < node.ChildCount; i++)
             {
-                consumedCount += LayoutNode(child, dfsIndex + consumedCount);
+                var childDfsIndex = dfsIndex + consumedCount;
+                var child = node.GetChild(i, childDfsIndex);
+                consumedCount += LayoutNode(child, childDfsIndex);
             }
 
             var subtreeCount = _treeNodes.Count - subtreeStart;
@@ -291,7 +295,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             return consumedCount;
         }
 
-        private int LayoutContent(VirtualNode node, int dfsIndex)
+        private int LayoutContent(VirtualNodeReader node, int dfsIndex)
         {
             return node.Content.Kind switch
             {
@@ -307,7 +311,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             return 1;
         }
 
-        private int LayoutTextContent(VirtualNode node, int dfsIndex)
+        private int LayoutTextContent(VirtualNodeReader node, int dfsIndex)
         {
             var content = LayoutNodeReader.GetTextContent(node);
             if (content.IsNone)
@@ -330,7 +334,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             return 1;
         }
 
-        private int LayoutRectangleContent(VirtualNode node, int dfsIndex)
+        private int LayoutRectangleContent(VirtualNodeReader node, int dfsIndex)
         {
             var properties = new PropertyReader(node.Properties);
             var rectangleBounds = new PixelRectangle(
@@ -351,7 +355,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             return 1;
         }
 
-        private int LayoutInteractiveContainer(VirtualNode node, int dfsIndex, PropertyReader properties, ActionId actionId)
+        private int LayoutInteractiveContainer(VirtualNodeReader node, int dfsIndex, PropertyReader properties, ActionId actionId)
         {
             var label = LayoutNodeReader.GetButtonLabel(node);
             if (label.IsNone)
@@ -389,14 +393,18 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
                 ForegroundColor: LayoutNodeReader.ReadColor(textProperties, VirtualPropertyKey.ForegroundColor)));
             _cursorY += bounds.Height + _ctx.Style.ItemSpacing;
             var subtreeStart = _treeNodes.Count + 1;
-            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Container, elementIndex, 1, subtreeStart, node.Children.Length));
+            _treeNodes.Add(new LayoutTreeNode(dfsIndex, node.Key, VirtualNodeKind.Container, elementIndex, 1, subtreeStart, node.ChildCount));
             RegisterElementRange(dfsIndex, elementIndex, 1);
 
-            var childCount = node.Children.Length;
+            var childCount = node.ChildCount;
+            var childOffset = 0;
             for (var i = 0; i < childCount; i++)
             {
-                _treeNodes.Add(new LayoutTreeNode(dfsIndex + 1 + i, node.Children[i].Key, VirtualNodeKind.Content, elementIndex, 1, 0, 0));
-                RegisterElementRange(dfsIndex + 1 + i, elementIndex, 1);
+                var childDfsIndex = dfsIndex + 1 + childOffset;
+                var child = node.GetChild(i, childDfsIndex);
+                _treeNodes.Add(new LayoutTreeNode(childDfsIndex, child.Key, VirtualNodeKind.Content, elementIndex, 1, 0, 0));
+                RegisterElementRange(childDfsIndex, elementIndex, 1);
+                childOffset += child.CountSubtreeNodes();
             }
 
             return 1 + childCount;

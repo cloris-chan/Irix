@@ -17,6 +17,8 @@ internal static class StyleOnlyLayoutPatcher
             return false;
         }
 
+        var nextTree = new VirtualNodeTree(nextRoot);
+        var nextReader = nextTree.CreateReader().Root;
         var nextElements = retainedLayout.Elements.ToArray();
         var scratch = new RenderScratchBuffer();
         Span<int> dirtyIndexStorage = stackalloc int[InlineDirtyIndexCapacity];
@@ -38,7 +40,7 @@ internal static class StyleOnlyLayoutPatcher
                 var treeCursor = 0;
                 var dirtyCursor = 0;
                 if (!TryPatchTree(
-                    nextRoot,
+                    nextReader,
                     retainedLayout,
                     nextElements,
                     sortedDirty.Written,
@@ -74,7 +76,7 @@ internal static class StyleOnlyLayoutPatcher
     }
 
     private static bool TryPatchTree(
-        VirtualNode nextNode,
+        VirtualNodeReader nextNode,
         LayoutTreeResult retainedLayout,
         LayoutElement[] elements,
         ReadOnlySpan<int> sortedDirty,
@@ -107,12 +109,17 @@ internal static class StyleOnlyLayoutPatcher
             ranges.Add((range.ElementStart, range.ElementCount));
         }
 
-        foreach (var child in nextNode.Children)
+        var childOffset = 0;
+        for (var i = 0; i < nextNode.ChildCount; i++)
         {
+            var childDfsIndex = nextNode.DfsIndex + 1 + childOffset;
+            var child = nextNode.GetChild(i, childDfsIndex);
             if (!TryPatchTree(child, retainedLayout, elements, sortedDirty, ref dfsIndex, ref dirtyCursor, ref treeCursor, ref ranges))
             {
                 return false;
             }
+
+            childOffset += child.CountSubtreeNodes();
         }
 
         return true;
@@ -149,7 +156,7 @@ internal static class StyleOnlyLayoutPatcher
     private static bool TryRefreshTextContent(
         LayoutElement[] elements,
         LayoutTreeNode retainedTreeNode,
-        VirtualNode nextNode)
+        VirtualNodeReader nextNode)
     {
         if (retainedTreeNode.Kind == VirtualNodeKind.None)
         {
@@ -218,7 +225,7 @@ internal static class StyleOnlyLayoutPatcher
 
     private static bool TryPatchElementRange(
         LayoutElement[] elements,
-        VirtualNode nextNode,
+        VirtualNodeReader nextNode,
         LayoutElementRange range)
     {
         if (range.ElementCount != 1
@@ -243,7 +250,7 @@ internal static class StyleOnlyLayoutPatcher
         LayoutElement[] elements,
         int elementIndex,
         LayoutElement retainedElement,
-        VirtualNode nextNode)
+        VirtualNodeReader nextNode)
     {
         if (!LayoutNodeReader.IsTextContent(nextNode) || !nextNode.Content.TryGetText(out var content))
         {
@@ -278,7 +285,7 @@ internal static class StyleOnlyLayoutPatcher
         LayoutElement[] elements,
         int elementIndex,
         LayoutElement retainedElement,
-        VirtualNode nextNode)
+        VirtualNodeReader nextNode)
     {
         if (!LayoutNodeReader.IsRectangleContent(nextNode))
         {
@@ -299,7 +306,7 @@ internal static class StyleOnlyLayoutPatcher
         LayoutElement[] elements,
         int elementIndex,
         LayoutElement retainedElement,
-        VirtualNode nextNode)
+        VirtualNodeReader nextNode)
     {
         if (nextNode.Kind != VirtualNodeKind.Container)
         {

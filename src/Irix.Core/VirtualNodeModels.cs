@@ -466,6 +466,7 @@ internal readonly ref struct VirtualNodeReader
     public NodeKey Key => _node.Key;
     public ContentResource Content => _node.Content;
     public ReadOnlySpan<VirtualNodeProperty> Properties => _node.Properties;
+    public ReadOnlySpan<VirtualNode> Children => _node.Children;
     public int ChildCount => _node.Children.Length;
 
     public bool IsDefault =>

@@ -431,9 +431,10 @@ Acceptance:
 ### P2 - VirtualNode Publication Slab
 
 Status: reader boundary implemented as a transition slice. `VirtualNodeTree`
-now exposes an internal generation-fenced reader/cursor contract for diff and
-structural comparison, so the next migration point is no longer "add a reader";
-it is "move publication storage from per-node arrays into tree-owned slabs."
+now exposes an internal generation-fenced reader/cursor contract for diff,
+layout traversal, and style-only patching, so the next migration point is no
+longer "add a reader"; it is "move publication storage from per-node arrays into
+tree-owned slabs."
 
 The measured `childrenArray` bucket is a sign that per-node owned arrays are the
 next structural limit. Since `VirtualNode` is internal, the next target design can
@@ -453,7 +454,8 @@ Possible shape:
   upload staging.
 - Builders can use scratch vectors and freeze once into contiguous publication
   ranges, reusing reserved slabs when capacity is sufficient.
-- Diff/layout APIs consume readers/spans instead of per-node arrays.
+- Diff/layout/style-only patch APIs consume readers/spans instead of per-node
+  arrays.
 
 This keeps ADR-010's important part: no retained all-`ref struct` tree and no
 borrowed scratch in retained state. It does allow replacing the current

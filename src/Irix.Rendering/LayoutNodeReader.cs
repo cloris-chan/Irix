@@ -2,47 +2,50 @@ namespace Irix.Rendering;
 
 internal static class LayoutNodeReader
 {
-    public static TextContentResource GetTextContent(VirtualNode node)
+    public static TextContentResource GetTextContent(VirtualNodeReader node)
     {
         return node.Content.TryGetText(out var textContent) ? textContent : default;
     }
 
-    public static TextContentResource GetButtonLabel(VirtualNode node)
+    public static TextContentResource GetButtonLabel(VirtualNodeReader node)
     {
-        foreach (var child in node.Children)
+        var children = node.Children;
+        for (var i = 0; i < children.Length; i++)
         {
-            if (!IsTextContent(child))
+            var child = children[i];
+            if (child.Kind != VirtualNodeKind.Content || child.Content.Kind != ContentResourceKind.Text)
             {
                 continue;
             }
 
-            var content = GetTextContent(child);
-            if (!content.IsNone)
+            if (child.Content.TryGetText(out var textContent))
             {
-                return content;
+                return textContent;
             }
         }
 
         return default;
     }
 
-    public static bool IsTextContent(VirtualNode node) =>
+    public static bool IsTextContent(VirtualNodeReader node) =>
         node.Kind == VirtualNodeKind.Content && node.Content.Kind == ContentResourceKind.Text;
 
-    public static bool IsRectangleContent(VirtualNode node) =>
+    public static bool IsRectangleContent(VirtualNodeReader node) =>
         node.Kind == VirtualNodeKind.Content && node.Content.Kind == ContentResourceKind.Rectangle;
 
-    public static bool IsInteractiveContainer(VirtualNode node) =>
+    public static bool IsInteractiveContainer(VirtualNodeReader node) =>
         node.Kind == VirtualNodeKind.Container
         && !new PropertyReader(node.Properties).GetActionId(VirtualPropertyKey.ActionId).IsNone;
 
-    public static bool TryGetFirstRectangleContent(VirtualNode node, out VirtualNode rectangle)
+    public static bool TryGetFirstRectangleContent(VirtualNodeReader node, out VirtualNodeReader rectangle)
     {
-        foreach (var child in node.Children)
+        var children = node.Children;
+        for (var i = 0; i < children.Length; i++)
         {
-            if (IsRectangleContent(child))
+            var child = children[i];
+            if (child.Kind == VirtualNodeKind.Content && child.Content.Kind == ContentResourceKind.Rectangle)
             {
-                rectangle = child;
+                rectangle = new VirtualNodeReader(child, node.DfsIndex + 1 + i);
                 return true;
             }
         }
@@ -51,13 +54,15 @@ internal static class LayoutNodeReader
         return false;
     }
 
-    public static bool TryGetFirstTextContent(VirtualNode node, out VirtualNode text)
+    public static bool TryGetFirstTextContent(VirtualNodeReader node, out VirtualNodeReader text)
     {
-        foreach (var child in node.Children)
+        var children = node.Children;
+        for (var i = 0; i < children.Length; i++)
         {
-            if (IsTextContent(child))
+            var child = children[i];
+            if (child.Kind == VirtualNodeKind.Content && child.Content.Kind == ContentResourceKind.Text)
             {
-                text = child;
+                text = new VirtualNodeReader(child, node.DfsIndex + 1 + i);
                 return true;
             }
         }

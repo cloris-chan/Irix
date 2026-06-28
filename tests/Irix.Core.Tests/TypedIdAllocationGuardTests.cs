@@ -1298,6 +1298,8 @@ public class TypedIdAllocationGuardTests
         var retainedTreeSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "RetainedTree.cs"));
         var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
         var layoutBuilderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+        var layoutNodeReaderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutNodeReader.cs"));
+        var styleOnlyLayoutPatcherSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleOnlyLayoutPatcher.cs"));
         var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
         var rangeUtilsSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RangeUtils.cs"));
 
@@ -1441,6 +1443,8 @@ public class TypedIdAllocationGuardTests
         var root = FindRepoRoot();
         var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
         var layoutBuilderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+        var layoutNodeReaderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutNodeReader.cs"));
+        var styleOnlyLayoutPatcherSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleOnlyLayoutPatcher.cs"));
         var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
 
         Assert.Contains("public static ScratchList<T> Create(Span<T> initialBuffer)", scratchListSource);
@@ -1455,6 +1459,10 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("Span<ScrollContainerDiag> scrollDiagStorage = stackalloc", layoutBuilderSource);
         Assert.Contains("Span<int> sortedDirtyStorage = stackalloc", layoutBuilderSource);
         Assert.Contains("Span<(int Start, int Count)> rangeStorage = stackalloc", layoutBuilderSource);
+        Assert.Contains("new VirtualNodeTree(root)", layoutBuilderSource);
+        Assert.Contains("VirtualNodeReader", layoutBuilderSource);
+        Assert.Contains("VirtualNodeReader", layoutNodeReaderSource);
+        Assert.Contains("VirtualNodeReader", styleOnlyLayoutPatcherSource);
         Assert.Contains("int SubtreeStart", layoutModelSource);
         Assert.Contains("int SubtreeCount", layoutModelSource);
         Assert.DoesNotContain("LayoutTreeNode[] Children", layoutModelSource);
@@ -1496,9 +1504,13 @@ public class TypedIdAllocationGuardTests
         var root = FindRepoRoot();
         var propertyReaderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "PropertyReader.cs"));
         var layoutSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+        var layoutNodeReaderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutNodeReader.cs"));
+        var styleOnlyLayoutPatcherSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "StyleOnlyLayoutPatcher.cs"));
 
         Assert.Contains("internal readonly ref struct PropertyReader", propertyReaderSource);
         Assert.Contains("internal ref struct LayoutContext", layoutSource);
+        Assert.Contains("VirtualNodeReader", layoutNodeReaderSource);
+        Assert.Contains("VirtualNodeReader", styleOnlyLayoutPatcherSource);
     }
 
     [Fact]
