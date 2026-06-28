@@ -376,6 +376,164 @@ internal static class ElementCommandRangeListBuilder
         ElementCommandRangeList.CopyFrom(ranges);
 }
 
+[CollectionBuilder(typeof(ScrollContainerDiagListBuilder), nameof(ScrollContainerDiagListBuilder.Create))]
+internal readonly struct ScrollContainerDiagList : IReadOnlyList<ScrollContainerDiag>, IEquatable<ScrollContainerDiagList>
+{
+    private readonly ScrollContainerDiag[]? _items;
+    private readonly ScrollContainerDiag _single;
+    private readonly int _count;
+
+    private ScrollContainerDiagList(ScrollContainerDiag[]? items, ScrollContainerDiag single, int count)
+    {
+        _items = items;
+        _single = single;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public ScrollContainerDiag this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return _items is null ? _single : _items[index];
+        }
+    }
+
+    public static ScrollContainerDiagList Empty => default;
+
+    public static ScrollContainerDiagList Single(ScrollContainerDiag diagnostic) =>
+        new(null, diagnostic, 1);
+
+    public static ScrollContainerDiagList FromOwnedArray(ScrollContainerDiag[] diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        return diagnostics.Length switch
+        {
+            0 => Empty,
+            1 => Single(diagnostics[0]),
+            _ => new ScrollContainerDiagList(diagnostics, default, diagnostics.Length)
+        };
+    }
+
+    public static ScrollContainerDiagList CopyFrom(ReadOnlySpan<ScrollContainerDiag> diagnostics)
+    {
+        return diagnostics.Length switch
+        {
+            0 => Empty,
+            1 => Single(diagnostics[0]),
+            _ => FromOwnedArray(diagnostics.ToArray())
+        };
+    }
+
+    public ScrollContainerDiag[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        if (_count == 1)
+        {
+            return [_single];
+        }
+
+        var copy = new ScrollContainerDiag[_count];
+        Array.Copy(_items!, copy, _count);
+        return copy;
+    }
+
+    public Enumerator GetEnumerator() => new(_items, _single, _count);
+
+    IEnumerator<ScrollContainerDiag> IEnumerable<ScrollContainerDiag>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(ScrollContainerDiagList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is ScrollContainerDiagList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(ScrollContainerDiagList left, ScrollContainerDiagList right) => left.Equals(right);
+
+    public static bool operator !=(ScrollContainerDiagList left, ScrollContainerDiagList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<ScrollContainerDiag>
+    {
+        private readonly ScrollContainerDiag[]? _items;
+        private readonly ScrollContainerDiag _single;
+        private readonly int _count;
+        private int _index;
+
+        internal Enumerator(ScrollContainerDiag[]? items, ScrollContainerDiag single, int count)
+        {
+            _items = items;
+            _single = single;
+            _count = count;
+            _index = -1;
+        }
+
+        public readonly ScrollContainerDiag Current => _items is null ? _single : _items[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+}
+
+internal static class ScrollContainerDiagListBuilder
+{
+    public static ScrollContainerDiagList Create(ReadOnlySpan<ScrollContainerDiag> diagnostics) =>
+        ScrollContainerDiagList.CopyFrom(diagnostics);
+}
+
 internal enum LayoutElementKind : byte
 {
     Text,
@@ -1003,25 +1161,24 @@ internal readonly struct LayoutTreeResult
     private static readonly LayoutElement[] EmptyElements = Array.Empty<LayoutElement>();
     private static readonly LayoutTreeNode[] EmptyTreeNodes = Array.Empty<LayoutTreeNode>();
     private static readonly LayoutElementRange[] EmptyElementRanges = Array.Empty<LayoutElementRange>();
-    private static readonly ScrollContainerDiag[] EmptyScrollDiagnostics = Array.Empty<ScrollContainerDiag>();
     private readonly LayoutElement[]? _elements;
     private readonly LayoutTreeNode[]? _treeNodes;
     private readonly LayoutElementRange[]? _elementRanges;
     private readonly IndexRangeList _dirtyElementRanges;
-    private readonly IReadOnlyList<ScrollContainerDiag>? _scrollDiagnostics;
+    private readonly ScrollContainerDiagList _scrollDiagnostics;
 
     public LayoutTreeResult(
         LayoutElement[] elements,
         LayoutTreeNode[] treeNodes,
         LayoutElementRange[] elementRanges,
         IndexRangeList dirtyElementRanges,
-        IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
+        ScrollContainerDiagList scrollDiagnostics)
     {
         _elements = NormalizeElements(elements);
         _treeNodes = NormalizeTreeNodes(treeNodes);
         _elementRanges = NormalizeElementRanges(elementRanges);
         _dirtyElementRanges = dirtyElementRanges;
-        _scrollDiagnostics = NormalizeScrollDiagnostics(scrollDiagnostics);
+        _scrollDiagnostics = scrollDiagnostics;
     }
 
     public LayoutTreeResult(
@@ -1036,7 +1193,7 @@ internal readonly struct LayoutTreeResult
         LayoutElement[] elements,
         LayoutTreeNode[] treeNodes,
         IndexRangeList dirtyElementRanges,
-        IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
+        ScrollContainerDiagList scrollDiagnostics)
         : this(elements, treeNodes, [], dirtyElementRanges, scrollDiagnostics)
     {
     }
@@ -1068,7 +1225,7 @@ internal readonly struct LayoutTreeResult
     public IndexRangeList DirtyElementRanges => _dirtyElementRanges;
 
     /// <summary>Diagnostic info for each scrollable container encountered during layout.</summary>
-    public IReadOnlyList<ScrollContainerDiag> ScrollDiagnostics => _scrollDiagnostics ?? EmptyScrollDiagnostics;
+    public ScrollContainerDiagList ScrollDiagnostics => _scrollDiagnostics;
 
     public LayoutTreeResult WithElementsAndDirtyRanges(
         LayoutElement[] nextElements,
@@ -1091,8 +1248,6 @@ internal readonly struct LayoutTreeResult
     private static LayoutElementRange[] NormalizeElementRanges(LayoutElementRange[] elementRanges) =>
         elementRanges.Length == 0 ? EmptyElementRanges : elementRanges;
 
-    private static IReadOnlyList<ScrollContainerDiag> NormalizeScrollDiagnostics(IReadOnlyList<ScrollContainerDiag> scrollDiagnostics) =>
-        scrollDiagnostics.Count == 0 ? EmptyScrollDiagnostics : scrollDiagnostics;
 }
 
 /// <summary>

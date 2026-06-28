@@ -3994,7 +3994,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Same(lastLayoutResult.TreeNodes, snapshot.LayoutResult.TreeNodes);
         Assert.Same(lastLayoutResult.ElementRanges, snapshot.LayoutResult.ElementRanges);
         Assert.Equal(lastLayoutResult.DirtyElementRanges, snapshot.LayoutResult.DirtyElementRanges);
-        Assert.Same(lastLayoutResult.ScrollDiagnostics, snapshot.LayoutResult.ScrollDiagnostics);
+        Assert.Equal(lastLayoutResult.ScrollDiagnostics, snapshot.LayoutResult.ScrollDiagnostics);
         Assert.Equal(pipeline.LastElementCommandRanges, snapshot.ElementCommandRanges);
         Assert.Equal(frame.HitTargets, snapshot.HitTargets);
         Assert.Equal(root.Kind, snapshot.RetainedRoot.Kind);
@@ -5749,7 +5749,7 @@ public sealed class WindowLayoutPipelineTests
         var dirtyEmptyResult = builder.BuildLayoutTree(containerRoot, viewport, [1]);
 
         Assert.Equal(IndexRangeList.Empty, cleanResult.DirtyElementRanges);
-        Assert.Same(Array.Empty<ScrollContainerDiag>(), cleanResult.ScrollDiagnostics);
+        Assert.Equal(ScrollContainerDiagList.Empty, cleanResult.ScrollDiagnostics);
         Assert.Equal(IndexRangeList.Empty, dirtyEmptyResult.DirtyElementRanges);
     }
 

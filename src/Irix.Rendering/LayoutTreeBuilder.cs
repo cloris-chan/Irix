@@ -34,8 +34,6 @@ internal ref struct LayoutContext
 
 internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 {
-    private static readonly ScrollContainerDiag[] EmptyScrollDiagnostics = Array.Empty<ScrollContainerDiag>();
-
     private const int InlineLayoutElementCapacity = 32;
     private const int InlineLayoutTreeNodeCapacity = 32;
     private const int InlineLayoutElementRangeCapacity = 64;
@@ -96,7 +94,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             var elementRanges = state.ElementRangesToArray();
 
             OnLayoutAllocationPhaseStarted();
-            var scrollDiagnostics = state.ScrollDiagnosticsToArray();
+            var scrollDiagnostics = state.ScrollDiagnosticsToList();
             OnLayoutScrollObservationsArrayAllocated();
 
             OnLayoutAllocationPhaseStarted();
@@ -151,8 +149,8 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
         public LayoutElementRange[] ElementRangesToArray() => _elementRanges.ToArray();
 
-        public ScrollContainerDiag[] ScrollDiagnosticsToArray() =>
-            _scrollDiags.Count == 0 ? EmptyScrollDiagnostics : _scrollDiags.ToArray();
+        public ScrollContainerDiagList ScrollDiagnosticsToList() =>
+            ScrollContainerDiagList.CopyFrom(_scrollDiags.Written);
 
         public void LayoutRoot(VirtualNode root, PixelRectangle viewportBounds)
         {

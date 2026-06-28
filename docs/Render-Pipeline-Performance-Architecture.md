@@ -165,16 +165,18 @@ the simple lifetime cases; guards cover the project-specific ones.
 
 ## Evidence Snapshot
 
-Baseline refreshed on 2026-06-27 after the `VirtualNode` IR was normalized to
+Baseline refreshed on 2026-06-28 after the `VirtualNode` IR was normalized to
 `Container`/`Content` nodes, the first production control/root publication
 slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
 `RenderPipelineRetainedInputSnapshot` became readonly value publication shells,
 pipeline attribution counters were aligned to the current-thread steady-state
 measurement scope, pipeline-owned hit-target publication can be handed to the
-retained frame without a defensive copy, and empty/single dirty classifications
-publish through an inline value list instead of a retained array. Clean render
-requests also reuse the retained hit-target publication when tree, viewport, and
-dirty state are unchanged.
+retained frame without a defensive copy, empty/single dirty classifications and
+dirty ranges publish through inline value lists instead of retained arrays,
+common element-command mappings publish through `ElementCommandRangeList`, and
+common scroll diagnostics publish through `ScrollContainerDiagList`. Clean
+render requests also reuse the retained hit-target publication when tree,
+viewport, and dirty state are unchanged.
 
 Primary command:
 
@@ -186,9 +188,9 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2164736 bytes | 12026 B/frame | render 10786 B/frame, tree 961 B/frame, diff 227 B/frame, translate 91 B/frame |
-| Warm scroll | 425896 bytes | 2366 B/frame | translate 1138 B/frame, tree 833 B/frame, render 273 B/frame, diff 182 B/frame |
-| Scale change | 240752 bytes | 1337 B/frame | tree 911 B/frame, translate 227 B/frame, render 182 B/frame, diff 91 B/frame |
+| Static | 2164632 bytes | 12025 B/frame | render 10832 B/frame, tree 689 B/frame, diff 317 B/frame, translate 227 B/frame |
+| Warm scroll | 411016 bytes | 2283 B/frame | translate 1138 B/frame, tree 833 B/frame, render 182 B/frame, diff 182 B/frame |
+| Scale change | 240608 bytes | 1336 B/frame | tree 911 B/frame, render 273 B/frame, translate 136 B/frame, diff 91 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
@@ -198,7 +200,7 @@ Warm-scroll details are the key CPU render-pipeline comparison point:
 | `layout.treeNodesArray` | 248 | Retained layout tree publication array. |
 | `drawRecord` | 32 | Command recording is visible but not the largest bucket; dirty range mapping now publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 112 | Dirty scroll still rebuilds retained input hit-test publication; clean render requests reuse the retained hit-target publication, and hit-target scanning uses the retained layout span view instead of an `IReadOnlyList<T>` enumeration path. |
-| `layout.scrollDiagnosticsArray` | 72 | Retained scroll observation publication array. |
+| `layout.scrollDiagnosticsArray` | 0 | Empty and single scroll diagnostics are retained through `ScrollContainerDiagList` without publishing an array. |
 | `layout.dirtyRanges` | 0 | Empty and single dirty ranges are retained through `IndexRangeList` without publishing an array. |
 | `pipeline.classify` | 0 | Empty and single dirty classifications are retained through `LayoutDirtyClassificationList` without publishing an array. |
 | `retainedFrame` | 0 | Pipeline-owned hit-target publication is handed to the retained frame without an additional copy. |
@@ -212,8 +214,8 @@ now agree with the value-publication slice:
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
 | Warm reuse | 75 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0` |
-| Style only | 1137 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
-| Layout change | 873 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
+| Style only | 1105 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
+| Layout change | 769 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0` |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
@@ -456,13 +458,15 @@ Acceptance:
 
 ### P3 - Layout Publication Builder
 
-Status: first slice implemented. `LayoutTreeResult` is now a readonly value
+Status: first slices implemented. `LayoutTreeResult` is now a readonly value
 publication shell around owned retained arrays/lists, and `RenderPipeline`
 tracks retained layout through a single nullable result state instead of a
 separate layout-list cache. This removes the result object's identity from the
-contract while preserving retained publication array ownership. The 2026-06-25
-`--diagnose-text-cache 180` warm-scroll run reports `layout.result=0 B/frame`;
-the remaining layout buckets are retained publication arrays.
+contract while preserving retained publication array ownership. `ScrollContainerDiagList`
+now keeps empty and single scroll diagnostics inline, so the warm-scroll
+`--diagnose-text-cache 180` run reports `layout.result=0 B/frame` and
+`layout.scrollDiagnosticsArray=0 B/frame`; the remaining layout buckets are
+retained element and tree publication arrays.
 
 `LayoutTreeBuilder` already uses stack-backed scratch lists before publishing
 owned arrays. The next slice is not "pool the arrays"; it is to make the
@@ -481,9 +485,9 @@ Direction:
 
 Acceptance:
 
-- Warm-scroll `layout.result` remains zero, and `layout.elementsArray`,
-  `layout.treeNodesArray`, plus `layout.scrollDiagnosticsArray` are reduced only
-  by a design that preserves retained publication ownership.
+- Warm-scroll `layout.result` and `layout.scrollDiagnosticsArray` remain zero,
+  and `layout.elementsArray` plus `layout.treeNodesArray` are reduced only by a
+  design that preserves retained publication ownership.
 - Under reserved capacity, full layout rebuilds and style-only layout patches do
   not allocate layout publication arrays.
 - `layout.nodeWalk` allocation remains zero.

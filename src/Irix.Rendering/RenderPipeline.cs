@@ -291,7 +291,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return treeChanged ? LayoutRebuildReason.TreeStructure : LayoutRebuildReason.None;
     }
 
-    private static double ResolveRootMaxScrollY(IReadOnlyList<ScrollContainerDiag> scrollDiagnostics)
+    private static double ResolveRootMaxScrollY(ScrollContainerDiagList scrollDiagnostics)
     {
         foreach (var diagnostic in scrollDiagnostics)
         {
@@ -806,7 +806,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return true;
     }
 
-    private static bool TryFindScrollDiagnostic(IReadOnlyList<ScrollContainerDiag> diagnostics, int dfsIndex, out ScrollContainerDiag diagnostic)
+    private static bool TryFindScrollDiagnostic(ScrollContainerDiagList diagnostics, int dfsIndex, out ScrollContainerDiag diagnostic)
     {
         foreach (var candidate in diagnostics)
         {

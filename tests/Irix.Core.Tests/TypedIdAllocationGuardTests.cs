@@ -113,6 +113,28 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void ScrollContainerDiagList_is_value_publication_for_scroll_diagnostics()
+    {
+        var root = FindRepoRoot();
+        var layoutModelSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutModels.cs"));
+        var layoutBuilderSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.cs"));
+
+        Assert.True(typeof(ScrollContainerDiagList).IsValueType);
+        Assert.Contains("internal readonly struct ScrollContainerDiagList", layoutModelSource);
+        Assert.DoesNotContain("IReadOnlyList<ScrollContainerDiag>? _scrollDiagnostics", layoutModelSource);
+        Assert.Contains("ScrollContainerDiagList.CopyFrom(_scrollDiags.Written)", layoutBuilderSource);
+        Assert.DoesNotContain("ScrollDiagnosticsToArray()", layoutBuilderSource);
+
+        ScrollContainerDiagList diagnostics =
+        [
+            new(0, 100, 160, 12, 60, 3, 1)
+        ];
+
+        Assert.Single(diagnostics);
+        Assert.Equal(12, diagnostics[0].ScrollY);
+    }
+
+    [Fact]
     public void Render_pipeline_retained_input_snapshot_is_value_publication_not_heap_identity()
     {
         var root = FindRepoRoot();
