@@ -1392,10 +1392,17 @@ public class TypedIdAllocationGuardTests
 
         Assert.DoesNotContain("new List<", rangeUtilsSource);
 
+        Assert.Contains("previousTree.CreateReader()", differSource);
+        Assert.Contains("nextTree.CreateReader()", differSource);
+        Assert.Contains("VirtualNodeReader", differSource);
+        Assert.DoesNotContain("private static bool IsDefaultTree", differSource);
+        Assert.DoesNotContain("ReadOnlySpan<VirtualNode> oldChildren", differSource);
+        Assert.DoesNotContain("ReadOnlySpan<VirtualNode> newChildren", differSource);
+
         var diffInnerSource = ExtractSourceBetween(
             differSource,
             "private static void DiffNode",
-            "private static int CountNodes");
+            "private static bool PropertiesEqual");
         Assert.DoesNotContain("ToArray()", diffInnerSource);
 
         var layoutRecursiveSource = ExtractSourceBetween(
@@ -1477,6 +1484,8 @@ public class TypedIdAllocationGuardTests
     {
         Assert.True(typeof(VirtualNodePropertyListBuilder).IsByRefLike);
         Assert.True(typeof(VirtualNodeChildrenBuilder).IsByRefLike);
+        Assert.True(typeof(VirtualNodeTreeReader).IsByRefLike);
+        Assert.True(typeof(VirtualNodeReader).IsByRefLike);
         Assert.False(typeof(VirtualNode).IsByRefLike);
         Assert.False(typeof(VirtualNodeTree).IsByRefLike);
         Assert.False(typeof(VirtualNodeProperty).IsByRefLike);
@@ -1508,6 +1517,8 @@ public class TypedIdAllocationGuardTests
         foreach (var file in sourceFiles)
         {
             var content = File.ReadAllText(file);
+            Assert.DoesNotContain("VirtualNodeTreeReader", content);
+            Assert.DoesNotContain("VirtualNodeReader", content);
             Assert.DoesNotContain("VirtualNodePropertyListBuilder", content);
             Assert.DoesNotContain("VirtualNodeChildrenBuilder", content);
             Assert.DoesNotContain("PropertyReader", content);
@@ -1703,6 +1714,8 @@ public class TypedIdAllocationGuardTests
         Assert.False(typeof(ContentResource).IsPublic);
         Assert.False(typeof(VirtualNode).IsPublic);
         Assert.False(typeof(VirtualNodeTree).IsPublic);
+        Assert.False(typeof(VirtualNodeTreeReader).IsPublic);
+        Assert.False(typeof(VirtualNodeReader).IsPublic);
         Assert.False(typeof(VirtualNodeProperty).IsPublic);
         Assert.False(typeof(VirtualNodePatch).IsPublic);
         Assert.False(typeof(VirtualNodeFactory).IsPublic);

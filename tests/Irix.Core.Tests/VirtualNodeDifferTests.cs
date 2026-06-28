@@ -114,6 +114,30 @@ public sealed class VirtualNodeDifferTests
     }
 
     [Fact]
+    public void Reader_views_compare_equally_for_identical_nodes()
+    {
+        var a = VirtualNodeFactory.Container(
+            1,
+            VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
+            VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(48)));
+        var b = VirtualNodeFactory.Container(
+            1,
+            VirtualNodeBuilder.Text(_arena, "Count: 42", new NodeKey(2)),
+            VirtualNodeFactory.Rectangle(new NodeKey(3), VirtualNodeProperty.Width(200), VirtualNodeProperty.Height(48)));
+
+        var snapshot = _arena.GetOrCreateSnapshot();
+        Assert.True(VirtualNodeStructuralComparer.Equals(new VirtualNodeReader(a, 0), new VirtualNodeReader(b, 0), snapshot, snapshot));
+    }
+
+    [Fact]
+    public void Reader_views_mark_default_trees_as_default()
+    {
+        var reader = default(VirtualNodeTree).CreateReader();
+
+        Assert.True(reader.IsDefault);
+    }
+
+    [Fact]
     public void NodesEqual_returns_false_for_different_content()
     {
         var a = VirtualNodeBuilder.Text(_arena, "Hello", new NodeKey(1));

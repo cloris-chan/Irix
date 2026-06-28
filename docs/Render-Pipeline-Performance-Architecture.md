@@ -430,6 +430,11 @@ Acceptance:
 
 ### P2 - VirtualNode Publication Slab
 
+Status: reader boundary implemented as a transition slice. `VirtualNodeTree`
+now exposes an internal generation-fenced reader/cursor contract for diff and
+structural comparison, so the next migration point is no longer "add a reader";
+it is "move publication storage from per-node arrays into tree-owned slabs."
+
 The measured `childrenArray` bucket is a sign that per-node owned arrays are the
 next structural limit. Since `VirtualNode` is internal, the next target design can
 move from "each node owns child/property arrays" to "one published tree owns
@@ -439,7 +444,8 @@ Possible shape:
 
 - `VirtualNodeTree` owns published arrays/slabs and their retained capacity.
 - `VirtualNodeRef` or a reader struct identifies nodes by index plus generation
-  or tree owner.
+  or tree owner. The current tree reader is a transition contract, not the slab
+  owner itself.
 - Node records store kind, key, content range/index, property range, and child
   range.
 - Hot node/property/content-resource records that contain no managed references

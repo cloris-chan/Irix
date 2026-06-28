@@ -430,6 +430,84 @@ internal readonly struct VirtualNodeTree(VirtualNode root, TextBufferSnapshot te
     public VirtualNode Root { get; } = root;
     public TextBufferSnapshot TextSnapshot { get; } = textSnapshot;
 
+    internal VirtualNodeTreeReader CreateReader() => new(this);
+}
+
+internal readonly ref struct VirtualNodeTreeReader
+{
+    private readonly VirtualNode _root;
+
+    public VirtualNodeTreeReader(VirtualNodeTree tree)
+    {
+        _root = tree.Root;
+        TextSnapshot = tree.TextSnapshot;
+    }
+
+    public TextBufferSnapshot TextSnapshot { get; }
+
+    public VirtualNodeReader Root => new(_root, 0);
+
+    public bool IsDefault => Root.IsDefault;
+}
+
+internal readonly ref struct VirtualNodeReader
+{
+    private readonly VirtualNode _node;
+
+    public VirtualNodeReader(VirtualNode node, int dfsIndex)
+    {
+        _node = node;
+        DfsIndex = dfsIndex;
+    }
+
+    public int DfsIndex { get; }
+    public VirtualNode Node => _node;
+    public VirtualNodeKind Kind => _node.Kind;
+    public NodeKey Key => _node.Key;
+    public ContentResource Content => _node.Content;
+    public ReadOnlySpan<VirtualNodeProperty> Properties => _node.Properties;
+    public int ChildCount => _node.Children.Length;
+
+    public bool IsDefault =>
+        Kind == VirtualNodeKind.None
+        && Key == NodeKey.None
+        && Content == ContentResource.None
+        && Properties.Length == 0
+        && ChildCount == 0;
+
+    public VirtualNodeReader GetChild(int childIndex, int dfsIndex)
+    {
+        var children = _node.Children;
+        if ((uint)childIndex >= (uint)children.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(childIndex));
+        }
+
+        return new VirtualNodeReader(children[childIndex], dfsIndex);
+    }
+
+    public NodeKey GetChildKey(int childIndex)
+    {
+        var children = _node.Children;
+        if ((uint)childIndex >= (uint)children.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(childIndex));
+        }
+
+        return children[childIndex].Key;
+    }
+
+    public int CountSubtreeNodes()
+    {
+        var count = 1;
+        var children = _node.Children;
+        for (var i = 0; i < children.Length; i++)
+        {
+            count += new VirtualNodeReader(children[i], 0).CountSubtreeNodes();
+        }
+
+        return count;
+    }
 }
 
 internal readonly struct VirtualNode
