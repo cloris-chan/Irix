@@ -8,6 +8,19 @@ internal static class StyleOnlyHitTargetPatch
         IndexRangeList dirtyElementRanges,
         out HitTargetList patchedHitTargets)
     {
+        return TryBuildPatchedHitTargets(
+            retainedHitTargets,
+            LayoutElementList.CopyFrom(nextLayoutElements),
+            dirtyElementRanges,
+            out patchedHitTargets);
+    }
+
+    public static bool TryBuildPatchedHitTargets(
+        HitTargetList retainedHitTargets,
+        LayoutElementList nextLayoutElements,
+        IndexRangeList dirtyElementRanges,
+        out HitTargetList patchedHitTargets)
+    {
         patchedHitTargets = HitTargetList.Empty;
         if (dirtyElementRanges.Count == 0)
         {

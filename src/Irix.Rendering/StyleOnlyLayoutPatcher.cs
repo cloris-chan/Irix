@@ -17,7 +17,7 @@ internal static class StyleOnlyLayoutPatcher
             return false;
         }
 
-        var nextElements = CopyElements(retainedLayout.Elements);
+        var nextElements = retainedLayout.Elements.ToArray();
         var scratch = new RenderScratchBuffer();
         Span<int> dirtyIndexStorage = stackalloc int[InlineDirtyIndexCapacity];
         scoped var sortedDirty = scratch.CreateDirtyIndexList(dirtyIndexStorage);
@@ -59,7 +59,7 @@ internal static class StyleOnlyLayoutPatcher
                     return false;
                 }
 
-                patchedLayout = retainedLayout.WithElementsAndDirtyRanges(nextElements, dirtyElementRanges);
+                patchedLayout = retainedLayout.WithElementsAndDirtyRanges(LayoutElementList.FromOwnedArray(nextElements), dirtyElementRanges);
                 return true;
             }
             finally
@@ -71,17 +71,6 @@ internal static class StyleOnlyLayoutPatcher
         {
             sortedDirty.Dispose();
         }
-    }
-
-    private static LayoutElement[] CopyElements(IReadOnlyList<LayoutElement> elements)
-    {
-        var result = new LayoutElement[elements.Count];
-        for (var i = 0; i < result.Length; i++)
-        {
-            result[i] = elements[i];
-        }
-
-        return result;
     }
 
     private static bool TryPatchTree(
@@ -130,7 +119,7 @@ internal static class StyleOnlyLayoutPatcher
     }
 
     private static bool TryReadTreeNode(
-        ReadOnlySpan<LayoutTreeNode> treeNodes,
+        LayoutTreeNodeList treeNodes,
         ref int treeCursor,
         int dfsIndex,
         out LayoutTreeNode treeNode)

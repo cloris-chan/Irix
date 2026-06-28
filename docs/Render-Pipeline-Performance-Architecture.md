@@ -172,10 +172,12 @@ slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
 pipeline attribution counters were aligned to the current-thread steady-state
 measurement scope, hit targets publish through `HitTargetList`, empty/single
 dirty classifications and dirty ranges publish through inline value lists instead of retained arrays,
-common element-command mappings publish through `ElementCommandRangeList`, and
-common scroll diagnostics publish through `ScrollContainerDiagList`. Clean
-render requests also reuse the retained hit-target value publication when tree,
-viewport, and dirty state are unchanged.
+common element-command mappings publish through `ElementCommandRangeList`,
+common scroll diagnostics publish through `ScrollContainerDiagList`, and common
+layout elements/tree nodes/ranges publish through `LayoutElementList`,
+`LayoutTreeNodeList`, and `LayoutElementRangeList`. Clean render requests also
+reuse the retained hit-target value publication when tree, viewport, and dirty
+state are unchanged.
 
 Primary command:
 
@@ -187,18 +189,21 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2158328 bytes | 11990 B/frame | render 10969 B/frame, tree 498 B/frame, translate 317 B/frame, diff 248 B/frame |
-| Warm scroll | 390856 bytes | 2171 B/frame | translate 1002 B/frame, tree 865 B/frame, render 195 B/frame, diff 182 B/frame |
-| Scale change | 246576 bytes | 1369 B/frame | tree 865 B/frame, render 410 B/frame, diff 136 B/frame, translate 45 B/frame |
+| Static | 2157488 bytes | 11986 B/frame | render 10922 B/frame, tree 928 B/frame, diff 91 B/frame, translate 45 B/frame |
+| Warm scroll | 239656 bytes | 1331 B/frame | tree 911 B/frame, diff 227 B/frame, render 182 B/frame, translate 91 B/frame |
+| Scale change | 238704 bytes | 1326 B/frame | tree 956 B/frame, render 227 B/frame, translate 136 B/frame, diff 45 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `layout.elementsArray` | 504 | Retained layout publication array. |
-| `layout.treeNodesArray` | 248 | Retained layout tree publication array. |
+| `tree.buildRoot.button.propertyArray` | 318 | Remaining measured control/tree publication cost in the synthetic button path. |
+| `tree.buildRoot.container` | 318 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
+| `tree.buildRoot.button.childrenArray` | 182 | Button lowering still publishes per-node child arrays in the measured synthetic path. |
 | `drawRecord` | 32 | Command recording is visible but not the largest bucket; dirty range mapping now publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 0 | Common hit targets are retained through `HitTargetList` without publishing an array; clean render requests reuse the retained value publication, and dirty retained input snapshots patch common hit-target metadata inline. |
+| `layout.elementsArray` | 0 | Common layout elements publish through `LayoutElementList` without a retained array. |
+| `layout.treeNodesArray` | 0 | Common layout tree nodes publish through `LayoutTreeNodeList` without a retained array. |
 | `layout.scrollDiagnosticsArray` | 0 | Empty and single scroll diagnostics are retained through `ScrollContainerDiagList` without publishing an array. |
 | `layout.dirtyRanges` | 0 | Empty and single dirty ranges are retained through `IndexRangeList` without publishing an array. |
 | `pipeline.classify` | 0 | Empty and single dirty classifications are retained through `LayoutDirtyClassificationList` without publishing an array. |
@@ -214,12 +219,13 @@ now agree with the value-publication slice:
 |----------|--------------------|-------------------|
 | Warm reuse | 75 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0` |
 | Style only | 1105 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
-| Layout change | 769 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0` |
+| Layout change | 73 | `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0` |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
-lower into a container plus content nodes, and layout publication exposes owned
-arrays rather than a retained result-object allocation.
+lower into a container plus content nodes, while common small layout publication
+stays inline and the remaining visible cost has moved back to tree/control
+publication plus command recording.
 
 Composition and scroll diagnostics were also checked:
 
@@ -458,19 +464,21 @@ Acceptance:
 ### P3 - Layout Publication Builder
 
 Status: first slices implemented. `LayoutTreeResult` is now a readonly value
-publication shell around owned retained arrays/lists, and `RenderPipeline`
+publication shell around typed retained publications, and `RenderPipeline`
 tracks retained layout through a single nullable result state instead of a
 separate layout-list cache. This removes the result object's identity from the
-contract while preserving retained publication array ownership. `ScrollContainerDiagList`
-now keeps empty and single scroll diagnostics inline, so the warm-scroll
-`--diagnose-text-cache 180` run reports `layout.result=0 B/frame` and
-`layout.scrollDiagnosticsArray=0 B/frame`; the remaining layout buckets are
-retained element and tree publication arrays.
+contract while preserving retained publication ownership. `LayoutElementList`,
+`LayoutTreeNodeList`, and `LayoutElementRangeList` now inline the common small
+layout result, and `ScrollContainerDiagList` keeps empty and single scroll
+diagnostics inline, so the warm-scroll `--diagnose-text-cache 180` run reports
+`layout.result=0 B/frame`, `layout.elementsArray=0 B/frame`,
+`layout.treeNodesArray=0 B/frame`, and `layout.scrollDiagnosticsArray=0 B/frame`.
 
 `LayoutTreeBuilder` already uses stack-backed scratch lists before publishing
-owned arrays. The next slice is not "pool the arrays"; it is to make the
-publication freeze boundary first-class and then give it retained capacity that
-can publish a new read-only generation without allocating.
+typed value lists. The next slice is not "pool the arrays"; it is to give the
+publication freeze boundary retained capacity that can publish a new read-only
+generation without allocating, including style-only patched element snapshots
+that currently copy to preserve older retained snapshots.
 
 Direction:
 
@@ -479,23 +487,23 @@ Direction:
   scroll diagnostics.
 - Keep stack/pool usage fully inside the build phase.
 - Freeze once into `LayoutTreeResult` or a future `PublishedLayoutFrame`, then
-  migrate the frozen storage to reserved publication pages.
+  migrate large or patched frozen storage to reserved publication pages.
 - Preserve current `StyleOnly` layout skip and retained geometry reuse rules.
 
 Acceptance:
 
-- Warm-scroll `layout.result` and `layout.scrollDiagnosticsArray` remain zero,
-  and `layout.elementsArray` plus `layout.treeNodesArray` are reduced only by a
-  design that preserves retained publication ownership.
-- Under reserved capacity, full layout rebuilds and style-only layout patches do
-  not allocate layout publication arrays.
+- Warm-scroll `layout.result`, `layout.elementsArray`, `layout.treeNodesArray`,
+  and `layout.scrollDiagnosticsArray` remain zero for the common small
+  publication path.
+- Under reserved capacity, large full layout rebuilds and style-only layout
+  patches do not allocate layout publication arrays.
 - `layout.nodeWalk` allocation remains zero.
 - Style-only and partial-apply guards stay green.
 
 ### P4 - Draw Ranges, Dirty Classification, Hit Targets, And Retained Frame Handoff
 
 Status: first draw-record, retained-input snapshot shell, hit-target
-value-publication, clean retained hit-target reuse, layout span hit-target
+value-publication, clean retained hit-target reuse, typed layout hit-target
 scanning, dirty range value-publication, element-command range value-publication, and
 dirty-classification value-publication slices
 implemented. `DrawCommandRecordResult` and
@@ -512,10 +520,10 @@ publish patched hit-target metadata through `HitTargetList`, so the warm-scroll
 `hitTargets` bucket is now zero for the common path. `LayoutDirtyClassificationList` keeps
 empty and single dirty classifications inline and uses an owned array only when
 multiple retained classifications must be published. Hit-target construction now
-uses the retained `LayoutTreeResult` element span directly inside the rendering
-layer, so style-only and layout-change scenarios with no action targets no
-longer pay an interface-enumeration allocation just to prove the hit-target
-publication is empty. `IndexRangeList` now keeps empty and single dirty element
+uses the retained `LayoutTreeResult` typed element publication directly inside
+the rendering layer, so style-only and layout-change scenarios with no action
+targets no longer pay an interface-enumeration allocation just to prove the
+hit-target publication is empty. `IndexRangeList` now keeps empty and single dirty element
 and dirty command ranges inline, while preserving owned arrays only for
 multi-range publication. `ElementCommandRangeList` now keeps up to four
 element-command range records inline, preserving an owned array only for larger

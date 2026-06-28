@@ -147,7 +147,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         }
 
         var retainedLayoutResult = _retainedLayoutResult!.Value;
-        var layout = retainedLayoutResult.ElementSpan;
+        var layout = retainedLayoutResult.Elements;
         var dirtyElementRanges = hasDirty
             ? retainedLayoutResult.DirtyElementRanges
             : IndexRangeList.Empty;
@@ -484,6 +484,11 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             : BuildHitTargetListFromList(layoutElements, []);
     }
 
+    internal static HitTargetList BuildHitTargets(LayoutElementList layoutElements)
+    {
+        return BuildHitTargetList(layoutElements, []);
+    }
+
     internal static HitTargetList BuildHitTargets(
         IReadOnlyList<LayoutElement> layoutElements,
         ElementCommandRangeList elementCommandRanges)
@@ -491,6 +496,13 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return layoutElements is LayoutElement[] elementArray
             ? BuildHitTargetList(elementArray.AsSpan(), elementCommandRanges)
             : BuildHitTargetListFromList(layoutElements, elementCommandRanges);
+    }
+
+    internal static HitTargetList BuildHitTargets(
+        LayoutElementList layoutElements,
+        ElementCommandRangeList elementCommandRanges)
+    {
+        return BuildHitTargetList(layoutElements, elementCommandRanges);
     }
 
     private static HitTargetList BuildHitTargetList(
@@ -521,6 +533,54 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         var hitTargets = ownedHitTargets is null ? inlineHitTargets[..hitTargetCount] : ownedHitTargets.AsSpan();
         var index = 0;
         for (var i = 0; i < layoutElements.Length; i++)
+        {
+            var element = layoutElements[i];
+            if (!element.ActionId.IsNone)
+            {
+                var commandRange = (uint)i < (uint)elementCommandRanges.Length ? elementCommandRanges[i] : default;
+                var commandStart = commandRange.CommandCount > 0 ? commandRange.CommandStart : -1;
+                hitTargets[index++] = new HitTestTarget(
+                    element.Bounds,
+                    element.ActionId,
+                    element.ClipBounds,
+                    commandStart,
+                    commandRange.CommandCount);
+            }
+        }
+
+        return ownedHitTargets is null
+            ? HitTargetList.CopyFrom(hitTargets)
+            : HitTargetList.FromOwnedArray(ownedHitTargets);
+    }
+
+    private static HitTargetList BuildHitTargetList(
+        LayoutElementList layoutElements,
+        ElementCommandRangeList elementCommandRanges)
+    {
+        if (layoutElements.IsEmpty)
+        {
+            return HitTargetList.Empty;
+        }
+
+        var hitTargetCount = 0;
+        for (var i = 0; i < layoutElements.Count; i++)
+        {
+            if (!layoutElements[i].ActionId.IsNone)
+            {
+                hitTargetCount++;
+            }
+        }
+
+        if (hitTargetCount == 0)
+        {
+            return HitTargetList.Empty;
+        }
+
+        Span<HitTestTarget> inlineHitTargets = stackalloc HitTestTarget[HitTargetList.InlineCapacity];
+        var ownedHitTargets = hitTargetCount > HitTargetList.InlineCapacity ? new HitTestTarget[hitTargetCount] : null;
+        var hitTargets = ownedHitTargets is null ? inlineHitTargets[..hitTargetCount] : ownedHitTargets.AsSpan();
+        var index = 0;
+        for (var i = 0; i < layoutElements.Count; i++)
         {
             var element = layoutElements[i];
             if (!element.ActionId.IsNone)
@@ -648,6 +708,42 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return false;
     }
 
+    internal static bool TryResolveCompositionTarget(
+        LayoutTreeNodeList treeNodes,
+        ElementCommandRangeList elementCommandRanges,
+        int commandCount,
+        NodeKey key,
+        out CompositionTarget target)
+    {
+        if (key == NodeKey.None || treeNodes.IsEmpty || elementCommandRanges.Count == 0 || commandCount <= 0)
+        {
+            target = default;
+            return false;
+        }
+
+        for (var i = 0; i < treeNodes.Count; i++)
+        {
+            var node = treeNodes[i];
+            if (node.Key != key || !TryResolveCommandRange(node, elementCommandRanges, commandCount, out var commandStart, out var resolvedCommandCount))
+            {
+                continue;
+            }
+
+            target = new CompositionTarget(
+                new CompositionLayerId(checked((int)node.Key.Value)),
+                node.Key,
+                node.Kind,
+                node.DfsIndex,
+                commandStart,
+                resolvedCommandCount);
+            return true;
+        }
+
+        target = default;
+        return false;
+    }
+
+
     internal static bool TryResolveScrollCompositionTarget(
         LayoutTreeResult layoutResult,
         ElementCommandRangeList elementCommandRanges,
@@ -655,19 +751,21 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         NodeKey key,
         out ScrollCompositionTarget target)
     {
-        if (key == NodeKey.None || layoutResult.TreeNodes.Length == 0 || elementCommandRanges.Count == 0 || commandCount <= 0)
+        var treeNodes = layoutResult.TreeNodes;
+        if (key == NodeKey.None || treeNodes.IsEmpty || elementCommandRanges.Count == 0 || commandCount <= 0)
         {
             target = default;
             return false;
         }
 
-        foreach (ref readonly var node in layoutResult.TreeNodes.AsSpan())
+        for (var i = 0; i < treeNodes.Count; i++)
         {
+            var node = treeNodes[i];
             if (node.Key != key
                 || node.Kind != VirtualNodeKind.Container
                 || !TryFindScrollDiagnostic(layoutResult.ScrollDiagnostics, node.DfsIndex, out var diagnostic)
                 || !TryResolveScrollCompositionLayers(
-                    layoutResult.ElementSpan,
+                    layoutResult.Elements,
                     elementCommandRanges,
                     commandCount,
                     node.ElementStart,
@@ -695,6 +793,48 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
     private static bool TryResolveScrollCompositionLayers(
         ReadOnlySpan<LayoutElement> elements,
+        ElementCommandRangeList elementCommandRanges,
+        int commandCount,
+        int elementStart,
+        int elementCount,
+        int baseLayerId,
+        out ScrollCompositionLayerTarget firstLayer,
+        out ScrollCompositionLayerTarget[] additionalLayers)
+    {
+        return TryResolveScrollCompositionLayers(
+            new LayoutElementReader(elements),
+            elementCommandRanges,
+            commandCount,
+            elementStart,
+            elementCount,
+            baseLayerId,
+            out firstLayer,
+            out additionalLayers);
+    }
+
+    private static bool TryResolveScrollCompositionLayers(
+        LayoutElementList elements,
+        ElementCommandRangeList elementCommandRanges,
+        int commandCount,
+        int elementStart,
+        int elementCount,
+        int baseLayerId,
+        out ScrollCompositionLayerTarget firstLayer,
+        out ScrollCompositionLayerTarget[] additionalLayers)
+    {
+        return TryResolveScrollCompositionLayers(
+            new LayoutElementReader(elements),
+            elementCommandRanges,
+            commandCount,
+            elementStart,
+            elementCount,
+            baseLayerId,
+            out firstLayer,
+            out additionalLayers);
+    }
+
+    private static bool TryResolveScrollCompositionLayers(
+        LayoutElementReader elements,
         ElementCommandRangeList elementCommandRanges,
         int commandCount,
         int elementStart,
@@ -811,6 +951,33 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
         layers.Add(layer);
         return true;
+    }
+
+    private readonly ref struct LayoutElementReader
+    {
+        private readonly ReadOnlySpan<LayoutElement> _span;
+        private readonly LayoutElementList _list;
+        private readonly bool _usesList;
+
+        public LayoutElementReader(ReadOnlySpan<LayoutElement> span)
+        {
+            _span = span;
+            _list = default;
+            _usesList = false;
+            Length = span.Length;
+        }
+
+        public LayoutElementReader(LayoutElementList list)
+        {
+            _span = default;
+            _list = list;
+            _usesList = true;
+            Length = list.Length;
+        }
+
+        public int Length { get; }
+
+        public LayoutElement this[int index] => _usesList ? _list[index] : _span[index];
     }
 
     private static bool TryFindScrollDiagnostic(ScrollContainerDiagList diagnostics, int dfsIndex, out ScrollContainerDiag diagnostic)

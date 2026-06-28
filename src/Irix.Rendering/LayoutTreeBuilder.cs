@@ -83,15 +83,15 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
             OnLayoutDirtyRangesAllocated();
 
             OnLayoutAllocationPhaseStarted();
-            var elements = state.ElementsToArray();
+            var elements = state.ElementsToList();
             OnLayoutElementArrayAllocated();
 
             OnLayoutAllocationPhaseStarted();
-            var treeNodes = state.TreeNodesToArray();
+            var treeNodes = state.TreeNodesToList();
             OnLayoutTreeNodeArrayAllocated();
 
             OnLayoutAllocationPhaseStarted();
-            var elementRanges = state.ElementRangesToArray();
+            var elementRanges = state.ElementRangesToList();
 
             OnLayoutAllocationPhaseStarted();
             var scrollDiagnostics = state.ScrollDiagnosticsToList();
@@ -108,7 +108,7 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
         }
     }
 
-    public IReadOnlyList<LayoutElement> BuildElements(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
+    public LayoutElementList BuildElements(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         return BuildLayoutTree(root, viewportBounds, dirtyNodes).Elements;
     }
@@ -143,11 +143,11 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
 
         public readonly ReadOnlySpan<LayoutElementRange> ElementRanges => _elementRanges.Written;
 
-        public LayoutElement[] ElementsToArray() => _elements.ToArray();
+        public LayoutElementList ElementsToList() => LayoutElementList.CopyFrom(_elements.Written);
 
-        public LayoutTreeNode[] TreeNodesToArray() => _treeNodes.ToArray();
+        public LayoutTreeNodeList TreeNodesToList() => LayoutTreeNodeList.CopyFrom(_treeNodes.Written);
 
-        public LayoutElementRange[] ElementRangesToArray() => _elementRanges.ToArray();
+        public LayoutElementRangeList ElementRangesToList() => LayoutElementRangeList.CopyFrom(_elementRanges.Written);
 
         public ScrollContainerDiagList ScrollDiagnosticsToList() =>
             ScrollContainerDiagList.CopyFrom(_scrollDiags.Written);

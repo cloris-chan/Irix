@@ -105,6 +105,25 @@ internal static class StyleOnlyPatchPlanBuilder
         ReadOnlySpan<LayoutElement> nextLayoutElements,
         IndexRangeList dirtyElementRanges)
     {
+        return Build(
+            dirtyClassifications,
+            viewportChanged,
+            retainedLayout,
+            retainedElementCommandRanges,
+            retainedHitTargets,
+            LayoutElementList.CopyFrom(nextLayoutElements),
+            dirtyElementRanges);
+    }
+
+    public static StyleOnlyPatchPlan Build(
+        LayoutDirtyClassificationList dirtyClassifications,
+        bool viewportChanged,
+        LayoutTreeResult? retainedLayout,
+        ElementCommandRangeList retainedElementCommandRanges,
+        HitTargetList retainedHitTargets,
+        LayoutElementList nextLayoutElements,
+        IndexRangeList dirtyElementRanges)
+    {
         if (retainedLayout is null)
         {
             return StyleOnlyPatchPlan.CreateFallback(StyleOnlyPatchFallbackReason.MissingRetainedLayout, dirtyElementRanges);

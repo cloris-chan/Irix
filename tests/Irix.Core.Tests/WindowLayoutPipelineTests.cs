@@ -3990,9 +3990,9 @@ public sealed class WindowLayoutPipelineTests
         Assert.True(pipeline.HasLastRetainedInputSnapshot);
         Assert.True(pipeline.LastLayoutResult.HasValue);
         var lastLayoutResult = pipeline.LastLayoutResult.Value;
-        Assert.Same(lastLayoutResult.Elements, snapshot.LayoutResult.Elements);
-        Assert.Same(lastLayoutResult.TreeNodes, snapshot.LayoutResult.TreeNodes);
-        Assert.Same(lastLayoutResult.ElementRanges, snapshot.LayoutResult.ElementRanges);
+        Assert.Equal(lastLayoutResult.Elements, snapshot.LayoutResult.Elements);
+        Assert.Equal(lastLayoutResult.TreeNodes, snapshot.LayoutResult.TreeNodes);
+        Assert.Equal(lastLayoutResult.ElementRanges, snapshot.LayoutResult.ElementRanges);
         Assert.Equal(lastLayoutResult.DirtyElementRanges, snapshot.LayoutResult.DirtyElementRanges);
         Assert.Equal(lastLayoutResult.ScrollDiagnostics, snapshot.LayoutResult.ScrollDiagnostics);
         Assert.Equal(pipeline.LastElementCommandRanges, snapshot.ElementCommandRanges);
@@ -4437,7 +4437,7 @@ public sealed class WindowLayoutPipelineTests
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
             frame1.HitTargets,
-            nextLayout.ElementSpan,
+            nextLayout.Elements,
             pipeline.LastDirtyElementRanges,
             out var patchedHitTargets);
 
@@ -4628,7 +4628,7 @@ public sealed class WindowLayoutPipelineTests
             initialLayout,
             pipeline.LastElementCommandRanges,
             frame1.HitTargets,
-            pipeline.LastLayoutResult!.Value.ElementSpan,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.Equal(initialRebuildCount, pipeline.LayoutRebuildCount);
@@ -4678,7 +4678,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             HitTargetList.CopyFrom(retainedHitTargets),
-            pipeline.LastLayoutResult!.Value.ElementSpan,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.True(plan.Eligible);
@@ -4716,7 +4716,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             retainedHitTargets,
-            pipeline.LastLayoutResult!.Value.ElementSpan,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.True(plan.Eligible);
@@ -4755,7 +4755,7 @@ public sealed class WindowLayoutPipelineTests
             retainedLayout,
             retainedCommandRanges,
             HitTargetList.CopyFrom(retainedHitTargets),
-            pipeline.LastLayoutResult!.Value.ElementSpan,
+            pipeline.LastLayoutResult!.Value.Elements,
             pipeline.LastDirtyElementRanges);
 
         Assert.False(plan.Eligible);
@@ -4908,7 +4908,7 @@ public sealed class WindowLayoutPipelineTests
         return snapshot;
     }
 
-    private static LayoutTreeRangeInvariant[] SnapshotLayoutTreeRanges(LayoutTreeNode[] treeNodes)
+    private static LayoutTreeRangeInvariant[] SnapshotLayoutTreeRanges(LayoutTreeNodeList treeNodes)
     {
         var snapshot = new LayoutTreeRangeInvariant[treeNodes.Length];
         for (var i = 0; i < treeNodes.Length; i++)

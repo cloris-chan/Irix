@@ -621,6 +621,209 @@ internal readonly struct LayoutElement(
     public static bool operator !=(LayoutElement left, LayoutElement right) => !left.Equals(right);
 }
 
+[CollectionBuilder(typeof(LayoutElementListBuilder), nameof(LayoutElementListBuilder.Create))]
+internal readonly struct LayoutElementList : IReadOnlyList<LayoutElement>, IEquatable<LayoutElementList>
+{
+    internal const int InlineCapacity = 8;
+
+    private readonly LayoutElement[]? _items;
+    private readonly InlineLayoutElements _inline;
+    private readonly int _count;
+
+    private LayoutElementList(LayoutElement[]? items, in InlineLayoutElements inline, int count)
+    {
+        _items = items;
+        _inline = inline;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public int Length => _count;
+
+    public bool IsEmpty => _count == 0;
+
+    public LayoutElement this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return _items is not null ? _items[index] : _inline[index];
+        }
+    }
+
+    public static LayoutElementList Empty => default;
+
+    internal static LayoutElementList FromOwnedArray(LayoutElement[] elements)
+    {
+        ArgumentNullException.ThrowIfNull(elements);
+        return elements.Length <= InlineCapacity
+            ? CopyFrom(elements.AsSpan())
+            : new LayoutElementList(elements, default, elements.Length);
+    }
+
+    public static LayoutElementList CopyFrom(ReadOnlySpan<LayoutElement> elements)
+    {
+        if (elements.IsEmpty)
+        {
+            return Empty;
+        }
+
+        if (elements.Length <= InlineCapacity)
+        {
+            var inline = default(InlineLayoutElements);
+            elements.CopyTo(inline[..elements.Length]);
+            return new LayoutElementList(null, inline, elements.Length);
+        }
+
+        return FromOwnedArray(elements.ToArray());
+    }
+
+    public static LayoutElementList CopyFrom(IReadOnlyList<LayoutElement> elements)
+    {
+        ArgumentNullException.ThrowIfNull(elements);
+        if (elements.Count == 0)
+        {
+            return Empty;
+        }
+
+        if (elements is LayoutElement[] elementArray)
+        {
+            return CopyFrom(elementArray.AsSpan());
+        }
+
+        var copy = new LayoutElement[elements.Count];
+        for (var i = 0; i < copy.Length; i++)
+        {
+            copy[i] = elements[i];
+        }
+
+        return FromOwnedArray(copy);
+    }
+
+    public LayoutElement[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        var copy = new LayoutElement[_count];
+        CopyTo(copy);
+        return copy;
+    }
+
+    public void CopyTo(Span<LayoutElement> destination)
+    {
+        if (destination.Length < _count)
+        {
+            throw new ArgumentException("Destination span is too small.", nameof(destination));
+        }
+
+        if (_items is not null)
+        {
+            _items.AsSpan(0, _count).CopyTo(destination);
+            return;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            destination[i] = _inline[i];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<LayoutElement> IEnumerable<LayoutElement>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(LayoutElementList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutElementList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(LayoutElementList left, LayoutElementList right) => left.Equals(right);
+
+    public static bool operator !=(LayoutElementList left, LayoutElementList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<LayoutElement>
+    {
+        private readonly LayoutElementList _elements;
+        private int _index;
+
+        internal Enumerator(LayoutElementList elements)
+        {
+            _elements = elements;
+            _index = -1;
+        }
+
+        public readonly LayoutElement Current => _elements[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_elements.Count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+
+    [InlineArray(InlineCapacity)]
+    private struct InlineLayoutElements
+    {
+        private LayoutElement _element;
+    }
+}
+
+internal static class LayoutElementListBuilder
+{
+    public static LayoutElementList Create(ReadOnlySpan<LayoutElement> elements) =>
+        LayoutElementList.CopyFrom(elements);
+}
+
 internal enum LayoutRebuildReason : byte
 {
     None,
@@ -873,6 +1076,187 @@ internal readonly struct LayoutTreeNode(
     public static bool operator !=(LayoutTreeNode left, LayoutTreeNode right) => !left.Equals(right);
 }
 
+[CollectionBuilder(typeof(LayoutTreeNodeListBuilder), nameof(LayoutTreeNodeListBuilder.Create))]
+internal readonly struct LayoutTreeNodeList : IReadOnlyList<LayoutTreeNode>, IEquatable<LayoutTreeNodeList>
+{
+    internal const int InlineCapacity = 8;
+
+    private readonly LayoutTreeNode[]? _items;
+    private readonly InlineLayoutTreeNodes _inline;
+    private readonly int _count;
+
+    private LayoutTreeNodeList(LayoutTreeNode[]? items, in InlineLayoutTreeNodes inline, int count)
+    {
+        _items = items;
+        _inline = inline;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public int Length => _count;
+
+    public bool IsEmpty => _count == 0;
+
+    public LayoutTreeNode this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return _items is not null ? _items[index] : _inline[index];
+        }
+    }
+
+    public static LayoutTreeNodeList Empty => default;
+
+    internal static LayoutTreeNodeList FromOwnedArray(LayoutTreeNode[] treeNodes)
+    {
+        ArgumentNullException.ThrowIfNull(treeNodes);
+        return treeNodes.Length <= InlineCapacity
+            ? CopyFrom(treeNodes.AsSpan())
+            : new LayoutTreeNodeList(treeNodes, default, treeNodes.Length);
+    }
+
+    public static LayoutTreeNodeList CopyFrom(ReadOnlySpan<LayoutTreeNode> treeNodes)
+    {
+        if (treeNodes.IsEmpty)
+        {
+            return Empty;
+        }
+
+        if (treeNodes.Length <= InlineCapacity)
+        {
+            var inline = default(InlineLayoutTreeNodes);
+            treeNodes.CopyTo(inline[..treeNodes.Length]);
+            return new LayoutTreeNodeList(null, inline, treeNodes.Length);
+        }
+
+        return FromOwnedArray(treeNodes.ToArray());
+    }
+
+    public LayoutTreeNode[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        var copy = new LayoutTreeNode[_count];
+        CopyTo(copy);
+        return copy;
+    }
+
+    public void CopyTo(Span<LayoutTreeNode> destination)
+    {
+        if (destination.Length < _count)
+        {
+            throw new ArgumentException("Destination span is too small.", nameof(destination));
+        }
+
+        if (_items is not null)
+        {
+            _items.AsSpan(0, _count).CopyTo(destination);
+            return;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            destination[i] = _inline[i];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<LayoutTreeNode> IEnumerable<LayoutTreeNode>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(LayoutTreeNodeList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutTreeNodeList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(LayoutTreeNodeList left, LayoutTreeNodeList right) => left.Equals(right);
+
+    public static bool operator !=(LayoutTreeNodeList left, LayoutTreeNodeList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<LayoutTreeNode>
+    {
+        private readonly LayoutTreeNodeList _treeNodes;
+        private int _index;
+
+        internal Enumerator(LayoutTreeNodeList treeNodes)
+        {
+            _treeNodes = treeNodes;
+            _index = -1;
+        }
+
+        public readonly LayoutTreeNode Current => _treeNodes[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_treeNodes.Count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+
+    [InlineArray(InlineCapacity)]
+    private struct InlineLayoutTreeNodes
+    {
+        private LayoutTreeNode _node;
+    }
+}
+
+internal static class LayoutTreeNodeListBuilder
+{
+    public static LayoutTreeNodeList Create(ReadOnlySpan<LayoutTreeNode> treeNodes) =>
+        LayoutTreeNodeList.CopyFrom(treeNodes);
+}
+
 internal readonly struct LayoutElementRange(int ElementStart, int ElementCount) : IEquatable<LayoutElementRange>
 {
     public int ElementStart { get; } = ElementStart;
@@ -891,6 +1275,187 @@ internal readonly struct LayoutElementRange(int ElementStart, int ElementCount) 
     public static bool operator ==(LayoutElementRange left, LayoutElementRange right) => left.Equals(right);
 
     public static bool operator !=(LayoutElementRange left, LayoutElementRange right) => !left.Equals(right);
+}
+
+[CollectionBuilder(typeof(LayoutElementRangeListBuilder), nameof(LayoutElementRangeListBuilder.Create))]
+internal readonly struct LayoutElementRangeList : IReadOnlyList<LayoutElementRange>, IEquatable<LayoutElementRangeList>
+{
+    internal const int InlineCapacity = 16;
+
+    private readonly LayoutElementRange[]? _items;
+    private readonly InlineLayoutElementRanges _inline;
+    private readonly int _count;
+
+    private LayoutElementRangeList(LayoutElementRange[]? items, in InlineLayoutElementRanges inline, int count)
+    {
+        _items = items;
+        _inline = inline;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public int Length => _count;
+
+    public bool IsEmpty => _count == 0;
+
+    public LayoutElementRange this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            return _items is not null ? _items[index] : _inline[index];
+        }
+    }
+
+    public static LayoutElementRangeList Empty => default;
+
+    internal static LayoutElementRangeList FromOwnedArray(LayoutElementRange[] ranges)
+    {
+        ArgumentNullException.ThrowIfNull(ranges);
+        return ranges.Length <= InlineCapacity
+            ? CopyFrom(ranges.AsSpan())
+            : new LayoutElementRangeList(ranges, default, ranges.Length);
+    }
+
+    public static LayoutElementRangeList CopyFrom(ReadOnlySpan<LayoutElementRange> ranges)
+    {
+        if (ranges.IsEmpty)
+        {
+            return Empty;
+        }
+
+        if (ranges.Length <= InlineCapacity)
+        {
+            var inline = default(InlineLayoutElementRanges);
+            ranges.CopyTo(inline[..ranges.Length]);
+            return new LayoutElementRangeList(null, inline, ranges.Length);
+        }
+
+        return FromOwnedArray(ranges.ToArray());
+    }
+
+    public LayoutElementRange[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        var copy = new LayoutElementRange[_count];
+        CopyTo(copy);
+        return copy;
+    }
+
+    public void CopyTo(Span<LayoutElementRange> destination)
+    {
+        if (destination.Length < _count)
+        {
+            throw new ArgumentException("Destination span is too small.", nameof(destination));
+        }
+
+        if (_items is not null)
+        {
+            _items.AsSpan(0, _count).CopyTo(destination);
+            return;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            destination[i] = _inline[i];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<LayoutElementRange> IEnumerable<LayoutElementRange>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(LayoutElementRangeList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is LayoutElementRangeList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(LayoutElementRangeList left, LayoutElementRangeList right) => left.Equals(right);
+
+    public static bool operator !=(LayoutElementRangeList left, LayoutElementRangeList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<LayoutElementRange>
+    {
+        private readonly LayoutElementRangeList _ranges;
+        private int _index;
+
+        internal Enumerator(LayoutElementRangeList ranges)
+        {
+            _ranges = ranges;
+            _index = -1;
+        }
+
+        public readonly LayoutElementRange Current => _ranges[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_ranges.Count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+
+    [InlineArray(InlineCapacity)]
+    private struct InlineLayoutElementRanges
+    {
+        private LayoutElementRange _range;
+    }
+}
+
+internal static class LayoutElementRangeListBuilder
+{
+    public static LayoutElementRangeList Create(ReadOnlySpan<LayoutElementRange> ranges) =>
+        LayoutElementRangeList.CopyFrom(ranges);
 }
 
 /// <summary>
@@ -1158,14 +1723,25 @@ internal readonly struct ScrollCompositionLayerTarget(
 /// </summary>
 internal readonly struct LayoutTreeResult
 {
-    private static readonly LayoutElement[] EmptyElements = Array.Empty<LayoutElement>();
-    private static readonly LayoutTreeNode[] EmptyTreeNodes = Array.Empty<LayoutTreeNode>();
-    private static readonly LayoutElementRange[] EmptyElementRanges = Array.Empty<LayoutElementRange>();
-    private readonly LayoutElement[]? _elements;
-    private readonly LayoutTreeNode[]? _treeNodes;
-    private readonly LayoutElementRange[]? _elementRanges;
+    private readonly LayoutElementList _elements;
+    private readonly LayoutTreeNodeList _treeNodes;
+    private readonly LayoutElementRangeList _elementRanges;
     private readonly IndexRangeList _dirtyElementRanges;
     private readonly ScrollContainerDiagList _scrollDiagnostics;
+
+    public LayoutTreeResult(
+        LayoutElementList elements,
+        LayoutTreeNodeList treeNodes,
+        LayoutElementRangeList elementRanges,
+        IndexRangeList dirtyElementRanges,
+        ScrollContainerDiagList scrollDiagnostics)
+    {
+        _elements = elements;
+        _treeNodes = treeNodes;
+        _elementRanges = elementRanges;
+        _dirtyElementRanges = dirtyElementRanges;
+        _scrollDiagnostics = scrollDiagnostics;
+    }
 
     public LayoutTreeResult(
         LayoutElement[] elements,
@@ -1173,12 +1749,13 @@ internal readonly struct LayoutTreeResult
         LayoutElementRange[] elementRanges,
         IndexRangeList dirtyElementRanges,
         ScrollContainerDiagList scrollDiagnostics)
+        : this(
+            LayoutElementList.FromOwnedArray(elements),
+            LayoutTreeNodeList.FromOwnedArray(treeNodes),
+            LayoutElementRangeList.FromOwnedArray(elementRanges),
+            dirtyElementRanges,
+            scrollDiagnostics)
     {
-        _elements = NormalizeElements(elements);
-        _treeNodes = NormalizeTreeNodes(treeNodes);
-        _elementRanges = NormalizeElementRanges(elementRanges);
-        _dirtyElementRanges = dirtyElementRanges;
-        _scrollDiagnostics = scrollDiagnostics;
     }
 
     public LayoutTreeResult(
@@ -1199,22 +1776,20 @@ internal readonly struct LayoutTreeResult
     }
 
     /// <summary>The flat layout element array (full frame).</summary>
-    public IReadOnlyList<LayoutElement> Elements => _elements ?? EmptyElements;
-
-    internal ReadOnlySpan<LayoutElement> ElementSpan => _elements ?? EmptyElements;
+    public LayoutElementList Elements => _elements;
 
     /// <summary>
     /// Flat preorder layout tree nodes. The root is usually <c>TreeNodes[0]</c>;
     /// subtree relationships use <see cref="LayoutTreeNode.SubtreeStart"/> and
     /// <see cref="LayoutTreeNode.SubtreeCount"/>.
     /// </summary>
-    public LayoutTreeNode[] TreeNodes => _treeNodes ?? EmptyTreeNodes;
+    public LayoutTreeNodeList TreeNodes => _treeNodes;
 
     /// <summary>
     /// DFS-indexed map from VirtualNodes to their layout element range. Entries
     /// with zero count have no directly rendered element.
     /// </summary>
-    public LayoutElementRange[] ElementRanges => _elementRanges ?? EmptyElementRanges;
+    public LayoutElementRangeList ElementRanges => _elementRanges;
 
     /// <summary>
     /// Merged, sorted ranges of layout elements that correspond to dirty VirtualNodes.
@@ -1228,7 +1803,7 @@ internal readonly struct LayoutTreeResult
     public ScrollContainerDiagList ScrollDiagnostics => _scrollDiagnostics;
 
     public LayoutTreeResult WithElementsAndDirtyRanges(
-        LayoutElement[] nextElements,
+        LayoutElementList nextElements,
         IndexRangeList nextDirtyElementRanges)
     {
         return new LayoutTreeResult(
@@ -1238,16 +1813,6 @@ internal readonly struct LayoutTreeResult
             nextDirtyElementRanges,
             ScrollDiagnostics);
     }
-
-    private static LayoutElement[] NormalizeElements(LayoutElement[] elements) =>
-        elements.Length == 0 ? EmptyElements : elements;
-
-    private static LayoutTreeNode[] NormalizeTreeNodes(LayoutTreeNode[] treeNodes) =>
-        treeNodes.Length == 0 ? EmptyTreeNodes : treeNodes;
-
-    private static LayoutElementRange[] NormalizeElementRanges(LayoutElementRange[] elementRanges) =>
-        elementRanges.Length == 0 ? EmptyElementRanges : elementRanges;
-
 }
 
 /// <summary>

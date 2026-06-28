@@ -1372,6 +1372,21 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("LayoutTreeNode[] Children", layoutModelSource);
         Assert.Contains("internal readonly struct LayoutTreeResult", layoutModelSource);
         Assert.DoesNotContain("internal sealed class LayoutTreeResult", layoutModelSource);
+        Assert.Contains("internal readonly struct LayoutElementList", layoutModelSource);
+        Assert.Contains("internal readonly struct LayoutTreeNodeList", layoutModelSource);
+        Assert.Contains("internal readonly struct LayoutElementRangeList", layoutModelSource);
+        Assert.Contains("private readonly LayoutElementList _elements", layoutModelSource);
+        Assert.Contains("private readonly LayoutTreeNodeList _treeNodes", layoutModelSource);
+        Assert.Contains("private readonly LayoutElementRangeList _elementRanges", layoutModelSource);
+        Assert.DoesNotContain("private readonly LayoutElement[]? _elements", layoutModelSource);
+        Assert.DoesNotContain("private readonly LayoutTreeNode[]? _treeNodes", layoutModelSource);
+        Assert.DoesNotContain("private readonly LayoutElementRange[]? _elementRanges", layoutModelSource);
+        Assert.Contains("ElementsToList", layoutBuilderSource);
+        Assert.Contains("TreeNodesToList", layoutBuilderSource);
+        Assert.Contains("ElementRangesToList", layoutBuilderSource);
+        Assert.DoesNotContain("ElementsToArray", layoutBuilderSource);
+        Assert.DoesNotContain("TreeNodesToArray", layoutBuilderSource);
+        Assert.DoesNotContain("ElementRangesToArray", layoutBuilderSource);
         Assert.Contains("private LayoutTreeResult? _retainedLayoutResult", renderPipelineSource);
         Assert.DoesNotContain("_retainedLayout;", renderPipelineSource);
 

@@ -25,6 +25,11 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         return Record(elements.AsSpan(), textSnapshot);
     }
 
+    public DrawCommandRecordResult Record(LayoutElementList elements, TextBufferSnapshot textSnapshot)
+    {
+        return RecordCore(new LayoutElementSource(elements), IndexRangeList.Empty, textSnapshot);
+    }
+
     /// <summary>
     /// Record draw commands for all layout elements.
     /// Returns the full command batch plus element→command range mapping.
@@ -47,6 +52,14 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         TextBufferSnapshot textSnapshot)
     {
         return Record(elements.AsSpan(), dirtyElementRanges, textSnapshot);
+    }
+
+    public DrawCommandRecordResult Record(
+        LayoutElementList elements,
+        IndexRangeList dirtyElementRanges,
+        TextBufferSnapshot textSnapshot)
+    {
+        return RecordCore(new LayoutElementSource(elements), dirtyElementRanges, textSnapshot);
     }
 
     /// <summary>
@@ -132,11 +145,15 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
     {
         private readonly ReadOnlySpan<LayoutElement> _span;
         private readonly IReadOnlyList<LayoutElement>? _list;
+        private readonly LayoutElementList _publication;
+        private readonly bool _usesPublication;
 
         public LayoutElementSource(ReadOnlySpan<LayoutElement> span)
         {
             _span = span;
             _list = null;
+            _publication = default;
+            _usesPublication = false;
             Count = span.Length;
         }
 
@@ -144,12 +161,23 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         {
             _span = default;
             _list = list;
+            _publication = default;
+            _usesPublication = false;
             Count = list.Count;
+        }
+
+        public LayoutElementSource(LayoutElementList publication)
+        {
+            _span = default;
+            _list = null;
+            _publication = publication;
+            _usesPublication = true;
+            Count = publication.Count;
         }
 
         public int Count { get; }
 
-        public LayoutElement this[int index] => _list is null ? _span[index] : _list[index];
+        public LayoutElement this[int index] => _usesPublication ? _publication[index] : _list is null ? _span[index] : _list[index];
     }
 
     private (DrawCommandBatch, IFrameResourceResolver, ElementCommandRangeList) RecordSmallBatch(
