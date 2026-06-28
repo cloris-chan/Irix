@@ -4669,7 +4669,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var retainedLayout = pipeline.LastLayoutResult;
         var retainedCommandRanges = pipeline.LastElementCommandRanges;
-        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+        var retainedHitTargets = frame1.HitTargets;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
         var plan = StyleOnlyPatchPlanBuilder.Build(
@@ -4677,7 +4677,7 @@ public sealed class WindowLayoutPipelineTests
             viewportChanged: false,
             retainedLayout,
             retainedCommandRanges,
-            retainedHitTargets,
+            HitTargetList.CopyFrom(retainedHitTargets),
             pipeline.LastLayoutResult!.Value.ElementSpan,
             pipeline.LastDirtyElementRanges);
 
@@ -4707,7 +4707,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var retainedLayout = pipeline.LastLayoutResult;
         var retainedCommandRanges = pipeline.LastElementCommandRanges;
-        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+        var retainedHitTargets = frame1.HitTargets;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [1]);
         var plan = StyleOnlyPatchPlanBuilder.Build(
@@ -4746,7 +4746,7 @@ public sealed class WindowLayoutPipelineTests
         using var frame1 = pipeline.Build(root1, viewport, _arena.GetOrCreateSnapshot());
         var retainedLayout = pipeline.LastLayoutResult;
         var retainedCommandRanges = pipeline.LastElementCommandRanges;
-        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+        var retainedHitTargets = frame1.HitTargets;
 
         using var frame2 = pipeline.Build(root2, viewport, _arena.GetOrCreateSnapshot(), [0]);
         var plan = StyleOnlyPatchPlanBuilder.Build(
@@ -4754,7 +4754,7 @@ public sealed class WindowLayoutPipelineTests
             viewportChanged: false,
             retainedLayout,
             retainedCommandRanges,
-            retainedHitTargets,
+            HitTargetList.CopyFrom(retainedHitTargets),
             pipeline.LastLayoutResult!.Value.ElementSpan,
             pipeline.LastDirtyElementRanges);
 
@@ -6408,7 +6408,7 @@ public sealed class WindowLayoutPipelineTests
         };
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
-            retainedHitTargets,
+            HitTargetList.CopyFrom(retainedHitTargets),
             nextElements,
             [(0, 1)],
             out var patchedHitTargets);
@@ -6439,7 +6439,7 @@ public sealed class WindowLayoutPipelineTests
         };
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
-            retainedHitTargets,
+            HitTargetList.CopyFrom(retainedHitTargets),
             nextElements,
             [(0, 1)],
             out var patchedHitTargets);
@@ -6467,7 +6467,7 @@ public sealed class WindowLayoutPipelineTests
         };
 
         var patched = StyleOnlyHitTargetPatch.TryBuildPatchedHitTargets(
-            retainedHitTargets,
+            HitTargetList.CopyFrom(retainedHitTargets),
             nextElements,
             [(0, 1)],
             out var patchedHitTargets);
@@ -6930,7 +6930,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public void RetainedRenderFrame_apply_full_adopts_pipeline_hit_target_publication()
+    public void RetainedRenderFrame_apply_full_adopts_pipeline_hit_target_value_publication()
     {
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -6940,12 +6940,12 @@ public sealed class WindowLayoutPipelineTests
 
         using var batch = pipeline.Build(root, viewport, _arena.GetOrCreateSnapshot());
 
-        Assert.NotNull(batch.HitTargetPublication);
-        Assert.Same(batch.HitTargetPublication, pipeline.RetainedFrame.HitTargets);
+        Assert.Equal(batch.HitTargets, pipeline.RetainedFrame.HitTargets);
+        Assert.Single(batch.HitTargets);
     }
 
     [Fact]
-    public void RenderPipeline_render_request_reuses_retained_hit_target_publication()
+    public void RenderPipeline_render_request_reuses_retained_hit_target_value_publication()
     {
         var pipeline = new RenderPipeline();
         var viewport = new PixelRectangle(0, 0, 960, 540);
@@ -6958,12 +6958,12 @@ public sealed class WindowLayoutPipelineTests
         {
         }
 
-        var retainedHitTargets = Assert.IsType<HitTestTarget[]>(pipeline.RetainedFrame.HitTargets);
+        var retainedHitTargets = pipeline.RetainedFrame.HitTargets;
 
         using var batch = pipeline.Build(root, viewport, snapshot);
 
-        Assert.Same(retainedHitTargets, batch.HitTargetPublication);
-        Assert.Same(retainedHitTargets, pipeline.RetainedFrame.HitTargets);
+        Assert.Equal(retainedHitTargets, batch.HitTargets);
+        Assert.Equal(retainedHitTargets, pipeline.RetainedFrame.HitTargets);
     }
 
     [Fact]

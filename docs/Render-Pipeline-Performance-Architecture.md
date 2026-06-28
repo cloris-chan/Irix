@@ -170,12 +170,11 @@ Baseline refreshed on 2026-06-28 after the `VirtualNode` IR was normalized to
 slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
 `RenderPipelineRetainedInputSnapshot` became readonly value publication shells,
 pipeline attribution counters were aligned to the current-thread steady-state
-measurement scope, pipeline-owned hit-target publication can be handed to the
-retained frame without a defensive copy, empty/single dirty classifications and
-dirty ranges publish through inline value lists instead of retained arrays,
+measurement scope, hit targets publish through `HitTargetList`, empty/single
+dirty classifications and dirty ranges publish through inline value lists instead of retained arrays,
 common element-command mappings publish through `ElementCommandRangeList`, and
 common scroll diagnostics publish through `ScrollContainerDiagList`. Clean
-render requests also reuse the retained hit-target publication when tree,
+render requests also reuse the retained hit-target value publication when tree,
 viewport, and dirty state are unchanged.
 
 Primary command:
@@ -188,9 +187,9 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2164632 bytes | 12025 B/frame | render 10832 B/frame, tree 689 B/frame, diff 317 B/frame, translate 227 B/frame |
-| Warm scroll | 411016 bytes | 2283 B/frame | translate 1138 B/frame, tree 833 B/frame, render 182 B/frame, diff 182 B/frame |
-| Scale change | 240608 bytes | 1336 B/frame | tree 911 B/frame, render 273 B/frame, translate 136 B/frame, diff 91 B/frame |
+| Static | 2158328 bytes | 11990 B/frame | render 10969 B/frame, tree 498 B/frame, translate 317 B/frame, diff 248 B/frame |
+| Warm scroll | 390856 bytes | 2171 B/frame | translate 1002 B/frame, tree 865 B/frame, render 195 B/frame, diff 182 B/frame |
+| Scale change | 246576 bytes | 1369 B/frame | tree 865 B/frame, render 410 B/frame, diff 136 B/frame, translate 45 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
@@ -199,11 +198,11 @@ Warm-scroll details are the key CPU render-pipeline comparison point:
 | `layout.elementsArray` | 504 | Retained layout publication array. |
 | `layout.treeNodesArray` | 248 | Retained layout tree publication array. |
 | `drawRecord` | 32 | Command recording is visible but not the largest bucket; dirty range mapping now publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
-| `hitTargets` | 112 | Dirty scroll still rebuilds retained input hit-test publication; clean render requests reuse the retained hit-target publication, and hit-target scanning uses the retained layout span view instead of an `IReadOnlyList<T>` enumeration path. |
+| `hitTargets` | 0 | Common hit targets are retained through `HitTargetList` without publishing an array; clean render requests reuse the retained value publication, and dirty retained input snapshots patch common hit-target metadata inline. |
 | `layout.scrollDiagnosticsArray` | 0 | Empty and single scroll diagnostics are retained through `ScrollContainerDiagList` without publishing an array. |
 | `layout.dirtyRanges` | 0 | Empty and single dirty ranges are retained through `IndexRangeList` without publishing an array. |
 | `pipeline.classify` | 0 | Empty and single dirty classifications are retained through `LayoutDirtyClassificationList` without publishing an array. |
-| `retainedFrame` | 0 | Pipeline-owned hit-target publication is handed to the retained frame without an additional copy. |
+| `retainedFrame` | 0 | The retained frame stores the `HitTargetList` value publication without an additional copy. |
 | `pipeline.snapshot.retainedInput` | 0 | The retained input snapshot shell is now a readonly value, not a heap object. |
 | `layout.result` | 0 | The retained result shell is now a readonly value, not a heap object. |
 | `layout.nodeWalk` | 0 | The layout bucket is publication cost, not node-walk allocation. |
@@ -495,21 +494,22 @@ Acceptance:
 
 ### P4 - Draw Ranges, Dirty Classification, Hit Targets, And Retained Frame Handoff
 
-Status: first draw-record, retained-input snapshot shell, pipeline-owned
-hit-target handoff, clean hit-target publication reuse, layout span
-hit-target scanning, dirty range value-publication, element-command range
-value-publication, and
+Status: first draw-record, retained-input snapshot shell, hit-target
+value-publication, clean retained hit-target reuse, layout span hit-target
+scanning, dirty range value-publication, element-command range value-publication, and
 dirty-classification value-publication slices
 implemented. `DrawCommandRecordResult` and
 `RenderPipelineRetainedInputSnapshot` are now readonly value publications, so
 command recording and retained input publication no longer allocate per-frame
-result/snapshot shell objects. `RenderPipeline` now marks its freshly built
-hit-target array as an internal immutable publication when constructing
-`RenderFrameBatch`, allowing `RetainedRenderFrame.ApplyFull` to adopt it without
-copying; public `RenderFrameBatch` construction still keeps the defensive copy
-contract. When a render request reuses the same retained tree, viewport, and
-clean state, `RenderPipeline` now reuses the retained hit-target publication
-instead of rebuilding an equivalent array. `LayoutDirtyClassificationList` keeps
+result/snapshot shell objects. `HitTargetList` keeps up to four common hit
+targets inline and preserves an owned array only for larger hit-target
+publications; public `RenderFrameBatch` construction still copies caller-owned
+lists into this value publication. `RetainedRenderFrame.ApplyFull` stores the
+value publication directly. When a render request reuses the same retained tree,
+viewport, and clean state, `RenderPipeline` reuses the retained `HitTargetList`
+instead of rebuilding an equivalent publication. Dirty style-only patches also
+publish patched hit-target metadata through `HitTargetList`, so the warm-scroll
+`hitTargets` bucket is now zero for the common path. `LayoutDirtyClassificationList` keeps
 empty and single dirty classifications inline and uses an owned array only when
 multiple retained classifications must be published. Hit-target construction now
 uses the retained `LayoutTreeResult` element span directly inside the rendering
@@ -519,9 +519,9 @@ publication is empty. `IndexRangeList` now keeps empty and single dirty element
 and dirty command ranges inline, while preserving owned arrays only for
 multi-range publication. `ElementCommandRangeList` now keeps up to four
 element-command range records inline, preserving an owned array only for larger
-draw publications. The command batch, frame resources,
-multi-classification publication, dirty hit-target publication, and
-large element-command range publication remain explicit outputs.
+draw publications. The command batch, frame resources, multi-classification
+publication, larger hit-target publication, and large element-command range
+publication remain explicit outputs.
 
 After the larger tree/layout publication buckets are addressed, review smaller
 publication costs:
@@ -529,8 +529,8 @@ publication costs:
 - Larger element-command range arrays created by `DrawCommandRecorder`.
 - Multi-classification dirty publication when more than one retained
   classification is present.
-- Hit-target arrays for dirty retained input snapshots that publish real action
-  targets.
+- Hit-target arrays only when a retained input snapshot publishes more than the
+  inline `HitTargetList` capacity.
 - Scroll composition target lists and command-range projection helpers.
 
 Direction:

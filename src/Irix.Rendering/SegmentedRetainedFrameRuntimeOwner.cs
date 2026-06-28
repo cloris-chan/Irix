@@ -12,7 +12,7 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner(Func<IFrameResourceReso
 
     public VirtualNode RetainedRoot => _owner.RetainedRoot;
 
-    public IReadOnlyList<HitTestTarget> HitTargets => _owner.HitTargets;
+    public HitTargetList HitTargets => _owner.HitTargets;
 
     public IReadOnlyList<RetainedResourceSegment> ResourceSegments => _owner.ResourceSegments;
 
@@ -33,7 +33,7 @@ internal sealed class SegmentedRetainedFrameRuntimeOwner(Func<IFrameResourceReso
         return _owner.TryAcceptPartial(batch, _captureSnapshot(batch.Resources), rootPatch);
     }
 
-    public bool TryAcceptPartial(RenderFrameBatch batch, RetainedRootMetadataPatch rootPatch, IReadOnlyList<HitTestTarget> hitTargets)
+    public bool TryAcceptPartial(RenderFrameBatch batch, RetainedRootMetadataPatch rootPatch, HitTargetList hitTargets)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _owner.TryAcceptPartial(batch, _captureSnapshot(batch.Resources), rootPatch, hitTargets);

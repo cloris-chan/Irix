@@ -112,13 +112,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             : [];
         LastDirtyClassifications = dirtyClassifications;
         LastLayoutRebuildReason = ResolveLayoutRebuildReason(hadRetainedLayout, treeChanged, viewportChanged, hasDirty, dirtyClassifications);
-        var retainedHitTargetPublication = _retainedFrame.HitTargets as HitTestTarget[];
-        var canReuseHitTargetPublication = hadRetainedLayout
+        var retainedHitTargets = _retainedFrame.HitTargets;
+        var canReuseRetainedHitTargets = hadRetainedLayout
             && !treeChanged
             && !viewportChanged
             && !hasDirty
-            && _retainedFrame.CommandCount > 0
-            && retainedHitTargetPublication is not null;
+            && _retainedFrame.CommandCount > 0;
         OnPipelineClassificationAllocated();
 
         if (treeChanged || viewportChanged || hasDirty)
@@ -162,14 +161,14 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         OnPipelineRecordAllocated(_drawCommandRecorder);
 
         OnPipelineAllocationPhaseStarted();
-        var hitTargets = canReuseHitTargetPublication
-            ? retainedHitTargetPublication!
-            : BuildHitTargetArray(layout, result.ElementCommandRanges);
+        var hitTargets = canReuseRetainedHitTargets
+            ? retainedHitTargets
+            : BuildHitTargetList(layout, result.ElementCommandRanges);
         OnPipelineHitTargetsAllocated();
 
         OnPipelineSnapshotAllocationStarted();
         OnPipelineSnapshotPhaseStarted();
-        var batch = RenderFrameBatch.WithHitTargetPublication(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
+        var batch = RenderFrameBatch.WithHitTargets(result.Commands, hitTargets, result.Resources, result.DirtyCommandRanges);
         OnPipelineFrameBatchAllocated();
 
         OnPipelineSnapshotPhaseStarted();
@@ -478,29 +477,29 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         public static bool operator !=(DirtyNodeClassification left, DirtyNodeClassification right) => !left.Equals(right);
     }
 
-    internal static IReadOnlyList<HitTestTarget> BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
+    internal static HitTargetList BuildHitTargets(IReadOnlyList<LayoutElement> layoutElements)
     {
         return layoutElements is LayoutElement[] elementArray
-            ? BuildHitTargetArray(elementArray.AsSpan(), [])
-            : BuildHitTargetArrayFromList(layoutElements, []);
+            ? BuildHitTargetList(elementArray.AsSpan(), [])
+            : BuildHitTargetListFromList(layoutElements, []);
     }
 
-    internal static IReadOnlyList<HitTestTarget> BuildHitTargets(
+    internal static HitTargetList BuildHitTargets(
         IReadOnlyList<LayoutElement> layoutElements,
         ElementCommandRangeList elementCommandRanges)
     {
         return layoutElements is LayoutElement[] elementArray
-            ? BuildHitTargetArray(elementArray.AsSpan(), elementCommandRanges)
-            : BuildHitTargetArrayFromList(layoutElements, elementCommandRanges);
+            ? BuildHitTargetList(elementArray.AsSpan(), elementCommandRanges)
+            : BuildHitTargetListFromList(layoutElements, elementCommandRanges);
     }
 
-    private static HitTestTarget[] BuildHitTargetArray(
+    private static HitTargetList BuildHitTargetList(
         ReadOnlySpan<LayoutElement> layoutElements,
         ElementCommandRangeList elementCommandRanges)
     {
         if (layoutElements.IsEmpty)
         {
-            return [];
+            return HitTargetList.Empty;
         }
 
         var hitTargetCount = 0;
@@ -514,10 +513,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
         if (hitTargetCount == 0)
         {
-            return [];
+            return HitTargetList.Empty;
         }
 
-        var hitTargets = new HitTestTarget[hitTargetCount];
+        Span<HitTestTarget> inlineHitTargets = stackalloc HitTestTarget[HitTargetList.InlineCapacity];
+        var ownedHitTargets = hitTargetCount > HitTargetList.InlineCapacity ? new HitTestTarget[hitTargetCount] : null;
+        var hitTargets = ownedHitTargets is null ? inlineHitTargets[..hitTargetCount] : ownedHitTargets.AsSpan();
         var index = 0;
         for (var i = 0; i < layoutElements.Length; i++)
         {
@@ -535,16 +536,18 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             }
         }
 
-        return hitTargets;
+        return ownedHitTargets is null
+            ? HitTargetList.CopyFrom(hitTargets)
+            : HitTargetList.FromOwnedArray(ownedHitTargets);
     }
 
-    private static HitTestTarget[] BuildHitTargetArrayFromList(
+    private static HitTargetList BuildHitTargetListFromList(
         IReadOnlyList<LayoutElement> layoutElements,
         ElementCommandRangeList elementCommandRanges)
     {
         if (layoutElements.Count == 0)
         {
-            return [];
+            return HitTargetList.Empty;
         }
 
         var hitTargetCount = 0;
@@ -558,10 +561,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
         if (hitTargetCount == 0)
         {
-            return [];
+            return HitTargetList.Empty;
         }
 
-        var hitTargets = new HitTestTarget[hitTargetCount];
+        Span<HitTestTarget> inlineHitTargets = stackalloc HitTestTarget[HitTargetList.InlineCapacity];
+        var ownedHitTargets = hitTargetCount > HitTargetList.InlineCapacity ? new HitTestTarget[hitTargetCount] : null;
+        var hitTargets = ownedHitTargets is null ? inlineHitTargets[..hitTargetCount] : ownedHitTargets.AsSpan();
         var index = 0;
         for (var i = 0; i < layoutElements.Count; i++)
         {
@@ -579,13 +584,15 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             }
         }
 
-        return hitTargets;
+        return ownedHitTargets is null
+            ? HitTargetList.CopyFrom(hitTargets)
+            : HitTargetList.FromOwnedArray(ownedHitTargets);
     }
 
     internal static RenderPipelineRetainedInputSnapshot CreateRetainedInputSnapshot(
         LayoutTreeResult layoutResult,
         ElementCommandRangeList elementCommandRanges,
-        IReadOnlyList<HitTestTarget> hitTargets,
+        HitTargetList hitTargets,
         VirtualNode retainedRoot,
         PixelRectangle viewport,
         LayoutDirtyClassificationList dirtyClassifications,
@@ -859,7 +866,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 internal readonly struct RenderPipelineRetainedInputSnapshot(
     LayoutTreeResult LayoutResult,
     ElementCommandRangeList ElementCommandRanges,
-    IReadOnlyList<HitTestTarget> HitTargets,
+    HitTargetList HitTargets,
     VirtualNode RetainedRoot,
     PixelRectangle Viewport,
     LayoutDirtyClassificationList DirtyClassifications,
@@ -871,7 +878,7 @@ internal readonly struct RenderPipelineRetainedInputSnapshot(
 {
     public LayoutTreeResult LayoutResult { get; } = LayoutResult;
     public ElementCommandRangeList ElementCommandRanges { get; } = ElementCommandRanges;
-    public IReadOnlyList<HitTestTarget> HitTargets { get; } = HitTargets;
+    public HitTargetList HitTargets { get; } = HitTargets;
     public VirtualNode RetainedRoot { get; } = RetainedRoot;
     public PixelRectangle Viewport { get; } = Viewport;
     public LayoutDirtyClassificationList DirtyClassifications { get; } = DirtyClassifications;

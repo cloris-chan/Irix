@@ -26,19 +26,19 @@ internal sealed record RetainedPartialApplyPlan(
     RetainedPartialApplyFallbackReason Reason,
     IndexRangeList DirtyElementRanges,
     IndexRangeList DirtyCommandRanges,
-    IReadOnlyList<HitTestTarget> PatchedHitTargets)
+    HitTargetList PatchedHitTargets)
 {
     public static RetainedPartialApplyPlan AppliedPartial(
         IndexRangeList dirtyElementRanges,
         IndexRangeList dirtyCommandRanges,
-        IReadOnlyList<HitTestTarget> patchedHitTargets)
+        HitTargetList patchedHitTargets)
     {
         return new RetainedPartialApplyPlan(
             RetainedPartialApplyResultKind.AppliedPartial,
             RetainedPartialApplyFallbackReason.None,
             dirtyElementRanges,
             dirtyCommandRanges,
-            patchedHitTargets.ToArray());
+            patchedHitTargets);
     }
 
     public static RetainedPartialApplyPlan FallbackFull(
@@ -50,7 +50,7 @@ internal sealed record RetainedPartialApplyPlan(
             reason,
             dirtyElementRanges,
             IndexRangeList.Empty,
-            []);
+            HitTargetList.Empty);
     }
 
     public static RetainedPartialApplyPlan Rejected(
@@ -63,7 +63,7 @@ internal sealed record RetainedPartialApplyPlan(
             reason,
             dirtyElementRanges,
             dirtyCommandRanges,
-            []);
+            HitTargetList.Empty);
     }
 }
 

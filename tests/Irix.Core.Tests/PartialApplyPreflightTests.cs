@@ -597,7 +597,7 @@ public sealed class PartialApplyPreflightTests
 
         frame.ApplyFull(oldBatch, oldTracker.CreateSnapshot(), retainedRoot);
         var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, replacementBatch.Resources, replacementBatch.Resources);
-        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], retainedHitTargets);
+        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], HitTargetList.CopyFrom(retainedHitTargets));
         var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, snapshot.DirtyClassifications, snapshot.PreviousTextSnapshot, snapshot.TextSnapshot);
         var accepted = frame.TryAcceptPartial(replacementBatch, replacementTracker.CreateSnapshot(replacementResolver), rootPatch);
         var reads = frame.ReadSegments();
@@ -3233,7 +3233,7 @@ public sealed class PartialApplyPreflightTests
             new HitTestTarget(new PixelRectangle(16, 120, 140, 40), new ActionId(1), new PixelRectangle(0, 0, 960, 540))
         };
 
-        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], retainedHitTargets);
+        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], HitTargetList.CopyFrom(retainedHitTargets));
 
         Assert.True(projection.Succeeded);
         Assert.Equal(RetainedPartialApplyFallbackReason.None, projection.FallbackReason);
@@ -3375,7 +3375,7 @@ public sealed class PartialApplyPreflightTests
             new HitTestTarget(new PixelRectangle(16, 172, 140, 40), new ActionId(2))
         };
 
-        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1, 4], retainedHitTargets);
+        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1, 4], HitTargetList.CopyFrom(retainedHitTargets));
 
         Assert.True(projection.Succeeded);
         Assert.Equal(new ActionId(4), projection.HitTargets[0].ActionId);
@@ -3403,13 +3403,13 @@ public sealed class PartialApplyPreflightTests
             new HitTestTarget(new PixelRectangle(16, 172, 140, 40), new ActionId(2))
         };
 
-        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [4, 1, 1], retainedHitTargets);
+        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [4, 1, 1], HitTargetList.CopyFrom(retainedHitTargets));
 
         Assert.True(projection.Succeeded);
         Assert.Equal(new ActionId(4), projection.HitTargets[0].ActionId);
         Assert.Equal(new ActionId(206), projection.HitTargets[1].ActionId);
 
-        var missing = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1, 99], retainedHitTargets);
+        var missing = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1, 99], HitTargetList.CopyFrom(retainedHitTargets));
 
         Assert.False(missing.Succeeded);
         Assert.Equal(RetainedPartialApplyFallbackReason.HitTargetPatchFailed, missing.FallbackReason);
@@ -3432,7 +3432,7 @@ public sealed class PartialApplyPreflightTests
             new HitTestTarget(new PixelRectangle(32, 136, 140, 40), new ActionId(207), new PixelRectangle(16, 16, 928, 508))
         };
 
-        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [2], retainedHitTargets);
+        var projection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [2], HitTargetList.CopyFrom(retainedHitTargets));
 
         Assert.True(projection.Succeeded);
         var target = Assert.Single(projection.HitTargets);
@@ -3668,7 +3668,7 @@ public sealed class PartialApplyPreflightTests
         var snapshot = new RenderPipelineRetainedInputSnapshot(
             layoutResult,
             [new ElementCommandRange(0, 1), new ElementCommandRange(1, 1)],
-            retainedHitTargets,
+            HitTargetList.CopyFrom(retainedHitTargets),
             retainedRoot,
             viewport,
             [new LayoutDirtyClassification(1, LayoutRebuildReason.StyleOnly)],
@@ -3698,7 +3698,7 @@ public sealed class PartialApplyPreflightTests
 
         var plan = RetainedPartialApplyPlanner.Plan(snapshot, viewport, planningResolver, planningResolver);
         AssertDryRunSentinels(pipeline, pipelineLayoutRebuildCount, pipelineLastViewport, pipelineRetainedFrameCommandCount, pipelineRetainedFrameResources, pipelineRetainedDirtyRanges, pipelineLastDirtyCommandRanges, retainedFrame, retainedFrameCommandCount, retainedFrameResources, retainedFrameDirtyRanges, compositor, compositorRenderCount, compositorFullApplyCount, compositorPartialApplyCount, compositorLastDirtyRanges);
-        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], retainedHitTargets);
+        var hitTargetProjection = HitTargetMetadataProjector.ProjectActionIds(retainedRoot, nextRoot, [1], HitTargetList.CopyFrom(retainedHitTargets));
         AssertDryRunSentinels(pipeline, pipelineLayoutRebuildCount, pipelineLastViewport, pipelineRetainedFrameCommandCount, pipelineRetainedFrameResources, pipelineRetainedDirtyRanges, pipelineLastDirtyCommandRanges, retainedFrame, retainedFrameCommandCount, retainedFrameResources, retainedFrameDirtyRanges, compositor, compositorRenderCount, compositorFullApplyCount, compositorPartialApplyCount, compositorLastDirtyRanges);
         var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(retainedRoot, nextRoot, snapshot.DirtyClassifications, snapshot.PreviousTextSnapshot, snapshot.TextSnapshot);
         AssertDryRunSentinels(pipeline, pipelineLayoutRebuildCount, pipelineLastViewport, pipelineRetainedFrameCommandCount, pipelineRetainedFrameResources, pipelineRetainedDirtyRanges, pipelineLastDirtyCommandRanges, retainedFrame, retainedFrameCommandCount, retainedFrameResources, retainedFrameDirtyRanges, compositor, compositorRenderCount, compositorFullApplyCount, compositorPartialApplyCount, compositorLastDirtyRanges);
@@ -4006,7 +4006,7 @@ public sealed class PartialApplyPreflightTests
         return new RenderPipelineRetainedInputSnapshot(
             layoutResult,
             [new ElementCommandRange(0, 1), new ElementCommandRange(1, 1)],
-            retainedHitTargets,
+            HitTargetList.CopyFrom(retainedHitTargets),
             retainedRoot,
             viewport,
             [new LayoutDirtyClassification(1, reason)],

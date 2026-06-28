@@ -36,7 +36,7 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         using var frame1 = pipeline.Build(root1, viewport, snapshot);
         var retainedLayout = pipeline.LastLayoutResult;
         var retainedCommandRanges = pipeline.LastElementCommandRanges;
-        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+        var retainedHitTargets = frame1.HitTargets;
 
         using var frame2 = pipeline.Build(root2, viewport, snapshot, [1]);
         return StyleOnlyPatchPlanBuilder.Build(
@@ -69,7 +69,7 @@ internal static class StyleOnlyPatchPlanSmokeDiagnostics
         using var frame1 = pipeline.Build(root1, viewport, snapshot);
         var retainedLayout = pipeline.LastLayoutResult;
         var retainedCommandRanges = pipeline.LastElementCommandRanges;
-        HitTestTarget[] retainedHitTargets = [.. frame1.HitTargets];
+        var retainedHitTargets = frame1.HitTargets;
 
         using var frame2 = pipeline.Build(root2, viewport, snapshot, [0]);
         return StyleOnlyPatchPlanBuilder.Build(

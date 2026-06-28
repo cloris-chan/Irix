@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Irix.Drawing;
 using Irix.Platform;
 
@@ -57,6 +58,223 @@ public readonly struct HitTestTarget(
     public static bool operator !=(HitTestTarget left, HitTestTarget right) => !left.Equals(right);
 }
 
+[CollectionBuilder(typeof(HitTargetListBuilder), nameof(HitTargetListBuilder.Create))]
+public readonly struct HitTargetList : IReadOnlyList<HitTestTarget>, IEquatable<HitTargetList>
+{
+    internal const int InlineCapacity = 4;
+
+    private readonly HitTestTarget[]? _items;
+    private readonly HitTestTarget _target0;
+    private readonly HitTestTarget _target1;
+    private readonly HitTestTarget _target2;
+    private readonly HitTestTarget _target3;
+    private readonly int _count;
+
+    private HitTargetList(
+        HitTestTarget[]? items,
+        HitTestTarget target0,
+        HitTestTarget target1,
+        HitTestTarget target2,
+        HitTestTarget target3,
+        int count)
+    {
+        _items = items;
+        _target0 = target0;
+        _target1 = target1;
+        _target2 = target2;
+        _target3 = target3;
+        _count = count;
+    }
+
+    public int Count => _count;
+
+    public bool IsEmpty => _count == 0;
+
+    public HitTestTarget this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)_count)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            if (_items is not null)
+            {
+                return _items[index];
+            }
+
+            return index switch
+            {
+                0 => _target0,
+                1 => _target1,
+                2 => _target2,
+                _ => _target3
+            };
+        }
+    }
+
+    public static HitTargetList Empty => default;
+
+    internal static HitTargetList FromOwnedArray(HitTestTarget[] hitTargets)
+    {
+        ArgumentNullException.ThrowIfNull(hitTargets);
+        return hitTargets.Length <= InlineCapacity
+            ? CopyFrom(hitTargets.AsSpan())
+            : new HitTargetList(hitTargets, default, default, default, default, hitTargets.Length);
+    }
+
+    public static HitTargetList CopyFrom(ReadOnlySpan<HitTestTarget> hitTargets)
+    {
+        return hitTargets.Length switch
+        {
+            0 => Empty,
+            1 => new HitTargetList(null, hitTargets[0], default, default, default, 1),
+            2 => new HitTargetList(null, hitTargets[0], hitTargets[1], default, default, 2),
+            3 => new HitTargetList(null, hitTargets[0], hitTargets[1], hitTargets[2], default, 3),
+            4 => new HitTargetList(null, hitTargets[0], hitTargets[1], hitTargets[2], hitTargets[3], 4),
+            _ => FromOwnedArray(hitTargets.ToArray())
+        };
+    }
+
+    public static HitTargetList CopyFrom(IReadOnlyList<HitTestTarget> hitTargets)
+    {
+        ArgumentNullException.ThrowIfNull(hitTargets);
+        return hitTargets.Count switch
+        {
+            0 => Empty,
+            1 => new HitTargetList(null, hitTargets[0], default, default, default, 1),
+            2 => new HitTargetList(null, hitTargets[0], hitTargets[1], default, default, 2),
+            3 => new HitTargetList(null, hitTargets[0], hitTargets[1], hitTargets[2], default, 3),
+            4 => new HitTargetList(null, hitTargets[0], hitTargets[1], hitTargets[2], hitTargets[3], 4),
+            _ => CopyListToOwnedArray(hitTargets)
+        };
+    }
+
+    public HitTestTarget[] ToArray()
+    {
+        if (_count == 0)
+        {
+            return [];
+        }
+
+        var copy = new HitTestTarget[_count];
+        CopyTo(copy);
+        return copy;
+    }
+
+    public void CopyTo(Span<HitTestTarget> destination)
+    {
+        if (destination.Length < _count)
+        {
+            throw new ArgumentException("Destination span is too small.", nameof(destination));
+        }
+
+        if (_items is not null)
+        {
+            _items.AsSpan(0, _count).CopyTo(destination);
+            return;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            destination[i] = this[i];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<HitTestTarget> IEnumerable<HitTestTarget>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(HitTargetList other)
+    {
+        if (_count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is HitTargetList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < _count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(HitTargetList left, HitTargetList right) => left.Equals(right);
+
+    public static bool operator !=(HitTargetList left, HitTargetList right) => !left.Equals(right);
+
+    private static HitTargetList CopyListToOwnedArray(IReadOnlyList<HitTestTarget> hitTargets)
+    {
+        var copy = new HitTestTarget[hitTargets.Count];
+        for (var i = 0; i < copy.Length; i++)
+        {
+            copy[i] = hitTargets[i];
+        }
+
+        return FromOwnedArray(copy);
+    }
+
+    public struct Enumerator : IEnumerator<HitTestTarget>
+    {
+        private readonly HitTargetList _hitTargets;
+        private int _index;
+
+        internal Enumerator(HitTargetList hitTargets)
+        {
+            _hitTargets = hitTargets;
+            _index = -1;
+        }
+
+        public readonly HitTestTarget Current => _hitTargets[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_hitTargets.Count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
+}
+
+public static class HitTargetListBuilder
+{
+    public static HitTargetList Create(ReadOnlySpan<HitTestTarget> hitTargets) =>
+        HitTargetList.CopyFrom(hitTargets);
+}
+
 public struct RenderFrameBatch : IDisposable
 {
     private readonly ulong _resourceFrameId;
@@ -68,23 +286,21 @@ public struct RenderFrameBatch : IDisposable
         IReadOnlyList<HitTestTarget> hitTargets,
         IFrameResourceResolver resources,
         IReadOnlyList<(int Start, int Count)> dirtyCommandRanges)
-        : this(commands, hitTargets, resources, IndexRangeList.CopyFrom(dirtyCommandRanges), hitTargetPublication: null)
+        : this(commands, HitTargetList.CopyFrom(hitTargets), resources, IndexRangeList.CopyFrom(dirtyCommandRanges))
     {
     }
 
     private RenderFrameBatch(
         DrawCommandBatch commands,
-        IReadOnlyList<HitTestTarget> hitTargets,
+        HitTargetList hitTargets,
         IFrameResourceResolver resources,
-        IndexRangeList dirtyCommandRanges,
-        HitTestTarget[]? hitTargetPublication)
+        IndexRangeList dirtyCommandRanges)
     {
         Commands = commands;
         HitTargets = hitTargets;
         Resources = resources;
         _dirtyCommandRanges = dirtyCommandRanges;
         _resourceFrameId = resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0;
-        HitTargetPublication = hitTargetPublication;
 
         if (resources is FrameDrawingResources retainedResources)
         {
@@ -103,19 +319,18 @@ public struct RenderFrameBatch : IDisposable
     }
 
     public DrawCommandBatch Commands { get; }
-    public IReadOnlyList<HitTestTarget> HitTargets { get; }
+    public HitTargetList HitTargets { get; }
     public IFrameResourceResolver Resources { get; }
     public IReadOnlyList<(int Start, int Count)> DirtyCommandRanges => _dirtyCommandRanges;
-    internal HitTestTarget[]? HitTargetPublication { get; }
     internal readonly IndexRangeList DirtyCommandRangeList => _dirtyCommandRanges;
     internal readonly ulong ResourceFrameId => _resourceFrameId;
 
-    internal static RenderFrameBatch WithHitTargetPublication(
+    internal static RenderFrameBatch WithHitTargets(
         DrawCommandBatch commands,
-        HitTestTarget[] hitTargets,
+        HitTargetList hitTargets,
         IFrameResourceResolver resources,
         IndexRangeList dirtyCommandRanges) =>
-        new(commands, hitTargets, resources, dirtyCommandRanges, hitTargetPublication: hitTargets);
+        new(commands, hitTargets, resources, dirtyCommandRanges);
 
     public void Dispose()
     {

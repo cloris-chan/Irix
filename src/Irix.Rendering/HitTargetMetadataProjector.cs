@@ -5,7 +5,7 @@ internal readonly struct HitTargetMetadataProjection
     private HitTargetMetadataProjection(
         bool succeeded,
         RetainedPartialApplyFallbackReason fallbackReason,
-        HitTestTarget[] hitTargets)
+        HitTargetList hitTargets)
     {
         Succeeded = succeeded;
         FallbackReason = fallbackReason;
@@ -14,16 +14,16 @@ internal readonly struct HitTargetMetadataProjection
 
     public bool Succeeded { get; }
     public RetainedPartialApplyFallbackReason FallbackReason { get; }
-    public HitTestTarget[] HitTargets { get; }
+    public HitTargetList HitTargets { get; }
 
-    public static HitTargetMetadataProjection CreateSucceeded(HitTestTarget[] hitTargets)
+    public static HitTargetMetadataProjection CreateSucceeded(HitTargetList hitTargets)
     {
         return new HitTargetMetadataProjection(true, RetainedPartialApplyFallbackReason.None, hitTargets);
     }
 
     public static HitTargetMetadataProjection CreateFallback()
     {
-        return new HitTargetMetadataProjection(false, RetainedPartialApplyFallbackReason.HitTargetPatchFailed, []);
+        return new HitTargetMetadataProjection(false, RetainedPartialApplyFallbackReason.HitTargetPatchFailed, HitTargetList.Empty);
     }
 
 }
@@ -36,7 +36,7 @@ internal static class HitTargetMetadataProjector
         VirtualNode retainedRoot,
         VirtualNode nextRoot,
         IReadOnlyList<int> dirtyDfsIndices,
-        IReadOnlyList<HitTestTarget> retainedHitTargets)
+        HitTargetList retainedHitTargets)
     {
         var scratch = new RenderScratchBuffer();
         Span<int> dirtyStorage = stackalloc int[InlineDirtyIndexCapacity];
@@ -64,7 +64,14 @@ internal static class HitTargetMetadataProjector
             }
 
             var dirtyCursor = 0;
-            var patched = retainedHitTargets.Count == 0 ? [] : retainedHitTargets.ToArray();
+            Span<HitTestTarget> inlinePatched = stackalloc HitTestTarget[HitTargetList.InlineCapacity];
+            var ownedPatched = retainedHitTargets.Count > HitTargetList.InlineCapacity ? new HitTestTarget[retainedHitTargets.Count] : null;
+            var patched = ownedPatched is null ? inlinePatched[..retainedHitTargets.Count] : ownedPatched.AsSpan();
+            for (var i = 0; i < retainedHitTargets.Count; i++)
+            {
+                patched[i] = retainedHitTargets[i];
+            }
+
             for (var i = 0; i < actionNodeCount; i++)
             {
                 var actionNode = actionNodes[i];
@@ -96,7 +103,10 @@ internal static class HitTargetMetadataProjector
                 return HitTargetMetadataProjection.CreateFallback();
             }
 
-            return HitTargetMetadataProjection.CreateSucceeded(patched);
+            return HitTargetMetadataProjection.CreateSucceeded(
+                ownedPatched is null
+                    ? HitTargetList.CopyFrom(patched)
+                    : HitTargetList.FromOwnedArray(ownedPatched));
         }
         finally
         {

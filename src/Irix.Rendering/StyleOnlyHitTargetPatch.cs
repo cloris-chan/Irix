@@ -3,19 +3,26 @@ namespace Irix.Rendering;
 internal static class StyleOnlyHitTargetPatch
 {
     public static bool TryBuildPatchedHitTargets(
-        IReadOnlyList<HitTestTarget> retainedHitTargets,
+        HitTargetList retainedHitTargets,
         ReadOnlySpan<LayoutElement> nextLayoutElements,
         IndexRangeList dirtyElementRanges,
-        out HitTestTarget[] patchedHitTargets)
+        out HitTargetList patchedHitTargets)
     {
-        patchedHitTargets = [];
+        patchedHitTargets = HitTargetList.Empty;
         if (dirtyElementRanges.Count == 0)
         {
             return false;
         }
 
         var dirtyRanges = RangeUtils.Merge(dirtyElementRanges);
-        var patched = retainedHitTargets.Count == 0 ? [] : retainedHitTargets.ToArray();
+        Span<HitTestTarget> inlinePatched = stackalloc HitTestTarget[HitTargetList.InlineCapacity];
+        var ownedPatched = retainedHitTargets.Count > HitTargetList.InlineCapacity ? new HitTestTarget[retainedHitTargets.Count] : null;
+        var patched = ownedPatched is null ? inlinePatched[..retainedHitTargets.Count] : ownedPatched.AsSpan();
+        for (var i = 0; i < retainedHitTargets.Count; i++)
+        {
+            patched[i] = retainedHitTargets[i];
+        }
+
         var hitTargetIndex = 0;
 
         for (var elementIndex = 0; elementIndex < nextLayoutElements.Length; elementIndex++)
@@ -55,7 +62,9 @@ internal static class StyleOnlyHitTargetPatch
             return false;
         }
 
-        patchedHitTargets = patched;
+        patchedHitTargets = ownedPatched is null
+            ? HitTargetList.CopyFrom(patched)
+            : HitTargetList.FromOwnedArray(ownedPatched);
         return true;
     }
 }

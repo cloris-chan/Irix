@@ -21,19 +21,19 @@ internal sealed record StyleOnlyPatchPlan(
     StyleOnlyPatchFallbackReason FallbackReason,
     IndexRangeList DirtyElementRanges,
     IndexRangeList DirtyCommandRanges,
-    IReadOnlyList<HitTestTarget> PatchedHitTargets)
+    HitTargetList PatchedHitTargets)
 {
     public static StyleOnlyPatchPlan CreateEligible(
         IndexRangeList dirtyElementRanges,
         IndexRangeList dirtyCommandRanges,
-        IReadOnlyList<HitTestTarget> patchedHitTargets)
+        HitTargetList patchedHitTargets)
     {
         return new StyleOnlyPatchPlan(
             true,
             StyleOnlyPatchFallbackReason.None,
             dirtyElementRanges,
             dirtyCommandRanges,
-            patchedHitTargets.ToArray());
+            patchedHitTargets);
     }
 
     public static StyleOnlyPatchPlan CreateFallback(
@@ -45,7 +45,7 @@ internal sealed record StyleOnlyPatchPlan(
             fallbackReason,
             dirtyElementRanges,
             IndexRangeList.Empty,
-            []);
+            HitTargetList.Empty);
     }
 }
 
@@ -101,7 +101,7 @@ internal static class StyleOnlyPatchPlanBuilder
         bool viewportChanged,
         LayoutTreeResult? retainedLayout,
         ElementCommandRangeList retainedElementCommandRanges,
-        IReadOnlyList<HitTestTarget> retainedHitTargets,
+        HitTargetList retainedHitTargets,
         ReadOnlySpan<LayoutElement> nextLayoutElements,
         IndexRangeList dirtyElementRanges)
     {

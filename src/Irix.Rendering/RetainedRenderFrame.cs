@@ -23,7 +23,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     private readonly RetainedCommandBuffer _commandBuffer = new();
     private IFrameResourceResolver _resources = FrameDrawingResources.Empty;
     private ulong _resourceFrameId;
-    private HitTestTarget[] _hitTargets = [];
+    private HitTargetList _hitTargets;
     private IndexRangeList _dirtyCommandRanges;
 
     /// <summary>The draw commands.</summary>
@@ -36,7 +36,7 @@ internal sealed class RetainedRenderFrame : IDisposable
     public IFrameResourceResolver Resources => _resources;
 
     /// <summary>Hit targets from the last full apply.</summary>
-    public IReadOnlyList<HitTestTarget> HitTargets => _hitTargets;
+    public HitTargetList HitTargets => _hitTargets;
 
     /// <summary>Dirty command ranges from the last apply, if any.</summary>
     public IndexRangeList DirtyCommandRanges => _dirtyCommandRanges;
@@ -51,7 +51,7 @@ internal sealed class RetainedRenderFrame : IDisposable
         _commandBuffer.ApplyFull(batch.Commands);
         _resources = batch.Resources;
         _resourceFrameId = batch.ResourceFrameId;
-        _hitTargets = batch.HitTargetPublication ?? [.. batch.HitTargets];
+        _hitTargets = batch.HitTargets;
         _dirtyCommandRanges = batch.DirtyCommandRangeList;
     }
 
@@ -176,7 +176,7 @@ internal sealed class RetainedRenderFrame : IDisposable
         _commandBuffer.Reset();
         _resources = FrameDrawingResources.Empty;
         _resourceFrameId = 0;
-        _hitTargets = [];
+        _hitTargets = HitTargetList.Empty;
         _dirtyCommandRanges = IndexRangeList.Empty;
     }
 
@@ -186,7 +186,7 @@ internal sealed class RetainedRenderFrame : IDisposable
         ReleaseResources();
         _resources = FrameDrawingResources.Empty;
         _resourceFrameId = 0;
-        _hitTargets = [];
+        _hitTargets = HitTargetList.Empty;
         _dirtyCommandRanges = IndexRangeList.Empty;
     }
 }

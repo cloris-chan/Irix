@@ -139,11 +139,20 @@ public class TypedIdAllocationGuardTests
     {
         var root = FindRepoRoot();
         var renderPipelineSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs"));
+        var renderFrameBatchSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderFrameBatch.cs"));
+        var retainedFrameSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RetainedRenderFrame.cs"));
 
         Assert.True(typeof(RenderPipelineRetainedInputSnapshot).IsValueType);
+        Assert.True(typeof(HitTargetList).IsValueType);
         Assert.Contains("internal readonly struct RenderPipelineRetainedInputSnapshot", renderPipelineSource);
+        Assert.Contains("public readonly struct HitTargetList", renderFrameBatchSource);
+        Assert.Contains("HitTargetList HitTargets", renderPipelineSource);
+        Assert.Contains("internal static HitTargetList FromOwnedArray", renderFrameBatchSource);
         Assert.Contains("public bool HasLastRetainedInputSnapshot", renderPipelineSource);
         Assert.DoesNotContain("internal sealed record RenderPipelineRetainedInputSnapshot", renderPipelineSource);
+        Assert.DoesNotContain("HitTargetPublication", renderFrameBatchSource);
+        Assert.DoesNotContain("public static HitTargetList FromOwnedArray", renderFrameBatchSource);
+        Assert.DoesNotContain("private HitTestTarget[] _hitTargets", retainedFrameSource);
     }
 
     [Fact]
