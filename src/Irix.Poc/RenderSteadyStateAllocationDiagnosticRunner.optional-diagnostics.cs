@@ -85,6 +85,10 @@ internal static class RenderSteadyStateAllocationDiagnosticRunner
             + $"classify={pipelineAttribution.ClassificationBytes} "
             + $"layout={pipelineAttribution.LayoutBytes} "
             + $"record={pipelineAttribution.RecordBytes} "
+            + $"record.resources={pipelineAttribution.RecordAttribution.ResourcesBytes} "
+            + $"record.styles={pipelineAttribution.RecordAttribution.StylesBytes} "
+            + $"record.commandBuild={pipelineAttribution.RecordAttribution.CommandBuildBytes} "
+            + $"record.dirtyRanges={pipelineAttribution.RecordAttribution.DirtyRangesBytes} "
             + $"hitTargets={pipelineAttribution.HitTargetsBytes} "
             + $"snapshot={pipelineAttribution.SnapshotBytes} "
             + $"retainedFrame={pipelineAttribution.RetainedFrameBytes}";

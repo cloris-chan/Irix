@@ -58,6 +58,43 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
+    public void DrawCommandBatch_generation_blocks_stale_pooled_owner_reads()
+    {
+        var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(1);
+        var batch = DrawCommandBatch.FromPooled(owner, 1);
+
+        batch.Dispose();
+
+        Assert.Equal(0, batch.Memory.Length);
+
+        var rentedOwners = new PooledArrayMemoryOwner<DrawCommand>[80];
+        PooledArrayMemoryOwner<DrawCommand>? reusedOwner = null;
+        try
+        {
+            for (var i = 0; i < rentedOwners.Length; i++)
+            {
+                rentedOwners[i] = PooledArrayMemoryOwner<DrawCommand>.Rent(1);
+                if (ReferenceEquals(owner, rentedOwners[i]))
+                {
+                    reusedOwner = rentedOwners[i];
+                    break;
+                }
+            }
+
+            Assert.NotNull(reusedOwner);
+            Assert.NotEqual(batch.OwnerGeneration, reusedOwner.Generation);
+            Assert.Equal(0, batch.Memory.Length);
+        }
+        finally
+        {
+            for (var i = 0; i < rentedOwners.Length; i++)
+            {
+                rentedOwners[i]?.Dispose();
+            }
+        }
+    }
+
+    [Fact]
     public async Task CompositorLoop_disposes_patch_and_draw_batches_after_render()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

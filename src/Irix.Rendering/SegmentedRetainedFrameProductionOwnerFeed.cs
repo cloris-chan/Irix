@@ -34,7 +34,8 @@ internal readonly struct SegmentedRetainedFrameProductionOwnerFeedResult(
     ulong BatchFrameId = 0,
     int BatchCommandCount = 0,
     IFrameResourceResolver? BatchResources = null,
-    object? BatchCommandOwner = null) : IEquatable<SegmentedRetainedFrameProductionOwnerFeedResult>
+    object? BatchCommandOwner = null,
+    ulong BatchCommandGeneration = 0) : IEquatable<SegmentedRetainedFrameProductionOwnerFeedResult>
 {
 
     public SegmentedRetainedFrameShadowResult ShadowResult { get; } = ShadowResult;
@@ -45,6 +46,7 @@ internal readonly struct SegmentedRetainedFrameProductionOwnerFeedResult(
     public int BatchCommandCount { get; } = BatchCommandCount;
     public IFrameResourceResolver? BatchResources { get; } = BatchResources;
     public object? BatchCommandOwner { get; } = BatchCommandOwner;
+    public ulong BatchCommandGeneration { get; } = BatchCommandGeneration;
 
     public static SegmentedRetainedFrameProductionOwnerFeedResult Disabled { get; } = new(
         SegmentedRetainedFrameShadowResult.Disabled,
@@ -63,7 +65,8 @@ internal readonly struct SegmentedRetainedFrameProductionOwnerFeedResult(
             && BatchFrameId == other.BatchFrameId
             && BatchCommandCount == other.BatchCommandCount
             && EqualityComparer<IFrameResourceResolver?>.Default.Equals(BatchResources, other.BatchResources)
-            && EqualityComparer<object?>.Default.Equals(BatchCommandOwner, other.BatchCommandOwner);
+            && EqualityComparer<object?>.Default.Equals(BatchCommandOwner, other.BatchCommandOwner)
+            && BatchCommandGeneration == other.BatchCommandGeneration;
     }
 
     public override bool Equals(object? obj) => obj is SegmentedRetainedFrameProductionOwnerFeedResult other && Equals(other);
@@ -79,6 +82,7 @@ internal readonly struct SegmentedRetainedFrameProductionOwnerFeedResult(
         hash.Add(BatchCommandCount);
         hash.Add(BatchResources);
         hash.Add(BatchCommandOwner);
+        hash.Add(BatchCommandGeneration);
         return hash.ToHashCode();
     }
 

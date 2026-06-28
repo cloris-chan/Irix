@@ -1545,6 +1545,7 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         return ownerResult.RuntimeOwnerEnabled
             && ReferenceEquals(ownerResult.BatchResources, renderFrameBatch.Resources)
             && ReferenceEquals(ownerResult.BatchCommandOwner, renderFrameBatch.Commands.Owner)
+            && ownerResult.BatchCommandGeneration == renderFrameBatch.Commands.OwnerGeneration
             && ownerResult.BatchCommandCount == renderFrameBatch.Commands.Count
             && ownerResult.BatchFrameId == GetBatchFrameId(renderFrameBatch);
     }

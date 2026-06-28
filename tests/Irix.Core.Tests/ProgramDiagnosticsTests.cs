@@ -4191,7 +4191,7 @@ public sealed partial class ProgramDiagnosticsTests
             "render-steady-state scope=core-render-pipeline prebuiltTrees=true knownResources=true capacityReserved=false frames=3 targetMet=false totalBytes=270",
             header);
         Assert.Equal(
-            "render-steady-state scenario=style-only frames=3 threadBytes=150 threadPerFrame=50 targetMet=false layoutReason=StyleOnly layoutRebuilds=0 pipelineBytes=252 classify=12 layout=24 record=36 hitTargets=48 snapshot=60 retainedFrame=72",
+            "render-steady-state scenario=style-only frames=3 threadBytes=150 threadPerFrame=50 targetMet=false layoutReason=StyleOnly layoutRebuilds=0 pipelineBytes=252 classify=12 layout=24 record=36 record.resources=0 record.styles=0 record.commandBuild=0 record.dirtyRanges=0 hitTargets=48 snapshot=60 retainedFrame=72",
             scenarioSummary);
         Assert.Equal(
             "render-steady-state focus largestScenario=style-only largestBytes=150 largestPerFrame=50 totalBytes=270 targetMet=false",

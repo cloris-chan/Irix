@@ -62,7 +62,8 @@ internal sealed class RetainedRenderFrameSegmentOwnership(RetainedRenderFrame re
             batch.Resources is FrameDrawingResources frameResources ? frameResources.FrameId : 0,
             batch.Commands.Count,
             batch.Resources,
-            batch.Commands.Owner);
+            batch.Commands.Owner,
+            batch.Commands.OwnerGeneration);
     }
 
     private SegmentedRetainedFrameProductionOwnerFeedResult UpdateSegmentedOwner(

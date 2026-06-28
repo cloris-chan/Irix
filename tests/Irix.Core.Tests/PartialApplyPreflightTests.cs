@@ -2045,7 +2045,8 @@ public sealed class PartialApplyPreflightTests
             BatchFrameId: 0,
             BatchCommandCount: rejectedFrame.Commands.Count,
             BatchResources: rejectedFrame.Resources,
-            BatchCommandOwner: rejectedFrame.Commands.Owner));
+            BatchCommandOwner: rejectedFrame.Commands.Owner,
+            BatchCommandGeneration: rejectedFrame.Commands.OwnerGeneration));
         await rejectedCompositor.RenderAsync(rejectedFrame, rejectedOwnership, new FrameContext(100, 100), cancellationToken);
 
         var disabledSnapshot = PartialApplyHandoffDiagnosticSnapshot.FromCompositor(disabledCompositor);
@@ -2184,7 +2185,8 @@ public sealed class PartialApplyPreflightTests
             0,
             selectedFrame.Commands.Count,
             selectedFrame.Resources,
-            selectedFrame.Commands.Owner));
+            selectedFrame.Commands.Owner,
+            selectedFrame.Commands.OwnerGeneration));
         var backend = new DirtyRangeAwareCapturingBackend();
         using var compositor = new DrawingBackendCompositor(backend, DrawingBackendCompositorHandoffOptions.Enabled);
 
@@ -2244,7 +2246,8 @@ public sealed class PartialApplyPreflightTests
             0,
             frame.Commands.Count,
             frame.Resources,
-            frame.Commands.Owner);
+            frame.Commands.Owner,
+            frame.Commands.OwnerGeneration);
         SetOwnershipLastResult(ownership, freshAcceptedResult);
         SetRuntimeOwnerSegmentsUnchecked(
             ownership.RuntimeOwner,
@@ -2288,7 +2291,8 @@ public sealed class PartialApplyPreflightTests
             0,
             frame.Commands.Count,
             frame.Resources,
-            frame.Commands.Owner));
+            frame.Commands.Owner,
+            frame.Commands.OwnerGeneration));
         var backend = new DirtyRangeAwareCapturingBackend();
         using var compositor = new DrawingBackendCompositor(backend, DrawingBackendCompositorHandoffOptions.Enabled);
 
@@ -2401,7 +2405,8 @@ public sealed class PartialApplyPreflightTests
             0,
             frame.Commands.Count,
             frame.Resources,
-            frame.Commands.Owner);
+            frame.Commands.Owner,
+            frame.Commands.OwnerGeneration);
         SetOwnershipLastResult(ownership, rejectedResult);
         var backend = new DirtyRangeAwareCapturingBackend();
         using var compositor = new DrawingBackendCompositor(

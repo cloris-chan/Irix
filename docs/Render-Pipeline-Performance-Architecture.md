@@ -175,9 +175,12 @@ dirty classifications and dirty ranges publish through inline value lists instea
 common element-command mappings publish through `ElementCommandRangeList`,
 common scroll diagnostics publish through `ScrollContainerDiagList`, and common
 layout elements/tree nodes/ranges publish through `LayoutElementList`,
-`LayoutTreeNodeList`, and `LayoutElementRangeList`. Clean render requests also
-reuse the retained hit-target value publication when tree, viewport, and dirty
-state are unchanged.
+`LayoutTreeNodeList`, and `LayoutElementRangeList`. Recorder-created
+`DrawCommandBatch` values now reuse pooled command-owner shells through a
+generation token, so retained handoff freshness must match both owner identity
+and generation before a reused owner is considered current. Clean render
+requests also reuse the retained hit-target value publication when tree,
+viewport, and dirty state are unchanged.
 
 Primary command:
 
@@ -189,18 +192,18 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2157488 bytes | 11986 B/frame | render 10922 B/frame, tree 928 B/frame, diff 91 B/frame, translate 45 B/frame |
-| Warm scroll | 239656 bytes | 1331 B/frame | tree 911 B/frame, diff 227 B/frame, render 182 B/frame, translate 91 B/frame |
-| Scale change | 238704 bytes | 1326 B/frame | tree 956 B/frame, render 227 B/frame, translate 136 B/frame, diff 45 B/frame |
+| Static | 2158120 bytes | 11989 B/frame | render 10877 B/frame, tree 837 B/frame, diff 180 B/frame, translate 136 B/frame |
+| Warm scroll | 233896 bytes | 1299 B/frame | tree 820 B/frame, diff 273 B/frame, translate 136 B/frame, render 136 B/frame |
+| Scale change | 232944 bytes | 1294 B/frame | tree 956 B/frame, diff 182 B/frame, render 136 B/frame, translate 91 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `tree.buildRoot.button.propertyArray` | 318 | Remaining measured control/tree publication cost in the synthetic button path. |
-| `tree.buildRoot.container` | 318 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
-| `tree.buildRoot.button.childrenArray` | 182 | Button lowering still publishes per-node child arrays in the measured synthetic path. |
-| `drawRecord` | 32 | Command recording is visible but not the largest bucket; dirty range mapping now publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
+| `tree.buildRoot.container` | 273 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
+| `tree.buildRoot.button.childrenArray` | 227 | Button lowering still publishes per-node child arrays in the measured synthetic path. |
+| `tree.buildRoot.button.propertyArray` | 227 | Remaining measured control/tree publication cost in the synthetic button path. |
+| `drawRecord` | 0 | Recorder-owned command batches now reuse pooled owner shells through a generation token; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 0 | Common hit targets are retained through `HitTargetList` without publishing an array; clean render requests reuse the retained value publication, and dirty retained input snapshots patch common hit-target metadata inline. |
 | `layout.elementsArray` | 0 | Common layout elements publish through `LayoutElementList` without a retained array. |
 | `layout.treeNodesArray` | 0 | Common layout tree nodes publish through `LayoutTreeNodeList` without a retained array. |
@@ -217,15 +220,16 @@ now agree with the value-publication slice:
 
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
-| Warm reuse | 75 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0` |
-| Style only | 1105 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0` |
-| Layout change | 73 | `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0` |
+| Warm reuse | 43 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `record=1240 total` with `record.commandBuild=544`, `record.resources=448`, `record.styles=248` across the run |
+| Style only | 1073 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0`, `record=1240 total` |
+| Layout change | 41 | `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=1240 total` |
 
 The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
 lower into a container plus content nodes, while common small layout publication
 stays inline and the remaining visible cost has moved back to tree/control
-publication plus command recording.
+publication. Recorder command-owner publication is no longer a per-frame
+warm-scroll bucket.
 
 Composition and scroll diagnostics were also checked:
 
@@ -527,9 +531,13 @@ hit-target publication is empty. `IndexRangeList` now keeps empty and single dir
 and dirty command ranges inline, while preserving owned arrays only for
 multi-range publication. `ElementCommandRangeList` now keeps up to four
 element-command range records inline, preserving an owned array only for larger
-draw publications. The command batch, frame resources, multi-classification
-publication, larger hit-target publication, and large element-command range
-publication remain explicit outputs.
+draw publications. Recorder-created `DrawCommandBatch` values now publish a
+generation token for their pooled command owner; the owner object itself can be
+reused after disposal, and stale retained-frame handoff state must match both
+owner identity and generation before it is considered fresh. The command array,
+frame resources, multi-classification publication, larger hit-target
+publication, and large element-command range publication remain explicit
+outputs.
 
 After the larger tree/layout publication buckets are addressed, review smaller
 publication costs:
