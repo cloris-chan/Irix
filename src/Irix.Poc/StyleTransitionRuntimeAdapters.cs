@@ -22,6 +22,13 @@ internal readonly struct DrawingBackendStyleTransitionCompositorAdapter(
         return ValueTask.CompletedTask;
     }
 
+    public ValueTask CommitAsync(NodeKey targetKey, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ((ICompositionAnimationCompositor)Compositor).CommitCompositionAnimation();
+        return ValueTask.CompletedTask;
+    }
+
     public async ValueTask RenderAnimationTickAtAsync(
         CompositionTimestamp timestamp,
         CancellationToken cancellationToken = default)

@@ -1,6 +1,6 @@
 namespace Irix.Rendering;
 
-public sealed class CompositeCompositor(params ICompositor[] compositors) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionFramePacingProvider
+public sealed class CompositeCompositor(params ICompositor[] compositors) : ICompositor, IRetainedFrameStagingCompositor, ICompositionScrollPresentationCompositor, ICompositionAnimationCompositor, ICompositionFramePacingProvider
 {
     CompositionFramePacing ICompositionFramePacingProvider.FramePacing
     {
@@ -135,5 +135,70 @@ public sealed class CompositeCompositor(params ICompositor[] compositors) : ICom
 
         presentedScrollY = 0;
         return false;
+    }
+
+    void ICompositionAnimationCompositor.SetCompositionAnimationDeclaration(
+        in CompositionAnimationDeclaration declaration,
+        RenderPipelineRetainedInputSnapshot snapshot)
+    {
+        var installed = false;
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionAnimationCompositor animationCompositor)
+            {
+                animationCompositor.SetCompositionAnimationDeclaration(declaration, snapshot);
+                installed = true;
+            }
+        }
+
+        if (!installed)
+        {
+            throw new InvalidOperationException("Composite compositor does not contain a composition animation compositor.");
+        }
+    }
+
+    void ICompositionAnimationCompositor.ClearCompositionAnimation()
+    {
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionAnimationCompositor animationCompositor)
+            {
+                animationCompositor.ClearCompositionAnimation();
+            }
+        }
+    }
+
+    void ICompositionAnimationCompositor.CommitCompositionAnimation()
+    {
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionAnimationCompositor animationCompositor)
+            {
+                animationCompositor.CommitCompositionAnimation();
+            }
+        }
+    }
+
+    async ValueTask<CompositionBackendExecutionResult> ICompositionAnimationCompositor.RenderCompositionAnimationTickAtAsync(
+        CompositionTimestamp timestamp,
+        CancellationToken cancellationToken)
+    {
+        var rendered = false;
+        var result = default(CompositionBackendExecutionResult);
+        foreach (var compositor in compositors)
+        {
+            if (compositor is ICompositionAnimationCompositor animationCompositor)
+            {
+                result = await animationCompositor.RenderCompositionAnimationTickAtAsync(timestamp, cancellationToken);
+                rendered = true;
+            }
+        }
+
+        if (!rendered)
+        {
+            throw new InvalidOperationException("Composite compositor does not contain a composition animation compositor.");
+        }
+
+        return result;
     }
 }

@@ -43,6 +43,8 @@ internal interface IStyleTransitionCompositorAdapter
         RenderPipelineRetainedInputSnapshot snapshot,
         CancellationToken cancellationToken = default);
 
+    ValueTask CommitAsync(NodeKey targetKey, CancellationToken cancellationToken = default);
+
     ValueTask CancelAsync(NodeKey targetKey, CancellationToken cancellationToken = default);
 }
 
@@ -394,7 +396,7 @@ internal sealed class StyleTransitionRuntimeCoordinator
 
         if (decision.Kind == StyleTransitionRuntimeDecisionKind.Commit)
         {
-            await compositor.CancelAsync(decision.TargetKey, cancellationToken);
+            await compositor.CommitAsync(decision.TargetKey, cancellationToken);
             return new StyleTransitionRuntimeResult(StyleTransitionRuntimeResultKind.Committed, decision.TargetKey);
         }
 

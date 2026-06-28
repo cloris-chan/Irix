@@ -430,6 +430,33 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         ClearCompositionAnimation();
     }
 
+    internal void CommitCompositionAnimation()
+    {
+        lock (_frameGate)
+        {
+            if (_compositionPresentationState.AnimationPlan is { } plan)
+            {
+                var committedLayer = TryGetPresentedLayer(plan.LayerAnimation.LayerId, out var presentedLayer)
+                    ? presentedLayer
+                    : plan.LayerAnimation.Evaluate(plan.LayerAnimation.Timeline.StartTimestamp + plan.LayerAnimation.Timeline.Duration);
+                _compositionPresentationState.SetAnimationPlan(CreateCommittedAnimationPlan(plan.LayerAnimation, committedLayer));
+                ClearCompositionMarkerEvents();
+                SetCompositionPresentationState(new CompositionFrame(committedLayer), default);
+                return;
+            }
+
+            if (_compositionPresentationState.AnimationPresentationPlan is { } presentationPlan)
+            {
+                CommitCompositionAnimationPresentationPlan(presentationPlan);
+            }
+        }
+    }
+
+    void ICompositionAnimationCompositor.CommitCompositionAnimation()
+    {
+        CommitCompositionAnimation();
+    }
+
     ValueTask<CompositionBackendExecutionResult> ICompositionAnimationCompositor.RenderCompositionAnimationTickAtAsync(
         CompositionTimestamp timestamp,
         CancellationToken cancellationToken)
@@ -1753,6 +1780,71 @@ public sealed partial class DrawingBackendCompositor(IDrawingBackend backend) : 
         }
 
         RefreshHitTestSnapshot(default);
+    }
+
+    private bool TryGetPresentedLayer(CompositionLayerId layerId, out CompositionLayer layer)
+    {
+        lock (_compositionStateLock)
+        {
+            for (var i = 0; i < _lastCompositionFrame.LayerCount; i++)
+            {
+                var candidate = _lastCompositionFrame.GetLayer(i);
+                if (candidate.Id == layerId)
+                {
+                    layer = candidate;
+                    return true;
+                }
+            }
+        }
+
+        layer = default;
+        return false;
+    }
+
+    private void CommitCompositionAnimationPresentationPlan(in CompositionAnimationPresentationSetPlan plan)
+    {
+        var plans = plan.Plans;
+        if (plans.IsEmpty)
+        {
+            ClearCompositionAnimation();
+            return;
+        }
+
+        var committedPlans = new CompositionAnimationPlan[plans.Length];
+        var committedLayers = new CompositionLayer[plans.Length];
+        for (var i = 0; i < plans.Length; i++)
+        {
+            var animation = plans[i].LayerAnimation;
+            var committedLayer = TryGetPresentedLayer(animation.LayerId, out var presentedLayer)
+                ? presentedLayer
+                : animation.Evaluate(animation.Timeline.StartTimestamp + animation.Timeline.Duration);
+            committedPlans[i] = CreateCommittedAnimationPlan(animation, committedLayer);
+            committedLayers[i] = committedLayer;
+        }
+
+        _compositionPresentationState.SetAnimationPresentationPlan(new CompositionAnimationPresentationSetPlan(committedPlans));
+        ClearCompositionMarkerEvents();
+        SetCompositionPresentationState(CompositionFrame.FromLayers(committedLayers), default);
+    }
+
+    private static CompositionAnimationPlan CreateCommittedAnimationPlan(
+        in CompositionLayerAnimation animation,
+        in CompositionLayer layer)
+    {
+        var timeline = new CompositionAnimationTimeline(
+            CompositionTimestamp.Zero,
+            CompositionDuration.FromStopwatchTicks(1));
+        return new CompositionAnimationPlan(new CompositionLayerAnimation(
+            animation.LayerId,
+            animation.CommandStart,
+            animation.CommandCount,
+            timeline,
+            new CompositionTransformAnimation(
+                CompositionScalarAnimation.Constant(layer.Transform.TranslateX),
+                CompositionScalarAnimation.Constant(layer.Transform.TranslateY)),
+            CompositionScalarAnimation.Constant(layer.Opacity.Normalized),
+            animation.InstanceId,
+            animation.TargetKey));
     }
 
     private void ClearCompositionMarkerEvents()

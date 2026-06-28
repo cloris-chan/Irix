@@ -3129,8 +3129,11 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("IStyleTransitionRetainedSnapshotProvider", scrollAdapterSource);
         Assert.Contains("internal interface ICompositionAnimationCompositor", compositorInterfaceSource);
         Assert.Contains("void ClearCompositionAnimation()", compositorInterfaceSource);
+        Assert.Contains("void CommitCompositionAnimation()", compositorInterfaceSource);
         Assert.Contains("ICompositionAnimationCompositor", drawingCompositorSource);
         Assert.Contains("internal void ClearCompositionAnimation()", drawingCompositorSource);
+        Assert.Contains("internal void CommitCompositionAnimation()", drawingCompositorSource);
+        Assert.Contains("CommitCompositionAnimation()", adapterSource);
         Assert.Contains("CompositionAnimationRepeatMode RepeatMode", compilerSource);
         Assert.Contains("new CompositionAnimationTimeline(request.StartTimestamp, request.Duration, request.RepeatMode)", compilerSource);
         Assert.Contains("StyleTransitionRuntimeCoordinator", demoSource);

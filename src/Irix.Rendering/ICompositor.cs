@@ -47,6 +47,8 @@ internal interface ICompositionAnimationCompositor
 
     void ClearCompositionAnimation();
 
+    void CommitCompositionAnimation();
+
     ValueTask<CompositionBackendExecutionResult> RenderCompositionAnimationTickAtAsync(
         CompositionTimestamp timestamp,
         CancellationToken cancellationToken = default);

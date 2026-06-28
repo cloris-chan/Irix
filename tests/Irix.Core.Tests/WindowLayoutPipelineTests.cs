@@ -954,7 +954,7 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
-    public async Task StyleTransitionRuntimeCoordinator_cancel_and_commit_clear_presentation_without_compiling()
+    public async Task StyleTransitionRuntimeCoordinator_cancel_clears_and_commit_preserves_presentation_without_compiling()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var snapshot = CreateStyleTransitionRetainedSnapshot();
@@ -988,8 +988,9 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(StyleTransitionCompileStatus.None, committed.CompileStatus);
         Assert.False(committed.HasDeclaration);
         Assert.Equal(0, compositor.StartCount);
-        Assert.Equal(2, compositor.CancelCount);
-        Assert.Equal(new NodeKey(22), compositor.LastCancelTarget);
+        Assert.Equal(1, compositor.CancelCount);
+        Assert.Equal(1, compositor.CommitCount);
+        Assert.Equal(new NodeKey(22), compositor.LastCommitTarget);
         Assert.Equal(committed, commitRuntime.LastResult);
     }
 
@@ -2531,7 +2532,11 @@ public sealed class WindowLayoutPipelineTests
             cancellationToken);
 
         Assert.Equal(StyleTransitionRuntimeResultKind.Committed, committed.Kind);
-        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+        var committedAnimation = compositor.CompositionAnimationPlan!.Value.LayerAnimation;
+        Assert.Equal(lifecycle.Decision.TargetKey, committedAnimation.TargetKey);
+        Assert.Equal(0.98f, committedAnimation.Opacity.To);
+        Assert.Equal(0f, committedAnimation.Transform.TranslateY.To);
     }
 
     [Fact]
@@ -2606,7 +2611,11 @@ public sealed class WindowLayoutPipelineTests
         Assert.True(completionTick.HasCommit);
         Assert.Equal(StyleTransitionRuntimeResultKind.Committed, completionTick.CommitResult.Kind);
         Assert.False(tracker.HasActiveTransition);
-        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+        var committedAnimation = compositor.CompositionAnimationPlan!.Value.LayerAnimation;
+        Assert.Equal(lifecycle.Decision.TargetKey, committedAnimation.TargetKey);
+        Assert.Equal(0.98f, committedAnimation.Opacity.To);
+        Assert.Equal(0f, committedAnimation.Transform.TranslateY.To);
         Assert.Equal(2, backend.ExecuteCompositionCount);
         Assert.Equal(2, pump.TickCount);
         Assert.Equal(1, pump.CommitCount);
@@ -2630,6 +2639,81 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(StyleTransitionCompletionPumpTickMode.SingleAnimation, snapshot.TickMode);
         Assert.False(snapshot.HasError);
         Assert.Null(snapshot.LastErrorKind);
+    }
+
+    [Fact]
+    public async Task CounterStyleTransitionRuntimeBridge_pressed_completion_preserves_presented_hit_test_position()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var window = new FakeWindow(new ScreenRegion(0, new PixelRectangle(0, 0, 960, 540)));
+        var translator = new WindowDrawCommandTranslator(window);
+        using var backend = new StyleTransitionCompositionBackend();
+        using var compositor = new DrawingBackendCompositor(backend);
+        await using var runtime = new Runtime<CounterModel, CounterMessage>(new CounterApplication(), new RenderingPatchSink(translator, compositor));
+        await runtime.StartAsync(cancellationToken);
+        var retainedSnapshot = translator.LastRetainedInputSnapshot;
+        Assert.NotNull(retainedSnapshot);
+
+        var hitTarget = FindHitTarget(retainedSnapshot.Value.HitTargets, ActionIdRegistry.Increment);
+        var insideX = hitTarget.Bounds.X + Math.Min(4, Math.Max(hitTarget.Bounds.Width - 1, 0));
+        var originalTopInsideY = hitTarget.Bounds.Y + 1;
+        var presentedTopInsideY = originalTopInsideY + 2;
+        var presentedBottomInsideY = hitTarget.Bounds.Y + hitTarget.Bounds.Height + 1;
+        var presentedBottomOutsideY = hitTarget.Bounds.Y + hitTarget.Bounds.Height + 3;
+
+        var pressedIncrement = new OwnershipSnapshot(
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            ActionIdRegistry.Increment,
+            default,
+            HoverChangeCount: 1,
+            IsPointerPressed: true);
+        var lifecycle = CounterStyleTransitionBridge.EvaluateInputTransition(
+            runtime.CurrentModel.InputOwnership,
+            pressedIncrement,
+            hasActiveScrollPresentation: false,
+            CompositionTimestamp.FromStopwatchTicks(100));
+        var tracker = new StyleTransitionCompletionTracker();
+        await using var pump = new StyleTransitionCompletionPump(
+            compositor,
+            tracker,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator));
+
+        var result = await CounterStyleTransitionRuntimeBridge.DispatchAndApplyInputTransitionAsync(
+            runtime,
+            new CounterMessage.InputVisualStateChanged(pressedIncrement),
+            lifecycle.Decision,
+            new DrawingBackendStyleTransitionCompositorAdapter(compositor),
+            new WindowDrawCommandTranslatorRetainedSnapshotProvider(translator),
+            cancellationToken,
+            tracker);
+        _ = await pump.TickAndDrainAtAsync(lifecycle.Decision.StartTimestamp, cancellationToken);
+        var completionTick = await pump.TickAndDrainAtAsync(
+            lifecycle.Decision.StartTimestamp + lifecycle.Decision.Duration,
+            cancellationToken);
+
+        Assert.True(result.Kind is StyleTransitionRuntimeResultKind.Started or StyleTransitionRuntimeResultKind.Retargeted);
+        Assert.Equal(StyleTransitionCompletionPumpResultKind.CompletionCommitted, completionTick.Kind);
+        Assert.False(tracker.HasActiveTransition);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
+        var committedAnimation = compositor.CompositionAnimationPlan!.Value.LayerAnimation;
+        Assert.Equal(new NodeKey(6), committedAnimation.TargetKey);
+        Assert.Equal(2f, committedAnimation.Transform.TranslateY.To);
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(insideX, presentedTopInsideY, out var presentedTopHit));
+        Assert.Equal(ActionIdRegistry.Increment, presentedTopHit);
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(insideX, presentedBottomInsideY, out var presentedBottomHit));
+        Assert.Equal(ActionIdRegistry.Increment, presentedBottomHit);
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(insideX, originalTopInsideY, out _));
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(insideX, presentedBottomOutsideY, out _));
+
+        compositor.ClearCompositionAnimation();
+
+        Assert.True(compositor.TryGetActionIdAtLogicalPixel(insideX, originalTopInsideY, out var restoredTopHit));
+        Assert.Equal(ActionIdRegistry.Increment, restoredTopHit);
+        Assert.False(compositor.TryGetActionIdAtLogicalPixel(insideX, presentedBottomOutsideY, out _));
     }
 
     [Fact]
@@ -2702,7 +2786,7 @@ public sealed class WindowLayoutPipelineTests
         Assert.Equal(1, diagnostic.DrainedEventCount);
         Assert.False(diagnostic.HasActiveTransition);
         Assert.False(diagnostic.HasError);
-        Assert.Null(compositor.CompositionAnimationPlan);
+        Assert.NotNull(compositor.CompositionAnimationPlan);
         Assert.Equal(2, backend.ExecuteCompositionCount);
     }
 
@@ -3496,8 +3580,9 @@ public sealed class WindowLayoutPipelineTests
             cancellationToken);
 
         Assert.Equal(StyleTransitionRuntimeResultKind.Committed, committed.Kind);
-        Assert.Equal(1, compositor.CancelCount);
-        Assert.Equal(new NodeKey(22), compositor.LastCancelTarget);
+        Assert.Equal(0, compositor.CancelCount);
+        Assert.Equal(1, compositor.CommitCount);
+        Assert.Equal(new NodeKey(22), compositor.LastCommitTarget);
     }
 
     [Fact]
@@ -7372,6 +7457,19 @@ public sealed class WindowLayoutPipelineTests
         ];
     }
 
+    private static HitTestTarget FindHitTarget(IReadOnlyList<HitTestTarget> hitTargets, ActionId actionId)
+    {
+        for (var i = 0; i < hitTargets.Count; i++)
+        {
+            if (hitTargets[i].ActionId == actionId)
+            {
+                return hitTargets[i];
+            }
+        }
+
+        throw new InvalidOperationException($"Expected hit target {actionId.Value}.");
+    }
+
     private static CompositionAnimationMarkerEvent BuildCompletionMarkerEvent(
         NodeKey targetKey,
         CompositionAnimationInstanceId instanceId)
@@ -7481,7 +7579,9 @@ public sealed class WindowLayoutPipelineTests
     {
         public int StartCount { get; private set; }
         public int CancelCount { get; private set; }
+        public int CommitCount { get; private set; }
         public NodeKey LastCancelTarget { get; private set; }
+        public NodeKey LastCommitTarget { get; private set; }
         public CompositionAnimationDeclaration LastDeclaration { get; private set; }
         public RenderPipelineRetainedInputSnapshot? LastSnapshot { get; private set; }
 
@@ -7494,6 +7594,14 @@ public sealed class WindowLayoutPipelineTests
             StartCount++;
             LastDeclaration = declaration;
             LastSnapshot = snapshot;
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask CommitAsync(NodeKey targetKey, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CommitCount++;
+            LastCommitTarget = targetKey;
             return ValueTask.CompletedTask;
         }
 
