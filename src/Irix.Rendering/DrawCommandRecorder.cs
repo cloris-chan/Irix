@@ -193,7 +193,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         var stackCommandCount = RecordInto(elements, resources, _style, _visualStateResolver, textStyle, buttonTextStyle, textSnapshot, stackCommands, stackRanges);
         resources.Seal();
 
-        var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(stackCommandCount);
+        var owner = PooledDrawCommandMemoryOwner.Rent(stackCommandCount);
         stackCommands[..stackCommandCount].CopyTo(owner.Memory.Span);
         var elementRanges = ElementCommandRangeList.CopyFrom(stackRanges);
         return (DrawCommandBatch.FromPooled(owner, stackCommandCount), resources, elementRanges);
@@ -207,7 +207,7 @@ internal sealed partial class DrawCommandRecorder(DrawingStyle style, ControlVis
         int maximumCommandCount,
         TextBufferSnapshot textSnapshot)
     {
-        var pooledOwner = PooledArrayMemoryOwner<DrawCommand>.Rent(maximumCommandCount);
+        var pooledOwner = PooledDrawCommandMemoryOwner.Rent(maximumCommandCount);
         var elementRanges = new ElementCommandRange[elements.Count];
         var success = false;
         try

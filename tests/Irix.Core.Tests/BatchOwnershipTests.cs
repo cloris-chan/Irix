@@ -46,9 +46,9 @@ public sealed class BatchOwnershipTests
     }
 
     [Fact]
-    public void PooledArrayMemoryOwner_dispose_releases_memory()
+    public void PooledDrawCommandMemoryOwner_dispose_releases_active_memory_view()
     {
-        var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(4);
+        var owner = PooledDrawCommandMemoryOwner.Rent(4);
 
         Assert.Equal(4, owner.Memory.Length);
 
@@ -60,20 +60,20 @@ public sealed class BatchOwnershipTests
     [Fact]
     public void DrawCommandBatch_generation_blocks_stale_pooled_owner_reads()
     {
-        var owner = PooledArrayMemoryOwner<DrawCommand>.Rent(1);
+        var owner = PooledDrawCommandMemoryOwner.Rent(1);
         var batch = DrawCommandBatch.FromPooled(owner, 1);
 
         batch.Dispose();
 
         Assert.Equal(0, batch.Memory.Length);
 
-        var rentedOwners = new PooledArrayMemoryOwner<DrawCommand>[80];
-        PooledArrayMemoryOwner<DrawCommand>? reusedOwner = null;
+        var rentedOwners = new PooledDrawCommandMemoryOwner[80];
+        PooledDrawCommandMemoryOwner? reusedOwner = null;
         try
         {
             for (var i = 0; i < rentedOwners.Length; i++)
             {
-                rentedOwners[i] = PooledArrayMemoryOwner<DrawCommand>.Rent(1);
+                rentedOwners[i] = PooledDrawCommandMemoryOwner.Rent(1);
                 if (ReferenceEquals(owner, rentedOwners[i]))
                 {
                     reusedOwner = rentedOwners[i];

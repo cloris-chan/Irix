@@ -412,6 +412,37 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void DrawCommand_recorder_uses_typed_capacity_owner_not_generic_array_pooling()
+    {
+        Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<DrawCommand>());
+
+        var root = FindRepoRoot();
+        var drawingDir = Path.Combine(root, "src", "Irix.Drawing");
+        var renderingDir = Path.Combine(root, "src", "Irix.Rendering");
+        var batchSource = File.ReadAllText(Path.Combine(drawingDir, "DrawCommandBatch.cs"));
+        var ownerSource = File.ReadAllText(Path.Combine(drawingDir, "PooledDrawCommandMemoryOwner.cs"));
+        var recorderSource = File.ReadAllText(Path.Combine(renderingDir, "DrawCommandRecorder.cs"));
+        var drawingRenderingSource = string.Concat(
+            Directory.GetFiles(drawingDir, "*.cs", SearchOption.AllDirectories)
+                .Concat(Directory.GetFiles(renderingDir, "*.cs", SearchOption.AllDirectories))
+                .Select(File.ReadAllText));
+
+        Assert.Contains("internal sealed class PooledDrawCommandMemoryOwner", ownerSource);
+        Assert.Contains("IMemoryOwner<DrawCommand>", ownerSource);
+        Assert.Contains("Queue<PooledDrawCommandMemoryOwner>", ownerSource);
+        Assert.Contains("ArrayPool<DrawCommand>.Shared.Rent(minimumLength)", ownerSource);
+        Assert.Contains("ReturnOwner(this)", ownerSource);
+        Assert.Contains("owner.ReleaseStorage()", ownerSource);
+        Assert.Contains("RuntimeHelpers.IsReferenceOrContainsReferences<DrawCommand>()", ownerSource);
+        Assert.Contains("PooledDrawCommandMemoryOwner pooledOwner", batchSource);
+        Assert.Contains("internal static DrawCommandBatch FromPooled(PooledDrawCommandMemoryOwner owner, int count)", batchSource);
+        Assert.Contains("PooledDrawCommandMemoryOwner.Rent(stackCommandCount)", recorderSource);
+        Assert.Contains("PooledDrawCommandMemoryOwner.Rent(maximumCommandCount)", recorderSource);
+        Assert.DoesNotContain("PooledArrayMemoryOwner", drawingRenderingSource);
+        Assert.False(File.Exists(Path.Combine(drawingDir, "PooledArrayMemoryOwner.cs")));
+    }
+
+    [Fact]
     public void Internal_style_value_slots_have_no_managed_references()
     {
         Assert.False(RuntimeHelpers.IsReferenceOrContainsReferences<StyleColor>());

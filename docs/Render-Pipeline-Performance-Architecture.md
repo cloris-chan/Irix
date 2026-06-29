@@ -176,9 +176,10 @@ common element-command mappings publish through `ElementCommandRangeList`,
 common scroll diagnostics publish through `ScrollContainerDiagList`, and common
 layout elements/tree nodes/ranges publish through `LayoutElementList`,
 `LayoutTreeNodeList`, and `LayoutElementRangeList`. Recorder-created
-`DrawCommandBatch` values now reuse pooled command-owner shells through a
-generation token, so retained handoff freshness must match both owner identity
-and generation before a reused owner is considered current. Clean render
+`DrawCommandBatch` values now use a typed `PooledDrawCommandMemoryOwner` that
+retains command backing capacity behind a generation token, so retained handoff
+freshness must match both owner identity and generation before a reused owner is
+considered current. Clean render
 requests also reuse the retained hit-target value publication when tree,
 viewport, and dirty state are unchanged. Style-only patch attribution is now a
 separate pipeline bucket, and the retained root metadata check on the layout-skip
@@ -195,18 +196,18 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2152632 bytes | 11959 B/frame | render 10922 B/frame, tree 747 B/frame, diff 180 B/frame, translate 136 B/frame |
-| Warm scroll | 234840 bytes | 1304 B/frame | tree 820 B/frame, diff 227 B/frame, render 227 B/frame, translate 91 B/frame |
-| Scale change | 231288 bytes | 1284 B/frame | tree 865 B/frame, diff 227 B/frame, render 182 B/frame, translate 45 B/frame |
+| Static | 2145856 bytes | 11921 B/frame | render 10877 B/frame, tree 702 B/frame, diff 182 B/frame, translate 180 B/frame |
+| Warm scroll | 230680 bytes | 1281 B/frame | tree 774 B/frame, diff 318 B/frame, render 227 B/frame, translate 45 B/frame |
+| Scale change | 226880 bytes | 1260 B/frame | tree 1002 B/frame, translate 136 B/frame, render 136 B/frame, diff 45 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `tree.buildRoot.container` | 318 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
+| `tree.buildRoot.container` | 273 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
 | `tree.buildRoot.button.childrenList` | 364 | Button lowering now publishes through `VirtualNodeChildList`; the current backing storage is still per-node child arrays until the future `VirtualNodeTree` slab owns the storage. |
 | `tree.buildRoot.button.propertyList` | 0 | Button control metadata now publishes through compact `VirtualNodePropertyList` storage instead of per-button property arrays. |
-| `drawRecord` | 14 | Recorder-owned command batches now reuse pooled owner shells through a generation token, but command/resource publication still remains until reserved-capacity command storage exists; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
+| `drawRecord` | 0 | Recorder-owned command batches now reuse typed command owners that retain backing capacity through a generation token; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 0 | Common hit targets are retained through `HitTargetList` without publishing an array; clean render requests reuse the retained value publication, and dirty retained input snapshots patch common hit-target metadata inline. |
 | `layout.elementsArray` | 0 | Common layout elements publish through `LayoutElementList` without a retained array. |
 | `layout.treeNodesArray` | 0 | Common layout tree nodes publish through `LayoutTreeNodeList` without a retained array. |
@@ -223,9 +224,9 @@ now agree with the value-publication slice:
 
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
-| Warm reuse | 127 | `pipelineBytes=3816 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `record=3760 total`, `retainedFrame=56 total` |
-| Style only | 125 | `pipelineBytes=3760 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `record=3760 total` |
-| Layout change | 125 | `pipelineBytes=3760 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=3760 total` |
+| Warm reuse | 43 | `pipelineBytes=1296 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `record=1240 total`, `retainedFrame=56 total` |
+| Style only | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `record=1240 total` |
+| Layout change | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=1240 total` |
 
 The `styleOnlyPatch=0` bucket matters: `layout=0` is no longer the only signal
 for layout-skip cost. If retained metadata validation or style-only layout
@@ -236,9 +237,10 @@ The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
 lower into a container plus content nodes, while common small layout publication
 stays inline and the remaining visible cost has moved back to tree/control
-publication. Recorder command-owner shell publication is no longer the
-warm-scroll bucket; the remaining draw-record cost is command/resource backing
-storage that belongs to future reserved-capacity command publication work.
+publication. Recorder command-owner shell and command-array backing capacity are
+no longer warm-scroll buckets; the remaining inner record cost is resource/style
+publication plus small command-build accounting until reserved frame-resource
+and publication handles exist.
 
 Composition and scroll diagnostics were also checked:
 
@@ -305,14 +307,15 @@ The required model is capacity-owned publication, not ad hoc object pooling:
   and is not counted as a zero-allocation steady-state frame.
 
 The current implementation is not there yet. The measured buckets show the gap:
-control child/property arrays and root/container publication remain visible in
-the synthetic tree builder, recorder resource/style/command-build publication is
+control child arrays and root/container publication remain visible in the
+synthetic tree builder, recorder resource/style/command-build publication is
 still a small inner-pipeline cost, and larger non-inline layout, hit-target,
 dirty-classification, dirty-range, and command-range publications can still
 allocate when they exceed the value-publication inline capacities. The recent
-value-publication slices remove result/snapshot object identity and common small
-array publications, but the remaining work is to replace new-array publication
-with capacity-owned pages and generation-fenced views.
+value-publication slices remove result/snapshot object identity, common small
+array publications, and warm-scroll draw-command backing allocation, but the
+remaining work is to replace new-array publication with capacity-owned pages and
+generation-fenced views.
 
 ## Architecture Rules
 
@@ -554,10 +557,10 @@ and dirty command ranges inline, while preserving owned arrays only for
 multi-range publication. `ElementCommandRangeList` now keeps up to four
 element-command range records inline, preserving an owned array only for larger
 draw publications. Recorder-created `DrawCommandBatch` values now publish a
-generation token for their pooled command owner; the owner object itself can be
-reused after disposal, and stale retained-frame handoff state must match both
-owner identity and generation before it is considered fresh. The command array,
-frame resources, multi-classification publication, larger hit-target
+generation token for their typed command owner; the owner object and command
+backing array can be reused after disposal, and stale retained-frame handoff
+state must match both owner identity and generation before it is considered
+fresh. Frame resources, multi-classification publication, larger hit-target
 publication, and large element-command range publication remain explicit
 outputs.
 

@@ -3,37 +3,37 @@ using System.Runtime.CompilerServices;
 
 namespace Irix.Drawing;
 
-internal sealed class PooledArrayMemoryOwner<T> : IMemoryOwner<T>
+internal sealed class PooledDrawCommandMemoryOwner : IMemoryOwner<DrawCommand>
 {
     private const int MaxOwnerPoolSize = 64;
 
     private static readonly Lock OwnerPoolLock = new();
-    private static readonly Queue<PooledArrayMemoryOwner<T>> OwnerPool = new();
+    private static readonly Queue<PooledDrawCommandMemoryOwner> OwnerPool = new();
 
+    private DrawCommand[]? _array;
     private int _length;
-    private T[]? _array;
     private ulong _generation;
     private bool _active;
 
-    private PooledArrayMemoryOwner()
+    private PooledDrawCommandMemoryOwner()
     {
     }
 
-    public Memory<T> Memory => _active && _array is not null ? _array.AsMemory(0, _length) : Memory<T>.Empty;
+    public Memory<DrawCommand> Memory => _active && _array is not null ? _array.AsMemory(0, _length) : Memory<DrawCommand>.Empty;
 
     internal ulong Generation => _generation;
 
-    public static PooledArrayMemoryOwner<T> Rent(int minimumLength)
+    public static PooledDrawCommandMemoryOwner Rent(int minimumLength)
     {
         var owner = RentOwner();
         owner.Activate(minimumLength);
         return owner;
     }
 
-    internal Memory<T> GetMemory(ulong generation) =>
+    internal Memory<DrawCommand> GetMemory(ulong generation) =>
         _active && _generation == generation && _array is not null
             ? _array.AsMemory(0, _length)
-            : Memory<T>.Empty;
+            : Memory<DrawCommand>.Empty;
 
     internal void Dispose(ulong generation)
     {
@@ -55,7 +55,7 @@ internal sealed class PooledArrayMemoryOwner<T> : IMemoryOwner<T>
         DisposeCore();
     }
 
-    private static PooledArrayMemoryOwner<T> RentOwner()
+    private static PooledDrawCommandMemoryOwner RentOwner()
     {
         lock (OwnerPoolLock)
         {
@@ -65,18 +65,21 @@ internal sealed class PooledArrayMemoryOwner<T> : IMemoryOwner<T>
             }
         }
 
-        return new PooledArrayMemoryOwner<T>();
+        return new PooledDrawCommandMemoryOwner();
     }
 
-    private static void ReturnOwner(PooledArrayMemoryOwner<T> owner)
+    private static void ReturnOwner(PooledDrawCommandMemoryOwner owner)
     {
         lock (OwnerPoolLock)
         {
             if (OwnerPool.Count < MaxOwnerPoolSize)
             {
                 OwnerPool.Enqueue(owner);
+                return;
             }
         }
+
+        owner.ReleaseStorage();
     }
 
     private void Activate(int minimumLength)
@@ -87,20 +90,24 @@ internal sealed class PooledArrayMemoryOwner<T> : IMemoryOwner<T>
             _generation = 1;
         }
 
-        if (minimumLength <= 0)
+        if (minimumLength > 0 && (_array is null || _array.Length < minimumLength))
         {
-            _array = [];
-            _length = 0;
-            _active = true;
-            return;
+            ReleaseStorage();
+            _array = ArrayPool<DrawCommand>.Shared.Rent(minimumLength);
         }
 
-        _array = ArrayPool<T>.Shared.Rent(minimumLength);
-        _length = minimumLength;
+        _length = Math.Max(minimumLength, 0);
         _active = true;
     }
 
     private void DisposeCore()
+    {
+        _length = 0;
+        _active = false;
+        ReturnOwner(this);
+    }
+
+    private void ReleaseStorage()
     {
         var array = _array;
         _array = null;
@@ -108,9 +115,7 @@ internal sealed class PooledArrayMemoryOwner<T> : IMemoryOwner<T>
         _active = false;
         if (array is not null && array.Length > 0)
         {
-            ArrayPool<T>.Shared.Return(array, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+            ArrayPool<DrawCommand>.Shared.Return(array, RuntimeHelpers.IsReferenceOrContainsReferences<DrawCommand>());
         }
-
-        ReturnOwner(this);
     }
 }

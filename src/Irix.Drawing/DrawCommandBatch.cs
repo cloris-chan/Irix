@@ -7,7 +7,7 @@ public readonly struct DrawCommandBatch : IDisposable, IEquatable<DrawCommandBat
     private readonly ulong _ownerGeneration;
 
     public DrawCommandBatch(IMemoryOwner<DrawCommand> owner, int count)
-        : this(owner, count, owner is PooledArrayMemoryOwner<DrawCommand> pooledOwner ? pooledOwner.Generation : 0)
+        : this(owner, count, owner is PooledDrawCommandMemoryOwner pooledOwner ? pooledOwner.Generation : 0)
     {
     }
 
@@ -27,19 +27,19 @@ public readonly struct DrawCommandBatch : IDisposable, IEquatable<DrawCommandBat
     {
         get
         {
-            var memory = Owner is PooledArrayMemoryOwner<DrawCommand> pooledOwner
+            var memory = Owner is PooledDrawCommandMemoryOwner pooledOwner
                 ? pooledOwner.GetMemory(_ownerGeneration)
                 : Owner.Memory;
             return memory.Length < Count ? memory : memory[..Count];
         }
     }
 
-    internal static DrawCommandBatch FromPooled(PooledArrayMemoryOwner<DrawCommand> owner, int count) =>
+    internal static DrawCommandBatch FromPooled(PooledDrawCommandMemoryOwner owner, int count) =>
         new(owner, count, owner.Generation);
 
     public void Dispose()
     {
-        if (Owner is PooledArrayMemoryOwner<DrawCommand> pooledOwner)
+        if (Owner is PooledDrawCommandMemoryOwner pooledOwner)
         {
             pooledOwner.Dispose(_ownerGeneration);
             return;
