@@ -1883,6 +1883,19 @@ public sealed class CounterInputRouterTests
         return false;
     }
 
+    private static bool ContainsProperty(VirtualNodePropertyList properties, Func<VirtualNodeProperty, bool> predicate)
+    {
+        foreach (var property in properties)
+        {
+            if (predicate(property))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool ContainsProperty(ReadOnlySpan<VirtualNodeProperty> properties, Func<VirtualNodeProperty, bool> predicate)
     {
         foreach (var property in properties)

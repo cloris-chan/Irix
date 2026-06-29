@@ -321,10 +321,10 @@ internal static class VirtualNodeDiffer
         }
     }
 
-    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> a, ReadOnlySpan<VirtualNodeProperty> b)
+    private static bool PropertiesEqual(VirtualNodePropertyList a, VirtualNodePropertyList b)
     {
-        if (a.Length != b.Length) return false;
-        for (var i = 0; i < a.Length; i++)
+        if (a.Count != b.Count) return false;
+        for (var i = 0; i < a.Count; i++)
         {
             if (a[i] != b[i]) return false;
         }
@@ -363,12 +363,12 @@ internal static class VirtualNodeStructuralComparer
 
         var aProperties = a.Properties;
         var bProperties = b.Properties;
-        if (aProperties.Length != bProperties.Length)
+        if (aProperties.Count != bProperties.Count)
         {
             return false;
         }
 
-        for (var i = 0; i < aProperties.Length; i++)
+        for (var i = 0; i < aProperties.Count; i++)
         {
             if (aProperties[i] != bProperties[i])
             {

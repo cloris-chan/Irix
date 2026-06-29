@@ -299,12 +299,12 @@ internal static class RetainedRootMetadataPatcher
     }
 
     private static bool TryValidateDirtyProperties(
-        ReadOnlySpan<VirtualNodeProperty> retainedProperties,
-        ReadOnlySpan<VirtualNodeProperty> nextProperties,
+        VirtualNodePropertyList retainedProperties,
+        VirtualNodePropertyList nextProperties,
         out RetainedPartialApplyFallbackReason reason)
     {
         reason = RetainedPartialApplyFallbackReason.None;
-        var keyCapacity = retainedProperties.Length + nextProperties.Length;
+        var keyCapacity = retainedProperties.Count + nextProperties.Count;
         Span<VirtualPropertyKey> inlineKeys = stackalloc VirtualPropertyKey[8];
         var keyArray = keyCapacity > inlineKeys.Length
             ? new VirtualPropertyKey[keyCapacity]
@@ -337,22 +337,24 @@ internal static class RetainedRootMetadataPatcher
     }
 
     private static bool TryGetChangedPropertyKeys(
-        ReadOnlySpan<VirtualNodeProperty> retainedProperties,
-        ReadOnlySpan<VirtualNodeProperty> nextProperties,
+        VirtualNodePropertyList retainedProperties,
+        VirtualNodePropertyList nextProperties,
         scoped Span<VirtualPropertyKey> changedKeys,
         out int changedKeyCount)
     {
         changedKeyCount = 0;
-        foreach (var property in retainedProperties)
+        for (var i = 0; i < retainedProperties.Count; i++)
         {
+            var property = retainedProperties[i];
             if (property.Key != default(VirtualPropertyKey) && !Contains(changedKeys[..changedKeyCount], property.Key))
             {
                 changedKeys[changedKeyCount++] = property.Key;
             }
         }
 
-        foreach (var property in nextProperties)
+        for (var i = 0; i < nextProperties.Count; i++)
         {
+            var property = nextProperties[i];
             if (property.Key != default(VirtualPropertyKey) && !Contains(changedKeys[..changedKeyCount], property.Key))
             {
                 changedKeys[changedKeyCount++] = property.Key;
@@ -380,7 +382,7 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool TryValidateNextMetadataProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key)
+    private static bool TryValidateNextMetadataProperty(VirtualNodePropertyList properties, VirtualPropertyKey key)
     {
         if (!TryGetUniqueProperty(properties, key, out var found, out var property))
         {
@@ -401,12 +403,13 @@ internal static class RetainedRootMetadataPatcher
             && property.Value.Kind == metadata.ValueKind;
     }
 
-    private static bool TryGetUniqueProperty(ReadOnlySpan<VirtualNodeProperty> properties, VirtualPropertyKey key, out bool found, out VirtualNodeProperty property)
+    private static bool TryGetUniqueProperty(VirtualNodePropertyList properties, VirtualPropertyKey key, out bool found, out VirtualNodeProperty property)
     {
         found = false;
         property = default;
-        foreach (var candidate in properties)
+        for (var i = 0; i < properties.Count; i++)
         {
+            var candidate = properties[i];
             if (candidate.Key != key)
             {
                 continue;
@@ -424,14 +427,14 @@ internal static class RetainedRootMetadataPatcher
         return true;
     }
 
-    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> left, ReadOnlySpan<VirtualNodeProperty> right)
+    private static bool PropertiesEqual(VirtualNodePropertyList left, VirtualNodePropertyList right)
     {
-        if (left.Length != right.Length)
+        if (left.Count != right.Count)
         {
             return false;
         }
 
-        for (var i = 0; i < left.Length; i++)
+        for (var i = 0; i < left.Count; i++)
         {
             if (left[i] != right[i])
             {

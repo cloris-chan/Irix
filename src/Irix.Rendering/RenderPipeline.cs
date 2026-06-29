@@ -368,20 +368,20 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             : new DirtyNodeClassification(LayoutRebuildReason.LayoutAffecting, InvalidationKind.Layout);
     }
 
-    private static DirtyNodeClassification ClassifyPropertyChanges(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)
+    private static DirtyNodeClassification ClassifyPropertyChanges(VirtualNodePropertyList previousProperties, VirtualNodePropertyList nextProperties)
     {
         var plan = StyleDeltaPlanner.Plan(previousProperties, nextProperties);
         return new DirtyNodeClassification(plan.LayoutRebuildReason, plan.InvalidationKind);
     }
 
-    private static bool PropertiesEqual(ReadOnlySpan<VirtualNodeProperty> previousProperties, ReadOnlySpan<VirtualNodeProperty> nextProperties)
+    private static bool PropertiesEqual(VirtualNodePropertyList previousProperties, VirtualNodePropertyList nextProperties)
     {
-        if (previousProperties.Length != nextProperties.Length)
+        if (previousProperties.Count != nextProperties.Count)
         {
             return false;
         }
 
-        for (var i = 0; i < previousProperties.Length; i++)
+        for (var i = 0; i < previousProperties.Count; i++)
         {
             if (previousProperties[i] != nextProperties[i])
             {

@@ -3918,7 +3918,7 @@ public sealed partial class ProgramDiagnosticsTests
                     LabelTextBytes: 12,
                     LabelNodeBytes: 0,
                     ChildrenArrayBytes: 30,
-                    PropertyArrayBytes: 48,
+                    PropertyListBytes: 48,
                     ButtonNodeBytes: 0,
                     MeasuredBytes: 90)),
             SnapshotAttribution: new TextBufferSnapshotAllocationAttribution(
@@ -3947,7 +3947,7 @@ public sealed partial class ProgramDiagnosticsTests
             "Button allocation processWide: "
             + "actionProperty=0 bytes (0/frame), labelText=12 bytes (4/frame), "
             + "labelNode=0 bytes (0/frame), childrenArray=30 bytes (10/frame), "
-            + "propertyArray=48 bytes (16/frame), buttonNode=0 bytes (0/frame), "
+            + "propertyList=48 bytes (16/frame), buttonNode=0 bytes (0/frame), "
             + "detailGap=0 bytes (0/frame), measuredTotal=90 bytes (30/frame)",
             buttonSummary);
     }
@@ -4036,7 +4036,7 @@ public sealed partial class ProgramDiagnosticsTests
                     LabelTextBytes: 0,
                     LabelNodeBytes: 0,
                     ChildrenArrayBytes: 120,
-                    PropertyArrayBytes: 90,
+                    PropertyListBytes: 90,
                     ButtonNodeBytes: 0,
                     MeasuredBytes: 210)));
         var translateAttribution = new WindowTranslateAllocationAttribution(
@@ -4089,7 +4089,7 @@ public sealed partial class ProgramDiagnosticsTests
                     LabelTextBytes: 0,
                     LabelNodeBytes: 0,
                     ChildrenArrayBytes: 120,
-                    PropertyArrayBytes: 90,
+                    PropertyListBytes: 90,
                     ButtonNodeBytes: 0,
                     MeasuredBytes: 210)));
         var translateAttribution = new WindowTranslateAllocationAttribution(

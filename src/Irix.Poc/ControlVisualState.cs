@@ -88,20 +88,17 @@ internal static class ControlNodeBuilder
         }
 
         CountButtonProperties(properties, out var containerCount, out var rectangleCount, out var textCount);
-        var containerProperties = CreateButtonPropertyArray(properties, containerCount, ButtonPropertyTarget.Container);
-        var rectangleProperties = CreateButtonPropertyArray(properties, rectangleCount, ButtonPropertyTarget.Rectangle);
-        var textProperties = CreateButtonPropertyArray(properties, textCount, ButtonPropertyTarget.Text);
-        var children = CreateButtonChildrenFromOwnedPropertyArraysUnsafe(label, rectangleProperties, textProperties);
-        return VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container, key, default, containerProperties, children);
+        var containerProperties = CreateButtonPropertyList(properties, containerCount, ButtonPropertyTarget.Container);
+        var rectangleProperties = CreateButtonPropertyList(properties, rectangleCount, ButtonPropertyTarget.Rectangle);
+        var textProperties = CreateButtonPropertyList(properties, textCount, ButtonPropertyTarget.Text);
+        var children = CreateButtonChildren(label, rectangleProperties, textProperties);
+        return VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, key, default, containerProperties, children);
     }
 
-    /// <summary>
-    /// Takes ownership of validated/frozen content-node property arrays.
-    /// </summary>
-    internal static VirtualNode[] CreateButtonChildrenFromOwnedPropertyArraysUnsafe(
+    internal static VirtualNode[] CreateButtonChildren(
         TextContentResource label,
-        VirtualNodeProperty[] rectangleProperties,
-        VirtualNodeProperty[] textProperties)
+        VirtualNodePropertyList rectangleProperties,
+        VirtualNodePropertyList textProperties)
     {
         if (label.IsNone)
         {
@@ -110,18 +107,18 @@ internal static class ControlNodeBuilder
 
         return VirtualNode.CreateOwnedChildren(
         [
-            VirtualNode.CreateFromOwnedArraysUnsafe(
+            new VirtualNode(
                 VirtualNodeKind.Content,
                 NodeKey.None,
                 ContentResource.Rectangle,
                 rectangleProperties,
-                []),
-            VirtualNode.CreateFromOwnedArraysUnsafe(
+                ReadOnlySpan<VirtualNode>.Empty),
+            new VirtualNode(
                 VirtualNodeKind.Content,
                 NodeKey.None,
                 ContentResource.FromText(label),
                 textProperties,
-                [])
+                ReadOnlySpan<VirtualNode>.Empty)
         ]);
     }
 
@@ -152,16 +149,41 @@ internal static class ControlNodeBuilder
         }
     }
 
-    internal static VirtualNodeProperty[] CreateButtonPropertyArray(
+    internal static VirtualNodePropertyList CreateButtonPropertyList(
         ReadOnlySpan<VirtualNodeProperty> properties,
         int count,
         ButtonPropertyTarget target)
     {
         if (count == 0)
         {
-            return [];
+            return VirtualNodePropertyList.Empty;
         }
 
+        const int StackPropertyLimit = 8;
+        if (count > StackPropertyLimit)
+        {
+            return CreateLargeButtonPropertyList(properties, count, target);
+        }
+
+        Span<VirtualNodeProperty> result = stackalloc VirtualNodeProperty[count];
+        var writeIndex = 0;
+        for (var i = 0; i < properties.Length; i++)
+        {
+            var property = properties[i];
+            if (GetButtonPropertyTarget(property.Key) == target)
+            {
+                result[writeIndex++] = property;
+            }
+        }
+
+        return VirtualNodePropertySet.Create(target == ButtonPropertyTarget.Container ? VirtualNodeKind.Container : VirtualNodeKind.Content, result);
+    }
+
+    private static VirtualNodePropertyList CreateLargeButtonPropertyList(
+        ReadOnlySpan<VirtualNodeProperty> properties,
+        int count,
+        ButtonPropertyTarget target)
+    {
         var result = new VirtualNodeProperty[count];
         var writeIndex = 0;
         for (var i = 0; i < properties.Length; i++)
@@ -173,8 +195,7 @@ internal static class ControlNodeBuilder
             }
         }
 
-        VirtualNodePropertySet.Validate(target == ButtonPropertyTarget.Container ? VirtualNodeKind.Container : VirtualNodeKind.Content, result);
-        return result;
+        return VirtualNodePropertyList.FromOwnedArray(target == ButtonPropertyTarget.Container ? VirtualNodeKind.Container : VirtualNodeKind.Content, result);
     }
 
     private static ButtonPropertyTarget GetButtonPropertyTarget(VirtualPropertyKey key)

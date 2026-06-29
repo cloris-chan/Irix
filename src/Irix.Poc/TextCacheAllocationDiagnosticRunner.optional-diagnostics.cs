@@ -202,7 +202,7 @@ internal static class TextCacheAllocationDiagnosticRunner
             + $"labelText={attribution.LabelTextBytes} bytes ({PerFrame(attribution.LabelTextBytes, divisor)}/frame), "
             + $"labelNode={attribution.LabelNodeBytes} bytes ({PerFrame(attribution.LabelNodeBytes, divisor)}/frame), "
             + $"childrenArray={attribution.ChildrenArrayBytes} bytes ({PerFrame(attribution.ChildrenArrayBytes, divisor)}/frame), "
-            + $"propertyArray={attribution.PropertyArrayBytes} bytes ({PerFrame(attribution.PropertyArrayBytes, divisor)}/frame), "
+            + $"propertyList={attribution.PropertyListBytes} bytes ({PerFrame(attribution.PropertyListBytes, divisor)}/frame), "
             + $"buttonNode={attribution.ButtonNodeBytes} bytes ({PerFrame(attribution.ButtonNodeBytes, divisor)}/frame), "
             + $"detailGap={attribution.DetailGapBytes} bytes ({PerFrame(attribution.DetailGapBytes, divisor)}/frame), "
             + $"measuredTotal={attribution.MeasuredBytes} bytes ({PerFrame(attribution.MeasuredBytes, divisor)}/frame)";
@@ -267,7 +267,7 @@ internal static class TextCacheAllocationDiagnosticRunner
                 UpdateLargest("tree.buildRoot.button.labelText", buttonAttribution.LabelTextBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
                 UpdateLargest("tree.buildRoot.button.labelNode", buttonAttribution.LabelNodeBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
                 UpdateLargest("tree.buildRoot.button.childrenArray", buttonAttribution.ChildrenArrayBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
-                UpdateLargest("tree.buildRoot.button.propertyArray", buttonAttribution.PropertyArrayBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+                UpdateLargest("tree.buildRoot.button.propertyList", buttonAttribution.PropertyListBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
                 UpdateLargest("tree.buildRoot.button.buttonNode", buttonAttribution.ButtonNodeBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
             }
 
@@ -422,18 +422,18 @@ internal static class TextCacheAllocationDiagnosticRunner
         ReadOnlySpan<VirtualNodeProperty> properties = [actionProperty];
         ControlNodeBuilder.CountButtonProperties(properties, out var containerCount, out var rectangleCount, out var textCount);
 
-        var beforePropertyArray = GetAllocatedBytes(measureAllocation);
-        var propertyArray = ControlNodeBuilder.CreateButtonPropertyArray(properties, containerCount, ControlNodeBuilder.ButtonPropertyTarget.Container);
-        var rectanglePropertyArray = ControlNodeBuilder.CreateButtonPropertyArray(properties, rectangleCount, ControlNodeBuilder.ButtonPropertyTarget.Rectangle);
-        var textPropertyArray = ControlNodeBuilder.CreateButtonPropertyArray(properties, textCount, ControlNodeBuilder.ButtonPropertyTarget.Text);
-        attribution = attribution.WithPropertyArray(AllocatedDelta(measureAllocation, beforePropertyArray));
+        var beforePropertyList = GetAllocatedBytes(measureAllocation);
+        var propertyList = ControlNodeBuilder.CreateButtonPropertyList(properties, containerCount, ControlNodeBuilder.ButtonPropertyTarget.Container);
+        var rectanglePropertyList = ControlNodeBuilder.CreateButtonPropertyList(properties, rectangleCount, ControlNodeBuilder.ButtonPropertyTarget.Rectangle);
+        var textPropertyList = ControlNodeBuilder.CreateButtonPropertyList(properties, textCount, ControlNodeBuilder.ButtonPropertyTarget.Text);
+        attribution = attribution.WithPropertyList(AllocatedDelta(measureAllocation, beforePropertyList));
 
         var beforeChildrenArray = GetAllocatedBytes(measureAllocation);
-        var childArray = ControlNodeBuilder.CreateButtonChildrenFromOwnedPropertyArraysUnsafe(labelContent, rectanglePropertyArray, textPropertyArray);
+        var childArray = ControlNodeBuilder.CreateButtonChildren(labelContent, rectanglePropertyList, textPropertyList);
         attribution = attribution.WithChildrenArray(AllocatedDelta(measureAllocation, beforeChildrenArray));
 
         var beforeButtonNode = GetAllocatedBytes(measureAllocation);
-        var button = VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container, key, default, propertyArray, childArray);
+        var button = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, key, default, propertyList, childArray);
         attribution = attribution.WithButtonNode(AllocatedDelta(measureAllocation, beforeButtonNode));
         return button;
     }
@@ -584,7 +584,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         long LabelTextBytes,
         long LabelNodeBytes,
         long ChildrenArrayBytes,
-        long PropertyArrayBytes,
+        long PropertyListBytes,
         long ButtonNodeBytes,
         long MeasuredBytes) : IEquatable<ButtonAllocationAttribution>
     {
@@ -592,10 +592,10 @@ internal static class TextCacheAllocationDiagnosticRunner
         public long LabelTextBytes { get; } = LabelTextBytes;
         public long LabelNodeBytes { get; } = LabelNodeBytes;
         public long ChildrenArrayBytes { get; } = ChildrenArrayBytes;
-        public long PropertyArrayBytes { get; } = PropertyArrayBytes;
+        public long PropertyListBytes { get; } = PropertyListBytes;
         public long ButtonNodeBytes { get; } = ButtonNodeBytes;
         public long MeasuredBytes { get; } = MeasuredBytes;
-        public long DetailBytes => ActionPropertyBytes + LabelTextBytes + LabelNodeBytes + ChildrenArrayBytes + PropertyArrayBytes + ButtonNodeBytes;
+        public long DetailBytes => ActionPropertyBytes + LabelTextBytes + LabelNodeBytes + ChildrenArrayBytes + PropertyListBytes + ButtonNodeBytes;
         public long DetailGapBytes => MeasuredBytes - DetailBytes;
 
         public ButtonAllocationAttribution Add(ButtonAllocationAttribution other) =>
@@ -604,30 +604,30 @@ internal static class TextCacheAllocationDiagnosticRunner
                 LabelTextBytes + other.LabelTextBytes,
                 LabelNodeBytes + other.LabelNodeBytes,
                 ChildrenArrayBytes + other.ChildrenArrayBytes,
-                PropertyArrayBytes + other.PropertyArrayBytes,
+                PropertyListBytes + other.PropertyListBytes,
                 ButtonNodeBytes + other.ButtonNodeBytes,
                 MeasuredBytes + other.MeasuredBytes);
 
         public ButtonAllocationAttribution WithActionProperty(long bytes) =>
-            new(ActionPropertyBytes + bytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyArrayBytes, ButtonNodeBytes, MeasuredBytes);
+            new(ActionPropertyBytes + bytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyListBytes, ButtonNodeBytes, MeasuredBytes);
 
         public ButtonAllocationAttribution WithLabelText(long bytes) =>
-            new(ActionPropertyBytes, LabelTextBytes + bytes, LabelNodeBytes, ChildrenArrayBytes, PropertyArrayBytes, ButtonNodeBytes, MeasuredBytes);
+            new(ActionPropertyBytes, LabelTextBytes + bytes, LabelNodeBytes, ChildrenArrayBytes, PropertyListBytes, ButtonNodeBytes, MeasuredBytes);
 
         public ButtonAllocationAttribution WithLabelNode(long bytes) =>
-            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes + bytes, ChildrenArrayBytes, PropertyArrayBytes, ButtonNodeBytes, MeasuredBytes);
+            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes + bytes, ChildrenArrayBytes, PropertyListBytes, ButtonNodeBytes, MeasuredBytes);
 
         public ButtonAllocationAttribution WithChildrenArray(long bytes) =>
-            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes + bytes, PropertyArrayBytes, ButtonNodeBytes, MeasuredBytes);
+            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes + bytes, PropertyListBytes, ButtonNodeBytes, MeasuredBytes);
 
-        public ButtonAllocationAttribution WithPropertyArray(long bytes) =>
-            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyArrayBytes + bytes, ButtonNodeBytes, MeasuredBytes);
+        public ButtonAllocationAttribution WithPropertyList(long bytes) =>
+            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyListBytes + bytes, ButtonNodeBytes, MeasuredBytes);
 
         public ButtonAllocationAttribution WithButtonNode(long bytes) =>
-            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyArrayBytes, ButtonNodeBytes + bytes, MeasuredBytes);
+            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyListBytes, ButtonNodeBytes + bytes, MeasuredBytes);
 
         public ButtonAllocationAttribution WithMeasured(long bytes) =>
-            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyArrayBytes, ButtonNodeBytes, MeasuredBytes + bytes);
+            new(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyListBytes, ButtonNodeBytes, MeasuredBytes + bytes);
 
         public bool Equals(ButtonAllocationAttribution other)
         {
@@ -635,14 +635,14 @@ internal static class TextCacheAllocationDiagnosticRunner
                 && LabelTextBytes == other.LabelTextBytes
                 && LabelNodeBytes == other.LabelNodeBytes
                 && ChildrenArrayBytes == other.ChildrenArrayBytes
-                && PropertyArrayBytes == other.PropertyArrayBytes
+                && PropertyListBytes == other.PropertyListBytes
                 && ButtonNodeBytes == other.ButtonNodeBytes
                 && MeasuredBytes == other.MeasuredBytes;
         }
 
         public override bool Equals(object? obj) => obj is ButtonAllocationAttribution other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyArrayBytes, ButtonNodeBytes, MeasuredBytes);
+        public override int GetHashCode() => HashCode.Combine(ActionPropertyBytes, LabelTextBytes, LabelNodeBytes, ChildrenArrayBytes, PropertyListBytes, ButtonNodeBytes, MeasuredBytes);
     }
 }
 #endif

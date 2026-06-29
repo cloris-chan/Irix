@@ -195,17 +195,17 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2158120 bytes | 11989 B/frame | render 10877 B/frame, tree 837 B/frame, diff 180 B/frame, translate 136 B/frame |
-| Warm scroll | 233896 bytes | 1299 B/frame | tree 820 B/frame, diff 273 B/frame, translate 136 B/frame, render 136 B/frame |
-| Scale change | 232944 bytes | 1294 B/frame | tree 956 B/frame, diff 182 B/frame, render 136 B/frame, translate 91 B/frame |
+| Static | 2146440 bytes | 11924 B/frame | render 10877 B/frame, tree 746 B/frame, translate 182 B/frame, diff 136 B/frame |
+| Warm scroll | 231016 bytes | 1283 B/frame | tree 774 B/frame, diff 318 B/frame, render 227 B/frame, translate 45 B/frame |
+| Scale change | 237768 bytes | 1320 B/frame | tree 956 B/frame, diff 182 B/frame, render 272 B/frame, translate 0 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
 | `tree.buildRoot.container` | 273 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
-| `tree.buildRoot.button.childrenArray` | 227 | Button lowering still publishes per-node child arrays in the measured synthetic path. |
-| `tree.buildRoot.button.propertyArray` | 227 | Remaining measured control/tree publication cost in the synthetic button path. |
+| `tree.buildRoot.button.childrenArray` | 364 | Button lowering still publishes per-node child arrays in the measured synthetic path. |
+| `tree.buildRoot.button.propertyList` | 0 | Button control metadata now publishes through compact `VirtualNodePropertyList` storage instead of per-button property arrays. |
 | `drawRecord` | 0 | Recorder-owned command batches now reuse pooled owner shells through a generation token; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 0 | Common hit targets are retained through `HitTargetList` without publishing an array; clean render requests reuse the retained value publication, and dirty retained input snapshots patch common hit-target metadata inline. |
 | `layout.elementsArray` | 0 | Common layout elements publish through `LayoutElementList` without a retained array. |
@@ -409,14 +409,15 @@ Acceptance:
 
 Status: production slices implemented. Button/control lowering now writes action
 and control-state style properties through a stack-backed bundle path, partitions
-button template properties without three full-size temporary arrays, and freezes
-only the final container/content property arrays plus the two-child publication
-array. `CounterApplication` root construction now fills the final owned child
-array directly instead of staging scroll rows in a temporary array before root
+button template properties without three full-size temporary arrays, publishes
+control metadata through compact `VirtualNodePropertyList` storage, and freezes
+only non-compact property publications plus the two-child publication array.
+`CounterApplication` root construction now fills the final owned child array
+directly instead of staging scroll rows in a temporary array before root
 publication. The semantic style bridge remains in use through
 `StyleDeclarationMapper`.
 
-Remaining hot signal: button lowering allocates child/property publication arrays
+Remaining hot signal: button lowering still allocates child publication arrays
 after the control is split into a container plus rectangle/text content nodes.
 Follow-up slices should reduce retained publication arrays structurally without
 changing the IR semantics.

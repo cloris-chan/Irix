@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Reflection;
 using Irix.Drawing;
 using Irix.Platform;
+using Irix.Poc;
 using Irix.Rendering;
 using Xunit;
 
@@ -230,6 +231,46 @@ public class TypedIdAllocationGuardTests
 
         Assert.Equal(120, node.Properties[0].Value.GetRequiredNumber());
         Assert.Equal(48, node.Properties[1].Value.GetRequiredNumber());
+    }
+
+    [Fact]
+    public void VirtualNodeFactory_control_metadata_property_publication_does_not_allocate()
+    {
+        _ = BuildActionPropertyNode(1);
+        _ = BuildControlBundlePropertyNode(1);
+
+        const int iterations = 1_000;
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var actionNode = default(VirtualNode);
+        var bundleNode = default(VirtualNode);
+        for (var i = 0; i < iterations; i++)
+        {
+            actionNode = BuildActionPropertyNode(i + 1);
+            bundleNode = BuildControlBundlePropertyNode(i + 1);
+        }
+
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        GC.KeepAlive(actionNode);
+        GC.KeepAlive(bundleNode);
+        Assert.Equal(0, allocated);
+    }
+
+    private static VirtualNode BuildActionPropertyNode(int index)
+    {
+        Span<VirtualNodeProperty> storage = stackalloc VirtualNodeProperty[1];
+        var builder = new VirtualNodePropertyListBuilder(storage);
+        builder.AddAction(new ActionId((uint)index));
+        return VirtualNodeFactory.Container(new NodeKey((uint)index), builder.Written, ReadOnlySpan<VirtualNode>.Empty);
+    }
+
+    private static VirtualNode BuildControlBundlePropertyNode(int index)
+    {
+        Span<VirtualNodeProperty> storage = stackalloc VirtualNodeProperty[4];
+        ButtonPropertyBundle.Write(
+            new ActionId((uint)index),
+            new ControlVisualState(IsHovered: (index & 1) == 0, IsPressed: (index & 2) == 0, IsFocused: (index & 4) == 0),
+            storage);
+        return VirtualNodeFactory.Container(new NodeKey((uint)(index + 1_000)), storage, ReadOnlySpan<VirtualNode>.Empty);
     }
 
     [Fact]
@@ -1569,15 +1610,20 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
-    public void VirtualNode_exposes_span_snapshots_without_readonly_list_wrappers()
+    public void VirtualNode_exposes_typed_property_publication_without_readonly_list_wrappers()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
 
-        Assert.Contains("public ReadOnlySpan<VirtualNodeProperty> Properties", source);
+        Assert.Contains("internal readonly struct VirtualNodePropertyList", source);
+        Assert.Contains("CompactKindAction", source);
+        Assert.Contains("CompactKindControlBundle", source);
+        Assert.Contains("HoveredBit", source);
+        Assert.Contains("public VirtualNodePropertyList Properties", source);
         Assert.Contains("public ReadOnlySpan<VirtualNode> Children", source);
-        Assert.DoesNotContain("IReadOnlyList<VirtualNodeProperty>", source);
+        Assert.DoesNotContain("private readonly VirtualNodeProperty _property", source);
         Assert.DoesNotContain("IReadOnlyList<VirtualNode>", source);
         Assert.DoesNotContain("Array.AsReadOnly", source);
+        Assert.DoesNotContain("public ReadOnlySpan<VirtualNodeProperty> Properties", source);
         Assert.DoesNotContain("_propertiesView", source);
         Assert.DoesNotContain("_childrenView", source);
     }
@@ -1599,12 +1645,16 @@ public class TypedIdAllocationGuardTests
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "ControlVisualState.cs"));
 
         Assert.Contains("CountButtonProperties", source);
-        Assert.Contains("CreateButtonPropertyArray", source);
-        Assert.Contains("CreateButtonChildrenFromOwnedPropertyArraysUnsafe", source);
-        Assert.Contains("VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container", source);
+        Assert.Contains("CreateButtonPropertyList", source);
+        Assert.Contains("CreateButtonChildren", source);
+        Assert.Contains("VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container", source);
         Assert.Contains("StyleDeclarationMapper.WriteVirtualNodeProperties", source);
+        Assert.DoesNotContain("CreateButtonPropertyArray", source);
+        Assert.DoesNotContain("CreateButtonChildrenFromOwnedPropertyArraysUnsafe", source);
         Assert.DoesNotContain("SplitButtonProperties", source);
         Assert.DoesNotContain("private static VirtualNodeProperty[] Trim", source);
+        Assert.Contains("CreateLargeButtonPropertyList", source);
+        Assert.Contains("const int StackPropertyLimit = 8", source);
         Assert.DoesNotContain("var container = new VirtualNodeProperty[properties.Length]", source);
         Assert.DoesNotContain("var rectangle = new VirtualNodeProperty[properties.Length]", source);
         Assert.DoesNotContain("var text = new VirtualNodeProperty[properties.Length]", source);

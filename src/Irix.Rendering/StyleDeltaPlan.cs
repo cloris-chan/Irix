@@ -54,6 +54,11 @@ internal static class StyleDeltaPlanner
         return Plan(BuildChangeSet(previousProperties, nextProperties));
     }
 
+    public static StyleDeltaPlan Plan(VirtualNodePropertyList previousProperties, VirtualNodePropertyList nextProperties)
+    {
+        return Plan(BuildChangeSet(previousProperties, nextProperties));
+    }
+
     public static StyleDeltaPlan Plan(PropertyChangeSet changes)
     {
         var effects = changes.Effects;
@@ -112,6 +117,32 @@ internal static class StyleDeltaPlanner
         return changeSet;
     }
 
+    internal static PropertyChangeSet BuildChangeSet(VirtualNodePropertyList previousProperties, VirtualNodePropertyList nextProperties)
+    {
+        var changeSet = default(PropertyChangeSet);
+
+        for (var i = 0; i < previousProperties.Count; i++)
+        {
+            var property = previousProperties[i];
+            if (!TryFindProperty(nextProperties, property.Key, out var nextProperty)
+                || property.Value != nextProperty.Value)
+            {
+                changeSet = PropertyChangeSet.AddKey(changeSet, property.Key);
+            }
+        }
+
+        for (var i = 0; i < nextProperties.Count; i++)
+        {
+            var property = nextProperties[i];
+            if (!TryFindProperty(previousProperties, property.Key, out _))
+            {
+                changeSet = PropertyChangeSet.AddKey(changeSet, property.Key);
+            }
+        }
+
+        return changeSet;
+    }
+
     private static InvalidationKind ResolveInvalidationKind(StyleEffect effects, StyleDeltaWork work)
     {
         if ((effects & StyleEffect.Layout) != 0)
@@ -141,6 +172,22 @@ internal static class StyleDeltaPlanner
     {
         foreach (var candidate in properties)
         {
+            if (candidate.Key == key)
+            {
+                property = candidate;
+                return true;
+            }
+        }
+
+        property = default;
+        return false;
+    }
+
+    private static bool TryFindProperty(VirtualNodePropertyList properties, VirtualPropertyKey key, out VirtualNodeProperty property)
+    {
+        for (var i = 0; i < properties.Count; i++)
+        {
+            var candidate = properties[i];
             if (candidate.Key == key)
             {
                 property = candidate;

@@ -465,7 +465,7 @@ internal readonly ref struct VirtualNodeReader
     public VirtualNodeKind Kind => _node.Kind;
     public NodeKey Key => _node.Key;
     public ContentResource Content => _node.Content;
-    public ReadOnlySpan<VirtualNodeProperty> Properties => _node.Properties;
+    public VirtualNodePropertyList Properties => _node.Properties;
     public ReadOnlySpan<VirtualNode> Children => _node.Children;
     public int ChildCount => _node.Children.Length;
 
@@ -513,7 +513,7 @@ internal readonly ref struct VirtualNodeReader
 
 internal readonly struct VirtualNode
 {
-    private readonly VirtualNodeProperty[]? _properties;
+    private readonly VirtualNodePropertyList _properties;
     private readonly VirtualNode[]? _children;
 
     public VirtualNode(
@@ -526,20 +526,29 @@ internal readonly struct VirtualNode
     {
     }
 
+    internal VirtualNode(
+        VirtualNodeKind kind,
+        NodeKey key,
+        ContentResource content,
+        VirtualNodePropertyList properties,
+        scoped ReadOnlySpan<VirtualNode> children)
+        : this(kind, key, content, properties, CreateChildren(children))
+    {
+    }
+
     private VirtualNode(
         VirtualNodeKind kind,
         NodeKey key,
         ContentResource content,
-        VirtualNodeProperty[] properties,
+        VirtualNodePropertyList properties,
         VirtualNode[] children)
     {
-        ArgumentNullException.ThrowIfNull(properties);
         ArgumentNullException.ThrowIfNull(children);
 
         Kind = kind;
         Key = key;
         Content = content;
-        _properties = properties.Length == 0 ? null : properties;
+        _properties = properties;
         _children = children.Length == 0 ? null : children;
         ValidateNodeShape(kind, key, content, properties, children);
     }
@@ -547,11 +556,11 @@ internal readonly struct VirtualNode
     public VirtualNodeKind Kind { get; }
     public NodeKey Key { get; }
     public ContentResource Content { get; }
-    public ReadOnlySpan<VirtualNodeProperty> Properties => _properties is null ? ReadOnlySpan<VirtualNodeProperty>.Empty : _properties;
+    public VirtualNodePropertyList Properties => _properties;
     public ReadOnlySpan<VirtualNode> Children => _children is null ? ReadOnlySpan<VirtualNode>.Empty : _children;
 
     /// <summary>
-    /// Takes ownership of already validated/frozen arrays without copying them again.
+    /// Takes ownership of already validated/frozen arrays without copying large retained publications again.
     /// Callers must not mutate the arrays after this call.
     /// </summary>
     internal static VirtualNode CreateFromOwnedArraysUnsafe(
@@ -559,6 +568,30 @@ internal readonly struct VirtualNode
         NodeKey key,
         ContentResource content,
         VirtualNodeProperty[] properties,
+        VirtualNode[] children) =>
+        new(kind, key, content, VirtualNodePropertyList.FromOwnedArray(kind, properties), children);
+
+    /// <summary>
+    /// Takes ownership of already frozen child storage while publishing properties through the typed value list.
+    /// Callers must not mutate the child array after this call.
+    /// </summary>
+    internal static VirtualNode CreateFromOwnedChildrenUnsafe(
+        VirtualNodeKind kind,
+        NodeKey key,
+        ContentResource content,
+        scoped ReadOnlySpan<VirtualNodeProperty> properties,
+        VirtualNode[] children) =>
+        new(kind, key, content, VirtualNodePropertySet.Create(kind, properties), children);
+
+    /// <summary>
+    /// Takes ownership of already frozen child storage while retaining an existing property publication.
+    /// Callers must not mutate the child array after this call.
+    /// </summary>
+    internal static VirtualNode CreateFromOwnedChildrenUnsafe(
+        VirtualNodeKind kind,
+        NodeKey key,
+        ContentResource content,
+        VirtualNodePropertyList properties,
         VirtualNode[] children) =>
         new(kind, key, content, properties, children);
 
@@ -572,7 +605,7 @@ internal readonly struct VirtualNode
         VirtualNodeKind kind,
         NodeKey key,
         ContentResource content,
-        VirtualNodeProperty[] properties,
+        VirtualNodePropertyList properties,
         VirtualNode[] children)
     {
         switch (kind)
@@ -580,7 +613,7 @@ internal readonly struct VirtualNode
             case VirtualNodeKind.None:
                 if (key != NodeKey.None
                     || content != ContentResource.None
-                    || properties.Length != 0
+                    || properties.Count != 0
                     || children.Length != 0)
                 {
                     throw new ArgumentException("None nodes must be empty.");
@@ -614,6 +647,247 @@ internal readonly struct VirtualNode
         }
     }
 
+}
+
+internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProperty>, IEquatable<VirtualNodePropertyList>
+{
+    private readonly VirtualNodeProperty[]? _items;
+    private readonly uint _actionIdValue;
+    private readonly byte _compactKind;
+    private readonly byte _controlStateBits;
+
+    private const byte CompactKindNone = 0;
+    private const byte CompactKindAction = 1;
+    private const byte CompactKindControlBundle = 2;
+    private const byte HoveredBit = 1;
+    private const byte PressedBit = 2;
+    private const byte FocusedBit = 4;
+
+    private VirtualNodePropertyList(
+        VirtualNodeProperty[]? items,
+        uint actionIdValue,
+        byte compactKind,
+        byte controlStateBits)
+    {
+        _items = items;
+        _actionIdValue = actionIdValue;
+        _compactKind = compactKind;
+        _controlStateBits = controlStateBits;
+    }
+
+    public int Count => _items is not null ? _items.Length : _compactKind == CompactKindAction ? 1 : _compactKind == CompactKindControlBundle ? 4 : 0;
+
+    public int Length => Count;
+
+    public bool IsEmpty => Count == 0;
+
+    public VirtualNodeProperty this[int index]
+    {
+        get
+        {
+            if (_items is not null)
+            {
+                if ((uint)index >= (uint)_items.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(index));
+                }
+
+                return _items[index];
+            }
+
+            if (_compactKind == CompactKindAction)
+            {
+                if (index != 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(index));
+                }
+
+                return VirtualNodeProperty.Action(new ActionId(_actionIdValue));
+            }
+
+            if (_compactKind == CompactKindControlBundle)
+            {
+                return index switch
+                {
+                    0 => VirtualNodeProperty.Action(new ActionId(_actionIdValue)),
+                    1 => VirtualNodeProperty.Hovered((_controlStateBits & HoveredBit) != 0),
+                    2 => VirtualNodeProperty.Pressed((_controlStateBits & PressedBit) != 0),
+                    3 => VirtualNodeProperty.Focused((_controlStateBits & FocusedBit) != 0),
+                    _ => throw new ArgumentOutOfRangeException(nameof(index))
+                };
+            }
+
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+    }
+
+    public static VirtualNodePropertyList Empty => default;
+
+    internal static VirtualNodePropertyList FromOwnedArray(VirtualNodeKind kind, VirtualNodeProperty[] properties)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        VirtualNodePropertySet.Validate(kind, properties);
+        return TryCreateCompact(properties, out var compact)
+            ? compact
+            : new VirtualNodePropertyList(properties, 0, CompactKindNone, 0);
+    }
+
+    public static VirtualNodePropertyList CopyFrom(VirtualNodeKind kind, scoped ReadOnlySpan<VirtualNodeProperty> properties)
+    {
+        VirtualNodePropertySet.Validate(kind, properties);
+        return CopyValidated(properties);
+    }
+
+    private static VirtualNodePropertyList CopyValidated(scoped ReadOnlySpan<VirtualNodeProperty> properties)
+    {
+        if (properties.IsEmpty)
+        {
+            return Empty;
+        }
+
+        return TryCreateCompact(properties, out var compact)
+            ? compact
+            : new VirtualNodePropertyList(properties.ToArray(), 0, CompactKindNone, 0);
+    }
+
+    private static bool TryCreateCompact(ReadOnlySpan<VirtualNodeProperty> properties, out VirtualNodePropertyList compact)
+    {
+        compact = default;
+        if (properties.Length == 1
+            && properties[0].Key == VirtualPropertyKey.ActionId
+            && properties[0].Value.TryGetActionId(out var actionId)
+            && !actionId.IsNone)
+        {
+            compact = new VirtualNodePropertyList(null, actionId.Value, CompactKindAction, 0);
+            return true;
+        }
+
+        if (properties.Length != 4
+            || properties[0].Key != VirtualPropertyKey.ActionId
+            || properties[1].Key != VirtualPropertyKey.IsHovered
+            || properties[2].Key != VirtualPropertyKey.IsPressed
+            || properties[3].Key != VirtualPropertyKey.IsFocused
+            || !properties[0].Value.TryGetActionId(out actionId)
+            || actionId.IsNone
+            || !properties[1].Value.TryGetBoolean(out var isHovered)
+            || !properties[2].Value.TryGetBoolean(out var isPressed)
+            || !properties[3].Value.TryGetBoolean(out var isFocused))
+        {
+            return false;
+        }
+
+        var stateBits = (byte)((isHovered ? HoveredBit : 0) | (isPressed ? PressedBit : 0) | (isFocused ? FocusedBit : 0));
+        compact = new VirtualNodePropertyList(null, actionId.Value, CompactKindControlBundle, stateBits);
+        return true;
+    }
+
+    public VirtualNodeProperty[] ToArray()
+    {
+        var count = Count;
+        if (count == 0)
+        {
+            return [];
+        }
+
+        var copy = new VirtualNodeProperty[count];
+        CopyTo(copy);
+        return copy;
+    }
+
+    public void CopyTo(Span<VirtualNodeProperty> destination)
+    {
+        var count = Count;
+        if (destination.Length < count)
+        {
+            throw new ArgumentException("Destination span is too small.", nameof(destination));
+        }
+
+        if (_items is not null)
+        {
+            _items.AsSpan(0, _items.Length).CopyTo(destination);
+            return;
+        }
+
+        for (var i = 0; i < count; i++)
+        {
+            destination[i] = this[i];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    IEnumerator<VirtualNodeProperty> IEnumerable<VirtualNodeProperty>.GetEnumerator() => GetEnumerator();
+
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(VirtualNodePropertyList other)
+    {
+        if (Count != other.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < Count; i++)
+        {
+            if (this[i] != other[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is VirtualNodePropertyList other && Equals(other);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        for (var i = 0; i < Count; i++)
+        {
+            hash.Add(this[i]);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    public static bool operator ==(VirtualNodePropertyList left, VirtualNodePropertyList right) => left.Equals(right);
+
+    public static bool operator !=(VirtualNodePropertyList left, VirtualNodePropertyList right) => !left.Equals(right);
+
+    public struct Enumerator : IEnumerator<VirtualNodeProperty>
+    {
+        private readonly VirtualNodePropertyList _properties;
+        private int _index;
+
+        internal Enumerator(VirtualNodePropertyList properties)
+        {
+            _properties = properties;
+            _index = -1;
+        }
+
+        public readonly VirtualNodeProperty Current => _properties[_index];
+
+        readonly object System.Collections.IEnumerator.Current => Current;
+
+        public bool MoveNext()
+        {
+            var next = _index + 1;
+            if ((uint)next >= (uint)_properties.Count)
+            {
+                return false;
+            }
+
+            _index = next;
+            return true;
+        }
+
+        public void Reset() => _index = -1;
+
+        public readonly void Dispose()
+        {
+        }
+    }
 }
 
 internal ref struct VirtualNodePropertyListBuilder
@@ -764,19 +1038,10 @@ internal ref struct VirtualNodeChildrenBuilder
 
 internal static class VirtualNodePropertySet
 {
-    public static VirtualNodeProperty[] Create(VirtualNodeKind kind, scoped ReadOnlySpan<VirtualNodeProperty> properties)
-    {
-        if (properties.IsEmpty)
-        {
-            return [];
-        }
+    public static VirtualNodePropertyList Create(VirtualNodeKind kind, scoped ReadOnlySpan<VirtualNodeProperty> properties) =>
+        VirtualNodePropertyList.CopyFrom(kind, properties);
 
-        var copy = properties.ToArray();
-        Validate(kind, copy);
-        return copy;
-    }
-
-    internal static void Validate(VirtualNodeKind kind, VirtualNodeProperty[] properties)
+    internal static void Validate(VirtualNodeKind kind, scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         for (var i = 0; i < properties.Length; i++)
         {
@@ -932,8 +1197,7 @@ internal static class VirtualNodeFactory
         scoped ref VirtualNodeChildrenBuilder children)
     {
         var childArray = children.ToArray();
-        var propertyArray = VirtualNodePropertySet.Create(kind, properties);
-        return VirtualNode.CreateFromOwnedArraysUnsafe(kind, key, content, propertyArray, childArray);
+        return VirtualNode.CreateFromOwnedChildrenUnsafe(kind, key, content, properties, childArray);
     }
 
     public static VirtualNode Container(NodeKey key = default, params scoped ReadOnlySpan<VirtualNode> children) =>
