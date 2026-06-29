@@ -7,6 +7,7 @@ namespace Irix.Poc;
 internal static class RenderSteadyStateAllocationDiagnosticRunner
 {
     internal const int DefaultFrameCount = 30;
+    private const int CapacityWarmupFrameCount = 4;
     private const int RectangleDfsIndex = 2;
     private static readonly int[] RectangleDirtyNodes = [RectangleDfsIndex];
     private static readonly PixelRectangle Viewport = new(0, 0, 960, 540);
@@ -52,7 +53,7 @@ internal static class RenderSteadyStateAllocationDiagnosticRunner
             frameCount,
             PrebuiltTrees: true,
             KnownResources: true,
-            CapacityReserved: false,
+            CapacityReserved: true,
             warmReuse,
             styleOnly,
             layoutChange);
@@ -135,6 +136,7 @@ internal static class RenderSteadyStateAllocationDiagnosticRunner
         {
         }
 
+        WarmReservedCapacity(pipeline, firstTree, secondTree, dirtyNodes);
         CollectBeforeMeasurement();
 
         var previousRoot = firstTree.Root;
@@ -167,6 +169,31 @@ internal static class RenderSteadyStateAllocationDiagnosticRunner
             pipelineAttribution,
             pipeline.LastLayoutRebuildReason,
             pipeline.LayoutRebuildCount - layoutRebuildCountBefore);
+    }
+
+    private static void WarmReservedCapacity(
+        RenderPipeline pipeline,
+        VirtualNodeTree firstTree,
+        VirtualNodeTree secondTree,
+        IReadOnlyList<int>? dirtyNodes)
+    {
+        var previousRoot = firstTree.Root;
+        var previousSnapshot = firstTree.TextSnapshot;
+
+        for (var frame = 0; frame < CapacityWarmupFrameCount; frame++)
+        {
+            var nextTree = (frame & 1) == 0 ? secondTree : firstTree;
+            using var batch = pipeline.BuildWithAllocationAttribution(
+                nextTree.Root,
+                Viewport,
+                nextTree.TextSnapshot,
+                dirtyNodes,
+                previousSnapshot,
+                previousRoot,
+                out _);
+            previousRoot = nextTree.Root;
+            previousSnapshot = nextTree.TextSnapshot;
+        }
     }
 
     private static ScenarioTrees PrebuildScenarioTrees()

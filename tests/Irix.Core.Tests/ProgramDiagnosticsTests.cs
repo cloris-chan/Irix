@@ -4181,7 +4181,7 @@ public sealed partial class ProgramDiagnosticsTests
             FrameCount: 3,
             PrebuiltTrees: true,
             KnownResources: true,
-            CapacityReserved: false,
+            CapacityReserved: true,
             WarmReuse: new RenderSteadyStateAllocationScenario(
                 "warm-reuse",
                 FrameCount: 3,
@@ -4203,7 +4203,7 @@ public sealed partial class ProgramDiagnosticsTests
         var focus = RenderSteadyStateAllocationDiagnosticRunner.FormatFocus(snapshot);
 
         Assert.Equal(
-            "render-steady-state scope=core-render-pipeline prebuiltTrees=true knownResources=true capacityReserved=false frames=3 targetMet=false totalBytes=420",
+            "render-steady-state scope=core-render-pipeline prebuiltTrees=true knownResources=true capacityReserved=true frames=3 targetMet=false totalBytes=420",
             header);
         Assert.Equal(
             "render-steady-state scenario=style-only frames=3 threadBytes=300 threadPerFrame=100 targetMet=false layoutReason=StyleOnly layoutRebuilds=0 pipelineBytes=300 classify=12 layout=24 styleOnlyPatch=48 record=36 record.resources=0 record.styles=0 record.commandBuild=0 record.dirtyRanges=0 hitTargets=48 snapshot=60 retainedFrame=72",
@@ -4221,7 +4221,7 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Equal(30, snapshot.FrameCount);
         Assert.True(snapshot.PrebuiltTrees);
         Assert.True(snapshot.KnownResources);
-        Assert.False(snapshot.CapacityReserved);
+        Assert.True(snapshot.CapacityReserved);
         Assert.Equal("warm-reuse", snapshot.WarmReuse.Name);
         Assert.Equal("style-only", snapshot.StyleOnly.Name);
         Assert.Equal("layout-change", snapshot.LayoutChange.Name);
@@ -4230,15 +4230,25 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Equal(30, snapshot.LayoutChange.FrameCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, snapshot.StyleOnly.LastLayoutRebuildReason);
         Assert.Equal(LayoutRebuildReason.LayoutAffecting, snapshot.LayoutChange.LastLayoutRebuildReason);
-        Assert.True(snapshot.WarmReuse.ThreadAllocatedBytes >= 0);
-        Assert.True(snapshot.StyleOnly.ThreadAllocatedBytes >= 0);
-        Assert.True(snapshot.LayoutChange.ThreadAllocatedBytes >= 0);
+        Assert.True(snapshot.TargetMet);
+        Assert.Equal(0, snapshot.WarmReuse.ThreadAllocatedBytes);
+        Assert.Equal(0, snapshot.StyleOnly.ThreadAllocatedBytes);
+        Assert.Equal(0, snapshot.LayoutChange.ThreadAllocatedBytes);
         AssertPipelineAttributionWithinScenarioThreadBytes(snapshot.WarmReuse);
         AssertPipelineAttributionWithinScenarioThreadBytes(snapshot.StyleOnly);
         AssertPipelineAttributionWithinScenarioThreadBytes(snapshot.LayoutChange);
         Assert.Equal(0, snapshot.StyleOnly.PipelineAttribution.LayoutBytes);
         Assert.Equal(0, snapshot.StyleOnly.PipelineAttribution.StyleOnlyPatchBytes);
         Assert.Equal(0, snapshot.LayoutChange.PipelineAttribution.StyleOnlyPatchBytes);
+        Assert.Equal(0, snapshot.WarmReuse.PipelineAttribution.RecordAttribution.ResourcesBytes);
+        Assert.Equal(0, snapshot.WarmReuse.PipelineAttribution.RecordAttribution.StylesBytes);
+        Assert.Equal(0, snapshot.WarmReuse.PipelineAttribution.RecordAttribution.CommandBuildBytes);
+        Assert.Equal(0, snapshot.StyleOnly.PipelineAttribution.RecordAttribution.ResourcesBytes);
+        Assert.Equal(0, snapshot.StyleOnly.PipelineAttribution.RecordAttribution.StylesBytes);
+        Assert.Equal(0, snapshot.StyleOnly.PipelineAttribution.RecordAttribution.CommandBuildBytes);
+        Assert.Equal(0, snapshot.LayoutChange.PipelineAttribution.RecordAttribution.ResourcesBytes);
+        Assert.Equal(0, snapshot.LayoutChange.PipelineAttribution.RecordAttribution.StylesBytes);
+        Assert.Equal(0, snapshot.LayoutChange.PipelineAttribution.RecordAttribution.CommandBuildBytes);
         Assert.True(
             snapshot.StyleOnly.ThreadAllocatedBytes <= snapshot.FrameCount * 256,
             $"style-only allocated {snapshot.StyleOnly.ThreadAllocatedBytes} bytes over {snapshot.FrameCount} frames, expected <= {snapshot.FrameCount * 256}");
@@ -4280,7 +4290,8 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.DoesNotContain("GC.GetTotalAllocatedBytes(false)", recordSource);
         Assert.Contains("PrebuildScenarioTrees", runnerSource);
         Assert.Contains("KnownResources: true", runnerSource);
-        Assert.Contains("CapacityReserved: false", runnerSource);
+        Assert.Contains("CapacityReserved: true", runnerSource);
+        Assert.Contains("WarmReservedCapacity", runnerSource);
         Assert.Contains("BuildWithAllocationAttribution", runnerSource);
         Assert.Contains("RectangleDirtyNodes", runnerSource);
         Assert.Contains("\"style-only\"", runnerSource);

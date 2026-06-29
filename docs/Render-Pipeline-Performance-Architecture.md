@@ -197,8 +197,8 @@ Allocation summary:
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
 | Static | 2145856 bytes | 11921 B/frame | render 10877 B/frame, tree 702 B/frame, diff 182 B/frame, translate 180 B/frame |
-| Warm scroll | 230680 bytes | 1281 B/frame | tree 774 B/frame, diff 318 B/frame, render 227 B/frame, translate 45 B/frame |
-| Scale change | 226880 bytes | 1260 B/frame | tree 1002 B/frame, translate 136 B/frame, render 136 B/frame, diff 45 B/frame |
+| Warm scroll | 231984 bytes | 1288 B/frame | tree 820 B/frame, diff 227 B/frame, render 227 B/frame, translate 91 B/frame |
+| Scale change | 228720 bytes | 1270 B/frame | tree 865 B/frame, render 182 B/frame, translate 136 B/frame, diff 136 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
@@ -219,14 +219,14 @@ Warm-scroll details are the key CPU render-pipeline comparison point:
 | `layout.result` | 0 | The retained result shell is now a readonly value, not a heap object. |
 | `layout.nodeWalk` | 0 | The layout bucket is publication cost, not node-walk allocation. |
 
-Core-pipeline steady-state diagnostics over prebuilt trees and known resources
-now agree with the value-publication slice:
+Core-pipeline steady-state diagnostics over prebuilt trees, known resources, and
+reserved capacity now prove the inner render loop is allocation-free:
 
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
-| Warm reuse | 43 | `pipelineBytes=1296 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `record=1240 total`, `retainedFrame=56 total` |
-| Style only | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `record=1240 total` |
-| Layout change | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=1240 total` |
+| Warm reuse | 0 | `pipelineBytes=0 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `record=0 total`, `retainedFrame=0 total` |
+| Style only | 0 | `pipelineBytes=0 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `record=0 total` |
+| Layout change | 0 | `pipelineBytes=0 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=0 total` |
 
 The `styleOnlyPatch=0` bucket matters: `layout=0` is no longer the only signal
 for layout-skip cost. If retained metadata validation or style-only layout
@@ -238,9 +238,10 @@ Container/Content split. The current shape is expected: button-like controls now
 lower into a container plus content nodes, while common small layout publication
 stays inline and the remaining visible cost has moved back to tree/control
 publication. Recorder command-owner shell and command-array backing capacity are
-no longer warm-scroll buckets; the remaining inner record cost is resource/style
-publication plus small command-build accounting until reserved frame-resource
-and publication handles exist.
+no longer warm-scroll buckets; after diagnostic capacity warmup, the inner
+resource/style/command-build record buckets are also zero. The remaining visible
+allocation work is outside the prebuilt-tree core loop, primarily control/tree
+publication and larger retained publication pages.
 
 Composition and scroll diagnostics were also checked:
 
@@ -306,14 +307,15 @@ The required model is capacity-owned publication, not ad hoc object pooling:
 - If capacity is insufficient, the operation may grow once, record the growth,
   and is not counted as a zero-allocation steady-state frame.
 
-The current implementation is not there yet. The measured buckets show the gap:
-control child arrays and root/container publication remain visible in the
-synthetic tree builder, recorder resource/style/command-build publication is
-still a small inner-pipeline cost, and larger non-inline layout, hit-target,
-dirty-classification, dirty-range, and command-range publications can still
-allocate when they exceed the value-publication inline capacities. The recent
-value-publication slices remove result/snapshot object identity, common small
-array publications, and warm-scroll draw-command backing allocation, but the
+The current implementation has reached zero managed allocation for the reserved
+inner `core-render-pipeline` diagnostic, but the full pipeline is not there yet.
+The measured outer buckets still show the gap: control child arrays and
+root/container publication remain visible in the synthetic tree builder, and
+larger non-inline layout, hit-target, dirty-classification, dirty-range, and
+command-range publications can still allocate when they exceed the
+value-publication inline capacities. The recent value-publication slices remove
+result/snapshot object identity, common small array publications, warm-scroll
+draw-command backing allocation, and reserved inner record allocation, but the
 remaining work is to replace new-array publication with capacity-owned pages and
 generation-fenced views.
 
@@ -653,17 +655,16 @@ For unmanaged-payload work, add focused guard coverage for:
   padding, normalization, or resource identity matters.
 
 The current `--diagnose-render-steady-state-allocation 30` command is the first
-inner-loop guard. It warms the renderer, measures with
-`GC.GetAllocatedBytesForCurrentThread()`, uses prebuilt `VirtualNodeTree`
-instances, reuses known text content resources, and reports warm reuse,
-style-only, and layout-affecting scenarios under the `core-render-pipeline`
-scope. Its `capacityReserved=false` header is intentional: the command is a
-baseline for the current pipeline, not proof of the final contract.
+reserved-capacity inner-loop guard. It warms the renderer and capacity-owning
+recording paths, measures with `GC.GetAllocatedBytesForCurrentThread()`, uses
+prebuilt `VirtualNodeTree` instances, reuses known text content resources, and
+reports warm reuse, style-only, and layout-affecting scenarios under the
+`core-render-pipeline` scope with `capacityReserved=true`.
 
 Before declaring the full render pipeline no-allocation complete, keep this core
-baseline and add the reserved-capacity guard. That later guard should reserve
-capacity for the scenario, reuse existing content and backend resources, then
-measure routine control/tree publication, diff/retained tree patching, full
+baseline and add a broader reserved-capacity guard. That later guard should
+reserve capacity for the scenario, reuse existing content and backend resources,
+then measure routine control/tree publication, diff/retained tree patching, full
 layout rebuilds, style-only layout patches, retained-frame handoff, and
 composition refresh with zero `GC.GetAllocatedBytesForCurrentThread()` deltas.
 Separate diagnostics should report capacity growth, new resource identity, and
