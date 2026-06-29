@@ -1618,12 +1618,15 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("CompactKindAction", source);
         Assert.Contains("CompactKindControlBundle", source);
         Assert.Contains("HoveredBit", source);
+        Assert.Contains("internal readonly struct VirtualNodeChildList", source);
         Assert.Contains("public VirtualNodePropertyList Properties", source);
-        Assert.Contains("public ReadOnlySpan<VirtualNode> Children", source);
+        Assert.Contains("public VirtualNodeChildList Children", source);
         Assert.DoesNotContain("private readonly VirtualNodeProperty _property", source);
+        Assert.DoesNotContain("private readonly VirtualNode[]? _children", source);
         Assert.DoesNotContain("IReadOnlyList<VirtualNode>", source);
         Assert.DoesNotContain("Array.AsReadOnly", source);
         Assert.DoesNotContain("public ReadOnlySpan<VirtualNodeProperty> Properties", source);
+        Assert.DoesNotContain("public ReadOnlySpan<VirtualNode> Children", source);
         Assert.DoesNotContain("_propertiesView", source);
         Assert.DoesNotContain("_childrenView", source);
     }
@@ -1646,7 +1649,7 @@ public class TypedIdAllocationGuardTests
 
         Assert.Contains("CountButtonProperties", source);
         Assert.Contains("CreateButtonPropertyList", source);
-        Assert.Contains("CreateButtonChildren", source);
+        Assert.Contains("VirtualNodeChildList CreateButtonChildren", source);
         Assert.Contains("VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container", source);
         Assert.Contains("StyleDeclarationMapper.WriteVirtualNodeProperties", source);
         Assert.DoesNotContain("CreateButtonPropertyArray", source);

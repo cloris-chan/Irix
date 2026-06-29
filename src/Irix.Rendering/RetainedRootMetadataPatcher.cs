@@ -267,7 +267,7 @@ internal static class RetainedRootMetadataPatcher
 
         dfsIndex++;
         var patchedChildren = retainedChildren;
-        VirtualNode[]? patchedChildrenArray = null;
+        VirtualNode[]? patchedChildrenStorage = null;
         for (var i = 0; i < retainedChildren.Length; i++)
         {
             if (!TryProject(retainedChildren[i], nextChildren[i], sortedDirty, ref dirtyCursor, ref dfsIndex, out var patchedChild, out reason, retainedSnapshot, nextSnapshot))
@@ -275,26 +275,28 @@ internal static class RetainedRootMetadataPatcher
                 return false;
             }
 
-            if (patchedChildrenArray is null && IsShallowNodeReplacement(patchedChild, retainedChildren[i]))
+            if (patchedChildrenStorage is null && IsShallowNodeReplacement(patchedChild, retainedChildren[i]))
             {
-                patchedChildrenArray = retainedChildren.ToArray();
+                patchedChildrenStorage = retainedChildren.ToArray();
             }
 
-            if (patchedChildrenArray is not null)
+            if (patchedChildrenStorage is not null)
             {
-                patchedChildrenArray[i] = patchedChild;
+                patchedChildrenStorage[i] = patchedChild;
             }
         }
 
         if (isDirty)
         {
-            patchedNode = new VirtualNode(retainedNode.Kind, retainedNode.Key, retainedNode.Content, nextNode.Properties, patchedChildrenArray ?? patchedChildren);
+            patchedNode = patchedChildrenStorage is null
+                ? VirtualNode.CreateFromOwnedChildrenUnsafe(retainedNode.Kind, retainedNode.Key, retainedNode.Content, nextNode.Properties, patchedChildren)
+                : VirtualNode.CreateFromOwnedChildrenUnsafe(retainedNode.Kind, retainedNode.Key, retainedNode.Content, nextNode.Properties, patchedChildrenStorage);
             return true;
         }
 
-        patchedNode = patchedChildrenArray is null
+        patchedNode = patchedChildrenStorage is null
             ? retainedNode
-            : new VirtualNode(retainedNode.Kind, retainedNode.Key, retainedNode.Content, retainedNode.Properties, patchedChildrenArray);
+            : VirtualNode.CreateFromOwnedChildrenUnsafe(retainedNode.Kind, retainedNode.Key, retainedNode.Content, retainedNode.Properties, patchedChildrenStorage);
         return true;
     }
 

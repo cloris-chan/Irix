@@ -147,7 +147,7 @@ public sealed class RetainedTreeTests
         Assert.False(ContainsChildKey(tree.Tree.Root.Children, new NodeKey(20)));
     }
 
-    private static bool ContainsChildKey(ReadOnlySpan<VirtualNode> children, NodeKey key)
+    private static bool ContainsChildKey(VirtualNodeChildList children, NodeKey key)
     {
         foreach (var child in children)
         {

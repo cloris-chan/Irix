@@ -195,18 +195,18 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2146440 bytes | 11924 B/frame | render 10877 B/frame, tree 746 B/frame, translate 182 B/frame, diff 136 B/frame |
-| Warm scroll | 231016 bytes | 1283 B/frame | tree 774 B/frame, diff 318 B/frame, render 227 B/frame, translate 45 B/frame |
-| Scale change | 237768 bytes | 1320 B/frame | tree 956 B/frame, diff 182 B/frame, render 272 B/frame, translate 0 B/frame |
+| Static | 2152632 bytes | 11959 B/frame | render 10922 B/frame, tree 747 B/frame, diff 180 B/frame, translate 136 B/frame |
+| Warm scroll | 234840 bytes | 1304 B/frame | tree 820 B/frame, diff 227 B/frame, render 227 B/frame, translate 91 B/frame |
+| Scale change | 231288 bytes | 1284 B/frame | tree 865 B/frame, diff 227 B/frame, render 182 B/frame, translate 45 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `tree.buildRoot.container` | 273 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
-| `tree.buildRoot.button.childrenArray` | 364 | Button lowering still publishes per-node child arrays in the measured synthetic path. |
+| `tree.buildRoot.container` | 318 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
+| `tree.buildRoot.button.childrenList` | 364 | Button lowering now publishes through `VirtualNodeChildList`; the current backing storage is still per-node child arrays until the future `VirtualNodeTree` slab owns the storage. |
 | `tree.buildRoot.button.propertyList` | 0 | Button control metadata now publishes through compact `VirtualNodePropertyList` storage instead of per-button property arrays. |
-| `drawRecord` | 0 | Recorder-owned command batches now reuse pooled owner shells through a generation token; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
+| `drawRecord` | 14 | Recorder-owned command batches now reuse pooled owner shells through a generation token, but command/resource publication still remains until reserved-capacity command storage exists; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 0 | Common hit targets are retained through `HitTargetList` without publishing an array; clean render requests reuse the retained value publication, and dirty retained input snapshots patch common hit-target metadata inline. |
 | `layout.elementsArray` | 0 | Common layout elements publish through `LayoutElementList` without a retained array. |
 | `layout.treeNodesArray` | 0 | Common layout tree nodes publish through `LayoutTreeNodeList` without a retained array. |
@@ -223,9 +223,9 @@ now agree with the value-publication slice:
 
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
-| Warm reuse | 43 | `pipelineBytes=1296 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `record=1240 total`, `retainedFrame=56 total` |
-| Style only | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `record=1240 total` |
-| Layout change | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=1240 total` |
+| Warm reuse | 127 | `pipelineBytes=3816 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `record=3760 total`, `retainedFrame=56 total` |
+| Style only | 125 | `pipelineBytes=3760 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `record=3760 total` |
+| Layout change | 125 | `pipelineBytes=3760 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=3760 total` |
 
 The `styleOnlyPatch=0` bucket matters: `layout=0` is no longer the only signal
 for layout-skip cost. If retained metadata validation or style-only layout
@@ -236,8 +236,9 @@ The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
 lower into a container plus content nodes, while common small layout publication
 stays inline and the remaining visible cost has moved back to tree/control
-publication. Recorder command-owner publication is no longer a per-frame
-warm-scroll bucket.
+publication. Recorder command-owner shell publication is no longer the
+warm-scroll bucket; the remaining draw-record cost is command/resource backing
+storage that belongs to future reserved-capacity command publication work.
 
 Composition and scroll diagnostics were also checked:
 
@@ -448,7 +449,7 @@ layout traversal, and style-only patching, so the next migration point is no
 longer "add a reader"; it is "move publication storage from per-node arrays into
 tree-owned slabs."
 
-The measured `childrenArray` bucket is a sign that per-node owned arrays are the
+The measured `childrenList` bucket is a sign that per-node owned child storage is the
 next structural limit. Since `VirtualNode` is internal, the next target design can
 move from "each node owns child/property arrays" to "one published tree owns
 contiguous node, child-range, property, and content-resource slabs".
@@ -476,7 +477,7 @@ justify the migration.
 
 Acceptance:
 
-- Warm-scroll `button.childrenArray` and broad tree-build publication allocation
+- Warm-scroll `button.childrenList` and broad tree-build publication allocation
   drop materially.
 - Under reserved capacity and known resources, tree shape changes do not allocate
   new child/property arrays.

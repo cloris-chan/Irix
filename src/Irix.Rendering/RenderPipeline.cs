@@ -392,7 +392,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return true;
     }
 
-    private static bool ChildrenShapeChanged(ReadOnlySpan<VirtualNode> previousChildren, ReadOnlySpan<VirtualNode> nextChildren)
+    private static bool ChildrenShapeChanged(VirtualNodeChildList previousChildren, VirtualNodeChildList nextChildren)
     {
         if (previousChildren.Length != nextChildren.Length)
         {

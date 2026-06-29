@@ -3917,7 +3917,7 @@ public sealed partial class ProgramDiagnosticsTests
                     ActionPropertyBytes: 0,
                     LabelTextBytes: 12,
                     LabelNodeBytes: 0,
-                    ChildrenArrayBytes: 30,
+                    ChildrenListBytes: 30,
                     PropertyListBytes: 48,
                     ButtonNodeBytes: 0,
                     MeasuredBytes: 90)),
@@ -3946,7 +3946,7 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Equal(
             "Button allocation processWide: "
             + "actionProperty=0 bytes (0/frame), labelText=12 bytes (4/frame), "
-            + "labelNode=0 bytes (0/frame), childrenArray=30 bytes (10/frame), "
+            + "labelNode=0 bytes (0/frame), childrenList=30 bytes (10/frame), "
             + "propertyList=48 bytes (16/frame), buttonNode=0 bytes (0/frame), "
             + "detailGap=0 bytes (0/frame), measuredTotal=90 bytes (30/frame)",
             buttonSummary);
@@ -4035,7 +4035,7 @@ public sealed partial class ProgramDiagnosticsTests
                     ActionPropertyBytes: 0,
                     LabelTextBytes: 0,
                     LabelNodeBytes: 0,
-                    ChildrenArrayBytes: 120,
+                    ChildrenListBytes: 120,
                     PropertyListBytes: 90,
                     ButtonNodeBytes: 0,
                     MeasuredBytes: 210)));
@@ -4088,7 +4088,7 @@ public sealed partial class ProgramDiagnosticsTests
                     ActionPropertyBytes: 0,
                     LabelTextBytes: 0,
                     LabelNodeBytes: 0,
-                    ChildrenArrayBytes: 120,
+                    ChildrenListBytes: 120,
                     PropertyListBytes: 90,
                     ButtonNodeBytes: 0,
                     MeasuredBytes: 210)));
@@ -4109,7 +4109,7 @@ public sealed partial class ProgramDiagnosticsTests
         var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Allocation focus: largestCandidate=pipeline.styleOnlyPatch=135 bytes (45/frame), nextCandidate=tree.buildRoot.button.childrenArray=120 bytes (40/frame), treeDetailGap=30 bytes (10/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
+            "Allocation focus: largestCandidate=pipeline.styleOnlyPatch=135 bytes (45/frame), nextCandidate=tree.buildRoot.button.childrenList=120 bytes (40/frame), treeDetailGap=30 bytes (10/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
             summary);
     }
 
@@ -5678,7 +5678,7 @@ public sealed partial class ProgramDiagnosticsTests
         }
     }
 
-    private static bool ContainsNode(ReadOnlySpan<VirtualNode> nodes, Func<VirtualNode, bool> predicate)
+    private static bool ContainsNode(VirtualNodeChildList nodes, Func<VirtualNode, bool> predicate)
     {
         foreach (var node in nodes)
         {

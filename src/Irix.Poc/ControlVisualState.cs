@@ -95,7 +95,7 @@ internal static class ControlNodeBuilder
         return VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, key, default, containerProperties, children);
     }
 
-    internal static VirtualNode[] CreateButtonChildren(
+    internal static VirtualNodeChildList CreateButtonChildren(
         TextContentResource label,
         VirtualNodePropertyList rectangleProperties,
         VirtualNodePropertyList textProperties)
