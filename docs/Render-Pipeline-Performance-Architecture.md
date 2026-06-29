@@ -671,10 +671,11 @@ for layout/tree publication cost, but it does not fully capture production
 control call-site savings from stack-backed `ButtonPropertyBundle` lowering or
 the exact-array `CounterApplication` root publication path.
 
-Attribution note: the text-cache scenario total and top-level
-tree/diff/translate/render row remain broad diagnostic counters, while the
-dedicated translate, pipeline, layout, and record detail lines are explicitly
-reported as current-thread counters. The inner
+Attribution note: the text-cache scenario total, top-level
+tree/diff/translate/render row, and tree publication detail rows are broad
+process-wide diagnostic counters and are labelled `processWide` in diagnostic
+output. The dedicated translate, pipeline, layout, and record detail lines are
+explicitly reported as current-thread counters. The inner
 `--diagnose-render-steady-state-allocation` command uses the same
 `GC.GetAllocatedBytesForCurrentThread()` scope for both scenario totals and
 pipeline phase buckets, so phase buckets are comparable to `threadBytes`.

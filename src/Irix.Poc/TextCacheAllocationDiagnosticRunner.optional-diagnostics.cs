@@ -163,19 +163,19 @@ internal static class TextCacheAllocationDiagnosticRunner
     internal static string FormatAllocationAttribution(AllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return $"Allocation attribution: tree={attribution.TreeBytes} bytes ({PerFrame(attribution.TreeBytes, divisor)}/frame), diff={attribution.DiffBytes} bytes ({PerFrame(attribution.DiffBytes, divisor)}/frame), translate={attribution.TranslateBytes} bytes ({PerFrame(attribution.TranslateBytes, divisor)}/frame), render={attribution.RenderBytes} bytes ({PerFrame(attribution.RenderBytes, divisor)}/frame)";
+        return $"Allocation attribution processWide: tree={attribution.TreeBytes} bytes ({PerFrame(attribution.TreeBytes, divisor)}/frame), diff={attribution.DiffBytes} bytes ({PerFrame(attribution.DiffBytes, divisor)}/frame), translate={attribution.TranslateBytes} bytes ({PerFrame(attribution.TranslateBytes, divisor)}/frame), render={attribution.RenderBytes} bytes ({PerFrame(attribution.RenderBytes, divisor)}/frame)";
     }
 
     internal static string FormatTreeAllocationAttribution(TreeAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return $"Tree allocation: beginFrame={attribution.BeginFrameBytes} bytes ({PerFrame(attribution.BeginFrameBytes, divisor)}/frame), buildRoot={attribution.BuildRootBytes} bytes ({PerFrame(attribution.BuildRootBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+        return $"Tree allocation processWide: beginFrame={attribution.BeginFrameBytes} bytes ({PerFrame(attribution.BeginFrameBytes, divisor)}/frame), buildRoot={attribution.BuildRootBytes} bytes ({PerFrame(attribution.BuildRootBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     internal static string FormatTreeSnapshotAllocationAttribution(TextBufferSnapshotAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return "Tree snapshot allocation: "
+        return "Tree snapshot allocation processWide: "
             + $"textBuffer={attribution.CharBufferBytes} bytes ({PerFrame(attribution.CharBufferBytes, divisor)}/frame), "
             + $"snapshotShell={attribution.SnapshotShellBytes} bytes ({PerFrame(attribution.SnapshotShellBytes, divisor)}/frame), "
             + $"detailGap={attribution.DetailGapBytes} bytes ({PerFrame(attribution.DetailGapBytes, divisor)}/frame), "
@@ -185,7 +185,7 @@ internal static class TextCacheAllocationDiagnosticRunner
     internal static string FormatBuildRootAllocationAttribution(BuildRootAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return "BuildRoot allocation: "
+        return "BuildRoot allocation processWide: "
             + $"buttons={attribution.ButtonBytes} bytes ({PerFrame(attribution.ButtonBytes, divisor)}/frame), "
             + $"text={attribution.TextBytes} bytes ({PerFrame(attribution.TextBytes, divisor)}/frame), "
             + $"scrollProperty={attribution.ScrollPropertyBytes} bytes ({PerFrame(attribution.ScrollPropertyBytes, divisor)}/frame), "
@@ -197,7 +197,7 @@ internal static class TextCacheAllocationDiagnosticRunner
     internal static string FormatButtonAllocationAttribution(ButtonAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return "Button allocation: "
+        return "Button allocation processWide: "
             + $"actionProperty={attribution.ActionPropertyBytes} bytes ({PerFrame(attribution.ActionPropertyBytes, divisor)}/frame), "
             + $"labelText={attribution.LabelTextBytes} bytes ({PerFrame(attribution.LabelTextBytes, divisor)}/frame), "
             + $"labelNode={attribution.LabelNodeBytes} bytes ({PerFrame(attribution.LabelNodeBytes, divisor)}/frame), "

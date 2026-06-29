@@ -3873,7 +3873,7 @@ public sealed partial class ProgramDiagnosticsTests
         var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationAttribution(attribution, frameCount: 3);
 
         Assert.Equal(
-            "Allocation attribution: tree=300 bytes (100/frame), diff=120 bytes (40/frame), translate=600 bytes (200/frame), render=180 bytes (60/frame)",
+            "Allocation attribution processWide: tree=300 bytes (100/frame), diff=120 bytes (40/frame), translate=600 bytes (200/frame), render=180 bytes (60/frame)",
             summary);
     }
 
@@ -3932,19 +3932,19 @@ public sealed partial class ProgramDiagnosticsTests
         var buttonSummary = TextCacheAllocationDiagnosticRunner.FormatButtonAllocationAttribution(attribution.BuildRootAttribution.ButtonAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Tree allocation: beginFrame=30 bytes (10/frame), buildRoot=210 bytes (70/frame), snapshot=60 bytes (20/frame), measuredTotal=300 bytes (100/frame)",
+            "Tree allocation processWide: beginFrame=30 bytes (10/frame), buildRoot=210 bytes (70/frame), snapshot=60 bytes (20/frame), measuredTotal=300 bytes (100/frame)",
             summary);
         Assert.Equal(
-            "Tree snapshot allocation: textBuffer=48 bytes (16/frame), snapshotShell=0 bytes (0/frame), detailGap=0 bytes (0/frame), measuredTotal=48 bytes (16/frame)",
+            "Tree snapshot allocation processWide: textBuffer=48 bytes (16/frame), snapshotShell=0 bytes (0/frame), detailGap=0 bytes (0/frame), measuredTotal=48 bytes (16/frame)",
             snapshotSummary);
         Assert.Equal(
-            "BuildRoot allocation: "
+            "BuildRoot allocation processWide: "
             + "buttons=90 bytes (30/frame), text=30 bytes (10/frame), "
             + "scrollProperty=12 bytes (4/frame), children=18 bytes (6/frame), "
             + "container=60 bytes (20/frame), measuredTotal=210 bytes (70/frame)",
             buildRootSummary);
         Assert.Equal(
-            "Button allocation: "
+            "Button allocation processWide: "
             + "actionProperty=0 bytes (0/frame), labelText=12 bytes (4/frame), "
             + "labelNode=0 bytes (0/frame), childrenArray=30 bytes (10/frame), "
             + "propertyArray=48 bytes (16/frame), buttonNode=0 bytes (0/frame), "
@@ -4118,6 +4118,7 @@ public sealed partial class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var source = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "TextCacheAllocationDiagnosticRunner.optional-diagnostics.cs")));
+        var arenaDiagnosticsSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "VirtualTextArena.optional-diagnostics.cs")));
         var translatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "WindowDrawCommandTranslator.optional-diagnostics.cs")));
 
         Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
@@ -4146,6 +4147,14 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("output.WriteLine(FormatLayoutAllocationAttribution(translateAttribution.PipelineAttribution.LayoutAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatRecordAllocationAttribution(translateAttribution.PipelineAttribution.RecordAttribution, frameCount));", source);
         Assert.Contains("output.WriteLine(FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount));", source);
+        Assert.Contains("Allocation attribution processWide", source);
+        Assert.Contains("Tree allocation processWide", source);
+        Assert.Contains("Tree snapshot allocation processWide", source);
+        Assert.Contains("BuildRoot allocation processWide", source);
+        Assert.Contains("Button allocation processWide", source);
+        Assert.Contains("Translate allocation currentThread", source);
+        Assert.Contains("GC.GetTotalAllocatedBytes(false)", source);
+        Assert.Contains("GC.GetTotalAllocatedBytes(false)", arenaDiagnosticsSource);
         Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", translatorSource);
         Assert.DoesNotContain("GC.GetTotalAllocatedBytes(false)", translatorSource);
         Assert.DoesNotContain("return new VirtualNodeTree(BuildRoot", source);
