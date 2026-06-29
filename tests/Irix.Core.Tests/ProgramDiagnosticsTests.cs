@@ -3962,6 +3962,7 @@ public sealed partial class ProgramDiagnosticsTests
             HitTargetsBytes: 48,
             SnapshotBytes: 60,
             RetainedFrameBytes: 72,
+            StyleOnlyPatchBytes: 30,
             SnapshotAttribution: new RenderPipelineSnapshotAllocationAttribution(
                 FrameBatchBytes: 12,
                 RetainedInputBytes: 48,
@@ -3971,7 +3972,7 @@ public sealed partial class ProgramDiagnosticsTests
         var snapshotSummary = TextCacheAllocationDiagnosticRunner.FormatPipelineSnapshotAllocationAttribution(attribution.SnapshotAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Pipeline allocation currentThread: classify=12 bytes (4/frame), layout=24 bytes (8/frame), record=36 bytes (12/frame), hitTargets=48 bytes (16/frame), snapshot=60 bytes (20/frame), retainedFrame=72 bytes (24/frame), measuredTotal=252 bytes (84/frame)",
+            "Pipeline allocation currentThread: classify=12 bytes (4/frame), layout=24 bytes (8/frame), styleOnlyPatch=30 bytes (10/frame), record=36 bytes (12/frame), hitTargets=48 bytes (16/frame), snapshot=60 bytes (20/frame), retainedFrame=72 bytes (24/frame), measuredTotal=282 bytes (94/frame)",
             summary);
         Assert.Equal(
             "Pipeline snapshot allocation currentThread: frameBatch=12 bytes (4/frame), retainedInput=48 bytes (16/frame), detailGap=0 bytes (0/frame), measuredTotal=60 bytes (20/frame)",
@@ -4094,7 +4095,7 @@ public sealed partial class ProgramDiagnosticsTests
         var translateAttribution = new WindowTranslateAllocationAttribution(
             RetainedApplyBytes: 0,
             ViewportBytes: 0,
-            PipelineBuildBytes: 240,
+            PipelineBuildBytes: 375,
             FeedbackBytes: 60,
             PipelineAttribution: new RenderPipelineBuildAllocationAttribution(
                 ClassificationBytes: 0,
@@ -4102,12 +4103,13 @@ public sealed partial class ProgramDiagnosticsTests
                 RecordBytes: 30,
                 HitTargetsBytes: 45,
                 SnapshotBytes: 75,
-                RetainedFrameBytes: 60));
+                RetainedFrameBytes: 60,
+                StyleOnlyPatchBytes: 135));
 
         var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationFocus(attribution, treeAttribution, translateAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Allocation focus: largestCandidate=tree.buildRoot.button.childrenArray=120 bytes (40/frame), nextCandidate=tree.buildRoot.button.propertyArray=90 bytes (30/frame), treeDetailGap=30 bytes (10/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
+            "Allocation focus: largestCandidate=pipeline.styleOnlyPatch=135 bytes (45/frame), nextCandidate=tree.buildRoot.button.childrenArray=120 bytes (40/frame), treeDetailGap=30 bytes (10/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
             summary);
     }
 
@@ -4155,14 +4157,15 @@ public sealed partial class ProgramDiagnosticsTests
         var scenario = new RenderSteadyStateAllocationScenario(
             "style-only",
             FrameCount: 3,
-            ThreadAllocatedBytes: 150,
+            ThreadAllocatedBytes: 300,
             PipelineAttribution: new RenderPipelineBuildAllocationAttribution(
                 ClassificationBytes: 12,
                 LayoutBytes: 24,
                 RecordBytes: 36,
                 HitTargetsBytes: 48,
                 SnapshotBytes: 60,
-                RetainedFrameBytes: 72),
+                RetainedFrameBytes: 72,
+                StyleOnlyPatchBytes: 48),
             LastLayoutRebuildReason: LayoutRebuildReason.StyleOnly,
             LayoutRebuildCountDelta: 0);
         var snapshot = new RenderSteadyStateAllocationSnapshot(
@@ -4191,36 +4194,45 @@ public sealed partial class ProgramDiagnosticsTests
         var focus = RenderSteadyStateAllocationDiagnosticRunner.FormatFocus(snapshot);
 
         Assert.Equal(
-            "render-steady-state scope=core-render-pipeline prebuiltTrees=true knownResources=true capacityReserved=false frames=3 targetMet=false totalBytes=270",
+            "render-steady-state scope=core-render-pipeline prebuiltTrees=true knownResources=true capacityReserved=false frames=3 targetMet=false totalBytes=420",
             header);
         Assert.Equal(
-            "render-steady-state scenario=style-only frames=3 threadBytes=150 threadPerFrame=50 targetMet=false layoutReason=StyleOnly layoutRebuilds=0 pipelineBytes=252 classify=12 layout=24 record=36 record.resources=0 record.styles=0 record.commandBuild=0 record.dirtyRanges=0 hitTargets=48 snapshot=60 retainedFrame=72",
+            "render-steady-state scenario=style-only frames=3 threadBytes=300 threadPerFrame=100 targetMet=false layoutReason=StyleOnly layoutRebuilds=0 pipelineBytes=300 classify=12 layout=24 styleOnlyPatch=48 record=36 record.resources=0 record.styles=0 record.commandBuild=0 record.dirtyRanges=0 hitTargets=48 snapshot=60 retainedFrame=72",
             scenarioSummary);
         Assert.Equal(
-            "render-steady-state focus largestScenario=style-only largestBytes=150 largestPerFrame=50 totalBytes=270 targetMet=false",
+            "render-steady-state focus largestScenario=style-only largestBytes=300 largestPerFrame=100 totalBytes=420 targetMet=false",
             focus);
     }
 
     [Fact]
     public void Render_steady_state_allocation_diagnostic_runs_prebuilt_known_resource_scenarios()
     {
-        var snapshot = RenderSteadyStateAllocationDiagnosticRunner.Capture(frameCount: 2);
+        var snapshot = RenderSteadyStateAllocationDiagnosticRunner.Capture(frameCount: 30);
 
-        Assert.Equal(2, snapshot.FrameCount);
+        Assert.Equal(30, snapshot.FrameCount);
         Assert.True(snapshot.PrebuiltTrees);
         Assert.True(snapshot.KnownResources);
         Assert.False(snapshot.CapacityReserved);
         Assert.Equal("warm-reuse", snapshot.WarmReuse.Name);
         Assert.Equal("style-only", snapshot.StyleOnly.Name);
         Assert.Equal("layout-change", snapshot.LayoutChange.Name);
-        Assert.Equal(2, snapshot.WarmReuse.FrameCount);
-        Assert.Equal(2, snapshot.StyleOnly.FrameCount);
-        Assert.Equal(2, snapshot.LayoutChange.FrameCount);
+        Assert.Equal(30, snapshot.WarmReuse.FrameCount);
+        Assert.Equal(30, snapshot.StyleOnly.FrameCount);
+        Assert.Equal(30, snapshot.LayoutChange.FrameCount);
         Assert.Equal(LayoutRebuildReason.StyleOnly, snapshot.StyleOnly.LastLayoutRebuildReason);
         Assert.Equal(LayoutRebuildReason.LayoutAffecting, snapshot.LayoutChange.LastLayoutRebuildReason);
         Assert.True(snapshot.WarmReuse.ThreadAllocatedBytes >= 0);
         Assert.True(snapshot.StyleOnly.ThreadAllocatedBytes >= 0);
         Assert.True(snapshot.LayoutChange.ThreadAllocatedBytes >= 0);
+        AssertPipelineAttributionWithinScenarioThreadBytes(snapshot.WarmReuse);
+        AssertPipelineAttributionWithinScenarioThreadBytes(snapshot.StyleOnly);
+        AssertPipelineAttributionWithinScenarioThreadBytes(snapshot.LayoutChange);
+        Assert.Equal(0, snapshot.StyleOnly.PipelineAttribution.LayoutBytes);
+        Assert.Equal(0, snapshot.StyleOnly.PipelineAttribution.StyleOnlyPatchBytes);
+        Assert.Equal(0, snapshot.LayoutChange.PipelineAttribution.StyleOnlyPatchBytes);
+        Assert.True(
+            snapshot.StyleOnly.ThreadAllocatedBytes <= snapshot.FrameCount * 256,
+            $"style-only allocated {snapshot.StyleOnly.ThreadAllocatedBytes} bytes over {snapshot.FrameCount} frames, expected <= {snapshot.FrameCount * 256}");
     }
 
     [Fact]
@@ -4228,7 +4240,9 @@ public sealed partial class ProgramDiagnosticsTests
     {
         var root = FindRepoRoot();
         var runnerSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "RenderSteadyStateAllocationDiagnosticRunner.optional-diagnostics.cs")));
+        var renderPipelineSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.cs")));
         var pipelineSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RenderPipeline.optional-diagnostics.cs")));
+        var retainedRootMetadataSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RetainedRootMetadataPatcher.cs")));
         var layoutSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "LayoutTreeBuilder.optional-diagnostics.cs")));
         var recordSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "DrawCommandRecorder.optional-diagnostics.cs")));
         var diagnosticProgramSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "Program.optional-diagnostics.cs")));
@@ -4245,6 +4259,7 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("--diagnose-render-steady-state-allocation", performanceDoc);
         Assert.Contains("core-render-pipeline", performanceDoc);
         Assert.Contains("prebuilt tree", performanceDoc);
+        Assert.Contains("styleOnlyPatch=0", performanceDoc);
         Assert.Contains("--diagnose-render-steady-state-allocation", statusDoc);
         Assert.StartsWith("#if IRIX_DIAGNOSTICS", runnerSource, StringComparison.Ordinal);
         Assert.Contains("GC.GetAllocatedBytesForCurrentThread()", runnerSource);
@@ -4260,6 +4275,16 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("BuildWithAllocationAttribution", runnerSource);
         Assert.Contains("RectangleDirtyNodes", runnerSource);
         Assert.Contains("\"style-only\"", runnerSource);
+        Assert.Contains("styleOnlyPatch=", runnerSource);
+        Assert.Contains("WithStyleOnlyPatch", pipelineSource);
+        Assert.Contains("ValidateControlMetadata", renderPipelineSource);
+        Assert.Contains("RetainedRootMetadataValidation", retainedRootMetadataSource);
+        var styleOnlySkipStart = renderPipelineSource.IndexOf("private bool TryApplyStyleOnlyLayoutSkip", StringComparison.Ordinal);
+        var partialDeclarationsStart = renderPipelineSource.IndexOf("partial void OnPipelineAllocationStarted", styleOnlySkipStart, StringComparison.Ordinal);
+        Assert.True(styleOnlySkipStart >= 0, "Could not find TryApplyStyleOnlyLayoutSkip.");
+        Assert.True(partialDeclarationsStart > styleOnlySkipStart, "Could not find RenderPipeline partial declarations.");
+        var styleOnlySkipSource = renderPipelineSource[styleOnlySkipStart..partialDeclarationsStart];
+        Assert.DoesNotContain("ProjectControlMetadata", styleOnlySkipSource);
         Assert.Contains("\"layout-change\"", runnerSource);
     }
 
@@ -5545,6 +5570,13 @@ public sealed partial class ProgramDiagnosticsTests
         content.TryGetText(out var tc) ? arena.ResolveRequired(tc).ToString() : "";
 
     private static string NormalizeLineEndings(string text) => text.Replace("\r\n", "\n");
+
+    private static void AssertPipelineAttributionWithinScenarioThreadBytes(RenderSteadyStateAllocationScenario scenario)
+    {
+        Assert.True(
+            scenario.PipelineAttribution.TotalBytes <= scenario.ThreadAllocatedBytes,
+            $"{scenario.Name} pipeline attribution {scenario.PipelineAttribution.TotalBytes} exceeded current-thread scenario total {scenario.ThreadAllocatedBytes}.");
+    }
 
     private static string ReadSourceFamily(string root, params string[] path)
     {

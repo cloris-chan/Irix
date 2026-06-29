@@ -217,7 +217,7 @@ internal static class TextCacheAllocationDiagnosticRunner
     internal static string FormatPipelineAllocationAttribution(RenderPipelineBuildAllocationAttribution attribution, int frameCount)
     {
         var divisor = frameCount > 0 ? frameCount : 0;
-        return $"Pipeline allocation currentThread: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
+        return $"Pipeline allocation currentThread: classify={attribution.ClassificationBytes} bytes ({PerFrame(attribution.ClassificationBytes, divisor)}/frame), layout={attribution.LayoutBytes} bytes ({PerFrame(attribution.LayoutBytes, divisor)}/frame), styleOnlyPatch={attribution.StyleOnlyPatchBytes} bytes ({PerFrame(attribution.StyleOnlyPatchBytes, divisor)}/frame), record={attribution.RecordBytes} bytes ({PerFrame(attribution.RecordBytes, divisor)}/frame), hitTargets={attribution.HitTargetsBytes} bytes ({PerFrame(attribution.HitTargetsBytes, divisor)}/frame), snapshot={attribution.SnapshotBytes} bytes ({PerFrame(attribution.SnapshotBytes, divisor)}/frame), retainedFrame={attribution.RetainedFrameBytes} bytes ({PerFrame(attribution.RetainedFrameBytes, divisor)}/frame), measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
     }
 
     internal static string FormatPipelineSnapshotAllocationAttribution(RenderPipelineSnapshotAllocationAttribution attribution, int frameCount)
@@ -290,6 +290,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         {
             UpdateLargest("pipeline.layout", pipelineAttribution.LayoutBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
         }
+        UpdateLargest("pipeline.styleOnlyPatch", pipelineAttribution.StyleOnlyPatchBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
         if (pipelineSnapshotAttribution.MeasuredBytes > 0)
         {
             UpdateLargest("pipeline.snapshot.frameBatch", pipelineSnapshotAttribution.FrameBatchBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);

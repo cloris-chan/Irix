@@ -19,7 +19,13 @@ internal static class StyleOnlyLayoutPatcher
 
         var nextTree = new VirtualNodeTree(nextRoot);
         var nextReader = nextTree.CreateReader().Root;
-        var nextElements = retainedLayout.Elements.ToArray();
+        var elementCount = retainedLayout.Elements.Length;
+        Span<LayoutElement> inlineElements = stackalloc LayoutElement[LayoutElementList.InlineCapacity];
+        LayoutElement[]? ownedElements = elementCount > LayoutElementList.InlineCapacity
+            ? new LayoutElement[elementCount]
+            : null;
+        var nextElements = ownedElements is null ? inlineElements[..elementCount] : ownedElements.AsSpan();
+        retainedLayout.Elements.CopyTo(nextElements);
         var scratch = new RenderScratchBuffer();
         Span<int> dirtyIndexStorage = stackalloc int[InlineDirtyIndexCapacity];
         scoped var sortedDirty = scratch.CreateDirtyIndexList(dirtyIndexStorage);
@@ -61,7 +67,10 @@ internal static class StyleOnlyLayoutPatcher
                     return false;
                 }
 
-                patchedLayout = retainedLayout.WithElementsAndDirtyRanges(LayoutElementList.FromOwnedArray(nextElements), dirtyElementRanges);
+                var patchedElements = ownedElements is null
+                    ? LayoutElementList.CopyFrom(nextElements)
+                    : LayoutElementList.FromOwnedArray(ownedElements);
+                patchedLayout = retainedLayout.WithElementsAndDirtyRanges(patchedElements, dirtyElementRanges);
                 return true;
             }
             finally
@@ -78,7 +87,7 @@ internal static class StyleOnlyLayoutPatcher
     private static bool TryPatchTree(
         VirtualNodeReader nextNode,
         LayoutTreeResult retainedLayout,
-        LayoutElement[] elements,
+        Span<LayoutElement> elements,
         ReadOnlySpan<int> sortedDirty,
         ref int dfsIndex,
         ref int dirtyCursor,
@@ -154,7 +163,7 @@ internal static class StyleOnlyLayoutPatcher
     }
 
     private static bool TryRefreshTextContent(
-        LayoutElement[] elements,
+        Span<LayoutElement> elements,
         LayoutTreeNode retainedTreeNode,
         VirtualNodeReader nextNode)
     {
@@ -224,7 +233,7 @@ internal static class StyleOnlyLayoutPatcher
     }
 
     private static bool TryPatchElementRange(
-        LayoutElement[] elements,
+        Span<LayoutElement> elements,
         VirtualNodeReader nextNode,
         LayoutElementRange range)
     {
@@ -247,7 +256,7 @@ internal static class StyleOnlyLayoutPatcher
     }
 
     private static bool TryPatchTextContent(
-        LayoutElement[] elements,
+        Span<LayoutElement> elements,
         int elementIndex,
         LayoutElement retainedElement,
         VirtualNodeReader nextNode)
@@ -282,7 +291,7 @@ internal static class StyleOnlyLayoutPatcher
     }
 
     private static bool TryPatchRectangleContent(
-        LayoutElement[] elements,
+        Span<LayoutElement> elements,
         int elementIndex,
         LayoutElement retainedElement,
         VirtualNodeReader nextNode)
@@ -303,7 +312,7 @@ internal static class StyleOnlyLayoutPatcher
     }
 
     private static bool TryPatchInteractiveContainer(
-        LayoutElement[] elements,
+        Span<LayoutElement> elements,
         int elementIndex,
         LayoutElement retainedElement,
         VirtualNodeReader nextNode)

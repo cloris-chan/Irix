@@ -39,9 +39,89 @@ internal readonly struct RetainedRootMetadataPatch : IEquatable<RetainedRootMeta
     public static bool operator !=(RetainedRootMetadataPatch left, RetainedRootMetadataPatch right) => !left.Equals(right);
 }
 
+internal readonly struct RetainedRootMetadataValidation : IEquatable<RetainedRootMetadataValidation>
+{
+    private RetainedRootMetadataValidation(bool succeeded, RetainedPartialApplyFallbackReason fallbackReason)
+    {
+        Succeeded = succeeded;
+        FallbackReason = fallbackReason;
+    }
+
+    public bool Succeeded { get; }
+    public RetainedPartialApplyFallbackReason FallbackReason { get; }
+
+    public static RetainedRootMetadataValidation CreateSucceeded()
+    {
+        return new RetainedRootMetadataValidation(true, RetainedPartialApplyFallbackReason.None);
+    }
+
+    public static RetainedRootMetadataValidation CreateFallback(RetainedPartialApplyFallbackReason reason)
+    {
+        return new RetainedRootMetadataValidation(false, reason);
+    }
+
+    public bool Equals(RetainedRootMetadataValidation other)
+    {
+        return Succeeded == other.Succeeded
+            && FallbackReason == other.FallbackReason;
+    }
+
+    public override bool Equals(object? obj) => obj is RetainedRootMetadataValidation other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Succeeded, FallbackReason);
+
+    public static bool operator ==(RetainedRootMetadataValidation left, RetainedRootMetadataValidation right) => left.Equals(right);
+
+    public static bool operator !=(RetainedRootMetadataValidation left, RetainedRootMetadataValidation right) => !left.Equals(right);
+}
+
 internal static class RetainedRootMetadataPatcher
 {
     private const int InlineDirtyIndexCapacity = 32;
+
+    public static RetainedRootMetadataValidation ValidateControlMetadata(
+        VirtualNode retainedRoot,
+        VirtualNode nextRoot,
+        LayoutDirtyClassificationList dirtyClassifications,
+        TextBufferSnapshot? retainedSnapshot = null,
+        TextBufferSnapshot? nextSnapshot = null)
+    {
+        retainedSnapshot ??= nextSnapshot;
+        nextSnapshot ??= retainedSnapshot;
+
+        var scratch = new RenderScratchBuffer();
+        Span<int> dirtyStorage = stackalloc int[InlineDirtyIndexCapacity];
+        scoped var sortedDirty = scratch.CreateDirtyIndexList(dirtyStorage);
+        try
+        {
+            foreach (var classification in dirtyClassifications)
+            {
+                if (classification.Reason != LayoutRebuildReason.StyleOnly)
+                {
+                    return RetainedRootMetadataValidation.CreateFallback(RetainedPartialApplyFallbackReason.NotStyleOnly);
+                }
+
+                sortedDirty.Add(classification.DfsIndex);
+            }
+
+            if (sortedDirty.Count == 0)
+            {
+                return RetainedRootMetadataValidation.CreateFallback(RetainedPartialApplyFallbackReason.HitTargetPatchFailed);
+            }
+
+            sortedDirty.Sort();
+            var dfsIndex = 0;
+            var dirtyCursor = 0;
+            return TryValidate(retainedRoot, nextRoot, sortedDirty.Written, ref dirtyCursor, ref dfsIndex, out var reason, retainedSnapshot, nextSnapshot)
+                && DirtyDfsIndexCursor.IsComplete(sortedDirty.Written, dirtyCursor)
+                ? RetainedRootMetadataValidation.CreateSucceeded()
+                : RetainedRootMetadataValidation.CreateFallback(reason);
+        }
+        finally
+        {
+            sortedDirty.Dispose();
+        }
+    }
 
     public static RetainedRootMetadataPatch ProjectControlMetadata(
         VirtualNode retainedRoot,
@@ -85,6 +165,60 @@ internal static class RetainedRootMetadataPatcher
         {
             sortedDirty.Dispose();
         }
+    }
+
+    private static bool TryValidate(
+        VirtualNode retainedNode,
+        VirtualNode nextNode,
+        ReadOnlySpan<int> sortedDirty,
+        ref int dirtyCursor,
+        ref int dfsIndex,
+        out RetainedPartialApplyFallbackReason reason,
+        TextBufferSnapshot? retainedSnapshot,
+        TextBufferSnapshot? nextSnapshot)
+    {
+        var currentIndex = dfsIndex;
+        reason = RetainedPartialApplyFallbackReason.HitTargetPatchFailed;
+        if (!DirtyDfsIndexCursor.TryRead(sortedDirty, ref dirtyCursor, currentIndex, out var isDirty))
+        {
+            return false;
+        }
+
+        var retainedChildren = retainedNode.Children;
+        var nextChildren = nextNode.Children;
+        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedChildren.Length != nextChildren.Length)
+        {
+            return false;
+        }
+
+        if (!VirtualNodeDiffer.ContentEqual(retainedNode.Content, nextNode.Content, retainedSnapshot, nextSnapshot))
+        {
+            reason = RetainedPartialApplyFallbackReason.NotStyleOnly;
+            return false;
+        }
+
+        if (isDirty)
+        {
+            if (!TryValidateDirtyProperties(retainedNode.Properties, nextNode.Properties, out reason))
+            {
+                return false;
+            }
+        }
+        else if (!PropertiesEqual(retainedNode.Properties, nextNode.Properties))
+        {
+            return false;
+        }
+
+        dfsIndex++;
+        for (var i = 0; i < retainedChildren.Length; i++)
+        {
+            if (!TryValidate(retainedChildren[i], nextChildren[i], sortedDirty, ref dirtyCursor, ref dfsIndex, out reason, retainedSnapshot, nextSnapshot))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool TryProject(

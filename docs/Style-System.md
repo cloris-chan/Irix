@@ -179,7 +179,7 @@ Animation eligibility is determined by the target property category:
 
 ## StyleOnly Dirty Classification
 
-`StyleOnly` is now both a classification and a guarded internal fast-path boundary. When every dirty classification is StyleOnly, viewport and retained layout context are stable, retained root metadata projection succeeds, and dirty element ranges can be mapped safely, `RenderPipeline.Build` reuses retained layout geometry/tree/scroll diagnostics instead of calling `LayoutTreeBuilder`.
+`StyleOnly` is now both a classification and a guarded internal fast-path boundary. When every dirty classification is StyleOnly, viewport and retained layout context are stable, retained root metadata validation succeeds, and dirty element ranges can be mapped safely, `RenderPipeline.Build` reuses retained layout geometry/tree/scroll diagnostics instead of calling `LayoutTreeBuilder`.
 
 The fast path refreshes current text handles across snapshots, patches dirty visual/action metadata, re-records current-frame draw commands/resources, rebuilds hit targets, and leaves partial apply/segmented handoff to the normal post-publication guards. Any text-size, layout, tree, viewport, incomplete dirty projection, or unsafe retained metadata condition falls back to full layout.
 

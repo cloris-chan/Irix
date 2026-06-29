@@ -40,6 +40,31 @@ public sealed class WindowLayoutPipelineTests
     }
 
     [Fact]
+    public void LayoutNodeReader_child_content_helpers_preserve_dfs_after_nested_siblings()
+    {
+        var label = _arena.AddText("Press".AsSpan());
+        var decoration = VirtualNodeFactory.Container(
+            new NodeKey(2),
+            VirtualNodeBuilder.Text(_arena, "Decoration", new NodeKey(3)));
+        var rectangle = VirtualNodeFactory.Rectangle(new NodeKey(4));
+        var text = VirtualNodeFactory.Text(label, new NodeKey(5));
+        var root = VirtualNodeFactory.Container(
+            new NodeKey(1),
+            [VirtualNodeProperty.Action(new ActionId(7))],
+            [decoration, rectangle, text]);
+        var reader = new VirtualNodeTree(root).CreateReader().Root;
+
+        var hasRectangle = LayoutNodeReader.TryGetFirstRectangleContent(reader, out var rectangleReader);
+        var hasText = LayoutNodeReader.TryGetFirstTextContent(reader, out var textReader);
+
+        Assert.True(hasRectangle);
+        Assert.True(hasText);
+        Assert.Equal(3, rectangleReader.DfsIndex);
+        Assert.Equal(4, textReader.DfsIndex);
+        Assert.Equal(label, LayoutNodeReader.GetButtonLabel(reader));
+    }
+
+    [Fact]
     public void DrawCommandRecorder_records_button_as_fill_and_text_commands()
     {
         var recorder = new DrawCommandRecorder();

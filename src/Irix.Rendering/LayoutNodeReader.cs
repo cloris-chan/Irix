@@ -9,12 +9,13 @@ internal static class LayoutNodeReader
 
     public static TextContentResource GetButtonLabel(VirtualNodeReader node)
     {
-        var children = node.Children;
-        for (var i = 0; i < children.Length; i++)
+        var childDfsIndex = node.DfsIndex + 1;
+        for (var i = 0; i < node.ChildCount; i++)
         {
-            var child = children[i];
+            var child = node.GetChild(i, childDfsIndex);
             if (child.Kind != VirtualNodeKind.Content || child.Content.Kind != ContentResourceKind.Text)
             {
+                childDfsIndex += child.CountSubtreeNodes();
                 continue;
             }
 
@@ -22,6 +23,8 @@ internal static class LayoutNodeReader
             {
                 return textContent;
             }
+
+            childDfsIndex += child.CountSubtreeNodes();
         }
 
         return default;
@@ -39,15 +42,17 @@ internal static class LayoutNodeReader
 
     public static bool TryGetFirstRectangleContent(VirtualNodeReader node, out VirtualNodeReader rectangle)
     {
-        var children = node.Children;
-        for (var i = 0; i < children.Length; i++)
+        var childDfsIndex = node.DfsIndex + 1;
+        for (var i = 0; i < node.ChildCount; i++)
         {
-            var child = children[i];
+            var child = node.GetChild(i, childDfsIndex);
             if (child.Kind == VirtualNodeKind.Content && child.Content.Kind == ContentResourceKind.Rectangle)
             {
-                rectangle = new VirtualNodeReader(child, node.DfsIndex + 1 + i);
+                rectangle = child;
                 return true;
             }
+
+            childDfsIndex += child.CountSubtreeNodes();
         }
 
         rectangle = default;
@@ -56,15 +61,17 @@ internal static class LayoutNodeReader
 
     public static bool TryGetFirstTextContent(VirtualNodeReader node, out VirtualNodeReader text)
     {
-        var children = node.Children;
-        for (var i = 0; i < children.Length; i++)
+        var childDfsIndex = node.DfsIndex + 1;
+        for (var i = 0; i < node.ChildCount; i++)
         {
-            var child = children[i];
+            var child = node.GetChild(i, childDfsIndex);
             if (child.Kind == VirtualNodeKind.Content && child.Content.Kind == ContentResourceKind.Text)
             {
-                text = new VirtualNodeReader(child, node.DfsIndex + 1 + i);
+                text = child;
                 return true;
             }
+
+            childDfsIndex += child.CountSubtreeNodes();
         }
 
         text = default;

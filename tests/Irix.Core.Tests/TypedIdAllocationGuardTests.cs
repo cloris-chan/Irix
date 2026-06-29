@@ -2357,10 +2357,9 @@ public class TypedIdAllocationGuardTests
         var after = GC.GetAllocatedBytesForCurrentThread();
         var allocated = after - before;
 
-        // Baseline: expect ~4-8 KB for lists, arrays, and retained snapshot.
-        // Set generous ceiling to avoid flaky tests; tighten as allocations improve.
-        Assert.True(allocated < 16_384,
-            $"Steady-state Build allocated {allocated} bytes, expected < 16384");
+        // Baseline guard: retained warm builds should stay comfortably below the old 16 KB ceiling.
+        Assert.True(allocated < 8_192,
+            $"Steady-state Build allocated {allocated} bytes, expected < 8192");
     }
 
     private static string RecordStructPattern() => @"\b(?:readonly\s+record\s+struct|record\s+readonly\s+struct|record\s+struct)\b";

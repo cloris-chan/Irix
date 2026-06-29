@@ -82,7 +82,7 @@ Current implementation: empty `DirtyElementRanges` and absent `ScrollDiagnostics
 
 ## StyleOnly Patch Boundary
 
-The planning, retained-frame ownership, and pipeline layout-skip pieces for style-only reuse are implemented: style-only eligibility, retained layout patching, current text-handle refresh, dirty element to command-range planning, retained root metadata projection, hit-target metadata projection, segmented retained-frame ownership, and guarded compositor handoff all exist as internal/runtime paths. Dirty element to command-range validation is shared through `RangeUtils`; retained layout patching, retained root metadata projection, and hit-target metadata projection now share the same sorted retained-DFS dirty cursor semantics for duplicate, stale, and missing dirty indices instead of each owning a separate membership scan.
+The planning, retained-frame ownership, and pipeline layout-skip pieces for style-only reuse are implemented: style-only eligibility, retained root metadata validation, retained layout patching, current text-handle refresh, dirty element to command-range planning, hit-target metadata projection, segmented retained-frame ownership, and guarded compositor handoff all exist as internal/runtime paths. Dirty element to command-range validation is shared through `RangeUtils`; retained metadata validation, retained layout patching, and hit-target metadata projection now share the same sorted retained-DFS dirty cursor semantics for duplicate, stale, and missing dirty indices instead of each owning a separate membership scan.
 
 The active `RenderPipeline.Build` branch reuses retained layout only when every dirty classification is `StyleOnly` and retained layout context is otherwise identical:
 

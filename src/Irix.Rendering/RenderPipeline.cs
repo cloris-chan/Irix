@@ -122,7 +122,8 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
         if (treeChanged || viewportChanged || hasDirty)
         {
-            if (TryApplyStyleOnlyLayoutSkip(root, textSnapshot, dirtyNodes, dirtyClassifications, viewportChanged, previousRoot, classifyOldSnapshot, out var patchedLayoutResult))
+            var styleOnlyPatched = TryApplyStyleOnlyLayoutSkip(root, textSnapshot, dirtyNodes, dirtyClassifications, viewportChanged, previousRoot, classifyOldSnapshot, out var patchedLayoutResult);
+            if (styleOnlyPatched)
             {
                 _retainedLayoutResult = patchedLayoutResult;
                 _retainedRoot = root;
@@ -228,27 +229,32 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             return false;
         }
 
-        var rootPatch = RetainedRootMetadataPatcher.ProjectControlMetadata(
+        OnPipelineAllocationPhaseStarted();
+        var rootValidation = RetainedRootMetadataPatcher.ValidateControlMetadata(
             _retainedRoot,
             root,
             dirtyClassifications,
             _retainedTextSnapshot,
             textSnapshot);
-        if (!rootPatch.Succeeded)
+        if (!rootValidation.Succeeded)
         {
+            OnPipelineStyleOnlyPatchAllocated();
             return false;
         }
 
-        return StyleOnlyLayoutPatcher.TryBuildPatchedLayout(
+        var patched = StyleOnlyLayoutPatcher.TryBuildPatchedLayout(
             _retainedLayoutResult.Value,
             root,
             dirtyNodes,
             out patchedLayout);
+        OnPipelineStyleOnlyPatchAllocated();
+        return patched;
     }
 
     partial void OnPipelineAllocationStarted();
     partial void OnPipelineAllocationPhaseStarted();
     partial void OnPipelineClassificationAllocated();
+    partial void OnPipelineStyleOnlyPatchAllocated();
     partial void OnPipelineLayoutAllocated(LayoutTreeBuilder layoutTreeBuilder);
     partial void OnPipelineRecordAllocated(DrawCommandRecorder drawCommandRecorder);
     partial void OnPipelineHitTargetsAllocated();

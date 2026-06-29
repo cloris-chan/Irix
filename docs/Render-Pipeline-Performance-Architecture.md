@@ -165,7 +165,7 @@ the simple lifetime cases; guards cover the project-specific ones.
 
 ## Evidence Snapshot
 
-Baseline refreshed on 2026-06-28 after the `VirtualNode` IR was normalized to
+Baseline refreshed on 2026-06-29 after the `VirtualNode` IR was normalized to
 `Container`/`Content` nodes, the first production control/root publication
 slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
 `RenderPipelineRetainedInputSnapshot` became readonly value publication shells,
@@ -180,7 +180,10 @@ layout elements/tree nodes/ranges publish through `LayoutElementList`,
 generation token, so retained handoff freshness must match both owner identity
 and generation before a reused owner is considered current. Clean render
 requests also reuse the retained hit-target value publication when tree,
-viewport, and dirty state are unchanged.
+viewport, and dirty state are unchanged. Style-only patch attribution is now a
+separate pipeline bucket, and the retained root metadata check on the layout-skip
+path validates shape/property safety without projecting and discarding a copied
+root.
 
 Primary command:
 
@@ -220,9 +223,14 @@ now agree with the value-publication slice:
 
 | Scenario | Thread bytes/frame | Pipeline snapshot |
 |----------|--------------------|-------------------|
-| Warm reuse | 43 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `record=1240 total` with `record.commandBuild=544`, `record.resources=448`, `record.styles=248` across the run |
-| Style only | 1073 | `snapshot=0`, `retainedInput=0`, `classify=0`, `hitTargets=0`, `dirtyRanges=0`, `record=1240 total` |
-| Layout change | 41 | `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=1240 total` |
+| Warm reuse | 43 | `pipelineBytes=1296 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `record=1240 total`, `retainedFrame=56 total` |
+| Style only | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `record=1240 total` |
+| Layout change | 41 | `pipelineBytes=1240 total`, `snapshot=0`, `retainedInput=0`, `classify=0`, `layout=0`, `styleOnlyPatch=0`, `hitTargets=0`, `dirtyRanges=0`, `scrollDiagnostics=0`, `record=1240 total` |
+
+The `styleOnlyPatch=0` bucket matters: `layout=0` is no longer the only signal
+for layout-skip cost. If retained metadata validation or style-only layout
+patching starts allocating again, it should now appear under `styleOnlyPatch`
+instead of hiding behind the scenario total.
 
 The older warm-scroll comparison point was about 2204 B/frame before the
 Container/Content split. The current shape is expected: button-like controls now
@@ -296,11 +304,14 @@ The required model is capacity-owned publication, not ad hoc object pooling:
   and is not counted as a zero-allocation steady-state frame.
 
 The current implementation is not there yet. The measured buckets show the gap:
-layout arrays, control child/property arrays, draw-record publication, dirty
-classification, hit targets, and retained-frame handoff still allocate when
-they publish new arrays or objects. The recent value-publication slices remove
-result/snapshot object identity, but the remaining work is to replace new-array
-publication with capacity-owned pages and generation-fenced views.
+control child/property arrays and root/container publication remain visible in
+the synthetic tree builder, recorder resource/style/command-build publication is
+still a small inner-pipeline cost, and larger non-inline layout, hit-target,
+dirty-classification, dirty-range, and command-range publications can still
+allocate when they exceed the value-publication inline capacities. The recent
+value-publication slices remove result/snapshot object identity and common small
+array publications, but the remaining work is to replace new-array publication
+with capacity-owned pages and generation-fenced views.
 
 ## Architecture Rules
 
@@ -499,7 +510,8 @@ Direction:
   scroll diagnostics.
 - Keep stack/pool usage fully inside the build phase.
 - Freeze once into `LayoutTreeResult` or a future `PublishedLayoutFrame`, then
-  migrate large or patched frozen storage to reserved publication pages.
+  migrate large or non-inline patched frozen storage to reserved publication
+  pages.
 - Preserve current `StyleOnly` layout skip and retained geometry reuse rules.
 
 Acceptance:
@@ -507,8 +519,8 @@ Acceptance:
 - Warm-scroll `layout.result`, `layout.elementsArray`, `layout.treeNodesArray`,
   and `layout.scrollDiagnosticsArray` remain zero for the common small
   publication path.
-- Under reserved capacity, large full layout rebuilds and style-only layout
-  patches do not allocate layout publication arrays.
+- Under reserved capacity, large full layout rebuilds and non-inline style-only
+  layout patches do not allocate layout publication arrays.
 - `layout.nodeWalk` allocation remains zero.
 - Style-only and partial-apply guards stay green.
 
