@@ -3905,12 +3905,13 @@ public sealed partial class ProgramDiagnosticsTests
     {
         var attribution = new TextCacheAllocationDiagnosticRunner.TreeAllocationAttribution(
             BeginFrameBytes: 30,
-            BuildRootBytes: 210,
+            BuildRootBytes: 234,
             SnapshotBytes: 60,
             BuildRootAttribution: new TextCacheAllocationDiagnosticRunner.BuildRootAllocationAttribution(
                 ButtonBytes: 90,
                 TextBytes: 30,
                 ScrollPropertyBytes: 12,
+                ChildPublicationBytes: 24,
                 ChildrenBytes: 18,
                 ContainerBytes: 60,
                 ButtonAttribution: new TextCacheAllocationDiagnosticRunner.ButtonAllocationAttribution(
@@ -3932,7 +3933,7 @@ public sealed partial class ProgramDiagnosticsTests
         var buttonSummary = TextCacheAllocationDiagnosticRunner.FormatButtonAllocationAttribution(attribution.BuildRootAttribution.ButtonAttribution, frameCount: 3);
 
         Assert.Equal(
-            "Tree allocation processWide: beginFrame=30 bytes (10/frame), buildRoot=210 bytes (70/frame), snapshot=60 bytes (20/frame), measuredTotal=300 bytes (100/frame)",
+            "Tree allocation processWide: beginFrame=30 bytes (10/frame), buildRoot=234 bytes (78/frame), snapshot=60 bytes (20/frame), measuredTotal=324 bytes (108/frame)",
             summary);
         Assert.Equal(
             "Tree snapshot allocation processWide: textBuffer=48 bytes (16/frame), snapshotShell=0 bytes (0/frame), detailGap=0 bytes (0/frame), measuredTotal=48 bytes (16/frame)",
@@ -3940,8 +3941,9 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Equal(
             "BuildRoot allocation processWide: "
             + "buttons=90 bytes (30/frame), text=30 bytes (10/frame), "
-            + "scrollProperty=12 bytes (4/frame), children=18 bytes (6/frame), "
-            + "container=60 bytes (20/frame), measuredTotal=210 bytes (70/frame)",
+            + "scrollProperty=12 bytes (4/frame), childPublication=24 bytes (8/frame), "
+            + "children=18 bytes (6/frame), "
+            + "container=60 bytes (20/frame), measuredTotal=234 bytes (78/frame)",
             buildRootSummary);
         Assert.Equal(
             "Button allocation processWide: "
@@ -4029,6 +4031,7 @@ public sealed partial class ProgramDiagnosticsTests
                 ButtonBytes: 90,
                 TextBytes: 30,
                 ScrollPropertyBytes: 0,
+                ChildPublicationBytes: 0,
                 ChildrenBytes: 0,
                 ContainerBytes: 90,
                 ButtonAttribution: new TextCacheAllocationDiagnosticRunner.ButtonAllocationAttribution(
@@ -4082,6 +4085,7 @@ public sealed partial class ProgramDiagnosticsTests
                 ButtonBytes: 210,
                 TextBytes: 0,
                 ScrollPropertyBytes: 0,
+                ChildPublicationBytes: 0,
                 ChildrenBytes: 0,
                 ContainerBytes: 90,
                 ButtonAttribution: new TextCacheAllocationDiagnosticRunner.ButtonAllocationAttribution(
@@ -4110,6 +4114,33 @@ public sealed partial class ProgramDiagnosticsTests
 
         Assert.Equal(
             "Allocation focus: largestCandidate=pipeline.styleOnlyPatch=135 bytes (45/frame), nextCandidate=tree.buildRoot.button.childrenList=120 bytes (40/frame), treeDetailGap=30 bytes (10/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=30 bytes (10/frame)",
+            summary);
+    }
+
+    [Fact]
+    public void Text_cache_allocation_focus_formatter_uses_child_publication_bucket()
+    {
+        var attribution = new TextCacheAllocationDiagnosticRunner.AllocationAttribution(
+            TreeBytes: 360,
+            DiffBytes: 0,
+            TranslateBytes: 0,
+            RenderBytes: 0);
+        var treeAttribution = new TextCacheAllocationDiagnosticRunner.TreeAllocationAttribution(
+            BeginFrameBytes: 0,
+            BuildRootBytes: 300,
+            SnapshotBytes: 60,
+            BuildRootAttribution: new TextCacheAllocationDiagnosticRunner.BuildRootAllocationAttribution(
+                ButtonBytes: 0,
+                TextBytes: 0,
+                ScrollPropertyBytes: 0,
+                ChildPublicationBytes: 240,
+                ChildrenBytes: 0,
+                ContainerBytes: 60));
+
+        var summary = TextCacheAllocationDiagnosticRunner.FormatAllocationFocus(attribution, treeAttribution, default, frameCount: 3);
+
+        Assert.Equal(
+            "Allocation focus: largestCandidate=tree.buildRoot.childPublication=240 bytes (80/frame), nextCandidate=tree.buildRoot.container=60 bytes (20/frame), treeDetailGap=0 bytes (0/frame), pipelineDetailGap=0 bytes (0/frame), drawRecord=0 bytes (0/frame)",
             summary);
     }
 

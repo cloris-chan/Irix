@@ -1663,6 +1663,39 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
+    public void VirtualNode_child_publication_supports_tree_owned_slab_ranges()
+    {
+        var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
+
+        Assert.Contains("internal ref struct VirtualNodeTreePublicationBuilder", source);
+        Assert.Contains("FromOwnedArrayRange", source);
+        Assert.Contains("private readonly int _start;", source);
+        Assert.Contains("private readonly int _count;", source);
+        Assert.Contains("return items[_start + index];", source);
+        Assert.Contains("_items.AsSpan(_start, _count)", source);
+        Assert.DoesNotContain("internal sealed class VirtualNodeChildSlab", source);
+        Assert.DoesNotContain("VirtualNodeChildSlab? _owner", source);
+    }
+
+    [Fact]
+    public void VirtualNode_child_publication_builder_publishes_array_ranges()
+    {
+        var builder = new VirtualNodeTreePublicationBuilder(childCapacity: 4);
+        var first = VirtualNodeFactory.Rectangle(new NodeKey(1), VirtualNodeProperty.Width(10));
+        var second = VirtualNodeFactory.Rectangle(new NodeKey(2), VirtualNodeProperty.Width(20));
+        var prefix = builder.PublishChildren(first, second);
+        var tail = builder.PublishChildren([first]);
+
+        Assert.Equal(3, builder.WrittenChildCount);
+        Assert.Equal(4, builder.ChildCapacity);
+        Assert.Equal(2, prefix.Length);
+        Assert.Equal(new NodeKey(1), prefix[0].Key);
+        Assert.Equal(new NodeKey(2), prefix[1].Key);
+        Assert.Single(tail.ToArray());
+        Assert.Equal(new NodeKey(1), tail[0].Key);
+    }
+
+    [Fact]
     public void VirtualNode_builders_keep_inline_and_freezing_boundaries_internal()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
@@ -1681,6 +1714,8 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("CountButtonProperties", source);
         Assert.Contains("CreateButtonPropertyList", source);
         Assert.Contains("VirtualNodeChildList CreateButtonChildren", source);
+        Assert.Contains("scoped ref VirtualNodeTreePublicationBuilder publication", source);
+        Assert.Contains("publication.PublishChildren", source);
         Assert.Contains("VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container", source);
         Assert.Contains("StyleDeclarationMapper.WriteVirtualNodeProperties", source);
         Assert.DoesNotContain("CreateButtonPropertyArray", source);
@@ -1701,7 +1736,10 @@ public class TypedIdAllocationGuardTests
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
 
         Assert.Contains("CreateRootChildren", source);
-        Assert.Contains("VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container", source);
+        Assert.Contains("new VirtualNodeTreePublicationBuilder", source);
+        Assert.Contains("VirtualNodeChildList.FromOwnedArray(children)", source);
+        Assert.Contains("VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container", source);
+        Assert.Contains("new VirtualNode[headerRows.Length", source);
         Assert.Contains("headerRows.CopyTo(children)", source);
         Assert.Contains("WriteScrollProbeRows", source);
         Assert.DoesNotContain("BuildScrollProbeRows", source);

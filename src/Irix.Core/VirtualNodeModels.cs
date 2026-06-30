@@ -433,6 +433,75 @@ internal readonly struct VirtualNodeTree(VirtualNode root, TextBufferSnapshot te
     internal VirtualNodeTreeReader CreateReader() => new(this);
 }
 
+internal ref struct VirtualNodeTreePublicationBuilder
+{
+    private VirtualNode[]? _children;
+    private int _written;
+
+    public VirtualNodeTreePublicationBuilder(int childCapacity)
+    {
+        if (childCapacity < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(childCapacity));
+        }
+
+        _children = childCapacity == 0 ? null : new VirtualNode[childCapacity];
+        _written = 0;
+    }
+
+    public readonly int WrittenChildCount => _written;
+
+    public readonly int ChildCapacity => _children?.Length ?? 0;
+
+    public VirtualNodeChildList PublishChildren(VirtualNode first, VirtualNode second)
+    {
+        var start = Reserve(2);
+        var children = _children!;
+        children[start] = first;
+        children[start + 1] = second;
+        return VirtualNodeChildList.FromOwnedArrayRange(children, start, 2);
+    }
+
+    public VirtualNodeChildList PublishChildren(scoped ReadOnlySpan<VirtualNode> children)
+    {
+        if (children.IsEmpty)
+        {
+            return VirtualNodeChildList.Empty;
+        }
+
+        var start = Reserve(children.Length);
+        var target = _children!;
+        children.CopyTo(target.AsSpan(start, children.Length));
+        return VirtualNodeChildList.FromOwnedArrayRange(target, start, children.Length);
+    }
+
+    private int Reserve(int count)
+    {
+        var start = _written;
+        var required = checked(start + count);
+        EnsureCapacity(required);
+        _written = required;
+        return start;
+    }
+
+    private void EnsureCapacity(int required)
+    {
+        var children = _children;
+        if (children is not null && required <= children.Length)
+        {
+            return;
+        }
+
+        var nextCapacity = children is null ? 4 : children.Length * 2;
+        while (nextCapacity < required)
+        {
+            nextCapacity *= 2;
+        }
+
+        Array.Resize(ref _children, nextCapacity);
+    }
+}
+
 internal readonly ref struct VirtualNodeTreeReader
 {
     private readonly VirtualNode _root;
@@ -658,13 +727,28 @@ internal readonly struct VirtualNode
 internal readonly struct VirtualNodeChildList : IEquatable<VirtualNodeChildList>
 {
     private readonly VirtualNode[]? _items;
+    private readonly int _start;
+    private readonly int _count;
 
     private VirtualNodeChildList(VirtualNode[] items)
+        : this(items, 0, items.Length)
     {
-        _items = items.Length == 0 ? null : items;
     }
 
-    public int Count => _items?.Length ?? 0;
+    private VirtualNodeChildList(VirtualNode[] items, int start, int count)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        if (start < 0 || count < 0 || start + count > items.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
+        _items = count == 0 ? null : items;
+        _start = start;
+        _count = count;
+    }
+
+    public int Count => _items is null ? 0 : _count;
 
     public int Length => Count;
 
@@ -675,12 +759,12 @@ internal readonly struct VirtualNodeChildList : IEquatable<VirtualNodeChildList>
         get
         {
             var items = _items;
-            if (items is null || (uint)index >= (uint)items.Length)
+            if (items is null || (uint)index >= (uint)_count)
             {
                 throw new ArgumentOutOfRangeException(nameof(index));
             }
 
-            return items[index];
+            return items[_start + index];
         }
     }
 
@@ -692,21 +776,24 @@ internal readonly struct VirtualNodeChildList : IEquatable<VirtualNodeChildList>
         return children.Length == 0 ? Empty : new VirtualNodeChildList(children);
     }
 
+    internal static VirtualNodeChildList FromOwnedArrayRange(VirtualNode[] children, int start, int count) =>
+        count == 0 ? Empty : new VirtualNodeChildList(children, start, count);
+
     public static VirtualNodeChildList CopyFrom(scoped ReadOnlySpan<VirtualNode> children) =>
         children.IsEmpty ? Empty : new VirtualNodeChildList(children.ToArray());
 
     public ReadOnlySpan<VirtualNode> AsSpan() =>
-        _items is null ? ReadOnlySpan<VirtualNode>.Empty : _items;
+        _items is null ? ReadOnlySpan<VirtualNode>.Empty : _items.AsSpan(_start, _count);
 
     public VirtualNode[] ToArray()
     {
-        if (_items is null)
+        if (Count == 0)
         {
             return [];
         }
 
-        var result = new VirtualNode[_items.Length];
-        _items.AsSpan().CopyTo(result);
+        var result = new VirtualNode[Count];
+        CopyTo(result);
         return result;
     }
 
@@ -718,10 +805,7 @@ internal readonly struct VirtualNodeChildList : IEquatable<VirtualNodeChildList>
             throw new ArgumentException("Destination span is too small.", nameof(destination));
         }
 
-        if (_items is not null)
-        {
-            _items.AsSpan().CopyTo(destination);
-        }
+        AsSpan().CopyTo(destination);
     }
 
     public Enumerator GetEnumerator() => new(this);

@@ -189,6 +189,7 @@ internal static class TextCacheAllocationDiagnosticRunner
             + $"buttons={attribution.ButtonBytes} bytes ({PerFrame(attribution.ButtonBytes, divisor)}/frame), "
             + $"text={attribution.TextBytes} bytes ({PerFrame(attribution.TextBytes, divisor)}/frame), "
             + $"scrollProperty={attribution.ScrollPropertyBytes} bytes ({PerFrame(attribution.ScrollPropertyBytes, divisor)}/frame), "
+            + $"childPublication={attribution.ChildPublicationBytes} bytes ({PerFrame(attribution.ChildPublicationBytes, divisor)}/frame), "
             + $"children={attribution.ChildrenBytes} bytes ({PerFrame(attribution.ChildrenBytes, divisor)}/frame), "
             + $"container={attribution.ContainerBytes} bytes ({PerFrame(attribution.ContainerBytes, divisor)}/frame), "
             + $"measuredTotal={attribution.TotalBytes} bytes ({PerFrame(attribution.TotalBytes, divisor)}/frame)";
@@ -273,6 +274,7 @@ internal static class TextCacheAllocationDiagnosticRunner
 
             UpdateLargest("tree.buildRoot.text", buildRootAttribution.TextBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
             UpdateLargest("tree.buildRoot.scrollProperty", buildRootAttribution.ScrollPropertyBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
+            UpdateLargest("tree.buildRoot.childPublication", buildRootAttribution.ChildPublicationBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
             UpdateLargest("tree.buildRoot.children", buildRootAttribution.ChildrenBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
             UpdateLargest("tree.buildRoot.container", buildRootAttribution.ContainerBytes, ref largestName, ref largestBytes, ref nextName, ref nextBytes);
         }
@@ -371,8 +373,12 @@ internal static class TextCacheAllocationDiagnosticRunner
     {
         attribution = default;
 
+        var beforeChildPublication = GetAllocatedBytes(measureAllocation);
+        var publication = new VirtualNodeTreePublicationBuilder(childCapacity: 4);
+        attribution = attribution.WithChildPublication(AllocatedDelta(measureAllocation, beforeChildPublication));
+
         var beforeButtonA = GetAllocatedBytes(measureAllocation);
-        var buttonA = BuildMeasuredButton(arena, "Cache A".AsSpan(), new NodeKey(2), new ActionId(200), measureAllocation, out var buttonAAttribution);
+        var buttonA = BuildMeasuredButton(arena, "Cache A".AsSpan(), new NodeKey(2), new ActionId(200), ref publication, measureAllocation, out var buttonAAttribution);
         attribution = attribution.WithButton(AllocatedDelta(measureAllocation, beforeButtonA), buttonAAttribution);
 
         var beforeText = GetAllocatedBytes(measureAllocation);
@@ -380,7 +386,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithText(AllocatedDelta(measureAllocation, beforeText));
 
         var beforeButtonB = GetAllocatedBytes(measureAllocation);
-        var buttonB = BuildMeasuredButton(arena, "Cache B".AsSpan(), new NodeKey(5), new ActionId(201), measureAllocation, out var buttonBAttribution);
+        var buttonB = BuildMeasuredButton(arena, "Cache B".AsSpan(), new NodeKey(5), new ActionId(201), ref publication, measureAllocation, out var buttonBAttribution);
         attribution = attribution.WithButton(AllocatedDelta(measureAllocation, beforeButtonB), buttonBAttribution);
 
         var beforeScrollProperty = GetAllocatedBytes(measureAllocation);
@@ -388,15 +394,11 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithScrollProperty(AllocatedDelta(measureAllocation, beforeScrollProperty));
 
         var beforeChildren = GetAllocatedBytes(measureAllocation);
-        ReadOnlySpan<VirtualNode> children = [buttonA, textNode, buttonB];
+        var children = new[] { buttonA, textNode, buttonB };
         attribution = attribution.WithChildren(AllocatedDelta(measureAllocation, beforeChildren));
 
         var beforeContainer = GetAllocatedBytes(measureAllocation);
-        var root = new VirtualNode(
-            VirtualNodeKind.Container,
-            key: 1,
-            properties: properties,
-            children: children);
+        var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertySet.Create(VirtualNodeKind.Container, properties), children);
         attribution = attribution.WithContainer(AllocatedDelta(measureAllocation, beforeContainer));
         return root;
     }
@@ -406,6 +408,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         ReadOnlySpan<char> label,
         NodeKey key,
         ActionId actionId,
+        scoped ref VirtualNodeTreePublicationBuilder publication,
         bool measureAllocation,
         out ButtonAllocationAttribution attribution)
     {
@@ -429,7 +432,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithPropertyList(AllocatedDelta(measureAllocation, beforePropertyList));
 
         var beforeChildrenList = GetAllocatedBytes(measureAllocation);
-        var childList = ControlNodeBuilder.CreateButtonChildren(labelContent, rectanglePropertyList, textPropertyList);
+        var childList = ControlNodeBuilder.CreateButtonChildren(labelContent, rectanglePropertyList, textPropertyList, ref publication);
         attribution = attribution.WithChildrenList(AllocatedDelta(measureAllocation, beforeChildrenList));
 
         var beforeButtonNode = GetAllocatedBytes(measureAllocation);
@@ -532,6 +535,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         long ButtonBytes,
         long TextBytes,
         long ScrollPropertyBytes,
+        long ChildPublicationBytes,
         long ChildrenBytes,
         long ContainerBytes,
         ButtonAllocationAttribution ButtonAttribution = default) : IEquatable<BuildRootAllocationAttribution>
@@ -539,36 +543,41 @@ internal static class TextCacheAllocationDiagnosticRunner
         public long ButtonBytes { get; } = ButtonBytes;
         public long TextBytes { get; } = TextBytes;
         public long ScrollPropertyBytes { get; } = ScrollPropertyBytes;
+        public long ChildPublicationBytes { get; } = ChildPublicationBytes;
         public long ChildrenBytes { get; } = ChildrenBytes;
         public long ContainerBytes { get; } = ContainerBytes;
         public ButtonAllocationAttribution ButtonAttribution { get; } = ButtonAttribution;
-        public long TotalBytes => ButtonBytes + TextBytes + ScrollPropertyBytes + ChildrenBytes + ContainerBytes;
+        public long TotalBytes => ButtonBytes + TextBytes + ScrollPropertyBytes + ChildPublicationBytes + ChildrenBytes + ContainerBytes;
 
         public BuildRootAllocationAttribution Add(BuildRootAllocationAttribution other) =>
             new(
                 ButtonBytes + other.ButtonBytes,
                 TextBytes + other.TextBytes,
                 ScrollPropertyBytes + other.ScrollPropertyBytes,
+                ChildPublicationBytes + other.ChildPublicationBytes,
                 ChildrenBytes + other.ChildrenBytes,
                 ContainerBytes + other.ContainerBytes,
                 ButtonAttribution.Add(other.ButtonAttribution));
 
         public BuildRootAllocationAttribution WithButton(long bytes, ButtonAllocationAttribution attribution) =>
-            new(ButtonBytes + bytes, TextBytes, ScrollPropertyBytes, ChildrenBytes, ContainerBytes, ButtonAttribution.Add(attribution.WithMeasured(bytes)));
+            new(ButtonBytes + bytes, TextBytes, ScrollPropertyBytes, ChildPublicationBytes, ChildrenBytes, ContainerBytes, ButtonAttribution.Add(attribution.WithMeasured(bytes)));
 
-        public BuildRootAllocationAttribution WithText(long bytes) => new(ButtonBytes, TextBytes + bytes, ScrollPropertyBytes, ChildrenBytes, ContainerBytes, ButtonAttribution);
+        public BuildRootAllocationAttribution WithText(long bytes) => new(ButtonBytes, TextBytes + bytes, ScrollPropertyBytes, ChildPublicationBytes, ChildrenBytes, ContainerBytes, ButtonAttribution);
 
-        public BuildRootAllocationAttribution WithScrollProperty(long bytes) => new(ButtonBytes, TextBytes, ScrollPropertyBytes + bytes, ChildrenBytes, ContainerBytes, ButtonAttribution);
+        public BuildRootAllocationAttribution WithScrollProperty(long bytes) => new(ButtonBytes, TextBytes, ScrollPropertyBytes + bytes, ChildPublicationBytes, ChildrenBytes, ContainerBytes, ButtonAttribution);
 
-        public BuildRootAllocationAttribution WithChildren(long bytes) => new(ButtonBytes, TextBytes, ScrollPropertyBytes, ChildrenBytes + bytes, ContainerBytes, ButtonAttribution);
+        public BuildRootAllocationAttribution WithChildPublication(long bytes) => new(ButtonBytes, TextBytes, ScrollPropertyBytes, ChildPublicationBytes + bytes, ChildrenBytes, ContainerBytes, ButtonAttribution);
 
-        public BuildRootAllocationAttribution WithContainer(long bytes) => new(ButtonBytes, TextBytes, ScrollPropertyBytes, ChildrenBytes, ContainerBytes + bytes, ButtonAttribution);
+        public BuildRootAllocationAttribution WithChildren(long bytes) => new(ButtonBytes, TextBytes, ScrollPropertyBytes, ChildPublicationBytes, ChildrenBytes + bytes, ContainerBytes, ButtonAttribution);
+
+        public BuildRootAllocationAttribution WithContainer(long bytes) => new(ButtonBytes, TextBytes, ScrollPropertyBytes, ChildPublicationBytes, ChildrenBytes, ContainerBytes + bytes, ButtonAttribution);
 
         public bool Equals(BuildRootAllocationAttribution other)
         {
             return ButtonBytes == other.ButtonBytes
                 && TextBytes == other.TextBytes
                 && ScrollPropertyBytes == other.ScrollPropertyBytes
+                && ChildPublicationBytes == other.ChildPublicationBytes
                 && ChildrenBytes == other.ChildrenBytes
                 && ContainerBytes == other.ContainerBytes
                 && ButtonAttribution.Equals(other.ButtonAttribution);
@@ -576,7 +585,7 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         public override bool Equals(object? obj) => obj is BuildRootAllocationAttribution other && Equals(other);
 
-        public override int GetHashCode() => HashCode.Combine(ButtonBytes, TextBytes, ScrollPropertyBytes, ChildrenBytes, ContainerBytes, ButtonAttribution);
+        public override int GetHashCode() => HashCode.Combine(ButtonBytes, TextBytes, ScrollPropertyBytes, ChildPublicationBytes, ChildrenBytes, ContainerBytes, ButtonAttribution);
     }
 
     internal readonly struct ButtonAllocationAttribution(

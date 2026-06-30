@@ -80,6 +80,14 @@ internal static class ControlNodeBuilder
         return Button(arena.AddText(label.AsSpan()), key, properties);
     }
 
+    internal static VirtualNode Button(VirtualTextArena arena, string label, NodeKey key, ActionId actionId, ControlVisualState visualState, scoped ref VirtualNodeTreePublicationBuilder publication)
+    {
+        ArgumentNullException.ThrowIfNull(label);
+        Span<VirtualNodeProperty> properties = stackalloc VirtualNodeProperty[4];
+        ButtonPropertyBundle.Write(actionId, visualState, properties);
+        return Button(arena.AddText(label.AsSpan()), key, ref publication, properties);
+    }
+
     internal static VirtualNode Button(TextContentResource label, NodeKey key = default, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
     {
         if (label.IsNone)
@@ -92,6 +100,21 @@ internal static class ControlNodeBuilder
         var rectangleProperties = CreateButtonPropertyList(properties, rectangleCount, ButtonPropertyTarget.Rectangle);
         var textProperties = CreateButtonPropertyList(properties, textCount, ButtonPropertyTarget.Text);
         var children = CreateButtonChildren(label, rectangleProperties, textProperties);
+        return VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, key, default, containerProperties, children);
+    }
+
+    internal static VirtualNode Button(TextContentResource label, NodeKey key, scoped ref VirtualNodeTreePublicationBuilder publication, params scoped ReadOnlySpan<VirtualNodeProperty> properties)
+    {
+        if (label.IsNone)
+        {
+            throw new ArgumentException("Button label must be explicit.", nameof(label));
+        }
+
+        CountButtonProperties(properties, out var containerCount, out var rectangleCount, out var textCount);
+        var containerProperties = CreateButtonPropertyList(properties, containerCount, ButtonPropertyTarget.Container);
+        var rectangleProperties = CreateButtonPropertyList(properties, rectangleCount, ButtonPropertyTarget.Rectangle);
+        var textProperties = CreateButtonPropertyList(properties, textCount, ButtonPropertyTarget.Text);
+        var children = CreateButtonChildren(label, rectangleProperties, textProperties, ref publication);
         return VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, key, default, containerProperties, children);
     }
 
@@ -120,6 +143,32 @@ internal static class ControlNodeBuilder
                 textProperties,
                 ReadOnlySpan<VirtualNode>.Empty)
         ]);
+    }
+
+    internal static VirtualNodeChildList CreateButtonChildren(
+        TextContentResource label,
+        VirtualNodePropertyList rectangleProperties,
+        VirtualNodePropertyList textProperties,
+        scoped ref VirtualNodeTreePublicationBuilder publication)
+    {
+        if (label.IsNone)
+        {
+            throw new ArgumentException("Button label must be explicit.", nameof(label));
+        }
+
+        return publication.PublishChildren(
+            new VirtualNode(
+                VirtualNodeKind.Content,
+                NodeKey.None,
+                ContentResource.Rectangle,
+                rectangleProperties,
+                ReadOnlySpan<VirtualNode>.Empty),
+            new VirtualNode(
+                VirtualNodeKind.Content,
+                NodeKey.None,
+                ContentResource.FromText(label),
+                textProperties,
+                ReadOnlySpan<VirtualNode>.Empty));
     }
 
     internal static void CountButtonProperties(

@@ -196,16 +196,18 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2145856 bytes | 11921 B/frame | render 10877 B/frame, tree 702 B/frame, diff 182 B/frame, translate 180 B/frame |
-| Warm scroll | 231984 bytes | 1288 B/frame | tree 820 B/frame, diff 227 B/frame, render 227 B/frame, translate 91 B/frame |
-| Scale change | 228720 bytes | 1270 B/frame | tree 865 B/frame, render 182 B/frame, translate 136 B/frame, diff 136 B/frame |
+| Static | 2159384 bytes | 11996 B/frame | render 10923 B/frame, tree 837 B/frame, translate 136 B/frame, diff 91 B/frame |
+| Warm scroll | 239320 bytes | 1329 B/frame | tree 820 B/frame, diff 273 B/frame, render 182 B/frame, translate 91 B/frame |
+| Scale change | 234128 bytes | 1300 B/frame | tree 774 B/frame, render 227 B/frame, translate 136 B/frame, diff 91 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `tree.buildRoot.container` | 273 | Remaining root/container publication cost before the future `VirtualNodeTree` slab. |
-| `tree.buildRoot.button.childrenList` | 364 | Button lowering now publishes through `VirtualNodeChildList`; the current backing storage is still per-node child arrays until the future `VirtualNodeTree` slab owns the storage. |
+| `tree.buildRoot.childPublication` | 410 | Button template children now publish into a tree-publication child array range; the remaining cost is the per-frame publication backing array until the future retained-capacity owner is installed. |
+| `tree.buildRoot.children` | 227 | Root children still publish through a per-frame owned array because `VirtualNode` contains managed references and cannot be stackalloced. |
+| `tree.buildRoot.container` | 136 | Remaining root/container publication cost before the future retained-capacity `VirtualNodeTree` publication owner. |
+| `tree.buildRoot.button.childrenList` | 0 | The per-button child-list backing allocation is removed for the measured button-template path. |
 | `tree.buildRoot.button.propertyList` | 0 | Button control metadata now publishes through compact `VirtualNodePropertyList` storage instead of per-button property arrays. |
 | `drawRecord` | 0 | Recorder-owned command batches now reuse typed command owners that retain backing capacity through a generation token; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
 | `hitTargets` | 0 | Common hit targets are retained through `HitTargetList` without publishing an array; clean render requests reuse the retained value publication, and dirty retained input snapshots patch common hit-target metadata inline. |
@@ -448,16 +450,21 @@ Acceptance:
 
 ### P2 - VirtualNode Publication Slab
 
-Status: reader boundary implemented as a transition slice. `VirtualNodeTree`
-now exposes an internal generation-fenced reader/cursor contract for diff,
-layout traversal, and style-only patching, so the next migration point is no
-longer "add a reader"; it is "move publication storage from per-node arrays into
-tree-owned slabs."
+Status: reader boundary and the first button child-range publication slice are
+implemented. `VirtualNodeTree` now exposes an internal reader/cursor contract for
+diff, layout traversal, and style-only patching, and measured button template
+children can publish into a single tree-publication child array range. The next
+migration point is no longer "add a reader"; it is "make publication storage a
+retained-capacity owner with a lifetime-safe current/previous handoff."
 
-The measured `childrenList` bucket is a sign that per-node owned child storage is the
-next structural limit. Since `VirtualNode` is internal, the next target design can
-move from "each node owns child/property arrays" to "one published tree owns
-contiguous node, child-range, property, and content-resource slabs".
+The old measured `button.childrenList` bucket is now zero for the synthetic
+button-template path. The remaining measured `tree.buildRoot.childPublication`
+and root `tree.buildRoot.children` buckets show the next structural limit:
+publication backing storage is still allocated per frame rather than reserved and
+owned by the tree publication lifetime. Since `VirtualNode` is internal, the next
+target design can move from "each node or builder owns child/property arrays" to
+"one published tree owns contiguous node, child-range, property, and
+content-resource slabs".
 
 Possible shape:
 
@@ -471,7 +478,10 @@ Possible shape:
   should be eligible for `where T : unmanaged` helpers and byte-span hashing or
   upload staging.
 - Builders can use scratch vectors and freeze once into contiguous publication
-  ranges, reusing reserved slabs when capacity is sufficient.
+  ranges, reusing reserved slabs when capacity is sufficient. Because
+  `VirtualNode` carries managed references, root/child staging cannot rely on
+  `stackalloc VirtualNode`; capacity-owned managed arrays/pages need explicit
+  lifetime ownership.
 - Diff/layout/style-only patch APIs consume readers/spans instead of per-node
   arrays.
 
@@ -482,8 +492,8 @@ justify the migration.
 
 Acceptance:
 
-- Warm-scroll `button.childrenList` and broad tree-build publication allocation
-  drop materially.
+- Warm-scroll `button.childrenList` stays at zero and broad tree-build
+  publication allocation drops through retained-capacity child pages.
 - Under reserved capacity and known resources, tree shape changes do not allocate
   new child/property arrays.
 - Diff, layout, and retained tree tests prove stable DFS/index/key behavior.

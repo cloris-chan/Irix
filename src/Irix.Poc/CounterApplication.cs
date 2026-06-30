@@ -34,6 +34,8 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
 {
     private const int ScrollProbeRowCount = 50;
     private const int RootFixedChildCount = 4;
+    private const int ButtonTemplateChildCount = 2;
+    private const int ButtonCount = 3;
 
     internal readonly VirtualTextArena _arena = new();
 
@@ -97,11 +99,12 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
                 VirtualNodeBuilder.Text(_arena, $"Count: {model.Count}", new NodeKey(2)),
                 VirtualNodeBuilder.Text(_arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4))
             ];
+        var publication = new VirtualNodeTreePublicationBuilder(ComputeChildPublicationCapacity());
 
         var rootProperties = new[] { VirtualNodeProperty.ScrollY(scrollY) };
         VirtualNodePropertySet.Validate(VirtualNodeKind.Container, rootProperties);
-        var rootChildren = CreateRootChildren(_arena, headerRows, inputOwnership);
-        var root = VirtualNode.CreateFromOwnedArraysUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, rootProperties, rootChildren);
+        var rootChildren = CreateRootChildren(_arena, headerRows, inputOwnership, publication);
+        var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertyList.FromOwnedArray(VirtualNodeKind.Container, rootProperties), rootChildren);
 
         return new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
     }
@@ -116,7 +119,13 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
         return new ButtonVisualState(state.IsHovered, state.IsPressed, state.IsFocused);
     }
 
-    private static VirtualNode BuildButton(VirtualTextArena arena, string label, uint key, ActionId actionId, OwnershipSnapshot ownership)
+    private static VirtualNode BuildButton(
+        VirtualTextArena arena,
+        string label,
+        uint key,
+        ActionId actionId,
+        OwnershipSnapshot ownership,
+        scoped ref VirtualNodeTreePublicationBuilder publication)
     {
         var visualState = ControlVisualStateProjection.Project(ownership, actionId);
         return ControlNodeBuilder.Button(
@@ -124,19 +133,24 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
             label,
             new NodeKey(key),
             actionId,
-            visualState);
+            visualState,
+            ref publication);
     }
 
-    private static VirtualNode[] CreateRootChildren(VirtualTextArena arena, ReadOnlySpan<VirtualNode> headerRows, OwnershipSnapshot inputOwnership)
+    private static VirtualNodeChildList CreateRootChildren(
+        VirtualTextArena arena,
+        ReadOnlySpan<VirtualNode> headerRows,
+        OwnershipSnapshot inputOwnership,
+        VirtualNodeTreePublicationBuilder publication)
     {
         var children = new VirtualNode[headerRows.Length + RootFixedChildCount + ScrollProbeRowCount];
         headerRows.CopyTo(children);
         var next = headerRows.Length;
 
         children[next++] = VirtualNodeFactory.Rectangle(new NodeKey(5), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48));
-        children[next++] = BuildButton(arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership);
-        children[next++] = BuildButton(arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership);
-        children[next++] = BuildButton(arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership);
+        children[next++] = BuildButton(arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership, ref publication);
+        children[next++] = BuildButton(arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership, ref publication);
+        children[next++] = BuildButton(arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership, ref publication);
         next = WriteScrollProbeRows(arena, children, next);
 
         if (next != children.Length)
@@ -144,10 +158,10 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
             throw new InvalidOperationException("Counter root child publication count changed unexpectedly.");
         }
 
-        return children;
+        return VirtualNodeChildList.FromOwnedArray(children);
     }
 
-    private static int WriteScrollProbeRows(VirtualTextArena arena, VirtualNode[] children, int startIndex)
+    private static int WriteScrollProbeRows(VirtualTextArena arena, Span<VirtualNode> children, int startIndex)
     {
         var next = startIndex;
         for (var index = 0; index < ScrollProbeRowCount; index++)
@@ -156,6 +170,11 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
         }
 
         return next;
+    }
+
+    private static int ComputeChildPublicationCapacity()
+    {
+        return ButtonCount * ButtonTemplateChildCount;
     }
 
     private static UpdateResult<CounterModel, CounterMessage> ApplyRoutedInput(CounterModel model, CounterMessage.RoutedInput input)
