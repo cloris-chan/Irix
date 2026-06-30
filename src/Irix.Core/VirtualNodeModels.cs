@@ -1000,12 +1000,15 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
 {
     private readonly VirtualNodeProperty[]? _items;
     private readonly uint _actionIdValue;
+    private readonly VirtualPropertyKey _singleNumberKey;
+    private readonly ulong _singleNumberBits;
     private readonly byte _compactKind;
     private readonly byte _controlStateBits;
 
     private const byte CompactKindNone = 0;
     private const byte CompactKindAction = 1;
     private const byte CompactKindControlBundle = 2;
+    private const byte CompactKindSingleNumber = 3;
     private const byte HoveredBit = 1;
     private const byte PressedBit = 2;
     private const byte FocusedBit = 4;
@@ -1014,15 +1017,27 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
         VirtualNodeProperty[]? items,
         uint actionIdValue,
         byte compactKind,
-        byte controlStateBits)
+        byte controlStateBits,
+        VirtualPropertyKey singleNumberKey = default,
+        ulong singleNumberBits = 0)
     {
         _items = items;
         _actionIdValue = actionIdValue;
+        _singleNumberKey = singleNumberKey;
+        _singleNumberBits = singleNumberBits;
         _compactKind = compactKind;
         _controlStateBits = controlStateBits;
     }
 
-    public int Count => _items is not null ? _items.Length : _compactKind == CompactKindAction ? 1 : _compactKind == CompactKindControlBundle ? 4 : 0;
+    public int Count =>
+        _items is not null
+            ? _items.Length
+            : _compactKind switch
+            {
+                CompactKindAction or CompactKindSingleNumber => 1,
+                CompactKindControlBundle => 4,
+                _ => 0
+            };
 
     public int Length => Count;
 
@@ -1050,6 +1065,16 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
                 }
 
                 return VirtualNodeProperty.Action(new ActionId(_actionIdValue));
+            }
+
+            if (_compactKind == CompactKindSingleNumber)
+            {
+                if (index != 0)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(index));
+                }
+
+                return CreateSingleNumberProperty(_singleNumberKey, _singleNumberBits);
             }
 
             if (_compactKind == CompactKindControlBundle)
@@ -1109,6 +1134,12 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
             return true;
         }
 
+        if (properties.Length == 1
+            && TryCreateSingleNumberCompact(properties[0], out compact))
+        {
+            return true;
+        }
+
         if (properties.Length != 4
             || properties[0].Key != VirtualPropertyKey.ActionId
             || properties[1].Key != VirtualPropertyKey.IsHovered
@@ -1126,6 +1157,39 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
         var stateBits = (byte)((isHovered ? HoveredBit : 0) | (isPressed ? PressedBit : 0) | (isFocused ? FocusedBit : 0));
         compact = new VirtualNodePropertyList(null, actionId.Value, CompactKindControlBundle, stateBits);
         return true;
+    }
+
+    private static bool TryCreateSingleNumberCompact(VirtualNodeProperty property, out VirtualNodePropertyList compact)
+    {
+        compact = default;
+        if (!property.Value.TryGetNumber(out var value) || !IsSingleNumberCompactKey(property.Key))
+        {
+            return false;
+        }
+
+        compact = new VirtualNodePropertyList(null, 0, CompactKindSingleNumber, 0, property.Key, BitConverter.DoubleToUInt64Bits(value));
+        return true;
+    }
+
+    private static bool IsSingleNumberCompactKey(VirtualPropertyKey key) =>
+        key == VirtualPropertyKey.Width
+        || key == VirtualPropertyKey.Height
+        || key == VirtualPropertyKey.ScrollY
+        || key == VirtualPropertyKey.LayerOpacity
+        || key == VirtualPropertyKey.TranslateX
+        || key == VirtualPropertyKey.TranslateY;
+
+    private static VirtualNodeProperty CreateSingleNumberProperty(VirtualPropertyKey key, ulong bits)
+    {
+        var value = BitConverter.UInt64BitsToDouble(bits);
+        if (key == VirtualPropertyKey.Width) return VirtualNodeProperty.Width(value);
+        if (key == VirtualPropertyKey.Height) return VirtualNodeProperty.Height(value);
+        if (key == VirtualPropertyKey.ScrollY) return VirtualNodeProperty.ScrollY(value);
+        if (key == VirtualPropertyKey.LayerOpacity) return VirtualNodeProperty.LayerOpacity(value);
+        if (key == VirtualPropertyKey.TranslateX) return VirtualNodeProperty.TranslateX(value);
+        if (key == VirtualPropertyKey.TranslateY) return VirtualNodeProperty.TranslateY(value);
+
+        throw new InvalidOperationException($"Property {VirtualPropertyDiagnostics.Format(key)} is not a compact single-number property.");
     }
 
     public VirtualNodeProperty[] ToArray()

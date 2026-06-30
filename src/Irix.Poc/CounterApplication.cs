@@ -103,10 +103,11 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
         var rootChildCount = ComputeRootChildCount(headerRows.Length);
         var publication = _treePublication.BeginBuild(ComputeChildPublicationCapacity(rootChildCount));
 
-        var rootProperties = new[] { VirtualNodeProperty.ScrollY(scrollY) };
+        Span<VirtualNodeProperty> rootProperties = stackalloc VirtualNodeProperty[1];
+        rootProperties[0] = VirtualNodeProperty.ScrollY(scrollY);
         VirtualNodePropertySet.Validate(VirtualNodeKind.Container, rootProperties);
         var rootChildren = CreateRootChildren(_arena, headerRows, inputOwnership, rootChildCount, ref publication);
-        var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertyList.FromOwnedArray(VirtualNodeKind.Container, rootProperties), rootChildren);
+        var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertySet.Create(VirtualNodeKind.Container, rootProperties), rootChildren);
 
         return new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
     }

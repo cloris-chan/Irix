@@ -165,7 +165,7 @@ the simple lifetime cases; guards cover the project-specific ones.
 
 ## Evidence Snapshot
 
-Baseline refreshed on 2026-06-29 after the `VirtualNode` IR was normalized to
+Baseline refreshed on 2026-06-30 after the `VirtualNode` IR was normalized to
 `Container`/`Content` nodes, the first production control/root publication
 slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
 `RenderPipelineRetainedInputSnapshot` became readonly value publication shells,
@@ -179,8 +179,10 @@ layout elements/tree nodes/ranges publish through `LayoutElementList`,
 `DrawCommandBatch` values now use a typed `PooledDrawCommandMemoryOwner` that
 retains command backing capacity behind a generation token, so retained handoff
 freshness must match both owner identity and generation before a reused owner is
-considered current. Clean render
-requests also reuse the retained hit-target value publication when tree,
+considered current. Single numeric `VirtualNodePropertyList` publications such
+as root `ScrollY` now compact into value storage instead of publishing a
+per-frame property array. Clean render requests also reuse the retained
+hit-target value publication when tree,
 viewport, and dirty state are unchanged. Style-only patch attribution is now a
 separate pipeline bucket, and the retained root metadata check on the layout-skip
 path validates shape/property safety without projecting and discarding a copied
@@ -196,17 +198,18 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2057200 bytes | 11428 B/frame | render 10989 B/frame, tree 227 B/frame, diff 180 B/frame, translate 45 B/frame |
-| Warm scroll | 141760 bytes | 787 B/frame | tree 364 B/frame, diff 227 B/frame, translate 136 B/frame, render 110 B/frame |
-| Scale change | 132856 bytes | 738 B/frame | tree 364 B/frame, diff 307 B/frame, render 136 B/frame, translate 0 B/frame |
+| Static | 2050760 bytes | 11393 B/frame | render 10923 B/frame, tree 180 B/frame, diff 157 B/frame, translate 136 B/frame |
+| Warm scroll | 130432 bytes | 724 B/frame | diff 383 B/frame, render 182 B/frame, tree 136 B/frame, translate 91 B/frame |
+| Scale change | 113912 bytes | 632 B/frame | tree 273 B/frame, diff 227 B/frame, translate 182 B/frame, render 0 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
 | `tree.buildRoot.childPublication` | 45 | Button template children and the root child list now publish into retained-capacity tree-publication child array slots. The remaining measured warm-scroll cost is the process-wide amortized first retained-slot capacity growth/noise, not a per-frame backing array. |
+| `tree.buildRoot.scrollProperty` | 0 | The measured root `ScrollY` property is written through stack-backed storage and compacted as a single numeric `VirtualNodePropertyList` value. |
 | `tree.buildRoot.children` | 0 | Root children now publish through a reserved range in the same tree-publication builder for the measured path. |
-| `tree.buildRoot.container` | 136 | Remaining root/container publication cost before a broader published tree/property slab. |
+| `tree.buildRoot.container` | 0 | Root/container publication no longer allocates a property backing array for the measured single-property path. |
 | `tree.buildRoot.button.childrenList` | 0 | The per-button child-list backing allocation is removed for the measured button-template path. |
 | `tree.buildRoot.button.propertyList` | 0 | Button control metadata now publishes through compact `VirtualNodePropertyList` storage instead of per-button property arrays. |
 | `drawRecord` | 0 | Recorder-owned command batches now reuse typed command owners that retain backing capacity through a generation token; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
@@ -241,9 +244,11 @@ lower into a container plus content nodes, while common small layout publication
 stays inline and the remaining visible cost has moved back to tree/control
 publication. Recorder command-owner shell and command-array backing capacity are
 no longer warm-scroll buckets; after diagnostic capacity warmup, the inner
-resource/style/command-build record buckets are also zero. The remaining visible
-allocation work is outside the prebuilt-tree core loop, primarily control/tree
-publication and larger retained publication pages.
+resource/style/command-build record buckets are also zero. The measured root
+property/container array cost is gone after single numeric property compaction.
+The remaining visible allocation work is outside the prebuilt-tree core loop,
+primarily text publication, broad process-wide attribution gaps, retained-slot
+capacity noise, and larger retained publication pages.
 
 Composition and scroll diagnostics were also checked:
 
@@ -450,22 +455,26 @@ Acceptance:
 
 ### P2 - VirtualNode Publication Slab
 
-Status: reader boundary, button/root child-range publication, and the first
-retained-capacity child-publication owner are implemented. `VirtualNodeTree` now
-exposes an internal reader/cursor contract for diff, layout traversal, and
-style-only patching, measured button template children plus the measured root
-child list publish into tree-publication child array ranges, and
+Status: reader boundary, button/root child-range publication, the first
+retained-capacity child-publication owner, and the first compact single-number
+property publication slice are implemented. `VirtualNodeTree` now exposes an
+internal reader/cursor contract for diff, layout traversal, and style-only
+patching, measured button template children plus the measured root child list
+publish into tree-publication child array ranges,
 `VirtualNodeTreePublicationOwner` retains child backing capacity across
-current/previous tree handoff slots.
+current/previous tree handoff slots, and single numeric root properties such as
+`ScrollY` no longer publish a per-frame property array.
 
 The old measured `button.childrenList` bucket is now zero for the synthetic
-button-template path, and root `tree.buildRoot.children` is zero for the measured
-path. Warm-scroll `tree.buildRoot.childPublication` is now amortized retained-slot
-capacity growth/process-wide attribution noise rather than a per-frame backing
-array. The next structural limit is broader than child publication: `VirtualNode`
-is still a managed value graph, so a full tree publication should move from
-"each node or builder owns child/property arrays" to "one published tree owns
-contiguous node, child-range, property, and content-resource slabs".
+button-template path, root `tree.buildRoot.children` is zero for the measured
+path, and root `tree.buildRoot.scrollProperty` / `tree.buildRoot.container` are
+zero for the measured single-property path. Warm-scroll
+`tree.buildRoot.childPublication` is now amortized retained-slot capacity
+growth/process-wide attribution noise rather than a per-frame backing array. The
+next structural limit is broader than child or single-property publication:
+`VirtualNode` is still a managed value graph, so a full tree publication should
+move from "each node or builder owns child/property arrays" to "one published
+tree owns contiguous node, child-range, property, and content-resource slabs".
 
 Possible shape:
 
@@ -493,8 +502,9 @@ justify the migration.
 
 Acceptance:
 
-- Warm-scroll `button.childrenList` and root `children` stay at zero, and child
-  publication backing remains retained-capacity across current/previous handoff.
+- Warm-scroll `button.childrenList`, root `children`, root `scrollProperty`, and
+  measured root `container` stay at zero, and child publication backing remains
+  retained-capacity across current/previous handoff.
 - Under reserved capacity and known resources, tree shape changes do not allocate
   new child/property arrays.
 - Diff, layout, and retained tree tests prove stable DFS/index/key behavior.

@@ -1648,6 +1648,9 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("internal readonly struct VirtualNodePropertyList", source);
         Assert.Contains("CompactKindAction", source);
         Assert.Contains("CompactKindControlBundle", source);
+        Assert.Contains("CompactKindSingleNumber", source);
+        Assert.Contains("CreateSingleNumberProperty", source);
+        Assert.Contains("BitConverter.DoubleToUInt64Bits", source);
         Assert.Contains("HoveredBit", source);
         Assert.Contains("internal readonly struct VirtualNodeChildList", source);
         Assert.Contains("public VirtualNodePropertyList Properties", source);
@@ -1660,6 +1663,21 @@ public class TypedIdAllocationGuardTests
         Assert.DoesNotContain("public ReadOnlySpan<VirtualNode> Children", source);
         Assert.DoesNotContain("_propertiesView", source);
         Assert.DoesNotContain("_childrenView", source);
+    }
+
+    [Fact]
+    public void VirtualNode_property_list_compacts_single_number_properties()
+    {
+        Span<VirtualNodeProperty> storage = stackalloc VirtualNodeProperty[1];
+        storage[0] = VirtualNodeProperty.ScrollY(12);
+
+        var properties = VirtualNodePropertySet.Create(VirtualNodeKind.Container, storage);
+
+        Assert.Single(properties);
+        Assert.Equal(VirtualPropertyKey.ScrollY, properties[0].Key);
+        Assert.True(properties[0].Value.TryGetNumber(out var scrollY));
+        Assert.Equal(12, scrollY);
+        Assert.Equal(properties, VirtualNodePropertySet.Create(VirtualNodeKind.Container, storage));
     }
 
     [Fact]
@@ -1780,6 +1798,9 @@ public class TypedIdAllocationGuardTests
         Assert.Contains(".BeginBuild", source);
         Assert.Contains("ReserveChildRange", source);
         Assert.Contains("PublishReservedChildren", source);
+        Assert.Contains("Span<VirtualNodeProperty> rootProperties = stackalloc VirtualNodeProperty[1];", source);
+        Assert.Contains("VirtualNodePropertySet.Create(VirtualNodeKind.Container, rootProperties)", source);
+        Assert.DoesNotContain("new[] { VirtualNodeProperty.ScrollY", source);
         Assert.Contains("VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container", source);
         Assert.DoesNotContain("new VirtualNode[headerRows.Length", source);
         Assert.DoesNotContain("VirtualNodeChildList.FromOwnedArray(children)", source);
