@@ -10,15 +10,14 @@ internal sealed partial class TranslatorCore
         in TranslatorRetainedState retained,
         out RenderPipelineBuildAllocationAttribution attribution)
     {
-        var textSnapshot = _retainedTree.Tree.TextSnapshot;
         RenderFrameBatch batch;
         if (_ownerFeed is not null)
         {
-            batch = _ownerFeed.BuildWithAllocationAttribution(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot, out attribution);
+            batch = _ownerFeed.BuildWithAllocationAttribution(_retainedTree.Tree, input.LayoutViewport, retained.DirtyNodes, retained.PreviousTree, out attribution);
         }
         else
         {
-            batch = _renderPipeline.BuildWithAllocationAttribution(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot, out attribution);
+            batch = _renderPipeline.BuildWithAllocationAttribution(_retainedTree.Tree, input.LayoutViewport, retained.DirtyNodes, retained.PreviousTree, out attribution);
         }
 
         LastPipelineAllocationAttribution = attribution;

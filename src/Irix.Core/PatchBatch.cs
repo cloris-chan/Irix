@@ -15,13 +15,24 @@ internal enum PatchBatchKind
 internal sealed class PatchBatch : IDisposable
 {
     private readonly IMemoryOwner<VirtualNodePatch> _owner;
+    private readonly VirtualNodeTree _tree;
 
     public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0, TextBufferSnapshot textSnapshot = default, bool hasCanonicalRoot = false)
-        : this(root, owner, count, screenId, PatchBatchKind.Diff, textSnapshot, hasCanonicalRoot)
+        : this(new VirtualNodeTree(root, textSnapshot), owner, count, screenId, PatchBatchKind.Diff, hasCanonicalRoot)
     {
     }
 
     public PatchBatch(VirtualNode root, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId, PatchBatchKind kind, TextBufferSnapshot textSnapshot = default, bool hasCanonicalRoot = false)
+        : this(new VirtualNodeTree(root, textSnapshot), owner, count, screenId, kind, hasCanonicalRoot)
+    {
+    }
+
+    public PatchBatch(VirtualNodeTree tree, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0, bool hasCanonicalRoot = false)
+        : this(tree, owner, count, screenId, PatchBatchKind.Diff, hasCanonicalRoot)
+    {
+    }
+
+    public PatchBatch(VirtualNodeTree tree, IMemoryOwner<VirtualNodePatch> owner, int count, int screenId, PatchBatchKind kind, bool hasCanonicalRoot = false)
     {
         ArgumentNullException.ThrowIfNull(owner);
 
@@ -30,26 +41,27 @@ internal sealed class PatchBatch : IDisposable
             throw new ArgumentOutOfRangeException(nameof(count));
         }
 
-        Root = root;
+        _tree = tree;
         _owner = owner;
         Count = count;
         ScreenId = screenId;
         Kind = kind;
-        TextSnapshot = textSnapshot;
         HasCanonicalRoot = hasCanonicalRoot;
     }
 
     public PatchBatch(IMemoryOwner<VirtualNodePatch> owner, int count, int screenId = 0)
-        : this(default, owner, count, screenId)
+        : this(default(VirtualNode), owner, count, screenId)
     {
     }
 
     public static PatchBatch CreateRenderRequest(int screenId = 0)
     {
-        return new PatchBatch(default, new EmptyMemoryOwner(), 0, screenId, PatchBatchKind.RenderRequest);
+        return new PatchBatch(default(VirtualNode), new EmptyMemoryOwner(), 0, screenId, PatchBatchKind.RenderRequest);
     }
 
-    public VirtualNode Root { get; }
+    public VirtualNode Root => _tree.Root;
+
+    public VirtualNodeTree Tree => _tree;
 
     public int Count { get; }
 
@@ -57,7 +69,7 @@ internal sealed class PatchBatch : IDisposable
 
     public PatchBatchKind Kind { get; }
 
-    public TextBufferSnapshot TextSnapshot { get; }
+    public TextBufferSnapshot TextSnapshot => _tree.TextSnapshot;
 
     /// <summary>
     /// True when <see cref="Root"/> is the canonical next retained root for this batch.

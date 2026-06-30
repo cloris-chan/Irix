@@ -53,14 +53,13 @@ internal sealed partial class LayoutTreeBuilder(LayoutStyle style)
     /// </summary>
     public LayoutTreeResult BuildLayoutTree(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
-        return BuildLayoutTreeCore(root, viewportBounds, dirtyNodes);
+        return BuildLayoutTree(new VirtualNodeTree(root), viewportBounds, dirtyNodes);
     }
 
-    private LayoutTreeResult BuildLayoutTreeCore(VirtualNode root, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes)
+    public LayoutTreeResult BuildLayoutTree(VirtualNodeTree tree, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null)
     {
         OnLayoutAllocationStarted();
-        var rootTree = new VirtualNodeTree(root);
-        var rootReader = rootTree.CreateReader().Root;
+        var rootReader = tree.CreateReader().Root;
         var scratch = new RenderScratchBuffer();
         Span<LayoutElement> elementStorage = stackalloc LayoutElement[InlineLayoutElementCapacity];
         Span<LayoutTreeNode> treeNodeStorage = stackalloc LayoutTreeNode[InlineLayoutTreeNodeCapacity];

@@ -25,8 +25,8 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     {
     }
 
-    private VirtualNode _retainedRoot;
-    private TextBufferSnapshot _retainedTextSnapshot;
+    private VirtualNodeTree _retainedTree;
+    private TextBufferSnapshot _retainedLayoutTextSnapshot;
     private LayoutTreeResult? _retainedLayoutResult;
     private PixelRectangle _retainedViewport;
     private readonly RetainedRenderFrame _retainedFrame = new();
@@ -87,28 +87,35 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     /// </summary>
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, TextBufferSnapshot textSnapshot, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? prevTextSnapshot = null, VirtualNode previousRoot = default)
     {
-        return BuildCore(root, viewportBounds, textSnapshot, dirtyNodes, prevTextSnapshot, previousRoot);
+        var previousTree = previousRoot.Kind == VirtualNodeKind.None
+            ? default
+            : new VirtualNodeTree(previousRoot, prevTextSnapshot ?? default);
+        return Build(new VirtualNodeTree(root, textSnapshot), viewportBounds, dirtyNodes, previousTree);
+    }
+
+    public RenderFrameBatch Build(VirtualNodeTree tree, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, VirtualNodeTree previousTree = default)
+    {
+        return BuildCore(tree, viewportBounds, dirtyNodes, previousTree);
     }
 
     private RenderFrameBatch BuildCore(
-        VirtualNode root,
+        VirtualNodeTree tree,
         PixelRectangle viewportBounds,
-        TextBufferSnapshot textSnapshot,
         IReadOnlyList<int>? dirtyNodes,
-        TextBufferSnapshot? prevTextSnapshot,
-        VirtualNode previousRoot)
+        VirtualNodeTree previousTree)
     {
         OnPipelineAllocationStarted();
         LastViewport = viewportBounds;
+        var textSnapshot = tree.TextSnapshot;
         var hadRetainedLayout = _retainedLayoutResult.HasValue;
-        var classifyOldRoot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? previousRoot : _retainedRoot;
-        var classifyOldSnapshot = hadRetainedLayout && previousRoot.Kind != VirtualNodeKind.None ? prevTextSnapshot : _retainedTextSnapshot;
-        var treeChanged = !hadRetainedLayout || !VirtualNodeStructuralComparer.Equals(classifyOldRoot, root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
+        var classifyOldTree = hadRetainedLayout && !previousTree.IsDefault ? previousTree : _retainedTree;
+        var classifyOldSnapshot = classifyOldTree.IsDefault ? (TextBufferSnapshot?)textSnapshot : classifyOldTree.TextSnapshot;
+        var treeChanged = !hadRetainedLayout || !VirtualNodeStructuralComparer.Equals(classifyOldTree.CreateReader().Root, tree.CreateReader().Root, classifyOldSnapshot ?? textSnapshot, textSnapshot);
         var viewportChanged = _retainedViewport != viewportBounds;
         var hasDirty = dirtyNodes is { Count: > 0 };
         OnPipelineAllocationPhaseStarted();
         var dirtyClassifications = hasDirty && hadRetainedLayout
-            ? ClassifyDirtyNodes(classifyOldRoot, root, dirtyNodes!, classifyOldSnapshot ?? textSnapshot, textSnapshot)
+            ? ClassifyDirtyNodes(classifyOldTree, tree, dirtyNodes!, classifyOldSnapshot ?? textSnapshot, textSnapshot)
             : [];
         LastDirtyClassifications = dirtyClassifications;
         LastLayoutRebuildReason = ResolveLayoutRebuildReason(hadRetainedLayout, treeChanged, viewportChanged, hasDirty, dirtyClassifications);
@@ -122,12 +129,12 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
         if (treeChanged || viewportChanged || hasDirty)
         {
-            var styleOnlyPatched = TryApplyStyleOnlyLayoutSkip(root, textSnapshot, dirtyNodes, dirtyClassifications, viewportChanged, previousRoot, classifyOldSnapshot, out var patchedLayoutResult);
+            var styleOnlyPatched = TryApplyStyleOnlyLayoutSkip(tree, dirtyNodes, dirtyClassifications, viewportChanged, previousTree, classifyOldSnapshot, out var patchedLayoutResult);
             if (styleOnlyPatched)
             {
                 _retainedLayoutResult = patchedLayoutResult;
-                _retainedRoot = root;
-                _retainedTextSnapshot = textSnapshot;
+                _retainedTree = tree;
+                _retainedLayoutTextSnapshot = textSnapshot;
                 _retainedViewport = viewportBounds;
 
                 LastMaxScrollY = ResolveRootMaxScrollY(patchedLayoutResult.ScrollDiagnostics);
@@ -136,15 +143,20 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             {
                 OnPipelineAllocationPhaseStarted();
                 LayoutRebuildCount++;
-                var layoutResult = _layoutTreeBuilder.BuildLayoutTree(root, viewportBounds, dirtyNodes);
+                var layoutResult = _layoutTreeBuilder.BuildLayoutTree(tree, viewportBounds, dirtyNodes);
                 _retainedLayoutResult = layoutResult;
-                _retainedRoot = root;
-                _retainedTextSnapshot = textSnapshot;
+                _retainedTree = tree;
+                _retainedLayoutTextSnapshot = textSnapshot;
                 _retainedViewport = viewportBounds;
 
                 LastMaxScrollY = ResolveRootMaxScrollY(layoutResult.ScrollDiagnostics);
                 OnPipelineLayoutAllocated(_layoutTreeBuilder);
             }
+        }
+        else
+        {
+            _retainedTree = tree;
+            _retainedViewport = viewportBounds;
         }
 
         var retainedLayoutResult = _retainedLayoutResult!.Value;
@@ -156,7 +168,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         LastDirtyElementRanges = dirtyElementRanges;
 
         OnPipelineAllocationPhaseStarted();
-        var result = _drawCommandRecorder.Record(layout, dirtyElementRanges, _retainedTextSnapshot);
+        var result = _drawCommandRecorder.Record(layout, dirtyElementRanges, _retainedLayoutTextSnapshot);
         LastDirtyCommandRanges = result.DirtyCommandRanges;
         LastElementCommandRanges = result.ElementCommandRanges;
         OnPipelineRecordAllocated(_drawCommandRecorder);
@@ -177,14 +189,14 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             retainedLayoutResult,
             result.ElementCommandRanges,
             hitTargets,
-            _retainedRoot,
+            _retainedTree,
             _retainedViewport,
             LastDirtyClassifications,
             LastDirtyElementRanges,
             LastDirtyCommandRanges,
             LastLayoutRebuildReason,
             classifyOldSnapshot,
-            _retainedTextSnapshot);
+            _retainedLayoutTextSnapshot);
         HasLastRetainedInputSnapshot = true;
         OnPipelineRetainedInputAllocated();
         OnPipelineSnapshotAllocated();
@@ -205,15 +217,15 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
     }
 
     private bool TryApplyStyleOnlyLayoutSkip(
-        VirtualNode root,
-        TextBufferSnapshot textSnapshot,
+        VirtualNodeTree tree,
         IReadOnlyList<int>? dirtyNodes,
         LayoutDirtyClassificationList dirtyClassifications,
         bool viewportChanged,
-        VirtualNode previousRoot,
+        VirtualNodeTree previousTree,
         TextBufferSnapshot? classifyOldSnapshot,
         out LayoutTreeResult patchedLayout)
     {
+        var textSnapshot = tree.TextSnapshot;
         patchedLayout = default;
         if (viewportChanged
             || dirtyNodes is not { Count: > 0 }
@@ -223,18 +235,18 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             return false;
         }
 
-        if (previousRoot.Kind != VirtualNodeKind.None
-            && !VirtualNodeStructuralComparer.Equals(_retainedRoot, previousRoot, _retainedTextSnapshot, classifyOldSnapshot ?? _retainedTextSnapshot))
+        if (!previousTree.IsDefault
+            && !VirtualNodeStructuralComparer.Equals(_retainedTree.CreateReader().Root, previousTree.CreateReader().Root, _retainedTree.TextSnapshot, classifyOldSnapshot ?? _retainedTree.TextSnapshot))
         {
             return false;
         }
 
         OnPipelineAllocationPhaseStarted();
         var rootValidation = RetainedRootMetadataPatcher.ValidateControlMetadata(
-            _retainedRoot,
-            root,
+            _retainedTree,
+            tree,
             dirtyClassifications,
-            _retainedTextSnapshot,
+            _retainedTree.TextSnapshot,
             textSnapshot);
         if (!rootValidation.Succeeded)
         {
@@ -244,7 +256,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
 
         var patched = StyleOnlyLayoutPatcher.TryBuildPatchedLayout(
             _retainedLayoutResult.Value,
-            root,
+            tree,
             dirtyNodes,
             out patchedLayout);
         OnPipelineStyleOnlyPatchAllocated();
@@ -309,7 +321,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return 0;
     }
 
-    private static LayoutDirtyClassificationList ClassifyDirtyNodes(VirtualNode previousRoot, VirtualNode nextRoot, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static LayoutDirtyClassificationList ClassifyDirtyNodes(VirtualNodeTree previousTree, VirtualNodeTree nextTree, IReadOnlyList<int> dirtyNodes, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
         var scratch = new RenderScratchBuffer();
         Span<int> dirtySetStorage = stackalloc int[InlineDirtyClassificationCapacity];
@@ -324,7 +336,7 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
             }
 
             var dirtyNode = dirtyNodes[i];
-            var reason = TryFindNode(previousRoot, dirtyNode, out var previousNode) && TryFindNode(nextRoot, dirtyNode, out var nextNode)
+            var reason = TryFindNode(previousTree, dirtyNode, out var previousNode) && TryFindNode(nextTree, dirtyNode, out var nextNode)
                 ? ClassifyNodeChange(previousNode, nextNode, prevSnapshot, nextSnapshot)
                 : new DirtyNodeClassification(LayoutRebuildReason.TreeStructure, InvalidationKind.TreeStructure);
             classifications.Add(new LayoutDirtyClassification(dirtyNode, reason.Reason, reason.InvalidationKind));
@@ -338,9 +350,9 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         };
     }
 
-    private static DirtyNodeClassification ClassifyNodeChange(VirtualNode previousNode, VirtualNode nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
+    private static DirtyNodeClassification ClassifyNodeChange(VirtualNodeReader previousNode, VirtualNodeReader nextNode, TextBufferSnapshot? prevSnapshot, TextBufferSnapshot? nextSnapshot)
     {
-        if (previousNode.Kind != nextNode.Kind || previousNode.Key != nextNode.Key || ChildrenShapeChanged(previousNode.Children, nextNode.Children))
+        if (previousNode.Kind != nextNode.Kind || previousNode.Key != nextNode.Key || ChildrenShapeChanged(previousNode, nextNode))
         {
             return new DirtyNodeClassification(LayoutRebuildReason.TreeStructure, InvalidationKind.TreeStructure);
         }
@@ -392,16 +404,18 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return true;
     }
 
-    private static bool ChildrenShapeChanged(VirtualNodeChildList previousChildren, VirtualNodeChildList nextChildren)
+    private static bool ChildrenShapeChanged(VirtualNodeReader previousNode, VirtualNodeReader nextNode)
     {
-        if (previousChildren.Length != nextChildren.Length)
+        if (previousNode.ChildCount != nextNode.ChildCount)
         {
             return true;
         }
 
-        for (var i = 0; i < previousChildren.Length; i++)
+        for (var i = 0; i < previousNode.ChildCount; i++)
         {
-            if (previousChildren[i].Kind != nextChildren[i].Kind || previousChildren[i].Key != nextChildren[i].Key)
+            var previousChild = previousNode.GetChild(i, 0);
+            var nextChild = nextNode.GetChild(i, 0);
+            if (previousChild.Kind != nextChild.Kind || previousChild.Key != nextChild.Key)
             {
                 return true;
             }
@@ -410,30 +424,35 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return false;
     }
 
-    private static bool TryFindNode(VirtualNode root, int targetIndex, out VirtualNode node)
+    private static bool TryFindNode(VirtualNodeTree tree, int targetIndex, out VirtualNodeReader node)
     {
-        var currentIndex = 0;
-        return TryFindNodeRecursive(root, targetIndex, ref currentIndex, out node);
+        return TryFindNodeRecursive(tree.CreateReader().Root, targetIndex, currentIndex: 0, out node, out _);
     }
 
-    private static bool TryFindNodeRecursive(VirtualNode candidate, int targetIndex, ref int currentIndex, out VirtualNode node)
+    private static bool TryFindNodeRecursive(VirtualNodeReader candidate, int targetIndex, int currentIndex, out VirtualNodeReader node, out int consumedCount)
     {
         if (currentIndex == targetIndex)
         {
             node = candidate;
+            consumedCount = candidate.CountSubtreeNodes();
             return true;
         }
 
-        currentIndex++;
-        foreach (var child in candidate.Children)
+        var nextIndex = currentIndex + 1;
+        for (var i = 0; i < candidate.ChildCount; i++)
         {
-            if (TryFindNodeRecursive(child, targetIndex, ref currentIndex, out node))
+            var child = candidate.GetChild(i, nextIndex);
+            if (TryFindNodeRecursive(child, targetIndex, nextIndex, out node, out var childConsumedCount))
             {
+                consumedCount = nextIndex + childConsumedCount - currentIndex;
                 return true;
             }
+
+            nextIndex += childConsumedCount;
         }
 
         node = default;
+        consumedCount = nextIndex - currentIndex;
         return false;
     }
 
@@ -667,11 +686,36 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         LayoutRebuildReason layoutRebuildReason,
         TextBufferSnapshot? previousTextSnapshot,
         TextBufferSnapshot? textSnapshot) =>
+        CreateRetainedInputSnapshot(
+            layoutResult,
+            elementCommandRanges,
+            hitTargets,
+            new VirtualNodeTree(retainedRoot, textSnapshot ?? default),
+            viewport,
+            dirtyClassifications,
+            dirtyElementRanges,
+            dirtyCommandRanges,
+            layoutRebuildReason,
+            previousTextSnapshot,
+            textSnapshot);
+
+    internal static RenderPipelineRetainedInputSnapshot CreateRetainedInputSnapshot(
+        LayoutTreeResult layoutResult,
+        ElementCommandRangeList elementCommandRanges,
+        HitTargetList hitTargets,
+        VirtualNodeTree retainedTree,
+        PixelRectangle viewport,
+        LayoutDirtyClassificationList dirtyClassifications,
+        IndexRangeList dirtyElementRanges,
+        IndexRangeList dirtyCommandRanges,
+        LayoutRebuildReason layoutRebuildReason,
+        TextBufferSnapshot? previousTextSnapshot,
+        TextBufferSnapshot? textSnapshot) =>
         new(
             layoutResult,
             elementCommandRanges,
             hitTargets,
-            retainedRoot,
+            retainedTree,
             viewport,
             dirtyClassifications,
             dirtyElementRanges,
@@ -1036,31 +1080,75 @@ internal sealed partial class RenderPipeline(LayoutStyle layoutStyle, DrawingSty
         return true;
     }
 }
-internal readonly struct RenderPipelineRetainedInputSnapshot(
-    LayoutTreeResult LayoutResult,
-    ElementCommandRangeList ElementCommandRanges,
-    HitTargetList HitTargets,
-    VirtualNode RetainedRoot,
-    PixelRectangle Viewport,
-    LayoutDirtyClassificationList DirtyClassifications,
-    IndexRangeList DirtyElementRanges,
-    IndexRangeList DirtyCommandRanges,
-    LayoutRebuildReason LayoutRebuildReason,
-    TextBufferSnapshot? PreviousTextSnapshot = null,
-    TextBufferSnapshot? TextSnapshot = null)
+internal readonly struct RenderPipelineRetainedInputSnapshot
 {
-    public LayoutTreeResult LayoutResult { get; } = LayoutResult;
-    public ElementCommandRangeList ElementCommandRanges { get; } = ElementCommandRanges;
-    public HitTargetList HitTargets { get; } = HitTargets;
-    public VirtualNode RetainedRoot { get; } = RetainedRoot;
-    public PixelRectangle Viewport { get; } = Viewport;
-    public LayoutDirtyClassificationList DirtyClassifications { get; } = DirtyClassifications;
-    public IndexRangeList DirtyElementRanges { get; } = DirtyElementRanges;
-    public IndexRangeList DirtyCommandRanges { get; } = DirtyCommandRanges;
-    public LayoutRebuildReason LayoutRebuildReason { get; } = LayoutRebuildReason;
-    public TextBufferSnapshot? PreviousTextSnapshot { get; } = PreviousTextSnapshot;
-    public TextBufferSnapshot? TextSnapshot { get; } = TextSnapshot;
-    public int CommandCount { get; } = ResolveCommandCount(ElementCommandRanges);
+    public RenderPipelineRetainedInputSnapshot(
+        LayoutTreeResult layoutResult,
+        ElementCommandRangeList elementCommandRanges,
+        HitTargetList hitTargets,
+        VirtualNode retainedRoot,
+        PixelRectangle viewport,
+        LayoutDirtyClassificationList dirtyClassifications,
+        IndexRangeList dirtyElementRanges,
+        IndexRangeList dirtyCommandRanges,
+        LayoutRebuildReason LayoutRebuildReason,
+        TextBufferSnapshot? PreviousTextSnapshot = null,
+        TextBufferSnapshot? TextSnapshot = null)
+        : this(
+            layoutResult,
+            elementCommandRanges,
+            hitTargets,
+            new VirtualNodeTree(retainedRoot, TextSnapshot ?? default),
+            viewport,
+            dirtyClassifications,
+            dirtyElementRanges,
+            dirtyCommandRanges,
+            LayoutRebuildReason,
+            PreviousTextSnapshot,
+            TextSnapshot)
+    {
+    }
+
+    public RenderPipelineRetainedInputSnapshot(
+        LayoutTreeResult layoutResult,
+        ElementCommandRangeList elementCommandRanges,
+        HitTargetList hitTargets,
+        VirtualNodeTree retainedTree,
+        PixelRectangle viewport,
+        LayoutDirtyClassificationList dirtyClassifications,
+        IndexRangeList dirtyElementRanges,
+        IndexRangeList dirtyCommandRanges,
+        LayoutRebuildReason LayoutRebuildReason,
+        TextBufferSnapshot? PreviousTextSnapshot = null,
+        TextBufferSnapshot? TextSnapshot = null)
+    {
+        LayoutResult = layoutResult;
+        ElementCommandRanges = elementCommandRanges;
+        HitTargets = hitTargets;
+        RetainedTree = retainedTree;
+        Viewport = viewport;
+        DirtyClassifications = dirtyClassifications;
+        DirtyElementRanges = dirtyElementRanges;
+        DirtyCommandRanges = dirtyCommandRanges;
+        this.LayoutRebuildReason = LayoutRebuildReason;
+        this.PreviousTextSnapshot = PreviousTextSnapshot;
+        this.TextSnapshot = TextSnapshot ?? retainedTree.TextSnapshot;
+        CommandCount = ResolveCommandCount(elementCommandRanges);
+    }
+
+    public LayoutTreeResult LayoutResult { get; }
+    public ElementCommandRangeList ElementCommandRanges { get; }
+    public HitTargetList HitTargets { get; }
+    public VirtualNodeTree RetainedTree { get; }
+    public VirtualNode RetainedRoot => RetainedTree.Root;
+    public PixelRectangle Viewport { get; }
+    public LayoutDirtyClassificationList DirtyClassifications { get; }
+    public IndexRangeList DirtyElementRanges { get; }
+    public IndexRangeList DirtyCommandRanges { get; }
+    public LayoutRebuildReason LayoutRebuildReason { get; }
+    public TextBufferSnapshot? PreviousTextSnapshot { get; }
+    public TextBufferSnapshot? TextSnapshot { get; }
+    public int CommandCount { get; }
 
     public bool TryGetCompositionTarget(NodeKey key, out CompositionTarget target)
     {

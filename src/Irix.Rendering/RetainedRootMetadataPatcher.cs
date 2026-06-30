@@ -86,8 +86,25 @@ internal static class RetainedRootMetadataPatcher
         TextBufferSnapshot? retainedSnapshot = null,
         TextBufferSnapshot? nextSnapshot = null)
     {
+        return ValidateControlMetadata(
+            new VirtualNodeTree(retainedRoot, retainedSnapshot ?? default),
+            new VirtualNodeTree(nextRoot, nextSnapshot ?? default),
+            dirtyClassifications,
+            retainedSnapshot,
+            nextSnapshot);
+    }
+
+    public static RetainedRootMetadataValidation ValidateControlMetadata(
+        VirtualNodeTree retainedTree,
+        VirtualNodeTree nextTree,
+        LayoutDirtyClassificationList dirtyClassifications,
+        TextBufferSnapshot? retainedSnapshot = null,
+        TextBufferSnapshot? nextSnapshot = null)
+    {
         retainedSnapshot ??= nextSnapshot;
         nextSnapshot ??= retainedSnapshot;
+        retainedSnapshot ??= retainedTree.TextSnapshot;
+        nextSnapshot ??= nextTree.TextSnapshot;
 
         var scratch = new RenderScratchBuffer();
         Span<int> dirtyStorage = stackalloc int[InlineDirtyIndexCapacity];
@@ -112,7 +129,7 @@ internal static class RetainedRootMetadataPatcher
             sortedDirty.Sort();
             var dfsIndex = 0;
             var dirtyCursor = 0;
-            return TryValidate(retainedRoot, nextRoot, sortedDirty.Written, ref dirtyCursor, ref dfsIndex, out var reason, retainedSnapshot, nextSnapshot)
+            return TryValidate(retainedTree.CreateReader().Root, nextTree.CreateReader().Root, sortedDirty.Written, ref dirtyCursor, ref dfsIndex, out var reason, retainedSnapshot, nextSnapshot)
                 && DirtyDfsIndexCursor.IsComplete(sortedDirty.Written, dirtyCursor)
                 ? RetainedRootMetadataValidation.CreateSucceeded()
                 : RetainedRootMetadataValidation.CreateFallback(reason);
@@ -168,8 +185,8 @@ internal static class RetainedRootMetadataPatcher
     }
 
     private static bool TryValidate(
-        VirtualNode retainedNode,
-        VirtualNode nextNode,
+        VirtualNodeReader retainedNode,
+        VirtualNodeReader nextNode,
         ReadOnlySpan<int> sortedDirty,
         ref int dirtyCursor,
         ref int dfsIndex,
@@ -184,9 +201,7 @@ internal static class RetainedRootMetadataPatcher
             return false;
         }
 
-        var retainedChildren = retainedNode.Children;
-        var nextChildren = nextNode.Children;
-        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedChildren.Length != nextChildren.Length)
+        if (retainedNode.Kind != nextNode.Kind || retainedNode.Key != nextNode.Key || retainedNode.ChildCount != nextNode.ChildCount)
         {
             return false;
         }
@@ -210,9 +225,10 @@ internal static class RetainedRootMetadataPatcher
         }
 
         dfsIndex++;
-        for (var i = 0; i < retainedChildren.Length; i++)
+        for (var i = 0; i < retainedNode.ChildCount; i++)
         {
-            if (!TryValidate(retainedChildren[i], nextChildren[i], sortedDirty, ref dirtyCursor, ref dfsIndex, out reason, retainedSnapshot, nextSnapshot))
+            var childDfsIndex = dfsIndex;
+            if (!TryValidate(retainedNode.GetChild(i, childDfsIndex), nextNode.GetChild(i, childDfsIndex), sortedDirty, ref dirtyCursor, ref dfsIndex, out reason, retainedSnapshot, nextSnapshot))
             {
                 return false;
             }

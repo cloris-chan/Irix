@@ -34,7 +34,7 @@ internal sealed partial class TranslatorCore : IRetainedInputSnapshotProvider
             var result = _retainedTree.Apply(patchBatch);
             return result.Dirty.Count == 0
                 ? new TranslatorRetainedState(result.Dirty)
-                : new TranslatorRetainedState(result.Dirty, result.PreviousRoot, result.PreviousTextSnapshot);
+                : new TranslatorRetainedState(result.Dirty, result.PreviousTree);
         }
 
         _retainedTree.Apply(patchBatch);
@@ -45,10 +45,9 @@ internal sealed partial class TranslatorCore : IRetainedInputSnapshotProvider
         in TranslatorInput input,
         in TranslatorRetainedState retained)
     {
-        var textSnapshot = _retainedTree.Tree.TextSnapshot;
         var batch = _ownerFeed is not null
-            ? _ownerFeed.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot)
-            : _renderPipeline.Build(_retainedTree.Tree.Root, input.LayoutViewport, textSnapshot, retained.DirtyNodes, retained.PreviousTextSnapshot, retained.PreviousRoot);
+            ? _ownerFeed.Build(_retainedTree.Tree, input.LayoutViewport, retained.DirtyNodes, retained.PreviousTree)
+            : _renderPipeline.Build(_retainedTree.Tree, input.LayoutViewport, retained.DirtyNodes, retained.PreviousTree);
 
         return CreateOutput(in input, batch);
     }
@@ -69,12 +68,12 @@ internal sealed partial class TranslatorCore : IRetainedInputSnapshotProvider
 
 internal readonly struct TranslatorRetainedState(
     IReadOnlyList<int>? DirtyNodes,
-    VirtualNode PreviousRoot = default,
-    TextBufferSnapshot? PreviousTextSnapshot = null)
+    VirtualNodeTree PreviousTree = default)
 {
     public IReadOnlyList<int>? DirtyNodes { get; } = DirtyNodes;
-    public VirtualNode PreviousRoot { get; } = PreviousRoot;
-    public TextBufferSnapshot? PreviousTextSnapshot { get; } = PreviousTextSnapshot;
+    public VirtualNodeTree PreviousTree { get; } = PreviousTree;
+    public VirtualNode PreviousRoot => PreviousTree.Root;
+    public TextBufferSnapshot? PreviousTextSnapshot => PreviousTree.IsDefault ? null : PreviousTree.TextSnapshot;
 }
 
 internal readonly struct TranslatorInput(

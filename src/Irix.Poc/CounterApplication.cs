@@ -109,7 +109,7 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
         var rootChildren = CreateRootChildren(_arena, headerRows, inputOwnership, rootChildCount, ref publication);
         var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertySet.Create(VirtualNodeKind.Container, rootProperties), rootChildren);
 
-        return new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
+        return publication.PublishTree(root, _arena.GetOrCreateSnapshot());
     }
 
     partial void TryUpdateOptional(CounterModel model, CounterMessage message, ref bool handled, ref UpdateResult<CounterModel, CounterMessage> result);

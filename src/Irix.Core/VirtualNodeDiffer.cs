@@ -16,7 +16,7 @@ internal static class VirtualNodeDiffer
         var prevSnapshot = previousTree.TextSnapshot;
         if (prevEmpty && nextEmpty)
         {
-            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
+            return new PatchBatch(nextTree, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, hasCanonicalRoot: true);
         }
 
         // Empty → something or something → empty: ReplaceRoot
@@ -24,10 +24,10 @@ internal static class VirtualNodeDiffer
         {
             if (VirtualNodeStructuralComparer.Equals(previousReader.Root, nextReader.Root, prevSnapshot, nextSnapshot))
             {
-                return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
+                return new PatchBatch(nextTree, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, hasCanonicalRoot: true);
             }
-            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>(
-                [new VirtualNodePatch(VirtualNodePatchOperation.ReplaceRoot, 0, nextTree.Root, screenId)]), 1, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
+            return new PatchBatch(nextTree, new PatchMemoryOwner<VirtualNodePatch>(
+                [new VirtualNodePatch(VirtualNodePatchOperation.ReplaceRoot, 0, nextReader.Root.Node, screenId)]), 1, screenId, hasCanonicalRoot: true);
         }
 
         // Both non-empty: local diff
@@ -39,7 +39,7 @@ internal static class VirtualNodeDiffer
 
             if (patches.Count == 0)
             {
-                return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
+                return new PatchBatch(nextTree, new PatchMemoryOwner<VirtualNodePatch>([]), 0, screenId, hasCanonicalRoot: true);
             }
 
             for (var i = 0; i < patches.Count; i++)
@@ -47,7 +47,7 @@ internal static class VirtualNodeDiffer
                 patches[i] = patches[i].WithScreenId(screenId);
             }
 
-            return new PatchBatch(nextTree.Root, new PatchMemoryOwner<VirtualNodePatch>(patches.ToArray()), patches.Count, screenId, textSnapshot: nextSnapshot, hasCanonicalRoot: true);
+            return new PatchBatch(nextTree, new PatchMemoryOwner<VirtualNodePatch>(patches.ToArray()), patches.Count, screenId, hasCanonicalRoot: true);
         }
         finally
         {

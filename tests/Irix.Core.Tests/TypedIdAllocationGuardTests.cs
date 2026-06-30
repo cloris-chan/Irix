@@ -1593,6 +1593,11 @@ public class TypedIdAllocationGuardTests
             .Where(file =>
             {
                 var name = Path.GetFileName(file);
+                if (name is "RetainedTree.cs" or "RetainedRootMetadataPatcher.cs")
+                {
+                    return false;
+                }
+
                 return name.Contains("Batch", StringComparison.Ordinal)
                     || name.Contains("Retained", StringComparison.Ordinal)
                     || name.Contains("Segmented", StringComparison.Ordinal);
@@ -1608,6 +1613,19 @@ public class TypedIdAllocationGuardTests
             Assert.DoesNotContain("PropertyReader", content);
             Assert.DoesNotContain("LayoutContext", content);
         }
+
+        var retainedTreeSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "RetainedTree.cs"));
+        Assert.Contains("BuildParentIndexTable(VirtualNodeTree tree", retainedTreeSource);
+        Assert.Contains("VirtualNodeReader", retainedTreeSource);
+        Assert.DoesNotContain("private VirtualNodeReader", retainedTreeSource);
+        Assert.DoesNotContain("VirtualNodeReader _", retainedTreeSource);
+
+        var retainedRootMetadataPatcherSource = File.ReadAllText(Path.Combine(root, "src", "Irix.Rendering", "RetainedRootMetadataPatcher.cs"));
+        Assert.Contains("ValidateControlMetadata(", retainedRootMetadataPatcherSource);
+        Assert.Contains("VirtualNodeTree retainedTree", retainedRootMetadataPatcherSource);
+        Assert.Contains("VirtualNodeReader", retainedRootMetadataPatcherSource);
+        Assert.DoesNotContain("private VirtualNodeReader", retainedRootMetadataPatcherSource);
+        Assert.DoesNotContain("VirtualNodeReader _", retainedRootMetadataPatcherSource);
     }
 
     [Fact]
@@ -1691,11 +1709,22 @@ public class TypedIdAllocationGuardTests
         Assert.Contains("ReserveChildRange", source);
         Assert.Contains("PublishReservedChildren", source);
         Assert.Contains("PublicationGeneration", source);
+        Assert.Contains("internal readonly struct VirtualNodeRecord", source);
+        Assert.Contains("internal readonly struct VirtualNodeTreeSlab", source);
+        Assert.Contains("private readonly VirtualNodeRecord[][] _nodeSlots", source);
+        Assert.Contains("private readonly VirtualNodeProperty[][] _propertySlots", source);
+        Assert.Contains("private readonly int[][] _childIndexSlots", source);
+        Assert.Contains("PublishTree", source);
+        Assert.Contains("HasPublishedSlab", source);
+        Assert.Contains("GetPublishedSlab", source);
+        Assert.Contains("FromPublishedArrayRange", source);
         Assert.Contains("FromOwnedArrayRange", source);
         Assert.Contains("private readonly int _start;", source);
         Assert.Contains("private readonly int _count;", source);
+        Assert.Contains("private readonly int _itemCount;", source);
         Assert.Contains("return items[_start + index];", source);
-        Assert.Contains("_items.AsSpan(_start, _count)", source);
+        Assert.Contains("return _items[_start + index];", source);
+        Assert.Contains("_items.AsSpan(_start, _itemCount)", source);
         Assert.DoesNotContain("ArrayPool<VirtualNode>", source);
         Assert.DoesNotContain("internal sealed class VirtualNodeChildSlab", source);
         Assert.DoesNotContain("VirtualNodeChildSlab? _owner", source);
@@ -1738,6 +1767,41 @@ public class TypedIdAllocationGuardTests
         var fourth = CreatePublishedContainer(owner, childKey: 40);
         Assert.Equal(new NodeKey(30), third.Children[0].Key);
         Assert.Equal(new NodeKey(40), fourth.Children[0].Key);
+    }
+
+    [Fact]
+    public void VirtualNode_tree_publication_owner_publishes_tree_node_property_slab_reader()
+    {
+        var owner = new VirtualNodeTreePublicationOwner();
+        var publication = owner.BeginBuild(childCapacity: 2);
+        var children = publication.ReserveChildRange(2, out var start);
+        children[0] = VirtualNodeFactory.Rectangle(new NodeKey(10), VirtualNodeProperty.Width(100));
+        children[1] = VirtualNodeFactory.Rectangle(new NodeKey(20), VirtualNodeProperty.Height(40));
+        var rootProperties = VirtualNodePropertySet.Create(VirtualNodeKind.Container, [VirtualNodeProperty.ScrollY(12)]);
+        var root = VirtualNode.CreateFromOwnedChildrenUnsafe(
+            VirtualNodeKind.Container,
+            new NodeKey(1),
+            ContentResource.None,
+            rootProperties,
+            publication.PublishReservedChildren(start, children.Length));
+
+        var tree = publication.PublishTree(root);
+
+        Assert.True(tree.HasPublishedSlab);
+        var slab = tree.GetPublishedSlab();
+        Assert.Equal(3, slab.NodeCount);
+        Assert.Equal(3, slab.PropertyCount);
+        Assert.Equal(2, slab.ChildIndexCount);
+
+        var reader = tree.CreateReader().Root;
+        Assert.Equal(VirtualNodeKind.Container, reader.Kind);
+        Assert.Equal(new NodeKey(1), reader.Key);
+        Assert.Equal(2, reader.ChildCount);
+        Assert.Equal(3, reader.CountSubtreeNodes());
+        Assert.Equal(VirtualPropertyKey.ScrollY, reader.Properties[0].Key);
+        Assert.Equal(new NodeKey(10), reader.GetChildKey(0));
+        Assert.Equal(new NodeKey(20), reader.GetChild(1, 2).Key);
+        Assert.Equal(new NodeKey(10), tree.Root.Children[0].Key);
     }
 
     private static VirtualNode CreatePublishedContainer(VirtualNodeTreePublicationOwner owner, uint childKey)

@@ -23,10 +23,23 @@ internal sealed partial class RenderPipeline
         VirtualNode previousRoot,
         out RenderPipelineBuildAllocationAttribution attribution)
     {
+        var previousTree = previousRoot.Kind == VirtualNodeKind.None
+            ? default
+            : new VirtualNodeTree(previousRoot, prevTextSnapshot ?? default);
+        return BuildWithAllocationAttribution(new VirtualNodeTree(root, textSnapshot), viewportBounds, dirtyNodes, previousTree, out attribution);
+    }
+
+    internal RenderFrameBatch BuildWithAllocationAttribution(
+        VirtualNodeTree tree,
+        PixelRectangle viewportBounds,
+        IReadOnlyList<int>? dirtyNodes,
+        VirtualNodeTree previousTree,
+        out RenderPipelineBuildAllocationAttribution attribution)
+    {
         _captureAllocationAttribution = true;
         try
         {
-            var batch = Build(root, viewportBounds, textSnapshot, dirtyNodes, prevTextSnapshot, previousRoot);
+            var batch = Build(tree, viewportBounds, dirtyNodes, previousTree);
             attribution = LastAllocationAttribution;
             return batch;
         }

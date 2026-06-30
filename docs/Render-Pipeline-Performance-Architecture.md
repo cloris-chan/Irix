@@ -166,8 +166,9 @@ the simple lifetime cases; guards cover the project-specific ones.
 ## Evidence Snapshot
 
 Baseline refreshed on 2026-06-30 after the `VirtualNode` IR was normalized to
-`Container`/`Content` nodes, the first production control/root publication
-slices were applied, `LayoutTreeResult`, `DrawCommandRecordResult`, and
+`Container`/`Content` nodes, the production control/root publication slices were
+applied, `VirtualNodeTreePublicationOwner` gained a retained tree/node/property
+slab publication, and `LayoutTreeResult`, `DrawCommandRecordResult`, and
 `RenderPipelineRetainedInputSnapshot` became readonly value publication shells,
 pipeline attribution counters were aligned to the current-thread steady-state
 measurement scope, hit targets publish through `HitTargetList`, empty/single
@@ -181,9 +182,12 @@ retains command backing capacity behind a generation token, so retained handoff
 freshness must match both owner identity and generation before a reused owner is
 considered current. Single numeric `VirtualNodePropertyList` publications such
 as root `ScrollY` now compact into value storage instead of publishing a
-per-frame property array. Clean render requests also reuse the retained
-hit-target value publication when tree,
-viewport, and dirty state are unchanged. Style-only patch attribution is now a
+per-frame property array. `VirtualNodeTreeSlab` is a readonly value handle over
+retained owner slots, so a published tree no longer allocates a per-frame slab
+object. Clean render requests also advance the canonical tree while retaining
+the layout text snapshot needed to resolve reused commands, and they reuse the
+retained hit-target value publication when tree, viewport, and dirty state are
+unchanged. Style-only patch attribution is now a
 separate pipeline bucket, and the retained root metadata check on the layout-skip
 path validates shape/property safety without projecting and discarding a copied
 root.
@@ -198,18 +202,19 @@ Allocation summary:
 
 | Scenario | Total | Bytes/frame | Main buckets |
 |----------|-------|-------------|--------------|
-| Static | 2050760 bytes | 11393 B/frame | render 10923 B/frame, tree 180 B/frame, diff 157 B/frame, translate 136 B/frame |
-| Warm scroll | 130432 bytes | 724 B/frame | diff 383 B/frame, render 182 B/frame, tree 136 B/frame, translate 91 B/frame |
-| Scale change | 113912 bytes | 632 B/frame | tree 273 B/frame, diff 227 B/frame, translate 182 B/frame, render 0 B/frame |
+| Static | 2061544 bytes | 11453 B/frame | render 10877 B/frame, diff 383 B/frame, translate 182 B/frame, tree 45 B/frame |
+| Warm scroll | 271864 bytes | 1510 B/frame | diff 976 B/frame, tree 363 B/frame, render 180 B/frame, translate 45 B/frame |
+| Scale change | 130768 bytes | 726 B/frame | diff 455 B/frame, tree 227 B/frame, translate 45 B/frame, render 45 B/frame |
 
 Warm-scroll details are the key CPU render-pipeline comparison point:
 
 | Bucket | Bytes/frame | Notes |
 |--------|-------------|-------|
-| `tree.buildRoot.childPublication` | 45 | Button template children and the root child list now publish into retained-capacity tree-publication child array slots. The remaining measured warm-scroll cost is the process-wide amortized first retained-slot capacity growth/noise, not a per-frame backing array. |
+| `tree.snapshot.textBuffer` | 226 | The warm-scroll synthetic text-cache scenario intentionally rebuilds a text snapshot each frame; this is the broad process-wide comparison baseline, not an inner render-pipeline allocation. |
+| `tree.buildRoot.childPublication` | 45 | Button template children and the root child list publish into retained-capacity tree-publication child array slots. The remaining measured warm-scroll cost is process-wide first retained-slot capacity growth/noise, not a per-frame backing array. |
 | `tree.buildRoot.scrollProperty` | 0 | The measured root `ScrollY` property is written through stack-backed storage and compacted as a single numeric `VirtualNodePropertyList` value. |
 | `tree.buildRoot.children` | 0 | Root children now publish through a reserved range in the same tree-publication builder for the measured path. |
-| `tree.buildRoot.container` | 0 | Root/container publication no longer allocates a property backing array for the measured single-property path. |
+| `tree.buildRoot.container` | 45 | Root/container property-array allocation is gone; the remaining process-wide cost is retained tree/node/property slab capacity growth inside the measured build-root window. |
 | `tree.buildRoot.button.childrenList` | 0 | The per-button child-list backing allocation is removed for the measured button-template path. |
 | `tree.buildRoot.button.propertyList` | 0 | Button control metadata now publishes through compact `VirtualNodePropertyList` storage instead of per-button property arrays. |
 | `drawRecord` | 0 | Recorder-owned command batches now reuse typed command owners that retain backing capacity through a generation token; dirty range mapping still publishes through `IndexRangeList`, and common element-command mapping publishes through `ElementCommandRangeList`, so `record.dirtyRanges=0`. |
@@ -455,35 +460,38 @@ Acceptance:
 
 ### P2 - VirtualNode Publication Slab
 
-Status: reader boundary, button/root child-range publication, the first
-retained-capacity child-publication owner, and the first compact single-number
-property publication slice are implemented. `VirtualNodeTree` now exposes an
-internal reader/cursor contract for diff, layout traversal, and style-only
-patching, measured button template children plus the measured root child list
-publish into tree-publication child array ranges,
-`VirtualNodeTreePublicationOwner` retains child backing capacity across
-current/previous tree handoff slots, and single numeric root properties such as
-`ScrollY` no longer publish a per-frame property array.
+Status: the first published `VirtualNode` tree/node/property slab is
+implemented. `VirtualNodeTreePublicationOwner` now retains child, node,
+property, and child-index backing slots behind generation checks;
+`VirtualNodeTreeSlab` is a readonly value handle over those slots; and
+`VirtualNodeTree` carries either a legacy materialized root or the published
+slab. `VirtualNodeDiffer`, `RetainedTree`, `TranslatorCore`,
+`RenderPipeline`, `LayoutTreeBuilder`, style-only layout patching, and retained
+root metadata validation consume tree readers so the canonical retained path no
+longer has to materialize the root to classify, apply, lay out, or record.
+Clean layout reuse advances the canonical tree while keeping the retained
+layout text snapshot for command recording.
 
-The old measured `button.childrenList` bucket is now zero for the synthetic
+The old measured `button.childrenList` bucket is zero for the synthetic
 button-template path, root `tree.buildRoot.children` is zero for the measured
-path, and root `tree.buildRoot.scrollProperty` / `tree.buildRoot.container` are
-zero for the measured single-property path. Warm-scroll
-`tree.buildRoot.childPublication` is now amortized retained-slot capacity
-growth/process-wide attribution noise rather than a per-frame backing array. The
-next structural limit is broader than child or single-property publication:
-`VirtualNode` is still a managed value graph, so a full tree publication should
-move from "each node or builder owns child/property arrays" to "one published
-tree owns contiguous node, child-range, property, and content-resource slabs".
+path, and root `tree.buildRoot.scrollProperty` is zero for the measured
+single-property path. With the slab handle moved to a value type,
+`tree.buildRoot.container` no longer includes a per-frame slab object; the
+remaining 45 B/frame warm-scroll value in `--diagnose-text-cache 180` is the
+process-wide amortized retained-slot capacity growth recorded inside the
+measured build-root window. The next structural limit is outside the already
+published tree handle: broader reserved-capacity diagnostics still need to warm
+tree/control publication and backend/cache boundaries before claiming full
+routine render no-allocation.
 
-Possible shape:
+Current shape:
 
-- `VirtualNodeTree` owns published arrays/slabs and their retained capacity.
-- `VirtualNodeRef` or a reader struct identifies nodes by index plus generation
-  or tree owner. The current tree reader is a transition contract, not the slab
-  owner itself.
-- Node records store kind, key, content range/index, property range, and child
-  range.
+- `VirtualNodeTree` references generation-checked owner slots through a value
+  slab handle.
+- `VirtualNodeReader` identifies nodes by slab node index plus DFS index while
+  legacy materialized trees remain readable through the same API.
+- Node records store kind, key, content, property range, child-index range, and
+  subtree count.
 - Hot node/property/content-resource records that contain no managed references
   should be eligible for `where T : unmanaged` helpers and byte-span hashing or
   upload staging.
@@ -493,7 +501,7 @@ Possible shape:
   `stackalloc VirtualNode`; capacity-owned managed arrays/pages need explicit
   lifetime ownership.
 - Diff/layout/style-only patch APIs consume readers/spans instead of per-node
-  arrays.
+  arrays on the published path.
 
 This keeps ADR-010's important part: no retained all-`ref struct` tree and no
 borrowed scratch in retained state. It does allow replacing the current
@@ -503,10 +511,10 @@ justify the migration.
 Acceptance:
 
 - Warm-scroll `button.childrenList`, root `children`, root `scrollProperty`, and
-  measured root `container` stay at zero, and child publication backing remains
-  retained-capacity across current/previous handoff.
-- Under reserved capacity and known resources, tree shape changes do not allocate
-  new child/property arrays.
+  per-frame root property/container backing stay removed, and child publication
+  backing remains retained-capacity across current/previous handoff.
+- Under reserved capacity and known resources, tree shape changes reuse
+  generation-checked node/property/child-index backing slots.
 - Diff, layout, and retained tree tests prove stable DFS/index/key behavior.
 - No published reader can outlive its owning tree publication.
 - `where T : unmanaged` helpers stay internal and guarded; they do not erase

@@ -425,12 +425,202 @@ internal readonly struct BorderStrokeSlot(BorderStroke Value, bool HasValue) : I
 
 // ── VirtualNodeTree / VirtualNode (R13-6: factory key -> NodeKey) ─
 
-internal readonly struct VirtualNodeTree(VirtualNode root, TextBufferSnapshot textSnapshot = default)
+internal readonly struct VirtualNodeTree
 {
-    public VirtualNode Root { get; } = root;
-    public TextBufferSnapshot TextSnapshot { get; } = textSnapshot;
+    private readonly VirtualNode _root;
+    private readonly VirtualNodeTreeSlab _slab;
+    private readonly bool _hasSlab;
+
+    public VirtualNodeTree(VirtualNode root, TextBufferSnapshot textSnapshot = default)
+    {
+        _root = root;
+        _slab = default;
+        _hasSlab = false;
+        TextSnapshot = textSnapshot;
+    }
+
+    private VirtualNodeTree(VirtualNode root, VirtualNodeTreeSlab slab, bool hasSlab, TextBufferSnapshot textSnapshot)
+    {
+        _root = root;
+        _slab = slab;
+        _hasSlab = hasSlab;
+        TextSnapshot = textSnapshot;
+    }
+
+    internal VirtualNodeTree(VirtualNodeTreeSlab slab, TextBufferSnapshot textSnapshot = default)
+        : this(default, slab, hasSlab: true, textSnapshot)
+    {
+    }
+
+    public VirtualNode Root => _hasSlab ? _slab.MaterializeRoot() : _root;
+
+    public TextBufferSnapshot TextSnapshot { get; }
+
+    internal bool IsDefault => !_hasSlab && IsDefaultRoot(_root);
+
+    internal bool HasPublishedSlab => _hasSlab;
+
+    internal VirtualNodeTreeSlab GetPublishedSlab() => _hasSlab ? _slab : throw new InvalidOperationException("Virtual node tree is not slab-backed.");
+
+    internal VirtualNodeTree WithTextSnapshot(TextBufferSnapshot textSnapshot) => new(_root, _slab, _hasSlab, textSnapshot);
 
     internal VirtualNodeTreeReader CreateReader() => new(this);
+
+    private static bool IsDefaultRoot(VirtualNode root) =>
+        root.Kind == VirtualNodeKind.None
+        && root.Key == NodeKey.None
+        && root.Content == ContentResource.None
+        && root.Properties.Length == 0
+        && root.Children.Length == 0;
+}
+
+internal readonly struct VirtualNodeRecord(
+    VirtualNodeKind Kind,
+    NodeKey Key,
+    ContentResource Content,
+    int PropertyStart,
+    int PropertyCount,
+    int ChildStart,
+    int ChildCount,
+    int SubtreeCount) : IEquatable<VirtualNodeRecord>
+{
+    public VirtualNodeKind Kind { get; } = Kind;
+    public NodeKey Key { get; } = Key;
+    public ContentResource Content { get; } = Content;
+    public int PropertyStart { get; } = PropertyStart;
+    public int PropertyCount { get; } = PropertyCount;
+    public int ChildStart { get; } = ChildStart;
+    public int ChildCount { get; } = ChildCount;
+    public int SubtreeCount { get; } = SubtreeCount;
+
+    public bool Equals(VirtualNodeRecord other) =>
+        Kind == other.Kind
+        && Key == other.Key
+        && Content == other.Content
+        && PropertyStart == other.PropertyStart
+        && PropertyCount == other.PropertyCount
+        && ChildStart == other.ChildStart
+        && ChildCount == other.ChildCount
+        && SubtreeCount == other.SubtreeCount;
+
+    public override bool Equals(object? obj) => obj is VirtualNodeRecord other && Equals(other);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, Key, Content, PropertyStart, PropertyCount, ChildStart, ChildCount, SubtreeCount);
+
+    public static bool operator ==(VirtualNodeRecord left, VirtualNodeRecord right) => left.Equals(right);
+
+    public static bool operator !=(VirtualNodeRecord left, VirtualNodeRecord right) => !left.Equals(right);
+}
+
+internal readonly struct VirtualNodeTreeSlab
+{
+    private readonly VirtualNodeTreePublicationOwner _owner;
+    private readonly int _slot;
+    private readonly ulong _generation;
+    private readonly VirtualNodeRecord[] _nodes;
+    private readonly VirtualNodeProperty[] _properties;
+    private readonly int[] _childIndices;
+    private readonly int _nodeCount;
+    private readonly int _propertyCount;
+    private readonly int _childIndexCount;
+
+    internal VirtualNodeTreeSlab(
+        VirtualNodeTreePublicationOwner owner,
+        int slot,
+        ulong generation,
+        VirtualNodeRecord[] nodes,
+        int nodeCount,
+        VirtualNodeProperty[] properties,
+        int propertyCount,
+        int[] childIndices,
+        int childIndexCount)
+    {
+        _owner = owner;
+        _slot = slot;
+        _generation = generation;
+        _nodes = nodes;
+        _nodeCount = nodeCount;
+        _properties = properties;
+        _propertyCount = propertyCount;
+        _childIndices = childIndices;
+        _childIndexCount = childIndexCount;
+    }
+
+    public int NodeCount => _nodeCount;
+
+    public int PropertyCount => _propertyCount;
+
+    public int ChildIndexCount => _childIndexCount;
+
+    internal bool IsCurrent => _owner.IsCurrentGeneration(_slot, _generation);
+
+    internal VirtualNodeRecord GetNode(int index)
+    {
+        EnsureCurrent();
+        if ((uint)index >= (uint)_nodeCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index));
+        }
+
+        return _nodes[index];
+    }
+
+    internal VirtualNodePropertyList GetProperties(int nodeIndex)
+    {
+        var node = GetNode(nodeIndex);
+        return node.PropertyCount == 0
+            ? VirtualNodePropertyList.Empty
+            : VirtualNodePropertyList.FromPublishedArrayRange(_properties, node.PropertyStart, node.PropertyCount);
+    }
+
+    internal int GetChildNodeIndex(int nodeIndex, int childIndex)
+    {
+        var node = GetNode(nodeIndex);
+        if ((uint)childIndex >= (uint)node.ChildCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(childIndex));
+        }
+
+        var index = node.ChildStart + childIndex;
+        if ((uint)index >= (uint)_childIndexCount)
+        {
+            throw new InvalidOperationException("Virtual node child slab is corrupt.");
+        }
+
+        return _childIndices[index];
+    }
+
+    internal VirtualNode MaterializeRoot()
+    {
+        EnsureCurrent();
+        if (_nodeCount == 0)
+        {
+            return default;
+        }
+
+        return MaterializeNode(0);
+    }
+
+    internal VirtualNode MaterializeNode(int nodeIndex)
+    {
+        var node = GetNode(nodeIndex);
+        var children = node.ChildCount == 0 ? [] : new VirtualNode[node.ChildCount];
+        for (var i = 0; i < children.Length; i++)
+        {
+            children[i] = MaterializeNode(GetChildNodeIndex(nodeIndex, i));
+        }
+
+        var properties = node.PropertyCount == 0 ? VirtualNodePropertyList.Empty : VirtualNodePropertyList.CopyFrom(node.Kind, _properties.AsSpan(node.PropertyStart, node.PropertyCount));
+        return VirtualNode.CreateFromOwnedChildrenUnsafe(node.Kind, node.Key, node.Content, properties, children);
+    }
+
+    private void EnsureCurrent()
+    {
+        if (!IsCurrent)
+        {
+            throw new InvalidOperationException("Virtual node tree slab generation is no longer retained by its publication owner.");
+        }
+    }
 }
 
 internal sealed class VirtualNodeTreePublicationOwner
@@ -438,6 +628,10 @@ internal sealed class VirtualNodeTreePublicationOwner
     private const int RetainedSlotCount = 3;
 
     private readonly VirtualNode[][] _childSlots = new VirtualNode[RetainedSlotCount][];
+    private readonly VirtualNodeRecord[][] _nodeSlots = new VirtualNodeRecord[RetainedSlotCount][];
+    private readonly VirtualNodeProperty[][] _propertySlots = new VirtualNodeProperty[RetainedSlotCount][];
+    private readonly int[][] _childIndexSlots = new int[RetainedSlotCount][];
+    private readonly ulong[] _slotGenerations = new ulong[RetainedSlotCount];
     private int _nextSlot = -1;
     private ulong _generation;
 
@@ -451,6 +645,7 @@ internal sealed class VirtualNodeTreePublicationOwner
         var slot = (_nextSlot + 1) % RetainedSlotCount;
         _nextSlot = slot;
         var generation = ++_generation;
+        _slotGenerations[slot] = generation;
         var children = EnsureChildCapacity(slot, childCapacity);
         children?.AsSpan().Clear();
         return new VirtualNodeTreePublicationBuilder(this, slot, generation, children);
@@ -488,6 +683,187 @@ internal sealed class VirtualNodeTreePublicationOwner
         children = new VirtualNode[nextCapacity];
         _childSlots[slot] = children;
         return children;
+    }
+
+    internal bool IsCurrentGeneration(int slot, ulong generation) =>
+        (uint)slot < RetainedSlotCount && _slotGenerations[slot] == generation;
+
+    internal VirtualNodeTree PublishTree(int slot, ulong generation, VirtualNode root, TextBufferSnapshot textSnapshot = default)
+    {
+        if (!IsCurrentGeneration(slot, generation))
+        {
+            throw new InvalidOperationException("Virtual node publication builder no longer owns the active slot generation.");
+        }
+
+        if (IsDefaultRoot(root))
+        {
+            return new VirtualNodeTree(default(VirtualNode), textSnapshot);
+        }
+
+        CountTree(root, out var nodeCount, out var propertyCount, out var childIndexCount);
+        var nodes = EnsureNodeCapacity(slot, nodeCount);
+        var properties = EnsurePropertyCapacity(slot, propertyCount);
+        var childIndices = EnsureChildIndexCapacity(slot, childIndexCount);
+        var writeState = new TreeWriteState(nodes, properties, childIndices);
+        WriteTree(root, ref writeState);
+        return new VirtualNodeTree(new VirtualNodeTreeSlab(this, slot, generation, nodes, writeState.NodeCount, properties, writeState.PropertyCount, childIndices, writeState.ChildIndexCount), textSnapshot);
+    }
+
+    private VirtualNodeRecord[] EnsureNodeCapacity(int slot, int required)
+    {
+        if ((uint)slot >= RetainedSlotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
+        if (required <= 0)
+        {
+            required = 1;
+        }
+
+        var nodes = _nodeSlots[slot];
+        if (nodes is not null && required <= nodes.Length)
+        {
+            return nodes;
+        }
+
+        var nextCapacity = nodes is null ? 8 : nodes.Length * 2;
+        while (nextCapacity < required)
+        {
+            nextCapacity *= 2;
+        }
+
+        nodes = new VirtualNodeRecord[nextCapacity];
+        _nodeSlots[slot] = nodes;
+        return nodes;
+    }
+
+    private VirtualNodeProperty[] EnsurePropertyCapacity(int slot, int required)
+    {
+        if ((uint)slot >= RetainedSlotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
+        if (required <= 0)
+        {
+            required = 1;
+        }
+
+        var properties = _propertySlots[slot];
+        if (properties is not null && required <= properties.Length)
+        {
+            return properties;
+        }
+
+        var nextCapacity = properties is null ? 8 : properties.Length * 2;
+        while (nextCapacity < required)
+        {
+            nextCapacity *= 2;
+        }
+
+        properties = new VirtualNodeProperty[nextCapacity];
+        _propertySlots[slot] = properties;
+        return properties;
+    }
+
+    private int[] EnsureChildIndexCapacity(int slot, int required)
+    {
+        if ((uint)slot >= RetainedSlotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
+        if (required <= 0)
+        {
+            required = 1;
+        }
+
+        var childIndices = _childIndexSlots[slot];
+        if (childIndices is not null && required <= childIndices.Length)
+        {
+            return childIndices;
+        }
+
+        var nextCapacity = childIndices is null ? 8 : childIndices.Length * 2;
+        while (nextCapacity < required)
+        {
+            nextCapacity *= 2;
+        }
+
+        childIndices = new int[nextCapacity];
+        _childIndexSlots[slot] = childIndices;
+        return childIndices;
+    }
+
+    private static bool IsDefaultRoot(VirtualNode root) =>
+        root.Kind == VirtualNodeKind.None
+        && root.Key == NodeKey.None
+        && root.Content == ContentResource.None
+        && root.Properties.Length == 0
+        && root.Children.Length == 0;
+
+    private static void CountTree(VirtualNode root, out int nodeCount, out int propertyCount, out int childIndexCount)
+    {
+        nodeCount = 0;
+        propertyCount = 0;
+        childIndexCount = 0;
+        CountTreeRecursive(root, ref nodeCount, ref propertyCount, ref childIndexCount);
+    }
+
+    private static void CountTreeRecursive(VirtualNode node, ref int nodeCount, ref int propertyCount, ref int childIndexCount)
+    {
+        nodeCount++;
+        propertyCount += node.Properties.Count;
+        var children = node.Children;
+        childIndexCount += children.Count;
+        for (var i = 0; i < children.Count; i++)
+        {
+            CountTreeRecursive(children[i], ref nodeCount, ref propertyCount, ref childIndexCount);
+        }
+    }
+
+    private static int WriteTree(VirtualNode node, ref TreeWriteState state)
+    {
+        var nodeIndex = state.NodeCount++;
+        var properties = node.Properties;
+        var propertyStart = state.PropertyCount;
+        for (var i = 0; i < properties.Count; i++)
+        {
+            state.Properties[state.PropertyCount++] = properties[i];
+        }
+
+        var children = node.Children;
+        var childStart = state.ChildIndexCount;
+        state.ChildIndexCount += children.Count;
+        for (var i = 0; i < children.Count; i++)
+        {
+            state.ChildIndices[childStart + i] = WriteTree(children[i], ref state);
+        }
+
+        state.Nodes[nodeIndex] = new VirtualNodeRecord(
+            node.Kind,
+            node.Key,
+            node.Content,
+            propertyStart,
+            properties.Count,
+            childStart,
+            children.Count,
+            state.NodeCount - nodeIndex);
+        return nodeIndex;
+    }
+
+    private ref struct TreeWriteState(
+        VirtualNodeRecord[] Nodes,
+        VirtualNodeProperty[] Properties,
+        int[] ChildIndices)
+    {
+        public VirtualNodeRecord[] Nodes { get; } = Nodes;
+        public VirtualNodeProperty[] Properties { get; } = Properties;
+        public int[] ChildIndices { get; } = ChildIndices;
+        public int NodeCount;
+        public int PropertyCount;
+        public int ChildIndexCount;
     }
 }
 
@@ -572,6 +948,11 @@ internal ref struct VirtualNodeTreePublicationBuilder
         return VirtualNodeChildList.FromOwnedArrayRange(target, start, children.Length);
     }
 
+    public readonly VirtualNodeTree PublishTree(VirtualNode root, TextBufferSnapshot textSnapshot = default) =>
+        _owner is null
+            ? new VirtualNodeTree(root, textSnapshot)
+            : _owner.PublishTree(_ownerSlot, _ownerGeneration, root, textSnapshot);
+
     private int Reserve(int count)
     {
         if (count < 0)
@@ -613,16 +994,30 @@ internal ref struct VirtualNodeTreePublicationBuilder
 internal readonly ref struct VirtualNodeTreeReader
 {
     private readonly VirtualNode _root;
+    private readonly VirtualNodeTreeSlab _slab;
+    private readonly bool _hasSlab;
 
     public VirtualNodeTreeReader(VirtualNodeTree tree)
     {
-        _root = tree.Root;
+        if (tree.HasPublishedSlab)
+        {
+            _root = default;
+            _slab = tree.GetPublishedSlab();
+            _hasSlab = true;
+        }
+        else
+        {
+            _root = tree.Root;
+            _slab = default;
+            _hasSlab = false;
+        }
+
         TextSnapshot = tree.TextSnapshot;
     }
 
     public TextBufferSnapshot TextSnapshot { get; }
 
-    public VirtualNodeReader Root => new(_root, 0);
+    public VirtualNodeReader Root => _hasSlab ? new VirtualNodeReader(_slab, 0, 0) : new VirtualNodeReader(_root, 0);
 
     public bool IsDefault => Root.IsDefault;
 }
@@ -630,21 +1025,36 @@ internal readonly ref struct VirtualNodeTreeReader
 internal readonly ref struct VirtualNodeReader
 {
     private readonly VirtualNode _node;
+    private readonly VirtualNodeTreeSlab _slab;
+    private readonly bool _hasSlab;
+    private readonly int _nodeIndex;
 
     public VirtualNodeReader(VirtualNode node, int dfsIndex)
     {
         _node = node;
+        _slab = default;
+        _hasSlab = false;
+        _nodeIndex = -1;
+        DfsIndex = dfsIndex;
+    }
+
+    internal VirtualNodeReader(VirtualNodeTreeSlab slab, int nodeIndex, int dfsIndex)
+    {
+        _node = default;
+        _slab = slab;
+        _hasSlab = true;
+        _nodeIndex = nodeIndex;
         DfsIndex = dfsIndex;
     }
 
     public int DfsIndex { get; }
-    public VirtualNode Node => _node;
-    public VirtualNodeKind Kind => _node.Kind;
-    public NodeKey Key => _node.Key;
-    public ContentResource Content => _node.Content;
-    public VirtualNodePropertyList Properties => _node.Properties;
-    public VirtualNodeChildList Children => _node.Children;
-    public int ChildCount => _node.Children.Length;
+    public VirtualNode Node => _hasSlab ? _slab.MaterializeNode(_nodeIndex) : _node;
+    public VirtualNodeKind Kind => _hasSlab ? _slab.GetNode(_nodeIndex).Kind : _node.Kind;
+    public NodeKey Key => _hasSlab ? _slab.GetNode(_nodeIndex).Key : _node.Key;
+    public ContentResource Content => _hasSlab ? _slab.GetNode(_nodeIndex).Content : _node.Content;
+    public VirtualNodePropertyList Properties => _hasSlab ? _slab.GetProperties(_nodeIndex) : _node.Properties;
+    public VirtualNodeChildList Children => _hasSlab ? MaterializeChildren() : _node.Children;
+    public int ChildCount => _hasSlab ? _slab.GetNode(_nodeIndex).ChildCount : _node.Children.Length;
 
     public bool IsDefault =>
         Kind == VirtualNodeKind.None
@@ -655,6 +1065,11 @@ internal readonly ref struct VirtualNodeReader
 
     public VirtualNodeReader GetChild(int childIndex, int dfsIndex)
     {
+        if (_hasSlab)
+        {
+            return new VirtualNodeReader(_slab, _slab.GetChildNodeIndex(_nodeIndex, childIndex), dfsIndex);
+        }
+
         var children = _node.Children;
         if ((uint)childIndex >= (uint)children.Length)
         {
@@ -666,6 +1081,11 @@ internal readonly ref struct VirtualNodeReader
 
     public NodeKey GetChildKey(int childIndex)
     {
+        if (_hasSlab)
+        {
+            return _slab.GetNode(_slab.GetChildNodeIndex(_nodeIndex, childIndex)).Key;
+        }
+
         var children = _node.Children;
         if ((uint)childIndex >= (uint)children.Length)
         {
@@ -677,6 +1097,11 @@ internal readonly ref struct VirtualNodeReader
 
     public int CountSubtreeNodes()
     {
+        if (_hasSlab)
+        {
+            return _slab.GetNode(_nodeIndex).SubtreeCount;
+        }
+
         var count = 1;
         var children = _node.Children;
         for (var i = 0; i < children.Length; i++)
@@ -685,6 +1110,28 @@ internal readonly ref struct VirtualNodeReader
         }
 
         return count;
+    }
+
+    private VirtualNodeChildList MaterializeChildren()
+    {
+        if (!_hasSlab)
+        {
+            throw new InvalidOperationException("Reader is not slab-backed.");
+        }
+
+        var childCount = _slab.GetNode(_nodeIndex).ChildCount;
+        if (childCount == 0)
+        {
+            return VirtualNodeChildList.Empty;
+        }
+
+        var children = new VirtualNode[childCount];
+        for (var i = 0; i < children.Length; i++)
+        {
+            children[i] = _slab.MaterializeNode(_slab.GetChildNodeIndex(_nodeIndex, i));
+        }
+
+        return VirtualNodeChildList.FromOwnedArray(children);
     }
 }
 
@@ -999,6 +1446,8 @@ internal readonly struct VirtualNodeChildList : IEquatable<VirtualNodeChildList>
 internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProperty>, IEquatable<VirtualNodePropertyList>
 {
     private readonly VirtualNodeProperty[]? _items;
+    private readonly int _start;
+    private readonly int _itemCount;
     private readonly uint _actionIdValue;
     private readonly VirtualPropertyKey _singleNumberKey;
     private readonly ulong _singleNumberBits;
@@ -1015,6 +1464,8 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
 
     private VirtualNodePropertyList(
         VirtualNodeProperty[]? items,
+        int start,
+        int itemCount,
         uint actionIdValue,
         byte compactKind,
         byte controlStateBits,
@@ -1022,6 +1473,8 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
         ulong singleNumberBits = 0)
     {
         _items = items;
+        _start = start;
+        _itemCount = itemCount;
         _actionIdValue = actionIdValue;
         _singleNumberKey = singleNumberKey;
         _singleNumberBits = singleNumberBits;
@@ -1031,7 +1484,7 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
 
     public int Count =>
         _items is not null
-            ? _items.Length
+            ? _itemCount
             : _compactKind switch
             {
                 CompactKindAction or CompactKindSingleNumber => 1,
@@ -1049,12 +1502,12 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
         {
             if (_items is not null)
             {
-                if ((uint)index >= (uint)_items.Length)
+                if ((uint)index >= (uint)_itemCount)
                 {
                     throw new ArgumentOutOfRangeException(nameof(index));
                 }
 
-                return _items[index];
+                return _items[_start + index];
             }
 
             if (_compactKind == CompactKindAction)
@@ -1101,7 +1554,18 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
         VirtualNodePropertySet.Validate(kind, properties);
         return TryCreateCompact(properties, out var compact)
             ? compact
-            : new VirtualNodePropertyList(properties, 0, CompactKindNone, 0);
+            : new VirtualNodePropertyList(properties, 0, properties.Length, 0, CompactKindNone, 0);
+    }
+
+    internal static VirtualNodePropertyList FromPublishedArrayRange(VirtualNodeProperty[] properties, int start, int count)
+    {
+        ArgumentNullException.ThrowIfNull(properties);
+        if (start < 0 || count < 0 || start + count > properties.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
+        return count == 0 ? Empty : new VirtualNodePropertyList(properties, start, count, 0, CompactKindNone, 0);
     }
 
     public static VirtualNodePropertyList CopyFrom(VirtualNodeKind kind, scoped ReadOnlySpan<VirtualNodeProperty> properties)
@@ -1119,7 +1583,7 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
 
         return TryCreateCompact(properties, out var compact)
             ? compact
-            : new VirtualNodePropertyList(properties.ToArray(), 0, CompactKindNone, 0);
+            : new VirtualNodePropertyList(properties.ToArray(), 0, properties.Length, 0, CompactKindNone, 0);
     }
 
     private static bool TryCreateCompact(ReadOnlySpan<VirtualNodeProperty> properties, out VirtualNodePropertyList compact)
@@ -1130,7 +1594,7 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
             && properties[0].Value.TryGetActionId(out var actionId)
             && !actionId.IsNone)
         {
-            compact = new VirtualNodePropertyList(null, actionId.Value, CompactKindAction, 0);
+            compact = new VirtualNodePropertyList(null, 0, 0, actionId.Value, CompactKindAction, 0);
             return true;
         }
 
@@ -1155,7 +1619,7 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
         }
 
         var stateBits = (byte)((isHovered ? HoveredBit : 0) | (isPressed ? PressedBit : 0) | (isFocused ? FocusedBit : 0));
-        compact = new VirtualNodePropertyList(null, actionId.Value, CompactKindControlBundle, stateBits);
+        compact = new VirtualNodePropertyList(null, 0, 0, actionId.Value, CompactKindControlBundle, stateBits);
         return true;
     }
 
@@ -1167,7 +1631,7 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
             return false;
         }
 
-        compact = new VirtualNodePropertyList(null, 0, CompactKindSingleNumber, 0, property.Key, BitConverter.DoubleToUInt64Bits(value));
+        compact = new VirtualNodePropertyList(null, 0, 0, 0, CompactKindSingleNumber, 0, property.Key, BitConverter.DoubleToUInt64Bits(value));
         return true;
     }
 
@@ -1215,7 +1679,7 @@ internal readonly struct VirtualNodePropertyList : IReadOnlyList<VirtualNodeProp
 
         if (_items is not null)
         {
-            _items.AsSpan(0, _items.Length).CopyTo(destination);
+            _items.AsSpan(_start, _itemCount).CopyTo(destination);
             return;
         }
 

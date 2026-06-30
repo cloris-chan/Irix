@@ -6,12 +6,12 @@ namespace Irix;
 /// </summary>
 internal readonly struct ApplyResult(
     IReadOnlyList<int> Dirty,
-    VirtualNode PreviousRoot,
-    TextBufferSnapshot PreviousTextSnapshot)
+    VirtualNodeTree PreviousTree)
 {
     public IReadOnlyList<int> Dirty { get; } = Dirty;
-    public VirtualNode PreviousRoot { get; } = PreviousRoot;
-    public TextBufferSnapshot PreviousTextSnapshot { get; } = PreviousTextSnapshot;
+    public VirtualNodeTree PreviousTree { get; } = PreviousTree;
+    public VirtualNode PreviousRoot => PreviousTree.Root;
+    public TextBufferSnapshot PreviousTextSnapshot => PreviousTree.TextSnapshot;
 }
 
 /// <summary>
@@ -44,27 +44,26 @@ internal sealed class RetainedTree(VirtualNodeTree tree)
     /// </summary>
     public ApplyResult Apply(PatchBatch batch)
     {
-        var prevRoot = _tree.Root;
-        var prevSnapshot = _tree.TextSnapshot;
+        var previousTree = _tree;
         if (batch.HasCanonicalRoot)
         {
-            return ApplyCanonicalRootBatch(batch, prevRoot, prevSnapshot);
+            return ApplyCanonicalRootBatch(batch, previousTree);
         }
 
         if (batch.Count == 0)
         {
-            return new ApplyResult([], prevRoot, prevSnapshot);
+            return new ApplyResult([], previousTree);
         }
 
         throw new InvalidOperationException("RetainedTree only accepts canonical diff batches.");
     }
 
-    private ApplyResult ApplyCanonicalRootBatch(PatchBatch batch, VirtualNode prevRoot, TextBufferSnapshot prevSnapshot)
+    private ApplyResult ApplyCanonicalRootBatch(PatchBatch batch, VirtualNodeTree previousTree)
     {
-        _tree = new VirtualNodeTree(batch.Root, batch.TextSnapshot);
+        _tree = batch.Tree;
         if (batch.Count == 0)
         {
-            return new ApplyResult([], prevRoot, prevSnapshot);
+            return new ApplyResult([], previousTree);
         }
 
         var memory = batch.Memory.Span;
@@ -93,12 +92,12 @@ internal sealed class RetainedTree(VirtualNodeTree tree)
 
             if (needsNextParentIndex)
             {
-                BuildParentIndexTable(batch.Root, ref nextParentIndex);
+                BuildParentIndexTable(batch.Tree, ref nextParentIndex);
             }
 
             if (needsPreviousParentIndex)
             {
-                BuildParentIndexTable(prevRoot, ref previousParentIndex);
+                BuildParentIndexTable(previousTree, ref previousParentIndex);
             }
 
             for (var i = 0; i < memory.Length; i++)
@@ -114,7 +113,7 @@ internal sealed class RetainedTree(VirtualNodeTree tree)
                 });
             }
 
-            return new ApplyResult(SortAndDeduplicateDirty(ref dirty), prevRoot, prevSnapshot);
+            return new ApplyResult(SortAndDeduplicateDirty(ref dirty), previousTree);
         }
         finally
         {
@@ -152,21 +151,21 @@ internal sealed class RetainedTree(VirtualNodeTree tree)
         return result;
     }
 
-    private static void BuildParentIndexTable(VirtualNode root, ref ScratchList<NodeIndexEntry> table)
+    private static void BuildParentIndexTable(VirtualNodeTree tree, ref ScratchList<NodeIndexEntry> table)
     {
         table.Add(new NodeIndexEntry(0, 0));
-        BuildParentIndexTableRecursive(root, 0, ref table);
+        BuildParentIndexTableRecursive(tree.CreateReader().Root, 0, ref table);
     }
 
-    private static int BuildParentIndexTableRecursive(VirtualNode node, int currentIndex, ref ScratchList<NodeIndexEntry> table)
+    private static int BuildParentIndexTableRecursive(VirtualNodeReader node, int currentIndex, ref ScratchList<NodeIndexEntry> table)
     {
         var nextIndex = currentIndex + 1;
-        var children = node.Children;
-        for (var i = 0; i < children.Length; i++)
+        for (var i = 0; i < node.ChildCount; i++)
         {
             var childIndex = nextIndex;
+            var child = node.GetChild(i, childIndex);
             table.Add(new NodeIndexEntry(childIndex, currentIndex));
-            nextIndex += BuildParentIndexTableRecursive(children[i], childIndex, ref table);
+            nextIndex += BuildParentIndexTableRecursive(child, childIndex, ref table);
         }
 
         return nextIndex - currentIndex;

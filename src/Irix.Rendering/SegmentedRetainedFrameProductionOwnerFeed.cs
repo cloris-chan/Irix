@@ -108,8 +108,16 @@ internal sealed partial class SegmentedRetainedFrameProductionOwnerFeed(RenderPi
 
     public RenderFrameBatch Build(VirtualNode root, PixelRectangle viewportBounds, TextBufferSnapshot textSnapshot, IReadOnlyList<int>? dirtyNodes = null, TextBufferSnapshot? prevTextSnapshot = null, VirtualNode previousRoot = default)
     {
-        var batch = _pipeline.Build(root, viewportBounds, textSnapshot, dirtyNodes, prevTextSnapshot, previousRoot);
-        LastResult = UpdateRuntimeOwner(root, viewportBounds, batch);
+        var tree = new VirtualNodeTree(root, textSnapshot);
+        var previousTree = previousRoot.Kind == VirtualNodeKind.None ? default : new VirtualNodeTree(previousRoot, prevTextSnapshot ?? default);
+        var batch = Build(tree, viewportBounds, dirtyNodes, previousTree);
+        return batch;
+    }
+
+    public RenderFrameBatch Build(VirtualNodeTree tree, PixelRectangle viewportBounds, IReadOnlyList<int>? dirtyNodes = null, VirtualNodeTree previousTree = default)
+    {
+        var batch = _pipeline.Build(tree, viewportBounds, dirtyNodes, previousTree);
+        LastResult = UpdateRuntimeOwner(tree.Root, viewportBounds, batch);
         return batch;
     }
 

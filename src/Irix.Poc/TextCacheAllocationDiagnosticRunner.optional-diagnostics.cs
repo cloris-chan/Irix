@@ -356,19 +356,19 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithBeginFrame(AllocatedDelta(measureAllocation, beforeBeginFrame));
 
         var beforeBuildRoot = GetAllocatedBytes(measureAllocation);
-        var root = BuildRoot(publicationOwner, arena, text, scrollY, measureAllocation, out var buildRootAttribution);
+        var tree = BuildRoot(publicationOwner, arena, text, scrollY, measureAllocation, out var buildRootAttribution);
         attribution = attribution.WithBuildRoot(AllocatedDelta(measureAllocation, beforeBuildRoot), buildRootAttribution);
 
         var beforeSnapshot = GetAllocatedBytes(measureAllocation);
         var snapshot = arena.GetOrCreateSnapshotWithAllocationAttribution(out var snapshotAttribution);
         attribution = attribution.WithSnapshot(AllocatedDelta(measureAllocation, beforeSnapshot), snapshotAttribution);
-        return new VirtualNodeTree(root, snapshot);
+        return tree.WithTextSnapshot(snapshot);
     }
 
-    private static VirtualNode BuildRoot(VirtualNodeTreePublicationOwner publicationOwner, VirtualTextArena arena, string text, int scrollY)
+    private static VirtualNodeTree BuildRoot(VirtualNodeTreePublicationOwner publicationOwner, VirtualTextArena arena, string text, int scrollY)
         => BuildRoot(publicationOwner, arena, text, scrollY, measureAllocation: false, out _);
 
-    private static VirtualNode BuildRoot(
+    private static VirtualNodeTree BuildRoot(
         VirtualNodeTreePublicationOwner publicationOwner,
         VirtualTextArena arena,
         string text,
@@ -411,8 +411,9 @@ internal static class TextCacheAllocationDiagnosticRunner
 
         var beforeContainer = GetAllocatedBytes(measureAllocation);
         var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertySet.Create(VirtualNodeKind.Container, properties), rootChildren);
+        var tree = publication.PublishTree(root);
         attribution = attribution.WithContainer(AllocatedDelta(measureAllocation, beforeContainer));
-        return root;
+        return tree;
     }
 
     private static VirtualNode BuildMeasuredButton(

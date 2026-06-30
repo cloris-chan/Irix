@@ -11,13 +11,21 @@ internal static class StyleOnlyLayoutPatcher
         IReadOnlyList<int> dirtyNodes,
         out LayoutTreeResult patchedLayout)
     {
+        return TryBuildPatchedLayout(retainedLayout, new VirtualNodeTree(nextRoot), dirtyNodes, out patchedLayout);
+    }
+
+    public static bool TryBuildPatchedLayout(
+        LayoutTreeResult retainedLayout,
+        VirtualNodeTree nextTree,
+        IReadOnlyList<int> dirtyNodes,
+        out LayoutTreeResult patchedLayout)
+    {
         patchedLayout = default;
         if (dirtyNodes.Count == 0 || retainedLayout.ElementRanges.Length == 0)
         {
             return false;
         }
 
-        var nextTree = new VirtualNodeTree(nextRoot);
         var nextReader = nextTree.CreateReader().Root;
         var elementCount = retainedLayout.Elements.Length;
         Span<LayoutElement> inlineElements = stackalloc LayoutElement[LayoutElementList.InlineCapacity];

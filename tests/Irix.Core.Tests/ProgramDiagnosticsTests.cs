@@ -4158,7 +4158,10 @@ public sealed partial class ProgramDiagnosticsTests
         Assert.Contains("var scalePublication = new VirtualNodeTreePublicationOwner();", source);
         Assert.Contains("arena.BeginFrame();", source);
         Assert.Contains("var snapshot = arena.GetOrCreateSnapshotWithAllocationAttribution(out var snapshotAttribution);", source);
-        Assert.Contains("return new VirtualNodeTree(root, snapshot);", source);
+        Assert.Contains("return tree.WithTextSnapshot(snapshot);", source);
+        Assert.Contains("private static VirtualNodeTree BuildRoot(", source);
+        Assert.Contains("return tree;", source);
+        Assert.Contains("publication.PublishTree(root)", source);
         Assert.Contains("out var treeFrameAttribution", source);
         Assert.Contains("treeAttribution = treeAttribution.Add(treeFrameAttribution);", source);
         Assert.Contains("output.WriteLine(FormatTreeSnapshotAllocationAttribution(treeAttribution.SnapshotAttribution, frameCount));", source);

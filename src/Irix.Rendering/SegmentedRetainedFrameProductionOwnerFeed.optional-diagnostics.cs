@@ -15,8 +15,20 @@ internal sealed partial class SegmentedRetainedFrameProductionOwnerFeed
         VirtualNode previousRoot,
         out RenderPipelineBuildAllocationAttribution attribution)
     {
-        var batch = _pipeline.BuildWithAllocationAttribution(root, viewportBounds, textSnapshot, dirtyNodes, prevTextSnapshot, previousRoot, out attribution);
-        LastResult = UpdateRuntimeOwner(root, viewportBounds, batch);
+        var tree = new VirtualNodeTree(root, textSnapshot);
+        var previousTree = previousRoot.Kind == VirtualNodeKind.None ? default : new VirtualNodeTree(previousRoot, prevTextSnapshot ?? default);
+        return BuildWithAllocationAttribution(tree, viewportBounds, dirtyNodes, previousTree, out attribution);
+    }
+
+    internal RenderFrameBatch BuildWithAllocationAttribution(
+        VirtualNodeTree tree,
+        PixelRectangle viewportBounds,
+        IReadOnlyList<int>? dirtyNodes,
+        VirtualNodeTree previousTree,
+        out RenderPipelineBuildAllocationAttribution attribution)
+    {
+        var batch = _pipeline.BuildWithAllocationAttribution(tree, viewportBounds, dirtyNodes, previousTree, out attribution);
+        LastResult = UpdateRuntimeOwner(tree.Root, viewportBounds, batch);
         return batch;
     }
 }
