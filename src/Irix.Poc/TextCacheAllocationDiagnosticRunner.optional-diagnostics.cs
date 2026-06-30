@@ -374,7 +374,10 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = default;
 
         var beforeChildPublication = GetAllocatedBytes(measureAllocation);
-        var publication = new VirtualNodeTreePublicationBuilder(childCapacity: 4);
+        const int RootChildCount = 3;
+        const int ButtonCount = 2;
+        const int ButtonChildCount = 2;
+        var publication = new VirtualNodeTreePublicationBuilder(childCapacity: RootChildCount + (ButtonCount * ButtonChildCount));
         attribution = attribution.WithChildPublication(AllocatedDelta(measureAllocation, beforeChildPublication));
 
         var beforeButtonA = GetAllocatedBytes(measureAllocation);
@@ -394,11 +397,15 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithScrollProperty(AllocatedDelta(measureAllocation, beforeScrollProperty));
 
         var beforeChildren = GetAllocatedBytes(measureAllocation);
-        var children = new[] { buttonA, textNode, buttonB };
+        var children = publication.ReserveChildRange(RootChildCount, out var rootStart);
+        children[0] = buttonA;
+        children[1] = textNode;
+        children[2] = buttonB;
+        var rootChildren = publication.PublishReservedChildren(rootStart, RootChildCount);
         attribution = attribution.WithChildren(AllocatedDelta(measureAllocation, beforeChildren));
 
         var beforeContainer = GetAllocatedBytes(measureAllocation);
-        var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertySet.Create(VirtualNodeKind.Container, properties), children);
+        var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertySet.Create(VirtualNodeKind.Container, properties), rootChildren);
         attribution = attribution.WithContainer(AllocatedDelta(measureAllocation, beforeContainer));
         return root;
     }

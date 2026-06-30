@@ -1668,6 +1668,8 @@ public class TypedIdAllocationGuardTests
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
 
         Assert.Contains("internal ref struct VirtualNodeTreePublicationBuilder", source);
+        Assert.Contains("ReserveChildRange", source);
+        Assert.Contains("PublishReservedChildren", source);
         Assert.Contains("FromOwnedArrayRange", source);
         Assert.Contains("private readonly int _start;", source);
         Assert.Contains("private readonly int _count;", source);
@@ -1685,14 +1687,19 @@ public class TypedIdAllocationGuardTests
         var second = VirtualNodeFactory.Rectangle(new NodeKey(2), VirtualNodeProperty.Width(20));
         var prefix = builder.PublishChildren(first, second);
         var tail = builder.PublishChildren([first]);
+        var reserved = builder.ReserveChildRange(1, out var reservedStart);
+        reserved[0] = second;
+        var reservedList = builder.PublishReservedChildren(reservedStart, reserved.Length);
 
-        Assert.Equal(3, builder.WrittenChildCount);
+        Assert.Equal(4, builder.WrittenChildCount);
         Assert.Equal(4, builder.ChildCapacity);
         Assert.Equal(2, prefix.Length);
         Assert.Equal(new NodeKey(1), prefix[0].Key);
         Assert.Equal(new NodeKey(2), prefix[1].Key);
         Assert.Single(tail.ToArray());
         Assert.Equal(new NodeKey(1), tail[0].Key);
+        Assert.Single(reservedList.ToArray());
+        Assert.Equal(new NodeKey(2), reservedList[0].Key);
     }
 
     [Fact]
@@ -1731,15 +1738,17 @@ public class TypedIdAllocationGuardTests
     }
 
     [Fact]
-    public void Counter_root_view_freezes_owned_children_without_scroll_row_temp_array()
+    public void Counter_root_view_publishes_root_children_through_tree_publication_range()
     {
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
 
         Assert.Contains("CreateRootChildren", source);
         Assert.Contains("new VirtualNodeTreePublicationBuilder", source);
-        Assert.Contains("VirtualNodeChildList.FromOwnedArray(children)", source);
+        Assert.Contains("ReserveChildRange", source);
+        Assert.Contains("PublishReservedChildren", source);
         Assert.Contains("VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container", source);
-        Assert.Contains("new VirtualNode[headerRows.Length", source);
+        Assert.DoesNotContain("new VirtualNode[headerRows.Length", source);
+        Assert.DoesNotContain("VirtualNodeChildList.FromOwnedArray(children)", source);
         Assert.Contains("headerRows.CopyTo(children)", source);
         Assert.Contains("WriteScrollProbeRows", source);
         Assert.DoesNotContain("BuildScrollProbeRows", source);

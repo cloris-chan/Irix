@@ -99,11 +99,12 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
                 VirtualNodeBuilder.Text(_arena, $"Count: {model.Count}", new NodeKey(2)),
                 VirtualNodeBuilder.Text(_arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4))
             ];
-        var publication = new VirtualNodeTreePublicationBuilder(ComputeChildPublicationCapacity());
+        var rootChildCount = ComputeRootChildCount(headerRows.Length);
+        var publication = new VirtualNodeTreePublicationBuilder(ComputeChildPublicationCapacity(rootChildCount));
 
         var rootProperties = new[] { VirtualNodeProperty.ScrollY(scrollY) };
         VirtualNodePropertySet.Validate(VirtualNodeKind.Container, rootProperties);
-        var rootChildren = CreateRootChildren(_arena, headerRows, inputOwnership, publication);
+        var rootChildren = CreateRootChildren(_arena, headerRows, inputOwnership, rootChildCount, ref publication);
         var root = VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container, new NodeKey(1), ContentResource.None, VirtualNodePropertyList.FromOwnedArray(VirtualNodeKind.Container, rootProperties), rootChildren);
 
         return new VirtualNodeTree(root, _arena.GetOrCreateSnapshot());
@@ -141,24 +142,30 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
         VirtualTextArena arena,
         ReadOnlySpan<VirtualNode> headerRows,
         OwnershipSnapshot inputOwnership,
-        VirtualNodeTreePublicationBuilder publication)
+        int childCount,
+        scoped ref VirtualNodeTreePublicationBuilder publication)
     {
-        var children = new VirtualNode[headerRows.Length + RootFixedChildCount + ScrollProbeRowCount];
+        var decoration = VirtualNodeFactory.Rectangle(new NodeKey(5), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48));
+        var incrementButton = BuildButton(arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership, ref publication);
+        var decrementButton = BuildButton(arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership, ref publication);
+        var resetButton = BuildButton(arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership, ref publication);
+
+        var children = publication.ReserveChildRange(childCount, out var rootStart);
         headerRows.CopyTo(children);
         var next = headerRows.Length;
 
-        children[next++] = VirtualNodeFactory.Rectangle(new NodeKey(5), VirtualNodeProperty.Width(220), VirtualNodeProperty.Height(48));
-        children[next++] = BuildButton(arena, "Increment", 6, ActionIdRegistry.Increment, inputOwnership, ref publication);
-        children[next++] = BuildButton(arena, "Decrement", 7, ActionIdRegistry.Decrement, inputOwnership, ref publication);
-        children[next++] = BuildButton(arena, "Reset", 8, ActionIdRegistry.Reset, inputOwnership, ref publication);
+        children[next++] = decoration;
+        children[next++] = incrementButton;
+        children[next++] = decrementButton;
+        children[next++] = resetButton;
         next = WriteScrollProbeRows(arena, children, next);
 
-        if (next != children.Length)
+        if (next != childCount)
         {
             throw new InvalidOperationException("Counter root child publication count changed unexpectedly.");
         }
 
-        return VirtualNodeChildList.FromOwnedArray(children);
+        return publication.PublishReservedChildren(rootStart, childCount);
     }
 
     private static int WriteScrollProbeRows(VirtualTextArena arena, Span<VirtualNode> children, int startIndex)
@@ -172,9 +179,14 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
         return next;
     }
 
-    private static int ComputeChildPublicationCapacity()
+    private static int ComputeRootChildCount(int headerRowCount)
     {
-        return ButtonCount * ButtonTemplateChildCount;
+        return headerRowCount + RootFixedChildCount + ScrollProbeRowCount;
+    }
+
+    private static int ComputeChildPublicationCapacity(int rootChildCount)
+    {
+        return rootChildCount + (ButtonCount * ButtonTemplateChildCount);
     }
 
     private static UpdateResult<CounterModel, CounterMessage> ApplyRoutedInput(CounterModel model, CounterMessage.RoutedInput input)

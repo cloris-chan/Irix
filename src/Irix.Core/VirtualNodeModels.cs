@@ -453,6 +453,28 @@ internal ref struct VirtualNodeTreePublicationBuilder
 
     public readonly int ChildCapacity => _children?.Length ?? 0;
 
+    public Span<VirtualNode> ReserveChildRange(int count, out int start)
+    {
+        start = Reserve(count);
+        return count == 0 ? Span<VirtualNode>.Empty : _children!.AsSpan(start, count);
+    }
+
+    public VirtualNodeChildList PublishReservedChildren(int start, int count)
+    {
+        if (start < 0 || count < 0 || start > _written || count > _written - start)
+        {
+            throw new ArgumentOutOfRangeException(nameof(start));
+        }
+
+        if (count == 0)
+        {
+            return VirtualNodeChildList.Empty;
+        }
+
+        var children = _children ?? throw new InvalidOperationException("No child publication storage is available.");
+        return VirtualNodeChildList.FromOwnedArrayRange(children, start, count);
+    }
+
     public VirtualNodeChildList PublishChildren(VirtualNode first, VirtualNode second)
     {
         var start = Reserve(2);
@@ -477,6 +499,11 @@ internal ref struct VirtualNodeTreePublicationBuilder
 
     private int Reserve(int count)
     {
+        if (count < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count));
+        }
+
         var start = _written;
         var required = checked(start + count);
         EnsureCapacity(required);
