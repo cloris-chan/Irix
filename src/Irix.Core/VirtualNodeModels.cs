@@ -433,8 +433,69 @@ internal readonly struct VirtualNodeTree(VirtualNode root, TextBufferSnapshot te
     internal VirtualNodeTreeReader CreateReader() => new(this);
 }
 
+internal sealed class VirtualNodeTreePublicationOwner
+{
+    private const int RetainedSlotCount = 3;
+
+    private readonly VirtualNode[][] _childSlots = new VirtualNode[RetainedSlotCount][];
+    private int _nextSlot = -1;
+    private ulong _generation;
+
+    public VirtualNodeTreePublicationBuilder BeginBuild(int childCapacity)
+    {
+        if (childCapacity < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(childCapacity));
+        }
+
+        var slot = (_nextSlot + 1) % RetainedSlotCount;
+        _nextSlot = slot;
+        var generation = ++_generation;
+        var children = EnsureChildCapacity(slot, childCapacity);
+        children?.AsSpan().Clear();
+        return new VirtualNodeTreePublicationBuilder(this, slot, generation, children);
+    }
+
+    internal VirtualNode[]? EnsureChildCapacity(int slot, int required)
+    {
+        if ((uint)slot >= RetainedSlotCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot));
+        }
+
+        if (required < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(required));
+        }
+
+        if (required == 0)
+        {
+            return null;
+        }
+
+        var children = _childSlots[slot];
+        if (children is not null && required <= children.Length)
+        {
+            return children;
+        }
+
+        var nextCapacity = children is null ? 4 : children.Length * 2;
+        while (nextCapacity < required)
+        {
+            nextCapacity *= 2;
+        }
+
+        children = new VirtualNode[nextCapacity];
+        _childSlots[slot] = children;
+        return children;
+    }
+}
+
 internal ref struct VirtualNodeTreePublicationBuilder
 {
+    private readonly VirtualNodeTreePublicationOwner? _owner;
+    private readonly int _ownerSlot;
+    private readonly ulong _ownerGeneration;
     private VirtualNode[]? _children;
     private int _written;
 
@@ -445,13 +506,27 @@ internal ref struct VirtualNodeTreePublicationBuilder
             throw new ArgumentOutOfRangeException(nameof(childCapacity));
         }
 
+        _owner = null;
+        _ownerSlot = -1;
+        _ownerGeneration = 0;
         _children = childCapacity == 0 ? null : new VirtualNode[childCapacity];
+        _written = 0;
+    }
+
+    internal VirtualNodeTreePublicationBuilder(VirtualNodeTreePublicationOwner owner, int ownerSlot, ulong ownerGeneration, VirtualNode[]? children)
+    {
+        _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+        _ownerSlot = ownerSlot;
+        _ownerGeneration = ownerGeneration;
+        _children = children;
         _written = 0;
     }
 
     public readonly int WrittenChildCount => _written;
 
     public readonly int ChildCapacity => _children?.Length ?? 0;
+
+    public readonly ulong PublicationGeneration => _ownerGeneration;
 
     public Span<VirtualNode> ReserveChildRange(int count, out int start)
     {
@@ -523,6 +598,12 @@ internal ref struct VirtualNodeTreePublicationBuilder
         while (nextCapacity < required)
         {
             nextCapacity *= 2;
+        }
+
+        if (_owner is not null)
+        {
+            _children = _owner.EnsureChildCapacity(_ownerSlot, required);
+            return;
         }
 
         Array.Resize(ref _children, nextCapacity);

@@ -48,12 +48,15 @@ internal static class TextCacheAllocationDiagnosticRunner
         output.WriteLine();
 
         var arena = new VirtualTextArena();
+        var staticPublication = new VirtualNodeTreePublicationOwner();
         RunScenario(output, "static", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (int i, DisplayScale _, out TreeAllocationAttribution treeFrameAttribution) =>
-            BuildScenarioTree(arena, "Static cache baseline", scrollY: 0, measureAllocation: true, out treeFrameAttribution));
+            BuildScenarioTree(staticPublication, arena, "Static cache baseline", scrollY: 0, measureAllocation: true, out treeFrameAttribution));
+        var scrollPublication = new VirtualNodeTreePublicationOwner();
         RunScenario(output, "scroll", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (int i, DisplayScale _, out TreeAllocationAttribution treeFrameAttribution) =>
-            BuildScenarioTree(arena, "Scrolling cache baseline", scrollY: i * 2, measureAllocation: true, out treeFrameAttribution));
+            BuildScenarioTree(scrollPublication, arena, "Scrolling cache baseline", scrollY: i * 2, measureAllocation: true, out treeFrameAttribution));
+        var scalePublication = new VirtualNodeTreePublicationOwner();
         RunScenario(output, "scale-change", frameCount, d3d12Renderer, d3d12Backend, compositor, translator, displayScale, (int i, DisplayScale scale, out TreeAllocationAttribution treeFrameAttribution) =>
-            BuildScenarioTree(arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0, measureAllocation: true, out treeFrameAttribution), scaleChangeAtHalf: true);
+            BuildScenarioTree(scalePublication, arena, $"Scale cache baseline {scale.ScaleX:0.##}x", scrollY: 0, measureAllocation: true, out treeFrameAttribution), scaleChangeAtHalf: true);
 
         output.WriteLine("=== Text cache / allocation diagnostic complete ===");
     }
@@ -336,10 +339,11 @@ internal static class TextCacheAllocationDiagnosticRunner
 
     private delegate VirtualNodeTree ScenarioTreeFactory(int frameIndex, DisplayScale displayScale, out TreeAllocationAttribution attribution);
 
-    private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)
-        => BuildScenarioTree(arena, text, scrollY, measureAllocation: false, out _);
+    private static VirtualNodeTree BuildScenarioTree(VirtualNodeTreePublicationOwner publicationOwner, VirtualTextArena arena, string text, int scrollY)
+        => BuildScenarioTree(publicationOwner, arena, text, scrollY, measureAllocation: false, out _);
 
     private static VirtualNodeTree BuildScenarioTree(
+        VirtualNodeTreePublicationOwner publicationOwner,
         VirtualTextArena arena,
         string text,
         int scrollY,
@@ -352,7 +356,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         attribution = attribution.WithBeginFrame(AllocatedDelta(measureAllocation, beforeBeginFrame));
 
         var beforeBuildRoot = GetAllocatedBytes(measureAllocation);
-        var root = BuildRoot(arena, text, scrollY, measureAllocation, out var buildRootAttribution);
+        var root = BuildRoot(publicationOwner, arena, text, scrollY, measureAllocation, out var buildRootAttribution);
         attribution = attribution.WithBuildRoot(AllocatedDelta(measureAllocation, beforeBuildRoot), buildRootAttribution);
 
         var beforeSnapshot = GetAllocatedBytes(measureAllocation);
@@ -361,10 +365,11 @@ internal static class TextCacheAllocationDiagnosticRunner
         return new VirtualNodeTree(root, snapshot);
     }
 
-    private static VirtualNode BuildRoot(VirtualTextArena arena, string text, int scrollY)
-        => BuildRoot(arena, text, scrollY, measureAllocation: false, out _);
+    private static VirtualNode BuildRoot(VirtualNodeTreePublicationOwner publicationOwner, VirtualTextArena arena, string text, int scrollY)
+        => BuildRoot(publicationOwner, arena, text, scrollY, measureAllocation: false, out _);
 
     private static VirtualNode BuildRoot(
+        VirtualNodeTreePublicationOwner publicationOwner,
         VirtualTextArena arena,
         string text,
         int scrollY,
@@ -377,7 +382,7 @@ internal static class TextCacheAllocationDiagnosticRunner
         const int RootChildCount = 3;
         const int ButtonCount = 2;
         const int ButtonChildCount = 2;
-        var publication = new VirtualNodeTreePublicationBuilder(childCapacity: RootChildCount + (ButtonCount * ButtonChildCount));
+        var publication = publicationOwner.BeginBuild(childCapacity: RootChildCount + (ButtonCount * ButtonChildCount));
         attribution = attribution.WithChildPublication(AllocatedDelta(measureAllocation, beforeChildPublication));
 
         var beforeButtonA = GetAllocatedBytes(measureAllocation);

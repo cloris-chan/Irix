@@ -38,6 +38,7 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
     private const int ButtonCount = 3;
 
     internal readonly VirtualTextArena _arena = new();
+    private readonly VirtualNodeTreePublicationOwner _treePublication = new();
 
     internal CounterApplication()
     {
@@ -100,7 +101,7 @@ internal sealed partial class CounterApplication : IApplication<CounterModel, Co
                 VirtualNodeBuilder.Text(_arena, "Click a button or use Up/Down, mouse wheel, and R.", new NodeKey(4))
             ];
         var rootChildCount = ComputeRootChildCount(headerRows.Length);
-        var publication = new VirtualNodeTreePublicationBuilder(ComputeChildPublicationCapacity(rootChildCount));
+        var publication = _treePublication.BeginBuild(ComputeChildPublicationCapacity(rootChildCount));
 
         var rootProperties = new[] { VirtualNodeProperty.ScrollY(scrollY) };
         VirtualNodePropertySet.Validate(VirtualNodeKind.Container, rootProperties);

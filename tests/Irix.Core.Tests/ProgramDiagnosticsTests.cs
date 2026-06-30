@@ -4152,7 +4152,10 @@ public sealed partial class ProgramDiagnosticsTests
         var arenaDiagnosticsSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Core", "VirtualTextArena.optional-diagnostics.cs")));
         var translatorSource = NormalizeLineEndings(File.ReadAllText(Path.Combine(root, "src", "Irix.Poc", "WindowDrawCommandTranslator.optional-diagnostics.cs")));
 
-        Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualTextArena arena, string text, int scrollY)", source);
+        Assert.Contains("private static VirtualNodeTree BuildScenarioTree(VirtualNodeTreePublicationOwner publicationOwner, VirtualTextArena arena, string text, int scrollY)", source);
+        Assert.Contains("var staticPublication = new VirtualNodeTreePublicationOwner();", source);
+        Assert.Contains("var scrollPublication = new VirtualNodeTreePublicationOwner();", source);
+        Assert.Contains("var scalePublication = new VirtualNodeTreePublicationOwner();", source);
         Assert.Contains("arena.BeginFrame();", source);
         Assert.Contains("var snapshot = arena.GetOrCreateSnapshotWithAllocationAttribution(out var snapshotAttribution);", source);
         Assert.Contains("return new VirtualNodeTree(root, snapshot);", source);

@@ -1668,13 +1668,17 @@ public class TypedIdAllocationGuardTests
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Core", "VirtualNodeModels.cs"));
 
         Assert.Contains("internal ref struct VirtualNodeTreePublicationBuilder", source);
+        Assert.Contains("internal sealed class VirtualNodeTreePublicationOwner", source);
+        Assert.Contains("BeginBuild", source);
         Assert.Contains("ReserveChildRange", source);
         Assert.Contains("PublishReservedChildren", source);
+        Assert.Contains("PublicationGeneration", source);
         Assert.Contains("FromOwnedArrayRange", source);
         Assert.Contains("private readonly int _start;", source);
         Assert.Contains("private readonly int _count;", source);
         Assert.Contains("return items[_start + index];", source);
         Assert.Contains("_items.AsSpan(_start, _count)", source);
+        Assert.DoesNotContain("ArrayPool<VirtualNode>", source);
         Assert.DoesNotContain("internal sealed class VirtualNodeChildSlab", source);
         Assert.DoesNotContain("VirtualNodeChildSlab? _owner", source);
     }
@@ -1700,6 +1704,35 @@ public class TypedIdAllocationGuardTests
         Assert.Equal(new NodeKey(1), tail[0].Key);
         Assert.Single(reservedList.ToArray());
         Assert.Equal(new NodeKey(2), reservedList[0].Key);
+    }
+
+    [Fact]
+    public void VirtualNode_tree_publication_owner_preserves_current_and_previous_publications()
+    {
+        var owner = new VirtualNodeTreePublicationOwner();
+        var first = CreatePublishedContainer(owner, childKey: 10);
+        var second = CreatePublishedContainer(owner, childKey: 20);
+        Assert.Equal(new NodeKey(10), first.Children[0].Key);
+
+        var third = CreatePublishedContainer(owner, childKey: 30);
+        Assert.Equal(new NodeKey(20), second.Children[0].Key);
+
+        var fourth = CreatePublishedContainer(owner, childKey: 40);
+        Assert.Equal(new NodeKey(30), third.Children[0].Key);
+        Assert.Equal(new NodeKey(40), fourth.Children[0].Key);
+    }
+
+    private static VirtualNode CreatePublishedContainer(VirtualNodeTreePublicationOwner owner, uint childKey)
+    {
+        var publication = owner.BeginBuild(childCapacity: 1);
+        var children = publication.ReserveChildRange(1, out var start);
+        children[0] = VirtualNodeFactory.Rectangle(new NodeKey(childKey), VirtualNodeProperty.Width(10));
+        return VirtualNode.CreateFromOwnedChildrenUnsafe(
+            VirtualNodeKind.Container,
+            new NodeKey(childKey + 100),
+            ContentResource.None,
+            VirtualNodePropertyList.Empty,
+            publication.PublishReservedChildren(start, children.Length));
     }
 
     [Fact]
@@ -1743,7 +1776,8 @@ public class TypedIdAllocationGuardTests
         var source = File.ReadAllText(Path.Combine(FindRepoRoot(), "src", "Irix.Poc", "CounterApplication.cs"));
 
         Assert.Contains("CreateRootChildren", source);
-        Assert.Contains("new VirtualNodeTreePublicationBuilder", source);
+        Assert.Contains("VirtualNodeTreePublicationOwner", source);
+        Assert.Contains(".BeginBuild", source);
         Assert.Contains("ReserveChildRange", source);
         Assert.Contains("PublishReservedChildren", source);
         Assert.Contains("VirtualNode.CreateFromOwnedChildrenUnsafe(VirtualNodeKind.Container", source);
